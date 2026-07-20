@@ -1,0 +1,27 @@
+[Unit]
+Description=Gunicorn — ArchiOSK / B-Hive Flask app
+After=network.target
+
+[Service]
+Type=notify
+# Adjust user/group and paths for your VPS
+User=archiosk
+Group=archiosk
+WorkingDirectory=/var/www/archiosk
+EnvironmentFile=/var/www/archiosk/.env
+ExecStart=/var/www/archiosk/.venv/bin/gunicorn \
+    -c /var/www/archiosk/deploy/gunicorn.conf.py \
+    wsgi:app
+ExecReload=/bin/kill -s HUP $MAINPID
+Restart=on-failure
+RestartSec=5
+KillMode=mixed
+TimeoutStopSec=30
+
+# Hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+
+[Install]
+WantedBy=multi-user.target

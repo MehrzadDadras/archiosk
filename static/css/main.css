@@ -1,0 +1,256 @@
+/* ============================================================
+   ArchiOSK / B-Hive — design tokens
+   Palette:  --ink (bg), --panel, --line (blueprint hairline),
+             --amber (hive accent / done), --teal (active),
+             --parchment (text), --muted (secondary text)
+   Type:     Space Grotesk (display), IBM Plex Sans (body),
+             IBM Plex Mono (data / labels / mono details)
+   ============================================================ */
+:root {
+    --ink: #0b1f33;
+    --panel: #122a41;
+    --panel-raised: #16324c;
+    --line: #24445e;
+    --amber: #e8a33d;
+    --amber-dim: #6b5227;
+    --teal: #4fa9a2;
+    --parchment: #f2ede3;
+    --muted: #8fa8bd;
+
+    --font-display: "Space Grotesk", sans-serif;
+    --font-body: "IBM Plex Sans", sans-serif;
+    --font-mono: "IBM Plex Mono", monospace;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--ink);
+    color: var(--parchment);
+    font-family: var(--font-body);
+    line-height: 1.55;
+}
+
+a { color: var(--amber); text-decoration: none; }
+a:hover { text-decoration: underline; }
+a:focus-visible, button:focus-visible, input:focus-visible {
+    outline: 2px solid var(--teal);
+    outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
+
+/* -- blueprint grid backdrop ------------------------------------------ */
+.blueprint-grid {
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    background-image:
+        linear-gradient(var(--line) 1px, transparent 1px),
+        linear-gradient(90deg, var(--line) 1px, transparent 1px);
+    background-size: 48px 48px;
+    opacity: 0.18;
+}
+
+/* -- header / nav ------------------------------------------------------- */
+.site-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.5rem 3rem;
+    border-bottom: 1px solid var(--line);
+}
+.brand {
+    display: flex;
+    align-items: baseline;
+    gap: 0.6rem;
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 1.3rem;
+    color: var(--parchment);
+}
+.brand-mark { color: var(--amber); font-size: 1.4rem; }
+.brand-sub { font-size: 0.85rem; color: var(--muted); font-weight: 500; margin-left: 0.3rem; }
+.site-nav a {
+    margin-left: 2rem;
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+    color: var(--muted);
+    letter-spacing: 0.02em;
+}
+.site-nav a:hover { color: var(--amber); }
+
+main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; }
+
+.site-footer {
+    text-align: center;
+    padding: 2.5rem;
+    color: var(--muted);
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    border-top: 1px solid var(--line);
+    margin-top: 4rem;
+}
+
+/* -- hero ---------------------------------------------------------------- */
+.hero { padding: 5.5rem 0 3rem; max-width: 780px; }
+.eyebrow {
+    font-family: var(--font-mono);
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    font-size: 0.75rem;
+    color: var(--teal);
+    margin-bottom: 1rem;
+}
+.hero h1 {
+    font-family: var(--font-display);
+    font-size: 3rem;
+    line-height: 1.12;
+    margin: 0 0 1.5rem;
+    font-weight: 600;
+}
+.hero-copy { color: var(--muted); font-size: 1.05rem; max-width: 60ch; }
+.hero-actions { margin-top: 2.2rem; display: flex; gap: 1rem; }
+
+.btn {
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+    padding: 0.85rem 1.5rem;
+    border-radius: 3px;
+    border: 1px solid var(--line);
+    display: inline-block;
+}
+.btn-primary { background: var(--amber); color: var(--ink); border-color: var(--amber); font-weight: 600; }
+.btn-primary:hover { background: #f2b459; text-decoration: none; }
+.btn-ghost { color: var(--parchment); }
+.btn-ghost:hover { border-color: var(--amber); text-decoration: none; }
+
+/* -- chassis step cells (hexagon-clipped) -------------------------------- */
+.hive-strip { padding: 3rem 0 5rem; }
+.hive-strip h2 {
+    font-family: var(--font-display);
+    font-size: 1.1rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-bottom: 2rem;
+}
+.cell-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1.5rem;
+}
+.cell {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    padding: 1.6rem 1.4rem 2rem;
+    position: relative;
+    clip-path: polygon(8% 0, 92% 0, 100% 8%, 100% 92%, 92% 100%, 8% 100%, 0 92%, 0 8%);
+}
+.cell-index {
+    font-family: var(--font-mono);
+    color: var(--amber);
+    font-size: 0.8rem;
+}
+.cell h3 { font-family: var(--font-display); margin: 0.6rem 0 0.5rem; font-size: 1.15rem; }
+.cell p { color: var(--muted); font-size: 0.92rem; margin: 0; }
+
+@media (max-width: 900px) {
+    .cell-row { grid-template-columns: 1fr 1fr; }
+}
+
+/* -- dashboard header ----------------------------------------------------- */
+.dash-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    padding: 3rem 0 1.5rem;
+    border-bottom: 1px solid var(--line);
+    flex-wrap: wrap;
+    gap: 1.5rem;
+}
+.dash-head h1 { font-family: var(--font-display); font-size: 1.8rem; margin: 0.3rem 0 0; }
+.mono { font-family: var(--font-mono); color: var(--teal); font-size: 1.1rem; }
+.dash-meta { display: flex; gap: 2.2rem; }
+.meta-stat { text-align: right; }
+.meta-num { display: block; font-family: var(--font-display); font-size: 1.9rem; color: var(--amber); }
+.meta-label { font-family: var(--font-mono); font-size: 0.72rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+
+/* -- honeycomb lattice (signature element) -------------------------------- */
+.lattice-wrap { display: flex; gap: 2.5rem; padding: 3rem 0; align-items: flex-start; }
+.lattice {
+    display: flex;
+    flex-wrap: wrap;
+    width: 640px;
+    gap: 6px;
+}
+.hex {
+    width: 92px;
+    height: 80px;
+    clip-path: polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%);
+    background: var(--panel);
+    border: 1px solid var(--line);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    color: var(--muted);
+    padding: 0.4rem;
+    position: relative;
+    margin-top: -12px;
+}
+.hex:nth-child(odd) { margin-top: 28px; }
+.hex.done { background: var(--amber-dim); border-color: var(--amber); color: var(--parchment); }
+.hex.active { border-color: var(--teal); color: var(--parchment); animation: pulse 2.4s ease-in-out infinite; }
+.hex.pending { color: var(--muted); }
+
+@keyframes pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(79, 169, 162, 0.35); }
+    50% { box-shadow: 0 0 0 6px rgba(79, 169, 162, 0); }
+}
+
+.legend { font-family: var(--font-mono); font-size: 0.8rem; color: var(--muted); min-width: 160px; }
+.legend-title { text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.72rem; margin-bottom: 0.8rem; }
+.dot { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 0.5rem; }
+.dot-done { background: var(--amber); }
+.dot-active { background: transparent; border: 1px solid var(--teal); }
+.dot-pending { background: transparent; border: 1px solid var(--line); }
+
+/* -- registry table -------------------------------------------------------- */
+.registry { padding: 1.5rem 0 5rem; }
+.registry h2 { font-family: var(--font-display); font-size: 1.2rem; margin-bottom: 1rem; }
+.registry-filter { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1.2rem; }
+.chip {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    padding: 0.35rem 0.7rem;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    color: var(--muted);
+    cursor: pointer;
+    background: transparent;
+}
+.chip.active { border-color: var(--amber); color: var(--amber); }
+
+.registry-table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
+.registry-table th {
+    text-align: left;
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+    border-bottom: 1px solid var(--line);
+    padding: 0.6rem 0.8rem;
+}
+.registry-table td { padding: 0.7rem 0.8rem; border-bottom: 1px solid var(--line); color: var(--parchment); }
+.registry-table td:last-child { font-family: var(--font-mono); color: var(--teal); }
+
+.error-page { padding: 6rem 0; text-align: center; }
+.error-page h1 { font-family: var(--font-display); font-size: 2.2rem; }
