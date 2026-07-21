@@ -91,19 +91,41 @@ Ingestion timeouts are linked across three files, and they need to move
 together:
 
 - `.env` — `ANTHROPIC_TIMEOUT_SECONDS` (per-batch classify timeout,
-  default 30s) and `ANTHROPIC_CLASSIFY_BUDGET_SECONDS` (overall
-  classify-stage ceiling regardless of document size, default 90s).
+  default 30s), `ANTHROPIC_CLASSIFY_BUDGET_SECONDS` (overall
+  classify-stage ceiling regardless of document size, default 90s),
+  and `ANTHROPIC_CONSISTENCY_TIMEOUT_SECONDS` (the cross-requirement
+  contradiction check — see below — default 25s).
 - `deploy/gunicorn.conf.py` — `GUNICORN_TIMEOUT` (worker timeout,
-  default 120s).
-- `deploy/nginx.conf` — `location /`'s `proxy_read_timeout`,
-  `proxy_send_timeout`, and `client_body_timeout` (all 120s).
+  default 150s).
+- `deploy/nginx.conf` — `location /`'s `proxy_read_timeout` (150s;
+  covers waiting on Gunicorn's response). `proxy_send_timeout` and
+  `client_body_timeout` (120s) are a separate concern — upload
+  transfer speed, not backend processing time — and don't need to
+  move with the other two.
 
-The budget must stay comfortably below the Gunicorn/nginx timeouts —
-if you raise `ANTHROPIC_CLASSIFY_BUDGET_SECONDS` without also raising
-`GUNICORN_TIMEOUT` and nginx's timeouts, a large document's classify
-stage can get SIGKILLed mid-request before it ever reaches its own
-rule-based fallback. Leave at least 20-30s of headroom for extraction,
-segmentation, and the registry save.
+The classify budget plus the consistency-check timeout must stay
+comfortably below `GUNICORN_TIMEOUT`/`proxy_read_timeout` — both run
+as sequential Anthropic calls in the same request, so a large
+document's classify stage (up to 90s) followed by the consistency
+check (up to 25s) can get SIGKILLed mid-request before either reaches
+its own fallback if you raise one without raising the others. Leave
+at least 20-30s of headroom for extraction, segmentation, and the
+registry save.
+
+### Cross-requirement consistency check
+
+After classification, a single Anthropic call reviews all extracted
+requirements together looking for contradictions a per-line classifier
+can't catch — e.g. a technical spec requiring a 30-day cure time next
+to a milestone scheduling occupancy 10 days later. This requires
+`ANTHROPIC_API_KEY`; there's no rule-based fallback, since it needs
+actual reasoning across lines, not per-line keyword matching. It's
+best-effort and never blocks ingestion — a document's
+`consistency_checked` field distinguishes "checked, found nothing"
+from "didn't actually check" (no API key, a timeout, or a malformed
+model response), with a human-readable `consistency_note` explaining
+which. Very large documents are capped at the first 150 requirements
+to keep the prompt bounded; `consistency_note` says so when truncated.
 
 `deploy/nginx.conf` serves `/static/` with a 30-day immutable cache.
 That's only safe because `STATIC_VERSION` is appended as a `?v=`

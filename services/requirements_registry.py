@@ -11,7 +11,7 @@ import json
 from pathlib import Path
 from typing import Optional
 
-from services.bhive_parser import ParsedDocument, RequirementItem
+from services.bhive_parser import ConsistencyFlag, ParsedDocument, RequirementItem
 
 
 class RequirementsRegistry:
@@ -31,12 +31,18 @@ class RequirementsRegistry:
 
         data = json.loads(path.read_text(encoding="utf-8"))
         requirements = [RequirementItem(**item) for item in data.get("requirements", [])]
+        consistency_flags = [
+            ConsistencyFlag(**item) for item in data.get("consistency_flags", [])
+        ]
         doc = ParsedDocument(
             project_id=data["project_id"],
             filename=data["filename"],
             ingested_at=data["ingested_at"],
             requirements=requirements,
             milestones=data.get("milestones", []),
+            consistency_flags=consistency_flags,
+            consistency_checked=data.get("consistency_checked", False),
+            consistency_note=data.get("consistency_note"),
         )
         return doc
 

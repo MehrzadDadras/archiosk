@@ -99,6 +99,9 @@ def dashboard(project_id=None):
             requirements=_DEMO_REQUIREMENTS,
             milestones=_DEMO_MILESTONES,
             categories=REQUIREMENT_CATEGORIES,
+            consistency_flags=[],
+            consistency_checked=False,
+            consistency_note='Demo data — the consistency check requires a real document and an Anthropic API key.',
         )
 
     document = get_registry(current_app).get(project_id)
@@ -113,4 +116,7 @@ def dashboard(project_id=None):
         requirements=[r.__dict__ for r in document.requirements],
         milestones=document.milestones,
         categories=REQUIREMENT_CATEGORIES,
+        consistency_flags=[f.__dict__ for f in document.consistency_flags],
+        consistency_checked=document.consistency_checked,
+        consistency_note=document.consistency_note,
     )

@@ -2,13 +2,21 @@
 B-Hive Core Chassis — modular ingestion pipeline for RFP/RFQ documents.
 
 Pipeline stages (each is swappable — see `BHiveParser.STAGES`):
-    1. extract   — pull raw text out of the uploaded file (pdf/docx/txt/csv)
-    2. segment   — split raw text into candidate requirement chunks
-    3. classify  — categorize each chunk against the requirement schema
-                   (uses the Anthropic API when ANTHROPIC_API_KEY is set;
-                   falls back to a rule-based classifier otherwise so the
-                   pipeline still runs in dev/test without a key)
-    4. assemble  — build the final ParsedDocument record
+    1. extract    — pull raw text out of the uploaded file (pdf/docx/txt/csv)
+    2. segment    — split raw text into candidate requirement chunks
+    3. classify   — categorize each chunk against the requirement schema
+                    (uses the Anthropic API when ANTHROPIC_API_KEY is set;
+                    falls back to a rule-based classifier otherwise so the
+                    pipeline still runs in dev/test without a key)
+    4. consistency — a single holistic pass over the classified requirements
+                    looking for cross-requirement contradictions (e.g. a
+                    technical spec that can't physically be satisfied by a
+                    scheduled milestone). Requires ANTHROPIC_API_KEY — there
+                    is no rule-based fallback, since this needs actual
+                    semantic reasoning across lines, not per-line keyword
+                    matching. Best-effort: never blocks ingestion, and is
+                    honest in its output about whether it actually ran.
+    5. assemble   — build the final ParsedDocument record
 
 Each stage is a small, independently testable function/class so new
 document types or classification strategies can be added without
@@ -39,6 +47,17 @@ DEFAULT_CLASSIFY_TIMEOUT_SECONDS = 30.0
 # see deploy/gunicorn.conf.py and deploy/nginx.conf for the matching values.
 DEFAULT_CLASSIFY_TOTAL_BUDGET_SECONDS = 90.0
 
+# Single one-shot call, so its worst case is bounded regardless of document
+# size (unlike the classify stage, which scales with chunk count) — but it
+# still adds to the same request, so it's budgeted into the same
+# Gunicorn/nginx timeouts as the classify stage.
+DEFAULT_CONSISTENCY_TIMEOUT_SECONDS = 25.0
+
+# Safety valve so a very large document doesn't blow up the consistency
+# prompt's size/cost unboundedly. Not env-configurable — it's an internal
+# guard, not something operators need to tune.
+DEFAULT_CONSISTENCY_MAX_ITEMS = 150
+
 REQUIREMENT_CATEGORIES = [
     "scope_of_work",
     "technical_specification",
@@ -65,12 +84,28 @@ class RequirementItem:
 
 
 @dataclass
+class ConsistencyFlag:
+    id: str
+    requirement_a_id: str
+    requirement_a_text: str
+    requirement_b_id: str
+    requirement_b_text: str
+    explanation: str
+
+
+@dataclass
 class ParsedDocument:
     project_id: str
     filename: str
     ingested_at: str
     requirements: list[RequirementItem] = field(default_factory=list)
     milestones: list[dict[str, Any]] = field(default_factory=list)
+    consistency_flags: list[ConsistencyFlag] = field(default_factory=list)
+    # Distinguishes "checked, found nothing" from "didn't actually check" —
+    # e.g. no ANTHROPIC_API_KEY, a timeout, or a malformed model response.
+    # consistency_flags being empty on its own can't tell you which happened.
+    consistency_checked: bool = False
+    consistency_note: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -79,6 +114,9 @@ class ParsedDocument:
             "ingested_at": self.ingested_at,
             "requirements": [r.__dict__ for r in self.requirements],
             "milestones": self.milestones,
+            "consistency_flags": [f.__dict__ for f in self.consistency_flags],
+            "consistency_checked": self.consistency_checked,
+            "consistency_note": self.consistency_note,
         }
 
 
@@ -91,6 +129,7 @@ class BHiveParser:
         model: str | None = None,
         timeout: float | None = None,
         total_budget: float | None = None,
+        consistency_timeout: float | None = None,
     ):
         # Falls back to the environment so every module gets the key the
         # same way — never hardcode it, never pass it in from a route directly.
@@ -102,6 +141,9 @@ class BHiveParser:
         self.total_budget = total_budget or float(
             os.getenv("ANTHROPIC_CLASSIFY_BUDGET_SECONDS", DEFAULT_CLASSIFY_TOTAL_BUDGET_SECONDS)
         )
+        self.consistency_timeout = consistency_timeout or float(
+            os.getenv("ANTHROPIC_CONSISTENCY_TIMEOUT_SECONDS", DEFAULT_CONSISTENCY_TIMEOUT_SECONDS)
+        )
 
     # -- public entrypoint -------------------------------------------------
     def parse(self, raw_bytes: bytes, filename: str) -> ParsedDocument:
@@ -112,6 +154,9 @@ class BHiveParser:
         chunks = self._segment(text)
         requirements = self._classify(chunks)
         milestones = self._derive_milestones(requirements)
+        consistency_flags, consistency_checked, consistency_note = (
+            self._check_consistency(requirements)
+        )
 
         return ParsedDocument(
             project_id=str(uuid.uuid4()),
@@ -119,6 +164,9 @@ class BHiveParser:
             ingested_at=datetime.now(timezone.utc).isoformat(),
             requirements=requirements,
             milestones=milestones,
+            consistency_flags=consistency_flags,
+            consistency_checked=consistency_checked,
+            consistency_note=consistency_note,
         )
 
     # -- stage 1: extract ---------------------------------------------------
@@ -320,7 +368,101 @@ class BHiveParser:
             )
         return items
 
-    # -- stage 4: assemble (milestones) --------------------------------------
+    # -- stage 4: consistency check -------------------------------------------
+    def _check_consistency(
+        self, requirements: list[RequirementItem]
+    ) -> tuple[list[ConsistencyFlag], bool, str | None]:
+        """Best-effort holistic pass for cross-requirement contradictions.
+
+        Returns (flags, checked, note). `checked` is False whenever the
+        check didn't actually run (no API key, timeout, bad output) —
+        callers must not treat an empty `flags` list alone as "verified
+        clean", since that's indistinguishable from "never checked".
+        """
+        if not self.api_key:
+            return [], False, "Skipped: no ANTHROPIC_API_KEY configured."
+
+        if len(requirements) < 2:
+            return [], False, "Skipped: fewer than two requirements to compare."
+
+        import anthropic  # imported lazily so the dep is optional in dev
+
+        candidates = requirements[:DEFAULT_CONSISTENCY_MAX_ITEMS]
+        truncated = len(requirements) > len(candidates)
+
+        client = anthropic.Anthropic(api_key=self.api_key, timeout=self.consistency_timeout)
+        prompt = self._build_consistency_prompt(candidates)
+
+        try:
+            response = client.messages.create(
+                model=self.model,
+                max_tokens=1500,
+                messages=[{"role": "user", "content": prompt}],
+            )
+        except anthropic.APITimeoutError:
+            logger.warning(
+                "Consistency check timed out after %.0fs; skipping.",
+                self.consistency_timeout,
+            )
+            return [], False, "Skipped: request timed out."
+        except Exception:
+            # Best-effort, like classification — never let this stage take
+            # down ingestion.
+            logger.warning("Consistency check failed; skipping.", exc_info=True)
+            return [], False, "Skipped: an error occurred."
+
+        text_out = "".join(
+            block.text for block in response.content if getattr(block, "type", None) == "text"
+        )
+        cleaned = re.sub(r"^```(json)?|```$", "", text_out.strip(), flags=re.MULTILINE).strip()
+        try:
+            parsed = json.loads(cleaned)
+        except json.JSONDecodeError:
+            logger.warning("Consistency check returned non-JSON output; skipping.")
+            return [], False, "Skipped: model returned invalid output."
+
+        by_id = {r.id: r for r in candidates}
+        flags = []
+        for entry in parsed:
+            req_a = by_id.get(entry.get("a"))
+            req_b = by_id.get(entry.get("b"))
+            if not req_a or not req_b:
+                continue
+            flags.append(
+                ConsistencyFlag(
+                    id=str(uuid.uuid4()),
+                    requirement_a_id=req_a.id,
+                    requirement_a_text=req_a.text,
+                    requirement_b_id=req_b.id,
+                    requirement_b_text=req_b.text,
+                    explanation=entry.get("explanation", ""),
+                )
+            )
+
+        note = (
+            f"Checked the first {len(candidates)} of {len(requirements)} requirements."
+            if truncated else None
+        )
+        return flags, True, note
+
+    @staticmethod
+    def _build_consistency_prompt(requirements: list[RequirementItem]) -> str:
+        lines = "\n".join(f"{r.id}: [{r.category}] {r.text}" for r in requirements)
+        return (
+            "You are reviewing a procurement document's extracted requirements "
+            "for internal contradictions — e.g. a technical specification that "
+            "cannot physically be satisfied by a scheduled milestone deadline, "
+            "a budget figure that conflicts with the stated scope, or "
+            "compliance terms that conflict with the schedule.\n"
+            "Respond ONLY with a JSON array of objects, one per contradiction "
+            'found: [{"a": "<requirement id>", "b": "<requirement id>", '
+            '"explanation": "<one concrete sentence>"}]. If there are no '
+            "contradictions, respond with an empty JSON array: []. No prose, "
+            "no markdown fences.\n\n"
+            f"{lines}"
+        )
+
+    # -- stage 5: assemble (milestones) --------------------------------------
     @staticmethod
     def _derive_milestones(requirements: list[RequirementItem]) -> list[dict[str, Any]]:
         milestones = []

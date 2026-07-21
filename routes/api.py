@@ -3,11 +3,12 @@ JSON API for the B-Hive document pipeline (mounted at /api/v1).
 """
 from __future__ import annotations
 
-from flask import Blueprint, current_app, jsonify, request
+from flask import Blueprint, current_app, jsonify, request, send_file
 from werkzeug.exceptions import RequestEntityTooLarge
 
 from services.bhive_parser import REQUIREMENT_CATEGORIES
 from services.ingestion import UploadError, get_registry, ingest_upload
+from services.rfi_export import RFIExportError, build_rfi_docx
 
 api_bp = Blueprint('api', __name__)
 
@@ -72,6 +73,37 @@ def get_milestones(project_id):
     if document is None:
         return _not_found(project_id)
     return jsonify(milestones=document.milestones)
+
+
+@api_bp.route('/documents/<project_id>/consistency', methods=['GET'])
+def get_consistency(project_id):
+    document = get_registry(current_app).get(project_id)
+    if document is None:
+        return _not_found(project_id)
+    return jsonify(
+        checked=document.consistency_checked,
+        note=document.consistency_note,
+        flags=[f.__dict__ for f in document.consistency_flags],
+    )
+
+
+@api_bp.route('/documents/<project_id>/rfi', methods=['GET'])
+def export_rfi(project_id):
+    document = get_registry(current_app).get(project_id)
+    if document is None:
+        return _not_found(project_id)
+
+    try:
+        buffer = build_rfi_docx(document)
+    except RFIExportError as exc:
+        return jsonify(error="nothing_to_export", message=str(exc)), 409
+
+    return send_file(
+        buffer,
+        mimetype="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        as_attachment=True,
+        download_name=f"RFI-{project_id}.docx",
+    )
 
 
 @api_bp.route('/categories', methods=['GET'])

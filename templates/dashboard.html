@@ -40,6 +40,38 @@
     </div>
 </div>
 
+<section class="consistency">
+    <h2>Consistency check</h2>
+    {% if consistency_flags %}
+    <div class="flag-list">
+        {% for flag in consistency_flags %}
+        <div class="flag-card">
+            <div class="flag-pair">
+                <div class="flag-req">
+                    <span class="flag-req-label">Requirement A</span>
+                    {{ flag.requirement_a_text }}
+                </div>
+                <div class="flag-req">
+                    <span class="flag-req-label">Requirement B</span>
+                    {{ flag.requirement_b_text }}
+                </div>
+            </div>
+            <p class="flag-explanation">{{ flag.explanation }}</p>
+        </div>
+        {% endfor %}
+    </div>
+    {% if not is_demo %}
+    <div class="export-actions">
+        <a class="btn btn-primary" href="{{ url_for('api.export_rfi', project_id=project_id) }}">Download RFI (.docx)</a>
+    </div>
+    {% endif %}
+    {% elif consistency_checked %}
+    <p class="consistency-clean">No contradictions detected.</p>
+    {% else %}
+    <p class="consistency-note">{{ consistency_note }}</p>
+    {% endif %}
+</section>
+
 <section class="registry">
     <h2>Requirements registry</h2>
     <div class="registry-filter">

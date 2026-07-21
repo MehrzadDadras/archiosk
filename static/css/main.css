@@ -266,5 +266,44 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; }
 .registry-table td { padding: 0.7rem 0.8rem; border-bottom: 1px solid var(--line); color: var(--parchment); }
 .registry-table td:last-child { font-family: var(--font-mono); color: var(--teal); }
 
+/* -- consistency flags ---------------------------------------------------- */
+.consistency { padding: 1.5rem 0 3rem; }
+.consistency h2 { font-family: var(--font-display); font-size: 1.2rem; margin-bottom: 1rem; }
+.consistency-note, .consistency-clean {
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+    padding: 1rem 1.2rem;
+    border: 1px solid var(--line);
+    border-radius: 3px;
+}
+.consistency-note { color: var(--muted); }
+.consistency-clean { color: var(--teal); border-color: var(--teal); }
+
+.flag-list { display: grid; gap: 1rem; }
+.flag-card {
+    background: var(--panel);
+    border: 1px solid var(--amber);
+    border-left: 4px solid var(--amber);
+    border-radius: 3px;
+    padding: 1.2rem 1.4rem;
+}
+.flag-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 0.8rem; }
+.flag-req { font-size: 0.88rem; color: var(--parchment); padding: 0.6rem 0.8rem; background: var(--panel-raised); border-radius: 3px; }
+.flag-req-label {
+    display: block;
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    color: var(--amber);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 0.3rem;
+}
+.flag-explanation { color: var(--muted); font-size: 0.9rem; margin: 0; }
+.export-actions { margin-top: 1.2rem; }
+
+@media (max-width: 560px) {
+    .flag-pair { grid-template-columns: 1fr; }
+}
+
 .error-page { padding: 6rem 0; text-align: center; }
 .error-page h1 { font-family: var(--font-display); font-size: 2.2rem; }
