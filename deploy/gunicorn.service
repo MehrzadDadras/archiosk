@@ -3,7 +3,9 @@ Description=Gunicorn — ArchiOSK / B-Hive Flask app
 After=network.target
 
 [Service]
-Type=notify
+# Gunicorn doesn't implement the systemd sd_notify readiness protocol, so
+# Type=notify would leave systemd waiting for a signal that never arrives.
+Type=simple
 # Adjust user/group and paths for your VPS
 User=archiosk
 Group=archiosk

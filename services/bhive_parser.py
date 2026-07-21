@@ -21,6 +21,7 @@ import json
 import logging
 import os
 import re
+import time
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -31,6 +32,12 @@ logger = logging.getLogger(__name__)
 
 # How long to wait on a single classification batch before giving up on it.
 DEFAULT_CLASSIFY_TIMEOUT_SECONDS = 30.0
+
+# Wall-clock ceiling for the whole classify stage, regardless of how many
+# batches a large document needs. Bounds worst-case request time so a big
+# upload can't run past the Gunicorn/nginx timeouts one batch at a time —
+# see deploy/gunicorn.conf.py and deploy/nginx.conf for the matching values.
+DEFAULT_CLASSIFY_TOTAL_BUDGET_SECONDS = 90.0
 
 REQUIREMENT_CATEGORIES = [
     "scope_of_work",
@@ -83,6 +90,7 @@ class BHiveParser:
         anthropic_api_key: str | None = None,
         model: str | None = None,
         timeout: float | None = None,
+        total_budget: float | None = None,
     ):
         # Falls back to the environment so every module gets the key the
         # same way — never hardcode it, never pass it in from a route directly.
@@ -90,6 +98,9 @@ class BHiveParser:
         self.model = model or os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-6")
         self.timeout = timeout or float(
             os.getenv("ANTHROPIC_TIMEOUT_SECONDS", DEFAULT_CLASSIFY_TIMEOUT_SECONDS)
+        )
+        self.total_budget = total_budget or float(
+            os.getenv("ANTHROPIC_CLASSIFY_BUDGET_SECONDS", DEFAULT_CLASSIFY_TOTAL_BUDGET_SECONDS)
         )
 
     # -- public entrypoint -------------------------------------------------
@@ -177,8 +188,26 @@ class BHiveParser:
         items: list[RequirementItem] = []
 
         batch_size = 25
+        started_at = time.monotonic()
         for start in range(0, len(chunks), batch_size):
             batch = chunks[start:start + batch_size]
+
+            elapsed = time.monotonic() - started_at
+            if elapsed > self.total_budget:
+                # A large document could otherwise run one 30s-timeout batch
+                # after another well past the Gunicorn/nginx request timeout.
+                # Once the overall budget is spent, stop calling the model
+                # entirely — rule-classify everything that's left in one go.
+                remaining = chunks[start:]
+                logger.warning(
+                    "Classification budget of %.0fs exceeded after %d batch(es); "
+                    "falling back to rule-based classification for the "
+                    "remaining %d line(s).",
+                    self.total_budget, start // batch_size, len(remaining),
+                )
+                items.extend(self._classify_with_rules(remaining))
+                break
+
             prompt = self._build_classification_prompt(batch)
             try:
                 response = client.messages.create(
