@@ -114,6 +114,18 @@ its own fallback if you raise one without raising the others. Leave
 at least 20-30s of headroom for extraction, segmentation, and the
 registry save.
 
+`deploy/gunicorn.conf.py` uses `gthread` workers (`GUNICORN_THREADS`,
+default 4 per worker) rather than `sync`. With `sync`, each worker
+handles exactly one request at a time, and a slow ingest can now
+legitimately hold one for up to `GUNICORN_TIMEOUT` — a handful of
+concurrent large uploads could exhaust every worker and start queuing
+even a fast `/health` check behind them. `gthread` gives each worker a
+thread pool instead, so a request blocked on Anthropic or disk I/O
+doesn't block everything else in that worker. Safe here because
+nothing in this app holds shared mutable state across a request —
+`BHiveParser`, its Anthropic clients, `RequirementsRegistry`, and
+`GovernanceLog` are all constructed fresh per request.
+
 ### Cross-requirement consistency check
 
 After classification, a single Anthropic call reviews all extracted
