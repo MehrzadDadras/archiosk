@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+
+{% block title %}Not found &mdash; Archiosk{% endblock %}
+
+{% block content %}
+<section class="error-page">
+    <p class="eyebrow">404</p>
+    <h1>Page not found</h1>
+    <p class="hero-copy">The page or document you're looking for doesn't exist.</p>
+    <div class="hero-actions" style="justify-content: center;">
+        <a class="btn btn-primary" href="{{ url_for('portal.index') }}">Back to home</a>
+    </div>
+</section>
+{% endblock %}

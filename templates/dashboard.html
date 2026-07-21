@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard &mdash; Archiosk{% endblock %}
+
+{% block content %}
+<div class="dash-head">
+    <div>
+        {% if is_demo %}
+        <p class="eyebrow">Demo data &mdash; ingest a document to replace this</p>
+        {% else %}
+        <p class="eyebrow mono">{{ project_id }}</p>
+        {% endif %}
+        <h1>{{ filename }}</h1>
+    </div>
+    <div class="dash-meta">
+        <div class="meta-stat">
+            <span class="meta-num">{{ requirements|length }}</span>
+            <span class="meta-label">Requirements</span>
+        </div>
+        <div class="meta-stat">
+            <span class="meta-num">{{ milestones|length }}</span>
+            <span class="meta-label">Milestones</span>
+        </div>
+    </div>
+</div>
+
+<div class="lattice-wrap">
+    <div class="lattice">
+        {% for m in milestones %}
+        <div class="hex {{ m.status }}" title="{{ m.label }}">{{ m.label }}</div>
+        {% else %}
+        <p class="mono">No milestones extracted yet.</p>
+        {% endfor %}
+    </div>
+    <div class="legend">
+        <p class="legend-title">Legend</p>
+        <p><span class="dot dot-done"></span> Done</p>
+        <p><span class="dot dot-active"></span> Active</p>
+        <p><span class="dot dot-pending"></span> Pending</p>
+    </div>
+</div>
+
+<section class="registry">
+    <h2>Requirements registry</h2>
+    <div class="registry-filter">
+        <button class="chip active" data-category="">All</button>
+        {% for c in categories %}
+        <button class="chip" data-category="{{ c }}">{{ c.replace('_', ' ') }}</button>
+        {% endfor %}
+    </div>
+    <table class="registry-table" id="registry-table">
+        <thead>
+            <tr>
+                <th>Requirement</th>
+                <th>Category</th>
+                <th>Confidence</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for r in requirements %}
+            <tr data-category="{{ r.category }}">
+                <td>{{ r.text }}</td>
+                <td>{{ r.category.replace('_', ' ') }}</td>
+                <td>{{ '%.0f' % (r.confidence * 100) }}%</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="3">No requirements extracted yet.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</section>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+{% endblock %}

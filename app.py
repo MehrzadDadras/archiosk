@@ -26,6 +26,7 @@ def create_app(config_name: str | None = None) -> Flask:
     _configure_logging(app)
     _register_blueprints(app)
     _register_error_handlers(app)
+    _register_context_processors(app)
 
     return app
 
@@ -65,6 +66,13 @@ def _register_error_handlers(app: Flask) -> None:
     def _wants_json() -> bool:
         from flask import request
         return request.path.startswith("/api/")
+
+
+def _register_context_processors(app: Flask) -> None:
+    @app.context_processor
+    def inject_globals():
+        from datetime import datetime, timezone
+        return {"current_year": datetime.now(timezone.utc).year}
 
 
 # Local dev entrypoint: `python app.py`

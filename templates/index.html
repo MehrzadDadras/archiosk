@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+
+{% block title %}Archiosk &mdash; B-Hive RFP Intelligence{% endblock %}
+
+{% block content %}
+<section class="hero">
+    <p class="eyebrow">B-Hive Core Chassis</p>
+    <h1>Turn RFPs into a structured requirements registry.</h1>
+    <p class="hero-copy">
+        Upload an RFP or RFQ and B-Hive extracts, segments, and classifies
+        every clause into scope, technical, compliance, budget, schedule,
+        submission, and evaluation buckets &mdash; then builds a milestone
+        timeline automatically.
+    </p>
+    <div class="hero-actions">
+        <a class="btn btn-primary" href="{{ url_for('portal.upload') }}">Ingest a document</a>
+        <a class="btn btn-ghost" href="{{ url_for('portal.dashboard') }}">View dashboard</a>
+    </div>
+</section>
+
+<section class="hive-strip">
+    <h2>Pipeline</h2>
+    <div class="cell-row">
+        <div class="cell">
+            <span class="cell-index">01</span>
+            <h3>Extract</h3>
+            <p>Pull raw text out of PDF, DOCX, TXT, or CSV uploads.</p>
+        </div>
+        <div class="cell">
+            <span class="cell-index">02</span>
+            <h3>Segment</h3>
+            <p>Split raw text into candidate requirement clauses.</p>
+        </div>
+        <div class="cell">
+            <span class="cell-index">03</span>
+            <h3>Classify</h3>
+            <p>Categorize each clause with Claude, or a rule-based fallback when no API key is set.</p>
+        </div>
+        <div class="cell">
+            <span class="cell-index">04</span>
+            <h3>Assemble</h3>
+            <p>Build the requirements registry and derive the milestone timeline.</p>
+        </div>
+    </div>
+</section>
+{% endblock %}

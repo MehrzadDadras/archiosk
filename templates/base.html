@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}Archiosk{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+    {% block extra_head %}{% endblock %}
+</head>
+<body>
+    <div class="blueprint-grid"></div>
+
+    <header class="site-header">
+        <a class="brand" href="{{ url_for('portal.index') }}">
+            <span class="brand-mark">&#8961;</span>
+            Archiosk<span class="brand-sub">B-Hive</span>
+        </a>
+        <nav class="site-nav">
+            <a href="{{ url_for('portal.index') }}">Home</a>
+            <a href="{{ url_for('portal.upload') }}">Upload</a>
+            <a href="{{ url_for('portal.dashboard') }}">Dashboard</a>
+        </nav>
+    </header>
+
+    <main>
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer class="site-footer">
+        &copy; {{ current_year }} Archiosk &mdash; B-Hive Core Chassis
+    </footer>
+
+    {% block extra_scripts %}{% endblock %}
+</body>
+</html>
