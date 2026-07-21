@@ -12,7 +12,7 @@ app.py                  Flask application factory
 config.py                Env-driven settings (no secrets hardcoded)
 wsgi.py                  Gunicorn entrypoint (wsgi:app)
 routes/
-  portal.py              HTML pages (/, /dashboard)
+  portal.py              HTML pages (/, /health, /upload, /dashboard)
   api.py                 JSON API (/api/v1/...)
 services/
   bhive_parser.py         extract -> segment -> classify -> assemble pipeline
@@ -79,6 +79,31 @@ sudo nginx -t && sudo systemctl reload nginx
 `ANTHROPIC_API_KEY`) at startup and logs a warning — rather than
 crashing — if any are missing, so you can bring the box up and fix
 config without a hard outage.
+
+### Monitoring and timeout tuning
+
+Point uptime monitoring (or a systemd timer) at `GET /health` — it's
+proxied by a dedicated, quiet location in `deploy/nginx.conf` and checks
+the registry store rather than the Anthropic API, so a slow/unreachable
+model API won't take the app out of rotation on its own.
+
+Ingestion timeouts are linked across three files, and they need to move
+together:
+
+- `.env` — `ANTHROPIC_TIMEOUT_SECONDS` (per-batch classify timeout,
+  default 30s) and `ANTHROPIC_CLASSIFY_BUDGET_SECONDS` (overall
+  classify-stage ceiling regardless of document size, default 90s).
+- `deploy/gunicorn.conf.py` — `GUNICORN_TIMEOUT` (worker timeout,
+  default 120s).
+- `deploy/nginx.conf` — `location /`'s `proxy_read_timeout`,
+  `proxy_send_timeout`, and `client_body_timeout` (all 120s).
+
+The budget must stay comfortably below the Gunicorn/nginx timeouts —
+if you raise `ANTHROPIC_CLASSIFY_BUDGET_SECONDS` without also raising
+`GUNICORN_TIMEOUT` and nginx's timeouts, a large document's classify
+stage can get SIGKILLed mid-request before it ever reaches its own
+rule-based fallback. Leave at least 20-30s of headroom for extraction,
+segmentation, and the registry save.
 
 ## Security notes
 
