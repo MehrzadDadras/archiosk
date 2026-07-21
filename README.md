@@ -112,6 +112,12 @@ query string on every static asset reference in `base.html` — bump
 changes, or browsers that already cached the old file won't see the
 update for up to 30 days.
 
+After bumping it, run `sudo systemctl restart archiosk` — **not**
+`reload`. `EnvironmentFile` is only read by systemd when the unit
+starts; `ExecReload`'s `SIGHUP` just tells gunicorn to reload its own
+config and re-fork workers, it doesn't make systemd re-read `.env`. A
+`reload` here will silently keep serving the old `STATIC_VERSION`.
+
 ## Security notes
 
 - `.env` and any local `*.db` / `instance/` files are excluded via
