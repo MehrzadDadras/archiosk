@@ -3,7 +3,7 @@ HTML pages: marketing home, upload form, and the Agility Engine dashboard.
 """
 from __future__ import annotations
 
-from flask import Blueprint, abort, current_app, redirect, render_template, request, url_for
+from flask import Blueprint, abort, current_app, jsonify, redirect, render_template, request, url_for
 
 from services.bhive_parser import REQUIREMENT_CATEGORIES
 from services.ingestion import UploadError, get_registry, ingest_upload
@@ -38,6 +38,36 @@ _DEMO_REQUIREMENTS = [
 @portal_bp.route('/')
 def index():
     return render_template('index.html')
+
+
+@portal_bp.route('/health')
+def health():
+    """Liveness/readiness probe for the load balancer and systemd.
+
+    Un-prefixed and unauthenticated by design so it stays stable across
+    /api/v1 version bumps. Checks the registry store (the app's only
+    real runtime dependency) rather than the Anthropic API, since a
+    slow/unreachable model API shouldn't take the whole app out of
+    rotation — BHiveParser already degrades to rule-based classification.
+    """
+    try:
+        get_registry(current_app).list_ids()
+        registry_ok = True
+    except OSError:
+        registry_ok = False
+
+    missing_config = []
+    if not current_app.config.get('SECRET_KEY'):
+        missing_config.append('FLASK_SECRET_KEY')
+    if not current_app.config.get('ANTHROPIC_API_KEY'):
+        missing_config.append('ANTHROPIC_API_KEY')
+
+    status_code = 200 if registry_ok else 503
+    return jsonify(
+        status='ok' if registry_ok else 'error',
+        checks={'registry_store': 'ok' if registry_ok else 'unreachable'},
+        missing_config=missing_config,
+    ), status_code
 
 
 @portal_bp.route('/upload', methods=['GET', 'POST'])
