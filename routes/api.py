@@ -7,7 +7,8 @@ from flask import Blueprint, current_app, jsonify, request, send_file
 from werkzeug.exceptions import RequestEntityTooLarge
 
 from services.bhive_parser import REQUIREMENT_CATEGORIES
-from services.ingestion import UploadError, get_registry, ingest_upload
+from services.governance import GovernanceError
+from services.ingestion import UploadError, get_governance_log, get_registry, ingest_upload
 from services.rfi_export import RFIExportError, build_rfi_docx
 
 api_bp = Blueprint('api', __name__)
@@ -25,9 +26,16 @@ def _file_too_large(_err):
 @api_bp.route('/documents/ingest', methods=['POST'])
 def ingest_document():
     try:
-        document = ingest_upload(request.files.get('file'), current_app)
+        document = ingest_upload(
+            request.files.get('file'),
+            current_app,
+            actor=request.form.get('actor'),
+            role=request.form.get('role'),
+        )
     except UploadError as exc:
         return jsonify(error="invalid_upload", message=str(exc)), 400
+    except GovernanceError as exc:
+        return jsonify(error="invalid_governance_fields", message=str(exc)), 400
 
     return jsonify(document.to_dict()), 201
 
@@ -85,6 +93,16 @@ def get_consistency(project_id):
         note=document.consistency_note,
         flags=[f.__dict__ for f in document.consistency_flags],
     )
+
+
+@api_bp.route('/documents/<project_id>/governance', methods=['GET'])
+def get_governance(project_id):
+    document = get_registry(current_app).get(project_id)
+    if document is None:
+        return _not_found(project_id)
+
+    events = get_governance_log(current_app).read(project_id)
+    return jsonify(events=[e.__dict__ for e in events])
 
 
 @api_bp.route('/documents/<project_id>/rfi', methods=['GET'])

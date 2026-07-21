@@ -15,8 +15,10 @@ routes/
   portal.py              HTML pages (/, /health, /upload, /dashboard)
   api.py                 JSON API (/api/v1/...)
 services/
-  bhive_parser.py         extract -> segment -> classify -> assemble pipeline
+  bhive_parser.py         extract -> segment -> classify -> consistency-check -> assemble
   requirements_registry.py  JSON-file registry (swap for a DB later)
+  governance.py           append-only .jsonl audit trail per project
+  rfi_export.py           flagged contradictions -> RFI .docx
 static/css/main.css      Blueprint/honeycomb design system
 static/js/dashboard.js   Renders the milestone lattice + registry table
 templates/               Jinja templates
@@ -126,6 +128,24 @@ from "didn't actually check" (no API key, a timeout, or a malformed
 model response), with a human-readable `consistency_note` explaining
 which. Very large documents are capped at the first 150 requirements
 to keep the prompt bounded; `consistency_note` says so when truncated.
+
+### Governance audit trail
+
+Every ingestion — via the API or the upload form — records a
+`document_ingested` event in an append-only log (`services/governance.py`),
+one `.jsonl` file per project (`instance/registry/<project_id>.governance.jsonl`),
+always opened in append mode and never read-modify-rewritten. A
+correction is recorded as a *new* event whose `predecessor_id` points
+back at the event it corrects — the original line is never edited.
+Read it via `GET /api/v1/documents/<id>/governance` or the dashboard's
+audit-trail table.
+
+**This app has no authentication system.** The upload form's optional
+`actor`/`role` fields (and the API's matching form fields) are
+free-text, defaulting to `"anonymous"`/`"unspecified"` when left
+blank. They're recorded honestly as given — this is a labeled audit
+trail, not verified identity or real access control. Don't rely on it
+for anything that needs actual authorization.
 
 `deploy/nginx.conf` serves `/static/` with a 30-day immutable cache.
 That's only safe because `STATIC_VERSION` is appended as a `?v=`

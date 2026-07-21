@@ -6,7 +6,8 @@ from __future__ import annotations
 from flask import Blueprint, abort, current_app, jsonify, redirect, render_template, request, url_for
 
 from services.bhive_parser import REQUIREMENT_CATEGORIES
-from services.ingestion import UploadError, get_registry, ingest_upload
+from services.governance import GovernanceError
+from services.ingestion import UploadError, get_governance_log, get_registry, ingest_upload
 
 portal_bp = Blueprint('portal', __name__)
 
@@ -78,8 +79,13 @@ def upload():
         return render_template('upload.html', max_upload_mb=max_upload_mb)
 
     try:
-        document = ingest_upload(request.files.get('file'), current_app)
-    except UploadError as exc:
+        document = ingest_upload(
+            request.files.get('file'),
+            current_app,
+            actor=request.form.get('actor'),
+            role=request.form.get('role'),
+        )
+    except (UploadError, GovernanceError) as exc:
         return render_template(
             'upload.html', max_upload_mb=max_upload_mb, error=str(exc)
         ), 400
@@ -102,11 +108,14 @@ def dashboard(project_id=None):
             consistency_flags=[],
             consistency_checked=False,
             consistency_note='Demo data — the consistency check requires a real document and an Anthropic API key.',
+            governance_events=[],
         )
 
     document = get_registry(current_app).get(project_id)
     if document is None:
         abort(404)
+
+    governance_events = get_governance_log(current_app).read(project_id)
 
     return render_template(
         'dashboard.html',
@@ -119,4 +128,5 @@ def dashboard(project_id=None):
         consistency_flags=[f.__dict__ for f in document.consistency_flags],
         consistency_checked=document.consistency_checked,
         consistency_note=document.consistency_note,
+        governance_events=[e.__dict__ for e in reversed(governance_events)],
     )

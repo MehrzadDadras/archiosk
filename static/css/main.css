@@ -117,6 +117,19 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; }
 .hero-actions { margin-top: 2.2rem; display: flex; gap: 1rem; }
 .hero-actions-center { justify-content: center; }
 
+.upload-form { margin-top: 2.2rem; display: flex; flex-direction: column; align-items: flex-start; gap: 1rem; }
+.upload-form-optional { display: flex; gap: 1rem; flex-wrap: wrap; }
+.text-input {
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+    padding: 0.6rem 0.8rem;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    color: var(--parchment);
+}
+.text-input::placeholder { color: var(--muted); }
+
 .btn {
     font-family: var(--font-mono);
     font-size: 0.85rem;
@@ -267,6 +280,10 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; }
 }
 .registry-table td { padding: 0.7rem 0.8rem; border-bottom: 1px solid var(--line); color: var(--parchment); }
 .registry-table td:last-child { font-family: var(--font-mono); color: var(--teal); }
+
+/* -- governance / audit trail ---------------------------------------------- */
+.governance { padding: 1.5rem 0 3rem; }
+.governance h2 { font-family: var(--font-display); font-size: 1.2rem; margin-bottom: 1rem; }
 
 /* -- consistency flags ---------------------------------------------------- */
 .consistency { padding: 1.5rem 0 3rem; }

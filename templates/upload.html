@@ -15,8 +15,12 @@
 <p class="mono form-error">{{ error }}</p>
 {% endif %}
 
-<form method="post" enctype="multipart/form-data" class="hero-actions">
+<form method="post" enctype="multipart/form-data" class="upload-form">
     <input type="file" name="file" required accept=".pdf,.docx,.txt,.csv">
+    <div class="upload-form-optional">
+        <input type="text" name="actor" class="text-input" placeholder="Your name (optional, for the audit trail)">
+        <input type="text" name="role" class="text-input" placeholder="Your role (optional)">
+    </div>
     <button type="submit" class="btn btn-primary">Parse document</button>
 </form>
 {% endblock %}

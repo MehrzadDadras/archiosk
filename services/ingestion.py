@@ -14,7 +14,14 @@ from flask import Flask
 from werkzeug.datastructures import FileStorage
 
 from services.bhive_parser import BHiveParser, ParsedDocument, ParserError
+from services.governance import GovernanceLog
 from services.requirements_registry import RequirementsRegistry
+
+# This app has no authentication system, so there's no real identity to
+# fall back on. These are honest placeholders, not a claim that anyone
+# was actually verified -- see services/governance.py.
+_DEFAULT_ACTOR = "anonymous"
+_DEFAULT_ROLE = "unspecified"
 
 
 class UploadError(Exception):
@@ -25,7 +32,18 @@ def get_registry(app: Flask) -> RequirementsRegistry:
     return RequirementsRegistry(app.config["REGISTRY_STORE_PATH"])
 
 
-def ingest_upload(file_storage: Optional[FileStorage], app: Flask) -> ParsedDocument:
+def get_governance_log(app: Flask) -> GovernanceLog:
+    # Same store as the registry -- one .governance.jsonl file per project
+    # alongside that project's .json record.
+    return GovernanceLog(app.config["REGISTRY_STORE_PATH"])
+
+
+def ingest_upload(
+    file_storage: Optional[FileStorage],
+    app: Flask,
+    actor: str | None = None,
+    role: str | None = None,
+) -> ParsedDocument:
     """Validate, parse, and persist an uploaded RFP/RFQ. Raises UploadError on bad input."""
     if file_storage is None or not file_storage.filename:
         raise UploadError("No file was provided.")
@@ -49,4 +67,15 @@ def ingest_upload(file_storage: Optional[FileStorage], app: Flask) -> ParsedDocu
         raise UploadError(str(exc)) from exc
 
     get_registry(app).save(document)
+    get_governance_log(app).append(
+        project_id=document.project_id,
+        event_type="document_ingested",
+        actor=actor or _DEFAULT_ACTOR,
+        role=role or _DEFAULT_ROLE,
+        payload={
+            "filename": document.filename,
+            "requirement_count": len(document.requirements),
+            "milestone_count": len(document.milestones),
+        },
+    )
     return document
