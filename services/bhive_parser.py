@@ -144,7 +144,17 @@ class BHiveParser:
             raise ParserError("python-docx is required to parse .docx files.") from exc
 
         document = docx.Document(io.BytesIO(raw_bytes))
-        return "\n".join(p.text for p in document.paragraphs)
+        # Section headings ("1. Scope of Work") aren't requirements, and
+        # their short, keyword-heavy text can itself get misclassified
+        # (e.g. a "Schedule and Milestones" heading matching the
+        # schedule_milestone keyword list and appearing as a fake
+        # milestone). docx already tells us which paragraphs are
+        # headings via style name — use that instead of guessing.
+        body_paragraphs = [
+            p.text for p in document.paragraphs
+            if not (p.style.name or "").startswith(("Heading", "Title"))
+        ]
+        return "\n".join(body_paragraphs)
 
     @staticmethod
     def _extract_pdf(raw_bytes: bytes) -> str:
