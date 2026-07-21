@@ -18,7 +18,10 @@ ExecReload=/bin/kill -s HUP $MAINPID
 Restart=on-failure
 RestartSec=5
 KillMode=mixed
-TimeoutStopSec=30
+# Must exceed gunicorn's own graceful_timeout (30s in gunicorn.conf.py) so
+# gunicorn's graceful worker drain gets to finish before systemd SIGKILLs
+# the whole unit out from under it.
+TimeoutStopSec=45
 
 # Hardening
 NoNewPrivileges=true
