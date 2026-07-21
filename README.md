@@ -172,6 +172,22 @@ starts; `ExecReload`'s `SIGHUP` just tells gunicorn to reload its own
 config and re-fork workers, it doesn't make systemd re-read `.env`. A
 `reload` here will silently keep serving the old `STATIC_VERSION`.
 
+## Development tools
+
+`tools/dependency_fit.py` is a maintainer-run CLI, not part of the
+running app — checks a proposed library/tool/pattern against
+constraints this project has actually and deliberately established
+(no client-side build step, flat-JSON storage, `gthread` not async
+workers, no new required cloud dependency, no background-worker
+infra, Python-native). Run it before adopting something new:
+
+```bash
+python tools/dependency_fit.py --name "some-library" --requires-database --database-type postgres
+```
+
+Exit code is 0 unless something FAILs outright, so it's usable as a
+quick gate in a review checklist. `--help` lists every flag.
+
 ## Security notes
 
 - `.env` and any local `*.db` / `instance/` files are excluded via

@@ -101,6 +101,12 @@ deploy/*  (nginx, gunicorn) — infra wrapping wsgi:app, not imported by Python
 | `deploy/gunicorn.conf.py` | Gunicorn worker settings: bind address, `worker_class` (`gthread`, not `sync` — each worker gets a thread pool via `threads`, default 4, so a request blocked on Anthropic/disk I/O doesn't block everything else in that worker; safe since `BHiveParser`, its Anthropic clients, `RequirementsRegistry`, and `GovernanceLog` are all constructed fresh per request with no shared mutable state), worker count, `timeout` (150s, sized to the classify + consistency-check budget), `worker_tmp_dir` (defaults to `/dev/shm` — workers heartbeat via a temp file, and tmpfs avoids a slow-disk false-positive "worker timed out" kill), request-based worker recycling (`max_requests`/`max_requests_jitter`). | Loaded via `gunicorn -c deploy/gunicorn.conf.py wsgi:app`; `bind` must match what `deploy/nginx.conf`'s `upstream` proxies to; `timeout` must stay in sync with `deploy/nginx.conf`'s `proxy_read_timeout`. |
 | `deploy/gunicorn.service` | systemd unit — runs gunicorn as the `archiosk` user/group, loads `.env` via `EnvironmentFile`, `Environment=PYTHONUNBUFFERED=1` (so a killed worker's last log lines aren't lost to buffering), `Type=simple` (gunicorn doesn't implement systemd's `sd_notify` protocol, so `Type=notify` would hang), restarts on failure, `TimeoutStopSec=45` (must exceed gunicorn's own 30s `graceful_timeout` so its graceful drain finishes before systemd SIGKILLs), applies sandboxing (`NoNewPrivileges`, `PrivateTmp`, `ProtectSystem`). | `ExecStart` points at `deploy/gunicorn.conf.py` and `wsgi:app`. Bumping `STATIC_VERSION` in `.env` requires `systemctl restart`, not `reload` — `EnvironmentFile` is only read at unit start. |
 
+## 9. Development tools (not imported by the app)
+
+| File | Purpose | Connects to |
+|---|---|---|
+| `tools/dependency_fit.py` | Standalone CLI (argparse, no Flask import) — checks a proposed library/tool/pattern against constraints this project has actually and deliberately established: no client-side build step, flat-JSON storage (SQLite was explicitly proposed and rejected), `gthread` not async workers, no new required cloud dependency, no background-worker infra, Python-native. Rule-based PASS/WARN/FAIL report; exit code 1 if anything FAILs. | Standalone — reads no app config, imports nothing from `services/`/`routes/`. Run directly: `python tools/dependency_fit.py --name ... [flags]`. |
+
 ---
 
 ## Request-flow reference
