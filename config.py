@@ -5,7 +5,15 @@ Never hardcode secrets here — this file is committed to version control.
 import os
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 BASE_DIR = Path(__file__).resolve().parent
+
+# Explicit path so this loads regardless of the process's cwd (e.g. when
+# Flask/Gunicorn is launched from outside the project root). Never
+# overrides real env vars already set — systemd's EnvironmentFile in
+# deploy/gunicorn.service takes precedence over this in production.
+load_dotenv(BASE_DIR / ".env")
 
 
 class BaseConfig:
