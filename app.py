@@ -72,9 +72,13 @@ def _register_context_processors(app: Flask) -> None:
     @app.context_processor
     def inject_globals():
         from datetime import datetime, timezone
+
+        from services.auth import is_authenticated
+
         return {
             "current_year": datetime.now(timezone.utc).year,
             "static_version": app.config["STATIC_VERSION"],
+            "authenticated": is_authenticated(),
         }
 
 

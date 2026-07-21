@@ -43,6 +43,19 @@ class BaseConfig:
     # already cached the old file won't see the update for up to 30 days.
     STATIC_VERSION = os.getenv("STATIC_VERSION", "1")
 
+    # -- Web UI login gate (single shared credential, no user database) ----
+    # Unset means services/auth.check_credentials() always returns False —
+    # the gate fails closed, not open, if these were never configured.
+    AUTH_USERNAME = os.getenv("AUTH_USERNAME", "")
+    AUTH_PASSWORD_HASH = os.getenv("AUTH_PASSWORD_HASH", "")
+
+    # HTTPOnly/SameSite are safe in every environment; Secure requires HTTPS,
+    # which only nginx terminates in production — off in dev so the login
+    # cookie still works over plain http://127.0.0.1.
+    SESSION_COOKIE_HTTPONLY = True
+    SESSION_COOKIE_SAMESITE = "Lax"
+    SESSION_COOKIE_SECURE = True
+
     @classmethod
     def validate(cls) -> list[str]:
         """Return a list of missing required env vars. Call at startup."""
@@ -56,6 +69,9 @@ class BaseConfig:
 
 class DevelopmentConfig(BaseConfig):
     DEBUG = True
+    # Local dev serves plain http://127.0.0.1 -- a Secure cookie would
+    # never actually be sent back by the browser, breaking login entirely.
+    SESSION_COOKIE_SECURE = False
 
 
 class ProductionConfig(BaseConfig):
@@ -65,6 +81,7 @@ class ProductionConfig(BaseConfig):
 class TestingConfig(BaseConfig):
     TESTING = True
     DATABASE_URL = "sqlite:///:memory:"
+    SESSION_COOKIE_SECURE = False
 
 
 _CONFIGS = {

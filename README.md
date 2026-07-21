@@ -12,13 +12,14 @@ app.py                  Flask application factory
 config.py                Env-driven settings (no secrets hardcoded)
 wsgi.py                  Gunicorn entrypoint (wsgi:app)
 routes/
-  portal.py              HTML pages (/, /health, /upload, /dashboard)
+  portal.py              HTML pages (/, /health, /login, /logout, /upload, /dashboard)
   api.py                 JSON API (/api/v1/...)
 services/
   bhive_parser.py         extract -> segment -> classify -> consistency-check -> assemble
   requirements_registry.py  JSON-file registry (swap for a DB later)
   governance.py           append-only .jsonl audit trail per project
   rfi_export.py           flagged contradictions -> RFI .docx
+  auth.py                 session-based login gate for the web UI (routes/portal.py only)
 static/css/main.css      Blueprint/honeycomb design system
 static/js/dashboard.js   Renders the milestone lattice + registry table
 templates/               Jinja templates
@@ -188,6 +189,33 @@ python tools/dependency_fit.py --name "some-library" --requires-database --datab
 Exit code is 0 unless something FAILs outright, so it's usable as a
 quick gate in a review checklist. `--help` lists every flag.
 
+## Web UI login gate
+
+`/upload` and `/dashboard` require signing in at `/login`; `/` (the
+marketing home page) and `/health` stay public. This is a single
+shared credential, not a multi-user account system — there's no user
+database anywhere in this app.
+
+Set it up via `.env`:
+
+```bash
+AUTH_USERNAME=admin
+AUTH_PASSWORD_HASH=   # python -c "from werkzeug.security import generate_password_hash; print(generate_password_hash('yourpassword'))"
+```
+
+**Leaving either blank fails closed, not open** — `/upload` and
+`/dashboard` become completely inaccessible rather than silently
+unprotected. This is a real behavior change from earlier in the
+project's history, when those pages had no gate at all; set the two
+env vars above before relying on them again.
+
+Scope: this only gates the HTML pages in `routes/portal.py`. The JSON
+API (`/api/v1/...`) is deliberately untouched — token/key-based API
+auth is a different concern from a session-cookie login gate and
+wasn't part of this feature. There's also no brute-force rate limiting
+on `/login`; this is a simple gate for a small internal tool, not a
+hardened multi-tenant login system.
+
 ## Security notes
 
 - `.env` and any local `*.db` / `instance/` files are excluded via
@@ -207,3 +235,9 @@ quick gate in a review checklist. `--help` lists every flag.
   doesn't inherit a parent's `add_header` directives once a location
   defines any of its own). These are edge-only; the Flask app itself
   doesn't set them, since nginx already owns TLS/edge concerns here.
+- The login session cookie is `HttpOnly` and `SameSite=Lax` in every
+  environment, and `Secure` in production — `DevelopmentConfig`/
+  `TestingConfig` turn `Secure` off since local dev serves plain
+  `http://127.0.0.1`, where a `Secure` cookie would never be sent back
+  by the browser at all. Passwords are compared with
+  `werkzeug.security.check_password_hash`, never a plain `==`.

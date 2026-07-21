@@ -127,8 +127,15 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; }
     border: 1px solid var(--line);
     border-radius: 3px;
     color: var(--parchment);
+    width: 100%;
+    max-width: 320px;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 .text-input::placeholder { color: var(--muted); }
+.text-input:focus {
+    border-color: var(--teal);
+    box-shadow: 0 0 0 3px rgba(79, 169, 162, 0.15);
+}
 
 .btn {
     font-family: var(--font-mono);

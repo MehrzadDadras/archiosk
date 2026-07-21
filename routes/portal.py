@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from flask import Blueprint, abort, current_app, jsonify, redirect, render_template, request, url_for
 
+from services.auth import check_credentials, log_in, log_out, login_required
 from services.bhive_parser import REQUIREMENT_CATEGORIES
 from services.governance import GovernanceError
 from services.ingestion import UploadError, get_governance_log, get_registry, ingest_upload
@@ -71,7 +72,35 @@ def health():
     ), status_code
 
 
+@portal_bp.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'GET':
+        return render_template('login.html', error=None)
+
+    username = request.form.get('username', '')
+    password = request.form.get('password', '')
+    if check_credentials(username, password):
+        log_in(username)
+        next_url = request.args.get('next') or url_for('portal.dashboard')
+        # Only follow same-site relative paths -- ?next=https://evil.example
+        # would otherwise redirect an authenticated session off-site.
+        if not next_url.startswith('/') or next_url.startswith('//'):
+            next_url = url_for('portal.dashboard')
+        return redirect(next_url)
+
+    # Deliberately generic -- doesn't distinguish "no such user" from
+    # "wrong password" (there's only one shared username anyway).
+    return render_template('login.html', error='Invalid username or password.'), 401
+
+
+@portal_bp.route('/logout')
+def logout():
+    log_out()
+    return redirect(url_for('portal.index'))
+
+
 @portal_bp.route('/upload', methods=['GET', 'POST'])
+@login_required
 def upload():
     max_upload_mb = current_app.config['MAX_CONTENT_LENGTH'] // (1024 * 1024)
 
@@ -95,6 +124,7 @@ def upload():
 
 @portal_bp.route('/dashboard')
 @portal_bp.route('/dashboard/<project_id>')
+@login_required
 def dashboard(project_id=None):
     if project_id is None:
         return render_template(

@@ -13,8 +13,12 @@
         timeline automatically.
     </p>
     <div class="hero-actions">
+        {% if authenticated %}
         <a class="btn btn-primary" href="{{ url_for('portal.upload') }}">Ingest a document</a>
         <a class="btn btn-ghost" href="{{ url_for('portal.dashboard') }}">View dashboard</a>
+        {% else %}
+        <a class="btn btn-primary" href="{{ url_for('portal.login') }}">Sign in to get started</a>
+        {% endif %}
     </div>
 </section>
 

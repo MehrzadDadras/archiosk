@@ -17,8 +17,13 @@
         </a>
         <nav class="site-nav">
             <a href="{{ url_for('portal.index') }}">Home</a>
+            {% if authenticated %}
             <a href="{{ url_for('portal.upload') }}">Upload</a>
             <a href="{{ url_for('portal.dashboard') }}">Dashboard</a>
+            <a href="{{ url_for('portal.logout') }}">Sign out</a>
+            {% else %}
+            <a href="{{ url_for('portal.login') }}">Sign in</a>
+            {% endif %}
         </nav>
     </header>
 
