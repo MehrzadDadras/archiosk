@@ -41,7 +41,7 @@ class BaseConfig:
     # is only safe because changing this value changes the requested URL —
     # bump it any time main.css or dashboard.js changes, or browsers that
     # already cached the old file won't see the update for up to 30 days.
-    STATIC_VERSION = os.getenv("STATIC_VERSION", "1")
+    STATIC_VERSION = os.getenv("STATIC_VERSION", "2")
 
     # -- Web UI login gate (single shared credential, no user database) ----
     # Unset means services/auth.check_credentials() always returns False —
