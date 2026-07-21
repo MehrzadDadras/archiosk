@@ -72,7 +72,10 @@ def _register_context_processors(app: Flask) -> None:
     @app.context_processor
     def inject_globals():
         from datetime import datetime, timezone
-        return {"current_year": datetime.now(timezone.utc).year}
+        return {
+            "current_year": datetime.now(timezone.utc).year,
+            "static_version": app.config["STATIC_VERSION"],
+        }
 
 
 # Local dev entrypoint: `python app.py`

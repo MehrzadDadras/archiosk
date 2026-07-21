@@ -105,6 +105,13 @@ stage can get SIGKILLed mid-request before it ever reaches its own
 rule-based fallback. Leave at least 20-30s of headroom for extraction,
 segmentation, and the registry save.
 
+`deploy/nginx.conf` serves `/static/` with a 30-day immutable cache.
+That's only safe because `STATIC_VERSION` is appended as a `?v=`
+query string on every static asset reference in `base.html` — bump
+`STATIC_VERSION` in `.env` any time `main.css` or `dashboard.js`
+changes, or browsers that already cached the old file won't see the
+update for up to 30 days.
+
 ## Security notes
 
 - `.env` and any local `*.db` / `instance/` files are excluded via

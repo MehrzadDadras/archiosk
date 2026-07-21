@@ -35,6 +35,14 @@ class BaseConfig:
     MAX_CONTENT_LENGTH = int(os.getenv("MAX_UPLOAD_MB", "25")) * 1024 * 1024
     ALLOWED_UPLOAD_EXTENSIONS = {".pdf", ".docx", ".txt", ".csv"}
 
+    # -- Static asset cache-busting ----------------------------------------
+    # Appended as a ?v= query string on static asset URLs (see base.html).
+    # deploy/nginx.conf serves /static/ with a 30-day immutable cache, which
+    # is only safe because changing this value changes the requested URL —
+    # bump it any time main.css or dashboard.js changes, or browsers that
+    # already cached the old file won't see the update for up to 30 days.
+    STATIC_VERSION = os.getenv("STATIC_VERSION", "1")
+
     @classmethod
     def validate(cls) -> list[str]:
         """Return a list of missing required env vars. Call at startup."""
