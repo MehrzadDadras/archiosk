@@ -48,26 +48,28 @@
         <button class="chip" data-category="{{ c }}">{{ c.replace('_', ' ') }}</button>
         {% endfor %}
     </div>
-    <table class="registry-table" id="registry-table">
-        <thead>
-            <tr>
-                <th>Requirement</th>
-                <th>Category</th>
-                <th>Confidence</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for r in requirements %}
-            <tr data-category="{{ r.category }}">
-                <td>{{ r.text }}</td>
-                <td>{{ r.category.replace('_', ' ') }}</td>
-                <td>{{ '%.0f' % (r.confidence * 100) }}%</td>
-            </tr>
-            {% else %}
-            <tr><td colspan="3">No requirements extracted yet.</td></tr>
-            {% endfor %}
-        </tbody>
-    </table>
+    <div class="table-scroll">
+        <table class="registry-table" id="registry-table">
+            <thead>
+                <tr>
+                    <th>Requirement</th>
+                    <th>Category</th>
+                    <th>Confidence</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in requirements %}
+                <tr data-category="{{ r.category }}">
+                    <td>{{ r.text }}</td>
+                    <td>{{ r.category.replace('_', ' ') }}</td>
+                    <td>{{ '%.0f' % (r.confidence * 100) }}%</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="3">No requirements extracted yet.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
 </section>
 {% endblock %}
 

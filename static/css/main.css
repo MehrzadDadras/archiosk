@@ -163,6 +163,12 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; }
     .cell-row { grid-template-columns: 1fr 1fr; }
 }
 
+@media (max-width: 560px) {
+    .cell-row { grid-template-columns: 1fr; }
+    .lattice { max-width: none; }
+    .dash-meta { width: 100%; justify-content: space-between; }
+}
+
 /* -- dashboard header ----------------------------------------------------- */
 .dash-head {
     display: flex;
@@ -181,16 +187,25 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; }
 .meta-label { font-family: var(--font-mono); font-size: 0.72rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
 
 /* -- honeycomb lattice (signature element) -------------------------------- */
-.lattice-wrap { display: flex; gap: 2.5rem; padding: 3rem 0; align-items: flex-start; }
-.lattice {
+.lattice-wrap {
     display: flex;
     flex-wrap: wrap;
-    width: 640px;
-    gap: 6px;
+    gap: 2.5rem;
+    padding: 3rem 0;
+    align-items: flex-start;
+}
+.lattice {
+    /* Responsive grid instead of a fixed-width flex-wrap: no magic-number
+       dependency between container width / hex width / gap to keep rows
+       even, and it can't overflow the page on a narrow viewport. */
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
+    gap: 10px;
+    flex: 1 1 320px;
+    max-width: 640px;
 }
 .hex {
-    width: 92px;
-    height: 80px;
+    aspect-ratio: 92 / 80;
     clip-path: polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%);
     background: var(--panel);
     border: 1px solid var(--line);
@@ -203,9 +218,7 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; }
     color: var(--muted);
     padding: 0.4rem;
     position: relative;
-    margin-top: -12px;
 }
-.hex:nth-child(odd) { margin-top: 28px; }
 .hex.done { background: var(--amber-dim); border-color: var(--amber); color: var(--parchment); }
 .hex.active { border-color: var(--teal); color: var(--parchment); animation: pulse 2.4s ease-in-out infinite; }
 .hex.pending { color: var(--muted); }
@@ -238,6 +251,7 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; }
 }
 .chip.active { border-color: var(--amber); color: var(--amber); }
 
+.table-scroll { overflow-x: auto; }
 .registry-table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
 .registry-table th {
     text-align: left;
