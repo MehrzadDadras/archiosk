@@ -81,11 +81,13 @@ def login():
     password = request.form.get('password', '')
     if check_credentials(username, password):
         log_in(username)
-        next_url = request.args.get('next') or url_for('portal.dashboard')
+        # No specific ?next= target -> land on the project gateway (pick
+        # ingest vs. dashboard) rather than jumping straight into one.
+        next_url = request.args.get('next') or url_for('portal.gateway')
         # Only follow same-site relative paths -- ?next=https://evil.example
         # would otherwise redirect an authenticated session off-site.
         if not next_url.startswith('/') or next_url.startswith('//'):
-            next_url = url_for('portal.dashboard')
+            next_url = url_for('portal.gateway')
         return redirect(next_url)
 
     # Deliberately generic -- doesn't distinguish "no such user" from
@@ -97,6 +99,15 @@ def login():
 def logout():
     log_out()
     return redirect(url_for('portal.index'))
+
+
+@portal_bp.route('/gateway')
+@login_required
+def gateway():
+    """Post-login landing: pick "ingest a new document" vs "view dashboard"
+    instead of jumping straight into one, mirroring a project-selection
+    style entry point rather than a single default destination."""
+    return render_template('gateway.html')
 
 
 @portal_bp.route('/upload', methods=['GET', 'POST'])

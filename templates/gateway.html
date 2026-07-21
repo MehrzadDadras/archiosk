@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+
+{% block title %}Project Gateway &mdash; Archiosk{% endblock %}
+
+{% block content %}
+<div class="gateway-page">
+    <div class="gateway-card">
+        <div class="gateway-brand">
+            <div class="gateway-logo">B</div>
+            <div>
+                <p class="eyebrow">Archiosk Core Chassis</p>
+                <h1>Beehive</h1>
+                <p class="gateway-subtitle">Architectural Project Investigation Workspace</p>
+            </div>
+        </div>
+
+        <div class="gateway-divider"></div>
+
+        <section class="gateway-section">
+            <p class="gateway-section-label">Project Gateway</p>
+            <h2>Begin a session</h2>
+
+            <div class="gateway-actions">
+                <a class="gateway-action gateway-action-primary" href="{{ url_for('portal.upload') }}">
+                    <span class="gateway-action-icon">+</span>
+                    <span>
+                        <strong>Ingest a new document</strong>
+                        <small>Upload an RFP/RFQ and run it through the B-Hive pipeline</small>
+                    </span>
+                </a>
+                <a class="gateway-action" href="{{ url_for('portal.dashboard') }}">
+                    <span class="gateway-action-icon">&#8963;</span>
+                    <span>
+                        <strong>View dashboard</strong>
+                        <small>Browse requirements, milestones, and consistency flags</small>
+                    </span>
+                </a>
+            </div>
+        </section>
+
+        <footer class="gateway-footer">
+            <span>Flat-JSON registry</span>
+            <span>B-Hive Core Chassis</span>
+            <span>Static build v{{ static_version }}</span>
+        </footer>
+    </div>
+</div>
+{% endblock %}

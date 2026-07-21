@@ -196,6 +196,13 @@ marketing home page) and `/health` stay public. This is a single
 shared credential, not a multi-user account system — there's no user
 database anywhere in this app.
 
+Signing in with no specific destination (i.e. not via a redirect from
+a gated page) lands on `/gateway` — a landing screen with two action
+cards, "Ingest a new document" and "View dashboard", rather than
+jumping straight into one. `login.html` and `gateway.html` share a
+`.gateway-card` layout: brand lockup, a mono section label, and a
+footer telemetry row (registry type, chassis name, `STATIC_VERSION`).
+
 Set it up via `.env`:
 
 ```bash
