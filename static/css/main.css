@@ -412,6 +412,35 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; }
 .gateway-action strong { display: block; margin-bottom: 0.25rem; font-size: 0.85rem; color: var(--parchment); }
 .gateway-action small { display: block; color: var(--muted); font-size: 0.72rem; line-height: 1.4; }
 
+/* -- gateway login card (compact) -----------------------------------------
+   Geometry/spacing/background mirror the archiosk-explorer (port 5173)
+   welcome/sign-in card exactly, scoped to .gateway-card-compact so the
+   post-login .gateway-card (gateway.html) keeps its original spacious
+   layout untouched. */
+.gateway-card-compact {
+    background: rgba(15, 122, 122, 0.98);
+    box-shadow: 0 24px 70px rgba(0, 0, 0, 0.48);
+}
+.gateway-card-compact .gateway-brand {
+    gap: 9.6px;
+    padding: 16px 32px 12px;
+    align-items: flex-end;
+}
+.gateway-card-compact .gateway-brand h1 { line-height: 1; }
+.gateway-card-compact .gateway-section { padding: 12.8px 32px 16px; }
+.gateway-card-compact .gateway-field { margin-bottom: 14px; }
+.gateway-card-compact .text-input { max-width: none; }
+.gateway-card-compact .gateway-signin-button {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+    padding: 10px 16px;
+    border-radius: 0;
+    text-align: center;
+    font-weight: 700;
+    margin-top: 14px;
+}
+
 .gateway-footer {
     display: flex;
     justify-content: space-between;

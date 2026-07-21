@@ -4,13 +4,11 @@
 
 {% block content %}
 <div class="gateway-page">
-    <div class="gateway-card">
+    <div class="gateway-card gateway-card-compact">
         <div class="gateway-brand">
             <div class="gateway-logo">B</div>
             <div>
-                <p class="eyebrow">Archiosk Core Chassis</p>
                 <h1>Beehive</h1>
-                <p class="gateway-subtitle">Architectural Project Investigation Workspace</p>
             </div>
         </div>
 
@@ -18,7 +16,6 @@
 
         <section class="gateway-section">
             <p class="gateway-section-label">Project Gateway</p>
-            <h2>Sign in</h2>
 
             {% if error %}
             <p class="mono form-error">{{ error }}</p>
@@ -33,15 +30,9 @@
                     <label for="password">Password</label>
                     <input type="password" id="password" name="password" class="text-input" required>
                 </div>
-                <button type="submit" class="btn btn-primary">Sign in</button>
+                <button type="submit" class="btn btn-primary gateway-signin-button">Sign in</button>
             </form>
         </section>
-
-        <footer class="gateway-footer">
-            <span>Flat-JSON registry</span>
-            <span>B-Hive Core Chassis</span>
-            <span>Static build v{{ static_version }}</span>
-        </footer>
     </div>
 </div>
 {% endblock %}
