@@ -115,6 +115,7 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; }
 }
 .hero-copy { color: var(--muted); font-size: 1.05rem; max-width: 60ch; }
 .hero-actions { margin-top: 2.2rem; display: flex; gap: 1rem; }
+.hero-actions-center { justify-content: center; }
 
 .btn {
     font-family: var(--font-mono);
@@ -181,6 +182,7 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; }
 }
 .dash-head h1 { font-family: var(--font-display); font-size: 1.8rem; margin: 0.3rem 0 0; }
 .mono { font-family: var(--font-mono); color: var(--teal); font-size: 1.1rem; }
+.form-error { color: var(--amber); }
 .dash-meta { display: flex; gap: 2.2rem; }
 .meta-stat { text-align: right; }
 .meta-num { display: block; font-family: var(--font-display); font-size: 1.9rem; color: var(--amber); }
