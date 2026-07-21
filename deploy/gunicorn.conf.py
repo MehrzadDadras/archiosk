@@ -14,6 +14,13 @@ timeout = int(os.getenv("GUNICORN_TIMEOUT", "120"))
 graceful_timeout = 30
 keepalive = 5
 
+# Sync workers heartbeat via a temp file so the arbiter can detect hangs;
+# on a slow/loaded disk that write can lag enough to trigger a false-
+# positive "worker timed out" kill, unrelated to the actual request.
+# tmpfs sidesteps that — not affected by systemd's PrivateTmp, which only
+# isolates /tmp and /var/tmp.
+worker_tmp_dir = os.getenv("GUNICORN_WORKER_TMP_DIR", "/dev/shm")
+
 accesslog = "-"
 errorlog = "-"
 loglevel = os.getenv("GUNICORN_LOG_LEVEL", "info")

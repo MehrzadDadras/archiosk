@@ -11,6 +11,9 @@ User=archiosk
 Group=archiosk
 WorkingDirectory=/var/www/archiosk
 EnvironmentFile=/var/www/archiosk/.env
+# Unbuffered stdout so a worker's last log lines aren't lost if it's ever
+# SIGKILLed (e.g. a hung-worker timeout) before Python would've flushed them.
+Environment=PYTHONUNBUFFERED=1
 ExecStart=/var/www/archiosk/.venv/bin/gunicorn \
     -c /var/www/archiosk/deploy/gunicorn.conf.py \
     wsgi:app
