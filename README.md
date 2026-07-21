@@ -149,3 +149,11 @@ config and re-fork workers, it doesn't make systemd re-read `.env`. A
   — it is never hardcoded or passed as a literal.
 - Uploads are capped (`MAX_UPLOAD_MB`, default 25MB) and restricted to
   `.pdf`, `.docx`, `.txt`, `.csv`.
+- `deploy/nginx.conf` sends `Strict-Transport-Security`,
+  `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, and
+  `Referrer-Policy: strict-origin-when-cross-origin` on every response
+  (repeated inside `location /static/` since it already sets its own
+  `add_header` for caching — nginx doesn't inherit a parent's
+  `add_header` directives once a location defines any of its own).
+  These are edge-only; the Flask app itself doesn't set them, since
+  nginx already owns TLS/edge concerns here.
