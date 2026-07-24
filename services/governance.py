@@ -11,6 +11,17 @@ free-text fields supplied by the caller and recorded as given -- this is a
 presence check (something was provided), not real authorization or
 identity verification. Treat entries as a labeled audit trail, not as
 cryptographic proof of who actually took an action.
+
+Foundation Batch A (Prompt 7) extension: GovernanceEvent gained six
+optional envelope fields (trigger, state_predecessor_version,
+state_successor_version, authority_class, reason, correlation_id) rather
+than being replaced by a separate event framework -- this was already the
+cheapest existing foothold for the shared "event/provenance envelope"
+Prompts 6/7 asked for. All six are optional with no default required by
+callers, so every existing call site and every already-persisted .jsonl
+line keeps working unchanged; new call sites populate what they honestly
+have. This remains an append-only audit trail, not an event-sourcing
+store -- BEEHIVE does not reconstruct state by replaying these.
 """
 from __future__ import annotations
 
@@ -36,6 +47,18 @@ class GovernanceEvent:
     payload: dict[str, Any]
     predecessor_id: Optional[str]
     created_at: str
+    # -- Foundation Batch A (Prompt 7) envelope extension, all optional -----
+    trigger: Optional[dict[str, Any]] = None
+    # e.g. {"trigger_type": "user_initiated", "trigger_reference_type":
+    # "conversation_message", "trigger_reference_id": "..."} - deliberately
+    # a plain dict, not case_workspace.AnalysisTrigger itself: this module
+    # stays domain-agnostic (no import of case_workspace), since not every
+    # governed event is an Analysis.
+    state_predecessor_version: Optional[int] = None  # ProjectWorkspace.version before this event's write
+    state_successor_version: Optional[int] = None    # ProjectWorkspace.version after this event's write
+    authority_class: Optional[str] = None            # e.g. "approval_gate:apply"
+    reason: Optional[str] = None
+    correlation_id: Optional[str] = None             # e.g. an AnalysisRun id or Supersession id
 
 
 class GovernanceLog:
@@ -61,6 +84,12 @@ class GovernanceLog:
         role: str,
         payload: dict[str, Any] | None = None,
         predecessor_id: str | None = None,
+        trigger: dict[str, Any] | None = None,
+        state_predecessor_version: int | None = None,
+        state_successor_version: int | None = None,
+        authority_class: str | None = None,
+        reason: str | None = None,
+        correlation_id: str | None = None,
     ) -> GovernanceEvent:
         if not actor or not actor.strip():
             raise GovernanceError("An actor is required to record a governance event.")
@@ -76,6 +105,12 @@ class GovernanceLog:
             payload=payload or {},
             predecessor_id=predecessor_id,
             created_at=datetime.now(timezone.utc).isoformat(),
+            trigger=trigger,
+            state_predecessor_version=state_predecessor_version,
+            state_successor_version=state_successor_version,
+            authority_class=authority_class,
+            reason=reason,
+            correlation_id=correlation_id,
         )
 
         with self._path_for(project_id).open("a", encoding="utf-8") as f:

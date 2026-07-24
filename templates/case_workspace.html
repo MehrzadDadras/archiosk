@@ -19,15 +19,24 @@
 
         <p class="workspace-pane-label">Lifecycle</p>
         <div class="lifecycle-strip">
-            {% for stage in ["RFQ", "RFP", "Requirements", "Design Sources", "Cases", "RFIs", "Construction", "Historic Record"] %}
-            <span class="lifecycle-stage{% if stage in ['RFP', 'Requirements'] %} current{% endif %}">{{ stage }}</span>
+            {% for stage in ["RFQ", "RFP", "Pursuit", "Award", "Design", "Construction", "Closeout", "Historic Record"] %}
+            <span class="lifecycle-stage{% if stage in ['RFP'] %} current{% endif %}">{{ stage }}</span>
             {% endfor %}
         </div>
         <p class="workspace-pane-label" style="margin-top:-0.6rem;margin-bottom:1.2rem;color:var(--muted);font-family:var(--font-body);text-transform:none;letter-spacing:normal;font-size:0.75rem;">
             This Project began as an RFQ/RFP ingestion. Extract &rarr; Segment &rarr; Classify &rarr; Assemble already ran
-            as this Project's first Analysis, producing the {{ document.requirements|length }} requirement(s) below as
-            governed Sources of truth. The same Analyze &rarr; Review &rarr; Apply machinery now continues into later
-            Cases (drawing review, RFIs, construction) as the Project moves forward.
+            as this Project's first Analysis, producing the {{ document.requirements|length }} requirement(s) as
+            governed Sources of truth. The same Project / Case / Source / Artifact / Analysis / Finding / Review /
+            Apply machinery continues into later Cases (drawing review, RFIs, construction) as the Project moves
+            forward — folders and filenames are views; this record is the canonical identity.
+        </p>
+
+        <p class="workspace-pane-label">
+            Accepted Knowledge ({{ knowledge_count }})
+        </p>
+        <p style="color:var(--muted);font-size:0.72rem;margin:-0.6rem 0 1rem;">
+            Every Applied Finding across this Project's Cases, independent of which Case produced it —
+            the Project's accumulated intelligence, not a per-Case log.
         </p>
 
         <p class="workspace-pane-label">Sources ({{ workspace.sources|length }})</p>
@@ -36,6 +45,12 @@
             <li class="source-item">
                 <span class="source-kind-badge">{{ source.kind.replace('_', ' ') }}</span>
                 {{ source.name }}
+                {% if source.superseded_by_source_id %}
+                <br><small style="color:var(--amber);">Superseded by a newer revision.</small>
+                {% endif %}
+                {% if source.supersedes_source_id %}
+                <br><small style="color:var(--teal);">Revision of a prior Source.</small>
+                {% endif %}
                 {% if source.note %}<br><small style="color:var(--muted);">{{ source.note }}</small>{% endif %}
             </li>
             {% endfor %}
@@ -72,6 +87,33 @@
         <h2>{{ active_case.title }}</h2>
         {% if active_case.objective %}<p style="color:var(--muted);font-size:0.85rem;margin-top:-0.6rem;">{{ active_case.objective }}</p>{% endif %}
 
+        {% if activities %}
+        <p class="workspace-pane-label">Activities ({{ activities|length }})</p>
+        <ul class="source-list">
+            {% for activity in activities %}
+            <li class="source-item">
+                <span class="source-kind-badge">{{ activity.kind }}</span>
+                {{ activity.description }}
+                <br><small style="color:var(--muted);">{{ activity.status }} &middot; {{ activity.created_by }}</small>
+            </li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+
+        {% for notice in revision_notices %}
+        <div class="revision-notice">
+            <strong>Reference update detected</strong>
+            <p>A newer revision of a Source used in this Case was registered. The original evidence
+               behind existing Findings is preserved unchanged.</p>
+            <div class="finding-provenance">
+                {% for status in notice.artifact_region_status %}
+                <span>artifact {{ status.artifact_id[:8] }}:</span>
+                <strong class="region-status region-status-{{ status.status }}">{{ status.status.replace('_', ' ') }}</strong><br>
+                {% endfor %}
+            </div>
+        </div>
+        {% endfor %}
+
         <details class="add-source-details">
             <summary>+ Add drawing Source to this Case</summary>
             <form class="workspace-form" method="post" enctype="multipart/form-data"
@@ -80,6 +122,22 @@
                 <button type="submit">Add Drawing</button>
             </form>
         </details>
+
+        {% set drawing_sources = workspace.sources|selectattr("kind", "equalto", "drawing")|selectattr("id", "in", active_case.source_ids)|list %}
+        {% if drawing_sources %}
+        <details class="add-source-details">
+            <summary>+ Register a new revision of an existing drawing Source</summary>
+            {% for source in drawing_sources if not source.superseded_by_source_id %}
+            <form class="workspace-form" method="post" enctype="multipart/form-data"
+                  action="{{ url_for('workspace.revise_source', project_id=project_id, source_id=source.id) }}">
+                <input type="hidden" name="case_id" value="{{ active_case.id }}">
+                <label style="font-family:var(--font-mono);font-size:0.72rem;color:var(--muted);">{{ source.name }}</label>
+                <input type="file" name="drawing" accept=".png,.jpg,.jpeg" required>
+                <button type="submit">Register Revision</button>
+            </form>
+            {% endfor %}
+        </details>
+        {% endif %}
 
         <div class="conversation-thread">
             {% for message in active_case.conversation %}
@@ -93,6 +151,42 @@
             </p>
             {% endfor %}
         </div>
+
+        {% if pending_rfi_finding_id %}
+        <div class="delegation-choice">
+            <p class="workspace-pane-label">How would you like to proceed?</p>
+            <form method="post" action="{{ url_for('workspace.create_rfi_draft', project_id=project_id, case_id=active_case.id) }}">
+                <input type="hidden" name="finding_id" value="{{ pending_rfi_finding_id }}">
+                <button type="submit" class="review-btn accept">Do it for me</button>
+            </form>
+            <form method="post" action="{{ url_for('workspace.preview_rfi_draft', project_id=project_id, case_id=active_case.id) }}">
+                <input type="hidden" name="finding_id" value="{{ pending_rfi_finding_id }}">
+                <button type="submit" class="review-btn needs_evidence">Show me the proposed action first</button>
+            </form>
+            <form method="post" action="{{ url_for('workspace.cancel_rfi_intent', project_id=project_id, case_id=active_case.id) }}">
+                <button type="submit" class="review-btn reject">Cancel</button>
+            </form>
+        </div>
+        {% endif %}
+
+        {% if rfi_preview %}
+        <div class="rfi-preview">
+            <p class="workspace-pane-label">Proposed RFI reference bundle (nothing created yet)</p>
+            <div class="finding-provenance">
+                <span>case:</span> <strong>{{ rfi_preview.case_title }}</strong><br>
+                <span>source:</span> <strong>{{ rfi_preview.source_name }}</strong> &middot; page <strong>{{ rfi_preview.page }}</strong><br>
+                {% if rfi_preview.region %}
+                <span>region:</span> <strong>x={{ "%.2f"|format(rfi_preview.region.x) }} y={{ "%.2f"|format(rfi_preview.region.y) }}</strong><br>
+                {% endif %}
+                <span>finding:</span> <strong>{{ rfi_preview.finding_statement }}</strong><br>
+                <span>reviewer validation:</span> <strong>{{ rfi_preview.reviewer_validation }}</strong> ({{ rfi_preview.reviewer }})
+            </div>
+            <form method="post" action="{{ url_for('workspace.create_rfi_draft', project_id=project_id, case_id=active_case.id) }}">
+                <input type="hidden" name="finding_id" value="{{ preview_finding_id }}">
+                <button type="submit" class="apply-button">Create this draft</button>
+            </form>
+        </div>
+        {% endif %}
 
         <form class="conversation-input-form" method="post"
               action="{{ url_for('workspace.post_message', project_id=project_id, case_id=active_case.id) }}">
@@ -114,10 +208,12 @@
             {% for row in findings_view %}
             {% set finding = row.finding %}
             {% set artifact = row.artifact %}
-            {% set latest = row.latest_review %}
+            {% set latest_validation = row.latest_validation %}
+            {% set latest_disposition = row.latest_disposition %}
             <article class="finding-card{% if finding.id == focused_finding_id %} focused{% endif %}">
                 <p class="finding-confidence">
                     Machine finding &middot; confidence {{ (finding.machine_confidence * 100)|round|int }}%
+                    &middot; <span class="review-state-badge review-state-{{ row.review_state|lower|replace(' ', '-') }}">{{ row.review_state }}</span>
                     {% if finding.claim_status == "applied" %}
                     <span class="applied-badge">Applied</span>
                     {% endif %}
@@ -140,32 +236,73 @@
                 </div>
                 {% endif %}
 
-                {% for review in row.reviews %}
-                    {% if review.decision == "correction" %}
-                    <div class="correction-note"><strong>Correction</strong> ({{ review.reviewer }}): {{ review.note }}</div>
-                    {% endif %}
+                {% for validation in row.reviewer_validations if validation.correction_note %}
+                <div class="correction-note"><strong>Correction</strong> ({{ validation.reviewer }}): {{ validation.correction_note }}</div>
                 {% endfor %}
 
-                {% if latest %}
-                <span class="review-decision-badge {{ latest.decision }}">{{ latest.decision.replace('_', ' ') }}</span>
+                {% if latest_validation %}
+                <span class="review-decision-badge validation-{{ latest_validation.validation|lower|replace(' ', '_') }}">{{ latest_validation.validation }}</span>
+                {% endif %}
+                {% if latest_disposition %}
+                <span class="review-decision-badge disposition-{{ latest_disposition.disposition|lower|replace(' ', '_') }}">{{ latest_disposition.disposition }}</span>
                 {% endif %}
 
                 {% if finding.claim_status != "applied" %}
+                <p class="workspace-pane-label" style="margin-top:0.6rem;">Reviewer Validation</p>
                 <form class="finding-review-actions" method="post"
-                      action="{{ url_for('workspace.review_finding', project_id=project_id, finding_id=finding.id) }}">
+                      action="{{ url_for('workspace.validate_finding', project_id=project_id, finding_id=finding.id) }}">
                     <input type="hidden" name="case_id" value="{{ active_case.id }}">
-                    <button type="submit" name="decision" value="accept" class="review-btn accept">Accept</button>
-                    <button type="submit" name="decision" value="reject" class="review-btn reject">Reject</button>
-                    <button type="submit" name="decision" value="needs_evidence" class="review-btn needs_evidence">Needs Evidence</button>
+                    {% for state in reviewer_validation_states %}
+                    <button type="submit" name="validation" value="{{ state }}"
+                            class="review-btn {{ 'accept' if state == 'Correct' else ('reject' if state == 'Incorrect' else 'needs_evidence') }}">{{ state }}</button>
+                    {% endfor %}
                 </form>
+
+                {% if latest_validation %}
+                <p class="workspace-pane-label" style="margin-top:0.6rem;">Disposition</p>
                 <form class="finding-review-actions" method="post"
-                      action="{{ url_for('workspace.review_finding', project_id=project_id, finding_id=finding.id) }}">
+                      action="{{ url_for('workspace.set_disposition', project_id=project_id, finding_id=finding.id) }}">
                     <input type="hidden" name="case_id" value="{{ active_case.id }}">
-                    <input type="hidden" name="decision" value="correction">
-                    <input type="text" name="note" placeholder="Add Correction…" style="flex:1;font-family:var(--font-mono);font-size:0.75rem;background:var(--ink);border:1px solid var(--line);border-radius:3px;color:var(--parchment);padding:0.4rem 0.6rem;">
+                    {% for state in dispositions %}
+                    <button type="submit" name="disposition" value="{{ state }}"
+                            class="review-btn {{ 'accept' if state in ['Confirmed', 'Known Accepted'] else ('reject' if state == 'Rejected' else 'needs_evidence') }}">{{ state }}</button>
+                    {% endfor %}
+                </form>
+                {% endif %}
+
+                <form class="finding-review-actions" method="post"
+                      action="{{ url_for('workspace.validate_finding', project_id=project_id, finding_id=finding.id) }}">
+                    <input type="hidden" name="case_id" value="{{ active_case.id }}">
+                    <input type="hidden" name="validation" value="Incorrect">
+                    <input type="text" name="correction_note" placeholder="Add Correction…" style="flex:1;font-family:var(--font-mono);font-size:0.75rem;background:var(--ink);border:1px solid var(--line);border-radius:3px;color:var(--parchment);padding:0.4rem 0.6rem;">
                     <button type="submit" class="review-btn correction">Add Correction</button>
                 </form>
                 {% endif %}
+
+                {% for draft in row.rfi_drafts %}
+                <div class="rfi-draft-card">
+                    <p class="workspace-pane-label">RFI Draft &middot; {{ draft.status }}</p>
+                    <div class="finding-provenance">
+                        <span>source:</span> <strong>{{ draft.reference_snapshot.source_name }}</strong>
+                        &middot; page <strong>{{ draft.reference_snapshot.page }}</strong><br>
+                        <span>case:</span> <strong>{{ draft.reference_snapshot.case_title }}</strong><br>
+                        <span>reviewer:</span> <strong>{{ draft.reference_snapshot.reviewer }}</strong>
+                    </div>
+                    {% if draft.status != "issued" %}
+                    <form method="post" action="{{ url_for('workspace.update_rfi_question', project_id=project_id, draft_id=draft.id) }}">
+                        <input type="hidden" name="case_id" value="{{ active_case.id }}">
+                        <textarea name="question_text" placeholder="RFI question…" style="width:100%;font-family:var(--font-body);background:var(--ink);border:1px solid var(--line);color:var(--parchment);border-radius:3px;padding:0.5rem;">{{ draft.question_text }}</textarea>
+                        <button type="submit" class="review-btn needs_evidence">Save question</button>
+                    </form>
+                    <form method="post" action="{{ url_for('workspace.issue_rfi_draft', project_id=project_id, draft_id=draft.id) }}">
+                        <input type="hidden" name="case_id" value="{{ active_case.id }}">
+                        <button type="submit" class="apply-button">Issue RFI</button>
+                    </form>
+                    {% else %}
+                    <p class="consistency-clean">Issued {{ draft.issued_at }} by {{ draft.issued_by }}.</p>
+                    {% endif %}
+                </div>
+                {% endfor %}
             </article>
             {% else %}
             <p class="findings-empty">
@@ -178,10 +315,10 @@
             <p>
                 {{ findings_view|length }} finding(s) in this Case &middot;
                 {{ applied_count }} applied &middot;
-                {{ awaiting_apply_count }} accepted, awaiting Apply
+                {{ awaiting_apply_count }} Confirmed, awaiting Apply
             </p>
             <form method="post" action="{{ url_for('workspace.apply_findings', project_id=project_id, case_id=active_case.id) }}">
-                <button type="submit" class="apply-button">Apply Accepted Findings</button>
+                <button type="submit" class="apply-button">Apply Confirmed Findings</button>
             </form>
         </div>
         {% else %}

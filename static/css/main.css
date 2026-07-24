@@ -788,3 +788,67 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; }
 .apply-button:disabled { background: transparent; color: var(--muted); border-color: var(--line); cursor: not-allowed; }
 
 .findings-empty { color: var(--muted); font-size: 0.88rem; padding: 2rem 0; text-align: center; }
+
+/* -- Reviewer Validation / Disposition / review_state badges --------------
+   Three separate concepts, three separate badge families - never merged
+   into one color/label so the distinction stays visible in the UI, not
+   just in the data model. */
+.review-state-badge {
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 0.15rem 0.45rem;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    color: var(--muted);
+}
+.review-state-badge.review-state-verified { color: var(--workspace-green); border-color: var(--workspace-green); }
+.review-state-badge.review-state-not-verified { color: var(--workspace-red); border-color: var(--workspace-red); }
+.review-state-badge.review-state-unverified { color: var(--muted); border-color: var(--line); }
+
+.review-decision-badge.validation-correct { color: var(--workspace-green); border: 1px solid var(--workspace-green); background: var(--workspace-green-dim); }
+.review-decision-badge.validation-incorrect { color: var(--workspace-red); border: 1px solid var(--workspace-red); background: var(--workspace-red-dim); }
+.review-decision-badge.validation-partial,
+.review-decision-badge.validation-needs_evidence { color: var(--amber); border: 1px solid var(--amber); background: var(--amber-dim); }
+.review-decision-badge.validation-not_applicable { color: var(--muted); border: 1px solid var(--muted); }
+
+.review-decision-badge.disposition-confirmed,
+.review-decision-badge.disposition-known_accepted { color: var(--workspace-green); border: 1px solid var(--workspace-green); background: var(--workspace-green-dim); }
+.review-decision-badge.disposition-rejected { color: var(--workspace-red); border: 1px solid var(--workspace-red); background: var(--workspace-red-dim); }
+.review-decision-badge.disposition-deferred,
+.review-decision-badge.disposition-known_pending_acceptance { color: var(--amber); border: 1px solid var(--amber); background: var(--amber-dim); }
+
+/* -- Revision-awareness ---------------------------------------------------- */
+.revision-notice {
+    background: var(--amber-dim);
+    border: 1px solid var(--amber);
+    border-left: 4px solid var(--amber);
+    border-radius: 4px;
+    padding: 0.9rem 1.1rem;
+    margin-bottom: 1rem;
+}
+.revision-notice strong { color: var(--amber); text-transform: uppercase; font-family: var(--font-mono); font-size: 0.78rem; letter-spacing: 0.05em; }
+.revision-notice p { color: var(--parchment); font-size: 0.85rem; margin: 0.4rem 0 0.6rem; }
+.region-status { font-family: var(--font-mono); }
+.region-status-unchanged { color: var(--workspace-green); }
+.region-status-changed { color: var(--workspace-red); }
+.region-status-unable_to_determine { color: var(--muted); }
+
+/* -- Delegation Choice / RFI preview & draft -------------------------------- */
+.delegation-choice, .rfi-preview, .rfi-draft-card {
+    background: var(--panel-raised);
+    border: 1px solid var(--teal);
+    border-radius: 4px;
+    padding: 0.9rem 1.1rem;
+    margin: 1rem 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+}
+.delegation-choice form, .rfi-preview form, .rfi-draft-card form { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
+
+/* -- Approval Gate ----------------------------------------------------------- */
+.approval-gate h2 { font-family: var(--font-display); font-size: 1.1rem; margin: 0.4rem 0 1rem; }
+.approval-gate-actions { display: flex; flex-direction: column; gap: 0.6rem; margin-top: 1.2rem; align-items: flex-start; }
+.approval-gate-actions button { width: 100%; text-align: left; padding: 0.7rem 1rem; }

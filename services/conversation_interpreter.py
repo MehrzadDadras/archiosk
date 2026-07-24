@@ -22,7 +22,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
-from services.case_workspace import CaseWorkspaceError, CaseWorkspaceStore, ProjectWorkspace
+from services.case_workspace import (
+    ANALYSIS_TRIGGER_USER_INITIATED,
+    AnalysisTrigger,
+    CaseWorkspaceError,
+    CaseWorkspaceStore,
+    ProjectWorkspace,
+)
 from services.drawing_analysis import analyze_drawing, make_comparison_artifact
 
 
@@ -44,6 +50,7 @@ def interpret_message(
     artifacts_dir: Path,
     reviewer: str,
     focused_finding_id: Optional[str],
+    triggering_message_id: Optional[str] = None,
 ) -> InterpretationResult:
     lowered = text.strip().lower()
 
@@ -54,13 +61,16 @@ def interpret_message(
         )
 
     if lowered.startswith(("analyze", "analyse")):
-        return _handle_analyze(text, workspace, case, store, artifacts_dir)
+        return _handle_analyze(text, workspace, case, store, artifacts_dir, reviewer, triggering_message_id)
 
     if "evidence" in lowered and "finding" in lowered:
         return _handle_show_evidence(lowered, case)
 
     if lowered.startswith("compare") or " compare " in f" {lowered} ":
         return _handle_compare(text, workspace, case, artifacts_dir, focused_finding_id)
+
+    if "draft" in lowered and "rfi" in lowered:
+        return _handle_draft_rfi_intent(focused_finding_id)
 
     if focused_finding_id is not None and _looks_like_correction(lowered):
         return _handle_correction(text, workspace, case, store, focused_finding_id, reviewer)
@@ -70,8 +80,9 @@ def interpret_message(
         reply_text=(
             "I didn't recognize an action in that message. Try \"Analyze this "
             "drawing for ...\", \"Show me the evidence supporting Finding N\", "
-            "\"Compare ... with ...\", or, with a Finding focused, a direct "
-            "correction (e.g. \"This is not a datum, it is a civil reference\")."
+            "\"Compare ... with ...\", \"Draft an RFI from this accepted issue\", "
+            "or, with a Finding focused, a direct correction (e.g. \"This is not "
+            "a datum, it is a civil reference\")."
         ),
     )
 
@@ -82,6 +93,8 @@ def _handle_analyze(
     case: dict,
     store: CaseWorkspaceStore,
     artifacts_dir: Path,
+    reviewer: str,
+    triggering_message_id: Optional[str],
 ) -> InterpretationResult:
     drawing_sources = [
         s for s in workspace.sources
@@ -97,12 +110,14 @@ def _handle_analyze(
         )
 
     source = drawing_sources[-1]
+    prior_corrections = store.corrections_for_case(workspace, case["id"])
 
     try:
         raw_findings = analyze_drawing(
             image_path=Path(source["file_path"]),
             objective=text,
             artifacts_dir=artifacts_dir,
+            prior_corrections=prior_corrections,
         )
     except Exception as exc:  # noqa: BLE001 - surfaced to the reviewer, not swallowed
         return InterpretationResult(
@@ -115,6 +130,19 @@ def _handle_analyze(
 
     from services.drawing_analysis import ENGINE_NAME, ENGINE_VERSION
 
+    # Prompt 7: this is the one, real trigger this Analysis has today - a
+    # human typed a conversational instruction. Honest and specific rather
+    # than a generic default: names the exact ConversationMessage that
+    # caused it, when the caller has that id (post_message always does;
+    # triggering_message_id is only ever None for call paths - none exist
+    # yet - that don't originate from a stored message).
+    trigger = AnalysisTrigger(
+        trigger_type=ANALYSIS_TRIGGER_USER_INITIATED,
+        trigger_reference_type="conversation_message" if triggering_message_id else None,
+        trigger_reference_id=triggering_message_id,
+        triggered_by_actor=reviewer,
+    )
+
     analysis = store.record_analysis(
         workspace,
         case_id=case["id"],
@@ -123,15 +151,23 @@ def _handle_analyze(
         engine_name=ENGINE_NAME,
         engine_version=ENGINE_VERSION,
         findings=raw_findings,
+        trigger=trigger,
+        prior_corrections_considered=len(prior_corrections),
     )
 
     count = len(analysis["finding_ids"])
+    context_note = (
+        f" Incorporated {len(prior_corrections)} prior reviewer correction(s) "
+        "from this Case - matching topics were excluded from this run."
+        if prior_corrections
+        else ""
+    )
     return InterpretationResult(
         action_taken=f"analysis:{analysis['id']}",
         reply_text=(
             f"Analysis complete on \"{source['name']}\". {count} candidate "
             f"finding(s) generated, each with its own Focus Snip Artifact. "
-            "All are provisional until reviewed — see the Artifact Workspace."
+            f"All are provisional until reviewed — see the Artifact Workspace.{context_note}"
         ),
     )
 
@@ -204,13 +240,17 @@ def _handle_correction(
     focused_finding_id: str,
     reviewer: str,
 ) -> InterpretationResult:
+    # A conversational correction is recorded as a Reviewer Validation of
+    # "Incorrect" carrying the correction text as its note - not a fourth,
+    # separate concept. This keeps reviewerValidation/disposition/
+    # review_state exactly three things, per Prompt 4 #1.
     try:
-        store.record_review(
+        store.record_reviewer_validation(
             workspace,
             finding_id=focused_finding_id,
-            decision="correction",
+            validation="Incorrect",
             reviewer=reviewer,
-            note=text,
+            correction_note=text,
         )
     except CaseWorkspaceError as exc:
         return InterpretationResult(action_taken="correction_failed", reply_text=str(exc))
@@ -218,10 +258,40 @@ def _handle_correction(
     return InterpretationResult(
         action_taken=f"correction:{focused_finding_id}",
         reply_text=(
-            "Recorded as a correction on the focused Finding. The original "
-            "machine finding is preserved; your correction is a separate, "
-            "attributed record alongside it — it does not overwrite it, and "
-            "nothing was applied to governed project state."
+            "Recorded as a Reviewer Validation (Incorrect) with your correction "
+            "attached to the focused Finding. The original machine finding is "
+            "preserved; your correction is a separate, attributed record "
+            "alongside it — it does not overwrite it, and nothing was applied "
+            "to governed project state. Future analysis in this Case will "
+            "account for it."
+        ),
+        focused_finding_id=focused_finding_id,
+    )
+
+
+def _handle_draft_rfi_intent(focused_finding_id: Optional[str]) -> InterpretationResult:
+    """
+    Recognizes "Draft an RFI ..." intent but does not create the draft
+    itself - this is a Delegation Choice point (Prompt 4 #10): the route
+    layer presents "Do it for me / Show me the proposed action first /
+    Cancel" before anything is created, using the reference_snapshot
+    BEEHIVE already has rather than asking the reviewer to reconstruct it.
+    """
+    if focused_finding_id is None:
+        return InterpretationResult(
+            action_taken="rfi_intent_failed",
+            reply_text=(
+                "Focus a Finding first (e.g. \"Show me the evidence supporting "
+                "Finding 2\"), then ask me to draft an RFI from it."
+            ),
+        )
+
+    return InterpretationResult(
+        action_taken=f"rfi_intent:{focused_finding_id}",
+        reply_text=(
+            "I can draft an RFI from the focused Finding, inheriting its "
+            "Source/page/region/Case references automatically. Choose below "
+            "how you'd like to proceed."
         ),
         focused_finding_id=focused_finding_id,
     )
