@@ -39,6 +39,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
+from services.governance import GovernanceLog
+
 # Every ingested RFQ/RFP document is registered as this Project's first
 # Source automatically (see get_or_create) — the RFQ/RFP pipeline is the
 # beginning of the same persistent Project, not a separate product.
@@ -164,6 +166,14 @@ OBJECT_KIND_ACTIVITY = "activity"
 OBJECT_KIND_TEMPORAL_OBLIGATION = "temporal_obligation"
 OBJECT_KIND_EXPERIENCE_KNOWLEDGE = "experience_knowledge"
 OBJECT_KIND_DECISION = "decision"
+OBJECT_KIND_REQUIREMENT = "requirement"  # canonicalized in Prompt 10 - already used as a real extension kind in Batch C's Design-Build tests
+OBJECT_KIND_REVIEW_THREAD = "review_thread"  # Prompt 10
+OBJECT_KIND_RELATIONSHIP = "relationship"  # Prompt 10 #2 - a Relationship can itself be an Anchor
+OBJECT_KIND_DISCIPLINE = "discipline"  # Prompt 12 - a maturity/expectation scope, not a stored object of its own
+OBJECT_KIND_PACKAGE = "package"  # Prompt 12 - same: a labeled scope, not a stored object
+OBJECT_KIND_PROJECT = "project"  # Prompt 12 - the whole-project scope; scope_id equals the Project's own project_id
+OBJECT_KIND_EXPECTED_INFORMATION_PROFILE = "expected_information_profile"  # Prompt 12
+OBJECT_KIND_MATURITY_RECORD = "maturity_record"  # Prompt 12
 
 KNOWN_OBJECT_KINDS = (
     OBJECT_KIND_SOURCE,
@@ -176,6 +186,14 @@ KNOWN_OBJECT_KINDS = (
     OBJECT_KIND_TEMPORAL_OBLIGATION,
     OBJECT_KIND_EXPERIENCE_KNOWLEDGE,
     OBJECT_KIND_DECISION,
+    OBJECT_KIND_REQUIREMENT,
+    OBJECT_KIND_REVIEW_THREAD,
+    OBJECT_KIND_RELATIONSHIP,
+    OBJECT_KIND_DISCIPLINE,
+    OBJECT_KIND_PACKAGE,
+    OBJECT_KIND_PROJECT,
+    OBJECT_KIND_EXPECTED_INFORMATION_PROFILE,
+    OBJECT_KIND_MATURITY_RECORD,
 )
 
 # -- Typed relationship vocabulary (Prompt 8 #1) -----------------------------
@@ -192,6 +210,7 @@ RELATIONSHIP_TYPE_IMPLEMENTS = "implements"
 RELATIONSHIP_TYPE_DEPENDS_ON = "depends_on"
 RELATIONSHIP_TYPE_BLOCKS = "blocks"
 RELATIONSHIP_TYPE_AFFECTS = "affects"
+RELATIONSHIP_TYPE_RESULTED_IN = "resulted_in"  # Prompt 10 #7: ReviewThread -> structured outcome linkage
 
 KNOWN_RELATIONSHIP_TYPES = (
     RELATIONSHIP_TYPE_SUPPORTS,
@@ -204,6 +223,7 @@ KNOWN_RELATIONSHIP_TYPES = (
     RELATIONSHIP_TYPE_DEPENDS_ON,
     RELATIONSHIP_TYPE_BLOCKS,
     RELATIONSHIP_TYPE_AFFECTS,
+    RELATIONSHIP_TYPE_RESULTED_IN,
 )
 
 # -- Temporal Obligation vocabulary (Prompt 8 #5/#9/#10) ---------------------
@@ -234,6 +254,191 @@ TEMPORAL_CONDITION_OVERDUE = "overdue"
 # value. A future per-project/per-contract override belongs to whichever
 # batch adds real per-project configuration; this is the honest fallback.
 DEFAULT_DUE_SOON_WINDOW_DAYS = 7
+
+# -- Review Thread vocabulary (Prompt 10) ------------------------------------
+# All four vocabularies below use the Open-World pattern (known values
+# normalized, unrecognized values preserved verbatim) - none of them are
+# closed enums. intended_actor on Attention is deliberately NOT one of
+# these: a person/role name space is fundamentally unbounded (anyone's
+# username, any discipline), unlike these, which name a real finite set of
+# professional review-comment shapes, thread lifecycle stages, attention
+# states, and resolution outcome kinds.
+
+MESSAGE_TYPE_OBSERVATION = "observation"
+MESSAGE_TYPE_QUESTION = "question"
+MESSAGE_TYPE_CRITIQUE = "critique"
+MESSAGE_TYPE_CLARIFICATION_REQUEST = "clarification_request"
+MESSAGE_TYPE_RESPONSE = "response"
+MESSAGE_TYPE_SUGGESTION = "suggestion"
+MESSAGE_TYPE_INTERPRETATION = "interpretation"
+MESSAGE_TYPE_DECISION_NOTE = "decision_note"
+MESSAGE_TYPE_EVIDENCE_NOTE = "evidence_note"
+MESSAGE_TYPE_RESOLUTION_NOTE = "resolution_note"
+
+KNOWN_MESSAGE_TYPES = (
+    MESSAGE_TYPE_OBSERVATION,
+    MESSAGE_TYPE_QUESTION,
+    MESSAGE_TYPE_CRITIQUE,
+    MESSAGE_TYPE_CLARIFICATION_REQUEST,
+    MESSAGE_TYPE_RESPONSE,
+    MESSAGE_TYPE_SUGGESTION,
+    MESSAGE_TYPE_INTERPRETATION,
+    MESSAGE_TYPE_DECISION_NOTE,
+    MESSAGE_TYPE_EVIDENCE_NOTE,
+    MESSAGE_TYPE_RESOLUTION_NOTE,
+)
+
+MESSAGE_ORIGIN_HUMAN = "human"
+MESSAGE_ORIGIN_MACHINE = "machine"
+MESSAGE_ORIGIN_SYSTEM = "system"
+# Closed, not open-world: a message's origin is a structural fact about how
+# BEEHIVE itself worked, not an evolving professional vocabulary - there is
+# no legitimate fourth kind of origin to leave room for the way there is
+# for message content or thread status.
+KNOWN_MESSAGE_ORIGINS = (MESSAGE_ORIGIN_HUMAN, MESSAGE_ORIGIN_MACHINE, MESSAGE_ORIGIN_SYSTEM)
+
+THREAD_STATUS_OPEN = "open"
+THREAD_STATUS_UNDER_REVIEW = "under_review"
+THREAD_STATUS_WAITING_FOR_RESPONSE = "waiting_for_response"
+THREAD_STATUS_WAITING_FOR_EVIDENCE = "waiting_for_evidence"
+THREAD_STATUS_RESOLVED = "resolved"
+THREAD_STATUS_CLOSED = "closed"
+THREAD_STATUS_REOPENED = "reopened"
+
+KNOWN_THREAD_STATUSES = (
+    THREAD_STATUS_OPEN,
+    THREAD_STATUS_UNDER_REVIEW,
+    THREAD_STATUS_WAITING_FOR_RESPONSE,
+    THREAD_STATUS_WAITING_FOR_EVIDENCE,
+    THREAD_STATUS_RESOLVED,
+    THREAD_STATUS_CLOSED,
+    THREAD_STATUS_REOPENED,
+)
+
+ATTENTION_STATUS_PENDING = "pending"
+ATTENTION_STATUS_ACKNOWLEDGED = "acknowledged"
+ATTENTION_STATUS_RESPONDED = "responded"
+
+KNOWN_ATTENTION_STATUSES = (ATTENTION_STATUS_PENDING, ATTENTION_STATUS_ACKNOWLEDGED, ATTENTION_STATUS_RESPONDED)
+
+RESOLUTION_OUTCOME_NO_ISSUE = "no_issue"
+RESOLUTION_OUTCOME_ACCEPTABLE_ALTERNATIVE = "acceptable_alternative"
+RESOLUTION_OUTCOME_NEEDS_EVIDENCE = "needs_evidence"
+RESOLUTION_OUTCOME_CONFIRMED_ISSUE = "confirmed_issue"
+RESOLUTION_OUTCOME_WITHDRAWN = "withdrawn"
+
+KNOWN_RESOLUTION_OUTCOMES = (
+    RESOLUTION_OUTCOME_NO_ISSUE,
+    RESOLUTION_OUTCOME_ACCEPTABLE_ALTERNATIVE,
+    RESOLUTION_OUTCOME_NEEDS_EVIDENCE,
+    RESOLUTION_OUTCOME_CONFIRMED_ISSUE,
+    RESOLUTION_OUTCOME_WITHDRAWN,
+)
+
+# -- Expected Information Profile / Maturity vocabulary (Prompt 11/12) -------
+# Per Prompt 11 B: "expectation authority" is split into two independent axes
+# rather than one flat label set. `bindingness` (below) is a small, genuinely
+# closed spectrum of how strongly something is expected. WHO/WHAT says so
+# (a contract clause, an owner PEP, industry practice, a machine inference)
+# is unbounded free text - `ExpectationItem.authority_source` - mirroring the
+# already-proven Supersession.authority_class free-text pattern, not a
+# vocabulary requiring validation.
+
+EXPECTATION_BINDINGNESS_MANDATORY = "mandatory"  # contractual/mandatory
+EXPECTATION_BINDINGNESS_EXPECTED = "expected"  # project-required / normally expected
+EXPECTATION_BINDINGNESS_RECOMMENDED = "recommended"  # recommended/typical/conditional collapse here - see report
+EXPECTATION_BINDINGNESS_INFERRED = "inferred"  # machine-inferred - always the weakest tier
+
+KNOWN_EXPECTATION_BINDINGNESS = (
+    EXPECTATION_BINDINGNESS_MANDATORY,
+    EXPECTATION_BINDINGNESS_EXPECTED,
+    EXPECTATION_BINDINGNESS_RECOMMENDED,
+    EXPECTATION_BINDINGNESS_INFERRED,
+)
+
+EXPECTED_KIND_DOCUMENT = "document"
+EXPECTED_KIND_INFORMATION_WITHIN_DOCUMENT = "information_within_document"
+EXPECTED_KIND_DECISION = "decision"
+EXPECTED_KIND_ANALYSIS = "analysis"
+EXPECTED_KIND_DATA = "data"
+EXPECTED_KIND_EVIDENCE = "evidence"
+
+KNOWN_EXPECTED_INFORMATION_KINDS = (
+    EXPECTED_KIND_DOCUMENT,
+    EXPECTED_KIND_INFORMATION_WITHIN_DOCUMENT,
+    EXPECTED_KIND_DECISION,
+    EXPECTED_KIND_ANALYSIS,
+    EXPECTED_KIND_DATA,
+    EXPECTED_KIND_EVIDENCE,
+)
+
+EXPECTATION_ITEM_STATUS_ACTIVE = "active"
+EXPECTATION_ITEM_STATUS_WITHDRAWN = "withdrawn"
+EXPECTATION_ITEM_STATUS_NOT_APPLICABLE = "not_applicable"
+
+KNOWN_EXPECTATION_ITEM_STATUSES = (
+    EXPECTATION_ITEM_STATUS_ACTIVE,
+    EXPECTATION_ITEM_STATUS_WITHDRAWN,
+    EXPECTATION_ITEM_STATUS_NOT_APPLICABLE,
+)
+
+PROFILE_STATUS_ACTIVE = "active"
+PROFILE_STATUS_SUPERSEDED = "superseded"
+PROFILE_STATUS_WITHDRAWN = "withdrawn"
+
+KNOWN_PROFILE_STATUSES = (PROFILE_STATUS_ACTIVE, PROFILE_STATUS_SUPERSEDED, PROFILE_STATUS_WITHDRAWN)
+
+# Example/canonical values only (Prompt 12 #5) - never the universal
+# lifecycle. A project-specific stage (e.g. "Integrated Systems Gate B")
+# normalizes to itself, verbatim, via normalize_open_world_value - it is
+# never forced into this list or rejected for not being in it.
+KNOWN_DESIGN_MATURITY_STAGES = (
+    "concept",
+    "schematic",
+    "design_development",
+    "bridging",
+    "tender",
+    "issued_for_construction",
+)
+
+# Same status: example/canonical only, roughly increasing precision - never
+# inferred from design maturity (Prompt 11 D / Prompt 12 #6).
+KNOWN_ESTIMATE_BASIS_VALUES = (
+    "benchmark",
+    "elemental",
+    "assembly",
+    "quantity_based",
+    "trade_package",
+    "subcontractor_quote",
+    "detailed_takeoff",
+    "procurement_pricing",
+)
+
+MATURITY_TYPE_DESIGN = "design"
+MATURITY_TYPE_ESTIMATE = "estimate"
+# Closed, not open-world: exactly two structurally distinct dimensions
+# (Prompt 11 D / Prompt 12 #6) - there is no legitimate third "kind" of
+# maturity this batch's model is meant to hold.
+KNOWN_MATURITY_TYPES = (MATURITY_TYPE_DESIGN, MATURITY_TYPE_ESTIMATE)
+
+MATURITY_STATUS_ACTIVE = "active"
+MATURITY_STATUS_SUPERSEDED = "superseded"
+KNOWN_MATURITY_STATUSES = (MATURITY_STATUS_ACTIVE, MATURITY_STATUS_SUPERSEDED)
+
+# -- Information Sufficiency outcome vocabulary (Prompt 12 #8) ---------------
+# This is the EVALUATOR's own closed output vocabulary (like
+# TEMPORAL_CONDITION_* before it) - never open-world, never supplied by a
+# caller, never persisted as its own record. See evaluate_information_
+# sufficiency below.
+SUFFICIENCY_EXPECTED_AND_FOUND = "expected_and_found"
+SUFFICIENCY_EXPECTED_NOT_FOUND = "expected_not_found"
+SUFFICIENCY_FOUND_BUT_INSUFFICIENT_FOR_STAGE = "found_but_insufficient_for_stage"
+SUFFICIENCY_NOT_EXPECTED_YET = "not_expected_yet"
+SUFFICIENCY_EXPECTATION_MAY_NOT_APPLY = "expectation_may_not_apply"
+SUFFICIENCY_INACCESSIBLE = "inaccessible"
+SUFFICIENCY_AUTHORITY_OR_VERSION_UNCERTAIN = "authority_or_version_uncertain"
+SUFFICIENCY_SUPERSEDED = "superseded"
+SUFFICIENCY_CONFLICTING = "conflicting_current_information"
 
 
 class CaseWorkspaceError(Exception):
@@ -698,6 +903,303 @@ def evaluate_temporal_condition(
     return TEMPORAL_CONDITION_NOT_YET_DUE
 
 
+def compare_maturity(a: str, b: str, known_order: tuple[str, ...] = KNOWN_DESIGN_MATURITY_STAGES) -> Optional[int]:
+    """
+    Compares two maturity values by position in `known_order`. Returns -1
+    (a earlier than b), 0 (equal), 1 (a later than b), or None if EITHER
+    value is not part of the known ordered vocabulary - an honest "cannot
+    determine" rather than a guess (Prompt 12 #14: an unfamiliar project-
+    specific maturity stage must never be silently forced into a known
+    ordering just so a comparison can produce an answer).
+    """
+    if a not in known_order or b not in known_order:
+        return None
+    ia, ib = known_order.index(a), known_order.index(b)
+    return (ia > ib) - (ia < ib)
+
+
+def evaluate_information_sufficiency(
+    item: dict,
+    observed: list[dict],
+    milestone_condition: Optional[str] = None,
+) -> dict:
+    """
+    Prompt 11/12: the Expected Information Shadow's actual comparison -
+    derived, never persisted, mirroring evaluate_temporal_condition's
+    shape exactly. Given a stored ExpectationItem dict and an explicit
+    list of observed-evidence descriptors, returns one SUFFICIENCY_*
+    outcome plus supporting detail. Never called automatically by
+    anything in this batch, and never itself decides whether to create a
+    Finding/ReviewThread/WorkItem - that decision belongs to a later,
+    separately-governed workflow (Prompt 11 AA's escalation threshold).
+
+    `observed` entries are plain dicts describing what BEEHIVE already
+    knows about matching evidence - deliberately NOT auto-discovered from
+    the whole workspace (Prompt 12 #7): matching an expectation to actual
+    Sources/Evidence is a search/reconciliation step left to a later
+    workflow; this function only proves the comparison logic given an
+    explicit observed set. Each entry may carry: "resolution_level"
+    (compared against item["expected_maturity"]), "accessible" (bool),
+    "authority_confidence" ("confirmed"|"uncertain"), "superseded" (bool),
+    "conflicts" (bool).
+
+    Checks run in a deliberate priority order (documented inline) -
+    applicability is checked before existence, because "this doesn't even
+    apply here" is a more fundamental fact than whether something was
+    found.
+    """
+    if item.get("status") in (EXPECTATION_ITEM_STATUS_WITHDRAWN, EXPECTATION_ITEM_STATUS_NOT_APPLICABLE):
+        return {"outcome": SUFFICIENCY_EXPECTATION_MAY_NOT_APPLY, "detail": {"item_status": item["status"]}}
+
+    if milestone_condition == TEMPORAL_CONDITION_NOT_YET_DUE:
+        return {"outcome": SUFFICIENCY_NOT_EXPECTED_YET, "detail": {"milestone_condition": milestone_condition}}
+
+    if not observed:
+        return {"outcome": SUFFICIENCY_EXPECTED_NOT_FOUND, "detail": {}}
+
+    if all(o.get("superseded") for o in observed):
+        return {"outcome": SUFFICIENCY_SUPERSEDED, "detail": {"observed_count": len(observed)}}
+
+    if any(not o.get("accessible", True) for o in observed):
+        return {"outcome": SUFFICIENCY_INACCESSIBLE, "detail": {}}
+
+    if any(o.get("authority_confidence") == "uncertain" for o in observed):
+        return {"outcome": SUFFICIENCY_AUTHORITY_OR_VERSION_UNCERTAIN, "detail": {}}
+
+    if any(o.get("conflicts") for o in observed):
+        return {"outcome": SUFFICIENCY_CONFLICTING, "detail": {}}
+
+    detail: dict = {}
+    expected_maturity = item.get("expected_maturity")
+    if expected_maturity:
+        resolution_levels = [o["resolution_level"] for o in observed if o.get("resolution_level")]
+        if resolution_levels:
+            comparisons = [compare_maturity(level, expected_maturity) for level in resolution_levels]
+            if any(c is not None and c < 0 for c in comparisons):
+                return {
+                    "outcome": SUFFICIENCY_FOUND_BUT_INSUFFICIENT_FOR_STAGE,
+                    "detail": {"observed_resolution_levels": resolution_levels, "expected_maturity": expected_maturity},
+                }
+            if all(c is None for c in comparisons):
+                detail["maturity_comparison"] = "indeterminate - value(s) not in a known ordered vocabulary"
+
+    return {"outcome": SUFFICIENCY_EXPECTED_AND_FOUND, "detail": detail}
+
+
+@dataclass
+class Anchor:
+    """
+    Prompt 10 #2: what a ReviewThread is about. Uses the same open-world
+    object-kind vocabulary as Supersession/Relationship rather than a new
+    polymorphic framework. One primary Anchor per ReviewThread
+    (ReviewThread.anchor); ReviewThread.related_anchors holds any
+    additional lightweight references, kept intentionally unstructured
+    (plain dicts) rather than a second first-class object - overbuilding
+    this was explicitly warned against.
+    """
+
+    anchor_type: str  # object kind, open-world (source/finding/relationship/temporal_obligation/requirement/...)
+    anchor_id: str
+    source_id: Optional[str] = None
+    location: Optional[dict] = None  # flexible - {"page":..., "region":...}, {"paragraph":...}, etc.
+    description: Optional[str] = None
+
+
+@dataclass
+class ReviewThread:
+    """
+    Prompt 10 #1: a governed discussion concerning a particular matter -
+    explicitly NOT a Finding, Work Item, Risk, Analysis, or chat session
+    (though it may reference all of those). case_id is optional from the
+    start (Prompt 10 #20, extending Batch C's principle): a thread does
+    not require an Investigation Case any more than a Project-level
+    Analysis does.
+
+    `resolution` holds the CURRENT resolution (None if never resolved);
+    `resolution_history` holds every PRIOR resolution, pushed there only
+    on reopen (see reopen_review_thread) - never overwritten, never
+    deleted (Prompt 10 #5/#13). `outcome_refs` records every structured
+    consequence the thread has been linked to (Prompt 10 #7) - the
+    discussion itself never IS project truth; these are pointers to
+    wherever that truth actually lives (a Relationship, a Finding, etc).
+    """
+
+    id: str
+    project_id: str
+    title: str
+    anchor: dict  # asdict(Anchor)
+    created_at: str
+    created_by: str
+    case_id: Optional[str] = None
+    status: str = THREAD_STATUS_OPEN
+    related_anchors: list[dict] = field(default_factory=list)
+    resolution: Optional[dict] = None
+    resolution_history: list[dict] = field(default_factory=list)
+    outcome_refs: list[dict] = field(default_factory=list)
+
+
+@dataclass
+class ReviewMessage:
+    """
+    Prompt 10 #3/#8/#14: one entry in a ReviewThread's discussion.
+    `origin` distinguishes human/machine/system authorship structurally -
+    `text` must contain only what a human reviewer should actually see
+    (Prompt 10 #3/#9 - no hidden chain-of-thought, ever). A machine-
+    authored message should carry related_analysis_id whenever it
+    honestly can, so "why did BEEHIVE say that" is always traceable back
+    to a real AnalysisRun rather than asserted as free-floating text.
+    `project_state_version` is captured at creation for provenance -
+    which governed state this message was written against.
+    """
+
+    id: str
+    thread_id: str
+    project_id: str
+    origin: str  # KNOWN_MESSAGE_ORIGINS
+    actor: str
+    message_type: str  # open-world, KNOWN_MESSAGE_TYPES
+    text: str
+    created_at: str
+    reply_to_message_id: Optional[str] = None
+    related_object_type: Optional[str] = None
+    related_object_id: Optional[str] = None
+    related_analysis_id: Optional[str] = None
+    related_finding_id: Optional[str] = None
+    project_state_version: Optional[int] = None
+
+
+@dataclass
+class Attention:
+    """
+    Prompt 10 #4: "this person/role should attend to this matter" - never
+    contractual responsibility, requirement ownership, approval authority,
+    or a Work Item (which does not exist in this batch, or at all yet).
+    `intended_actor` is deliberately free text, not validated against any
+    vocabulary (see the module-level note above KNOWN_MESSAGE_TYPES) -
+    people and roles are not a closed or even meaningfully "known" set the
+    way message types or thread statuses are.
+    """
+
+    id: str
+    thread_id: str
+    project_id: str
+    message_id: str  # the message that generated this attention request
+    intended_actor: str
+    created_by: str
+    created_at: str
+    status: str = ATTENTION_STATUS_PENDING
+    acknowledged_at: Optional[str] = None
+    responded_message_id: Optional[str] = None
+
+
+@dataclass
+class ThreadResolution:
+    """Prompt 10 #6. Additive, never a mutation of the conversation that
+    preceded it - the messages remain exactly as written; this is a
+    separate record layered on top."""
+
+    resolution_outcome: str  # open-world, KNOWN_RESOLUTION_OUTCOMES
+    summary: str
+    resolved_by: str
+    resolved_at: str
+    related_evidence_refs: list[dict] = field(default_factory=list)
+    authority_context: Optional[str] = None
+
+
+@dataclass
+class ExpectationItem:
+    """
+    Prompt 12 #3: one expected information item within a profile - a
+    document, information within a document, a decision, an analysis,
+    data, or evidence (open-world `expected_kind`). Embedded inside its
+    owning ExpectedInformationProfile's `items` list, not a separate
+    top-level store, mirroring how Anchor is embedded inside ReviewThread.
+
+    `bindingness` + `authority_source` implement Prompt 11 B's split:
+    bindingness is the small closed "how strongly expected" spectrum;
+    authority_source is free text naming WHO/WHAT says so (a contract
+    clause, an owner PEP, industry practice, "machine_inferred") - never
+    validated, exactly like Supersession.authority_class.
+
+    `expected_provider` names who would normally supply this information -
+    explicitly NOT contractual responsibility, Work Item ownership, or
+    approval authority (Prompt 12 #15). `milestone_trigger_id` optionally
+    names a TemporalObligation gating whether this expectation is active
+    yet at all (Prompt 12 #11).
+    """
+
+    id: str
+    expected_kind: str  # open-world, KNOWN_EXPECTED_INFORMATION_KINDS
+    description: str
+    created_at: str
+    created_by: str
+    status: str = EXPECTATION_ITEM_STATUS_ACTIVE
+    applicability: Optional[str] = None
+    expected_maturity: Optional[str] = None
+    bindingness: str = EXPECTATION_BINDINGNESS_EXPECTED
+    authority_source: Optional[str] = None
+    expected_provider: Optional[str] = None
+    milestone_trigger_id: Optional[str] = None
+    related_object_type: Optional[str] = None
+    related_object_id: Optional[str] = None
+
+
+@dataclass
+class ExpectedInformationProfile:
+    """
+    Prompt 12 #1/#2: what information would reasonably be expected, at
+    what maturity, for a particular governed project context. An
+    expectation/reference structure - NOT project truth. Deliberately
+    scoped (scope_type/scope_id, open-world object kind - typically
+    "project"/"discipline"/"package") rather than one global project-wide
+    template: a project may hold many of these simultaneously, one per
+    discipline/package, each independently revisable.
+
+    Revision is non-destructive (see revise_expected_information_profile):
+    a governed correction supersedes the whole profile via the shared
+    Supersession primitive, exactly like Source revision - the original
+    remains historically reconstructable.
+    """
+
+    id: str
+    project_id: str
+    title: str
+    scope_type: str  # open-world object kind
+    scope_id: str
+    created_at: str
+    created_by: str
+    status: str = PROFILE_STATUS_ACTIVE
+    items: list[dict] = field(default_factory=list)  # list of asdict(ExpectationItem)
+    authority_context: Optional[str] = None
+
+
+@dataclass
+class MaturityRecord:
+    """
+    Prompt 12 #5/#6: DesignMaturity and EstimateMaturity share this one
+    shape (scope + open-world value + provenance), distinguished only by
+    `maturity_type` - a closed, structural distinction (design vs
+    estimate), never conflated or inferred from one another. Scoped the
+    same way ExpectedInformationProfile is, so a project can hold many
+    (architecture=60%, structure=90%, mechanical=30%, simultaneously) -
+    there is no single global project percentage anywhere in this model.
+
+    Revision is non-destructive (see revise_maturity) via Supersession,
+    same as everything else that changes over a project's life.
+    """
+
+    id: str
+    project_id: str
+    maturity_type: str  # KNOWN_MATURITY_TYPES
+    scope_type: str  # open-world object kind
+    scope_id: str
+    value: str  # open-world, normalized against KNOWN_DESIGN_MATURITY_STAGES or KNOWN_ESTIMATE_BASIS_VALUES
+    created_at: str
+    created_by: str
+    status: str = MATURITY_STATUS_ACTIVE
+    effective_at: Optional[str] = None
+
+
 @dataclass
 class CaseRecord:
     id: str
@@ -739,6 +1241,11 @@ class ProjectWorkspace:
     supersessions: list[dict] = field(default_factory=list)
     relationships: list[dict] = field(default_factory=list)
     temporal_obligations: list[dict] = field(default_factory=list)
+    review_threads: list[dict] = field(default_factory=list)
+    review_messages: list[dict] = field(default_factory=list)
+    attentions: list[dict] = field(default_factory=list)
+    expected_information_profiles: list[dict] = field(default_factory=list)
+    maturity_records: list[dict] = field(default_factory=list)
 
 
 class CaseWorkspaceStore:
@@ -1559,6 +2066,731 @@ class CaseWorkspaceStore:
         if obligation is None:
             raise CaseWorkspaceError(f"Temporal Obligation {obligation_id} was not found.")
         return evaluate_temporal_condition(obligation, now or project_clock_now(), due_soon_window_days)
+
+    # -- Review Threads (Prompt 10) ----------------------------------------------------
+    #
+    # No route/UI calls any of this yet (Prompt 10 is backend/domain
+    # foundation only) - mutating methods below accept an optional
+    # `governance_log` parameter and log directly when given, the same
+    # way services/project_clock.py logs its own events, rather than
+    # requiring a route layer that does not exist yet.
+
+    def create_review_thread(
+        self,
+        workspace: ProjectWorkspace,
+        title: str,
+        anchor_type: str,
+        anchor_id: str,
+        created_by: str,
+        case_id: Optional[str] = None,
+        anchor_source_id: Optional[str] = None,
+        anchor_location: Optional[dict] = None,
+        anchor_description: Optional[str] = None,
+        governance_log: Optional[GovernanceLog] = None,
+    ) -> dict:
+        anchor = Anchor(
+            anchor_type=normalize_open_world_value(anchor_type, KNOWN_OBJECT_KINDS),
+            anchor_id=anchor_id,
+            source_id=anchor_source_id,
+            location=anchor_location,
+            description=anchor_description,
+        )
+        thread = ReviewThread(
+            id=_new_id(),
+            project_id=workspace.project_id,
+            title=title,
+            anchor=asdict(anchor),
+            created_at=_now(),
+            created_by=created_by,
+            case_id=case_id,
+        )
+        workspace.review_threads.append(asdict(thread))
+        self.save(workspace)
+
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id,
+                event_type="review_thread_created",
+                actor=created_by,
+                role="system",
+                payload={
+                    "thread_id": thread.id,
+                    "anchor_type": anchor.anchor_type,
+                    "anchor_id": anchor_id,
+                    "case_id": case_id,
+                },
+                correlation_id=thread.id,
+            )
+        return asdict(thread)
+
+    def threads_for_project(self, workspace: ProjectWorkspace) -> list[dict]:
+        return list(workspace.review_threads)
+
+    def threads_for_case(self, workspace: ProjectWorkspace, case_id: str) -> list[dict]:
+        return [t for t in workspace.review_threads if t.get("case_id") == case_id]
+
+    def threads_for_anchor(self, workspace: ProjectWorkspace, anchor_type: str, anchor_id: str) -> list[dict]:
+        anchor_type = normalize_open_world_value(anchor_type, KNOWN_OBJECT_KINDS)
+        return [
+            t for t in workspace.review_threads
+            if t["anchor"]["anchor_type"] == anchor_type and t["anchor"]["anchor_id"] == anchor_id
+        ]
+
+    def add_review_message(
+        self,
+        workspace: ProjectWorkspace,
+        thread_id: str,
+        origin: str,
+        actor: str,
+        message_type: str,
+        text: str,
+        reply_to_message_id: Optional[str] = None,
+        related_object_type: Optional[str] = None,
+        related_object_id: Optional[str] = None,
+        related_analysis_id: Optional[str] = None,
+        related_finding_id: Optional[str] = None,
+        governance_log: Optional[GovernanceLog] = None,
+    ) -> dict:
+        thread = self._find(workspace.review_threads, thread_id)
+        if thread is None:
+            raise CaseWorkspaceError(f"Review Thread {thread_id} was not found.")
+        if origin not in KNOWN_MESSAGE_ORIGINS:
+            raise CaseWorkspaceError(
+                f"'{origin}' is not a recognized message origin. Use one of: {', '.join(KNOWN_MESSAGE_ORIGINS)}."
+            )
+
+        message = ReviewMessage(
+            id=_new_id(),
+            thread_id=thread_id,
+            project_id=workspace.project_id,
+            origin=origin,
+            actor=actor,
+            message_type=normalize_open_world_value(message_type, KNOWN_MESSAGE_TYPES),
+            text=text,
+            created_at=_now(),
+            reply_to_message_id=reply_to_message_id,
+            related_object_type=(
+                normalize_open_world_value(related_object_type, KNOWN_OBJECT_KINDS)
+                if related_object_type is not None else None
+            ),
+            related_object_id=related_object_id,
+            related_analysis_id=related_analysis_id,
+            related_finding_id=related_finding_id,
+            project_state_version=workspace.version,
+        )
+        workspace.review_messages.append(asdict(message))
+        self.save(workspace)
+
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id,
+                event_type="review_message_added",
+                actor=actor,
+                role="system",
+                payload={"thread_id": thread_id, "message_id": message.id, "origin": origin},
+                correlation_id=message.id,
+            )
+        return asdict(message)
+
+    def messages_for_thread(self, workspace: ProjectWorkspace, thread_id: str) -> list[dict]:
+        return [m for m in workspace.review_messages if m["thread_id"] == thread_id]
+
+    def request_attention(
+        self,
+        workspace: ProjectWorkspace,
+        thread_id: str,
+        message_id: str,
+        intended_actor: str,
+        created_by: str,
+        governance_log: Optional[GovernanceLog] = None,
+    ) -> dict:
+        """
+        Attention means "this person/role should attend to this matter" -
+        nothing more (Prompt 10 #4). It never creates contractual
+        responsibility, requirement ownership, approval authority, or a
+        Work Item - none of those exist as a side effect here, or at all
+        in this batch. The only structural side effect is the thread
+        moving to WAITING_FOR_RESPONSE if it was OPEN/UNDER_REVIEW - a
+        deterministic, explicit rule, not an inferred one.
+        """
+        thread = self._find(workspace.review_threads, thread_id)
+        if thread is None:
+            raise CaseWorkspaceError(f"Review Thread {thread_id} was not found.")
+
+        attention = Attention(
+            id=_new_id(),
+            thread_id=thread_id,
+            project_id=workspace.project_id,
+            message_id=message_id,
+            intended_actor=intended_actor,
+            created_by=created_by,
+            created_at=_now(),
+        )
+        workspace.attentions.append(asdict(attention))
+
+        if thread["status"] in (THREAD_STATUS_OPEN, THREAD_STATUS_UNDER_REVIEW):
+            thread["status"] = THREAD_STATUS_WAITING_FOR_RESPONSE
+
+        self.save(workspace)
+
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id,
+                event_type="review_attention_requested",
+                actor=created_by,
+                role="system",
+                payload={"thread_id": thread_id, "attention_id": attention.id, "intended_actor": intended_actor},
+                correlation_id=attention.id,
+            )
+        return asdict(attention)
+
+    def attentions_for_thread(self, workspace: ProjectWorkspace, thread_id: str) -> list[dict]:
+        return [a for a in workspace.attentions if a["thread_id"] == thread_id]
+
+    def respond_to_attention(
+        self,
+        workspace: ProjectWorkspace,
+        attention_id: str,
+        response_message_id: str,
+    ) -> dict:
+        attention = self._find(workspace.attentions, attention_id)
+        if attention is None:
+            raise CaseWorkspaceError(f"Attention {attention_id} was not found.")
+
+        attention["status"] = ATTENTION_STATUS_RESPONDED
+        attention["responded_message_id"] = response_message_id
+
+        thread = self._find(workspace.review_threads, attention["thread_id"])
+        if thread is not None and thread["status"] == THREAD_STATUS_WAITING_FOR_RESPONSE:
+            thread["status"] = THREAD_STATUS_UNDER_REVIEW
+
+        self.save(workspace)
+        return attention
+
+    def set_review_thread_status(
+        self,
+        workspace: ProjectWorkspace,
+        thread_id: str,
+        status: str,
+        actor: str,
+    ) -> dict:
+        """Explicit, deterministic status transitions for states that
+        aren't a side effect of a more specific action (e.g.
+        WAITING_FOR_EVIDENCE) - never inferred from message content."""
+        thread = self._find(workspace.review_threads, thread_id)
+        if thread is None:
+            raise CaseWorkspaceError(f"Review Thread {thread_id} was not found.")
+        thread["status"] = normalize_open_world_value(status, KNOWN_THREAD_STATUSES)
+        self.save(workspace)
+        return thread
+
+    def resolve_review_thread(
+        self,
+        workspace: ProjectWorkspace,
+        thread_id: str,
+        resolution_outcome: str,
+        summary: str,
+        resolved_by: str,
+        related_evidence_refs: Optional[list[dict]] = None,
+        authority_context: Optional[str] = None,
+        governance_log: Optional[GovernanceLog] = None,
+    ) -> dict:
+        """Additive (Prompt 10 #6): sets thread.resolution and status -
+        never touches a single existing ReviewMessage. The conversation
+        remains available exactly as written."""
+        thread = self._find(workspace.review_threads, thread_id)
+        if thread is None:
+            raise CaseWorkspaceError(f"Review Thread {thread_id} was not found.")
+        if thread["status"] in (THREAD_STATUS_RESOLVED, THREAD_STATUS_CLOSED):
+            raise CaseWorkspaceError(
+                f"Review Thread {thread_id} is already {thread['status']} - reopen it before resolving again."
+            )
+
+        resolution = ThreadResolution(
+            resolution_outcome=normalize_open_world_value(resolution_outcome, KNOWN_RESOLUTION_OUTCOMES),
+            summary=summary,
+            resolved_by=resolved_by,
+            resolved_at=_now(),
+            related_evidence_refs=related_evidence_refs or [],
+            authority_context=authority_context,
+        )
+        thread["resolution"] = asdict(resolution)
+        thread["status"] = THREAD_STATUS_RESOLVED
+
+        self.save(workspace)
+
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id,
+                event_type="review_thread_resolved",
+                actor=resolved_by,
+                role="system",
+                payload={"thread_id": thread_id, "resolution_outcome": resolution.resolution_outcome},
+                correlation_id=thread_id,
+            )
+        return thread
+
+    def reopen_review_thread(
+        self,
+        workspace: ProjectWorkspace,
+        thread_id: str,
+        reason: str,
+        actor: str,
+        governance_log: Optional[GovernanceLog] = None,
+    ) -> dict:
+        """
+        Never erases the prior resolution (Prompt 10 #5/#13): it is
+        pushed onto resolution_history, timestamped and attributed, and
+        only THEN is thread.resolution cleared to make room for a new
+        one. The original discussion, the original resolution, and the
+        reopening itself all remain independently reconstructable.
+        """
+        thread = self._find(workspace.review_threads, thread_id)
+        if thread is None:
+            raise CaseWorkspaceError(f"Review Thread {thread_id} was not found.")
+        if thread["status"] not in (THREAD_STATUS_RESOLVED, THREAD_STATUS_CLOSED):
+            raise CaseWorkspaceError(f"Review Thread {thread_id} is not resolved/closed - nothing to reopen.")
+
+        thread["resolution_history"].append({
+            "resolution": thread["resolution"],
+            "reopened_at": _now(),
+            "reopened_by": actor,
+            "reopen_reason": reason,
+        })
+        thread["resolution"] = None
+        thread["status"] = THREAD_STATUS_REOPENED
+
+        self.save(workspace)
+
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id,
+                event_type="review_thread_reopened",
+                actor=actor,
+                role="system",
+                payload={"thread_id": thread_id, "reason": reason},
+                correlation_id=thread_id,
+            )
+        return thread
+
+    def confirm_relationship(self, workspace: ProjectWorkspace, relationship_id: str, actor: str) -> dict:
+        """Standalone confirmation for direct use outside a thread outcome
+        context - see link_thread_outcome for the atomic, in-transaction
+        version used when confirming as part of resolving a thread."""
+        relationship = self._find(workspace.relationships, relationship_id)
+        if relationship is None:
+            raise CaseWorkspaceError(f"Relationship {relationship_id} was not found.")
+        relationship["provisional"] = False
+        relationship["confirmed_by"] = actor
+        self.save(workspace)
+        return relationship
+
+    def link_thread_outcome(
+        self,
+        workspace: ProjectWorkspace,
+        thread_id: str,
+        outcome_type: str,
+        actor: str,
+        object_type: Optional[str] = None,
+        object_id: Optional[str] = None,
+        confirm_relationship_id: Optional[str] = None,
+        reason: Optional[str] = None,
+        governance_log: Optional[GovernanceLog] = None,
+    ) -> dict:
+        """
+        Structured outcome linkage (Prompt 10 #7) - never automatic;
+        always an explicit call alongside/after resolve_review_thread.
+        Reuses the existing typed Relationship substrate rather than a
+        new outcome-link mechanism: when object_type/object_id are given,
+        records a Relationship(relationship_type="resulted_in") from the
+        thread to that governed object. confirm_relationship_id lets a
+        resolution mark an existing provisional Relationship (e.g. the
+        original departs_from) as no longer merely provisional - this is
+        how "Relationship confirmed" as an outcome is represented, with
+        no new field beyond what Relationship already had since Batch B.
+
+        Everything here - the new Relationship (if any), the confirmation
+        (if any), and the outcome_ref record - happens on the same
+        in-memory workspace mutation before the single save() call at the
+        end, so they commit atomically together (never a Relationship
+        created without its outcome_ref, or vice versa).
+        """
+        thread = self._find(workspace.review_threads, thread_id)
+        if thread is None:
+            raise CaseWorkspaceError(f"Review Thread {thread_id} was not found.")
+
+        relationship_id = None
+        if object_type is not None and object_id is not None:
+            relationship = Relationship(
+                id=_new_id(),
+                project_id=workspace.project_id,
+                from_type=OBJECT_KIND_REVIEW_THREAD,
+                from_id=thread_id,
+                to_type=normalize_open_world_value(object_type, KNOWN_OBJECT_KINDS),
+                to_id=object_id,
+                relationship_type=RELATIONSHIP_TYPE_RESULTED_IN,
+                created_at=_now(),
+                created_by=actor,
+                provisional=False,
+            )
+            workspace.relationships.append(asdict(relationship))
+            relationship_id = relationship.id
+
+        if confirm_relationship_id is not None:
+            confirmed = self._find(workspace.relationships, confirm_relationship_id)
+            if confirmed is None:
+                raise CaseWorkspaceError(f"Relationship {confirm_relationship_id} was not found.")
+            confirmed["provisional"] = False
+            confirmed["confirmed_by"] = actor
+
+        outcome_ref = {
+            "outcome_type": outcome_type,
+            "object_type": object_type,
+            "object_id": object_id,
+            "relationship_id": relationship_id,
+            "confirmed_relationship_id": confirm_relationship_id,
+            "reason": reason,
+            "linked_by": actor,
+            "linked_at": _now(),
+        }
+        thread["outcome_refs"].append(outcome_ref)
+
+        self.save(workspace)
+
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id,
+                event_type="review_thread_outcome_linked",
+                actor=actor,
+                role="system",
+                payload={
+                    "thread_id": thread_id,
+                    "outcome_type": outcome_type,
+                    "object_type": object_type,
+                    "object_id": object_id,
+                },
+                correlation_id=thread_id,
+            )
+        return thread
+
+    # -- Expected Information Profile / Maturity (Prompt 11/12) -----------------------
+    #
+    # Same convention as Review Threads: no route/UI calls any of this yet
+    # (backend/domain foundation only) - mutating methods accept an
+    # optional `governance_log` and log directly when given.
+
+    def create_expected_information_profile(
+        self,
+        workspace: ProjectWorkspace,
+        title: str,
+        scope_type: str,
+        scope_id: str,
+        created_by: str,
+        authority_context: Optional[str] = None,
+        governance_log: Optional[GovernanceLog] = None,
+    ) -> dict:
+        profile = ExpectedInformationProfile(
+            id=_new_id(),
+            project_id=workspace.project_id,
+            title=title,
+            scope_type=normalize_open_world_value(scope_type, KNOWN_OBJECT_KINDS),
+            scope_id=scope_id,
+            created_at=_now(),
+            created_by=created_by,
+            authority_context=authority_context,
+        )
+        workspace.expected_information_profiles.append(asdict(profile))
+        self.save(workspace)
+
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id,
+                event_type="expected_information_profile_created",
+                actor=created_by,
+                role="system",
+                payload={"profile_id": profile.id, "scope_type": profile.scope_type, "scope_id": scope_id},
+                correlation_id=profile.id,
+            )
+        return asdict(profile)
+
+    def add_expectation_item(
+        self,
+        workspace: ProjectWorkspace,
+        profile_id: str,
+        expected_kind: str,
+        description: str,
+        created_by: str,
+        bindingness: str = EXPECTATION_BINDINGNESS_EXPECTED,
+        authority_source: Optional[str] = None,
+        applicability: Optional[str] = None,
+        expected_maturity: Optional[str] = None,
+        expected_provider: Optional[str] = None,
+        milestone_trigger_id: Optional[str] = None,
+        related_object_type: Optional[str] = None,
+        related_object_id: Optional[str] = None,
+    ) -> dict:
+        profile = self._find(workspace.expected_information_profiles, profile_id)
+        if profile is None:
+            raise CaseWorkspaceError(f"Expected Information Profile {profile_id} was not found.")
+        if bindingness not in KNOWN_EXPECTATION_BINDINGNESS:
+            raise CaseWorkspaceError(
+                f"'{bindingness}' is not a recognized expectation bindingness. "
+                f"Use one of: {', '.join(KNOWN_EXPECTATION_BINDINGNESS)}."
+            )
+
+        item = ExpectationItem(
+            id=_new_id(),
+            expected_kind=normalize_open_world_value(expected_kind, KNOWN_EXPECTED_INFORMATION_KINDS),
+            description=description,
+            created_at=_now(),
+            created_by=created_by,
+            applicability=applicability,
+            expected_maturity=expected_maturity,
+            bindingness=bindingness,
+            authority_source=authority_source,
+            expected_provider=expected_provider,
+            milestone_trigger_id=milestone_trigger_id,
+            related_object_type=(
+                normalize_open_world_value(related_object_type, KNOWN_OBJECT_KINDS)
+                if related_object_type is not None else None
+            ),
+            related_object_id=related_object_id,
+        )
+        profile["items"].append(asdict(item))
+        self.save(workspace)
+        return asdict(item)
+
+    def set_expectation_item_status(
+        self,
+        workspace: ProjectWorkspace,
+        profile_id: str,
+        item_id: str,
+        status: str,
+        actor: str,
+    ) -> dict:
+        profile = self._find(workspace.expected_information_profiles, profile_id)
+        if profile is None:
+            raise CaseWorkspaceError(f"Expected Information Profile {profile_id} was not found.")
+        item = self._find(profile["items"], item_id)
+        if item is None:
+            raise CaseWorkspaceError(f"Expectation Item {item_id} was not found.")
+        item["status"] = normalize_open_world_value(status, KNOWN_EXPECTATION_ITEM_STATUSES)
+        self.save(workspace)
+        return item
+
+    def profiles_for_scope(self, workspace: ProjectWorkspace, scope_type: str, scope_id: str) -> list[dict]:
+        """Active profiles only - superseded/withdrawn profiles remain in
+        workspace.expected_information_profiles for historical reconstruction
+        (see supersessions_for) but are not "currently governing"."""
+        scope_type = normalize_open_world_value(scope_type, KNOWN_OBJECT_KINDS)
+        return [
+            p for p in workspace.expected_information_profiles
+            if p["scope_type"] == scope_type and p["scope_id"] == scope_id and p["status"] == PROFILE_STATUS_ACTIVE
+        ]
+
+    def profiles_for_project(self, workspace: ProjectWorkspace) -> list[dict]:
+        return list(workspace.expected_information_profiles)
+
+    def revise_expected_information_profile(
+        self,
+        workspace: ProjectWorkspace,
+        profile_id: str,
+        actor: str,
+        reason: Optional[str] = None,
+        authority_class: Optional[str] = None,
+        new_title: Optional[str] = None,
+        new_items: Optional[list[dict]] = None,
+        governance_log: Optional[GovernanceLog] = None,
+    ) -> tuple[dict, dict]:
+        """
+        Prompt 12 #12/#13: non-destructive governed correction - creates a
+        successor profile via the shared Supersession primitive rather
+        than mutating the original. This is exactly the mechanism for a
+        project-specific override (Prompt 12 #13/Test P): the generic/
+        default profile is superseded by a new one carrying the corrected
+        items, with `reason`/`authority_class` recording who authorized
+        the change and why - the original remains fully reconstructable.
+        """
+        old = self._find(workspace.expected_information_profiles, profile_id)
+        if old is None:
+            raise CaseWorkspaceError(f"Expected Information Profile {profile_id} was not found.")
+
+        new_profile = ExpectedInformationProfile(
+            id=_new_id(),
+            project_id=workspace.project_id,
+            title=new_title if new_title is not None else old["title"],
+            scope_type=old["scope_type"],
+            scope_id=old["scope_id"],
+            created_at=_now(),
+            created_by=actor,
+            items=new_items if new_items is not None else [dict(i) for i in old["items"]],
+            authority_context=old.get("authority_context"),
+        )
+        workspace.expected_information_profiles.append(asdict(new_profile))
+        old["status"] = PROFILE_STATUS_SUPERSEDED
+
+        supersession = Supersession(
+            id=_new_id(),
+            project_id=workspace.project_id,
+            predecessor_type=OBJECT_KIND_EXPECTED_INFORMATION_PROFILE,
+            predecessor_id=profile_id,
+            successor_type=OBJECT_KIND_EXPECTED_INFORMATION_PROFILE,
+            successor_id=new_profile.id,
+            actor=actor,
+            authorized_at=_now(),
+            reason=reason,
+            authority_class=authority_class,
+        )
+        workspace.supersessions.append(asdict(supersession))
+
+        self.save(workspace)
+
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id,
+                event_type="expected_information_profile_revised",
+                actor=actor,
+                role="system",
+                payload={"predecessor_id": profile_id, "successor_id": new_profile.id, "reason": reason},
+                correlation_id=supersession.id,
+            )
+        return asdict(new_profile), asdict(supersession)
+
+    # -- Design / Estimate Maturity (Prompt 11/12) --------------------------------------
+
+    def record_design_maturity(
+        self,
+        workspace: ProjectWorkspace,
+        scope_type: str,
+        scope_id: str,
+        value: str,
+        created_by: str,
+        effective_at: Optional[str] = None,
+        governance_log: Optional[GovernanceLog] = None,
+    ) -> dict:
+        return self._record_maturity(workspace, MATURITY_TYPE_DESIGN, scope_type, scope_id, value, created_by, effective_at, governance_log)
+
+    def record_estimate_maturity(
+        self,
+        workspace: ProjectWorkspace,
+        scope_type: str,
+        scope_id: str,
+        value: str,
+        created_by: str,
+        effective_at: Optional[str] = None,
+        governance_log: Optional[GovernanceLog] = None,
+    ) -> dict:
+        return self._record_maturity(workspace, MATURITY_TYPE_ESTIMATE, scope_type, scope_id, value, created_by, effective_at, governance_log)
+
+    def _record_maturity(
+        self,
+        workspace: ProjectWorkspace,
+        maturity_type: str,
+        scope_type: str,
+        scope_id: str,
+        value: str,
+        created_by: str,
+        effective_at: Optional[str],
+        governance_log: Optional[GovernanceLog],
+    ) -> dict:
+        known_values = KNOWN_DESIGN_MATURITY_STAGES if maturity_type == MATURITY_TYPE_DESIGN else KNOWN_ESTIMATE_BASIS_VALUES
+        record = MaturityRecord(
+            id=_new_id(),
+            project_id=workspace.project_id,
+            maturity_type=maturity_type,
+            scope_type=normalize_open_world_value(scope_type, KNOWN_OBJECT_KINDS),
+            scope_id=scope_id,
+            value=normalize_open_world_value(value, known_values),
+            created_at=_now(),
+            created_by=created_by,
+            effective_at=effective_at,
+        )
+        workspace.maturity_records.append(asdict(record))
+        self.save(workspace)
+
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id,
+                event_type="maturity_recorded",
+                actor=created_by,
+                role="system",
+                payload={
+                    "maturity_id": record.id, "maturity_type": maturity_type,
+                    "scope_type": record.scope_type, "scope_id": scope_id, "value": record.value,
+                },
+                correlation_id=record.id,
+            )
+        return asdict(record)
+
+    def maturity_for_scope(
+        self, workspace: ProjectWorkspace, maturity_type: str, scope_type: str, scope_id: str,
+    ) -> Optional[dict]:
+        """Latest ACTIVE record for this exact type+scope - superseded
+        records remain in workspace.maturity_records for history but are
+        not "current" (Prompt 12 #5: no single global project percentage;
+        every scope is looked up independently)."""
+        scope_type = normalize_open_world_value(scope_type, KNOWN_OBJECT_KINDS)
+        matches = [
+            m for m in workspace.maturity_records
+            if m["maturity_type"] == maturity_type
+            and m["scope_type"] == scope_type
+            and m["scope_id"] == scope_id
+            and m["status"] == MATURITY_STATUS_ACTIVE
+        ]
+        return matches[-1] if matches else None
+
+    def revise_maturity(
+        self,
+        workspace: ProjectWorkspace,
+        maturity_record_id: str,
+        new_value: str,
+        actor: str,
+        reason: Optional[str] = None,
+        governance_log: Optional[GovernanceLog] = None,
+    ) -> tuple[dict, dict]:
+        old = self._find(workspace.maturity_records, maturity_record_id)
+        if old is None:
+            raise CaseWorkspaceError(f"Maturity record {maturity_record_id} was not found.")
+
+        known_values = KNOWN_DESIGN_MATURITY_STAGES if old["maturity_type"] == MATURITY_TYPE_DESIGN else KNOWN_ESTIMATE_BASIS_VALUES
+        new_record = MaturityRecord(
+            id=_new_id(),
+            project_id=workspace.project_id,
+            maturity_type=old["maturity_type"],
+            scope_type=old["scope_type"],
+            scope_id=old["scope_id"],
+            value=normalize_open_world_value(new_value, known_values),
+            created_at=_now(),
+            created_by=actor,
+        )
+        workspace.maturity_records.append(asdict(new_record))
+        old["status"] = MATURITY_STATUS_SUPERSEDED
+
+        supersession = Supersession(
+            id=_new_id(),
+            project_id=workspace.project_id,
+            predecessor_type=OBJECT_KIND_MATURITY_RECORD,
+            predecessor_id=maturity_record_id,
+            successor_type=OBJECT_KIND_MATURITY_RECORD,
+            successor_id=new_record.id,
+            actor=actor,
+            authorized_at=_now(),
+            reason=reason,
+        )
+        workspace.supersessions.append(asdict(supersession))
+
+        self.save(workspace)
+
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id,
+                event_type="maturity_revised",
+                actor=actor,
+                role="system",
+                payload={"predecessor_id": maturity_record_id, "successor_id": new_record.id, "reason": reason},
+                correlation_id=supersession.id,
+            )
+        return asdict(new_record), asdict(supersession)
 
     # -- activities ------------------------------------------------------------------
 

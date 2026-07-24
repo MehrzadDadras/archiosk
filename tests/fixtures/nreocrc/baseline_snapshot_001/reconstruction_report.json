@@ -1,0 +1,437 @@
+{
+  "generated_at": "2026-07-24T20:05:22.611838+00:00",
+  "bhive_parser_capability_test": {
+    "md_extension_direct": "UNSUPPORTED: Unsupported extension for extraction: .md",
+    "content_extraction_via_txt_bypass": "succeeded",
+    "requirement_count": 212,
+    "milestone_count": 4,
+    "consistency_checked": false,
+    "consistency_note": "Skipped: no ANTHROPIC_API_KEY configured.",
+    "category_distribution": {
+      "other": 191,
+      "technical_specification": 5,
+      "submission_instruction": 2,
+      "schedule_milestone": 4,
+      "scope_of_work": 4,
+      "evaluation_criteria": 1,
+      "compliance_legal": 5
+    },
+    "sample_extracted_lines": [
+      {
+        "line": 1,
+        "category": "other",
+        "confidence": 0.4,
+        "text": "SYNTHETIC TEST DOCUMENT \u2014 NOT ISSUED BY INFRASTRUCTURE ONTARIO"
+      },
+      {
+        "line": 5,
+        "category": "other",
+        "confidence": 0.4,
+        "text": "# NORTH RIVER EMERGENCY OPERATIONS AND COMMUNITY RESILIENCE CENTRE"
+      },
+      {
+        "line": 6,
+        "category": "other",
+        "confidence": 0.4,
+        "text": "## OWNER'S PROJECT REQUIREMENTS"
+      },
+      {
+        "line": 8,
+        "category": "other",
+        "confidence": 0.4,
+        "text": "| Field | Detail |"
+      },
+      {
+        "line": 9,
+        "category": "other",
+        "confidence": 0.4,
+        "text": "|---|---|"
+      },
+      {
+        "line": 10,
+        "category": "other",
+        "confidence": 0.4,
+        "text": "| Document ID | NREOCRC-OPR-001 |"
+      },
+      {
+        "line": 11,
+        "category": "other",
+        "confidence": 0.4,
+        "text": "| Document Title | Owner's Project Requirements \u2014 North River Emergency Operations and Community Resilience Centre |"
+      },
+      {
+        "line": 12,
+        "category": "other",
+        "confidence": 0.4,
+        "text": "| Revision | 0 |"
+      },
+      {
+        "line": 13,
+        "category": "other",
+        "confidence": 0.4,
+        "text": "| Issue Date | December 8, 2026 |"
+      },
+      {
+        "line": 14,
+        "category": "other",
+        "confidence": 0.4,
+        "text": "| Issuer | North River Infrastructure Corporation |"
+      },
+      {
+        "line": 15,
+        "category": "other",
+        "confidence": 0.4,
+        "text": "| Status | ISSUED WITH RFP \u2014 CONTRACTUAL DOCUMENT |"
+      },
+      {
+        "line": 16,
+        "category": "other",
+        "confidence": 0.4,
+        "text": "| Forming Part Of | Request for Proposals NREOCRC-RFP-001, Volume 2 |"
+      }
+    ],
+    "functional_program_table_row_sample": {
+      "text": "| 14 | Emergency Operations Centre | EOC Operations Room | 1 | 280 | \u2014 | Section Rooms; Secure Entry Vestibule | Secure | Raised floor or accessible underfloor pathway for cabling; acoustically isolated | See Section 5.3 regarding approximate area referenced in prose |",
+      "category": "other",
+      "confidence": 0.4
+    }
+  },
+  "gaps": [
+    {
+      "gap": "BHiveParser._extract has no .md handler",
+      "condition": "NREOCRC-OPR-001.md is UTF-8 markdown text, structurally readable as plain text",
+      "current_behavior": "ParserError raised for unsupported extension; ingestion refuses to start",
+      "preferable_behavior": "treat .md as plain text (same path as .txt), since its content is plain-text-decodable",
+      "affected_architecture": "services/bhive_parser.py:_extract"
+    },
+    {
+      "gap": "BHiveParser._segment/_classify have no table-aware handling",
+      "condition": "Appendix OPR-1 is a 42-row markdown table (Functional Program) with columns for area/adjacency/security level/etc.",
+      "current_behavior": "each table row is segmented as one raw pipe-delimited text line and classified by keyword matching tuned for RFP prose, not tabular data - column semantics (which cell is area vs adjacency vs security level) are entirely lost",
+      "preferable_behavior": "a table-aware extraction stage that parses markdown/real tables into structured rows with named columns",
+      "affected_architecture": "services/bhive_parser.py:_segment, :_classify_with_rules"
+    },
+    {
+      "gap": "Source has no first-class fields for document_id/revision/issue_date/issuer/authority-status/file_hash",
+      "condition": "NREOCRC-OPR-001 carries real, stated values for all of these (Document ID, Rev. 0, Issue Date, Issuer, Status)",
+      "current_behavior": "these facts were packed into Source.note as an ad hoc 'key=value; key=value' string - functional but not queryable/structured",
+      "preferable_behavior": "dedicated fields (or a small embedded provenance dict) on Source for document identity/revision/issuer/authority/hash",
+      "affected_architecture": "services/case_workspace.py:Source"
+    },
+    {
+      "gap": "evaluate_information_sufficiency has no outcome for 'explicitly deferred, no date stated'",
+      "condition": "NREOCRC-OPR-001 explicitly defers IDP-001/SCH-001/DR-001/PA-001 with no date - only a milestone_condition of NOT_YET_DUE (requiring a dated TemporalObligation) currently suppresses EXPECTED_NOT_FOUND",
+      "current_behavior": "the evaluator returns EXPECTED_NOT_FOUND for these items when called without a milestone_condition, which is misleading on its own",
+      "preferable_behavior": "a distinct outcome (e.g. EXPECTED_LATER_UNDATED) for items explicitly and textually deferred without a stated trigger date",
+      "affected_architecture": "services/case_workspace.py:evaluate_information_sufficiency, SUFFICIENCY_* vocabulary"
+    },
+    {
+      "gap": "No first-class Freeze/Snapshot object exists",
+      "condition": "Prompt 6/7 named Freeze/Snapshot as a needed region; never implemented through Batch E",
+      "current_behavior": "Snapshot 001 here is an externally-assembled JSON artifact (this script's own output), referencing project_state_version but not a governed, stored, queryable Snapshot record",
+      "preferable_behavior": "a real Snapshot primitive (per Prompt 6 L's design: project_clock_timestamp + version-references, not duplicated content)",
+      "affected_architecture": "services/case_workspace.py (no Snapshot dataclass exists)"
+    }
+  ],
+  "manual_registration_note": "Requirement records below are HAND-CURATED, TEST-FIXTURE registrations transcribed directly from the immutable original by a human/LLM reviewer reading the source document. They are NOT the output of automated extraction. No dedicated 'Requirement' domain object exists in BEEHIVE yet (see gaps) so these are held only in this reconstruction artifact, referenced by Relationships via an id scheme ('OPR-001\u00a7<clause>'), not persisted into any CaseWorkspaceStore list.",
+  "requirements_registered": [
+    {
+      "id": "OPR-001\u00a72.2",
+      "section": "2.2",
+      "authority": "STATED HIERARCHY (provisional)",
+      "text": "Order of precedence, highest to lowest: Project Agreement > Addenda (latest governing) > this OPR > Functional Program > RFP main document (technical gaps only) > Accepted Proposal Commitments (bounded) > Indicative Design Package (indicative only) > Data Room (reference/informational).",
+      "note": "Explicitly stated as 'the Owner's current statement of intent... will be restated and finalized in the Project Agreement' - PROVISIONAL, not final."
+    },
+    {
+      "id": "OPR-001\u00a74.1",
+      "section": "4.1",
+      "authority": "MANDATORY",
+      "text": "Physically separated vehicular access for public, staff, EOC emergency vehicles, and service/delivery/fuel vehicles."
+    },
+    {
+      "id": "OPR-001\u00a74.3",
+      "section": "4.3",
+      "authority": "MANDATORY",
+      "text": "Site shall accommodate the Future Expansion Area (Section 18) without requiring demolition/relocation of primary structure, standby power, or site servicing."
+    },
+    {
+      "id": "OPR-001\u00a74.6",
+      "section": "4.6",
+      "authority": "INDICATIVE",
+      "text": "Three preliminary site/building placement concepts (Options A/B/C) in the Indicative Design Package illustrate Owner thinking; Design-Builder not required to adopt any Option.",
+      "note": "References NREOCRC-IDP-001, which is 'to be issued' - not present in this corpus state."
+    },
+    {
+      "id": "OPR-001\u00a75.2",
+      "section": "5.2",
+      "authority": "MANDATORY",
+      "text": "Interior organization shall reflect zoning principles in Section 8, illustrated in Figure OPR-2.1, such that movement between zones occurs only at defined transition points."
+    },
+    {
+      "id": "OPR-001\u00a75.3",
+      "section": "5.3",
+      "authority": "INFORMATIONAL",
+      "text": "EOC Operations Room approximate primary operations floor area 'in the order of 250 m\u00b2'; governing net area requirement is set out in the Functional Program (Appendix OPR-1)."
+    },
+    {
+      "id": "OPR-001\u00a78.1",
+      "section": "8.1",
+      "authority": "STATED (general)",
+      "text": "Facility organized into three security zones (Public/Controlled/Secure) per Figure OPR-2.1; functional adjacencies per Figure OPR-2.2."
+    },
+    {
+      "id": "OPR-001\u00a78.2",
+      "section": "8.2",
+      "authority": "MANDATORY",
+      "text": "Full Functional Program (Appendix OPR-1) forms a Contractual Document."
+    },
+    {
+      "id": "OPR-001\u00a78.5",
+      "section": "8.5",
+      "authority": "MANDATORY",
+      "text": "Net areas in Appendix OPR-1 are minimum net areas unless expressly maximum/nominal."
+    },
+    {
+      "id": "OPR-001\u00a7Appendix-OPR-1-Row14",
+      "section": "Appendix OPR-1, Row 14",
+      "authority": "MANDATORY",
+      "text": "EOC Operations Room: 280 m\u00b2 net area (minimum), Secure zone. Notes: 'See Section 5.3 regarding approximate area referenced in prose.'"
+    },
+    {
+      "id": "OPR-001\u00a712.1",
+      "section": "12.1",
+      "authority": "MANDATORY",
+      "text": "Standby power generation for full EOC-activated load for a continuous period of no less than 96 hours without refuelling."
+    },
+    {
+      "id": "OPR-001\u00a712.2",
+      "section": "12.2 (table)",
+      "authority": "INFORMATIONAL (labelled 'for Design-Builder planning purposes')",
+      "text": "Estimated EOC-activated critical load 850-1,050 kW (Class D estimate); fuel storage sized to municipal bylaw minimum of 72 hours with 24-hour bulk refuelling arrangement; fuel type diesel (assumed)."
+    },
+    {
+      "id": "OPR-001\u00a712.3",
+      "section": "12.3",
+      "authority": "MANDATORY",
+      "text": "Standby power system, including fuel storage, shall not be rendered inoperable by the same event conditions the Facility must remain operational through, including flood conditions per Section 4.5.",
+      "note": "Explicitly cross-references Section 4.5 (site floodplain)."
+    },
+    {
+      "id": "OPR-001\u00a712.4",
+      "section": "12.4",
+      "authority": "RATED",
+      "text": "Standby power duration/redundancy/fuel resupply exceeding 12.1-12.3 viewed favourably."
+    },
+    {
+      "id": "OPR-001\u00a715.1",
+      "section": "15.1",
+      "authority": "MANDATORY",
+      "text": "Recognized sustainability certification required; resilience/standby-power requirements may create tension with energy-efficiency strategies - where tension exists, Sections 9-14 (resilience/continuity) govern.",
+      "note": "The document resolves this tension explicitly itself - not an unresolved conflict."
+    },
+    {
+      "id": "OPR-001\u00a718.1",
+      "section": "18.1",
+      "authority": "MANDATORY",
+      "text": "Protect a Future Expansion Area for ~1,500-2,000 m\u00b2 EOC surge-capacity addition without relocating primary structure/standby power/Secure Zone."
+    },
+    {
+      "id": "OPR-001\u00a718.3",
+      "section": "18.3",
+      "authority": "INDICATIVE",
+      "text": "Future Expansion Area is NOT part of current contracted scope and will not be constructed under this Project Agreement."
+    },
+    {
+      "id": "OPR-001\u00a720.2",
+      "section": "20.2",
+      "authority": "MANDATORY (procedural)",
+      "text": "Items stated to be confirmed later (6.1, 12.4, 14.3, 15.1, 19.3) will be issued by Addendum prior to Proposal Submission Deadline.",
+      "note": "No specific date is given anywhere in this document for the Proposal Submission Deadline - it is referenced, not dated, in the current corpus state."
+    }
+  ],
+  "relationships_created": [
+    {
+      "from": "requirement:OPR-001\u00a75.2",
+      "to": "source:64ddb0f85bd7404182c42dacb813104e",
+      "type": "corresponds_to",
+      "confidence": 0.95,
+      "note": "Explicit textual reference: '...illustrated in Figure OPR-2.1...'"
+    },
+    {
+      "from": "requirement:OPR-001\u00a78.1",
+      "to": "source:64ddb0f85bd7404182c42dacb813104e",
+      "type": "corresponds_to",
+      "confidence": 0.95,
+      "note": "Explicit textual reference to Figure OPR-2.1 (Security Zoning)."
+    },
+    {
+      "from": "requirement:OPR-001\u00a78.1",
+      "to": "source:9d8b972eaa094fe5a96d3d721ebdd357",
+      "type": "corresponds_to",
+      "confidence": 0.95,
+      "note": "Explicit textual reference to Figure OPR-2.2 (Functional Adjacency)."
+    },
+    {
+      "from": "requirement:OPR-001\u00a7Appendix-OPR-1-Row14",
+      "to": "requirement:OPR-001\u00a75.3",
+      "type": "qualifies",
+      "confidence": 0.9,
+      "note": "280 m\u00b2 Mandatory table value qualifies/governs the 250 m\u00b2 Informational prose approximation - per Section 2.3 (Informational carries no contractual obligation) and Section 2.4 (more specific/recent statement governs). Document resolves this itself: COMPATIBLE, one governs - not a conflict."
+    },
+    {
+      "from": "requirement:OPR-001\u00a712.3",
+      "to": "requirement:OPR-001\u00a74.3",
+      "type": "references",
+      "confidence": 0.9,
+      "note": "Section 12.3 explicitly cross-references the Section 4.5 floodplain condition (via Section 4 generally, linked here to the Section 4 site-planning cluster of requirements)."
+    },
+    {
+      "from": "requirement:OPR-001\u00a718.1",
+      "to": "requirement:OPR-001\u00a74.3",
+      "type": "references",
+      "confidence": 0.9,
+      "note": "Section 4.3 (site siting) and Section 18.1 (future expansion area) describe the same requirement from two different sections - site planning and future-expansion chapters cross-reference each other."
+    },
+    {
+      "from": "requirement:OPR-001\u00a72.2",
+      "to": "requirement:OPR-001\u00a74.6",
+      "type": "takes_precedence_over",
+      "confidence": 0.85,
+      "note": "Section 2.2's stated hierarchy places the OPR itself above the (not-yet-issued) Indicative Design Package, which Section 4.6 confirms is non-mandatory. Modeled as an open-world extension relationship type ('takes_precedence_over') since no canonical KNOWN_RELATIONSHIP_TYPES value captures document-hierarchy precedence, and 'supersedes' is reserved exclusively for lineage."
+    }
+  ],
+  "maturity_recorded": {
+    "id": "6e9390e4-2ea8-4b9c-90cc-c518248a809a",
+    "project_id": "nreocrc",
+    "maturity_type": "design",
+    "scope_type": "project",
+    "scope_id": "nreocrc",
+    "value": "rfp_pre_proposal",
+    "created_at": "2026-07-24T20:05:22.869667+00:00",
+    "created_by": "nreocrc-ingestion-lab",
+    "status": "active",
+    "effective_at": null
+  },
+  "maturity_note": "No canonical KNOWN_DESIGN_MATURITY_STAGES value fits an RFP/pre-Proposal stage (the canonical set starts at 'concept'). 'rfp_pre_proposal' is preserved verbatim as an open-world extension value, not forced into a known stage - an authentic, unplanned demonstration of Test R's behavior on real project data.",
+  "expected_information_profile": {
+    "id": "2335746e-7444-4bbf-924d-236c29f72d1d",
+    "project_id": "nreocrc",
+    "title": "RFP-stage referenced documents (per NREOCRC-OPR-001 Sections 1.2/3)",
+    "scope_type": "project",
+    "scope_id": "nreocrc",
+    "created_at": "2026-07-24T20:05:22.903016+00:00",
+    "created_by": "nreocrc-ingestion-lab",
+    "status": "active",
+    "items": [],
+    "authority_context": null
+  },
+  "expectation_items": [
+    {
+      "id": "d4f89ae1-8494-4358-8a5e-0a217d6e8064",
+      "expected_kind": "document",
+      "description": "Indicative Design Package (Options A/B/C) (NREOCRC-IDP-001)",
+      "created_at": "2026-07-24T20:05:22.933916+00:00",
+      "created_by": "nreocrc-ingestion-lab",
+      "status": "active",
+      "applicability": "Explicitly referenced by NREOCRC-OPR-001 as 'to be issued' - no date stated in current corpus.",
+      "expected_maturity": null,
+      "bindingness": "expected",
+      "authority_source": "OPR-001 Section 1.2/3.6/4.6",
+      "expected_provider": null,
+      "milestone_trigger_id": null,
+      "related_object_type": null,
+      "related_object_id": null,
+      "raw_evaluator_outcome": "expected_not_found",
+      "raw_evaluator_detail": {},
+      "human_layer_override": "EXPECTED LATER (undated) - NOT a deficiency. The raw evaluator outcome above (expected_not_found) would overstate confidence if reported as-is: no milestone date exists in the current corpus to gate this as NOT_EXPECTED_YET, but the source document explicitly and unambiguously states this document is forthcoming. See false-confidence audit."
+    },
+    {
+      "id": "bd0025c4-ce15-4287-8312-653c996166ae",
+      "expected_kind": "document",
+      "description": "Procurement and Milestone Schedule (NREOCRC-SCH-001)",
+      "created_at": "2026-07-24T20:05:22.966048+00:00",
+      "created_by": "nreocrc-ingestion-lab",
+      "status": "active",
+      "applicability": "Explicitly referenced by NREOCRC-OPR-001 as 'to be issued' - no date stated in current corpus.",
+      "expected_maturity": null,
+      "bindingness": "expected",
+      "authority_source": "OPR-001 Section 1.2/3/20.1",
+      "expected_provider": null,
+      "milestone_trigger_id": null,
+      "related_object_type": null,
+      "related_object_id": null,
+      "raw_evaluator_outcome": "expected_not_found",
+      "raw_evaluator_detail": {},
+      "human_layer_override": "EXPECTED LATER (undated) - NOT a deficiency. The raw evaluator outcome above (expected_not_found) would overstate confidence if reported as-is: no milestone date exists in the current corpus to gate this as NOT_EXPECTED_YET, but the source document explicitly and unambiguously states this document is forthcoming. See false-confidence audit."
+    },
+    {
+      "id": "69fed5b0-3458-458e-a3e3-ec0a0ef93ce0",
+      "expected_kind": "document",
+      "description": "Data Room Document Register (NREOCRC-DR-001)",
+      "created_at": "2026-07-24T20:05:22.995023+00:00",
+      "created_by": "nreocrc-ingestion-lab",
+      "status": "active",
+      "applicability": "Explicitly referenced by NREOCRC-OPR-001 as 'to be issued' - no date stated in current corpus.",
+      "expected_maturity": null,
+      "bindingness": "expected",
+      "authority_source": "OPR-001 Section 1.2/3",
+      "expected_provider": null,
+      "milestone_trigger_id": null,
+      "related_object_type": null,
+      "related_object_id": null,
+      "raw_evaluator_outcome": "expected_not_found",
+      "raw_evaluator_detail": {},
+      "human_layer_override": "EXPECTED LATER (undated) - NOT a deficiency. The raw evaluator outcome above (expected_not_found) would overstate confidence if reported as-is: no milestone date exists in the current corpus to gate this as NOT_EXPECTED_YET, but the source document explicitly and unambiguously states this document is forthcoming. See false-confidence audit."
+    },
+    {
+      "id": "ac9c6490-0a41-489e-b144-67c06bd4b892",
+      "expected_kind": "document",
+      "description": "Draft Project Agreement (NREOCRC-PA-001 (Draft))",
+      "created_at": "2026-07-24T20:05:23.023006+00:00",
+      "created_by": "nreocrc-ingestion-lab",
+      "status": "active",
+      "applicability": "Explicitly referenced by NREOCRC-OPR-001 as 'to be issued' - no date stated in current corpus.",
+      "expected_maturity": null,
+      "bindingness": "expected",
+      "authority_source": "OPR-001 Section 3",
+      "expected_provider": null,
+      "milestone_trigger_id": null,
+      "related_object_type": null,
+      "related_object_id": null,
+      "raw_evaluator_outcome": "expected_not_found",
+      "raw_evaluator_detail": {},
+      "human_layer_override": "EXPECTED LATER (undated) - NOT a deficiency. The raw evaluator outcome above (expected_not_found) would overstate confidence if reported as-is: no milestone date exists in the current corpus to gate this as NOT_EXPECTED_YET, but the source document explicitly and unambiguously states this document is forthcoming. See false-confidence audit."
+    }
+  ],
+  "functional_program_sufficiency_check": {
+    "item": {
+      "id": "14c0b07f-883f-47d7-84b2-b8fa26094ac9",
+      "expected_kind": "information_within_document",
+      "description": "Room-by-room Functional Program with net areas, adjacencies, security levels (Appendix OPR-1)",
+      "created_at": "2026-07-24T20:05:23.047797+00:00",
+      "created_by": "nreocrc-ingestion-lab",
+      "status": "active",
+      "applicability": null,
+      "expected_maturity": null,
+      "bindingness": "mandatory",
+      "authority_source": "OPR-001 Section 8.2",
+      "expected_provider": null,
+      "milestone_trigger_id": null,
+      "related_object_type": null,
+      "related_object_id": null
+    },
+    "result": {
+      "outcome": "expected_and_found",
+      "detail": {}
+    }
+  },
+  "snapshot_001": {
+    "snapshot_id": "NREOCRC-BASELINE-INGESTION-SNAPSHOT-001",
+    "project_state_version": 17,
+    "source_count": 3,
+    "relationship_count": 7,
+    "profile_count": 1,
+    "finding_count": 0,
+    "review_thread_count": 0
+  }
+}

@@ -1,0 +1,62 @@
+{
+  "project_id": "nreocrc",
+  "project_title": "North River Emergency Operations and Community Resilience Centre",
+  "corpus_state_id": "CORPUS-STATE-001",
+  "corpus_state_description": "Initial corpus state: OPR-001 (with embedded Functional Program and two figures) only. RFP main document, IDP-001, SCH-001, DR-001, and draft PA-001 are explicitly referenced as 'to be issued' and are NOT part of this corpus state.",
+  "manifest_generated_at": "2026-07-24T00:00:00+00:00",
+  "manifest_note": "This manifest is itself derived/generated (Prompt 13 #31). It does not alter the originals it describes.",
+  "files": [
+    {
+      "file_name": "NREOCRC-OPR-001.md",
+      "document_id": "NREOCRC-OPR-001",
+      "document_title": "Owner's Project Requirements — North River Emergency Operations and Community Resilience Centre",
+      "revision": "0",
+      "issue_date": "2026-12-08",
+      "issuer": "North River Infrastructure Corporation",
+      "status_as_stated_in_document": "ISSUED WITH RFP — CONTRACTUAL DOCUMENT",
+      "file_type": "text/markdown",
+      "sha256": "0109f49a8dc0bd75ab7612f87e5b23d4af8d129633c3815f8917e8fafb47ed6f",
+      "byte_size": 33994,
+      "immutable_source_path": "tests/fixtures/nreocrc/immutable_original/NREOCRC-OPR-001.md",
+      "ingestion_status": "registered_as_source",
+      "ingestion_timestamp": "2026-07-24T00:00:00+00:00"
+    },
+    {
+      "file_name": "NREOCRC-OPR-001-FIG-2-1-Security-Zoning.svg",
+      "document_id": "NREOCRC-OPR-001 / Figure OPR-2.1",
+      "document_title": "Security Zoning Diagram (Appendix OPR-2 to NREOCRC-OPR-001)",
+      "revision": "0",
+      "issue_date": "2026-12-08",
+      "issuer": "North River Infrastructure Corporation",
+      "status_as_stated_in_document": "Schematic and indicative of required relationships and separations; does not establish final room locations, dimensions, or building configuration except where a specific figure is expressly designated Mandatory in the OPR body",
+      "file_type": "image/svg+xml",
+      "sha256": "9502b6e600acd3d24731d99b6874412a398b7a35c1364849534ccef9af258823",
+      "byte_size": 4407,
+      "immutable_source_path": "tests/fixtures/nreocrc/immutable_original/figures/NREOCRC-OPR-001-FIG-2-1-Security-Zoning.svg",
+      "ingestion_status": "registered_as_source",
+      "ingestion_timestamp": "2026-07-24T00:00:00+00:00"
+    },
+    {
+      "file_name": "NREOCRC-OPR-001-FIG-2-2-Functional-Adjacency.svg",
+      "document_id": "NREOCRC-OPR-001 / Figure OPR-2.2",
+      "document_title": "Functional Relationship / Adjacency Diagram (Appendix OPR-2 to NREOCRC-OPR-001)",
+      "revision": "0",
+      "issue_date": "2026-12-08",
+      "issuer": "North River Infrastructure Corporation",
+      "status_as_stated_in_document": "Schematic only, not to scale",
+      "file_type": "image/svg+xml",
+      "sha256": "2c7cb9982742f80444b2c6c0b23c7e4ecec8cf62ba36545a8120533a1f9b5a9e",
+      "byte_size": 4002,
+      "immutable_source_path": "tests/fixtures/nreocrc/immutable_original/figures/NREOCRC-OPR-001-FIG-2-2-Functional-Adjacency.svg",
+      "ingestion_status": "registered_as_source",
+      "ingestion_timestamp": "2026-07-24T00:00:00+00:00"
+    }
+  ],
+  "documents_referenced_but_not_yet_issued": [
+    {"document_id": "NREOCRC-RFP-001", "role": "RFP main document", "status_as_stated": "Issued concurrently (referenced; not itself part of this corpus)"},
+    {"document_id": "NREOCRC-IDP-001", "role": "Indicative Design Package (Options A/B/C)", "status_as_stated": "To be issued"},
+    {"document_id": "NREOCRC-SCH-001", "role": "Procurement and Milestone Schedule", "status_as_stated": "To be issued"},
+    {"document_id": "NREOCRC-DR-001", "role": "Data Room Document Register", "status_as_stated": "To be issued"},
+    {"document_id": "NREOCRC-PA-001 (Draft)", "role": "Draft Project Agreement", "status_as_stated": "To be issued"}
+  ]
+}

@@ -1,0 +1,56 @@
+<svg viewBox="0 0 900 620" xmlns="http://www.w3.org/2000/svg" font-family="Arial, Helvetica, sans-serif">
+  <rect x="0" y="0" width="900" height="620" fill="#ffffff"/>
+  <text x="450" y="30" text-anchor="middle" font-size="18" font-weight="bold">FIGURE OPR-2.1 — SECURITY ZONING DIAGRAM (SCHEMATIC)</text>
+  <text x="450" y="50" text-anchor="middle" font-size="12" fill="#555">NREOCRC — Indicative Zoning Only — Not to Scale</text>
+
+  <!-- Overall site boundary -->
+  <rect x="60" y="80" width="780" height="470" fill="none" stroke="#333" stroke-width="2" stroke-dasharray="6,4"/>
+  <text x="70" y="100" font-size="12" fill="#555">SITE BOUNDARY</text>
+
+  <!-- Public Zone -->
+  <rect x="90" y="120" width="230" height="410" fill="#dff0d8" stroke="#3c763d" stroke-width="2"/>
+  <text x="205" y="145" text-anchor="middle" font-size="14" font-weight="bold" fill="#3c763d">PUBLIC ZONE</text>
+  <text x="205" y="165" text-anchor="middle" font-size="11" fill="#3c763d">Community Training</text>
+  <text x="205" y="180" text-anchor="middle" font-size="11" fill="#3c763d">Public Lobby / Reception</text>
+  <text x="205" y="195" text-anchor="middle" font-size="11" fill="#3c763d">Public Parking Access</text>
+
+  <!-- Controlled Zone -->
+  <rect x="340" y="120" width="230" height="410" fill="#fcf8e3" stroke="#8a6d3b" stroke-width="2"/>
+  <text x="455" y="145" text-anchor="middle" font-size="14" font-weight="bold" fill="#8a6d3b">CONTROLLED ZONE</text>
+  <text x="455" y="165" text-anchor="middle" font-size="11" fill="#8a6d3b">Municipal Administration</text>
+  <text x="455" y="180" text-anchor="middle" font-size="11" fill="#8a6d3b">Staff Circulation</text>
+  <text x="455" y="195" text-anchor="middle" font-size="11" fill="#8a6d3b">Staff Parking Access</text>
+
+  <!-- Secure Zone -->
+  <rect x="590" y="120" width="250" height="410" fill="#f2dede" stroke="#a94442" stroke-width="2"/>
+  <text x="715" y="145" text-anchor="middle" font-size="14" font-weight="bold" fill="#a94442">SECURE ZONE</text>
+  <text x="715" y="165" text-anchor="middle" font-size="11" fill="#a94442">EOC Operations Room</text>
+  <text x="715" y="180" text-anchor="middle" font-size="11" fill="#a94442">Section Rooms</text>
+  <text x="715" y="195" text-anchor="middle" font-size="11" fill="#a94442">Secure Entry Vestibule</text>
+
+  <!-- Restricted Comms sub-zone within Secure -->
+  <rect x="615" y="330" width="200" height="150" fill="#e8d5e8" stroke="#6b2d6b" stroke-width="2"/>
+  <text x="715" y="355" text-anchor="middle" font-size="12" font-weight="bold" fill="#6b2d6b">RESTRICTED</text>
+  <text x="715" y="370" text-anchor="middle" font-size="12" font-weight="bold" fill="#6b2d6b">COMMUNICATIONS</text>
+  <text x="715" y="385" text-anchor="middle" font-size="12" font-weight="bold" fill="#6b2d6b">SUB-ZONE</text>
+  <text x="715" y="405" text-anchor="middle" font-size="10" fill="#6b2d6b">Radio / Dispatch-Adjacent</text>
+  <text x="715" y="420" text-anchor="middle" font-size="10" fill="#6b2d6b">Server / Comms Equipment</text>
+
+  <!-- Vehicle / Service zone bar at bottom spanning controlled+secure -->
+  <rect x="340" y="470" width="500" height="60" fill="#d9edf7" stroke="#31708f" stroke-width="2"/>
+  <text x="590" y="495" text-anchor="middle" font-size="12" font-weight="bold" fill="#31708f">VEHICLE / SERVICE ZONE</text>
+  <text x="590" y="512" text-anchor="middle" font-size="10" fill="#31708f">Fleet Bay — Controlled/Secure Access Only</text>
+
+  <!-- Transition control points -->
+  <circle cx="330" cy="250" r="10" fill="#fff" stroke="#000" stroke-width="2"/>
+  <text x="330" y="255" text-anchor="middle" font-size="10" font-weight="bold">A</text>
+  <circle cx="580" cy="250" r="10" fill="#fff" stroke="#000" stroke-width="2"/>
+  <text x="580" y="255" text-anchor="middle" font-size="10" font-weight="bold">B</text>
+
+  <!-- Legend -->
+  <rect x="90" y="545" width="740" height="65" fill="#f9f9f9" stroke="#ccc"/>
+  <text x="100" y="562" font-size="11" font-weight="bold">LEGEND:</text>
+  <text x="100" y="578" font-size="10">A = Controlled Access Transition Point (card access, staff only)</text>
+  <text x="100" y="592" font-size="10">B = Secure Access Transition Point (card access + secondary verification, EOC-activated staff and escorted visitors only)</text>
+  <text x="100" y="604" font-size="10">Zone boundaries are conceptual and indicate required security separation, not final wall locations.</text>
+</svg>

@@ -1,0 +1,7 @@
+# The NREOCRC synthetic corpus is an immutable test fixture whose SHA-256
+# hashes are recorded in tests/fixtures/nreocrc/manifest.json as part of the
+# corpus's own provenance guarantee (Prompt 13). Line-ending normalization
+# on checkout (core.autocrlf) would silently change these files' bytes on
+# some machines and break that guarantee - `-text` disables any such
+# conversion, so the files are always checked out exactly as committed.
+tests/fixtures/nreocrc/immutable_original/** -text
