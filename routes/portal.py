@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from flask import Blueprint, abort, current_app, jsonify, redirect, render_template, request, url_for
 
-from services.auth import check_credentials, log_in, log_out, login_required
+from services.auth import admin_required, check_credentials, log_in, log_out, login_required
 from services.bhive_parser import REQUIREMENT_CATEGORIES
 from services.governance import GovernanceError
 from services.ingestion import UploadError, get_governance_log, get_registry, ingest_upload
@@ -79,8 +79,9 @@ def login():
 
     username = request.form.get('username', '')
     password = request.form.get('password', '')
-    if check_credentials(username, password):
-        log_in(username)
+    user = check_credentials(username, password)
+    if user is not None:
+        log_in(user)
         # No specific ?next= target -> land on the project gateway (pick
         # ingest vs. dashboard) rather than jumping straight into one.
         next_url = request.args.get('next') or url_for('portal.gateway')
@@ -111,7 +112,7 @@ def gateway():
 
 
 @portal_bp.route('/upload', methods=['GET', 'POST'])
-@login_required
+@admin_required
 def upload():
     max_upload_mb = current_app.config['MAX_CONTENT_LENGTH'] // (1024 * 1024)
 

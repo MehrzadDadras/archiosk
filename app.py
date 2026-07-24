@@ -24,11 +24,29 @@ def create_app(config_name: str | None = None) -> Flask:
     app.config.from_object(get_config(config_name))
 
     _configure_logging(app)
+    _register_database(app)
     _register_blueprints(app)
     _register_error_handlers(app)
     _register_context_processors(app)
 
     return app
+
+
+def _register_database(app: Flask) -> None:
+    from pathlib import Path
+
+    from models import db
+
+    # app.instance_path defaults to <repo_root>/instance, matching
+    # config.py's BASE_DIR / 'instance' -- creates the directory SQLite
+    # needs before it tries to open a file there.
+    Path(app.instance_path).mkdir(parents=True, exist_ok=True)
+    db.init_app(app)
+    with app.app_context():
+        # Idempotent -- safe to call on every worker boot. Fine for this
+        # app's single small table; revisit with real migration tooling
+        # if the schema ever needs a change that create_all() can't do.
+        db.create_all()
 
 
 def _configure_logging(app: Flask) -> None:
@@ -65,6 +83,12 @@ def _register_error_handlers(app: Flask) -> None:
             return jsonify(error="server_error", message="Something went wrong."), 500
         return render_template("errors/500.html"), 500
 
+    @app.errorhandler(403)
+    def forbidden(_err):
+        if _wants_json():
+            return jsonify(error="forbidden", message="You do not have permission to access this resource."), 403
+        return render_template("errors/403.html"), 403
+
     def _wants_json() -> bool:
         from flask import request
         return request.path.startswith("/api/")
@@ -75,12 +99,13 @@ def _register_context_processors(app: Flask) -> None:
     def inject_globals():
         from datetime import datetime, timezone
 
-        from services.auth import is_authenticated
+        from services.auth import is_admin, is_authenticated
 
         return {
             "current_year": datetime.now(timezone.utc).year,
             "static_version": app.config["STATIC_VERSION"],
             "authenticated": is_authenticated(),
+            "is_admin": is_admin(),
         }
 
 

@@ -28,8 +28,14 @@ class BaseConfig:
     ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-6")
 
     # -- Storage ---------------------------------------------------------
-    DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{BASE_DIR / 'instance' / 'bhive.db'}")
-    REGISTRY_STORE_PATH = os.getenv("REGISTRY_STORE_PATH", str(BASE_DIR / "instance" / "registry"))
+    # `or` (not getenv's own default arg) so a blank .env value -- e.g.
+    # "DATABASE_URL=" -- falls through too, not just a fully unset var:
+    # os.getenv only applies its default when the key is absent entirely,
+    # and returns "" as-is when the key is present but empty.
+    DATABASE_URL = os.getenv("DATABASE_URL") or f"sqlite:///{BASE_DIR / 'instance' / 'bhive.db'}"
+    SQLALCHEMY_DATABASE_URI = DATABASE_URL
+    SQLALCHEMY_TRACK_MODIFICATIONS = False
+    REGISTRY_STORE_PATH = os.getenv("REGISTRY_STORE_PATH") or str(BASE_DIR / "instance" / "registry")
 
     # -- Upload / parsing limits ------------------------------------------
     MAX_CONTENT_LENGTH = int(os.getenv("MAX_UPLOAD_MB", "25")) * 1024 * 1024
@@ -41,13 +47,7 @@ class BaseConfig:
     # is only safe because changing this value changes the requested URL —
     # bump it any time main.css or dashboard.js changes, or browsers that
     # already cached the old file won't see the update for up to 30 days.
-    STATIC_VERSION = os.getenv("STATIC_VERSION", "2")
-
-    # -- Web UI login gate (single shared credential, no user database) ----
-    # Unset means services/auth.check_credentials() always returns False —
-    # the gate fails closed, not open, if these were never configured.
-    AUTH_USERNAME = os.getenv("AUTH_USERNAME", "")
-    AUTH_PASSWORD_HASH = os.getenv("AUTH_PASSWORD_HASH", "")
+    STATIC_VERSION = os.getenv("STATIC_VERSION", "4")
 
     # HTTPOnly/SameSite are safe in every environment; Secure requires HTTPS,
     # which only nginx terminates in production — off in dev so the login
@@ -81,6 +81,7 @@ class ProductionConfig(BaseConfig):
 class TestingConfig(BaseConfig):
     TESTING = True
     DATABASE_URL = "sqlite:///:memory:"
+    SQLALCHEMY_DATABASE_URI = "sqlite:///:memory:"
     SESSION_COOKIE_SECURE = False
 
 

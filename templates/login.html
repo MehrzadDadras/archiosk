@@ -17,10 +17,6 @@
         <section class="gateway-section">
             <p class="gateway-section-label">Project Gateway</p>
 
-            {% if error %}
-            <p class="mono form-error">{{ error }}</p>
-            {% endif %}
-
             <form method="post">
                 <div class="gateway-field">
                     <label for="username">Username</label>
@@ -30,6 +26,9 @@
                     <label for="password">Password</label>
                     <input type="password" id="password" name="password" class="text-input" required>
                 </div>
+                {% if error %}
+                <div class="mono form-error">{{ error }}</div>
+                {% endif %}
                 <button type="submit" class="btn btn-primary gateway-signin-button">Sign in</button>
             </form>
         </section>

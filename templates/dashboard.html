@@ -140,6 +140,16 @@
     <p class="consistency-note">No events recorded yet.</p>
     {% endif %}
 </section>
+{% if not is_admin %}
+<section class="help-desk">
+    <h2>Need something changed?</h2>
+    <p class="consistency-note">
+        Read-only accounts can browse requirements, milestones, and the audit
+        trail, but can't ingest new documents. To upload a new RFP/RFQ or
+        request a role change, contact your Archiosk administrator.
+    </p>
+</section>
+{% endif %}
 {% endblock %}
 
 {% block extra_scripts %}

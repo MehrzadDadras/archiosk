@@ -21,6 +21,7 @@
             <h2>Begin a session</h2>
 
             <div class="gateway-actions">
+                {% if is_admin %}
                 <a class="gateway-action gateway-action-primary" href="{{ url_for('portal.upload') }}">
                     <span class="gateway-action-icon">+</span>
                     <span>
@@ -28,6 +29,7 @@
                         <small>Upload an RFP/RFQ and run it through the B-Hive pipeline</small>
                     </span>
                 </a>
+                {% endif %}
                 <a class="gateway-action" href="{{ url_for('portal.dashboard') }}">
                     <span class="gateway-action-icon">&#8963;</span>
                     <span>

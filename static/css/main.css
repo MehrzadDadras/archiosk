@@ -7,7 +7,7 @@
              IBM Plex Mono (data / labels / mono details)
    ============================================================ */
 :root {
-    --ink: #0b1f33;
+    --ink: #0b1329;
     --panel: #122a41;
     --panel-raised: #16324c;
     --line: #24445e;
@@ -309,6 +309,7 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; }
 /* -- consistency flags ---------------------------------------------------- */
 .consistency { padding: 1.5rem 0 3rem; }
 .consistency h2 { font-family: var(--font-display); font-size: 1.2rem; margin-bottom: 1rem; }
+.help-desk h2 { font-family: var(--font-display); font-size: 1.2rem; margin-bottom: 1rem; }
 .consistency-note, .consistency-clean {
     font-family: var(--font-mono);
     font-size: 0.85rem;
@@ -432,7 +433,10 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; }
    post-login .gateway-card (gateway.html) keeps its original spacious
    layout untouched. */
 .gateway-card-compact {
-    background: rgba(15, 122, 122, 0.98);
+    background-color: rgba(15, 23, 42, 0.65);
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
     box-shadow: 0 24px 70px rgba(0, 0, 0, 0.48);
 }
 .gateway-card-compact .gateway-brand {
@@ -442,8 +446,10 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; }
 }
 .gateway-card-compact .gateway-brand h1 { line-height: 1; }
 .gateway-card-compact .gateway-section { padding: 12.8px 32px 16px; }
-.gateway-card-compact .gateway-field { margin-bottom: 14px; }
+.gateway-card-compact .gateway-section-label { margin-bottom: 19.2px; }
+.gateway-card-compact .gateway-field { gap: 3px; margin-bottom: 14px; }
 .gateway-card-compact .text-input { max-width: none; }
+.gateway-card-compact form .form-error { margin: 0; }
 .gateway-card-compact .gateway-signin-button {
     display: block;
     width: 100%;

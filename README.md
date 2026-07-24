@@ -191,30 +191,44 @@ quick gate in a review checklist. `--help` lists every flag.
 
 ## Web UI login gate
 
-`/upload` and `/dashboard` require signing in at `/login`; `/` (the
-marketing home page) and `/health` stay public. This is a single
-shared credential, not a multi-user account system — there's no user
-database anywhere in this app.
+`/dashboard` requires signing in at `/login`; `/upload` additionally
+requires the `admin` role; `/` (the marketing home page) and `/health`
+stay public. Accounts live in a `User` table (`models.py`, SQLite via
+`DATABASE_URL`/`SQLALCHEMY_DATABASE_URI`) with two roles:
 
-Signing in with no specific destination (i.e. not via a redirect from
-a gated page) lands on `/gateway` — a landing screen with two action
-cards, "Ingest a new document" and "View dashboard", rather than
-jumping straight into one. `login.html` and `gateway.html` share a
-`.gateway-card` layout: brand lockup, a mono section label, and a
-footer telemetry row (registry type, chassis name, `STATIC_VERSION`).
+- `admin` — full access, including `/upload` (document ingestion).
+- `read_only` — can browse `/gateway` and `/dashboard`, sees a Help
+  Desk info block there, but gets a `403` if it hits `/upload` directly
+  (the nav link and gateway action card are hidden for this role too).
 
-Set it up via `.env`:
+There is no self-registration route. Accounts are provisioned only via
+the maintainer CLI:
 
 ```bash
-AUTH_USERNAME=admin
-AUTH_PASSWORD_HASH=   # python -c "from werkzeug.security import generate_password_hash; print(generate_password_hash('yourpassword'))"
+python tools/create_credentials.py --username admin --role admin
+python tools/create_credentials.py --username jdoe --role read_only
 ```
 
-**Leaving either blank fails closed, not open** — `/upload` and
-`/dashboard` become completely inaccessible rather than silently
-unprotected. This is a real behavior change from earlier in the
-project's history, when those pages had no gate at all; set the two
-env vars above before relying on them again.
+Re-running with an existing `--username` updates that account's
+password/role in place. The script also fills in `FLASK_SECRET_KEY` in
+`.env` if it's blank (sessions need it) — see `tools/create_credentials.py`.
+
+**Role is trusted from the session cookie, not re-checked against the DB
+on every request.** For this app's size (a handful of maintainer-
+provisioned accounts, no self-service changes) that's the right
+tradeoff, but it means a demoted/deleted user stays effectively
+privileged until they log out. Sessions are default signed cookies (no
+server-side session store), so there's no way to force-invalidate one
+specific session — the only way to force everyone to re-authenticate
+immediately is rotating `FLASK_SECRET_KEY`.
+
+Signing in with no specific destination (i.e. not via a redirect from
+a gated page) lands on `/gateway` — a landing screen with action
+cards ("Ingest a new document" for admins, "View dashboard" for
+everyone), rather than jumping straight into one. `login.html` and
+`gateway.html` share a `.gateway-card` layout: brand lockup, a mono
+section label, and a footer telemetry row (registry type, chassis
+name, `STATIC_VERSION`).
 
 Scope: this only gates the HTML pages in `routes/portal.py`. The JSON
 API (`/api/v1/...`) is deliberately untouched — token/key-based API
@@ -222,6 +236,13 @@ auth is a different concern from a session-cookie login gate and
 wasn't part of this feature. There's also no brute-force rate limiting
 on `/login`; this is a simple gate for a small internal tool, not a
 hardened multi-tenant login system.
+
+Note on `tools/dependency_fit.py`'s `flat-json-storage` rule: that
+constraint is scoped specifically to `services/requirements_registry.py`
+(the document/requirements registry), which stays flat-file by
+deliberate prior decision. The `users` SQLite table here is a separate,
+narrower concern — structured account records that don't fit flat JSON
+— and doesn't reopen that decision.
 
 ## Security notes
 

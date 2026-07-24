@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+
+{% block title %}Forbidden &mdash; Archiosk{% endblock %}
+
+{% block content %}
+<section class="error-page">
+    <p class="eyebrow">403</p>
+    <h1>Access restricted</h1>
+    <p class="hero-copy">Your account doesn't have permission to view this page.</p>
+    <div class="hero-actions hero-actions-center">
+        <a class="btn btn-primary" href="{{ url_for('portal.dashboard') }}">Back to dashboard</a>
+    </div>
+</section>
+{% endblock %}
