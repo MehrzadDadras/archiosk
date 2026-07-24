@@ -1,0 +1,704 @@
+{
+  "generated_at": "2026-07-24T21:35:35.088653+00:00",
+  "experiment": "Prompt 17 - Snapshot 002 (current architecture re-ingestion)",
+  "corpus_state": "CORPUS-STATE-001 (unchanged, verified below)",
+  "gaps_still_open": [
+    {
+      "gap": "No generic natural-language date parser for free-text issue dates",
+      "condition": "Front-matter table's Issue Date cell is 'December 8, 2026', not ISO-8601",
+      "current_behavior": "left unset in this run rather than guessing a parse",
+      "affected_architecture": "would be a new small utility, not added during this experiment (Prompt 17 #18)"
+    },
+    {
+      "gap": "evaluate_information_sufficiency has no outcome for 'explicitly deferred, no date stated'",
+      "status": "STILL OPEN - not addressed by Batch F, G, or H."
+    },
+    {
+      "gap": "No separate procurement/commercial-milestone maturity axis; 'rfp_pre_proposal' is still tagged maturity_type=design",
+      "status": "STILL OPEN - Adversarial Review 001 Section 4 flagged this; not addressed by Batch F, G, or H."
+    }
+  ],
+  "gaps_closed_since_snapshot_001": [
+    {
+      "gap": "BHiveParser._extract has no .md handler",
+      "status": "CLOSED (Batch H)",
+      "evidence": "parser.parse() called with the real '.md' filename directly - no .txt-rename bypass needed, unlike Snapshot 001."
+    },
+    {
+      "gap": "BHiveParser._segment/_classify have no table-aware handling",
+      "status": "CLOSED for structural extraction (Batch H)",
+      "evidence": "5 real tables extracted with headers+rows (was 0 in Snapshot 001; table rows were meaningless raw-pipe fragments)."
+    }
+  ],
+  "provenance_labels_used": [
+    "MACHINE_EXTRACTED",
+    "DERIVED_BY_GENERIC_ANALYSIS",
+    "MANUALLY_REGISTERED_TEST_FIXTURE",
+    "NOT_EXTRACTED",
+    "UNSUPPORTED"
+  ],
+  "immutability_verification": {
+    "all_files_unchanged": true,
+    "detail": [
+      {
+        "file": "NREOCRC-OPR-001.md",
+        "hash_match": true,
+        "size_match": true
+      },
+      {
+        "file": "NREOCRC-OPR-001-FIG-2-1-Security-Zoning.svg",
+        "hash_match": true,
+        "size_match": true
+      },
+      {
+        "file": "NREOCRC-OPR-001-FIG-2-2-Functional-Adjacency.svg",
+        "hash_match": true,
+        "size_match": true
+      }
+    ]
+  },
+  "bhive_parser_capability_test": {
+    "md_extension_direct": "supported (Batch H)",
+    "table_count_extracted": 5,
+    "requirement_count_old_taxonomy": 169,
+    "milestone_count": 4,
+    "consistency_checked": false,
+    "consistency_note": "Skipped: no ANTHROPIC_API_KEY configured.",
+    "table_shapes": [
+      {
+        "headers": [
+          "Field",
+          "Detail"
+        ],
+        "row_count": 8,
+        "start_line": 8,
+        "end_line": 17
+      },
+      {
+        "headers": [
+          "Related Document",
+          "Document ID",
+          "Status at Issuance of this OPR"
+        ],
+        "row_count": 8,
+        "start_line": 86,
+        "end_line": 95
+      },
+      {
+        "headers": [
+          "Parameter",
+          "Value",
+          "Notes"
+        ],
+        "row_count": 4,
+        "start_line": 203,
+        "end_line": 208
+      },
+      {
+        "headers": [
+          "#",
+          "Functional Group",
+          "Room / Space",
+          "Qty",
+          "Net Area (m\u00b2) each",
+          "Dept. Area Subtotal (m\u00b2)",
+          "Major Adjacency",
+          "Security Level",
+          "Special Requirement",
+          "Notes"
+        ],
+        "row_count": 42,
+        "start_line": 298,
+        "end_line": 341
+      },
+      {
+        "headers": [
+          "Reference",
+          "Citation Status"
+        ],
+        "row_count": 5,
+        "start_line": 373,
+        "end_line": 379
+      }
+    ]
+  },
+  "source_identity_test": {
+    "frontmatter_table_found": true,
+    "fields_derived_by_generic_analysis": {
+      "document_id": "NREOCRC-OPR-001",
+      "revision": "0",
+      "issue_date": "December 8, 2026",
+      "issuer": "North River Infrastructure Corporation",
+      "document_status": "ISSUED WITH RFP \u2014 CONTRACTUAL DOCUMENT"
+    },
+    "method": "DERIVED_BY_GENERIC_ANALYSIS: generic Field-name -> Source-attribute keyword mapping applied to the machine-extracted front-matter table; values themselves come from the table, not typed from memory.",
+    "issue_date_note": "NOT_EXTRACTED: the front-matter table's 'Issue Date' cell is free text ('December 8, 2026'), not ISO-8601 - Source.issue_date expects a plain string too (no format enforced) so it COULD have been passed through verbatim; left unset here deliberately to test whether a stricter downstream consumer would need parsing this script does not attempt. See gaps."
+  },
+  "figures": [
+    {
+      "source": {
+        "id": "d1a84567-be71-42e9-a09d-74ff986fe6bd",
+        "project_id": "nreocrc",
+        "kind": "drawing",
+        "name": "NREOCRC-OPR-001-FIG-2-1-Security-Zoning.svg",
+        "added_at": "2026-07-24T21:35:35.142346+00:00",
+        "file_path": "C:\\Archiosk\\Research\\archiosk\\tests\\fixtures\\nreocrc\\immutable_original\\figures\\NREOCRC-OPR-001-FIG-2-1-Security-Zoning.svg",
+        "width": 900,
+        "height": 620,
+        "note": null,
+        "supersedes_source_id": null,
+        "superseded_by_source_id": null,
+        "document_id": "NREOCRC-OPR-001 / Figure OPR-2.1",
+        "revision": "0",
+        "issue_date": null,
+        "issuer": "North River Infrastructure Corporation",
+        "document_status": null,
+        "document_authority": null,
+        "file_hash": "9502b6e600acd3d24731d99b6874412a398b7a35c1364849534ccef9af258823",
+        "origin_type": "controlled_corpus",
+        "origin_reference": "tests/fixtures/nreocrc/immutable_original/figures/NREOCRC-OPR-001-FIG-2-1-Security-Zoning.svg"
+      },
+      "svg_text_labels": [
+        "FIGURE OPR-2.1 \u2014 SECURITY ZONING DIAGRAM (SCHEMATIC)",
+        "NREOCRC \u2014 Indicative Zoning Only \u2014 Not to Scale",
+        "SITE BOUNDARY",
+        "PUBLIC ZONE",
+        "Community Training",
+        "Public Lobby / Reception",
+        "Public Parking Access",
+        "CONTROLLED ZONE",
+        "Municipal Administration",
+        "Staff Circulation",
+        "Staff Parking Access",
+        "SECURE ZONE",
+        "EOC Operations Room",
+        "Section Rooms",
+        "Secure Entry Vestibule",
+        "RESTRICTED",
+        "COMMUNICATIONS",
+        "SUB-ZONE",
+        "Radio / Dispatch-Adjacent",
+        "Server / Comms Equipment",
+        "VEHICLE / SERVICE ZONE",
+        "Fleet Bay \u2014 Controlled/Secure Access Only",
+        "A",
+        "B",
+        "LEGEND:",
+        "A = Controlled Access Transition Point (card access, staff only)",
+        "B = Secure Access Transition Point (card access + secondary verification, EOC-activated staff and escorted visitors only)",
+        "Zone boundaries are conceptual and indicate required security separation, not final wall locations."
+      ],
+      "viewbox_wh": [
+        900,
+        620
+      ],
+      "identity_note": "width/height: DERIVED_BY_GENERIC_ANALYSIS (generic SVG viewBox regex). document_id/'this figure belongs to NREOCRC-OPR-001': MANUALLY_REGISTERED_TEST_FIXTURE - no generic mechanism here associates a same-directory SVG with its parent markdown document's identity; a human read Appendix OPR-2's captions to know this."
+    },
+    {
+      "source": {
+        "id": "c896f842-88fe-4046-9ea6-60837697c955",
+        "project_id": "nreocrc",
+        "kind": "drawing",
+        "name": "NREOCRC-OPR-001-FIG-2-2-Functional-Adjacency.svg",
+        "added_at": "2026-07-24T21:35:35.178805+00:00",
+        "file_path": "C:\\Archiosk\\Research\\archiosk\\tests\\fixtures\\nreocrc\\immutable_original\\figures\\NREOCRC-OPR-001-FIG-2-2-Functional-Adjacency.svg",
+        "width": 900,
+        "height": 640,
+        "note": null,
+        "supersedes_source_id": null,
+        "superseded_by_source_id": null,
+        "document_id": "NREOCRC-OPR-001 / Figure OPR-2.2",
+        "revision": "0",
+        "issue_date": null,
+        "issuer": "North River Infrastructure Corporation",
+        "document_status": null,
+        "document_authority": null,
+        "file_hash": "2c7cb9982742f80444b2c6c0b23c7e4ecec8cf62ba36545a8120533a1f9b5a9e",
+        "origin_type": "controlled_corpus",
+        "origin_reference": "tests/fixtures/nreocrc/immutable_original/figures/NREOCRC-OPR-001-FIG-2-2-Functional-Adjacency.svg"
+      },
+      "svg_text_labels": [
+        "FIGURE OPR-2.2 \u2014 FUNCTIONAL RELATIONSHIP / ADJACENCY DIAGRAM",
+        "NREOCRC \u2014 Schematic Only \u2014 Not to Scale",
+        "PUBLIC /",
+        "COMMUNITY",
+        "MUNICIPAL",
+        "ADMINISTRATION",
+        "EMERGENCY",
+        "OPERATIONS",
+        "CENTRE (EOC)",
+        "COMMUNICATIONS /",
+        "DISPATCH-ADJACENT",
+        "VEHICLE /",
+        "SERVICE",
+        "SUPPORT /",
+        "BUILDING SERVICES",
+        "LEGEND:",
+        "Required direct adjacency (shared corridor or immediate proximity)",
+        "Controlled adjacency (separated by security transition point)",
+        "Indirect / procedural relationship only (no shared circulation required)"
+      ],
+      "viewbox_wh": [
+        900,
+        640
+      ],
+      "identity_note": "width/height: DERIVED_BY_GENERIC_ANALYSIS (generic SVG viewBox regex). document_id/'this figure belongs to NREOCRC-OPR-001': MANUALLY_REGISTERED_TEST_FIXTURE - no generic mechanism here associates a same-directory SVG with its parent markdown document's identity; a human read Appendix OPR-2's captions to know this."
+    }
+  ],
+  "requirement_extraction_test": {
+    "bracket_tagged_clauses_found": 56,
+    "registered_via_generic_derivation": 56,
+    "registered_manually_unlabeled": 2,
+    "total_requirements_registered": 58,
+    "note_on_count": "Count (58) is diagnostic only, per Prompt 17 #6 - not optimized to any target. Snapshot 001 hand-picked 18 representative clauses; this run registers every clause the generic bracket-tag rule finds, plus 2 unlabeled clauses that still require human classification (2.2, 8.1) - 12.2 is intentionally NOT force-fit here since it is a table, not a bracket-tagged clause (see Authority test).",
+    "classification_distribution": {
+      "indicative": 2,
+      "informational": 4,
+      "mandatory": 42,
+      "rated": 8
+    }
+  },
+  "authority_test": {
+    "document_authority": "contractual",
+    "indicative_requirements_found": [
+      "4.6",
+      "18.3"
+    ],
+    "check": "PASS - classification values (mandatory/rated/indicative/reference/informational) were never touched after registration; each Requirement.classification independently reflects its own bracket tag regardless of Source.document_authority='contractual'."
+  },
+  "cross_reference_test": {
+    "relationships_created_generically": 11,
+    "unresolved_section_references": [
+      {
+        "from_section": "4.3",
+        "referenced_section": "18"
+      },
+      {
+        "from_section": "4.4",
+        "referenced_section": "4"
+      },
+      {
+        "from_section": "4.6",
+        "referenced_section": "4"
+      },
+      {
+        "from_section": "5.1",
+        "referenced_section": "8"
+      },
+      {
+        "from_section": "5.2",
+        "referenced_section": "8"
+      },
+      {
+        "from_section": "5.6",
+        "referenced_section": "9"
+      },
+      {
+        "from_section": "6.1",
+        "referenced_section": "3"
+      },
+      {
+        "from_section": "8.3",
+        "referenced_section": "14"
+      },
+      {
+        "from_section": "8.4",
+        "referenced_section": "13"
+      },
+      {
+        "from_section": "8.4",
+        "referenced_section": "14"
+      },
+      {
+        "from_section": "9.2",
+        "referenced_section": "12"
+      },
+      {
+        "from_section": "10.3",
+        "referenced_section": "12"
+      },
+      {
+        "from_section": "10.4",
+        "referenced_section": "17"
+      },
+      {
+        "from_section": "11.2",
+        "referenced_section": "12"
+      },
+      {
+        "from_section": "13.2",
+        "referenced_section": "14"
+      },
+      {
+        "from_section": "15.1",
+        "referenced_section": "9"
+      },
+      {
+        "from_section": "17.2",
+        "referenced_section": "19"
+      },
+      {
+        "from_section": "19.1",
+        "referenced_section": "10"
+      }
+    ],
+    "unresolved_note": "These are real textual 'Section N' mentions found generically that do not resolve to any registered clause-level Requirement (usually because N names a whole Section container, e.g. 'Section 18' or 'Section 14', not a specific N.N sub-clause). Not fabricated as edges to non-existent targets."
+  },
+  "section_12_3_citation_test": {
+    "old_snapshot_001_target": "OPR-001\u00a74.3 (flagged as mis-targeted by Adversarial Review 001 \u00a73)",
+    "new_generic_target_requirement_ids": [
+      "0f93c1ff-e4a2-4c5b-8ca0-59af85f168fb"
+    ],
+    "new_generic_target_sections": [
+      "4.5"
+    ]
+  },
+  "table_structure_test": {
+    "functional_program_table_found": true,
+    "row_count": 42,
+    "headers": [
+      "#",
+      "Functional Group",
+      "Room / Space",
+      "Qty",
+      "Net Area (m\u00b2) each",
+      "Dept. Area Subtotal (m\u00b2)",
+      "Major Adjacency",
+      "Security Level",
+      "Special Requirement",
+      "Notes"
+    ]
+  },
+  "arithmetic_reconciliation_test": {
+    "method": "DERIVED_BY_GENERIC_ANALYSIS: generic grouped-quantity-table reconciliation (group/qty/unit-value/subtotal columns identified by header keyword, not fixed index).",
+    "result": {
+      "groups": [
+        {
+          "group": "Public / Community",
+          "computed_from_line_items": 615.0,
+          "stated_subtotal": 570.0,
+          "matches": false,
+          "row_count": 6
+        },
+        {
+          "group": "Municipal Administration",
+          "computed_from_line_items": 534.0,
+          "stated_subtotal": 850.0,
+          "matches": false,
+          "row_count": 7
+        },
+        {
+          "group": "Emergency Operations Centre",
+          "computed_from_line_items": 731.0,
+          "stated_subtotal": 1120.0,
+          "matches": false,
+          "row_count": 10
+        },
+        {
+          "group": "Communications",
+          "computed_from_line_items": 175.0,
+          "stated_subtotal": 175.0,
+          "matches": true,
+          "row_count": 4
+        },
+        {
+          "group": "Standby Power & Building Services",
+          "computed_from_line_items": 545.0,
+          "stated_subtotal": 545.0,
+          "matches": true,
+          "row_count": 6
+        },
+        {
+          "group": "Vehicle / Service",
+          "computed_from_line_items": 410.0,
+          "stated_subtotal": 460.0,
+          "matches": false,
+          "row_count": 4
+        },
+        {
+          "group": "Support",
+          "computed_from_line_items": 195.0,
+          "stated_subtotal": 260.0,
+          "matches": false,
+          "row_count": 5
+        }
+      ],
+      "total_from_line_items": 3205.0,
+      "total_from_stated_subtotals": 3980.0,
+      "mismatched_group_count": 5,
+      "group_count": 7
+    },
+    "stated_grand_total_found": {
+      "line_text": "**Program Net Area Subtotal (approximate, sum of Dept. Area Subtotals above): 4,105 m\u00b2**",
+      "value": 4105.0,
+      "unit": "m\u00b2"
+    }
+  },
+  "row_boundary_detection_test": {
+    "method": "DERIVED_BY_GENERIC_ANALYSIS: rows whose Security-Level-like column contains '/' (dual-zone classification), cross-checked against narrative 'Row N' backreferences.",
+    "flags": [
+      {
+        "row_number": "20",
+        "security_level": "Secure/Controlled interface",
+        "row": [
+          "20",
+          "Emergency Operations Centre",
+          "Situational Awareness / Media Briefing Room",
+          "1",
+          "65",
+          "",
+          "EOC Operations Room; Controlled Zone (for media access)",
+          "Secure/Controlled interface",
+          "Access control at both boundaries",
+          "Room bridges Secure and Controlled Zones \u2014 see Section 14"
+        ]
+      }
+    ],
+    "narrative_backreferences": [
+      {
+        "row_number": "20",
+        "narrative_line": "(b) The security level assigned to Row 20 (Situational Awareness / Media Briefing Room) reflects its function as a boundary space between the Secure and Controlled Zones; Design-Builders should refer to Section 14 for applicable access control requirements at both boundaries of this room."
+      }
+    ]
+  },
+  "row_boundary_unresolved_section_refs": [
+    {
+      "row": "20",
+      "referenced_section": "14"
+    }
+  ],
+  "citation_validation_test": [
+    {
+      "requirement": "12.3",
+      "claim": "cross-references Section 4.5 (not 4.3)",
+      "4.5_literally_present": true,
+      "4.3_literally_present": false,
+      "verdict": "VALID"
+    }
+  ],
+  "arithmetic_governance_action": {
+    "chosen_state": "Provisional Finding (claim_status=provisional, no Disposition recorded) + ReviewThread with Attention requested of the Owner",
+    "explicitly_not_done": "NOT marked non-compliance; NOT a Disposition; NOT attributed to Design-Builder fault.",
+    "finding_id": "5a21f311-4616-42c6-b1d5-a9995a4bfdc2",
+    "review_thread_id": "0ecc3851-f14c-4db4-91f8-329e9e15cbb7"
+  },
+  "expected_information_shadow_rerun": {
+    "method": "DERIVED_BY_GENERIC_ANALYSIS: every row of the Section 3 cross-reference table (found generically) gets an Expected Information item, bucketed by generic keyword match on its OWN status text ('to be issued' / 'issued concurrently' / 'issued') - RFP-001 is no longer silently excluded the way Snapshot 001 excluded it, because this loop does not hand-pick which rows to include.",
+    "rows": [
+      {
+        "document": "Request for Proposals (main document)",
+        "document_id": "NREOCRC-RFP-001",
+        "status_as_stated": "Issued concurrently",
+        "generic_bucket": "CURRENTLY EXPECTED - stated as already issued, but absent from this corpus state",
+        "raw_evaluator_outcome": "expected_not_found"
+      },
+      {
+        "document": "Owner's Project Requirements (this document)",
+        "document_id": "NREOCRC-OPR-001",
+        "status_as_stated": "Issued",
+        "generic_bucket": "ALREADY OBSERVED (present in this corpus)",
+        "raw_evaluator_outcome": "expected_and_found"
+      },
+      {
+        "document": "Functional Program",
+        "document_id": "Appendix OPR-1 (this document)",
+        "status_as_stated": "Issued",
+        "generic_bucket": "ALREADY OBSERVED (present in this corpus)",
+        "raw_evaluator_outcome": "expected_not_found"
+      },
+      {
+        "document": "Indicative Design Package (Options A/B/C)",
+        "document_id": "NREOCRC-IDP-001",
+        "status_as_stated": "To be issued",
+        "generic_bucket": "DECLARED FUTURE / NOT YET ISSUED",
+        "raw_evaluator_outcome": "expected_not_found"
+      },
+      {
+        "document": "Procurement and Milestone Schedule",
+        "document_id": "NREOCRC-SCH-001",
+        "status_as_stated": "To be issued",
+        "generic_bucket": "DECLARED FUTURE / NOT YET ISSUED",
+        "raw_evaluator_outcome": "expected_not_found"
+      },
+      {
+        "document": "Data Room Document Register",
+        "document_id": "NREOCRC-DR-001",
+        "status_as_stated": "To be issued",
+        "generic_bucket": "DECLARED FUTURE / NOT YET ISSUED",
+        "raw_evaluator_outcome": "expected_not_found"
+      },
+      {
+        "document": "City of North River Accessibility Design Standard, 2023 ed.",
+        "document_id": "Ref. TBD in NREOCRC-DR-001",
+        "status_as_stated": "Incorporated by reference; to be listed",
+        "generic_bucket": "UNKNOWN",
+        "raw_evaluator_outcome": "expected_not_found"
+      },
+      {
+        "document": "Draft Project Agreement",
+        "document_id": "NREOCRC-PA-001 (Draft)",
+        "status_as_stated": "To be issued",
+        "generic_bucket": "DECLARED FUTURE / NOT YET ISSUED",
+        "raw_evaluator_outcome": "expected_not_found"
+      }
+    ],
+    "known_still_open_gap": "No SUFFICIENCY_* outcome exists for 'explicitly deferred, no date stated' (evaluate_information_sufficiency still returns 'expected_not_found' raw for undated future items) - this gap from Snapshot 001 was NOT addressed by Batches F/G/H and remains open. The generic_bucket labels above are this script's own human-layer interpretation layered on top of the unchanged raw evaluator output, same workaround as Snapshot 001 needed."
+  },
+  "precedence_reconstruction": {
+    "method": "DERIVED_BY_GENERIC_ANALYSIS: generic numbered-list regex applied to Section 2.2's raw text.",
+    "items": [
+      {
+        "rank": 1,
+        "text": "The Project Agreement (once executed) and its recitals;"
+      },
+      {
+        "rank": 2,
+        "text": "Addenda (in reverse chronological order, latest governing);"
+      },
+      {
+        "rank": 3,
+        "text": "This OPR;"
+      },
+      {
+        "rank": 4,
+        "text": "The Functional Program (Appendix OPR-1 to this OPR);"
+      },
+      {
+        "rank": 5,
+        "text": "The RFP main document (NREOCRC-RFP-001), to the extent it contains technical requirements not otherwise addressed in this OPR;"
+      },
+      {
+        "rank": 6,
+        "text": "Accepted Proposal Commitments (governing over this OPR only to the extent they exceed, and do not derogate from, OPR requirements);"
+      },
+      {
+        "rank": 7,
+        "text": "The Indicative Design Package (Indicative only, illustrative of design intent, not mandatory except where an element is expressly designated Mandatory therein);"
+      },
+      {
+        "rank": 8,
+        "text": "Data Room reference material (Reference/Informational only, provided for Design-Builder's own investigation and not warranted by the Owner except as expressly stated)."
+      },
+      {
+        "rank": null,
+        "qualifier": "This order of precedence is the Owner's current statement of intent for RFP purposes and will be restated and finalized in the Project Agreement."
+      }
+    ],
+    "note": "No Relationship edges created to document-level concepts (Project Agreement, Addenda, RFP main document, etc.) since none of those exist as registered Sources in this corpus state - fabricating such edges would misrepresent what BEEHIVE actually has evidence for."
+  },
+  "unresolved_qualifier_preservation_test": {
+    "method": "Generic keyword scan for hedge phrases across every registered Requirement.text_reference (which is captured VERBATIM by the bracket-tag regex, not paraphrased by a human).",
+    "sections_with_preserved_hedges": [
+      {
+        "section": "4.2",
+        "hedge_phrases_preserved": [
+          "to be provided"
+        ]
+      },
+      {
+        "section": "5.3",
+        "hedge_phrases_preserved": [
+          "approximate",
+          "in the order of"
+        ]
+      },
+      {
+        "section": "6.1",
+        "hedge_phrases_preserved": [
+          "to be confirmed"
+        ]
+      },
+      {
+        "section": "14.3",
+        "hedge_phrases_preserved": [
+          "to be confirmed"
+        ]
+      },
+      {
+        "section": "15.1",
+        "hedge_phrases_preserved": [
+          "to be confirmed"
+        ]
+      },
+      {
+        "section": "16.1",
+        "hedge_phrases_preserved": [
+          "to be confirmed"
+        ]
+      },
+      {
+        "section": "18.1",
+        "hedge_phrases_preserved": [
+          "to be issued",
+          "approximate"
+        ]
+      },
+      {
+        "section": "19.3",
+        "hedge_phrases_preserved": [
+          "to be confirmed"
+        ]
+      },
+      {
+        "section": "20.1",
+        "hedge_phrases_preserved": [
+          "to be issued"
+        ]
+      },
+      {
+        "section": "20.2",
+        "hedge_phrases_preserved": [
+          "to be confirmed"
+        ]
+      },
+      {
+        "section": "2.2",
+        "hedge_phrases_preserved": [
+          "current intended order",
+          "will be restated"
+        ]
+      }
+    ]
+  },
+  "maturity_recorded": {
+    "id": "ae8a107c-4ee3-432a-8bc0-97ec61ca9191",
+    "project_id": "nreocrc",
+    "maturity_type": "design",
+    "scope_type": "project",
+    "scope_id": "nreocrc",
+    "value": "rfp_pre_proposal",
+    "created_at": "2026-07-24T21:35:38.077066+00:00",
+    "created_by": "nreocrc-reingestion-lab-002",
+    "status": "active",
+    "effective_at": null
+  },
+  "snapshot_002": {
+    "snapshot_id": "c73c05a4-8c47-4c3a-ae29-6f6132fd7e6a",
+    "project_state_version": 91,
+    "frozen_at": "2026-07-24T21:35:38.160607+00:00",
+    "reference_list_counts": {
+      "sources": 3,
+      "cases": 1,
+      "artifacts": 0,
+      "findings": 1,
+      "reviewer_validations": 0,
+      "dispositions": 0,
+      "analyses": 1,
+      "applies": 0,
+      "rfi_drafts": 0,
+      "revision_notices": 0,
+      "knowledge": 0,
+      "activities": 0,
+      "supersessions": 0,
+      "relationships": 11,
+      "temporal_obligations": 0,
+      "review_threads": 1,
+      "review_messages": 1,
+      "attentions": 1,
+      "expected_information_profiles": 1,
+      "maturity_records": 1,
+      "requirements": 59
+    },
+    "governance_event_count": 67
+  }
+}

@@ -1,0 +1,124 @@
+{
+  "id": "c73c05a4-8c47-4c3a-ae29-6f6132fd7e6a",
+  "project_id": "nreocrc",
+  "label": "NREOCRC Corpus State 001 Re-Ingestion (Snapshot 002, current architecture)",
+  "project_state_version": 91,
+  "frozen_at": "2026-07-24T21:35:38.160607+00:00",
+  "created_by": "nreocrc-reingestion-lab-002",
+  "reference_lists": {
+    "sources": [
+      "b0b23ed6-d56f-44f4-bf7d-4b4fdfb63dbf",
+      "d1a84567-be71-42e9-a09d-74ff986fe6bd",
+      "c896f842-88fe-4046-9ea6-60837697c955"
+    ],
+    "cases": [
+      "145252f1-2869-4a55-8c6b-05331dcb47bb"
+    ],
+    "artifacts": [],
+    "findings": [
+      "5a21f311-4616-42c6-b1d5-a9995a4bfdc2"
+    ],
+    "reviewer_validations": [],
+    "dispositions": [],
+    "analyses": [
+      "6678132f-617c-46c5-aa45-9611670320d2"
+    ],
+    "applies": [],
+    "rfi_drafts": [],
+    "revision_notices": [],
+    "knowledge": [],
+    "activities": [],
+    "supersessions": [],
+    "relationships": [
+      "7523639f-510e-4bb3-a2cd-a795f14d726a",
+      "26b34da2-b9ce-45ce-a7fe-37cd43fca6f3",
+      "34598d97-657c-4a3f-b087-36fbff3179ce",
+      "76cf0b22-3906-476c-badf-607a87852161",
+      "019df322-eda5-49c8-b922-303d5d187b5c",
+      "36e2bcba-8928-4a2a-bce5-f3028a475ca2",
+      "d7fd0510-3c2d-41cb-9853-a5a53c0ea739",
+      "3b87eddc-3f7f-4f81-9a23-6f466dd946fb",
+      "b41a2841-1ad2-4e0a-bac9-05a178083cca",
+      "5ad2b57b-f267-439c-b8d8-becc949361db",
+      "81697a11-a0f1-427d-a0a5-feac2b2090ef"
+    ],
+    "temporal_obligations": [],
+    "review_threads": [
+      "0ecc3851-f14c-4db4-91f8-329e9e15cbb7"
+    ],
+    "review_messages": [
+      "d85feb7a-e818-4521-9b5b-deec496160ef"
+    ],
+    "attentions": [
+      "93ee78b3-3c45-4551-a582-962224b717c2"
+    ],
+    "expected_information_profiles": [
+      "ea7be575-3dcc-4ac7-9925-a39695b7c4e5"
+    ],
+    "maturity_records": [
+      "ae8a107c-4ee3-432a-8bc0-97ec61ca9191"
+    ],
+    "requirements": [
+      "3a50189f-2d0d-4c00-9544-c9d92d60e6f6",
+      "e3542c7a-4941-4823-90ab-e2a548e8ed94",
+      "da3fc5cd-7b63-4214-a262-b1eaf6312ca5",
+      "53cd4f62-f27f-4ade-9953-c214ab2d8576",
+      "0f93c1ff-e4a2-4c5b-8ca0-59af85f168fb",
+      "8a72ce85-fe2e-412c-8683-45007c290390",
+      "7b216003-ab05-41e6-8ada-341cbe6ff621",
+      "9aff998e-cf6a-4dcb-b288-077b3a9cdb02",
+      "a1c15c13-fa56-4d5d-95e7-6854f97d8b23",
+      "df5987eb-0ace-4f7a-897d-2d1432abbfd9",
+      "cf6d126b-1ebd-42a9-8f47-e3b7db3efa93",
+      "6fbb8fad-059e-488b-b75c-7bd40d7776aa",
+      "14376027-4a02-4f8d-b23e-5fe649a1ed6e",
+      "425eb5a5-7b86-4ae7-bcba-190d0b33d3c5",
+      "bd58b83d-f0e4-48ef-ba67-b43304ecbebd",
+      "f33acac4-553d-4432-90bd-ae6b6811a85c",
+      "41f8d926-7527-4dab-891f-3066a93a769a",
+      "bbaccc33-1eca-49a0-8bf5-b6b50bb0a8e2",
+      "ca94a91d-3d84-4889-ba83-622328dd1edf",
+      "1d1fe23b-c633-4a00-9efe-e2cc0ab3cac3",
+      "e7518b74-a87e-4e41-a606-c5fe64b12acd",
+      "dd9cb087-abcc-4fe5-ac4c-ba54a5844dcc",
+      "7c923236-d282-419b-aa74-bace1de8dbe2",
+      "afcfb024-582f-4b21-8ef0-047b19a41d2b",
+      "c258f316-bf0e-475c-b592-01b6e6465ddd",
+      "3b950744-ad8e-4ed5-ab1e-0d32e655a72c",
+      "25f7d3b3-ce26-4160-9bb3-8929c2698818",
+      "44fc1179-5a6e-4f72-9d2a-0656e6acd6dd",
+      "ac8277ad-73ea-48db-b0be-3d642e29a84a",
+      "00b53b34-87e6-4857-838c-659e730cba80",
+      "610636ba-56e7-4688-81df-9d548e9e0f2b",
+      "d523059a-e0cf-42d2-ae48-c112302bfeb0",
+      "917b9d18-fe4e-42bb-8ee6-fa1cda572492",
+      "45c5008f-7d92-4620-98ab-6c0fcb6399eb",
+      "b3028720-6f37-4c0c-a3b3-5b8cdaec40f8",
+      "b8668746-f331-4c16-9bd7-8be2566b7b88",
+      "7944a10d-4185-41ed-af7c-ef85a0165f01",
+      "769e9fa4-f847-4eec-964d-1752a94c61f6",
+      "5dd1ea2a-ec5e-4d88-949d-6dbca500cf7e",
+      "0949df58-6ee4-4441-995a-d17d45c1f32b",
+      "de72e5d9-0e63-49f9-8084-6ea5e619c591",
+      "d7489c40-692c-484f-a3e8-79c6f6be4c6f",
+      "091a3aef-e0ee-4e1e-aa78-bfa1523f28bb",
+      "9bed9c2d-e6f6-4ec0-a02b-313fb950bb44",
+      "f7952439-def6-4574-b73f-0005cc1c996e",
+      "9a18e46d-4084-453d-b5aa-4589be513d1b",
+      "e3dfc9e8-679e-4cb4-9887-046d128a3b34",
+      "ac3e2418-30a8-4736-80ad-983e3c005a9e",
+      "62a0e690-6a4f-4319-b4fa-aa95baaf133f",
+      "2e6496d6-ce7f-47b0-90db-223ef22e7c8f",
+      "cc868a5b-06a4-4af6-9b8b-a25762d5883c",
+      "32978ced-89a9-43a3-bf65-bbde5fcd8597",
+      "af44e24c-fde5-4d1d-9f3a-1b89356b4501",
+      "1be3698c-fb38-4fc3-9e39-3d57b15f02d6",
+      "2df10bd9-aca2-4264-9087-9e988e23763c",
+      "7b9a47d9-ef96-46ff-b882-c603bb349459",
+      "a4c7ff16-ee97-4d8d-84eb-a202c52fed00",
+      "55e944f1-6326-421a-835e-153a6afdef6d",
+      "2833b684-42b5-4948-ab36-a1a5bc0ad496"
+    ]
+  },
+  "note": "Prompt 17 controlled experiment - same immutable corpus as Snapshot 001, current Batch F/G/H architecture."
+}
