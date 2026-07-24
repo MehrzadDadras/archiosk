@@ -1,0 +1,192 @@
+{% extends "base.html" %}
+
+{% block title %}Case Workspace &mdash; {{ document.filename }}{% endblock %}
+
+{% block content %}
+<div class="dash-head" style="padding-top:2rem;">
+    <div>
+        <p class="eyebrow mono">{{ project_id }}</p>
+        <h1>Case Workspace</h1>
+    </div>
+    <a class="btn btn-ghost" href="{{ url_for('portal.dashboard', project_id=project_id) }}">&larr; Back to Dashboard</a>
+</div>
+
+<div class="case-workspace">
+
+    {# ---------------- Left: Project Navigation ---------------- #}
+    <aside class="workspace-pane">
+        <h2>Project</h2>
+
+        <p class="workspace-pane-label">Lifecycle</p>
+        <div class="lifecycle-strip">
+            {% for stage in ["RFQ", "RFP", "Requirements", "Design Sources", "Cases", "RFIs", "Construction", "Historic Record"] %}
+            <span class="lifecycle-stage{% if stage in ['RFP', 'Requirements'] %} current{% endif %}">{{ stage }}</span>
+            {% endfor %}
+        </div>
+        <p class="workspace-pane-label" style="margin-top:-0.6rem;margin-bottom:1.2rem;color:var(--muted);font-family:var(--font-body);text-transform:none;letter-spacing:normal;font-size:0.75rem;">
+            This Project began as an RFQ/RFP ingestion. Extract &rarr; Segment &rarr; Classify &rarr; Assemble already ran
+            as this Project's first Analysis, producing the {{ document.requirements|length }} requirement(s) below as
+            governed Sources of truth. The same Analyze &rarr; Review &rarr; Apply machinery now continues into later
+            Cases (drawing review, RFIs, construction) as the Project moves forward.
+        </p>
+
+        <p class="workspace-pane-label">Sources ({{ workspace.sources|length }})</p>
+        <ul class="source-list">
+            {% for source in workspace.sources %}
+            <li class="source-item">
+                <span class="source-kind-badge">{{ source.kind.replace('_', ' ') }}</span>
+                {{ source.name }}
+                {% if source.note %}<br><small style="color:var(--muted);">{{ source.note }}</small>{% endif %}
+            </li>
+            {% endfor %}
+        </ul>
+
+        <p class="workspace-pane-label">Cases ({{ workspace.cases|length }})</p>
+        <ul class="case-list">
+            {% for case in workspace.cases %}
+            <li>
+                <a class="case-item{% if active_case and case.id == active_case.id %} active{% endif %}"
+                   href="{{ url_for('workspace.show_workspace', project_id=project_id, case=case.id) }}">
+                    <span class="case-status-badge">{{ case.status }}</span>
+                    {{ case.title }}
+                </a>
+            </li>
+            {% else %}
+            <li style="color:var(--muted);font-size:0.82rem;">No Cases yet.</li>
+            {% endfor %}
+        </ul>
+
+        <details class="add-source-details">
+            <summary>+ New Case</summary>
+            <form class="workspace-form" method="post" action="{{ url_for('workspace.create_case', project_id=project_id) }}">
+                <input type="text" name="title" placeholder="Case title (e.g. Drawing Review — Sheet A101)" required>
+                <input type="text" name="objective" placeholder="Objective (optional)">
+                <button type="submit">Create Case</button>
+            </form>
+        </details>
+    </aside>
+
+    {# ---------------- Center: Conversation ---------------- #}
+    <section class="workspace-pane">
+        {% if active_case %}
+        <h2>{{ active_case.title }}</h2>
+        {% if active_case.objective %}<p style="color:var(--muted);font-size:0.85rem;margin-top:-0.6rem;">{{ active_case.objective }}</p>{% endif %}
+
+        <details class="add-source-details">
+            <summary>+ Add drawing Source to this Case</summary>
+            <form class="workspace-form" method="post" enctype="multipart/form-data"
+                  action="{{ url_for('workspace.add_drawing_source', project_id=project_id, case_id=active_case.id) }}">
+                <input type="file" name="drawing" accept=".png,.jpg,.jpeg" required>
+                <button type="submit">Add Drawing</button>
+            </form>
+        </details>
+
+        <div class="conversation-thread">
+            {% for message in active_case.conversation %}
+            <div class="conversation-message {{ message.role }}">
+                <span class="role-label">{{ "You" if message.role == "human" else "Beehive" }}</span>
+                {{ message.text }}
+            </div>
+            {% else %}
+            <p class="conversation-empty">
+                No conversation yet. Try: &ldquo;Analyze this drawing for datum inconsistencies.&rdquo;
+            </p>
+            {% endfor %}
+        </div>
+
+        <form class="conversation-input-form" method="post"
+              action="{{ url_for('workspace.post_message', project_id=project_id, case_id=active_case.id) }}">
+            <input type="text" name="text" placeholder="Analyze this drawing for datum inconsistencies…" autocomplete="off" required>
+            <button type="submit">Send</button>
+        </form>
+        {% else %}
+        <h2>No Case selected</h2>
+        <p style="color:var(--muted);">Create a Case on the left to begin a conversation and open a drawing for review.</p>
+        {% endif %}
+    </section>
+
+    {# ---------------- Right: Artifact Workspace ---------------- #}
+    <section class="workspace-pane">
+        <h2>Artifact Workspace</h2>
+
+        {% if active_case %}
+        <div class="finding-list">
+            {% for row in findings_view %}
+            {% set finding = row.finding %}
+            {% set artifact = row.artifact %}
+            {% set latest = row.latest_review %}
+            <article class="finding-card{% if finding.id == focused_finding_id %} focused{% endif %}">
+                <p class="finding-confidence">
+                    Machine finding &middot; confidence {{ (finding.machine_confidence * 100)|round|int }}%
+                    {% if finding.claim_status == "applied" %}
+                    <span class="applied-badge">Applied</span>
+                    {% endif %}
+                </p>
+                <p class="finding-statement">{{ finding.statement }}</p>
+
+                {% if artifact %}
+                <img class="finding-artifact-thumb"
+                     src="{{ url_for('workspace.artifact_image', project_id=project_id, artifact_id=artifact.id) }}"
+                     alt="Focus Snip Artifact">
+                <div class="finding-provenance">
+                    <span>artifact:</span> <strong>{{ artifact.id }}</strong><br>
+                    <span>source:</span> <strong>{{ artifact.source_id }}</strong> &middot; page <strong>{{ artifact.page }}</strong><br>
+                    {% if artifact.crop %}
+                    <span>region:</span> <strong>x={{ "%.2f"|format(artifact.crop.x) }} y={{ "%.2f"|format(artifact.crop.y) }} w={{ "%.2f"|format(artifact.crop.width) }} h={{ "%.2f"|format(artifact.crop.height) }}</strong><br>
+                    {% endif %}
+                    <span>analysis:</span> <strong>{{ artifact.analysis_id }}</strong><br>
+                    <span>engine:</span> <strong>{{ artifact.engine_name }} {{ artifact.engine_version }}</strong><br>
+                    <span>created:</span> <strong>{{ artifact.created_at }}</strong>
+                </div>
+                {% endif %}
+
+                {% for review in row.reviews %}
+                    {% if review.decision == "correction" %}
+                    <div class="correction-note"><strong>Correction</strong> ({{ review.reviewer }}): {{ review.note }}</div>
+                    {% endif %}
+                {% endfor %}
+
+                {% if latest %}
+                <span class="review-decision-badge {{ latest.decision }}">{{ latest.decision.replace('_', ' ') }}</span>
+                {% endif %}
+
+                {% if finding.claim_status != "applied" %}
+                <form class="finding-review-actions" method="post"
+                      action="{{ url_for('workspace.review_finding', project_id=project_id, finding_id=finding.id) }}">
+                    <input type="hidden" name="case_id" value="{{ active_case.id }}">
+                    <button type="submit" name="decision" value="accept" class="review-btn accept">Accept</button>
+                    <button type="submit" name="decision" value="reject" class="review-btn reject">Reject</button>
+                    <button type="submit" name="decision" value="needs_evidence" class="review-btn needs_evidence">Needs Evidence</button>
+                </form>
+                <form class="finding-review-actions" method="post"
+                      action="{{ url_for('workspace.review_finding', project_id=project_id, finding_id=finding.id) }}">
+                    <input type="hidden" name="case_id" value="{{ active_case.id }}">
+                    <input type="hidden" name="decision" value="correction">
+                    <input type="text" name="note" placeholder="Add Correction…" style="flex:1;font-family:var(--font-mono);font-size:0.75rem;background:var(--ink);border:1px solid var(--line);border-radius:3px;color:var(--parchment);padding:0.4rem 0.6rem;">
+                    <button type="submit" class="review-btn correction">Add Correction</button>
+                </form>
+                {% endif %}
+            </article>
+            {% else %}
+            <p class="findings-empty">
+                No Findings yet. Ask the conversation to analyze a drawing Source to generate some.
+            </p>
+            {% endfor %}
+        </div>
+
+        <div class="apply-bar">
+            <p>
+                {{ findings_view|length }} finding(s) in this Case &middot;
+                {{ applied_count }} applied &middot;
+                {{ awaiting_apply_count }} accepted, awaiting Apply
+            </p>
+            <form method="post" action="{{ url_for('workspace.apply_findings', project_id=project_id, case_id=active_case.id) }}">
+                <button type="submit" class="apply-button">Apply Accepted Findings</button>
+            </form>
+        </div>
+        {% else %}
+        <p style="color:var(--muted);">Select or create a Case to see its Findings and Artifacts here.</p>
+        {% endif %}
+    </section>
+</div>
+{% endblock %}

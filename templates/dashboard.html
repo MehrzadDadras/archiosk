@@ -11,6 +11,11 @@
         <p class="eyebrow mono">{{ project_id }}</p>
         {% endif %}
         <h1>{{ filename }}</h1>
+        {% if not is_demo %}
+        <a class="btn btn-ghost workspace-link" href="{{ url_for('workspace.show_workspace', project_id=project_id) }}">
+            Open Case Workspace &rarr;
+        </a>
+        {% endif %}
     </div>
     <div class="dash-meta">
         <div class="meta-stat">

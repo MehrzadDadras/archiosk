@@ -42,9 +42,11 @@ def _configure_logging(app: Flask) -> None:
 def _register_blueprints(app: Flask) -> None:
     from routes.portal import portal_bp
     from routes.api import api_bp
+    from routes.workspace import workspace_bp
 
     app.register_blueprint(portal_bp)
     app.register_blueprint(api_bp, url_prefix="/api/v1")
+    app.register_blueprint(workspace_bp)
 
 
 def _register_error_handlers(app: Flask) -> None:

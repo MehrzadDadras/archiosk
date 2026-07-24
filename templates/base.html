@@ -28,6 +28,15 @@
     </header>
 
     <main>
+        {% with flashed = get_flashed_messages(with_categories=true) %}
+        {% if flashed %}
+        <div class="flash-stack">
+            {% for category, message in flashed %}
+            <div class="flash-message flash-{{ category }}">{{ message }}</div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% endwith %}
         {% block content %}{% endblock %}
     </main>
 
