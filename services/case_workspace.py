@@ -335,6 +335,129 @@ KNOWN_RESOLUTION_OUTCOMES = (
     RESOLUTION_OUTCOME_WITHDRAWN,
 )
 
+# -- Source document identity / provenance vocabulary (Prompt 15) -----------
+# Document-level authority (Prompt 15 #5) - distinct from per-clause
+# Requirement.classification (Prompt 15 #11): a Source can be uniformly
+# "contractual" as a whole document while individual Requirements it
+# contains carry their own, different, per-clause classification.
+DOCUMENT_AUTHORITY_CONTRACTUAL = "contractual"
+DOCUMENT_AUTHORITY_REFERENCE = "reference"
+DOCUMENT_AUTHORITY_INFORMATIONAL = "informational"
+DOCUMENT_AUTHORITY_INDICATIVE = "indicative"
+DOCUMENT_AUTHORITY_DRAFT = "draft"
+DOCUMENT_AUTHORITY_ISSUED_FOR_PROCUREMENT = "issued_for_procurement"
+DOCUMENT_AUTHORITY_PROJECT_AGREEMENT = "project_agreement"
+
+KNOWN_DOCUMENT_AUTHORITY_LEVELS = (
+    DOCUMENT_AUTHORITY_CONTRACTUAL,
+    DOCUMENT_AUTHORITY_REFERENCE,
+    DOCUMENT_AUTHORITY_INFORMATIONAL,
+    DOCUMENT_AUTHORITY_INDICATIVE,
+    DOCUMENT_AUTHORITY_DRAFT,
+    DOCUMENT_AUTHORITY_ISSUED_FOR_PROCUREMENT,
+    DOCUMENT_AUTHORITY_PROJECT_AGREEMENT,
+)
+
+# Prompt 15 #4: generic enough for future uploads/connectors/imports, not
+# just the controlled synthetic-corpus test scenario.
+SOURCE_ORIGIN_TYPE_UPLOAD = "upload"
+SOURCE_ORIGIN_TYPE_CONTROLLED_CORPUS = "controlled_corpus"
+SOURCE_ORIGIN_TYPE_EXTERNAL_CONNECTOR = "external_connector"
+SOURCE_ORIGIN_TYPE_IMPORT = "import"
+
+KNOWN_SOURCE_ORIGIN_TYPES = (
+    SOURCE_ORIGIN_TYPE_UPLOAD,
+    SOURCE_ORIGIN_TYPE_CONTROLLED_CORPUS,
+    SOURCE_ORIGIN_TYPE_EXTERNAL_CONNECTOR,
+    SOURCE_ORIGIN_TYPE_IMPORT,
+)
+
+# -- Requirement vocabulary (Prompt 15) --------------------------------------
+# Prompt 15 #10/#11: the SAME classification vocabulary NREOCRC itself uses
+# ([MANDATORY]/[RATED]/[INDICATIVE]/[REFERENCE]/[INFORMATIONAL]) - per-
+# clause, deliberately distinct from Source.document_authority above.
+REQUIREMENT_CLASSIFICATION_MANDATORY = "mandatory"
+REQUIREMENT_CLASSIFICATION_RATED = "rated"
+REQUIREMENT_CLASSIFICATION_INDICATIVE = "indicative"
+REQUIREMENT_CLASSIFICATION_REFERENCE = "reference"
+REQUIREMENT_CLASSIFICATION_INFORMATIONAL = "informational"
+
+KNOWN_REQUIREMENT_CLASSIFICATIONS = (
+    REQUIREMENT_CLASSIFICATION_MANDATORY,
+    REQUIREMENT_CLASSIFICATION_RATED,
+    REQUIREMENT_CLASSIFICATION_INDICATIVE,
+    REQUIREMENT_CLASSIFICATION_REFERENCE,
+    REQUIREMENT_CLASSIFICATION_INFORMATIONAL,
+)
+
+# Prompt 15 #17: existence/lifecycle STATE, never a compliance outcome.
+# COMPLIANT/NON_COMPLIANT deliberately do not belong to this vocabulary -
+# those are evaluation results produced by Analysis/Finding, not facts
+# about whether the Requirement record itself is currently in force.
+REQUIREMENT_STATUS_ACTIVE = "active"
+REQUIREMENT_STATUS_SUPERSEDED = "superseded"
+REQUIREMENT_STATUS_WITHDRAWN = "withdrawn"
+REQUIREMENT_STATUS_FUTURE_EFFECTIVE = "future_effective"
+REQUIREMENT_STATUS_UNKNOWN = "unknown"
+
+KNOWN_REQUIREMENT_STATUSES = (
+    REQUIREMENT_STATUS_ACTIVE,
+    REQUIREMENT_STATUS_SUPERSEDED,
+    REQUIREMENT_STATUS_WITHDRAWN,
+    REQUIREMENT_STATUS_FUTURE_EFFECTIVE,
+    REQUIREMENT_STATUS_UNKNOWN,
+)
+
+# Hard denylist, not an open-world "known" vocabulary (see
+# set_requirement_status): a compliance outcome must never become a
+# Requirement status under any spelling, so this is deliberately checked
+# and rejected rather than left to normalize_open_world_value's usual
+# "preserve unfamiliar values verbatim" behavior.
+_REQUIREMENT_STATUS_COMPLIANCE_DENYLIST = (
+    "compliant", "non_compliant", "noncompliant", "not_compliant",
+)
+
+# Prompt 15 #8: where a Requirement's source_location points, reusing the
+# same flexible-dict approach as Anchor.location (Batch D) rather than a
+# new structural mechanism.
+REQUIREMENT_LOCATION_TYPE_CLAUSE = "clause"
+REQUIREMENT_LOCATION_TYPE_SECTION = "section"
+REQUIREMENT_LOCATION_TYPE_PAGE = "page"
+REQUIREMENT_LOCATION_TYPE_TABLE = "table"
+REQUIREMENT_LOCATION_TYPE_TABLE_ROW = "table_row"
+REQUIREMENT_LOCATION_TYPE_FIGURE = "figure"
+REQUIREMENT_LOCATION_TYPE_PARAGRAPH = "paragraph"
+
+KNOWN_REQUIREMENT_LOCATION_TYPES = (
+    REQUIREMENT_LOCATION_TYPE_CLAUSE,
+    REQUIREMENT_LOCATION_TYPE_SECTION,
+    REQUIREMENT_LOCATION_TYPE_PAGE,
+    REQUIREMENT_LOCATION_TYPE_TABLE,
+    REQUIREMENT_LOCATION_TYPE_TABLE_ROW,
+    REQUIREMENT_LOCATION_TYPE_FIGURE,
+    REQUIREMENT_LOCATION_TYPE_PARAGRAPH,
+)
+
+# Prompt 15 #19/#20: registration provenance (who/what created this BEEHIVE
+# record) is never conflated with requirement AUTHORITY (who/what the
+# Owner is). Also the explicit honesty mechanism: a caller must say
+# whether a Requirement was actually machine-extracted or hand-registered
+# as a test fixture - see the NREOCRC lab script's own past overclaiming
+# risk, now structurally prevented from being silent about it.
+REQUIREMENT_REGISTRATION_MACHINE_EXTRACTED = "machine_extracted"
+REQUIREMENT_REGISTRATION_MANUAL_TEST_FIXTURE = "manually_registered_test_fixture"
+REQUIREMENT_REGISTRATION_DERIVED_FROM_STRUCTURED_SOURCE = "derived_from_structured_source"
+REQUIREMENT_REGISTRATION_IMPORTED = "imported"
+REQUIREMENT_REGISTRATION_OTHER = "other"
+
+KNOWN_REQUIREMENT_REGISTRATION_METHODS = (
+    REQUIREMENT_REGISTRATION_MACHINE_EXTRACTED,
+    REQUIREMENT_REGISTRATION_MANUAL_TEST_FIXTURE,
+    REQUIREMENT_REGISTRATION_DERIVED_FROM_STRUCTURED_SOURCE,
+    REQUIREMENT_REGISTRATION_IMPORTED,
+    REQUIREMENT_REGISTRATION_OTHER,
+)
+
 # -- Expected Information Profile / Maturity vocabulary (Prompt 11/12) -------
 # Per Prompt 11 B: "expectation authority" is split into two independent axes
 # rather than one flat label set. `bindingness` (below) is a small, genuinely
@@ -504,6 +627,82 @@ class Source:
     note: Optional[str] = None
     supersedes_source_id: Optional[str] = None
     superseded_by_source_id: Optional[str] = None
+    # -- document identity / provenance (Prompt 15) --------------------------
+    # Deliberately distinct from `name`/`file_path` (Prompt 15 #3): `name` is
+    # the physical file's name, `document_id` is the issuer's own document
+    # identity - a later revision may keep the same document_id with a
+    # different file_path/file_hash/revision entirely. None of these fields
+    # are validated as required - honest absence throughout (Prompt 15 #2).
+    document_id: Optional[str] = None
+    revision: Optional[str] = None  # free text - "0", "1", "A" - not assumed numeric
+    issue_date: Optional[str] = None
+    issuer: Optional[str] = None
+    document_status: Optional[str] = None  # verbatim, as literally stated by the source (e.g. "ISSUED WITH RFP — CONTRACTUAL DOCUMENT")
+    document_authority: Optional[str] = None  # open-world normalized, KNOWN_DOCUMENT_AUTHORITY_LEVELS
+    file_hash: Optional[str] = None
+    # Generic provenance reference (Prompt 15 #4) - NOT specific to the
+    # NREOCRC test corpus. origin_type names what kind of place this Source
+    # came from; origin_reference's meaning depends on origin_type (an
+    # immutable corpus file path, an external connector's artifact id, an
+    # import archive reference, or None for an ordinary upload).
+    origin_type: Optional[str] = None  # open-world, KNOWN_SOURCE_ORIGIN_TYPES
+    origin_reference: Optional[str] = None
+
+
+@dataclass
+class Requirement:
+    """
+    Prompt 14/15: a source-stated Requirement is project meaning that
+    exists the moment the Owner (or any issuer) states it - independently
+    of any machine analysis. It is NOT a Finding: a Finding is a
+    machine/reviewer ASSERTION produced by examining evidence; a
+    Requirement never requires a Finding to exist, and a Finding must
+    never be used merely as storage for an Owner requirement (Prompt 15
+    #1). Registering a Requirement makes no claim about whether it is
+    satisfied - that question belongs entirely to Analysis/Finding/Pass/
+    Human Adjudication, layers this object never touches.
+
+    `original_requirement_identifier` preserves the source's own numbering
+    ("12.1", "Appendix OPR-1 Row 20") - BEEHIVE's own `id` is a separate,
+    stable internal identity; neither replaces the other (Prompt 15 #7).
+
+    `classification` (open-world, e.g. mandatory/indicative) is the
+    per-clause authority - deliberately independent of Source.
+    document_authority, the whole-document classification (Prompt 15
+    #11): a Contractual document can contain both Mandatory and
+    Indicative clauses simultaneously.
+
+    `status` is existence/lifecycle state only - never a compliance
+    result (Prompt 15 #17). COMPLIANT/NON_COMPLIANT are not, and must
+    never become, values of this field.
+
+    `registration_method` is honesty machinery (Prompt 15 #19/#20): it
+    must always say whether this record was actually machine-extracted or
+    hand-registered as a test fixture - the exact distinction the NREOCRC
+    corpus test needed and previously had to track only informally in a
+    lab-script comment.
+
+    Lineage/revision reuses the shared Supersession primitive (see
+    revise_requirement) - the same non-destructive pattern as Source and
+    TemporalObligation revision, not a new mechanism.
+    """
+
+    id: str
+    project_id: str
+    source_id: str
+    original_requirement_identifier: str
+    text_reference: str
+    created_at: str
+    created_by: str
+    registration_method: str  # KNOWN_REQUIREMENT_REGISTRATION_METHODS
+    status: str = REQUIREMENT_STATUS_ACTIVE
+    classification: Optional[str] = None  # open-world, KNOWN_REQUIREMENT_CLASSIFICATIONS
+    authority_source: Optional[str] = None  # free text, mirrors Supersession.authority_class
+    applicability: Optional[str] = None
+    subject_domain: Optional[str] = None  # open-world
+    title: Optional[str] = None
+    source_location: Optional[dict] = None  # {"location_type": open-world KNOWN_REQUIREMENT_LOCATION_TYPES, ...}
+    effective_context: Optional[str] = None
 
 
 @dataclass
@@ -903,6 +1102,26 @@ def evaluate_temporal_condition(
     return TEMPORAL_CONDITION_NOT_YET_DUE
 
 
+def validate_requirement_location_citation(source_text: str, location_value: str) -> bool:
+    """
+    Lightweight citation-validation hook (Prompt 15 #23). Prompt 13's
+    NREOCRC test produced a real defect: a Relationship cited "Section
+    4.3" when the source text it was meant to describe actually named
+    "Section 4.5". This function would have caught that: it checks
+    whether `location_value` (e.g. "4.3", "Section 4.5") appears
+    literally in `source_text` - a substring presence check, not real
+    document-structure parsing.
+
+    Deliberately minimal: no file I/O (the caller supplies the text it
+    already has), no table/section-aware verification. A True result is
+    not proof of correctness (the string could appear coincidentally
+    elsewhere in a large document) - only a False result is a strong,
+    actionable signal that a citation is wrong and should be reviewed
+    before being trusted.
+    """
+    return location_value in source_text
+
+
 def compare_maturity(a: str, b: str, known_order: tuple[str, ...] = KNOWN_DESIGN_MATURITY_STAGES) -> Optional[int]:
     """
     Compares two maturity values by position in `known_order`. Returns -1
@@ -1246,6 +1465,7 @@ class ProjectWorkspace:
     attentions: list[dict] = field(default_factory=list)
     expected_information_profiles: list[dict] = field(default_factory=list)
     maturity_records: list[dict] = field(default_factory=list)
+    requirements: list[dict] = field(default_factory=list)
 
 
 class CaseWorkspaceStore:
@@ -1383,6 +1603,72 @@ class CaseWorkspaceStore:
 
     # -- sources ---------------------------------------------------------------
 
+    def add_source(
+        self,
+        workspace: ProjectWorkspace,
+        name: str,
+        file_path: str,
+        kind: str,
+        width: Optional[int] = None,
+        height: Optional[int] = None,
+        document_id: Optional[str] = None,
+        revision: Optional[str] = None,
+        issue_date: Optional[str] = None,
+        issuer: Optional[str] = None,
+        document_status: Optional[str] = None,
+        document_authority: Optional[str] = None,
+        file_hash: Optional[str] = None,
+        origin_type: Optional[str] = None,
+        origin_reference: Optional[str] = None,
+        governance_log: Optional[GovernanceLog] = None,
+        actor: str = "system",
+    ) -> dict:
+        """
+        Prompt 15: the general Source-registration mechanism, not limited
+        to drawings (width/height are optional here). `add_drawing_source`
+        below is now a thin wrapper kept for its existing callers/route.
+        This is the method a non-drawing document (an OPR text document,
+        a schedule, any non-image Source) should call directly, instead
+        of constructing a Source dataclass by hand the way the NREOCRC
+        ingestion lab script previously had to (a gap this batch closes).
+        """
+        source = Source(
+            id=_new_id(),
+            project_id=workspace.project_id,
+            kind=kind,
+            name=name,
+            added_at=_now(),
+            file_path=file_path,
+            width=width,
+            height=height,
+            document_id=document_id,
+            revision=revision,
+            issue_date=issue_date,
+            issuer=issuer,
+            document_status=document_status,
+            document_authority=(
+                normalize_open_world_value(document_authority, KNOWN_DOCUMENT_AUTHORITY_LEVELS)
+                if document_authority is not None else None
+            ),
+            file_hash=file_hash,
+            origin_type=(
+                normalize_open_world_value(origin_type, KNOWN_SOURCE_ORIGIN_TYPES)
+                if origin_type is not None else None
+            ),
+            origin_reference=origin_reference,
+        )
+        workspace.sources.append(asdict(source))
+        self.save(workspace)
+
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id, event_type="source_registered",
+                actor=actor, role="system",
+                payload={"source_id": source.id, "kind": kind, "document_id": document_id},
+                correlation_id=source.id,
+            )
+        return asdict(source)
+
     def add_drawing_source(
         self,
         workspace: ProjectWorkspace,
@@ -1390,20 +1676,78 @@ class CaseWorkspaceStore:
         file_path: str,
         width: int,
         height: int,
+        document_id: Optional[str] = None,
+        revision: Optional[str] = None,
+        issue_date: Optional[str] = None,
+        issuer: Optional[str] = None,
+        document_status: Optional[str] = None,
+        document_authority: Optional[str] = None,
+        file_hash: Optional[str] = None,
+        origin_type: Optional[str] = None,
+        origin_reference: Optional[str] = None,
     ) -> dict:
-        source = Source(
-            id=_new_id(),
-            project_id=workspace.project_id,
-            kind=SOURCE_KIND_DRAWING,
-            name=name,
-            added_at=_now(),
-            file_path=file_path,
-            width=width,
-            height=height,
+        return self.add_source(
+            workspace, name=name, file_path=file_path, kind=SOURCE_KIND_DRAWING,
+            width=width, height=height, document_id=document_id, revision=revision,
+            issue_date=issue_date, issuer=issuer, document_status=document_status,
+            document_authority=document_authority, file_hash=file_hash,
+            origin_type=origin_type, origin_reference=origin_reference,
         )
-        workspace.sources.append(asdict(source))
+
+    def update_source_identity(
+        self,
+        workspace: ProjectWorkspace,
+        source_id: str,
+        actor: str,
+        document_id: Optional[str] = None,
+        revision: Optional[str] = None,
+        issue_date: Optional[str] = None,
+        issuer: Optional[str] = None,
+        document_status: Optional[str] = None,
+        document_authority: Optional[str] = None,
+        file_hash: Optional[str] = None,
+        origin_type: Optional[str] = None,
+        origin_reference: Optional[str] = None,
+        governance_log: Optional[GovernanceLog] = None,
+    ) -> dict:
+        """
+        Backfills/corrects document-identity metadata on an already-
+        registered Source (e.g. metadata that arrives after the file
+        itself was uploaded). Only supplied fields are changed - honest
+        absence is preserved for anything left None.
+        """
+        source = self._find(workspace.sources, source_id)
+        if source is None:
+            raise CaseWorkspaceError(f"Source {source_id} was not found.")
+
+        if document_id is not None:
+            source["document_id"] = document_id
+        if revision is not None:
+            source["revision"] = revision
+        if issue_date is not None:
+            source["issue_date"] = issue_date
+        if issuer is not None:
+            source["issuer"] = issuer
+        if document_status is not None:
+            source["document_status"] = document_status
+        if document_authority is not None:
+            source["document_authority"] = normalize_open_world_value(document_authority, KNOWN_DOCUMENT_AUTHORITY_LEVELS)
+        if file_hash is not None:
+            source["file_hash"] = file_hash
+        if origin_type is not None:
+            source["origin_type"] = normalize_open_world_value(origin_type, KNOWN_SOURCE_ORIGIN_TYPES)
+        if origin_reference is not None:
+            source["origin_reference"] = origin_reference
+
         self.save(workspace)
-        return asdict(source)
+
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id, event_type="source_identity_updated",
+                actor=actor, role="system", payload={"source_id": source_id},
+                correlation_id=source_id,
+            )
+        return source
 
     def register_source_revision(
         self,
@@ -1845,6 +2189,196 @@ class CaseWorkspaceStore:
 
     def knowledge_for_project(self, workspace: ProjectWorkspace) -> list[dict]:
         return list(workspace.knowledge)
+
+    # -- Requirement (Prompt 15) --------------------------------------------------------
+
+    def register_requirement(
+        self,
+        workspace: ProjectWorkspace,
+        source_id: str,
+        original_requirement_identifier: str,
+        text_reference: str,
+        created_by: str,
+        registration_method: str,
+        classification: Optional[str] = None,
+        authority_source: Optional[str] = None,
+        applicability: Optional[str] = None,
+        subject_domain: Optional[str] = None,
+        title: Optional[str] = None,
+        source_location: Optional[dict] = None,
+        effective_context: Optional[str] = None,
+        governance_log: Optional[GovernanceLog] = None,
+    ) -> dict:
+        """
+        Registers a source-stated Requirement - project meaning that
+        exists independently of any Finding (Prompt 14/15 #1). Requires an
+        honest `registration_method` (KNOWN_REQUIREMENT_REGISTRATION_
+        METHODS) rather than defaulting one, so a caller can never be
+        silent about whether this was actually machine-extracted or
+        hand-registered as a test fixture.
+        """
+        source = self._find(workspace.sources, source_id)
+        if source is None:
+            raise CaseWorkspaceError(f"Source {source_id} was not found.")
+        if registration_method not in KNOWN_REQUIREMENT_REGISTRATION_METHODS:
+            raise CaseWorkspaceError(
+                f"'{registration_method}' is not a recognized Requirement registration "
+                f"method. Use one of: {', '.join(KNOWN_REQUIREMENT_REGISTRATION_METHODS)}."
+            )
+        if source_location is not None and "location_type" in source_location:
+            source_location = dict(source_location)
+            source_location["location_type"] = normalize_open_world_value(
+                source_location["location_type"], KNOWN_REQUIREMENT_LOCATION_TYPES
+            )
+
+        requirement = Requirement(
+            id=_new_id(),
+            project_id=workspace.project_id,
+            source_id=source_id,
+            original_requirement_identifier=original_requirement_identifier,
+            text_reference=text_reference,
+            created_at=_now(),
+            created_by=created_by,
+            registration_method=registration_method,
+            classification=(
+                normalize_open_world_value(classification, KNOWN_REQUIREMENT_CLASSIFICATIONS)
+                if classification is not None else None
+            ),
+            authority_source=authority_source,
+            applicability=applicability,
+            subject_domain=subject_domain,
+            title=title,
+            source_location=source_location,
+            effective_context=effective_context,
+        )
+        workspace.requirements.append(asdict(requirement))
+        self.save(workspace)
+
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id, event_type="requirement_registered",
+                actor=created_by, role="system",
+                payload={
+                    "requirement_id": requirement.id, "source_id": source_id,
+                    "original_requirement_identifier": original_requirement_identifier,
+                    "registration_method": registration_method,
+                },
+                correlation_id=requirement.id,
+            )
+        return asdict(requirement)
+
+    def requirements_for_source(self, workspace: ProjectWorkspace, source_id: str) -> list[dict]:
+        return [r for r in workspace.requirements if r["source_id"] == source_id]
+
+    def requirements_for_project(self, workspace: ProjectWorkspace) -> list[dict]:
+        return list(workspace.requirements)
+
+    def set_requirement_status(
+        self, workspace: ProjectWorkspace, requirement_id: str, status: str, actor: str,
+    ) -> dict:
+        """
+        For lifecycle transitions other than supersession (which only
+        revise_requirement sets, since it is tied to lineage) - e.g.
+        withdrawn, future_effective, unknown.
+
+        Deliberately narrow exception to the general Open-World rule of
+        never rejecting an unfamiliar value (Prompt 15 #17): a compliance
+        outcome is not a Requirement lifecycle state under any
+        circumstance, so a status that is obviously compliance-shaped is
+        rejected outright here rather than silently preserved as an
+        "extension value" the way a genuinely novel lifecycle state would
+        be. This mirrors the existing precedent that `supersedes` is
+        reserved exclusively for lineage and is never an ordinary
+        Relationship type - a hard constitutional line, not everything
+        being open-world all the time.
+        """
+        requirement = self._find(workspace.requirements, requirement_id)
+        if requirement is None:
+            raise CaseWorkspaceError(f"Requirement {requirement_id} was not found.")
+
+        normalized_check = status.strip().lower().replace("-", "_").replace(" ", "_")
+        if normalized_check in _REQUIREMENT_STATUS_COMPLIANCE_DENYLIST:
+            raise CaseWorkspaceError(
+                f"'{status}' is a compliance outcome, not a Requirement lifecycle state "
+                "(Prompt 15 #17). Compliance is an Analysis/Finding/Pass/Human Adjudication "
+                "result - record it there, never as this Requirement's own status."
+            )
+
+        requirement["status"] = normalize_open_world_value(status, KNOWN_REQUIREMENT_STATUSES)
+        self.save(workspace)
+        return requirement
+
+    def revise_requirement(
+        self,
+        workspace: ProjectWorkspace,
+        requirement_id: str,
+        actor: str,
+        reason: Optional[str] = None,
+        authority_class: Optional[str] = None,
+        governance_log: Optional[GovernanceLog] = None,
+        **overrides,
+    ) -> tuple[dict, dict]:
+        """
+        Non-destructive revision (Prompt 15 #16): creates a new
+        Requirement as successor via the shared Supersession primitive -
+        the same pattern as Source/TemporalObligation/ExpectedInformation
+        Profile revision, not a new mechanism. `overrides` may supply any
+        of the optional Requirement fields to change on the successor
+        (e.g. `classification=...`, `text_reference=...`); anything not
+        overridden carries forward unchanged from the predecessor. An
+        Addendum amending/qualifying/superseding an earlier requirement is
+        exactly this call - no special Addendum workflow is built.
+        """
+        old = self._find(workspace.requirements, requirement_id)
+        if old is None:
+            raise CaseWorkspaceError(f"Requirement {requirement_id} was not found.")
+
+        new_requirement = Requirement(
+            id=_new_id(),
+            project_id=workspace.project_id,
+            source_id=overrides.get("source_id", old["source_id"]),
+            original_requirement_identifier=overrides.get(
+                "original_requirement_identifier", old["original_requirement_identifier"]
+            ),
+            text_reference=overrides.get("text_reference", old["text_reference"]),
+            created_at=_now(),
+            created_by=actor,
+            registration_method=overrides.get("registration_method", old["registration_method"]),
+            classification=overrides.get("classification", old["classification"]),
+            authority_source=overrides.get("authority_source", old["authority_source"]),
+            applicability=overrides.get("applicability", old["applicability"]),
+            subject_domain=overrides.get("subject_domain", old["subject_domain"]),
+            title=overrides.get("title", old["title"]),
+            source_location=overrides.get("source_location", old["source_location"]),
+            effective_context=overrides.get("effective_context", old["effective_context"]),
+        )
+        workspace.requirements.append(asdict(new_requirement))
+        old["status"] = REQUIREMENT_STATUS_SUPERSEDED
+
+        supersession = Supersession(
+            id=_new_id(),
+            project_id=workspace.project_id,
+            predecessor_type=OBJECT_KIND_REQUIREMENT,
+            predecessor_id=requirement_id,
+            successor_type=OBJECT_KIND_REQUIREMENT,
+            successor_id=new_requirement.id,
+            actor=actor,
+            authorized_at=_now(),
+            reason=reason,
+            authority_class=authority_class,
+        )
+        workspace.supersessions.append(asdict(supersession))
+
+        self.save(workspace)
+
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id, event_type="requirement_superseded",
+                actor=actor, role="system",
+                payload={"predecessor_id": requirement_id, "successor_id": new_requirement.id, "reason": reason},
+                correlation_id=supersession.id,
+            )
+        return asdict(new_requirement), asdict(supersession)
 
     # -- shared successor / lineage primitive (Prompt 6/7) ----------------------------
 
