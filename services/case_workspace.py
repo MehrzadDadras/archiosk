@@ -35,6 +35,7 @@ import json
 import threading
 import uuid
 from dataclasses import asdict, dataclass, field
+from dataclasses import fields as dataclass_fields
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -174,6 +175,7 @@ OBJECT_KIND_PACKAGE = "package"  # Prompt 12 - same: a labeled scope, not a stor
 OBJECT_KIND_PROJECT = "project"  # Prompt 12 - the whole-project scope; scope_id equals the Project's own project_id
 OBJECT_KIND_EXPECTED_INFORMATION_PROFILE = "expected_information_profile"  # Prompt 12
 OBJECT_KIND_MATURITY_RECORD = "maturity_record"  # Prompt 12
+OBJECT_KIND_SNAPSHOT = "snapshot"  # Batch G - a frozen reference to Project state itself
 
 KNOWN_OBJECT_KINDS = (
     OBJECT_KIND_SOURCE,
@@ -194,6 +196,7 @@ KNOWN_OBJECT_KINDS = (
     OBJECT_KIND_PROJECT,
     OBJECT_KIND_EXPECTED_INFORMATION_PROFILE,
     OBJECT_KIND_MATURITY_RECORD,
+    OBJECT_KIND_SNAPSHOT,
 )
 
 # -- Typed relationship vocabulary (Prompt 8 #1) -----------------------------
@@ -1436,6 +1439,57 @@ class CaseRecord:
 
 
 @dataclass
+class Snapshot:
+    """
+    Prompt 6 L / Prompt 14 O-AC: a governed, IMMUTABLE reference to what
+    existed in a Project at a particular state/time. There is deliberately
+    no update/mutation method anywhere in this module for Snapshot - a
+    later correction to a frozen understanding is always a NEW Snapshot,
+    never an edit to an old one. Unlike Source/Requirement/Expected
+    InformationProfile/MaturityRecord, a Snapshot is also never
+    superseded by a later one: Snapshot 002 does not correct Snapshot
+    001, it is an independent historical fact about a LATER moment - both
+    remain equally true statements about their own respective times, so
+    the shared Supersession lineage primitive does not apply here.
+
+    Deliberately the "hybrid, leaning toward references over copies"
+    design Prompt 14 O concluded, having reached it only by manually
+    building exactly this kind of bundle by hand for the NREOCRC
+    baseline: `reference_lists` holds only ids, keyed by the
+    ProjectWorkspace list they came from, never duplicated record
+    content. See _snapshot_reference_lists below - built generically via
+    dataclass field introspection, so a future batch that adds a new
+    governed list to ProjectWorkspace is automatically captured here with
+    no change needed to this dataclass or to create_snapshot.
+
+    Honest, load-bearing limitation - not hidden: several object kinds in
+    this module are mutated IN PLACE after creation rather than
+    following the append-only/successor pattern (Finding.claim_status,
+    Relationship.provisional/confirmed_by, ReviewThread.status/
+    resolution/outcome_refs, Attention.status/acknowledged_at/
+    responded_message_id, and the predecessor side of any Supersession
+    chain having its own status flipped to "superseded"). Resolving this
+    Snapshot's references later (see resolve_snapshot_objects) returns
+    those objects' CURRENT content, not necessarily what existed at
+    freeze time - only the fact that the id existed yet is frozen, not
+    the field values on it. True point-in-time content-fidelity for
+    those specific fields would require either copying content (rejected
+    here, per Prompt 14 O) or converting every in-place mutation to the
+    successor pattern (a materially larger change than this batch
+    undertakes) - see the Batch G report for the full accounting.
+    """
+
+    id: str
+    project_id: str
+    label: str
+    project_state_version: int
+    frozen_at: str
+    created_by: str
+    reference_lists: dict = field(default_factory=dict)
+    note: Optional[str] = None
+
+
+@dataclass
 class ProjectWorkspace:
     project_id: str
     # Prompt 7 / Foundation Batch A: monotonically increasing state
@@ -1466,6 +1520,65 @@ class ProjectWorkspace:
     expected_information_profiles: list[dict] = field(default_factory=list)
     maturity_records: list[dict] = field(default_factory=list)
     requirements: list[dict] = field(default_factory=list)
+    snapshots: list[dict] = field(default_factory=list)
+
+
+def _snapshot_reference_lists(workspace: ProjectWorkspace) -> dict:
+    """
+    Generic reference-list capture for Snapshot (Prompt 14 O): walks
+    every list field on ProjectWorkspace via dataclass introspection and
+    records the ids currently present, rather than hardcoding one field
+    per governed list type (which would need updating every time a
+    future batch adds a new list). Skips `snapshots` itself (a Snapshot
+    does not reference other Snapshots) and `project_id`/`version` (not
+    lists of governed records).
+    """
+    result: dict[str, list[str]] = {}
+    for f in dataclass_fields(ProjectWorkspace):
+        if f.name in ("project_id", "version", "snapshots"):
+            continue
+        value = getattr(workspace, f.name)
+        if isinstance(value, list):
+            result[f.name] = [item["id"] for item in value if isinstance(item, dict) and "id" in item]
+    return result
+
+
+def compare_snapshot_reference_lists(snapshot_a: dict, snapshot_b: dict) -> dict:
+    """
+    Prompt 14 AC / Batch G: a generic, project-agnostic STRUCTURAL
+    comparison between two Snapshots - which ids exist in one but not the
+    other, per governed list, plus simple counts. Deliberately NOT a
+    SEMANTIC comparison (Prompt 14's NREOCRC-specific criteria - source
+    identity fidelity, requirement fidelity, authority fidelity, etc.):
+    those require corpus-specific knowledge this generic function does
+    not and should not encode. A semantic comparison for a specific
+    corpus re-ingestion belongs in its own script built on top of this,
+    the same way the NREOCRC ingestion lab script sits on top of
+    CaseWorkspaceStore itself - resolve_snapshot_objects gives that
+    script everything it needs to build one.
+
+    Meaningful primarily for two Snapshots of the SAME evolving project
+    over time (this architecture's lists are append-only - items are
+    superseded/withdrawn, never deleted, so "removed_in_b" is expected to
+    stay empty for that case in practice). Comparing Snapshots from two
+    genuinely independent projects/ingestion runs is not rejected, but
+    the id-sets will not overlap at all, so "added"/"removed" mean
+    something different there - interpret with that in mind.
+    """
+    lists_a = snapshot_a.get("reference_lists") or {}
+    lists_b = snapshot_b.get("reference_lists") or {}
+    all_names = sorted(set(lists_a) | set(lists_b))
+    comparison: dict = {}
+    for name in all_names:
+        ids_a = set(lists_a.get(name, []))
+        ids_b = set(lists_b.get(name, []))
+        comparison[name] = {
+            "count_a": len(ids_a),
+            "count_b": len(ids_b),
+            "added_in_b": sorted(ids_b - ids_a),
+            "removed_in_b": sorted(ids_a - ids_b),
+        }
+    return comparison
 
 
 class CaseWorkspaceStore:
@@ -3444,3 +3557,79 @@ class CaseWorkspaceStore:
         draft["issued_by"] = issued_by
         self.save(workspace)
         return draft
+
+    # -- Snapshot / Freeze / State Comparison (Prompt 14 O/AC, Batch G) ---------
+
+    def create_snapshot(
+        self,
+        workspace: ProjectWorkspace,
+        label: str,
+        created_by: str,
+        note: Optional[str] = None,
+        governance_log: Optional[GovernanceLog] = None,
+    ) -> dict:
+        """
+        Freezes a governed reference to the CURRENT project state. There
+        is deliberately no update_snapshot anywhere in this module - a
+        Snapshot is immutable from the moment it is created; a later
+        correction is always a NEW Snapshot (see the Snapshot dataclass
+        docstring for why no Supersession lineage applies here either).
+        """
+        snapshot = Snapshot(
+            id=_new_id(),
+            project_id=workspace.project_id,
+            label=label,
+            project_state_version=workspace.version,
+            frozen_at=project_clock_now().isoformat(),
+            created_by=created_by,
+            reference_lists=_snapshot_reference_lists(workspace),
+            note=note,
+        )
+        workspace.snapshots.append(asdict(snapshot))
+        self.save(workspace)
+
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id, event_type="snapshot_created",
+                actor=created_by, role="system",
+                payload={
+                    "snapshot_id": snapshot.id, "label": label,
+                    "project_state_version": snapshot.project_state_version,
+                },
+                correlation_id=snapshot.id,
+            )
+        return asdict(snapshot)
+
+    def snapshots_for_project(self, workspace: ProjectWorkspace) -> list[dict]:
+        return list(workspace.snapshots)
+
+    def get_snapshot(self, workspace: ProjectWorkspace, snapshot_id: str) -> Optional[dict]:
+        return self._find(workspace.snapshots, snapshot_id)
+
+    def resolve_snapshot_objects(self, workspace: ProjectWorkspace, snapshot_id: str, list_name: str) -> list[dict]:
+        """
+        Resolves a frozen Snapshot's ids for `list_name` back to their
+        CURRENT records in the live workspace (references, not copies -
+        see the Snapshot dataclass docstring for the honest limitation
+        this creates for in-place-mutated fields).
+        """
+        snapshot = self._find(workspace.snapshots, snapshot_id)
+        if snapshot is None:
+            raise CaseWorkspaceError(f"Snapshot {snapshot_id} was not found.")
+        if list_name not in snapshot["reference_lists"]:
+            raise CaseWorkspaceError(
+                f"'{list_name}' is not a governed list this Snapshot captured. "
+                f"Available: {', '.join(sorted(snapshot['reference_lists']))}."
+            )
+        ids = set(snapshot["reference_lists"][list_name])
+        current_items = getattr(workspace, list_name, [])
+        return [item for item in current_items if item.get("id") in ids]
+
+    def compare_snapshots(self, workspace: ProjectWorkspace, snapshot_id_a: str, snapshot_id_b: str) -> dict:
+        snap_a = self._find(workspace.snapshots, snapshot_id_a)
+        snap_b = self._find(workspace.snapshots, snapshot_id_b)
+        if snap_a is None:
+            raise CaseWorkspaceError(f"Snapshot {snapshot_id_a} was not found.")
+        if snap_b is None:
+            raise CaseWorkspaceError(f"Snapshot {snapshot_id_b} was not found.")
+        return compare_snapshot_reference_lists(snap_a, snap_b)
