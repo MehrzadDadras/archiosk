@@ -39,7 +39,7 @@ class BaseConfig:
 
     # -- Upload / parsing limits ------------------------------------------
     MAX_CONTENT_LENGTH = int(os.getenv("MAX_UPLOAD_MB", "25")) * 1024 * 1024
-    ALLOWED_UPLOAD_EXTENSIONS = {".pdf", ".docx", ".txt", ".csv"}
+    ALLOWED_UPLOAD_EXTENSIONS = {".pdf", ".docx", ".txt", ".csv", ".md"}
 
     # -- Static asset cache-busting ----------------------------------------
     # Appended as a ?v= query string on static asset URLs (see base.html).

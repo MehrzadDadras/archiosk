@@ -7,7 +7,7 @@
     <p class="eyebrow">Step 1</p>
     <h1>Ingest an RFP or RFQ</h1>
     <p class="hero-copy">
-        Accepted formats: PDF, DOCX, TXT, CSV. Maximum size {{ max_upload_mb }}MB.
+        Accepted formats: PDF, DOCX, TXT, CSV, MD. Maximum size {{ max_upload_mb }}MB.
     </p>
 </section>
 
@@ -16,7 +16,7 @@
 {% endif %}
 
 <form method="post" enctype="multipart/form-data" class="upload-form">
-    <input type="file" name="file" required accept=".pdf,.docx,.txt,.csv">
+    <input type="file" name="file" required accept=".pdf,.docx,.txt,.csv,.md">
     <div class="upload-form-optional">
         <input type="text" name="actor" class="text-input" placeholder="Your name (optional, for the audit trail)">
         <input type="text" name="role" class="text-input" placeholder="Your role (optional)">

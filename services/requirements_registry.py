@@ -40,6 +40,7 @@ class RequirementsRegistry:
             ingested_at=data["ingested_at"],
             requirements=requirements,
             milestones=data.get("milestones", []),
+            tables=data.get("tables", []),
             consistency_flags=consistency_flags,
             consistency_checked=data.get("consistency_checked", False),
             consistency_note=data.get("consistency_note"),

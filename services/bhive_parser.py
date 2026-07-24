@@ -100,6 +100,12 @@ class ParsedDocument:
     ingested_at: str
     requirements: list[RequirementItem] = field(default_factory=list)
     milestones: list[dict[str, Any]] = field(default_factory=list)
+    # Batch H: the raw structured tables (headers + rows) found in the
+    # source document, kept separate from `requirements` - a future
+    # reconciliation/arithmetic-check capability (still deferred, not
+    # built here) needs the real column values, not the header-labeled
+    # text reconstruction that feeds classification below.
+    tables: list[dict[str, Any]] = field(default_factory=list)
     consistency_flags: list[ConsistencyFlag] = field(default_factory=list)
     # Distinguishes "checked, found nothing" from "didn't actually check" —
     # e.g. no ANTHROPIC_API_KEY, a timeout, or a malformed model response.
@@ -114,10 +120,93 @@ class ParsedDocument:
             "ingested_at": self.ingested_at,
             "requirements": [r.__dict__ for r in self.requirements],
             "milestones": self.milestones,
+            "tables": self.tables,
             "consistency_flags": [f.__dict__ for f in self.consistency_flags],
             "consistency_checked": self.consistency_checked,
             "consistency_note": self.consistency_note,
         }
+
+
+# -- table-aware extraction (Batch H) ---------------------------------------
+# The concrete gap the NREOCRC baseline adjudication named: BHiveParser had
+# no notion of tables at all, so a GFM pipe table (e.g. the Functional
+# Program's per-department area breakdown) was invisible to it beyond
+# meaningless per-line fragments - each row segmented alone, with no header
+# context, and multi-row numeric content (department subtotals) unreachable
+# by anything downstream.
+
+_MD_HEADING_RE = re.compile(r"^#{1,6}\s")
+_TABLE_SEPARATOR_CELL_RE = re.compile(r"^:?-+:?$")
+
+
+def _is_table_row_line(line: str) -> bool:
+    stripped = line.strip()
+    return len(stripped) >= 2 and stripped.startswith("|") and stripped.endswith("|")
+
+
+def _split_table_row(line: str) -> list[str]:
+    """
+    Deliberately minimal (Batch H): does not handle an escaped pipe
+    ("\\|") within a cell - no real document seen so far needs it, and
+    adding it now would be speculative rather than grounded in an actual
+    gap.
+    """
+    stripped = line.strip()
+    if stripped.startswith("|"):
+        stripped = stripped[1:]
+    if stripped.endswith("|"):
+        stripped = stripped[:-1]
+    return [cell.strip() for cell in stripped.split("|")]
+
+
+def _is_separator_row(cells: list[str]) -> bool:
+    return bool(cells) and all(_TABLE_SEPARATOR_CELL_RE.match(cell) for cell in cells)
+
+
+def extract_markdown_tables(text: str) -> list[dict]:
+    """
+    A minimal GFM pipe-table parser. Requires each table/data row to both
+    START and END with "|" - true of every table in the NREOCRC corpus and
+    of standard GFM table style; a table written without the outer pipes
+    is a real GFM variant this does not attempt to support.
+
+    Returns one dict per table found, in document order:
+    {"start_line", "end_line"} are 1-indexed and inclusive, using the same
+    line numbering _segment already produces elsewhere - "start_line" is
+    the header row's line, "end_line" is the last data row's line (or the
+    separator row's line, for a table with zero data rows). "headers" is
+    the header row's cells; "rows" is a list of cell-lists, one per data
+    row. A data row with fewer cells than the header is padded with ""
+    (never fabricated content) rather than raising - a single malformed
+    row should not discard an otherwise-good table's real rows.
+    """
+    lines = text.splitlines()
+    tables: list[dict] = []
+    i = 0
+    while i < len(lines):
+        if (
+            _is_table_row_line(lines[i])
+            and i + 1 < len(lines)
+            and _is_table_row_line(lines[i + 1])
+            and _is_separator_row(_split_table_row(lines[i + 1]))
+        ):
+            start_line = i + 1  # 1-indexed header line
+            headers = _split_table_row(lines[i])
+            j = i + 2
+            rows: list[list[str]] = []
+            while j < len(lines) and _is_table_row_line(lines[j]):
+                cells = _split_table_row(lines[j])
+                if len(cells) < len(headers):
+                    cells = cells + [""] * (len(headers) - len(cells))
+                elif len(cells) > len(headers):
+                    cells = cells[: len(headers)]
+                rows.append(cells)
+                j += 1
+            tables.append({"start_line": start_line, "end_line": j, "headers": headers, "rows": rows})
+            i = j
+        else:
+            i += 1
+    return tables
 
 
 class BHiveParser:
@@ -151,7 +240,7 @@ class BHiveParser:
         if not text.strip():
             raise ParserError(f"No extractable text found in '{filename}'.")
 
-        chunks = self._segment(text)
+        chunks, tables = self._segment(text)
         requirements = self._classify(chunks)
         milestones = self._derive_milestones(requirements)
         consistency_flags, consistency_checked, consistency_note = (
@@ -164,6 +253,7 @@ class BHiveParser:
             ingested_at=datetime.now(timezone.utc).isoformat(),
             requirements=requirements,
             milestones=milestones,
+            tables=tables,
             consistency_flags=consistency_flags,
             consistency_checked=consistency_checked,
             consistency_note=consistency_note,
@@ -173,7 +263,11 @@ class BHiveParser:
     def _extract(self, raw_bytes: bytes, filename: str) -> str:
         ext = Path(filename).suffix.lower()
 
-        if ext == ".txt" or ext == ".csv":
+        # .md is already plain text - the only thing that makes it
+        # different from .txt is that _segment (below) now knows how to
+        # read its structure (tables, ATX headings) instead of treating
+        # every non-trivial line the same way.
+        if ext in (".txt", ".csv", ".md"):
             return raw_bytes.decode("utf-8", errors="ignore")
 
         if ext == ".docx":
@@ -215,14 +309,53 @@ class BHiveParser:
         return "\n".join((page.extract_text() or "") for page in reader.pages)
 
     # -- stage 2: segment ----------------------------------------------------
-    def _segment(self, text: str) -> list[tuple[int, str]]:
-        """Split into non-trivial lines/clauses, keeping 1-indexed line numbers."""
-        chunks = []
-        for i, line in enumerate(text.splitlines(), start=1):
+    def _segment(self, text: str) -> tuple[list[tuple[int, str]], list[dict]]:
+        """
+        Split into non-trivial lines/clauses, keeping 1-indexed line
+        numbers, plus (Batch H) any GFM tables found in the text.
+
+        Table-aware: table lines (header/separator/data rows) are
+        excluded from the naive per-line pass below - left in, a table
+        row would segment as one meaningless raw-pipe fragment with no
+        header context. Instead each data row becomes its own
+        header-labeled chunk ("Functional Group: ...; Room / Space: ...;
+        ..."), giving the existing classify stage legible text, while the
+        raw table (headers + rows) is returned separately for a caller
+        that wants the real values.
+
+        Also excludes markdown ATX headings ("## 12.1 Standby Power") -
+        the same reasoning _extract_docx already applies to Heading/Title
+        paragraphs: a heading's short, keyword-heavy text can otherwise
+        get misclassified as a real requirement.
+        """
+        tables = extract_markdown_tables(text)
+        table_line_numbers: set[int] = set()
+        for table in tables:
+            table_line_numbers.update(range(table["start_line"], table["end_line"] + 1))
+
+        lines = text.splitlines()
+        chunks: list[tuple[int, str]] = []
+        for i, line in enumerate(lines, start=1):
+            if i in table_line_numbers:
+                continue
+            if _MD_HEADING_RE.match(line.strip()):
+                continue
             cleaned = line.strip(" \t-*•")
             if len(cleaned) >= 8:
                 chunks.append((i, cleaned))
-        return chunks
+
+        for table in tables:
+            headers = table["headers"]
+            data_row_start_line = table["start_line"] + 2  # + header line, + separator line
+            for row_index, row in enumerate(table["rows"]):
+                labeled = " | ".join(
+                    f"{header}: {cell}" for header, cell in zip(headers, row) if header
+                )
+                if labeled:
+                    chunks.append((data_row_start_line + row_index, labeled))
+
+        chunks.sort(key=lambda c: c[0])
+        return chunks, tables
 
     # -- stage 3: classify ----------------------------------------------------
     def _classify(self, chunks: list[tuple[int, str]]) -> list[RequirementItem]:
