@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+
+{% block title %}Projects &mdash; Archiosk{% endblock %}
+
+{% block content %}
+<div class="dash-head" style="padding-top:2rem;">
+    <div>
+        <p class="eyebrow">Every project ever ingested</p>
+        <h1>Projects</h1>
+    </div>
+    {% if is_admin %}
+    <a class="btn btn-ghost" href="{{ url_for('portal.upload') }}">+ Ingest a new document</a>
+    {% endif %}
+</div>
+
+{% if projects %}
+<div class="table-scroll">
+    <table class="registry-table">
+        <thead>
+            <tr>
+                <th>Project</th>
+                <th>Ingested</th>
+                <th>Requirements</th>
+                <th>Milestones</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for document in projects %}
+            <tr>
+                <td>
+                    {{ document.filename }}<br>
+                    <small class="mono" style="color:var(--muted);">{{ document.project_id }}</small>
+                </td>
+                <td>{{ document.ingested_at }}</td>
+                <td>{{ document.requirements|length }}</td>
+                <td>{{ document.milestones|length }}</td>
+                <td>
+                    <a class="btn btn-ghost" href="{{ url_for('portal.dashboard', project_id=document.project_id) }}">Dashboard</a>
+                    <a class="btn btn-ghost" href="{{ url_for('workspace.show_workspace', project_id=document.project_id) }}">Case Workspace &rarr;</a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<p class="consistency-note">
+    No projects have been ingested yet.
+    {% if is_admin %}<a href="{{ url_for('portal.upload') }}">Ingest one now</a>.{% endif %}
+</p>
+{% endif %}
+{% endblock %}

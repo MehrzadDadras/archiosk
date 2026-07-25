@@ -48,7 +48,15 @@ class RequirementsRegistry:
         return doc
 
     def list_ids(self) -> list[str]:
-        return [p.stem for p in self.store_path.glob("*.json")]
+        # CaseWorkspaceStore's own files sit alongside these in the same
+        # directory, named "<project_id>.workspace.json" -- Path.stem only
+        # strips one suffix level, so a naive "*.json" glob would also
+        # yield "<project_id>.workspace" as a bogus extra id. Excluded
+        # explicitly rather than relying on load-time failure downstream.
+        return [
+            p.stem for p in self.store_path.glob("*.json")
+            if not p.stem.endswith(".workspace")
+        ]
 
     def _path_for(self, project_id: str) -> Path:
         return self.store_path / f"{project_id}.json"

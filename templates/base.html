@@ -21,6 +21,7 @@
             {% if is_admin %}
             <a href="{{ url_for('portal.upload') }}">Upload</a>
             {% endif %}
+            <a href="{{ url_for('portal.projects_list') }}">Projects</a>
             <a href="{{ url_for('portal.dashboard') }}">Dashboard</a>
             <a href="{{ url_for('portal.logout') }}">Sign out</a>
             {% else %}

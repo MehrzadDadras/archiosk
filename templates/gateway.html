@@ -30,11 +30,18 @@
                     </span>
                 </a>
                 {% endif %}
-                <a class="gateway-action" href="{{ url_for('portal.dashboard') }}">
+                <a class="gateway-action" href="{{ url_for('portal.projects_list') }}">
                     <span class="gateway-action-icon">&#8963;</span>
                     <span>
-                        <strong>View dashboard</strong>
-                        <small>Browse requirements, milestones, and consistency flags</small>
+                        <strong>Open an existing project</strong>
+                        <small>Reopen a project you or a teammate already ingested</small>
+                    </span>
+                </a>
+                <a class="gateway-action" href="{{ url_for('portal.dashboard') }}">
+                    <span class="gateway-action-icon">&#9635;</span>
+                    <span>
+                        <strong>View demo dashboard</strong>
+                        <small>Browse the sample requirements/milestones/consistency layout</small>
                     </span>
                 </a>
             </div>

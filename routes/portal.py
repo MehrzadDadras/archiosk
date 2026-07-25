@@ -111,6 +111,26 @@ def gateway():
     return render_template('gateway.html')
 
 
+@portal_bp.route('/projects')
+@login_required
+def projects_list():
+    """The project directory: every previously ingested project, so a
+    returning user can find and reopen one without already knowing its
+    project_id or having bookmarked its dashboard URL. Before this route
+    existed, the only way back into a project was the redirect landed on
+    right after uploading it -- there was no way to "reopen tomorrow"
+    through the UI at all."""
+    registry = get_registry(current_app)
+    projects = []
+    for project_id in registry.list_ids():
+        document = registry.get(project_id)
+        if document is None:
+            continue
+        projects.append(document)
+    projects.sort(key=lambda d: d.ingested_at, reverse=True)
+    return render_template('projects.html', projects=projects)
+
+
 @portal_bp.route('/upload', methods=['GET', 'POST'])
 @admin_required
 def upload():

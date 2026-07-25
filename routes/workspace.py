@@ -44,6 +44,7 @@ from werkzeug.utils import secure_filename
 from services.auth import login_required
 from services.case_workspace import (
     ANALYSIS_TRIGGER_USER_INITIATED,
+    REQUIREMENT_ADJUDICATION_OUTCOMES,
     AnalysisTrigger,
     CaseWorkspaceError,
     CaseWorkspaceStore,
@@ -232,6 +233,34 @@ def show_workspace(project_id):
         store.revision_notices_for_case(workspace, active_case["id"]) if active_case else []
     )
 
+    # Requirement promotion/adjudication: Requirement is project-scoped
+    # (no case_id of its own - see current/kernel-object-model.md), so
+    # this view-model is built once per page render regardless of which
+    # Case is active. `original_requirement_identifier` is the one field
+    # that ties a governed Requirement back to the RequirementItem it was
+    # promoted from (see promote_requirement_item) - used here only to
+    # keep an already-promoted item off the "not yet promoted" list, not
+    # as a general-purpose lookup key.
+    governed_requirements = store.requirements_for_project(workspace)
+    promoted_item_ids = {r["original_requirement_identifier"] for r in governed_requirements}
+    unpromoted_requirement_items = [
+        item for item in document.requirements if item.id not in promoted_item_ids
+    ]
+    requirements_view = [
+        {
+            "requirement": requirement,
+            "adjudication_state": store.requirement_adjudication_state(workspace, requirement["id"]),
+            "latest_adjudication": store.latest_requirement_adjudication_for(workspace, requirement["id"]),
+        }
+        for requirement in governed_requirements
+    ]
+
+    # Recent provenance, visible from inside the workspace itself rather
+    # than only on the separate legacy dashboard - most-recent-first,
+    # capped so the sidebar stays scannable rather than becoming its own
+    # unbounded log viewer.
+    recent_governance_events = list(reversed(_log().read(project_id)))[:25]
+
     return render_template(
         "case_workspace.html",
         document=document,
@@ -251,6 +280,10 @@ def show_workspace(project_id):
         revision_notices=revision_notices,
         knowledge_count=len(store.knowledge_for_project(workspace)),
         activities=store.activities_for_case(workspace, active_case["id"]) if active_case else [],
+        unpromoted_requirement_items=unpromoted_requirement_items,
+        requirements_view=requirements_view,
+        adjudication_outcomes=REQUIREMENT_ADJUDICATION_OUTCOMES,
+        recent_governance_events=recent_governance_events,
     )
 
 

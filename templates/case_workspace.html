@@ -98,6 +98,88 @@
                 <button type="submit">Create Case</button>
             </form>
         </details>
+
+        <p class="workspace-pane-label">Requirements ({{ requirements_view|length }})</p>
+        {% if unpromoted_requirement_items %}
+        <details class="add-source-details">
+            <summary>Extracted, not yet governed ({{ unpromoted_requirement_items|length }})</summary>
+            {% if active_case %}
+            {% for item in unpromoted_requirement_items %}
+            <form class="workspace-form" method="post"
+                  action="{{ url_for('workspace.promote_requirement_item_route', project_id=project_id, case_id=active_case.id, requirement_item_id=item.id) }}">
+                <p style="color:var(--muted);font-size:0.78rem;margin:0.3rem 0;">
+                    {{ item.text }}
+                    <br><small>{{ item.category.replace('_', ' ') }} &middot; confidence {{ (item.confidence * 100)|round|int }}%</small>
+                </p>
+                <select name="source_id" required>
+                    {% for source in workspace.sources %}
+                    <option value="{{ source.id }}"{% if source.kind == 'rfq_rfp_document' %} selected{% endif %}>{{ source.name }} ({{ source.kind.replace('_', ' ') }})</option>
+                    {% endfor %}
+                </select>
+                <button type="submit">Promote to governed Requirement</button>
+            </form>
+            {% endfor %}
+            {% else %}
+            <p style="color:var(--muted);font-size:0.78rem;">Select or create a Case first — promotion attributes the new Requirement's evidence to a Case.</p>
+            {% endif %}
+        </details>
+        {% endif %}
+
+        {% if requirements_view %}
+        <details class="add-source-details">
+            <summary>Governed Requirements ({{ requirements_view|length }})</summary>
+            {% for row in requirements_view %}
+            {% set requirement = row.requirement %}
+            <div style="border-top:1px solid var(--line);padding:0.5rem 0;">
+                <p style="font-size:0.78rem;margin:0 0 0.3rem;">{{ requirement.text_reference }}</p>
+                <p style="color:var(--muted);font-size:0.7rem;margin:0 0 0.4rem;">
+                    {{ requirement.original_requirement_identifier }}
+                    {% if requirement.subject_domain %} &middot; {{ requirement.subject_domain.replace('_', ' ') }}{% endif %}
+                    &middot; <span class="review-state-badge">{{ row.adjudication_state }}</span>
+                    {% if row.latest_adjudication %}
+                    <br>Last: {{ row.latest_adjudication.outcome }} by {{ row.latest_adjudication.adjudicator }} &mdash; {{ row.latest_adjudication.reasoning }}
+                    {% endif %}
+                </p>
+                <form class="workspace-form" method="post" action="{{ url_for('workspace.adjudicate_requirement', project_id=project_id, requirement_id=requirement.id) }}">
+                    <input type="hidden" name="case_id" value="{{ active_case.id if active_case else '' }}">
+                    <select name="outcome" required>
+                        {% for outcome in adjudication_outcomes %}
+                        <option value="{{ outcome }}">{{ outcome }}</option>
+                        {% endfor %}
+                    </select>
+                    <input type="text" name="reasoning" placeholder="Reasoning (required)" required>
+                    {% if active_case and findings_view %}
+                    <span style="color:var(--muted);font-size:0.7rem;">Evidence Findings:</span>
+                    {% for row2 in findings_view %}
+                    <label style="display:block;font-size:0.72rem;color:var(--muted);">
+                        <input type="checkbox" name="evidence_finding_id" value="{{ row2.finding.id }}">
+                        {{ row2.finding.statement[:60] }}
+                    </label>
+                    {% endfor %}
+                    {% endif %}
+                    <button type="submit">Adjudicate</button>
+                </form>
+            </div>
+            {% endfor %}
+        </details>
+        {% endif %}
+
+        <details class="add-source-details">
+            <summary>History ({{ recent_governance_events|length }})</summary>
+            {% if recent_governance_events %}
+            <ul class="source-list">
+                {% for event in recent_governance_events %}
+                <li class="source-item" style="font-size:0.72rem;">
+                    <span class="source-kind-badge">{{ event.event_type.replace('_', ' ') }}</span>
+                    {{ event.actor }} ({{ event.role }})
+                    <br><small style="color:var(--muted);">{{ event.created_at }}</small>
+                </li>
+                {% endfor %}
+            </ul>
+            {% else %}
+            <p style="color:var(--muted);font-size:0.78rem;">No governed events recorded yet.</p>
+            {% endif %}
+        </details>
     </aside>
 
     {# ---------------- Center: Conversation ---------------- #}
