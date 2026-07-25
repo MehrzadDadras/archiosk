@@ -257,6 +257,13 @@ RELATIONSHIP_TYPE_DEPENDS_ON = "depends_on"
 RELATIONSHIP_TYPE_BLOCKS = "blocks"
 RELATIONSHIP_TYPE_AFFECTS = "affects"
 RELATIONSHIP_TYPE_RESULTED_IN = "resulted_in"  # Prompt 10 #7: ReviewThread -> structured outcome linkage
+# Case-lineage tranche: a NEW Case derived from an ARCHIVED one - structurally
+# distinct from "supersedes" (Supersession implies the predecessor is no
+# longer the authoritative version of the SAME thing) and from ordinary
+# evidentiary edges above (this connects two Cases, not a Finding/Source/
+# Requirement pair). from_id is always the new derived Case, to_id is
+# always the archived source Case - see derive_case_from_archive.
+RELATIONSHIP_TYPE_DERIVED_FROM = "derived_from"
 
 KNOWN_RELATIONSHIP_TYPES = (
     RELATIONSHIP_TYPE_SUPPORTS,
@@ -270,6 +277,7 @@ KNOWN_RELATIONSHIP_TYPES = (
     RELATIONSHIP_TYPE_BLOCKS,
     RELATIONSHIP_TYPE_AFFECTS,
     RELATIONSHIP_TYPE_RESULTED_IN,
+    RELATIONSHIP_TYPE_DERIVED_FROM,
 )
 
 # -- Temporal Obligation vocabulary (Prompt 8 #5/#9/#10) ---------------------
@@ -1645,6 +1653,15 @@ class CaseRecord:
     # on the record itself, non-destructively.
     retracted_by: Optional[str] = None
     retracted_at: Optional[str] = None
+    # Derivation lineage (Case-lineage tranche). Denormalized forward
+    # pointer to the archived Case this one was derived from - cheap,
+    # direct querying, same pattern as Source.supersedes_source_id
+    # alongside Supersession. The authoritative, structural, queryable
+    # record is the accompanying Relationship (RELATIONSHIP_TYPE_DERIVED_
+    # FROM); both are written together in derive_case_from_archive so
+    # they can never drift apart. None for every Case that is not itself
+    # a derivation.
+    derived_from_case_id: Optional[str] = None
     source_ids: list[str] = field(default_factory=list)
     conversation: list[dict] = field(default_factory=list)
     analysis_ids: list[str] = field(default_factory=list)
@@ -3033,6 +3050,129 @@ class CaseWorkspaceStore:
             )
 
         return case
+
+    def derived_cases_of(self, workspace: ProjectWorkspace, archived_case_id: str) -> list[dict]:
+        """Reverse lineage lookup: every Case whose derived_from_case_id
+        points at archived_case_id. Cheap field filter - the authoritative
+        structural record is the accompanying RELATIONSHIP_TYPE_DERIVED_FROM
+        Relationship (see derive_case_from_archive), but for the common
+        "what was derived from this archive" query this denormalized
+        pointer is sufficient and avoids an unnecessary relationship scan."""
+        return [c for c in workspace.cases if c.get("derived_from_case_id") == archived_case_id]
+
+    def derive_case_from_archive(
+        self,
+        workspace: ProjectWorkspace,
+        archived_case_id: str,
+        actor: str,
+        actor_role: Optional[str] = None,
+        title: Optional[str] = None,
+        objective: Optional[str] = None,
+        governance_log: Optional[GovernanceLog] = None,
+    ) -> dict:
+        """
+        Archive is terminal for the OBJECT, not for the WORK: this is the
+        one authorized way continued reasoning proceeds after archival - a
+        brand new Case (new permanent id, new identity) that carries
+        forward only the minimal working context, never the archived
+        Case's own history.
+
+        Explicitly NOT Supersession (the archived Case is not being
+        replaced or corrected - it remains standing, permanent historical
+        truth) and NOT a mutation of any kind to the archived Case - this
+        method never writes to the archived Case's own record.
+
+        Working context copied onto the new Case (per this tranche's
+        "copy the working context; reference the history; do not clone
+        the history"): `title`/`objective` (overridable by the caller,
+        defaulting to the archived Case's own values - the minimal
+        structural fields intrinsic to Case identity) and `source_ids`
+        (references to Source *documents* - copying the reference list
+        duplicates no content, since Source objects themselves are never
+        cloned or mutated by this).
+
+        Deliberately NOT copied - these remain attached to the archived
+        Case exclusively, reachable only through the lineage pointer, never
+        duplicated: conversation, analysis_ids, finding_ids, artifact_ids,
+        activity_ids (and, transitively, every review thread/message/
+        ReviewerValidation/Disposition/Attention/collaboration/archive
+        event that referenced the archived Case - none of those carry a
+        case_id pointing at the new Case, so they simply do not appear
+        there).
+
+        Visibility: the new Case always begins CASE_VISIBILITY_PRIVATE,
+        regardless of what the archived Case's own visibility was -
+        Constitutional Invariant 11 (private work stays private until
+        deliberately shared) means creating a new working object must
+        never itself constitute an act of sharing, even when its
+        predecessor had already been shared/collaborative. The archived
+        Case's own `visibility` field is never touched by this method.
+
+        Authority: the same owner-or-admin pattern as archive_case - the
+        archived Case's own creator, or an actor whose actor_role is the
+        system's existing "admin" role. No new role architecture.
+        """
+        archived_case = self._find(workspace.cases, archived_case_id)
+        if archived_case is None:
+            raise CaseWorkspaceError(f"Case {archived_case_id} was not found.")
+
+        if archived_case.get("status") != CASE_STATUS_ARCHIVED:
+            raise CaseWorkspaceError(
+                f"Case {archived_case_id} is not archived - derivation in this "
+                "tranche is only defined as a path forward from an archived "
+                "Case, not a general Copy/Adopt of an active one."
+            )
+
+        is_owner = archived_case.get("created_by") is not None and actor == archived_case["created_by"]
+        is_admin_override = actor_role == "admin"
+        if not (is_owner or is_admin_override):
+            raise CaseWorkspaceError(
+                "Only the archived Case's own creator, or an actor with the "
+                "admin role, may derive a new active Case from it."
+            )
+
+        new_case = CaseRecord(
+            id=_new_id(),
+            project_id=archived_case["project_id"],
+            title=title if title is not None else archived_case["title"],
+            objective=objective if objective is not None else archived_case["objective"],
+            created_at=_now(),
+            created_by=actor,
+            visibility=CASE_VISIBILITY_PRIVATE,
+            derived_from_case_id=archived_case_id,
+            source_ids=list(archived_case["source_ids"]),
+        )
+        relationship = Relationship(
+            id=_new_id(),
+            project_id=workspace.project_id,
+            from_type=OBJECT_KIND_CASE,
+            from_id=new_case.id,
+            to_type=OBJECT_KIND_CASE,
+            to_id=archived_case_id,
+            relationship_type=RELATIONSHIP_TYPE_DERIVED_FROM,
+            created_at=new_case.created_at,
+            created_by=actor,
+            provisional=False,  # a structural fact this method itself establishes, not a machine claim awaiting confirmation
+        )
+
+        workspace.cases.append(asdict(new_case))
+        workspace.relationships.append(asdict(relationship))
+        self.save(workspace)
+
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id, event_type="case_derived_from_archive",
+                actor=actor, role="human",
+                payload={
+                    "derived_case_id": new_case.id,
+                    "archived_case_id": archived_case_id,
+                    "archived_case_creator": archived_case.get("created_by"),
+                    "relationship_id": relationship.id,
+                },
+                correlation_id=new_case.id,
+            )
+
+        return asdict(new_case)
 
     def attach_source_to_case(self, workspace: ProjectWorkspace, case_id: str, source_id: str) -> None:
         case = self._find(workspace.cases, case_id)

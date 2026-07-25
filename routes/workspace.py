@@ -343,6 +343,30 @@ def archive_case(project_id, case_id):
     return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
 
 
+@workspace_bp.route("/projects/<project_id>/workspace/cases/<case_id>/derive", methods=["POST"])
+@login_required
+def derive_case(project_id, case_id):
+    """Create a new active Case derived from an archived one - see
+    CaseWorkspaceStore.derive_case_from_archive. Owner or admin-role only,
+    same narrow authority pattern as archive_case; the machine never
+    performs this. `case_id` here is the ARCHIVED source Case; on success
+    the user is redirected into the newly created derived Case, not the
+    archived one, since that new Case is where continued work happens."""
+    _, store, workspace = _load_workspace_or_404(project_id)
+
+    try:
+        new_case = store.derive_case_from_archive(
+            workspace, archived_case_id=case_id, actor=_reviewer(),
+            actor_role=session.get("role"), governance_log=_log(),
+        )
+    except CaseWorkspaceError as exc:
+        flash(str(exc), "error")
+        return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
+
+    flash("New active Case derived from archive.", "success")
+    return redirect(url_for("workspace.show_workspace", project_id=project_id, case=new_case["id"]))
+
+
 @workspace_bp.route("/projects/<project_id>/workspace/cases/<case_id>/sources", methods=["POST"])
 @login_required
 def add_drawing_source(project_id, case_id):

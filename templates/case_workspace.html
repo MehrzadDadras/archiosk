@@ -79,6 +79,10 @@
                 <form method="post" action="{{ url_for('workspace.archive_case', project_id=project_id, case_id=case.id) }}">
                     <button type="submit" class="link-button">Archive</button>
                 </form>
+                {% elif case.status == 'archived' and (case.created_by == session.username or session.role == 'admin') %}
+                <form method="post" action="{{ url_for('workspace.derive_case', project_id=project_id, case_id=case.id) }}">
+                    <button type="submit" class="link-button">Derive Active Case</button>
+                </form>
                 {% endif %}
             </li>
             {% else %}
