@@ -77,6 +77,38 @@ REVIEW_STATE_UNVERIFIED = "Unverified"
 REVIEW_STATE_VERIFIED = "Verified"
 REVIEW_STATE_NOT_VERIFIED = "Not Verified"
 
+# -- Requirement Adjudication vocabulary (Prompt 19 / Foundation Batch K) ---
+# The human REQUIREMENT-level compliance record - a distinct question from
+# Disposition above ("what happens to this Finding next") and from
+# Requirement.status below (existence/lifecycle only, hard-walled off from
+# compliance language by _REQUIREMENT_STATUS_COMPLIANCE_DENYLIST). A
+# deliberately small, closed vocabulary - not every candidate outcome word
+# gets its own state: "Needs Evidence" is omitted (it already exists as a
+# ReviewerValidation state on the underlying Finding; an adjudicator who
+# lacks evidence simply does not adjudicate yet) and "Superseded" is
+# omitted (already carried by Requirement.status/Supersession lineage - a
+# new adjudication is recorded against the successor Requirement instead
+# of inventing a second way to say the same thing here).
+REQUIREMENT_ADJUDICATION_SATISFIED = "Satisfied"
+REQUIREMENT_ADJUDICATION_PARTIALLY_SATISFIED = "Partially Satisfied"
+REQUIREMENT_ADJUDICATION_NOT_SATISFIED = "Not Satisfied"
+REQUIREMENT_ADJUDICATION_NOT_APPLICABLE = "Not Applicable"
+REQUIREMENT_ADJUDICATION_ACCEPTED_ALTERNATIVE = "Accepted Alternative"
+
+REQUIREMENT_ADJUDICATION_OUTCOMES = (
+    REQUIREMENT_ADJUDICATION_SATISFIED,
+    REQUIREMENT_ADJUDICATION_PARTIALLY_SATISFIED,
+    REQUIREMENT_ADJUDICATION_NOT_SATISFIED,
+    REQUIREMENT_ADJUDICATION_NOT_APPLICABLE,
+    REQUIREMENT_ADJUDICATION_ACCEPTED_ALTERNATIVE,
+)
+
+# Derived-only (never stored) - see requirement_adjudication_state below.
+# Mirrors REVIEW_STATE_UNVERIFIED's own derived-absence pattern: a
+# Requirement with no RequirementAdjudication record on file has no row
+# saying so, just this computed answer.
+REQUIREMENT_ADJUDICATION_STATE_NOT_YET_ASSESSED = "Not Yet Assessed"
+
 RFI_STATUS_DRAFT = "draft"
 RFI_STATUS_ISSUED = "issued"
 
@@ -181,6 +213,7 @@ OBJECT_KIND_TABLE = "table"  # Batch J - structured tabular evidence
 OBJECT_KIND_TABLE_ROW = "table_row"  # Batch J
 OBJECT_KIND_TABLE_CELL = "table_cell"  # Batch J
 OBJECT_KIND_SOURCE_REFERENCE = "source_reference"  # Batch J
+OBJECT_KIND_REQUIREMENT_ADJUDICATION = "requirement_adjudication"  # Batch K
 
 KNOWN_OBJECT_KINDS = (
     OBJECT_KIND_SOURCE,
@@ -206,6 +239,7 @@ KNOWN_OBJECT_KINDS = (
     OBJECT_KIND_TABLE_ROW,
     OBJECT_KIND_TABLE_CELL,
     OBJECT_KIND_SOURCE_REFERENCE,
+    OBJECT_KIND_REQUIREMENT_ADJUDICATION,
 )
 
 # -- Typed relationship vocabulary (Prompt 8 #1) -----------------------------
@@ -820,6 +854,54 @@ class Disposition:
     disposition: str  # DISPOSITIONS
     reviewer: str
     recorded_at: str
+
+
+@dataclass
+class RequirementAdjudication:
+    """
+    Foundation Batch K (Prompt 19): the human REQUIREMENT-level compliance
+    record - a distinct question from Disposition's "what happens to this
+    Finding next" above. Registering a Requirement (see Requirement) makes
+    no claim about whether it is satisfied; this is the first-class record
+    of a human's answer to that separate question, at the Requirement's
+    own grain rather than any single Finding's.
+
+    Deliberately many-to-many with evidence rather than 1:1 with a Finding
+    the way Disposition/ReviewerValidation are: `evidence_finding_ids`/
+    `evidence_relationship_ids` may be EMPTY (e.g. "Not Applicable" needs
+    no supporting Finding at all) or may reference several Findings and
+    Relationships spanning several Analyses. A Requirement never requires
+    exactly one Finding to exist (see Requirement's own docstring) - this
+    record preserves that same independence for its own outcome.
+
+    Append-only like ReviewerValidation/Disposition (see
+    record_requirement_adjudication) - a later adjudication supersedes an
+    earlier one in EFFECT (see latest_requirement_adjudication_for /
+    requirement_adjudication_state) but never overwrites or deletes it,
+    per ADR-032-R06's human-adjudication-as-evidence principle.
+
+    `outcome` is a CLOSED vocabulary (REQUIREMENT_ADJUDICATION_OUTCOMES),
+    deliberately narrower than every candidate word considered (see the
+    vocabulary comment above) - "Needs Evidence" and "Not Yet Assessed"
+    are never stored values here, only ever the DERIVED absence of any
+    record at all (requirement_adjudication_state): an un-adjudicated
+    Requirement has no row, not a placeholder row saying so.
+
+    Never touches `Requirement.status` (see set_requirement_status's own
+    compliance denylist) - governed Requirement lifecycle state and
+    adjudicated compliance outcome remain two separate, never-merged
+    layers.
+    """
+
+    id: str
+    project_id: str
+    requirement_id: str
+    outcome: str  # REQUIREMENT_ADJUDICATION_OUTCOMES
+    adjudicator: str
+    adjudicated_at: str
+    reasoning: str
+    evidence_finding_ids: list[str] = field(default_factory=list)
+    evidence_relationship_ids: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -1690,6 +1772,7 @@ class ProjectWorkspace:
     tables: list[dict] = field(default_factory=list)
     table_rows: list[dict] = field(default_factory=list)
     source_references: list[dict] = field(default_factory=list)
+    requirement_adjudications: list[dict] = field(default_factory=list)
 
 
 def _snapshot_reference_lists(workspace: ProjectWorkspace) -> dict:
@@ -3002,6 +3085,94 @@ class CaseWorkspaceStore:
         requirement["status"] = normalize_open_world_value(status, KNOWN_REQUIREMENT_STATUSES)
         self.save(workspace)
         return requirement
+
+    # -- requirement adjudication (Prompt 19 / Foundation Batch K) ------------------
+
+    def record_requirement_adjudication(
+        self,
+        workspace: ProjectWorkspace,
+        requirement_id: str,
+        outcome: str,
+        adjudicator: str,
+        reasoning: str,
+        evidence_finding_ids: Optional[list[str]] = None,
+        evidence_relationship_ids: Optional[list[str]] = None,
+        governance_log: Optional[GovernanceLog] = None,
+    ) -> dict:
+        """
+        Records a human's Requirement-level compliance determination.
+        Append-only - always creates a new record; see
+        latest_requirement_adjudication_for/requirement_adjudication_state
+        for the current effective outcome. `reasoning` is required, not
+        optional (ADR-032-R05/R06: reviewer reasoning is preserved as
+        first-class forensic evidence, never just a bare outcome word) -
+        the same honesty-machinery shape as Requirement.registration_
+        method's mandatory, never-defaulted field.
+        """
+        requirement = self._find(workspace.requirements, requirement_id)
+        if requirement is None:
+            raise CaseWorkspaceError(f"Requirement {requirement_id} was not found.")
+
+        if outcome not in REQUIREMENT_ADJUDICATION_OUTCOMES:
+            raise CaseWorkspaceError(
+                f"'{outcome}' is not a recognized Requirement Adjudication outcome. "
+                f"Use one of: {', '.join(REQUIREMENT_ADJUDICATION_OUTCOMES)}."
+            )
+
+        if not reasoning or not reasoning.strip():
+            raise CaseWorkspaceError(
+                "A Requirement Adjudication requires reasoning - the human basis "
+                "for the determination must be recorded, not just its outcome."
+            )
+
+        for finding_id in evidence_finding_ids or []:
+            if self._find(workspace.findings, finding_id) is None:
+                raise CaseWorkspaceError(f"Finding {finding_id} was not found.")
+
+        for relationship_id in evidence_relationship_ids or []:
+            if self._find(workspace.relationships, relationship_id) is None:
+                raise CaseWorkspaceError(f"Relationship {relationship_id} was not found.")
+
+        record = RequirementAdjudication(
+            id=_new_id(),
+            project_id=workspace.project_id,
+            requirement_id=requirement_id,
+            outcome=outcome,
+            adjudicator=adjudicator,
+            adjudicated_at=_now(),
+            reasoning=reasoning,
+            evidence_finding_ids=list(evidence_finding_ids or []),
+            evidence_relationship_ids=list(evidence_relationship_ids or []),
+        )
+        workspace.requirement_adjudications.append(asdict(record))
+        self.save(workspace)
+
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id, event_type="requirement_adjudicated",
+                actor=adjudicator, role="human",
+                payload={
+                    "requirement_adjudication_id": record.id, "requirement_id": requirement_id,
+                    "outcome": outcome,
+                },
+                correlation_id=record.id,
+            )
+        return asdict(record)
+
+    def requirement_adjudications_for(self, workspace: ProjectWorkspace, requirement_id: str) -> list[dict]:
+        return [a for a in workspace.requirement_adjudications if a["requirement_id"] == requirement_id]
+
+    def latest_requirement_adjudication_for(self, workspace: ProjectWorkspace, requirement_id: str) -> Optional[dict]:
+        records = self.requirement_adjudications_for(workspace, requirement_id)
+        return records[-1] if records else None
+
+    def requirement_adjudication_state(self, workspace: ProjectWorkspace, requirement_id: str) -> str:
+        """Derived, never stored - mirrors review_state_for_finding's own
+        derived-absence pattern (Prompt 19 #5)."""
+        latest = self.latest_requirement_adjudication_for(workspace, requirement_id)
+        if latest is None:
+            return REQUIREMENT_ADJUDICATION_STATE_NOT_YET_ASSESSED
+        return latest["outcome"]
 
     def revise_requirement(
         self,
