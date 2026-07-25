@@ -59,7 +59,7 @@ from services.conversation_interpreter import interpret_message
 from services.governance import GovernanceLog
 from services.ingestion import get_registry
 from services.project_clock import open_project
-from services.rfi_export import RFIExportError, build_rfi_docx
+from services.rfi_export import RFIExportError, build_rfi_docx, build_rfi_draft_docx
 from models import User
 
 workspace_bp = Blueprint("workspace", __name__)
@@ -1215,11 +1215,14 @@ def update_rfi_question(project_id, draft_id):
     _, store, workspace = _load_workspace_or_404(project_id)
     case_id = _rfi_draft_case_id(workspace, draft_id)
     _require_visible_case(store, workspace, case_id)
-    draft = next((d for d in workspace.rfi_drafts if d["id"] == draft_id), None)
-    if draft is None:
-        abort(404)
-    draft["question_text"] = request.form.get("question_text") or ""
-    store.save(workspace)
+
+    try:
+        store.update_rfi_draft_question(
+            workspace, draft_id=draft_id, question_text=request.form.get("question_text") or "",
+        )
+    except CaseWorkspaceError as exc:
+        flash(str(exc), "error")
+
     return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
 
 
@@ -1263,6 +1266,46 @@ def issue_rfi_draft(project_id, draft_id):
 
     flash("RFI issued.", "success")
     return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
+
+
+@workspace_bp.route("/projects/<project_id>/workspace/rfi-drafts/<draft_id>/export")
+@login_required
+def export_rfi_draft(project_id, draft_id):
+    """
+    Downloads one governed per-Finding RFIDraft as a professional .docx -
+    see services.rfi_export.build_rfi_draft_docx. Deliberately NOT the
+    same exporter as the project-wide consistency-flag RFI
+    (workspace.export_rfi) - that mechanism has nothing to do with any
+    specific Finding/Case, and feeding a governed RFIDraft through it
+    would misrepresent what the document actually is.
+
+    A read operation, not a write: the draft's real case_id is derived
+    server-side (never a client-supplied value) and checked against
+    visible_cases_for exactly like every other hardened Case-scoped
+    route, but _require_case_not_archived is deliberately NOT called
+    here - an already-issued historical RFI belonging to an archived
+    Case remains readable/exportable wherever the requester is already
+    authorized to read that Case (Archive is terminal for new
+    contributions, not for reading what already happened). Export can
+    never broaden visibility: an invisible Case's draft 404s exactly
+    like any other invisible-Case object.
+    """
+    _, store, workspace = _load_workspace_or_404(project_id)
+    case_id = _rfi_draft_case_id(workspace, draft_id)
+    _require_visible_case(store, workspace, case_id)
+
+    draft = next((d for d in workspace.rfi_drafts if d["id"] == draft_id), None)
+    if draft is None:
+        abort(404)
+
+    buffer = build_rfi_draft_docx(draft)
+    status_label = "issued" if draft["status"] == "issued" else "draft"
+    return send_file(
+        buffer,
+        mimetype="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        as_attachment=True,
+        download_name=f"RFI-{draft['id'][:8]}-{status_label}.docx",
+    )
 
 
 @workspace_bp.route("/projects/<project_id>/workspace/artifacts/<artifact_id>/image")

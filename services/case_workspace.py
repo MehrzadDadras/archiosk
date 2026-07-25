@@ -5511,6 +5511,25 @@ class CaseWorkspaceStore:
     def rfi_drafts_for_case(self, workspace: ProjectWorkspace, case_id: str) -> list[dict]:
         return [d for d in workspace.rfi_drafts if d["case_id"] == case_id]
 
+    def update_rfi_draft_question(self, workspace: ProjectWorkspace, draft_id: str, question_text: str) -> dict:
+        """
+        Editing a draft's own question text - previously inlined directly
+        in routes/workspace.py's update_rfi_question route (a mutation
+        bypassing the store layer entirely), which meant it was the one
+        RFIDraft write path that never called _require_case_not_archived.
+        Moved here to close that gap using the same guard every other
+        governed write already goes through, not a route-level
+        workaround.
+        """
+        draft = self._find(workspace.rfi_drafts, draft_id)
+        if draft is None:
+            raise CaseWorkspaceError(f"RFI draft {draft_id} was not found.")
+        self._require_case_not_archived(workspace, draft.get("case_id"))
+
+        draft["question_text"] = question_text
+        self.save(workspace)
+        return draft
+
     def issue_rfi_draft(self, workspace: ProjectWorkspace, draft_id: str, issued_by: str) -> dict:
         draft = self._find(workspace.rfi_drafts, draft_id)
         if draft is None:

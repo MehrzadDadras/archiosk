@@ -544,8 +544,10 @@
                         <input type="hidden" name="case_id" value="{{ active_case.id }}">
                         <button type="submit" class="apply-button">Issue RFI</button>
                     </form>
+                    <a class="btn btn-ghost" href="{{ url_for('workspace.export_rfi_draft', project_id=project_id, draft_id=draft.id) }}">Download Draft RFI (.docx)</a>
                     {% else %}
                     <p class="consistency-clean">Issued {{ draft.issued_at }} by {{ draft.issued_by }}.</p>
+                    <a class="btn btn-ghost" href="{{ url_for('workspace.export_rfi_draft', project_id=project_id, draft_id=draft.id) }}">Download Issued RFI (.docx)</a>
                     {% endif %}
                 </div>
                 {% endfor %}
