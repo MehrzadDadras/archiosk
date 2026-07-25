@@ -32,6 +32,7 @@ Finding. Apply requires a Disposition of "Confirmed" already on record.
 from __future__ import annotations
 
 import json
+import re
 import threading
 import uuid
 from dataclasses import asdict, dataclass, field
@@ -176,6 +177,10 @@ OBJECT_KIND_PROJECT = "project"  # Prompt 12 - the whole-project scope; scope_id
 OBJECT_KIND_EXPECTED_INFORMATION_PROFILE = "expected_information_profile"  # Prompt 12
 OBJECT_KIND_MATURITY_RECORD = "maturity_record"  # Prompt 12
 OBJECT_KIND_SNAPSHOT = "snapshot"  # Batch G - a frozen reference to Project state itself
+OBJECT_KIND_TABLE = "table"  # Batch J - structured tabular evidence
+OBJECT_KIND_TABLE_ROW = "table_row"  # Batch J
+OBJECT_KIND_TABLE_CELL = "table_cell"  # Batch J
+OBJECT_KIND_SOURCE_REFERENCE = "source_reference"  # Batch J
 
 KNOWN_OBJECT_KINDS = (
     OBJECT_KIND_SOURCE,
@@ -197,6 +202,10 @@ KNOWN_OBJECT_KINDS = (
     OBJECT_KIND_EXPECTED_INFORMATION_PROFILE,
     OBJECT_KIND_MATURITY_RECORD,
     OBJECT_KIND_SNAPSHOT,
+    OBJECT_KIND_TABLE,
+    OBJECT_KIND_TABLE_ROW,
+    OBJECT_KIND_TABLE_CELL,
+    OBJECT_KIND_SOURCE_REFERENCE,
 )
 
 # -- Typed relationship vocabulary (Prompt 8 #1) -----------------------------
@@ -565,6 +574,39 @@ SUFFICIENCY_INACCESSIBLE = "inaccessible"
 SUFFICIENCY_AUTHORITY_OR_VERSION_UNCERTAIN = "authority_or_version_uncertain"
 SUFFICIENCY_SUPERSEDED = "superseded"
 SUFFICIENCY_CONFLICTING = "conflicting_current_information"
+
+# -- Structured Tabular Evidence / Source Reference vocabulary (Prompt 18 / Batch J) --
+# Prompt 18 #14: the KIND of thing a source reference names (a Section, a
+# Figure, a Row, ...) - open-world, since a different document could use
+# "Schedule"/"Drawing"/"Annex"/etc, none of which this codebase should have
+# to know about in advance to represent honestly.
+REFERENCE_TYPE_SECTION = "section"
+REFERENCE_TYPE_CLAUSE = "clause"
+REFERENCE_TYPE_FIGURE = "figure"
+REFERENCE_TYPE_TABLE = "table"
+REFERENCE_TYPE_TABLE_ROW = "table_row"
+REFERENCE_TYPE_APPENDIX = "appendix"
+
+KNOWN_REFERENCE_TYPES = (
+    REFERENCE_TYPE_SECTION,
+    REFERENCE_TYPE_CLAUSE,
+    REFERENCE_TYPE_FIGURE,
+    REFERENCE_TYPE_TABLE,
+    REFERENCE_TYPE_TABLE_ROW,
+    REFERENCE_TYPE_APPENDIX,
+)
+
+# Prompt 18 #18: the RESOLVER's own closed output vocabulary - like
+# SUFFICIENCY_*/TEMPORAL_CONDITION_* before it, never open-world, never
+# supplied by a caller. See resolve_source_reference_candidate below.
+RESOLUTION_STATUS_RESOLVED_EXACT = "resolved_exact"
+RESOLUTION_STATUS_RESOLVED_RANGE = "resolved_range"
+RESOLUTION_STATUS_RESOLVED_MULTIPLE = "resolved_multiple"
+RESOLUTION_STATUS_AMBIGUOUS = "ambiguous"
+RESOLUTION_STATUS_TARGET_NOT_FOUND = "target_not_found"
+RESOLUTION_STATUS_UNSUPPORTED_REFERENCE_TYPE = "unsupported_reference_type"
+RESOLUTION_STATUS_PARTIALLY_RESOLVED = "partially_resolved"
+RESOLUTION_STATUS_UNKNOWN = "unknown"
 
 
 class CaseWorkspaceError(Exception):
@@ -1439,6 +1481,130 @@ class CaseRecord:
 
 
 @dataclass
+class Table:
+    """
+    Prompt 18 / Batch J: structured tabular evidence, first-class rather
+    than something every consumer re-derives by reaching into
+    ParsedDocument.tables independently. A Table is the governed record
+    of "this table exists at this location in this Source" - its rows
+    live in their own list (see TableRow) linked by `id`, the same
+    FK-not-nesting pattern already used for ReviewThread/ReviewMessage
+    rather than a new convention.
+
+    `source_location` is a physical position within the Source (line
+    range) - not a resolved SourceReference, since a Table describing
+    where it physically sits is a different fact from something ELSE
+    citing it (see SourceReference below). `section_context`, when
+    determinable, is the nearest preceding heading - a convenience, not
+    a guarantee (left None rather than guessed when no heading precedes
+    it in the extracted text).
+
+    Table ordinal (creation order) is NOT treated as permanent identity
+    (Prompt 18 #4) - `id` is the only stable identity; `source_location`
+    is the strongest available position reference, kept alongside it.
+    """
+
+    id: str
+    project_id: str
+    source_id: str
+    headers: list[str]
+    source_location: dict  # {"start_line": int, "end_line": int}
+    created_at: str
+    created_by: str
+    title: Optional[str] = None
+    section_context: Optional[str] = None
+    extraction_engine: Optional[str] = None
+    extraction_version: Optional[str] = None
+
+
+@dataclass
+class TableRow:
+    """
+    Prompt 18 #5: a Table's row, individually referencable by `id` -
+    "Appendix OPR-1, Row 20" becomes a real record, not merely
+    "somewhere in the Functional Program table."
+
+    `cells` are embedded (not a separate top-level list, unlike Table/
+    TableRow themselves) - a cell only ever makes sense in the context of
+    its own row, the same reasoning already applied to Anchor (embedded
+    in ReviewThread) and ExpectationItem (embedded in
+    ExpectedInformationProfile). Each cell dict still carries its own
+    stable `id` (Prompt 18 #3: "another object can reliably point to...
+    this specific cell/value") - see resolve_table_cell below for how a
+    Relationship can address one directly despite the embedding.
+
+    Each cell dict holds: {"id", "header", "raw_value", "parsed_value",
+    "qualifier", "unit"}. `raw_value` is NEVER discarded when a
+    `parsed_value` is derived (Prompt 18 #6) - both are always present.
+    `qualifier` preserves recognized non-numeric placeholders ("—", "TBD",
+    "approx.", "included in subtotal", etc, Prompt 18 #7) rather than
+    coercing them - a blank cell or em dash is never silently treated as
+    zero.
+
+    `source_row_identifier` is the row's OWN stated identity where the
+    table provides one (e.g. a "#" column's value, "20") - kept distinct
+    from `row_index` (structural position, 0-based), since a table could
+    in principle omit or renumber its own identifier column.
+    """
+
+    id: str
+    table_id: str
+    project_id: str
+    row_index: int
+    cells: list[dict]
+    created_at: str
+    source_row_identifier: Optional[str] = None
+    source_location: Optional[dict] = None  # {"line": int} where determinable
+
+
+@dataclass
+class SourceReference:
+    """
+    Prompt 18 #14/#23: a governed record of an EXPLICIT citation found in
+    a Source's own text ("see Section 14", "Sections 10 through 14",
+    "Figure OPR-2.1") - representation of the citation ITSELF, distinct
+    from any richer semantic relationship (depends_on/contradicts/
+    implements/etc) analysis might later assign (Prompt 18 #15). A
+    Relationship may be created FROM a resolved SourceReference, but a
+    SourceReference is not itself a Relationship - it is closer to
+    Requirement (source-stated meaning) than to an analysis conclusion.
+
+    `reference_text` is the ORIGINAL phrasing verbatim (Prompt 18 #17) -
+    never lost even when `resolution_status` is anything other than a
+    clean single resolution. `reference_type` is open-world
+    (KNOWN_REFERENCE_TYPES). `resolved_target_ids` may hold zero, one, or
+    many ids depending on `resolution_status` (a CLOSED, evaluator-owned
+    vocabulary - see RESOLUTION_STATUS_*), always reflecting only targets
+    actually confirmed to exist (Prompt 18 #16) - a syntactically-valid
+    range is never expanded into ids that don't correspond to anything
+    real in the current governed state.
+
+    `origin_context` names where the reference was found - a clause
+    (`{"location_type": "clause", "section": ...}`, reusing the existing
+    Requirement.source_location shape rather than inventing a new one) or
+    a table row (`{"location_type": "table_row", "table_row_id": ...}`).
+    No new first-class Clause object was created for this (Prompt 18
+    #20) - Markdown extraction's own section numbering is already a
+    sufficient, resolvable target.
+    """
+
+    id: str
+    project_id: str
+    source_id: str
+    reference_text: str
+    reference_type: str  # open-world, KNOWN_REFERENCE_TYPES
+    resolution_status: str  # RESOLUTION_STATUS_* (closed)
+    origin_context: dict
+    created_at: str
+    created_by: str
+    resolved_target_type: Optional[str] = None  # open-world object kind, when resolved
+    resolved_target_ids: list[str] = field(default_factory=list)
+    resolution_method: Optional[str] = None
+    confidence: Optional[float] = None
+    extractor_version: Optional[str] = None
+
+
+@dataclass
 class Snapshot:
     """
     Prompt 6 L / Prompt 14 O-AC: a governed, IMMUTABLE reference to what
@@ -1521,6 +1687,9 @@ class ProjectWorkspace:
     maturity_records: list[dict] = field(default_factory=list)
     requirements: list[dict] = field(default_factory=list)
     snapshots: list[dict] = field(default_factory=list)
+    tables: list[dict] = field(default_factory=list)
+    table_rows: list[dict] = field(default_factory=list)
+    source_references: list[dict] = field(default_factory=list)
 
 
 def _snapshot_reference_lists(workspace: ProjectWorkspace) -> dict:
@@ -1579,6 +1748,419 @@ def compare_snapshot_reference_lists(snapshot_a: dict, snapshot_b: dict) -> dict
             "removed_in_b": sorted(ids_a - ids_b),
         }
     return comparison
+
+
+# -- Structured Tabular Evidence: pure helpers (Prompt 18 / Batch J) ---------
+# Table/TableRow REGISTRATION reads a ParsedDocument.tables entry (raw
+# headers/rows-of-strings, as BHiveParser already produces - Batch H) and
+# turns it into governed evidence. These pure functions do the actual
+# cell-level interpretation; register_table_evidence (on the store) does
+# the persistence.
+
+# Recognized non-numeric placeholders (Prompt 18 #7) - preserved as a
+# QUALIFIER, never coerced into 0 or any other numeric default. Matched
+# case-insensitively against the FULL stripped cell text.
+_CELL_QUALIFIER_TOKENS = (
+    "tbd", "n/a", "not applicable", "approx.", "approximate", "minimum",
+    "maximum", "nominal", "if required", "included in subtotal",
+)
+_CELL_BLANK_MARKERS = ("", "—", "-", "–")
+
+
+def parse_table_cell_value(raw: str) -> tuple[Optional[float], Optional[str]]:
+    """
+    Returns (parsed_value, qualifier) for one raw cell string - never
+    discards `raw` itself (the caller keeps it separately). A blank cell
+    or em dash becomes qualifier="blank"/"em_dash" with parsed_value=None,
+    NEVER parsed_value=0 (Prompt 18 #7's central rule). A recognized
+    qualifier PHRASE (whole-cell match) is preserved as the qualifier
+    string itself. Free descriptive text that is neither a clean number
+    nor a recognized qualifier is honestly left as (None, None) - the
+    `raw` value is still there for a human to read; this function does
+    not force everything into one of its two output buckets.
+    """
+    stripped = raw.strip()
+    if stripped in _CELL_BLANK_MARKERS:
+        return None, ("blank" if stripped == "" else "em_dash")
+
+    lowered = stripped.lower().rstrip(".")
+    for token in _CELL_QUALIFIER_TOKENS:
+        if lowered == token.rstrip("."):
+            return None, stripped
+
+    numeric_candidate = stripped.replace(",", "")
+    try:
+        return float(numeric_candidate), None
+    except ValueError:
+        return None, None
+
+
+def extract_unit_from_header(header: str) -> Optional[str]:
+    """
+    Prompt 18 #6: a unit is only ever inherited from the COLUMN HEADER's
+    own explicit parenthetical (e.g. "Net Area (m²) each" -> "m²") - never
+    guessed or assumed from cell content. Returns None when the header
+    carries no such hint.
+    """
+    m = re.search(r"\(([^)]+)\)", header)
+    if not m:
+        return None
+    candidate = m.group(1).strip()
+    # A parenthetical like "this document" or "Draft" is not a unit -
+    # only accept short, unit-shaped tokens (no spaces, or a single
+    # qualifying word) to avoid misreading an unrelated parenthetical.
+    if len(candidate) <= 6 and not candidate.lower() in ("each",):
+        return candidate
+    return None
+
+
+_HEADING_LINE_RE = re.compile(r"^#{1,6}\s+(.+)$")
+_BOLD_CAPTION_RE = re.compile(r"^\*\*([^*]+)\*\*$")
+
+
+def find_preceding_heading(raw_lines: list[str], before_line_1indexed: int) -> Optional[str]:
+    """
+    Prompt 18 #4: a Table's `section_context` - the nearest markdown ATX
+    heading (or bold standalone caption line) preceding the table, if
+    any. Scans backward from the line just above the table's start.
+    Returns None (never guessed) if nothing heading-shaped precedes it
+    within the document.
+    """
+    for i in range(before_line_1indexed - 2, -1, -1):
+        line = raw_lines[i].strip()
+        if not line:
+            continue
+        m = _HEADING_LINE_RE.match(line)
+        if m:
+            return m.group(1).strip()
+        m = _BOLD_CAPTION_RE.match(line)
+        if m:
+            return m.group(1).strip()
+        # Stop at the first non-blank, non-heading, non-caption line -
+        # "nearest preceding heading" means immediately above the table's
+        # own lead-in, not the closest heading anywhere earlier in the
+        # document.
+        return None
+    return None
+
+
+def reconcile_table_evidence(table: dict, rows: list[dict]) -> Optional[dict]:
+    """
+    Prompt 18 #12/#28: the production version of generic grouped-quantity
+    table reconciliation - consumes real Table/TableRow EVIDENCE (cells
+    with an already-parsed `parsed_value` and their own `header`), not a
+    raw ParsedDocument.tables dict. Column identification is still by
+    HEADER KEYWORD (group/qty/each/subtotal), not fixed index - the same
+    generic approach proven in the Prompt 17 experiment, now living in
+    production so no future caller needs to reimplement it against
+    Markdown directly.
+
+    Returns None if `table` doesn't have the required column shape - an
+    honest "not applicable", not a forced computation.
+
+    This function does NOT decide what a mismatch MEANS (Prompt 18 #13):
+    it reports numbers. Whether that constitutes a "source internal
+    inconsistency" worth a Finding/ReviewThread is a decision for the
+    caller (see the completion report for how this is used against
+    Design-Builder-compliance concerns specifically NOT being implied
+    here).
+    """
+    headers_lower = [h.lower() for h in table["headers"]]
+
+    def find_col_index(*keywords):
+        for i, h in enumerate(headers_lower):
+            if all(kw in h for kw in keywords):
+                return i
+        return None
+
+    group_col = find_col_index("group")
+    qty_col = find_col_index("qty")
+    unit_value_col = next((i for i, h in enumerate(headers_lower) if "area" in h and "each" in h), None)
+    subtotal_col = find_col_index("subtotal")
+    if None in (group_col, qty_col, unit_value_col, subtotal_col):
+        return None
+
+    group_header = table["headers"][group_col]
+    qty_header = table["headers"][qty_col]
+    unit_value_header = table["headers"][unit_value_col]
+    subtotal_header = table["headers"][subtotal_col]
+
+    def cell_value(row: dict, header: str) -> Optional[float]:
+        for cell in row["cells"]:
+            if cell["header"] == header:
+                return cell["parsed_value"]
+        return None
+
+    def group_name(row: dict) -> Optional[str]:
+        for cell in row["cells"]:
+            if cell["header"] == group_header:
+                return cell["raw_value"].strip()
+        return None
+
+    groups: list[dict] = []
+    current_group_name = None
+    current_rows: list[dict] = []
+
+    def flush():
+        if current_group_name is None:
+            return
+        computed = 0.0
+        for row in current_rows:
+            qty = cell_value(row, qty_header) or 0.0
+            unit_value = cell_value(row, unit_value_header) or 0.0
+            computed += qty * unit_value
+        stated_values = [cell_value(row, subtotal_header) for row in current_rows]
+        stated_values = [v for v in stated_values if v is not None]
+        stated = stated_values[0] if stated_values else None
+        groups.append({
+            "group": current_group_name,
+            "computed_from_line_items": computed,
+            "stated_subtotal": stated,
+            # None (not False) when there is no stated subtotal to compare
+            # against at all - "nothing to compare" is a different fact
+            # from "compared and it differs", and collapsing them would
+            # misreport an ordinary missing-subtotal group as a mismatch.
+            "matches": (abs(stated - computed) < 0.001) if stated is not None else None,
+            "row_count": len(current_rows),
+        })
+
+    for row in rows:
+        name = group_name(row)
+        if name != current_group_name:
+            flush()
+            current_group_name = name
+            current_rows = []
+        current_rows.append(row)
+    flush()
+
+    total_line_items = sum(
+        (cell_value(row, qty_header) or 0.0) * (cell_value(row, unit_value_header) or 0.0)
+        for row in rows
+    )
+    total_stated_subtotals = sum(g["stated_subtotal"] for g in groups if g["stated_subtotal"] is not None)
+
+    return {
+        "groups": groups,
+        "total_from_line_items": total_line_items,
+        "total_from_stated_subtotals": total_stated_subtotals,
+        "mismatched_group_count": sum(1 for g in groups if g["stated_subtotal"] is not None and not g["matches"]),
+        "group_count": len(groups),
+    }
+
+
+# -- Generic Source-Reference parsing / resolution (Prompt 18 / Batch J) ----
+# Two-phase, mirroring evaluate_information_sufficiency's shape: a pure
+# SYNTACTIC parse (what does the text say, structurally) followed by a
+# separate RESOLUTION step against caller-supplied known targets (does
+# what it says actually exist) - never conflated, so a reference can be
+# syntactically well-formed yet honestly unresolved.
+
+_REF_NUMERIC_TOKEN = r"\d+(?:\.\d+)?"
+_REF_WORD_TOKEN = r"(?=[\w\-.]*\d)[\w\-.]+"  # must contain a digit; dots allowed (e.g. "OPR-2.1")
+_REF_CONNECTOR = r"(?:and|through|to)"
+_REF_SEP = r"(?:[,\s]+|[-–—])"
+
+
+def _reference_tail_group(token_pattern: str) -> str:
+    unit = f"(?:{token_pattern}|{_REF_CONNECTOR})"
+    return r"(" + unit + r"(?:" + _REF_SEP + unit + r")*)"
+
+
+_REFERENCE_PATTERNS = (
+    (REFERENCE_TYPE_SECTION, re.compile(r"\bSections?\s+" + _reference_tail_group(_REF_NUMERIC_TOKEN), re.IGNORECASE)),
+    (REFERENCE_TYPE_FIGURE, re.compile(r"\bFigures?\s+" + _reference_tail_group(_REF_WORD_TOKEN), re.IGNORECASE)),
+    (REFERENCE_TYPE_TABLE, re.compile(r"\bTables?\s+" + _reference_tail_group(_REF_WORD_TOKEN), re.IGNORECASE)),
+    (REFERENCE_TYPE_APPENDIX, re.compile(r"\bAppendix\s+" + _reference_tail_group(_REF_WORD_TOKEN), re.IGNORECASE)),
+)
+_TABLE_ROW_COMPOUND_RE = re.compile(
+    r"\b((?:Appendix|Table)\s+[\w\-]+),?\s+Rows?\s+" + _reference_tail_group(_REF_NUMERIC_TOKEN), re.IGNORECASE
+)
+_ROW_ONLY_RE = re.compile(r"\bRows?\s+" + _reference_tail_group(_REF_NUMERIC_TOKEN), re.IGNORECASE)
+
+_NUMERIC_RANGE_RE = re.compile(r"^(\d+(?:\.\d+)?)\s*(?:through|to|[-–—])\s*(\d+(?:\.\d+)?)$", re.IGNORECASE)
+# Deliberately excludes a bare hyphen (unlike the numeric range above) - a
+# word-shaped identifier like "OPR-2.1" contains a hyphen that is part of
+# the identifier itself, not a range connector, so only "through"/"to"/
+# en-dash/em-dash (never bare "-") are treated as connectors between two
+# WORD-shaped tokens.
+_WORD_RANGE_CONNECTOR_RE = re.compile(r"\s+(?:through|to)\s+|\s*[–—]\s*", re.IGNORECASE)
+_LIST_SPLIT_RE = re.compile(r",\s*(?:and\s+)?|\s+and\s+", re.IGNORECASE)
+
+
+def _expand_numeric_range(start: str, end: str) -> Optional[list[str]]:
+    """
+    Arithmetic expansion ONLY where safe and unambiguous: both endpoints
+    bare integers ("10".."14"), or both sharing the same major part
+    before a single decimal point ("4.1".."4.6" -> 4.1..4.6). Returns
+    None (never a guess) for anything else - e.g. differently-shaped
+    endpoints, or a minor part that isn't a clean ascending integer run.
+    """
+    if start.isdigit() and end.isdigit():
+        lo, hi = int(start), int(end)
+        if lo <= hi <= lo + 100:
+            return [str(n) for n in range(lo, hi + 1)]
+        return None
+
+    start_parts, end_parts = start.split("."), end.split(".")
+    if len(start_parts) == 2 and len(end_parts) == 2 and start_parts[0] == end_parts[0]:
+        major = start_parts[0]
+        if start_parts[1].isdigit() and end_parts[1].isdigit():
+            lo, hi = int(start_parts[1]), int(end_parts[1])
+            if lo <= hi <= lo + 100:
+                return [f"{major}.{n}" for n in range(lo, hi + 1)]
+    return None
+
+
+def _parse_reference_tail(tail: str) -> tuple[list[str], str]:
+    """
+    Parses the text AFTER a reference keyword ("Section(s)", "Figure(s)",
+    ...) into a list of individual target strings plus a syntactic-form
+    tag ("single"/"range"/"list"/"ambiguous"). Purely syntactic - does
+    not check whether any target actually exists.
+    """
+    def _clean(token: str) -> str:
+        return token.strip().rstrip(".,;")
+
+    tail = _clean(tail)
+
+    m = _NUMERIC_RANGE_RE.match(tail)
+    if m:
+        expanded = _expand_numeric_range(m.group(1), m.group(2))
+        if expanded is not None:
+            return expanded, "range"
+        return [m.group(1), m.group(2)], "ambiguous"
+
+    range_parts = _WORD_RANGE_CONNECTOR_RE.split(tail)
+    if len(range_parts) == 2:
+        start, end = _clean(range_parts[0]), _clean(range_parts[1])
+        expanded = _expand_numeric_range(start, end)
+        if expanded is not None:
+            return expanded, "range"
+        return [start, end], "ambiguous"
+
+    if "," in tail or re.search(r"\band\b", tail, re.IGNORECASE):
+        items = [_clean(p) for p in _LIST_SPLIT_RE.split(tail) if _clean(p)]
+        if len(items) > 1:
+            return items, "list"
+
+    return [tail], "single"
+
+
+def parse_source_reference_text(text: str) -> list[dict]:
+    """
+    Prompt 18 #14/#16/#17: finds every explicit reference mention in
+    `text` (a clause's own sentence, a table-row Note, etc) and returns
+    one candidate dict per mention: {"reference_text" (verbatim matched
+    span), "reference_type" (open-world), "candidate_targets" (syntactic
+    expansion - NOT yet existence-checked), "syntactic_form"}. A single
+    piece of text may yield multiple candidates (e.g. one sentence citing
+    both a Section and a Figure).
+
+    Deliberately open-world at the PATTERN level too (Prompt 18 #14): new
+    reference keywords are not exhaustively enumerable, so this is a
+    reasonably-generic set of common document-part keywords
+    (Section/Figure/Table/Appendix/Row), not a claim that every possible
+    citation phrasing is covered.
+    """
+    candidates: list[dict] = []
+    consumed_spans: list[tuple[int, int]] = []
+
+    for m in _TABLE_ROW_COMPOUND_RE.finditer(text):
+        container, row_tail = m.group(1), m.group(2)
+        targets, form = _parse_reference_tail(row_tail)
+        candidates.append({
+            "reference_text": m.group(0), "reference_type": REFERENCE_TYPE_TABLE_ROW,
+            "candidate_targets": [f"{container} Row {t}" for t in targets], "syntactic_form": form,
+            "container": container,
+        })
+        consumed_spans.append(m.span())
+
+    def _overlaps(span):
+        return any(a <= span[0] < b or a < span[1] <= b for a, b in consumed_spans)
+
+    for m in _ROW_ONLY_RE.finditer(text):
+        if _overlaps(m.span()):
+            continue
+        targets, form = _parse_reference_tail(m.group(1))
+        candidates.append({
+            "reference_text": m.group(0), "reference_type": REFERENCE_TYPE_TABLE_ROW,
+            "candidate_targets": targets, "syntactic_form": form,
+        })
+        consumed_spans.append(m.span())
+
+    for ref_type, pattern in _REFERENCE_PATTERNS:
+        for m in pattern.finditer(text):
+            if _overlaps(m.span()):
+                continue
+            targets, form = _parse_reference_tail(m.group(1))
+            candidates.append({
+                "reference_text": m.group(0), "reference_type": ref_type,
+                "candidate_targets": targets, "syntactic_form": form,
+            })
+            consumed_spans.append(m.span())
+
+    return candidates
+
+
+def resolve_source_reference_candidate(candidate: dict, known_targets: dict) -> dict:
+    """
+    Prompt 18 #16/#18: cross-checks a syntactic candidate's
+    `candidate_targets` against ACTUALLY-KNOWN targets supplied by the
+    caller - `known_targets` is a dict of {reference_type: set-of-known-
+    identifier-strings} (e.g. {"section": {"4.1","4.2",...}, "figure":
+    {"OPR-2.1","OPR-2.2"}}). A syntactically valid range/list is never
+    expanded into ids that don't correspond to anything real in the
+    current governed state - only confirmed targets ever appear in the
+    returned `resolved_targets`.
+
+    Returns {"resolution_status" (RESOLUTION_STATUS_*, closed), "resolved_targets"}.
+    Pure - does no persistence; register_source_reference (on the store)
+    does that using this function's output.
+    """
+    ref_type = candidate["reference_type"]
+    known = known_targets.get(ref_type, set())
+    targets = candidate["candidate_targets"]
+    form = candidate["syntactic_form"]
+
+    if not known and ref_type not in known_targets:
+        return {"resolution_status": RESOLUTION_STATUS_UNSUPPORTED_REFERENCE_TYPE, "resolved_targets": []}
+
+    confirmed = [t for t in targets if t in known]
+
+    if form == "ambiguous":
+        return {
+            "resolution_status": (RESOLUTION_STATUS_PARTIALLY_RESOLVED if confirmed else RESOLUTION_STATUS_AMBIGUOUS),
+            "resolved_targets": confirmed,
+        }
+    if not confirmed:
+        return {"resolution_status": RESOLUTION_STATUS_TARGET_NOT_FOUND, "resolved_targets": []}
+    if len(confirmed) < len(targets):
+        return {"resolution_status": RESOLUTION_STATUS_PARTIALLY_RESOLVED, "resolved_targets": confirmed}
+    if form == "range":
+        return {"resolution_status": RESOLUTION_STATUS_RESOLVED_RANGE, "resolved_targets": confirmed}
+    if form == "list":
+        return {"resolution_status": RESOLUTION_STATUS_RESOLVED_MULTIPLE, "resolved_targets": confirmed}
+    return {"resolution_status": RESOLUTION_STATUS_RESOLVED_EXACT, "resolved_targets": confirmed}
+
+
+def check_citation_against_resolved_references(claimed_target: str, resolved_references: list[dict]) -> str:
+    """
+    Prompt 18 #19: generalizes the ad hoc check the Prompt 17 lab script
+    did by hand (does the text ACTUALLY cite what a Relationship claims
+    it cites) into a reusable function. Given a claimed target (e.g.
+    "4.3") and a list of already-resolved SourceReference dicts (asdict
+    form) derived from the SAME text, returns "VALID" if any resolved
+    reference's `resolved_target_ids` contains the claim, "MISMATCH" if
+    references were resolved but none match (the text cites something
+    else instead), or "UNVERIFIABLE" if no references were resolved at
+    all from that text (nothing to check against, one way or the other).
+    """
+    if not resolved_references:
+        return "UNVERIFIABLE"
+    for ref in resolved_references:
+        if claimed_target in ref.get("resolved_target_ids", []):
+            return "VALID"
+    return "MISMATCH"
 
 
 class CaseWorkspaceStore:
@@ -3633,3 +4215,209 @@ class CaseWorkspaceStore:
         if snap_b is None:
             raise CaseWorkspaceError(f"Snapshot {snapshot_id_b} was not found.")
         return compare_snapshot_reference_lists(snap_a, snap_b)
+
+    # -- Structured Tabular Evidence (Prompt 18 / Batch J) ----------------------
+
+    def register_table_evidence(
+        self,
+        workspace: ProjectWorkspace,
+        source_id: str,
+        parsed_table: dict,
+        raw_lines: Optional[list[str]] = None,
+        extraction_engine: Optional[str] = None,
+        extraction_version: Optional[str] = None,
+        actor: str = "system",
+        governance_log: Optional[GovernanceLog] = None,
+    ) -> tuple[dict, list[dict]]:
+        """
+        Bridges a ParsedDocument.tables entry (BHiveParser's raw headers/
+        rows-of-strings, Batch H) into governed Table/TableRow evidence -
+        the "STRUCTURED TABULAR EVIDENCE" step in Prompt 18's own diagram.
+        Call this once per table worth registering as evidence, rather
+        than every consumer reaching into ParsedDocument.tables on its
+        own (the exact duplication this batch exists to remove).
+
+        `raw_lines`, if given, lets `section_context` be derived from the
+        nearest preceding heading (find_preceding_heading) - optional,
+        since not every caller has the full document text on hand.
+        """
+        source = self._find(workspace.sources, source_id)
+        if source is None:
+            raise CaseWorkspaceError(f"Source {source_id} was not found.")
+
+        section_context = (
+            find_preceding_heading(raw_lines, parsed_table["start_line"]) if raw_lines else None
+        )
+        table = Table(
+            id=_new_id(), project_id=workspace.project_id, source_id=source_id,
+            headers=list(parsed_table["headers"]),
+            source_location={"start_line": parsed_table["start_line"], "end_line": parsed_table["end_line"]},
+            created_at=_now(), created_by=actor,
+            section_context=section_context,
+            extraction_engine=extraction_engine, extraction_version=extraction_version,
+        )
+        workspace.tables.append(asdict(table))
+
+        units_by_header = {h: extract_unit_from_header(h) for h in parsed_table["headers"]}
+        row_dicts: list[dict] = []
+        data_row_start_line = parsed_table["start_line"] + 2  # + header line, + separator line
+
+        # Generic row-identifier column: only the table's OWN first column,
+        # and only if its header looks like a conventional row-number/id
+        # column - never assumed for a table that doesn't actually have one.
+        id_col_index = None
+        if parsed_table["headers"] and parsed_table["headers"][0].strip().lower() in ("#", "no", "no.", "item", "row"):
+            id_col_index = 0
+
+        for row_index, raw_row in enumerate(parsed_table["rows"]):
+            cells = []
+            for col_index, header in enumerate(parsed_table["headers"]):
+                raw_value = raw_row[col_index] if col_index < len(raw_row) else ""
+                parsed_value, qualifier = parse_table_cell_value(raw_value)
+                cells.append({
+                    "id": _new_id(), "header": header, "raw_value": raw_value,
+                    "parsed_value": parsed_value, "qualifier": qualifier,
+                    "unit": units_by_header.get(header),
+                })
+            row = TableRow(
+                id=_new_id(), table_id=table.id, project_id=workspace.project_id,
+                row_index=row_index, cells=cells, created_at=_now(),
+                source_row_identifier=(
+                    raw_row[id_col_index].strip()
+                    if id_col_index is not None and id_col_index < len(raw_row) else None
+                ),
+                source_location={"line": data_row_start_line + row_index},
+            )
+            workspace.table_rows.append(asdict(row))
+            row_dicts.append(asdict(row))
+
+        self.save(workspace)
+
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id, event_type="table_evidence_registered",
+                actor=actor, role="system",
+                payload={"table_id": table.id, "source_id": source_id, "row_count": len(row_dicts)},
+                correlation_id=table.id,
+            )
+        return asdict(table), row_dicts
+
+    def tables_for_source(self, workspace: ProjectWorkspace, source_id: str) -> list[dict]:
+        return [t for t in workspace.tables if t["source_id"] == source_id]
+
+    def get_table(self, workspace: ProjectWorkspace, table_id: str) -> Optional[dict]:
+        return self._find(workspace.tables, table_id)
+
+    def rows_for_table(self, workspace: ProjectWorkspace, table_id: str) -> list[dict]:
+        return [r for r in workspace.table_rows if r["table_id"] == table_id]
+
+    def get_table_row(self, workspace: ProjectWorkspace, row_id: str) -> Optional[dict]:
+        return self._find(workspace.table_rows, row_id)
+
+    def resolve_table_cell(self, workspace: ProjectWorkspace, cell_id: str) -> Optional[dict]:
+        """
+        Prompt 18 #3: resolves a single cell by its OWN id even though
+        cells are embedded within their row (not a separate top-level
+        list) - a Relationship can address `to_type="table_cell",
+        to_id=<cell id>` and this is how it gets resolved back.
+        """
+        for row in workspace.table_rows:
+            for cell in row["cells"]:
+                if cell["id"] == cell_id:
+                    return cell
+        return None
+
+    def reconcile_table(self, workspace: ProjectWorkspace, table_id: str) -> Optional[dict]:
+        """
+        Production entry point for Prompt 18 #12/#28: reconciles a
+        REGISTERED Table (by id) using its real TableRow evidence, not a
+        raw ParsedDocument.tables dict - the caller never needs direct
+        access to BHiveParser output for this.
+        """
+        table = self.get_table(workspace, table_id)
+        if table is None:
+            raise CaseWorkspaceError(f"Table {table_id} was not found.")
+        rows = self.rows_for_table(workspace, table_id)
+        return reconcile_table_evidence(table, rows)
+
+    # -- Generic Source-Reference resolution (Prompt 18 / Batch J) -------------
+
+    def extract_and_register_source_references(
+        self,
+        workspace: ProjectWorkspace,
+        source_id: str,
+        text: str,
+        origin_context: dict,
+        known_targets: Optional[dict] = None,
+        resolution_method: Optional[str] = None,
+        actor: str = "system",
+        governance_log: Optional[GovernanceLog] = None,
+    ) -> list[dict]:
+        """
+        Finds every explicit reference in `text` (parse_source_reference_
+        text) and persists one governed SourceReference per candidate.
+        Resolved against `known_targets` if given (resolve_source_
+        reference_candidate); if `known_targets` is omitted entirely, each
+        reference is still persisted with resolution_status=UNKNOWN rather
+        than silently discarded (Prompt 18 #18) - the original citation
+        text and syntactic type are never lost even when nothing is known
+        yet about what it might resolve to.
+        """
+        source = self._find(workspace.sources, source_id)
+        if source is None:
+            raise CaseWorkspaceError(f"Source {source_id} was not found.")
+
+        created: list[dict] = []
+        for candidate in parse_source_reference_text(text):
+            if known_targets is not None:
+                resolution = resolve_source_reference_candidate(candidate, known_targets)
+            else:
+                resolution = {"resolution_status": RESOLUTION_STATUS_UNKNOWN, "resolved_targets": []}
+
+            reference = SourceReference(
+                id=_new_id(), project_id=workspace.project_id, source_id=source_id,
+                reference_text=candidate["reference_text"],
+                reference_type=normalize_open_world_value(candidate["reference_type"], KNOWN_REFERENCE_TYPES),
+                resolution_status=resolution["resolution_status"],
+                origin_context=origin_context, created_at=_now(), created_by=actor,
+                resolved_target_ids=resolution["resolved_targets"],
+                resolution_method=resolution_method,
+            )
+            workspace.source_references.append(asdict(reference))
+            created.append(asdict(reference))
+
+            if governance_log is not None:
+                event_type = (
+                    "source_reference_resolved"
+                    if resolution["resolution_status"] in (
+                        RESOLUTION_STATUS_RESOLVED_EXACT, RESOLUTION_STATUS_RESOLVED_RANGE,
+                        RESOLUTION_STATUS_RESOLVED_MULTIPLE,
+                    ) else "source_reference_resolution_failed"
+                )
+                governance_log.append(
+                    project_id=workspace.project_id, event_type=event_type, actor=actor, role="system",
+                    payload={
+                        "reference_id": reference.id, "reference_text": reference.reference_text,
+                        "status": reference.resolution_status,
+                    },
+                    correlation_id=reference.id,
+                )
+
+        if created:
+            self.save(workspace)
+        return created
+
+    def source_references_for_source(self, workspace: ProjectWorkspace, source_id: str) -> list[dict]:
+        return [r for r in workspace.source_references if r["source_id"] == source_id]
+
+    def get_source_reference(self, workspace: ProjectWorkspace, reference_id: str) -> Optional[dict]:
+        return self._find(workspace.source_references, reference_id)
+
+    def source_references_to_target(self, workspace: ProjectWorkspace, target_id: str) -> list[dict]:
+        """
+        Prompt 18 #24: low-level explicit-reference graph traversal -
+        every SourceReference whose resolved targets include `target_id`.
+        Deliberately separate from the higher-level project semantic
+        graph (Relationship) - this is citation-level, not analysis-level.
+        """
+        return [r for r in workspace.source_references if target_id in r["resolved_target_ids"]]
