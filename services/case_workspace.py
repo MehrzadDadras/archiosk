@@ -4134,6 +4134,61 @@ class CaseWorkspaceStore:
             return REQUIREMENT_ADJUDICATION_STATE_NOT_YET_ASSESSED
         return latest["outcome"]
 
+    def requirement_evidence(self, workspace: ProjectWorkspace, requirement_id: str) -> dict:
+        """
+        Makes the compliance rollup explainable, not just countable:
+        resolves the requirement's own LATEST RequirementAdjudication's
+        `evidence_finding_ids`/`evidence_relationship_ids` (already the
+        real, existing governed link between a Requirement and the
+        Findings/Relationships a human actually cited when adjudicating -
+        no new linkage object invented) into the actual referenced
+        records, plus every `AcceptedKnowledge` entry that traces back to
+        one of those same Findings via its own `source_finding_id` (a
+        second existing pointer, joined here rather than duplicated onto
+        a new field).
+
+        Deliberately does not scan every historical adjudication - only
+        the current, latest one - matching `requirement_adjudication_state`'s
+        own "derived from latest only" convention: this answers "why is
+        the Requirement in its CURRENT state," not a full audit history
+        (the full history remains reconstructable via
+        `requirement_adjudications_for`, unchanged).
+
+        Returns Finding/Relationship/AcceptedKnowledge as their raw
+        stored dicts - no Case-visibility filtering happens here (this
+        is a pure read of already-stored project-level state); the
+        caller (route layer, which alone knows the current requester's
+        identity) is responsible for deciding what to actually render
+        for a Finding whose own Case isn't visible to them.
+        """
+        adjudication = self.latest_requirement_adjudication_for(workspace, requirement_id)
+        if adjudication is None:
+            return {"adjudication": None, "findings": [], "relationships": [], "accepted_knowledge": []}
+
+        finding_ids = adjudication.get("evidence_finding_ids") or []
+        relationship_ids = adjudication.get("evidence_relationship_ids") or []
+        return {
+            "adjudication": adjudication,
+            "findings": [f for f in workspace.findings if f["id"] in finding_ids],
+            "relationships": [r for r in workspace.relationships if r["id"] in relationship_ids],
+            "accepted_knowledge": [k for k in workspace.knowledge if k.get("source_finding_id") in finding_ids],
+        }
+
+    def requirements_evidenced_by_finding(self, workspace: ProjectWorkspace, finding_id: str) -> list[dict]:
+        """Reverse of requirement_evidence's Finding side: every
+        Requirement whose own latest RequirementAdjudication currently
+        cites `finding_id` as evidence - used for AcceptedKnowledge's own
+        drill-back ("which Requirement(s), if any, is this linked to"),
+        via AcceptedKnowledge.source_finding_id. Honestly returns an
+        empty list, never a fabricated link, when no adjudication cites
+        this Finding."""
+        linked = []
+        for requirement in workspace.requirements:
+            adjudication = self.latest_requirement_adjudication_for(workspace, requirement["id"])
+            if adjudication and finding_id in (adjudication.get("evidence_finding_ids") or []):
+                linked.append(requirement)
+        return linked
+
     # -- requirement item promotion bridge (ratified governance baseline) ----------
 
     def promote_requirement_item(

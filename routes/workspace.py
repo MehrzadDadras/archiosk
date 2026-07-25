@@ -66,6 +66,29 @@ workspace_bp = Blueprint("workspace", __name__)
 
 ALLOWED_DRAWING_EXTENSIONS = {".png", ".jpg", ".jpeg"}
 
+# Requirement-evidence explainability: maps the EXISTING, already-governed
+# Relationship.relationship_type vocabulary (case_workspace.py's
+# KNOWN_RELATIONSHIP_TYPES) onto the workspace's own already-documented
+# 4-color semantic language (static/css/main.css's "Case Workspace semantic
+# color language": green=accepted/supported, red=rejected/contradiction,
+# amber=needs evidence/uncertain, cyan=machine/reference/linkage) - no new
+# truth-status vocabulary invented, purely a display mapping.
+_RELATIONSHIP_COLOR_CLASS = {
+    "supports": "green",
+    "corresponds_to": "green",
+    "implements": "green",
+    "contradicts": "red",
+    "blocks": "red",
+    "qualifies": "amber",
+    "affects": "amber",
+    "references": "cyan",
+    "depicts": "cyan",
+    "depends_on": "cyan",
+    "resulted_in": "cyan",
+    "derived_from": "cyan",
+    "carried_forward_from": "cyan",
+}
+
 
 def _store() -> CaseWorkspaceStore:
     return CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"])
@@ -321,14 +344,54 @@ def show_workspace(project_id):
     unpromoted_requirement_items = [
         item for item in document.requirements if item.id not in promoted_item_ids
     ]
-    requirements_view = [
-        {
+
+    # Explainability, not a new compliance engine: for each Requirement,
+    # resolve what a human already cited as evidence when adjudicating it
+    # (requirement_evidence, reusing the existing evidence_finding_ids/
+    # evidence_relationship_ids link) plus any AcceptedKnowledge derived
+    # from those same Findings. A Finding's own statement/Case title is
+    # only ever rendered here if its Case is in THIS requester's own
+    # visible_cases - the store layer's query is Case-visibility-blind by
+    # design (it's a pure project-level read), so the redaction decision
+    # belongs here, the one place that actually knows who's asking.
+    visible_case_ids = {c["id"] for c in visible_cases}
+    requirements_view = []
+    for requirement in governed_requirements:
+        evidence = store.requirement_evidence(workspace, requirement["id"])
+        evidence_findings_view = []
+        for finding in evidence["findings"]:
+            if finding.get("case_id") in visible_case_ids:
+                case = next((c for c in workspace.cases if c["id"] == finding["case_id"]), None)
+                evidence_findings_view.append({
+                    "visible": True,
+                    "statement": finding["statement"],
+                    "claim_status": finding["claim_status"],
+                    "case_title": case["title"] if case else None,
+                })
+            else:
+                evidence_findings_view.append({"visible": False})
+        evidence_relationships_view = [
+            {
+                "relationship_type": relationship["relationship_type"],
+                "from_type": relationship["from_type"],
+                "to_type": relationship["to_type"],
+                "color_class": _RELATIONSHIP_COLOR_CLASS.get(relationship["relationship_type"], "cyan"),
+            }
+            for relationship in evidence["relationships"]
+        ]
+        requirements_view.append({
             "requirement": requirement,
             "adjudication_state": store.requirement_adjudication_state(workspace, requirement["id"]),
-            "latest_adjudication": store.latest_requirement_adjudication_for(workspace, requirement["id"]),
-        }
-        for requirement in governed_requirements
-    ]
+            "latest_adjudication": evidence["adjudication"],
+            "evidence_findings": evidence_findings_view,
+            "evidence_relationships": evidence_relationships_view,
+            # AcceptedKnowledge is deliberately project-wide, not Case-gated,
+            # by the same pre-existing design as the "Accepted Knowledge"
+            # panel itself (Apply is the explicit human act that graduates a
+            # Finding's substance into project knowledge, independent of its
+            # source Case's own visibility) - not re-decided here.
+            "accepted_knowledge": evidence["accepted_knowledge"],
+        })
 
     # Compliance rollup: a transparent count of ACTUAL requirement_
     # adjudication_state values (REQUIREMENT_ADJUDICATION_STATE_NOT_YET_
@@ -379,6 +442,24 @@ def show_workspace(project_id):
     # rather than either a fabricated directory or a bare free-text box.
     known_usernames = sorted(u.username for u in User.query.all())
 
+    # Accepted Knowledge drill-back: which Finding/Case it came from
+    # (already-stored source_finding_id/source_case_id, just not
+    # rendered before) and which Requirement(s), if any, currently cite
+    # that same Finding as adjudication evidence (requirements_evidenced_
+    # by_finding - the same evidence_finding_ids link, read in reverse).
+    # Deliberately not Case-visibility-filtered here - AcceptedKnowledge
+    # is already project-wide by the pre-existing design of Apply itself
+    # (see the Accepted Knowledge panel's own long-standing copy above),
+    # not a new decision made in this tranche.
+    accepted_knowledge_view = []
+    for item in reversed(store.knowledge_for_project(workspace)):
+        source_case = next((c for c in workspace.cases if c["id"] == item.get("source_case_id")), None)
+        accepted_knowledge_view.append({
+            "item": item,
+            "source_case_title": source_case["title"] if source_case else None,
+            "linked_requirements": store.requirements_evidenced_by_finding(workspace, item.get("source_finding_id")),
+        })
+
     return render_template(
         "case_workspace.html",
         document=document,
@@ -396,7 +477,7 @@ def show_workspace(project_id):
         rfi_preview=rfi_preview,
         preview_finding_id=preview_finding_id,
         revision_notices=revision_notices,
-        accepted_knowledge=list(reversed(store.knowledge_for_project(workspace))),
+        accepted_knowledge=accepted_knowledge_view,
         activities=store.activities_for_case(workspace, active_case["id"]) if active_case else [],
         unpromoted_requirement_items=unpromoted_requirement_items,
         requirements_view=requirements_view,

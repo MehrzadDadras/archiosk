@@ -807,6 +807,25 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; }
 .review-state-badge.review-state-not-verified { color: var(--workspace-red); border-color: var(--workspace-red); }
 .review-state-badge.review-state-unverified { color: var(--muted); border-color: var(--line); }
 
+/* Requirement-evidence explainability (Connect Accepted Knowledge to
+   Requirement Impact tranche) - maps the existing Relationship.
+   relationship_type vocabulary onto the same 4-color semantic language
+   already used above, not a new truth-status vocabulary. */
+.evidence-badge {
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 0.15rem 0.45rem;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    color: var(--muted);
+}
+.evidence-badge.evidence-green { color: var(--workspace-green); border-color: var(--workspace-green); }
+.evidence-badge.evidence-red { color: var(--workspace-red); border-color: var(--workspace-red); }
+.evidence-badge.evidence-amber { color: var(--amber); border-color: var(--amber); }
+.evidence-badge.evidence-cyan { color: var(--teal); border-color: var(--teal); }
+
 .review-decision-badge.validation-correct { color: var(--workspace-green); border: 1px solid var(--workspace-green); background: var(--workspace-green-dim); }
 .review-decision-badge.validation-incorrect { color: var(--workspace-red); border: 1px solid var(--workspace-red); background: var(--workspace-red-dim); }
 .review-decision-badge.validation-partial,

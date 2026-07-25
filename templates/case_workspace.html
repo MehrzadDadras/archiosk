@@ -43,10 +43,21 @@
         <details class="add-source-details">
             <summary>View accepted knowledge</summary>
             <ul class="source-list">
-                {% for item in accepted_knowledge %}
+                {% for row in accepted_knowledge %}
+                {% set item = row.item %}
                 <li class="source-item">
                     {{ item.statement }}
-                    <br><small style="color:var(--muted);">established by {{ item.established_by }} &middot; {{ item.established_at }}</small>
+                    <br><small style="color:var(--muted);">
+                        established by {{ item.established_by }} &middot; {{ item.established_at }}
+                        &middot; from {{ row.source_case_title or 'an unknown Case' }}
+                    </small>
+                    <br><small style="color:var(--muted);">
+                        {% if row.linked_requirements %}
+                        Linked Requirement(s): {% for req in row.linked_requirements %}{{ req.text_reference[:40] }}{% if not loop.last %}; {% endif %}{% endfor %}
+                        {% else %}
+                        No linked Requirement
+                        {% endif %}
+                    </small>
                 </li>
                 {% endfor %}
             </ul>
@@ -180,6 +191,37 @@
                     <br>Last: {{ row.latest_adjudication.outcome }} by {{ row.latest_adjudication.adjudicator }} &mdash; {{ row.latest_adjudication.reasoning }}
                     {% endif %}
                 </p>
+
+                {% if row.latest_adjudication %}
+                <div style="font-size:0.7rem;color:var(--muted);margin:0 0 0.5rem;">
+                    {% if row.evidence_findings %}
+                    <strong>Evidence Findings:</strong><br>
+                    {% for ef in row.evidence_findings %}
+                    {% if ef.visible %}
+                    <span class="review-state-badge">{{ ef.claim_status }}</span> {{ ef.statement[:60] }} <em>({{ ef.case_title }})</em><br>
+                    {% else %}
+                    <span>Evidence from a Case you don't have access to.</span><br>
+                    {% endif %}
+                    {% endfor %}
+                    {% endif %}
+                    {% if row.evidence_relationships %}
+                    <strong>Evidence Relationships:</strong><br>
+                    {% for er in row.evidence_relationships %}
+                    <span class="evidence-badge evidence-{{ er.color_class }}">{{ er.relationship_type.replace('_', ' ') }}</span> ({{ er.from_type }} &rarr; {{ er.to_type }})<br>
+                    {% endfor %}
+                    {% endif %}
+                    {% if row.accepted_knowledge %}
+                    <strong>Accepted Knowledge linked:</strong><br>
+                    {% for k in row.accepted_knowledge %}
+                    {{ k.statement[:60] }}<br>
+                    {% endfor %}
+                    {% endif %}
+                    {% if not row.evidence_findings and not row.evidence_relationships and not row.accepted_knowledge %}
+                    No connected Findings or Accepted Knowledge cited as evidence yet.
+                    {% endif %}
+                </div>
+                {% endif %}
+
                 <form class="workspace-form" method="post" action="{{ url_for('workspace.adjudicate_requirement', project_id=project_id, requirement_id=requirement.id) }}">
                     <input type="hidden" name="case_id" value="{{ active_case.id if active_case else '' }}">
                     <select name="outcome" required>
