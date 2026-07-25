@@ -1569,6 +1569,25 @@ KNOWN_CASE_VISIBILITY_STATES = (
     CASE_VISIBILITY_COLLABORATIVE,
 )
 
+# -- Case lifecycle status: Archive tranche -------------------------------------
+# Architectural correction made explicit here, not silently: ARCHIVED is NOT
+# a fourth visibility value. Visibility (PRIVATE/SHARED/COLLABORATIVE)
+# answers "who can participate/see"; status (OPEN/ARCHIVED) answers
+# "whether the Case is still alive and mutable" - two orthogonal axes, not
+# one enum. A Case can therefore be PRIVATE+ARCHIVED or COLLABORATIVE+
+# ARCHIVED equally validly. This reuses CaseRecord's own pre-existing
+# `status` field (`status: str = "open"`, present since before this whole
+# tranche sequence began) rather than inventing a new field - that field
+# was always the right home for this, it simply had no enforced values or
+# write-path guards until now (see _require_case_not_archived below).
+CASE_STATUS_OPEN = "open"
+CASE_STATUS_ARCHIVED = "archived"
+
+KNOWN_CASE_STATUSES = (
+    CASE_STATUS_OPEN,
+    CASE_STATUS_ARCHIVED,
+)
+
 
 @dataclass
 class CaseRecord:
@@ -1595,11 +1614,20 @@ class CaseRecord:
     title: str
     objective: str
     created_at: str
-    status: str = "open"
+    status: str = CASE_STATUS_OPEN
     visibility: str = CASE_VISIBILITY_PRIVATE
     created_by: Optional[str] = None
     shared_by: Optional[str] = None
     shared_at: Optional[str] = None
+    # Archive fields (lifecycle status, orthogonal to visibility - see the
+    # CASE_STATUS_* comment above). archive_prior_visibility preserves what
+    # visibility was AT archive time - archiving never changes visibility
+    # itself, but this makes the pre-archive state independently legible
+    # without needing to consult GovernanceLog.
+    archived_by: Optional[str] = None
+    archived_at: Optional[str] = None
+    archive_authority: Optional[str] = None  # "owner" or "admin_override"
+    archive_prior_visibility: Optional[str] = None
     # Collaboration threshold fields (Constitutional Invariant 12). Set
     # exactly once, atomically alongside the qualifying non-owner write
     # that triggers them - see _cross_collaboration_threshold_if_qualifying.
@@ -2761,6 +2789,7 @@ class CaseWorkspaceStore:
         case = self._find(workspace.cases, case_id)
         if case is None:
             raise CaseWorkspaceError(f"Case {case_id} was not found.")
+        self._require_case_not_archived(workspace, case_id)
 
         if case["visibility"] != CASE_VISIBILITY_PRIVATE:
             raise CaseWorkspaceError(
@@ -2816,6 +2845,7 @@ class CaseWorkspaceStore:
         case = self._find(workspace.cases, case_id)
         if case is None:
             raise CaseWorkspaceError(f"Case {case_id} was not found.")
+        self._require_case_not_archived(workspace, case_id)
 
         if case["visibility"] == CASE_VISIBILITY_COLLABORATIVE:
             raise CaseWorkspaceError(
@@ -2909,10 +2939,106 @@ class CaseWorkspaceStore:
         case["collaboration_contribution_id"] = contribution_id
         return True
 
+    def _require_case_not_archived(self, workspace: ProjectWorkspace, case_id: Optional[str]) -> None:
+        """
+        The single centralized frozen-state guard: every governed write
+        that mutates a Case's contribution set, or the Case's own
+        visibility, calls this first. `case_id=None` is a legitimate no-op
+        (a Project-level write with no Case at all - archiving is a
+        Case-scoped concept and has nothing to say about those). A
+        missing Case is also a no-op here - the caller's own subsequent
+        `_find`/existence check is responsible for that error, this guard
+        only ever adds an ADDITIONAL rejection reason for an existing,
+        archived Case, never replaces the normal not-found check.
+        """
+        if not case_id:
+            return
+        case = self._find(workspace.cases, case_id)
+        if case is not None and case.get("status") == CASE_STATUS_ARCHIVED:
+            raise CaseWorkspaceError(
+                f"Case {case_id} is archived and frozen - no new governed "
+                "contributions, and no visibility change, may be made to it. "
+                "Historical content remains readable; new work requires a "
+                "separately-authorized Derive to a new Case (not yet built)."
+            )
+
+    def archive_case(
+        self,
+        workspace: ProjectWorkspace,
+        case_id: str,
+        actor: str,
+        actor_role: Optional[str] = None,
+        governance_log: Optional[GovernanceLog] = None,
+    ) -> dict:
+        """
+        Archive is terminal/frozen status, not a visibility state (see the
+        CASE_STATUS_* comment above) - permitted from PRIVATE, SHARED, or
+        COLLABORATIVE alike, since Archive is preservation, not
+        publication, and never itself changes visibility. Never removes,
+        rewrites, or resolves any existing contribution - unresolved
+        comments/Findings/etc. remain exactly as they were, permanently,
+        as part of the frozen historical record; they are not required to
+        be withdrawn or resolved first, and a contributor who is no longer
+        reachable is never a blocker.
+
+        Authority: the narrowest existing legitimate pattern, not a new
+        role architecture - the Case's own owner, OR an actor whose
+        `actor_role` is the system's existing "admin" role
+        (models.ROLE_ADMIN's value, passed through as a plain string
+        rather than importing models/services.auth into this pure domain
+        module - the same decoupling already used for `reviewer`/`actor`
+        parameters everywhere else in this file). This is exactly the
+        "Design Manager/project authority" path the ratified tranche
+        describes: an admin can archive even if the original owner is
+        unavailable, without inventing anything beyond the role
+        distinction that already exists system-wide.
+        """
+        case = self._find(workspace.cases, case_id)
+        if case is None:
+            raise CaseWorkspaceError(f"Case {case_id} was not found.")
+
+        if case.get("status") == CASE_STATUS_ARCHIVED:
+            raise CaseWorkspaceError(f"Case {case_id} is already archived.")
+
+        is_owner = case.get("created_by") is not None and actor == case["created_by"]
+        is_admin_override = actor_role == "admin"
+        if not (is_owner or is_admin_override):
+            raise CaseWorkspaceError(
+                "Only this Case's own creator, or an actor with the admin "
+                "role, may archive it."
+            )
+
+        prior_visibility = case["visibility"]
+        archived_at = _now()
+        case["status"] = CASE_STATUS_ARCHIVED
+        case["archived_by"] = actor
+        case["archived_at"] = archived_at
+        case["archive_authority"] = "owner" if is_owner else "admin_override"
+        case["archive_prior_visibility"] = prior_visibility
+        # Deliberately does NOT touch case["visibility"] - archiving never
+        # changes who could see the Case, only whether it can still change.
+        self.save(workspace)
+
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id, event_type="case_archived",
+                actor=actor, role="human",
+                payload={
+                    "case_id": case_id, "case_creator": case.get("created_by"),
+                    "archive_authority": case["archive_authority"],
+                    "prior_visibility": prior_visibility,
+                    "archived_at": archived_at,
+                },
+                correlation_id=case_id,
+            )
+
+        return case
+
     def attach_source_to_case(self, workspace: ProjectWorkspace, case_id: str, source_id: str) -> None:
         case = self._find(workspace.cases, case_id)
         if case is None:
             raise CaseWorkspaceError(f"Case {case_id} was not found.")
+        self._require_case_not_archived(workspace, case_id)
         if source_id not in case["source_ids"]:
             case["source_ids"].append(source_id)
         self.save(workspace)
@@ -2921,6 +3047,7 @@ class CaseWorkspaceStore:
         case = self._find(workspace.cases, case_id)
         if case is None:
             raise CaseWorkspaceError(f"Case {case_id} was not found.")
+        self._require_case_not_archived(workspace, case_id)
         message = ConversationMessage(
             id=_new_id(),
             case_id=case_id,
@@ -2988,6 +3115,7 @@ class CaseWorkspaceStore:
             case = self._find(workspace.cases, case_id)
             if case is None:
                 raise CaseWorkspaceError(f"Case {case_id} was not found.")
+            self._require_case_not_archived(workspace, case_id)
         elif findings:
             raise CaseWorkspaceError(
                 "A Project-level Analysis (no case_id) cannot currently record "
@@ -3116,6 +3244,8 @@ class CaseWorkspaceStore:
                 "in place; it cannot be re-adjudicated retroactively."
             )
 
+        self._require_case_not_archived(workspace, finding["case_id"])
+
         record = ReviewerValidation(
             id=_new_id(),
             finding_id=finding_id,
@@ -3197,6 +3327,8 @@ class CaseWorkspaceStore:
                 "classify the Finding's accuracy before deciding what happens to it."
             )
 
+        self._require_case_not_archived(workspace, finding["case_id"])
+
         record = Disposition(
             id=_new_id(),
             finding_id=finding_id,
@@ -3261,6 +3393,8 @@ class CaseWorkspaceStore:
                     f"Finding {finding_id} does not have a Confirmed Disposition on "
                     "record. Apply requires an explicit 'Confirmed' disposition first."
                 )
+
+            self._require_case_not_archived(workspace, finding["case_id"])
 
         apply_record = ApplyRecord(
             id=_new_id(),
@@ -4039,6 +4173,7 @@ class CaseWorkspaceStore:
             raise CaseWorkspaceError(
                 f"'{origin}' is not a recognized message origin. Use one of: {', '.join(KNOWN_MESSAGE_ORIGINS)}."
             )
+        self._require_case_not_archived(workspace, thread.get("case_id"))
 
         message = ReviewMessage(
             id=_new_id(),
@@ -4120,6 +4255,7 @@ class CaseWorkspaceStore:
         thread = self._find(workspace.review_threads, thread_id)
         if thread is None:
             raise CaseWorkspaceError(f"Review Thread {thread_id} was not found.")
+        self._require_case_not_archived(workspace, thread.get("case_id"))
 
         attention = Attention(
             id=_new_id(),
@@ -4319,8 +4455,6 @@ class CaseWorkspaceStore:
         relationship = self._find(workspace.relationships, relationship_id)
         if relationship is None:
             raise CaseWorkspaceError(f"Relationship {relationship_id} was not found.")
-        relationship["provisional"] = False
-        relationship["confirmed_by"] = actor
 
         referenced_cases = {
             c["id"]: c for c in (
@@ -4328,6 +4462,14 @@ class CaseWorkspaceStore:
                 + self._cases_referencing_object(workspace, relationship.get("to_id"))
             )
         }
+        # Reject if ANY referenced Case is archived - errs toward protecting
+        # frozen state even when a Relationship also touches a non-archived
+        # Case, rather than trying to partially confirm.
+        for case_id in referenced_cases:
+            self._require_case_not_archived(workspace, case_id)
+
+        relationship["provisional"] = False
+        relationship["confirmed_by"] = actor
         crossed_case_ids = [
             case_id for case_id in referenced_cases
             if self._cross_collaboration_threshold_if_qualifying(
@@ -4789,6 +4931,7 @@ class CaseWorkspaceStore:
         case = self._find(workspace.cases, case_id)
         if case is None:
             raise CaseWorkspaceError(f"Case {case_id} was not found.")
+        self._require_case_not_archived(workspace, case_id)
 
         activity = Activity(
             id=_new_id(),
@@ -4855,6 +4998,7 @@ class CaseWorkspaceStore:
             )
 
         finding = self._find(workspace.findings, finding_id)
+        self._require_case_not_archived(workspace, finding["case_id"])
         reference_snapshot = self.build_reference_snapshot(workspace, finding_id)
 
         draft = RFIDraft(
@@ -4880,6 +5024,7 @@ class CaseWorkspaceStore:
             raise CaseWorkspaceError(f"RFI draft {draft_id} was not found.")
         if draft["status"] == RFI_STATUS_ISSUED:
             raise CaseWorkspaceError("This RFI has already been issued.")
+        self._require_case_not_archived(workspace, draft.get("case_id"))
 
         draft["status"] = RFI_STATUS_ISSUED
         draft["issued_at"] = _now()

@@ -319,6 +319,30 @@ def retract_case(project_id, case_id):
     return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
 
 
+@workspace_bp.route("/projects/<project_id>/workspace/cases/<case_id>/archive", methods=["POST"])
+@login_required
+def archive_case(project_id, case_id):
+    """Terminal/frozen Case status - see CaseWorkspaceStore.archive_case.
+    Owner or admin-role only; the machine never performs this. Passes the
+    real session role through so the store layer's owner-or-admin
+    authority check (the narrowest existing legitimate pattern - no new
+    role architecture) can recognize a Design Manager/admin override
+    without this route inventing its own separate authorization logic."""
+    _, store, workspace = _load_workspace_or_404(project_id)
+
+    try:
+        store.archive_case(
+            workspace, case_id=case_id, actor=_reviewer(),
+            actor_role=session.get("role"), governance_log=_log(),
+        )
+    except CaseWorkspaceError as exc:
+        flash(str(exc), "error")
+        return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
+
+    flash("Case archived.", "success")
+    return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
+
+
 @workspace_bp.route("/projects/<project_id>/workspace/cases/<case_id>/sources", methods=["POST"])
 @login_required
 def add_drawing_source(project_id, case_id):
