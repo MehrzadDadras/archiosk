@@ -297,6 +297,28 @@ def share_case(project_id, case_id):
     return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
 
 
+@workspace_bp.route("/projects/<project_id>/workspace/cases/<case_id>/retract", methods=["POST"])
+@login_required
+def retract_case(project_id, case_id):
+    """Explicit, human-authorized Shared -> Private retraction, only
+    before the collaboration threshold - see
+    CaseWorkspaceStore.retract_case_to_private. Rejected outright by the
+    store layer once the Case is Collaborative (Constitutional Invariant
+    12); this route does not attempt its own separate check, so there is
+    exactly one place irreversibility is enforced, not two that could
+    drift apart."""
+    _, store, workspace = _load_workspace_or_404(project_id)
+
+    try:
+        store.retract_case_to_private(workspace, case_id=case_id, actor=_reviewer(), governance_log=_log())
+    except CaseWorkspaceError as exc:
+        flash(str(exc), "error")
+        return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
+
+    flash("Case retracted to private.", "success")
+    return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
+
+
 @workspace_bp.route("/projects/<project_id>/workspace/cases/<case_id>/sources", methods=["POST"])
 @login_required
 def add_drawing_source(project_id, case_id):
@@ -515,6 +537,7 @@ def validate_finding(project_id, finding_id):
             validation=validation,
             reviewer=_reviewer(),
             correction_note=correction_note,
+            governance_log=_log(),
         )
     except CaseWorkspaceError as exc:
         flash(str(exc), "error")
@@ -549,6 +572,7 @@ def set_disposition(project_id, finding_id):
             finding_id=finding_id,
             disposition=disposition,
             reviewer=_reviewer(),
+            governance_log=_log(),
         )
     except CaseWorkspaceError as exc:
         flash(str(exc), "error")

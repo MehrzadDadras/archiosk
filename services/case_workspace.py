@@ -1554,10 +1554,19 @@ class MaturityRecord:
 # their own governed transitions would misrepresent them as available.
 CASE_VISIBILITY_PRIVATE = "private"
 CASE_VISIBILITY_SHARED = "shared"
+# Collaboration threshold + irreversibility tranche: added now that Private
+# <-> Shared exists to build on. COLLABORATIVE is a distinct THIRD state
+# from SHARED - "visible to others" and "another party has genuinely
+# contributed" are different facts (Constitutional Invariant 12), and
+# collapsing them would silently permit exactly the privacy-reversal
+# Invariant 12 exists to prevent. Archive is still deliberately NOT added
+# here - it remains genuinely unbuilt, not implied by this tranche.
+CASE_VISIBILITY_COLLABORATIVE = "collaborative"
 
 KNOWN_CASE_VISIBILITY_STATES = (
     CASE_VISIBILITY_PRIVATE,
     CASE_VISIBILITY_SHARED,
+    CASE_VISIBILITY_COLLABORATIVE,
 )
 
 
@@ -1591,6 +1600,23 @@ class CaseRecord:
     created_by: Optional[str] = None
     shared_by: Optional[str] = None
     shared_at: Optional[str] = None
+    # Collaboration threshold fields (Constitutional Invariant 12). Set
+    # exactly once, atomically alongside the qualifying non-owner write
+    # that triggers them - see _cross_collaboration_threshold_if_qualifying.
+    # Never cleared, never mutated again once set (irreversibility is
+    # enforced by rejecting the transition entirely, not by these fields
+    # ever changing back).
+    collaboration_established_by: Optional[str] = None
+    collaboration_established_at: Optional[str] = None
+    collaboration_contribution_type: Optional[str] = None
+    collaboration_contribution_id: Optional[str] = None
+    # Retraction fields (SHARED -> PRIVATE, pre-threshold only). Deliberately
+    # does NOT clear shared_by/shared_at on retraction - "do not delete
+    # historic evidence that the Case had previously been shared" (ratified
+    # spec) - both the prior share and the later retraction remain visible
+    # on the record itself, non-destructively.
+    retracted_by: Optional[str] = None
+    retracted_at: Optional[str] = None
     source_ids: list[str] = field(default_factory=list)
     conversation: list[dict] = field(default_factory=list)
     analysis_ids: list[str] = field(default_factory=list)
@@ -2744,8 +2770,8 @@ class CaseWorkspaceStore:
 
         if case.get("created_by") is None or actor != case["created_by"]:
             raise CaseWorkspaceError(
-                "Only this Case's own creator may share it. No collaboration "
-                "threshold or delegated sharing authority exists yet."
+                "Only this Case's own creator may share it. No delegated "
+                "sharing authority exists yet."
             )
 
         prior_visibility = case["visibility"]
@@ -2769,6 +2795,119 @@ class CaseWorkspaceStore:
             )
 
         return case
+
+    def retract_case_to_private(
+        self,
+        workspace: ProjectWorkspace,
+        case_id: str,
+        actor: str,
+        governance_log: Optional[GovernanceLog] = None,
+    ) -> dict:
+        """
+        SHARED -> PRIVATE only, and only before the collaboration
+        threshold has been crossed (Constitutional Invariant 12). A
+        COLLABORATIVE Case rejects this outright - irreversibility is
+        enforced here, at the validation gate, not merely documented.
+        Owner-only, same authority model as share_case. Deliberately
+        does not clear shared_by/shared_at - the fact this Case was
+        once shared is not erased by retracting it, only its current
+        visibility changes.
+        """
+        case = self._find(workspace.cases, case_id)
+        if case is None:
+            raise CaseWorkspaceError(f"Case {case_id} was not found.")
+
+        if case["visibility"] == CASE_VISIBILITY_COLLABORATIVE:
+            raise CaseWorkspaceError(
+                f"Case {case_id} is Collaborative - another party has already "
+                "made a genuine, governed contribution. Reverting shared work "
+                "to private is prohibited (Constitutional Invariant 12); this "
+                "preserves shared provenance, not authorship."
+            )
+        if case["visibility"] != CASE_VISIBILITY_SHARED:
+            raise CaseWorkspaceError(
+                f"Case {case_id} is '{case['visibility']}' - only a Shared "
+                "Case can be retracted to Private."
+            )
+
+        if case.get("created_by") is None or actor != case["created_by"]:
+            raise CaseWorkspaceError("Only this Case's own creator may retract it.")
+
+        retracted_at = _now()
+        case["visibility"] = CASE_VISIBILITY_PRIVATE
+        case["retracted_by"] = actor
+        case["retracted_at"] = retracted_at
+        self.save(workspace)
+
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id, event_type="case_retracted_to_private",
+                actor=actor, role="human",
+                payload={
+                    "case_id": case_id, "case_creator": case["created_by"],
+                    "prior_visibility": CASE_VISIBILITY_SHARED,
+                    "resulting_visibility": CASE_VISIBILITY_PRIVATE,
+                    "retracted_at": retracted_at,
+                },
+                correlation_id=case_id,
+            )
+
+        return case
+
+    def _cases_referencing_object(self, workspace: ProjectWorkspace, object_id: Optional[str]) -> list[dict]:
+        """Every Case whose finding_ids/source_ids/artifact_ids contains
+        object_id - used to resolve which Case(s) a Relationship's from_id/
+        to_id belongs to, since Relationship carries no case_id of its own."""
+        if not object_id:
+            return []
+        return [
+            c for c in workspace.cases
+            if object_id in c["finding_ids"] or object_id in c["source_ids"] or object_id in c["artifact_ids"]
+        ]
+
+    def _cross_collaboration_threshold_if_qualifying(
+        self,
+        workspace: ProjectWorkspace,
+        case_id: Optional[str],
+        actor: Optional[str],
+        contribution_type: str,
+        contribution_id: str,
+    ) -> bool:
+        """
+        The one enforcement point for Constitutional Invariant 12
+        becoming real, not just documented: SHARED -> COLLABORATIVE
+        fires exactly once, the moment the first governed, attributed
+        write by a non-owner actor actually commits. Callers are
+        responsible for (a) already having filtered out machine/system-
+        originated events before calling this at all - see each call
+        site for how it distinguishes human origin - and (b) calling
+        self.save(workspace) themselves, exactly once, immediately
+        after, so this mutation and the qualifying write commit
+        atomically together, never one without the other.
+
+        Deliberately silent-and-safe on anything that doesn't qualify
+        (no Case, not currently Shared, no actor, or actor is the
+        owner) - this is a side effect of an otherwise-already-valid
+        write, never a validation gate that could reject the write
+        itself. Returns True only if this call actually crossed the
+        threshold, so callers can correlate a governance_log event.
+        """
+        if not case_id:
+            return False
+        case = self._find(workspace.cases, case_id)
+        if case is None:
+            return False
+        if case["visibility"] != CASE_VISIBILITY_SHARED:
+            return False
+        if not actor or actor == case.get("created_by"):
+            return False
+
+        case["visibility"] = CASE_VISIBILITY_COLLABORATIVE
+        case["collaboration_established_by"] = actor
+        case["collaboration_established_at"] = _now()
+        case["collaboration_contribution_type"] = contribution_type
+        case["collaboration_contribution_id"] = contribution_id
+        return True
 
     def attach_source_to_case(self, workspace: ProjectWorkspace, case_id: str, source_id: str) -> None:
         case = self._find(workspace.cases, case_id)
@@ -2821,6 +2960,7 @@ class CaseWorkspaceStore:
         trigger: AnalysisTrigger,
         case_id: Optional[str] = None,
         prior_corrections_considered: int = 0,
+        governance_log: Optional[GovernanceLog] = None,
     ) -> dict:
         """
         `findings` is a list of {"statement", "machine_confidence", "crop"?,
@@ -2919,7 +3059,33 @@ class CaseWorkspaceStore:
         if case is not None:
             case["analysis_ids"].append(analysis_id)
 
+        # Collaboration threshold: only a genuinely human-initiated Analysis
+        # can qualify - ANALYSIS_TRIGGER_USER_INITIATED specifically, never
+        # AGENT_INITIATED/CLOCK_INITIATED/SYSTEM_RECHECK/etc, regardless of
+        # what string triggered_by_actor happens to carry. This is the
+        # machine-boundary distinction the ratified spec requires: a
+        # machine-created record must never falsely cross the human
+        # collaboration threshold merely because a non-owner name appears
+        # somewhere on it.
+        crossed = False
+        if trigger.trigger_type == ANALYSIS_TRIGGER_USER_INITIATED:
+            crossed = self._cross_collaboration_threshold_if_qualifying(
+                workspace, case_id, trigger.triggered_by_actor, "analysis", analysis_id,
+            )
+
         self.save(workspace)
+
+        if crossed and governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id, event_type="case_became_collaborative",
+                actor=trigger.triggered_by_actor, role="human",
+                payload={
+                    "case_id": case_id, "contribution_type": "analysis",
+                    "contribution_id": analysis_id,
+                },
+                correlation_id=case_id,
+            )
+
         return asdict(analysis)
 
     # -- reviewer validation --------------------------------------------------------
@@ -2931,6 +3097,7 @@ class CaseWorkspaceStore:
         validation: str,
         reviewer: str,
         correction_note: Optional[str] = None,
+        governance_log: Optional[GovernanceLog] = None,
     ) -> dict:
         if validation not in REVIEWER_VALIDATION_STATES:
             raise CaseWorkspaceError(
@@ -2960,7 +3127,26 @@ class CaseWorkspaceStore:
         workspace.reviewer_validations.append(asdict(record))
         # Recording a Reviewer Validation is not a Disposition and never
         # changes claim_status - see record_disposition/apply_findings.
+        # ReviewerValidation is, by construction, always a human act (this
+        # is its entire reason for existing - a human's epistemic judgment
+        # about a machine Finding) - no separate origin check is needed the
+        # way machine-originated writes elsewhere require one.
+        crossed = self._cross_collaboration_threshold_if_qualifying(
+            workspace, finding["case_id"], reviewer, "reviewer_validation", record.id,
+        )
         self.save(workspace)
+
+        if crossed and governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id, event_type="case_became_collaborative",
+                actor=reviewer, role="human",
+                payload={
+                    "case_id": finding["case_id"], "contribution_type": "reviewer_validation",
+                    "contribution_id": record.id,
+                },
+                correlation_id=finding["case_id"],
+            )
+
         return asdict(record)
 
     def reviewer_validations_for_finding(self, workspace: ProjectWorkspace, finding_id: str) -> list[dict]:
@@ -2988,6 +3174,7 @@ class CaseWorkspaceStore:
         finding_id: str,
         disposition: str,
         reviewer: str,
+        governance_log: Optional[GovernanceLog] = None,
     ) -> dict:
         if disposition not in DISPOSITIONS:
             raise CaseWorkspaceError(
@@ -3018,7 +3205,24 @@ class CaseWorkspaceStore:
             recorded_at=_now(),
         )
         workspace.dispositions.append(asdict(record))
+        # Disposition, like ReviewerValidation, is by construction always a
+        # human act - no separate machine-origin check needed.
+        crossed = self._cross_collaboration_threshold_if_qualifying(
+            workspace, finding["case_id"], reviewer, "disposition", record.id,
+        )
         self.save(workspace)
+
+        if crossed and governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id, event_type="case_became_collaborative",
+                actor=reviewer, role="human",
+                payload={
+                    "case_id": finding["case_id"], "contribution_type": "disposition",
+                    "contribution_id": record.id,
+                },
+                correlation_id=finding["case_id"],
+            )
+
         return asdict(record)
 
     def dispositions_for_finding(self, workspace: ProjectWorkspace, finding_id: str) -> list[dict]:
@@ -3233,6 +3437,15 @@ class CaseWorkspaceStore:
         first-class forensic evidence, never just a bare outcome word) -
         the same honesty-machinery shape as Requirement.registration_
         method's mandatory, never-defaulted field.
+
+        Deliberately does NOT participate in any Case's collaboration
+        threshold, even when `evidence_finding_ids` references a Finding
+        that belongs to a Shared Case (the ratified spec's own
+        deliberately-flagged boundary case, resolved here explicitly, not
+        left as a silent default): adjudicating a Requirement is a
+        contribution to the Requirement's own governed record, a
+        genuinely different object from the Case whose evidence it cites.
+        Counting it would blur two distinct objects' provenance together.
         """
         requirement = self._find(workspace.requirements, requirement_id)
         if requirement is None:
@@ -3847,6 +4060,19 @@ class CaseWorkspaceStore:
             project_state_version=workspace.version,
         )
         workspace.review_messages.append(asdict(message))
+
+        # Collaboration threshold: only origin == human qualifies - a
+        # machine- or system-authored message must never cross the
+        # threshold merely because `actor` happens to hold a non-owner
+        # name. Only counts if this thread is directly anchored to a Case
+        # (thread["case_id"]) - a thread with no Case anchor has nothing
+        # to cross the threshold on.
+        crossed = False
+        if origin == MESSAGE_ORIGIN_HUMAN:
+            crossed = self._cross_collaboration_threshold_if_qualifying(
+                workspace, thread.get("case_id"), actor, "review_message", message.id,
+            )
+
         self.save(workspace)
 
         if governance_log is not None:
@@ -3858,6 +4084,16 @@ class CaseWorkspaceStore:
                 payload={"thread_id": thread_id, "message_id": message.id, "origin": origin},
                 correlation_id=message.id,
             )
+            if crossed:
+                governance_log.append(
+                    project_id=workspace.project_id, event_type="case_became_collaborative",
+                    actor=actor, role="human",
+                    payload={
+                        "case_id": thread.get("case_id"), "contribution_type": "review_message",
+                        "contribution_id": message.id,
+                    },
+                    correlation_id=thread.get("case_id"),
+                )
         return asdict(message)
 
     def messages_for_thread(self, workspace: ProjectWorkspace, thread_id: str) -> list[dict]:
@@ -3899,7 +4135,27 @@ class CaseWorkspaceStore:
         if thread["status"] in (THREAD_STATUS_OPEN, THREAD_STATUS_UNDER_REVIEW):
             thread["status"] = THREAD_STATUS_WAITING_FOR_RESPONSE
 
+        # Attention has no separate machine/human origin field (unlike
+        # ReviewMessage), but nothing in this codebase creates one with a
+        # machine identity - "this person/role should attend to this
+        # matter" has no autonomous-machine analogue here. Only counts if
+        # the thread is directly anchored to a Case.
+        crossed = self._cross_collaboration_threshold_if_qualifying(
+            workspace, thread.get("case_id"), created_by, "attention", attention.id,
+        )
+
         self.save(workspace)
+
+        if crossed and governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id, event_type="case_became_collaborative",
+                actor=created_by, role="human",
+                payload={
+                    "case_id": thread.get("case_id"), "contribution_type": "attention",
+                    "contribution_id": attention.id,
+                },
+                correlation_id=thread.get("case_id"),
+            )
 
         if governance_log is not None:
             governance_log.append(
@@ -4041,16 +4297,58 @@ class CaseWorkspaceStore:
             )
         return thread
 
-    def confirm_relationship(self, workspace: ProjectWorkspace, relationship_id: str, actor: str) -> dict:
+    def confirm_relationship(
+        self, workspace: ProjectWorkspace, relationship_id: str, actor: str,
+        governance_log: Optional[GovernanceLog] = None,
+    ) -> dict:
         """Standalone confirmation for direct use outside a thread outcome
         context - see link_thread_outcome for the atomic, in-transaction
-        version used when confirming as part of resolving a thread."""
+        version used when confirming as part of resolving a thread.
+
+        Collaboration-threshold qualifying event uses confirmed_by, not
+        created_by/relationship-creation - a Relationship's created_by can
+        be machine-populated (provisional=True Spin output) with no
+        structural guarantee it names a real human actor. Confirmation
+        (provisional -> False, confirmed_by set) is the one point in this
+        object's life that is unambiguously a human act, the same
+        Finding-is-machine/ReviewerValidation-is-human split this codebase
+        already draws everywhere else. A Relationship carries no case_id
+        of its own, so this checks every Case whose Findings/Sources/
+        Artifacts the relationship's from_id or to_id actually references.
+        """
         relationship = self._find(workspace.relationships, relationship_id)
         if relationship is None:
             raise CaseWorkspaceError(f"Relationship {relationship_id} was not found.")
         relationship["provisional"] = False
         relationship["confirmed_by"] = actor
+
+        referenced_cases = {
+            c["id"]: c for c in (
+                self._cases_referencing_object(workspace, relationship.get("from_id"))
+                + self._cases_referencing_object(workspace, relationship.get("to_id"))
+            )
+        }
+        crossed_case_ids = [
+            case_id for case_id in referenced_cases
+            if self._cross_collaboration_threshold_if_qualifying(
+                workspace, case_id, actor, "relationship_confirmation", relationship_id,
+            )
+        ]
+
         self.save(workspace)
+
+        if governance_log is not None:
+            for case_id in crossed_case_ids:
+                governance_log.append(
+                    project_id=workspace.project_id, event_type="case_became_collaborative",
+                    actor=actor, role="human",
+                    payload={
+                        "case_id": case_id, "contribution_type": "relationship_confirmation",
+                        "contribution_id": relationship_id,
+                    },
+                    correlation_id=case_id,
+                )
+
         return relationship
 
     def link_thread_outcome(
@@ -4471,6 +4769,16 @@ class CaseWorkspaceStore:
         created_by: str,
     ) -> dict:
         """
+        Deliberately does NOT participate in any Case's collaboration
+        threshold (a documented exclusion, not an oversight): unlike
+        ReviewMessage's structural `origin` field, Activity has no way to
+        distinguish machine- from human-initiated work ("machine- or
+        human-initiated" per this class's own docstring), and has zero
+        real callers anywhere in this codebase today to establish a real-
+        world convention either way. Counting it would risk exactly the
+        false machine-boundary crossing the ratified spec prohibits.
+        Revisit if/when Activity gains its own origin field.
+
         A general work item - not an Analysis, not a Finding. The
         structural home for lifecycle work that isn't evidence-review
         shaped (Prompt 5 #11): an opportunity go/no-go note, a follow-up

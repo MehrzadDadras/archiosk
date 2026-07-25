@@ -66,9 +66,13 @@
                     <span class="case-status-badge">{{ case.visibility }}</span>
                     {{ case.title }}
                 </a>
-                {% if case.visibility == 'private' %}
+                {% if case.visibility == 'private' and case.created_by == session.username %}
                 <form method="post" action="{{ url_for('workspace.share_case', project_id=project_id, case_id=case.id) }}">
                     <button type="submit" class="link-button">Share</button>
+                </form>
+                {% elif case.visibility == 'shared' and case.created_by == session.username %}
+                <form method="post" action="{{ url_for('workspace.retract_case', project_id=project_id, case_id=case.id) }}">
+                    <button type="submit" class="link-button">Retract to Private</button>
                 </form>
                 {% endif %}
             </li>
