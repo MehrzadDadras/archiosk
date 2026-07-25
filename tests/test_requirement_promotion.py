@@ -242,7 +242,11 @@ class RequirementRouteWiringTests(unittest.TestCase):
             },
         )
         self.source_id = workspace.sources[0]["id"]
-        case = store.create_case(workspace, title="Review", objective="Promote items")
+        # created_by must match the session these tests actually act as
+        # ("tester") - an ownerless private Case is invisible to everyone
+        # under the existing Case-visibility model (visible_cases_for),
+        # which the route layer now also enforces on the promote route.
+        case = store.create_case(workspace, title="Review", objective="Promote items", created_by="tester")
         self.case_id = case["id"]
 
     def tearDown(self):

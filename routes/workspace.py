@@ -109,26 +109,43 @@ def _thread_case_id(workspace, thread_id):
     return thread.get("case_id") if thread else None
 
 
+def _finding_case_id(workspace, finding_id):
+    """The Finding's OWN recorded case_id, looked up server-side - same
+    reasoning as _thread_case_id: a route keyed by finding_id must never
+    trust a separate, client-supplied case_id form field for its
+    authorization decision (validate_finding/set_disposition/
+    create_rfi_draft all take finding_id as the real write target;
+    case_id in their forms was historically only ever used for the
+    redirect/log line, never checked)."""
+    finding = next((f for f in workspace.findings if f["id"] == finding_id), None)
+    return finding.get("case_id") if finding else None
+
+
+def _rfi_draft_case_id(workspace, draft_id):
+    """The RFIDraft's OWN recorded case_id (itself always server-derived
+    from its Finding's case_id at creation time - see
+    CaseWorkspaceStore.create_rfi_draft - never from a caller-supplied
+    value), looked up server-side for the same reason as
+    _thread_case_id/_finding_case_id."""
+    draft = next((d for d in workspace.rfi_drafts if d["id"] == draft_id), None)
+    return draft.get("case_id") if draft else None
+
+
 def _require_visible_case(store: CaseWorkspaceStore, workspace, case_id) -> None:
     """
-    The discussion routes below (human-comment tranche) are the first
-    write paths in this file that both (a) take a case_id straight off
-    the URL/a looked-up thread and (b) are now exposed to ordinary,
-    non-admin users through real UI controls, rather than being a
-    low-probability direct-URL-typing path. `None` is a legitimate no-op
-    (a Project-level thread with no Case anchor). A visible-but-
-    nonexistent case_id is left to the caller's own subsequent lookup -
-    this only ever adds an additional rejection for a real Case the
-    requester is not allowed to see, mirroring
+    The one authorization check every Case-scoped write/download route in
+    this file now runs before acting: derive the real Case (from the URL,
+    or - for routes keyed by a finding/thread/RFI-draft id instead -
+    server-side via _finding_case_id/_thread_case_id/_rfi_draft_case_id,
+    never a client-supplied hidden form field) and verify the requester
+    may actually see it. `None` is a legitimate no-op (a Project-level
+    write, or a Requirement, which has no Case of its own at all - see
+    current/kernel-object-model.md's "Case"/"Requirement" entries). A
+    visible-but-nonexistent case_id is left to the caller's own
+    subsequent lookup - this only ever adds an additional rejection for a
+    real Case the requester is not allowed to see, mirroring
     _require_case_not_archived's own "additional reason, never replaces
     the normal check" shape.
-
-    Deliberately narrow: this does not retrofit every pre-existing
-    Case-scoped route in this file (validate_finding, set_disposition,
-    add_drawing_source, etc.) - that remains the same previously-flagged,
-    not-yet-closed gap it already was (see governance/current/kernel-
-    object-model.md's "Case visibility" entry), not something this
-    tranche's narrower mandate authorizes rewriting wholesale.
     """
     if not case_id:
         return
@@ -697,6 +714,7 @@ def reopen_thread(project_id, thread_id):
 @login_required
 def add_drawing_source(project_id, case_id):
     _, store, workspace = _load_workspace_or_404(project_id)
+    _require_visible_case(store, workspace, case_id)
 
     file_storage = request.files.get("drawing")
     if file_storage is None or not file_storage.filename:
@@ -831,6 +849,7 @@ def revise_source(project_id, source_id):
 @login_required
 def post_message(project_id, case_id):
     _, store, workspace = _load_workspace_or_404(project_id)
+    _require_visible_case(store, workspace, case_id)
 
     case = next((c for c in workspace.cases if c["id"] == case_id), None)
     if case is None:
@@ -899,10 +918,11 @@ def validate_finding(project_id, finding_id):
     Evidence/Not Applicable) - distinct from Disposition, see
     /disposition below."""
     _, store, workspace = _load_workspace_or_404(project_id)
+    case_id = _finding_case_id(workspace, finding_id)
+    _require_visible_case(store, workspace, case_id)
 
     validation = request.form.get("validation")
     correction_note = request.form.get("correction_note") or None
-    case_id = request.form.get("case_id")
 
     try:
         store.record_reviewer_validation(
@@ -936,9 +956,10 @@ def set_disposition(project_id, finding_id):
     separate from Reviewer Validation: validating accuracy and deciding
     what happens next are two different questions."""
     _, store, workspace = _load_workspace_or_404(project_id)
+    case_id = _finding_case_id(workspace, finding_id)
+    _require_visible_case(store, workspace, case_id)
 
     disposition = request.form.get("disposition")
-    case_id = request.form.get("case_id")
 
     try:
         store.record_disposition(
@@ -977,6 +998,7 @@ def promote_requirement_item_route(project_id, case_id, requirement_item_id):
     - it never infers source_id, it only forwards what the form
     explicitly asserts."""
     document, store, workspace = _load_workspace_or_404(project_id)
+    _require_visible_case(store, workspace, case_id)
 
     item = next((r for r in document.requirements if r.id == requirement_item_id), None)
     if item is None:
@@ -1054,6 +1076,7 @@ def adjudicate_requirement(project_id, requirement_id):
 @login_required
 def apply_findings(project_id, case_id):
     _, store, workspace = _load_workspace_or_404(project_id)
+    _require_visible_case(store, workspace, case_id)
 
     case = next((c for c in workspace.cases if c["id"] == case_id), None)
     if case is None:
@@ -1119,6 +1142,7 @@ def apply_findings(project_id, case_id):
 @login_required
 def cancel_rfi_intent(project_id, case_id):
     _, store, workspace = _load_workspace_or_404(project_id)
+    _require_visible_case(store, workspace, case_id)
     store.add_message(workspace, case_id, role="system", text="RFI draft request cancelled.", action_taken="rfi_cancelled")
     return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
 
@@ -1130,6 +1154,7 @@ def preview_rfi_draft(project_id, case_id):
     and displays the auto-inherited reference bundle WITHOUT creating
     the draft yet."""
     _, store, workspace = _load_workspace_or_404(project_id)
+    _require_visible_case(store, workspace, case_id)
     finding_id = request.form.get("finding_id")
     store.add_message(
         workspace, case_id, role="system",
@@ -1148,8 +1173,16 @@ def create_rfi_draft(project_id, case_id):
     """Delegation Choice: 'Do it for me' (question_text may be blank, to
     be filled in after) or the follow-up create step after a preview."""
     _, store, workspace = _load_workspace_or_404(project_id)
+    _require_visible_case(store, workspace, case_id)
     finding_id = request.form.get("finding_id")
     question_text = request.form.get("question_text") or ""
+
+    # The draft's real case attribution comes from the Finding itself
+    # (CaseWorkspaceStore.create_rfi_draft sets case_id=finding["case_id"],
+    # never from this route's own case_id param) - a visible case_id in
+    # the URL must not become cover for drafting an RFI against a Finding
+    # that actually belongs to a different, private Case.
+    _require_visible_case(store, workspace, _finding_case_id(workspace, finding_id))
 
     try:
         draft = store.create_rfi_draft(
@@ -1180,7 +1213,8 @@ def create_rfi_draft(project_id, case_id):
 @login_required
 def update_rfi_question(project_id, draft_id):
     _, store, workspace = _load_workspace_or_404(project_id)
-    case_id = request.form.get("case_id")
+    case_id = _rfi_draft_case_id(workspace, draft_id)
+    _require_visible_case(store, workspace, case_id)
     draft = next((d for d in workspace.rfi_drafts if d["id"] == draft_id), None)
     if draft is None:
         abort(404)
@@ -1196,7 +1230,8 @@ def issue_rfi_draft(project_id, draft_id):
     issuance - Issue is a separate, explicit, Approval-Gated action from
     drafting."""
     _, store, workspace = _load_workspace_or_404(project_id)
-    case_id = request.form.get("case_id")
+    case_id = _rfi_draft_case_id(workspace, draft_id)
+    _require_visible_case(store, workspace, case_id)
 
     draft = next((d for d in workspace.rfi_drafts if d["id"] == draft_id), None)
     if draft is None:
