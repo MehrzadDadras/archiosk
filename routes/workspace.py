@@ -59,6 +59,7 @@ from services.conversation_interpreter import interpret_message
 from services.governance import GovernanceLog
 from services.ingestion import get_registry
 from services.project_clock import open_project
+from services.rfi_export import RFIExportError, build_rfi_docx
 from models import User
 
 workspace_bp = Blueprint("workspace", __name__)
@@ -300,6 +301,16 @@ def show_workspace(project_id):
         for requirement in governed_requirements
     ]
 
+    # Compliance rollup: a transparent count of ACTUAL requirement_
+    # adjudication_state values (REQUIREMENT_ADJUDICATION_STATE_NOT_YET_
+    # ASSESSED or one of REQUIREMENT_ADJUDICATION_OUTCOMES) - never a new
+    # invented compliance score. Ordinary dict, insertion order matches
+    # first-seen order so a re-render is stable rather than jittering.
+    compliance_rollup: dict[str, int] = {}
+    for row in requirements_view:
+        state = row["adjudication_state"]
+        compliance_rollup[state] = compliance_rollup.get(state, 0) + 1
+
     # Recent provenance, visible from inside the workspace itself rather
     # than only on the separate legacy dashboard - most-recent-first,
     # capped so the sidebar stays scannable rather than becoming its own
@@ -346,10 +357,11 @@ def show_workspace(project_id):
         rfi_preview=rfi_preview,
         preview_finding_id=preview_finding_id,
         revision_notices=revision_notices,
-        knowledge_count=len(store.knowledge_for_project(workspace)),
+        accepted_knowledge=list(reversed(store.knowledge_for_project(workspace))),
         activities=store.activities_for_case(workspace, active_case["id"]) if active_case else [],
         unpromoted_requirement_items=unpromoted_requirement_items,
         requirements_view=requirements_view,
+        compliance_rollup=compliance_rollup,
         adjudication_outcomes=REQUIREMENT_ADJUDICATION_OUTCOMES,
         recent_governance_events=recent_governance_events,
         threads_view=threads_view,
@@ -1239,3 +1251,45 @@ def artifact_image(project_id, artifact_id):
         abort(404)
 
     return send_file(image_path, mimetype="image/png")
+
+
+@workspace_bp.route("/projects/<project_id>/workspace/rfi-export")
+@login_required
+def export_rfi(project_id):
+    """
+    Authenticated surface for the one existing RFI exporter
+    (services.rfi_export.build_rfi_docx) - reused verbatim, not
+    reimplemented. routes/api.py's own /documents/<project_id>/rfi
+    already calls this same function, but that JSON API blueprint is
+    deliberately unauthenticated (see services/auth.py's own docstring:
+    "token/key-based API auth is a different concern from a session-
+    cookie login gate"), a pre-existing, documented design boundary this
+    route doesn't touch or remove. This route exists so that a link
+    surfaced from inside the (login-gated) Case Workspace never itself
+    becomes an unauthenticated download path merely because it's
+    convenient to link to the existing one.
+
+    Project-scoped, not Case-scoped: the underlying RFI is built from
+    the legacy consistency-check pipeline's flagged contradictions
+    (ParsedDocument.consistency_flags), which has no Case/visibility
+    concept of its own - the same access rule already governing
+    portal.dashboard (any authenticated user may view/download; there is
+    no per-project membership model in this legacy pipeline to check
+    against).
+    """
+    document = get_registry(current_app).get(project_id)
+    if document is None:
+        abort(404)
+
+    try:
+        buffer = build_rfi_docx(document)
+    except RFIExportError as exc:
+        flash(str(exc), "error")
+        return redirect(url_for("workspace.show_workspace", project_id=project_id))
+
+    return send_file(
+        buffer,
+        mimetype="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        as_attachment=True,
+        download_name=f"RFI-{project_id}.docx",
+    )
