@@ -359,6 +359,15 @@
             </div>
             {% endif %}
 
+            {% if thread.resolution_history %}
+            <p style="font-size:0.7rem;color:var(--muted);">
+                {% for entry in thread.resolution_history %}
+                Previously {{ entry.resolution.resolution_outcome.replace('_', ' ') }} ({{ entry.resolution.summary }}) &mdash;
+                reopened by {{ entry.reopened_by }} on {{ entry.reopened_at }}: {{ entry.reopen_reason }}<br>
+                {% endfor %}
+            </p>
+            {% endif %}
+
             <div class="conversation-thread">
                 {% for message in row.messages %}
                 <div class="conversation-message {{ 'human' if message.origin == 'human' else 'system' }}">
@@ -385,12 +394,38 @@
             </div>
 
             {% if row.attentions %}
-            <p style="font-size:0.7rem;color:var(--muted);">
-                Attention requested:
-                {% for attention in row.attentions %}
-                {{ attention.intended_actor }} ({{ attention.status }} &middot; by {{ attention.created_by }}){% if not loop.last %}, {% endif %}
+            <div style="margin:0.4rem 0;">
+                {% for entry in row.attentions %}
+                {% set attention = entry.attention %}
+                <div style="border-top:1px solid var(--line);padding:0.4rem 0;font-size:0.72rem;">
+                    <strong>Attention</strong> for {{ attention.intended_actor }}{% if attention.intended_actor == session.username %} <span style="color:var(--amber);">(you)</span>{% endif %}
+                    &middot; requested by {{ attention.created_by }} on {{ attention.created_at }}
+                    {% if entry.about_message %}
+                    <br><span style="color:var(--muted);">Re: &ldquo;{{ entry.about_message.text[:80] }}&rdquo;</span>
+                    {% endif %}
+                    <br>
+                    {% if attention.status == 'responded' %}
+                    <span class="review-state-badge">Responded</span>
+                    {% if entry.response_message %}
+                    &mdash; {{ entry.response_message.actor }}: &ldquo;{{ entry.response_message.text[:80] }}&rdquo;
+                    {% endif %}
+                    {% else %}
+                    <span class="review-state-badge">Pending</span>
+                    {% if active_case.status != 'archived' and row.messages %}
+                    <form method="post" action="{{ url_for('workspace.respond_to_attention_route', project_id=project_id, attention_id=attention.id) }}" style="display:inline-flex;gap:0.3rem;align-items:center;">
+                        <select name="response_message_id" required style="font-size:0.68rem;">
+                            <option value="" disabled selected>Respond with message…</option>
+                            {% for m in row.messages %}
+                            <option value="{{ m.id }}">{{ m.actor }}: {{ m.text[:40] }}</option>
+                            {% endfor %}
+                        </select>
+                        <button type="submit" class="link-button">Mark Responded</button>
+                    </form>
+                    {% endif %}
+                    {% endif %}
+                </div>
                 {% endfor %}
-            </p>
+            </div>
             {% endif %}
 
             {% if active_case.status != 'archived' %}

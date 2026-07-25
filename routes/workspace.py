@@ -131,6 +131,18 @@ def _rfi_draft_case_id(workspace, draft_id):
     return draft.get("case_id") if draft else None
 
 
+def _attention_case_id(workspace, attention_id):
+    """An Attention carries no case_id of its own (see Attention's own
+    docstring) - its real Case is its thread's Case, one hop through
+    _thread_case_id. Same reasoning as the other _*_case_id helpers:
+    never trust a caller-supplied case_id for this route's authorization
+    decision."""
+    attention = next((a for a in workspace.attentions if a["id"] == attention_id), None)
+    if attention is None:
+        return None
+    return _thread_case_id(workspace, attention["thread_id"])
+
+
 def _require_visible_case(store: CaseWorkspaceStore, workspace, case_id) -> None:
     """
     The one authorization check every Case-scoped write/download route in
@@ -342,10 +354,20 @@ def show_workspace(project_id):
     threads_view = []
     if active_case is not None:
         for thread in store.threads_for_case(workspace, active_case["id"]):
+            messages = store.messages_for_thread(workspace, thread["id"])
+            messages_by_id = {m["id"]: m for m in messages}
+            attentions_view = [
+                {
+                    "attention": attention,
+                    "about_message": messages_by_id.get(attention["message_id"]),
+                    "response_message": messages_by_id.get(attention.get("responded_message_id")),
+                }
+                for attention in store.attentions_for_thread(workspace, thread["id"])
+            ]
             threads_view.append({
                 "thread": thread,
-                "messages": store.messages_for_thread(workspace, thread["id"]),
-                "attentions": store.attentions_for_thread(workspace, thread["id"]),
+                "messages": messages,
+                "attentions": attentions_view,
             })
 
     # Attention's `intended_actor` is free text in the domain model (see
@@ -655,6 +677,45 @@ def request_thread_attention(project_id, thread_id):
     except CaseWorkspaceError as exc:
         flash(str(exc), "error")
 
+    return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
+
+
+@workspace_bp.route("/projects/<project_id>/workspace/attentions/<attention_id>/respond", methods=["POST"])
+@login_required
+def respond_to_attention_route(project_id, attention_id):
+    """Completes the existing Attention loop - see
+    CaseWorkspaceStore.respond_to_attention. The response IS an existing
+    ReviewMessage already posted in the thread (chosen by the responder,
+    never free text captured here) - Attention has no separate
+    acknowledgment-only path built in the domain model (`acknowledged_at`/
+    ATTENTION_STATUS_ACKNOWLEDGED exist in the vocabulary but no method
+    ever sets them), so this route only ever exposes the one capability
+    that's actually implemented: marking an Attention responded against
+    a real message."""
+    _, store, workspace = _load_workspace_or_404(project_id)
+    case_id = _attention_case_id(workspace, attention_id)
+    _require_visible_case(store, workspace, case_id)
+
+    response_message_id = request.form.get("response_message_id", "").strip()
+    if not response_message_id:
+        flash("Choose which message answers this attention request.", "error")
+        return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
+
+    try:
+        store.respond_to_attention(workspace, attention_id=attention_id, response_message_id=response_message_id)
+    except CaseWorkspaceError as exc:
+        flash(str(exc), "error")
+        return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
+
+    _log().append(
+        project_id=project_id,
+        event_type="attention_responded",
+        actor=_reviewer(),
+        role=session.get("role") or "unspecified",
+        payload={"attention_id": attention_id, "response_message_id": response_message_id},
+    )
+
+    flash("Attention marked as responded.", "success")
     return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
 
 
