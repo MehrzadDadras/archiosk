@@ -4805,10 +4805,12 @@ class CaseWorkspaceStore:
         if attention is None:
             raise CaseWorkspaceError(f"Attention {attention_id} was not found.")
 
+        thread = self._find(workspace.review_threads, attention["thread_id"])
+        self._require_case_not_archived(workspace, thread.get("case_id") if thread else None)
+
         attention["status"] = ATTENTION_STATUS_RESPONDED
         attention["responded_message_id"] = response_message_id
 
-        thread = self._find(workspace.review_threads, attention["thread_id"])
         if thread is not None and thread["status"] == THREAD_STATUS_WAITING_FOR_RESPONSE:
             thread["status"] = THREAD_STATUS_UNDER_REVIEW
 
@@ -4828,6 +4830,7 @@ class CaseWorkspaceStore:
         thread = self._find(workspace.review_threads, thread_id)
         if thread is None:
             raise CaseWorkspaceError(f"Review Thread {thread_id} was not found.")
+        self._require_case_not_archived(workspace, thread.get("case_id"))
         thread["status"] = normalize_open_world_value(status, KNOWN_THREAD_STATUSES)
         self.save(workspace)
         return thread
@@ -4849,6 +4852,7 @@ class CaseWorkspaceStore:
         thread = self._find(workspace.review_threads, thread_id)
         if thread is None:
             raise CaseWorkspaceError(f"Review Thread {thread_id} was not found.")
+        self._require_case_not_archived(workspace, thread.get("case_id"))
         if thread["status"] in (THREAD_STATUS_RESOLVED, THREAD_STATUS_CLOSED):
             raise CaseWorkspaceError(
                 f"Review Thread {thread_id} is already {thread['status']} - reopen it before resolving again."
@@ -4896,6 +4900,7 @@ class CaseWorkspaceStore:
         thread = self._find(workspace.review_threads, thread_id)
         if thread is None:
             raise CaseWorkspaceError(f"Review Thread {thread_id} was not found.")
+        self._require_case_not_archived(workspace, thread.get("case_id"))
         if thread["status"] not in (THREAD_STATUS_RESOLVED, THREAD_STATUS_CLOSED):
             raise CaseWorkspaceError(f"Review Thread {thread_id} is not resolved/closed - nothing to reopen.")
 

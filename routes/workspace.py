@@ -44,6 +44,10 @@ from werkzeug.utils import secure_filename
 from services.auth import login_required
 from services.case_workspace import (
     ANALYSIS_TRIGGER_USER_INITIATED,
+    KNOWN_RESOLUTION_OUTCOMES,
+    MESSAGE_ORIGIN_HUMAN,
+    OBJECT_KIND_CASE,
+    OBJECT_KIND_FINDING,
     REQUIREMENT_ADJUDICATION_OUTCOMES,
     AnalysisTrigger,
     CaseWorkspaceError,
@@ -55,6 +59,7 @@ from services.conversation_interpreter import interpret_message
 from services.governance import GovernanceLog
 from services.ingestion import get_registry
 from services.project_clock import open_project
+from models import User
 
 workspace_bp = Blueprint("workspace", __name__)
 
@@ -89,6 +94,46 @@ def _load_workspace_or_404(project_id: str):
         },
     )
     return document, store, workspace
+
+
+def _thread_case_id(workspace, thread_id):
+    """The thread's OWN recorded case_id, looked up server-side - never
+    trust a client-supplied hidden `case_id` form field for an
+    authorization decision (a caller could submit a case_id they own
+    alongside a thread_id belonging to someone else's Private Case).
+    Returns None both when the thread doesn't exist (the caller's own
+    subsequent store-layer call already raises a real not-found error)
+    and when it exists but has no Case anchor at all."""
+    thread = next((t for t in workspace.review_threads if t["id"] == thread_id), None)
+    return thread.get("case_id") if thread else None
+
+
+def _require_visible_case(store: CaseWorkspaceStore, workspace, case_id) -> None:
+    """
+    The discussion routes below (human-comment tranche) are the first
+    write paths in this file that both (a) take a case_id straight off
+    the URL/a looked-up thread and (b) are now exposed to ordinary,
+    non-admin users through real UI controls, rather than being a
+    low-probability direct-URL-typing path. `None` is a legitimate no-op
+    (a Project-level thread with no Case anchor). A visible-but-
+    nonexistent case_id is left to the caller's own subsequent lookup -
+    this only ever adds an additional rejection for a real Case the
+    requester is not allowed to see, mirroring
+    _require_case_not_archived's own "additional reason, never replaces
+    the normal check" shape.
+
+    Deliberately narrow: this does not retrofit every pre-existing
+    Case-scoped route in this file (validate_finding, set_disposition,
+    add_drawing_source, etc.) - that remains the same previously-flagged,
+    not-yet-closed gap it already was (see governance/current/kernel-
+    object-model.md's "Case visibility" entry), not something this
+    tranche's narrower mandate authorizes rewriting wholesale.
+    """
+    if not case_id:
+        return
+    visible_ids = {c["id"] for c in store.visible_cases_for(workspace, _reviewer())}
+    if case_id not in visible_ids:
+        abort(404)
 
 
 # -- Approval Gate ---------------------------------------------------------------
@@ -261,6 +306,29 @@ def show_workspace(project_id):
     # unbounded log viewer.
     recent_governance_events = list(reversed(_log().read(project_id)))[:25]
 
+    # Human discussion (ReviewThread/ReviewMessage/Attention), scoped to
+    # whichever Case is active - same read/write boundary as everything
+    # else on this page (a thread only ever appears here if its own
+    # case_id equals active_case's id, so a Private Case's discussion is
+    # exactly as invisible to a non-owner as its Findings already are).
+    threads_view = []
+    if active_case is not None:
+        for thread in store.threads_for_case(workspace, active_case["id"]):
+            threads_view.append({
+                "thread": thread,
+                "messages": store.messages_for_thread(workspace, thread["id"]),
+                "attentions": store.attentions_for_thread(workspace, thread["id"]),
+            })
+
+    # Attention's `intended_actor` is free text in the domain model (see
+    # Attention's own docstring - people/roles are not a closed
+    # vocabulary), but a real registered-user list already exists and is
+    # safe to offer as a convenience: it names no project, reveals no
+    # Case's existence or visibility, only who is a registered account at
+    # all - the "narrowest honest UI supported by the current data model"
+    # rather than either a fabricated directory or a bare free-text box.
+    known_usernames = sorted(u.username for u in User.query.all())
+
     return render_template(
         "case_workspace.html",
         document=document,
@@ -284,6 +352,9 @@ def show_workspace(project_id):
         requirements_view=requirements_view,
         adjudication_outcomes=REQUIREMENT_ADJUDICATION_OUTCOMES,
         recent_governance_events=recent_governance_events,
+        threads_view=threads_view,
+        known_usernames=known_usernames,
+        resolution_outcomes=KNOWN_RESOLUTION_OUTCOMES,
     )
 
 
@@ -448,6 +519,165 @@ def adopt_review_message(project_id, case_id):
         return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
 
     flash("Review comment carried forward for renewed consideration.", "success")
+    return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
+
+
+# -- human discussion: ReviewThread / ReviewMessage / Attention --------------------
+
+@workspace_bp.route("/projects/<project_id>/workspace/cases/<case_id>/threads", methods=["POST"])
+@login_required
+def create_thread(project_id, case_id):
+    """Start a new discussion on the active Case, or optionally anchored
+    to one of its Findings - see CaseWorkspaceStore.create_review_thread.
+    Anyone who can see this Case may start a discussion on it (the same
+    boundary reads already enforce, not a stricter owner-only rule -
+    ordinary collaborative participation is not a Case-lifecycle
+    transition the way Archive/Derive/Adopt are)."""
+    _, store, workspace = _load_workspace_or_404(project_id)
+    _require_visible_case(store, workspace, case_id)
+
+    title = (request.form.get("title") or "").strip()
+    if not title:
+        flash("A discussion needs a title.", "error")
+        return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
+
+    related_finding_id = request.form.get("related_finding_id") or None
+    if related_finding_id:
+        anchor_type, anchor_id = OBJECT_KIND_FINDING, related_finding_id
+    else:
+        anchor_type, anchor_id = OBJECT_KIND_CASE, case_id
+
+    try:
+        thread = store.create_review_thread(
+            workspace, title=title, anchor_type=anchor_type, anchor_id=anchor_id,
+            created_by=_reviewer(), case_id=case_id, governance_log=_log(),
+        )
+    except CaseWorkspaceError as exc:
+        flash(str(exc), "error")
+        return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
+
+    opening_text = (request.form.get("text") or "").strip()
+    if opening_text:
+        try:
+            store.add_review_message(
+                workspace, thread_id=thread["id"], origin=MESSAGE_ORIGIN_HUMAN,
+                actor=_reviewer(), message_type="observation", text=opening_text,
+                related_finding_id=related_finding_id, governance_log=_log(),
+            )
+        except CaseWorkspaceError as exc:
+            flash(str(exc), "error")
+
+    return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
+
+
+@workspace_bp.route("/projects/<project_id>/workspace/threads/<thread_id>/messages", methods=["POST"])
+@login_required
+def add_thread_message(project_id, thread_id):
+    """Reply within an existing discussion - always origin=human, since
+    this form only exists for a real authenticated person to use; there
+    is no machine caller of this route. See
+    CaseWorkspaceStore.add_review_message for the collaboration-
+    threshold crossing this triggers automatically on a non-owner's
+    first qualifying contribution to a SHARED Case - that logic is not
+    reproduced here, only invoked."""
+    _, store, workspace = _load_workspace_or_404(project_id)
+    case_id = _thread_case_id(workspace, thread_id)
+    _require_visible_case(store, workspace, case_id)
+
+    text = (request.form.get("text") or "").strip()
+    if not text:
+        return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
+
+    try:
+        store.add_review_message(
+            workspace, thread_id=thread_id, origin=MESSAGE_ORIGIN_HUMAN,
+            actor=_reviewer(), message_type="response", text=text,
+            governance_log=_log(),
+        )
+    except CaseWorkspaceError as exc:
+        flash(str(exc), "error")
+
+    return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
+
+
+@workspace_bp.route("/projects/<project_id>/workspace/threads/<thread_id>/attention", methods=["POST"])
+@login_required
+def request_thread_attention(project_id, thread_id):
+    """The equivalent of "please look at this" against one specific
+    message - see CaseWorkspaceStore.request_attention. Deliberately a
+    governed in-project request only: no email, push notification, or
+    presence/availability tracking exists anywhere in this codebase, and
+    none is added here."""
+    _, store, workspace = _load_workspace_or_404(project_id)
+    case_id = _thread_case_id(workspace, thread_id)
+    _require_visible_case(store, workspace, case_id)
+
+    message_id = request.form.get("message_id", "").strip()
+    intended_actor = (request.form.get("intended_actor") or "").strip()
+    if not message_id or not intended_actor:
+        flash("Choose a message and who should attend to it.", "error")
+        return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
+
+    try:
+        store.request_attention(
+            workspace, thread_id=thread_id, message_id=message_id,
+            intended_actor=intended_actor, created_by=_reviewer(), governance_log=_log(),
+        )
+    except CaseWorkspaceError as exc:
+        flash(str(exc), "error")
+
+    return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
+
+
+@workspace_bp.route("/projects/<project_id>/workspace/threads/<thread_id>/resolve", methods=["POST"])
+@login_required
+def resolve_thread(project_id, thread_id):
+    """See CaseWorkspaceStore.resolve_review_thread - additive only,
+    never rewrites or removes a single existing message. Unresolved
+    discussion is never required to be resolved for any reason other
+    than an explicit human choice to do so here."""
+    _, store, workspace = _load_workspace_or_404(project_id)
+    case_id = _thread_case_id(workspace, thread_id)
+    _require_visible_case(store, workspace, case_id)
+
+    resolution_outcome = request.form.get("resolution_outcome", "").strip()
+    summary = (request.form.get("summary") or "").strip()
+    if not resolution_outcome or not summary:
+        flash("A resolution needs both an outcome and a summary.", "error")
+        return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
+
+    try:
+        store.resolve_review_thread(
+            workspace, thread_id=thread_id, resolution_outcome=resolution_outcome,
+            summary=summary, resolved_by=_reviewer(), governance_log=_log(),
+        )
+    except CaseWorkspaceError as exc:
+        flash(str(exc), "error")
+
+    return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
+
+
+@workspace_bp.route("/projects/<project_id>/workspace/threads/<thread_id>/reopen", methods=["POST"])
+@login_required
+def reopen_thread(project_id, thread_id):
+    """See CaseWorkspaceStore.reopen_review_thread - the prior resolution
+    is pushed onto resolution_history, never erased."""
+    _, store, workspace = _load_workspace_or_404(project_id)
+    case_id = _thread_case_id(workspace, thread_id)
+    _require_visible_case(store, workspace, case_id)
+
+    reason = (request.form.get("reason") or "").strip()
+    if not reason:
+        flash("Reopening a resolved discussion needs a reason.", "error")
+        return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
+
+    try:
+        store.reopen_review_thread(
+            workspace, thread_id=thread_id, reason=reason, actor=_reviewer(), governance_log=_log(),
+        )
+    except CaseWorkspaceError as exc:
+        flash(str(exc), "error")
+
     return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
 
 

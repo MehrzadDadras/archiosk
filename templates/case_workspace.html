@@ -294,6 +294,111 @@
             <input type="text" name="text" placeholder="Analyze this drawing for datum inconsistencies…" autocomplete="off" required>
             <button type="submit">Send</button>
         </form>
+
+        <p class="workspace-pane-label" style="margin-top:1.2rem;">Discussion ({{ threads_view|length }})</p>
+        {% if active_case.status == 'archived' %}
+        <p style="color:var(--muted);font-size:0.78rem;">
+            This Case is archived — the discussion below is preserved exactly as it stood and is read-only.
+        </p>
+        {% endif %}
+
+        {% for row in threads_view %}
+        {% set thread = row.thread %}
+        <details class="add-source-details">
+            <summary>
+                {{ thread.title }}
+                <span class="review-state-badge">{{ thread.status.replace('_', ' ') }}</span>
+                {% if thread.anchor.anchor_type == 'finding' %}<small style="color:var(--muted);">&middot; re: a Finding</small>{% endif %}
+            </summary>
+
+            {% if thread.resolution %}
+            <div class="revision-notice">
+                <strong>Resolved</strong> &middot; {{ thread.resolution.resolution_outcome.replace('_', ' ') }}
+                by {{ thread.resolution.resolved_by }} on {{ thread.resolution.resolved_at }}
+                <p>{{ thread.resolution.summary }}</p>
+            </div>
+            {% endif %}
+
+            <div class="conversation-thread">
+                {% for message in row.messages %}
+                <div class="conversation-message {{ 'human' if message.origin == 'human' else 'system' }}">
+                    <span class="role-label">{{ message.actor }}</span>
+                    <span style="color:var(--muted);font-size:0.68rem;">{{ message.origin }} &middot; {{ message.created_at }}</span>
+                    {% if message.message_type == 'carried_forward' %}
+                    <br><small style="color:var(--amber);">Carried forward from an archived predecessor Case for renewed consideration — not originally authored here.</small>
+                    {% endif %}
+                    <p style="margin:0.3rem 0;">{{ message.text }}</p>
+                    {% if active_case.status != 'archived' %}
+                    <form method="post" action="{{ url_for('workspace.request_thread_attention', project_id=project_id, thread_id=thread.id) }}" style="display:inline-flex;gap:0.3rem;align-items:center;">
+                        <input type="hidden" name="message_id" value="{{ message.id }}">
+                        <select name="intended_actor" required style="font-size:0.68rem;">
+                            <option value="" disabled selected>Request attention…</option>
+                            {% for username in known_usernames %}
+                            <option value="{{ username }}">{{ username }}</option>
+                            {% endfor %}
+                        </select>
+                        <button type="submit" class="link-button">&#9888; Flag</button>
+                    </form>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+
+            {% if row.attentions %}
+            <p style="font-size:0.7rem;color:var(--muted);">
+                Attention requested:
+                {% for attention in row.attentions %}
+                {{ attention.intended_actor }} ({{ attention.status }} &middot; by {{ attention.created_by }}){% if not loop.last %}, {% endif %}
+                {% endfor %}
+            </p>
+            {% endif %}
+
+            {% if active_case.status != 'archived' %}
+            <form class="workspace-form" method="post" action="{{ url_for('workspace.add_thread_message', project_id=project_id, thread_id=thread.id) }}">
+                <input type="text" name="text" placeholder="Reply…" required>
+                <button type="submit">Reply</button>
+            </form>
+
+            {% if thread.status not in ['resolved', 'closed'] %}
+            <form class="workspace-form" method="post" action="{{ url_for('workspace.resolve_thread', project_id=project_id, thread_id=thread.id) }}">
+                <select name="resolution_outcome" required>
+                    {% for outcome in resolution_outcomes %}
+                    <option value="{{ outcome }}">{{ outcome.replace('_', ' ') }}</option>
+                    {% endfor %}
+                </select>
+                <input type="text" name="summary" placeholder="Resolution summary" required>
+                <button type="submit">Resolve</button>
+            </form>
+            {% else %}
+            <form class="workspace-form" method="post" action="{{ url_for('workspace.reopen_thread', project_id=project_id, thread_id=thread.id) }}">
+                <input type="text" name="reason" placeholder="Reason to reopen" required>
+                <button type="submit">Reopen</button>
+            </form>
+            {% endif %}
+            {% endif %}
+        </details>
+        {% else %}
+        <p style="color:var(--muted);font-size:0.82rem;">No discussion yet on this Case.</p>
+        {% endfor %}
+
+        {% if active_case.status != 'archived' %}
+        <details class="add-source-details">
+            <summary>+ Start a discussion</summary>
+            <form class="workspace-form" method="post" action="{{ url_for('workspace.create_thread', project_id=project_id, case_id=active_case.id) }}">
+                <input type="text" name="title" placeholder="Discussion title" required>
+                {% if findings_view %}
+                <select name="related_finding_id">
+                    <option value="">General Case discussion</option>
+                    {% for row in findings_view %}
+                    <option value="{{ row.finding.id }}">Re: {{ row.finding.statement[:50] }}</option>
+                    {% endfor %}
+                </select>
+                {% endif %}
+                <textarea name="text" placeholder="Opening comment (optional)"></textarea>
+                <button type="submit">Start Discussion</button>
+            </form>
+        </details>
+        {% endif %}
         {% else %}
         <h2>No Case selected</h2>
         <p style="color:var(--muted);">Create a Case on the left to begin a conversation and open a drawing for review.</p>
