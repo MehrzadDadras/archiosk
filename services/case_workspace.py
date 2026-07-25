@@ -1546,14 +1546,51 @@ class MaturityRecord:
     effective_at: Optional[str] = None
 
 
+# -- Case visibility (ratified governance baseline, Private -> Shared tranche) --
+# Deliberately minimal for this tranche - only the two states the ratified
+# Investigation Lifecycle spec authorizes now. COLLABORATIVE and ARCHIVED
+# are named but NOT added here (see governance/specified-unbuilt/
+# investigation-lifecycle-extensions.md) - adding their constants ahead of
+# their own governed transitions would misrepresent them as available.
+CASE_VISIBILITY_PRIVATE = "private"
+CASE_VISIBILITY_SHARED = "shared"
+
+KNOWN_CASE_VISIBILITY_STATES = (
+    CASE_VISIBILITY_PRIVATE,
+    CASE_VISIBILITY_SHARED,
+)
+
+
 @dataclass
 class CaseRecord:
+    """
+    `visibility` defaults to CASE_VISIBILITY_PRIVATE unconditionally -
+    "newly created investigative Cases default to PRIVATE" per the
+    ratified spec, not an open-world/caller-chosen value in this
+    tranche. `created_by` is optional (None) only for backward
+    compatibility with the many pre-existing callers of create_case()
+    across Foundation Batches A-K that never passed an actor - a real,
+    new Case created through the current route wiring always has one.
+    A Case with created_by=None cannot be shared (see share_case) -
+    there is no ambient/inferred owner to authorize the transition,
+    an honest limitation rather than a silently-invented one.
+    `shared_by`/`shared_at` record the transition directly on the
+    record itself, alongside (not instead of) the GovernanceLog event
+    share_case also writes - the same denormalized-pointer-plus-
+    separate-governed-record pattern Source.supersedes_source_id and
+    Supersession already use together.
+    """
+
     id: str
     project_id: str
     title: str
     objective: str
     created_at: str
     status: str = "open"
+    visibility: str = CASE_VISIBILITY_PRIVATE
+    created_by: Optional[str] = None
+    shared_by: Optional[str] = None
+    shared_at: Optional[str] = None
     source_ids: list[str] = field(default_factory=list)
     conversation: list[dict] = field(default_factory=list)
     analysis_ids: list[str] = field(default_factory=list)
@@ -2633,17 +2670,105 @@ class CaseWorkspaceStore:
 
     # -- cases -----------------------------------------------------------------
 
-    def create_case(self, workspace: ProjectWorkspace, title: str, objective: str) -> dict:
+    def create_case(self, workspace: ProjectWorkspace, title: str, objective: str, created_by: Optional[str] = None) -> dict:
+        """
+        `created_by` is optional only for backward compatibility with
+        existing callers that predate Case visibility (see CaseRecord's
+        own docstring) - every new Case is unconditionally CASE_
+        VISIBILITY_PRIVATE regardless of whether an actor was given;
+        visibility is never a caller-chosen value in this tranche.
+        """
         case = CaseRecord(
             id=_new_id(),
             project_id=workspace.project_id,
             title=title,
             objective=objective,
             created_at=_now(),
+            visibility=CASE_VISIBILITY_PRIVATE,
+            created_by=created_by,
         )
         workspace.cases.append(asdict(case))
         self.save(workspace)
         return asdict(case)
+
+    def visible_cases_for(self, workspace: ProjectWorkspace, actor: str) -> list[dict]:
+        """
+        The one real enforcement point for Case privacy (ratified
+        governance baseline): a Case is visible to `actor` if it is not
+        private, or if `actor` is its recorded creator/owner. Every
+        route or query that lists, switches between, or resolves a
+        default Case MUST go through this - filtering `workspace.cases`
+        directly, or trusting an id supplied by the caller without
+        checking it against this list first, silently re-opens exactly
+        the "field called visibility='private' while unrestricted
+        queries still return the Case" failure this method exists to
+        prevent. Project membership/authentication alone is deliberately
+        NOT sufficient here - see this method's own callers for where
+        an authenticated-but-non-owner actor is still excluded.
+        """
+        return [
+            c for c in workspace.cases
+            if c["visibility"] != CASE_VISIBILITY_PRIVATE or c.get("created_by") == actor
+        ]
+
+    def share_case(
+        self,
+        workspace: ProjectWorkspace,
+        case_id: str,
+        actor: str,
+        governance_log: Optional[GovernanceLog] = None,
+    ) -> dict:
+        """
+        The one authorized transition this tranche implements: PRIVATE
+        -> SHARED, by explicit human action only. Deliberately narrow
+        authority model for this tranche: only the Case's own recorded
+        creator/owner may share it - there is no collaboration threshold
+        yet (specified but unbuilt, see governance/specified-unbuilt/
+        investigation-lifecycle-extensions.md), so no PM/authorized-role
+        override is implemented here; inventing one now would be ambient
+        authority this tranche was explicitly told not to add. A Case
+        with created_by=None (a pre-visibility legacy record) cannot be
+        shared through this method - there is no recorded owner to
+        authorize the transition, and no actor is silently treated as
+        one.
+        """
+        case = self._find(workspace.cases, case_id)
+        if case is None:
+            raise CaseWorkspaceError(f"Case {case_id} was not found.")
+
+        if case["visibility"] != CASE_VISIBILITY_PRIVATE:
+            raise CaseWorkspaceError(
+                f"Case {case_id} is already '{case['visibility']}' - only a "
+                "Private Case can be shared."
+            )
+
+        if case.get("created_by") is None or actor != case["created_by"]:
+            raise CaseWorkspaceError(
+                "Only this Case's own creator may share it. No collaboration "
+                "threshold or delegated sharing authority exists yet."
+            )
+
+        prior_visibility = case["visibility"]
+        shared_at = _now()
+        case["visibility"] = CASE_VISIBILITY_SHARED
+        case["shared_by"] = actor
+        case["shared_at"] = shared_at
+        self.save(workspace)
+
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id, event_type="case_shared",
+                actor=actor, role="human",
+                payload={
+                    "case_id": case_id, "case_creator": case["created_by"],
+                    "prior_visibility": prior_visibility,
+                    "resulting_visibility": CASE_VISIBILITY_SHARED,
+                    "shared_at": shared_at,
+                },
+                correlation_id=case_id,
+            )
+
+        return case
 
     def attach_source_to_case(self, workspace: ProjectWorkspace, case_id: str, source_id: str) -> None:
         case = self._find(workspace.cases, case_id)

@@ -56,15 +56,21 @@
             {% endfor %}
         </ul>
 
-        <p class="workspace-pane-label">Cases ({{ workspace.cases|length }})</p>
+        <p class="workspace-pane-label">Cases ({{ visible_cases|length }})</p>
         <ul class="case-list">
-            {% for case in workspace.cases %}
+            {% for case in visible_cases %}
             <li>
                 <a class="case-item{% if active_case and case.id == active_case.id %} active{% endif %}"
                    href="{{ url_for('workspace.show_workspace', project_id=project_id, case=case.id) }}">
                     <span class="case-status-badge">{{ case.status }}</span>
+                    <span class="case-status-badge">{{ case.visibility }}</span>
                     {{ case.title }}
                 </a>
+                {% if case.visibility == 'private' %}
+                <form method="post" action="{{ url_for('workspace.share_case', project_id=project_id, case_id=case.id) }}">
+                    <button type="submit" class="link-button">Share</button>
+                </form>
+                {% endif %}
             </li>
             {% else %}
             <li style="color:var(--muted);font-size:0.82rem;">No Cases yet.</li>

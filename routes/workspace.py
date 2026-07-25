@@ -155,10 +155,18 @@ def show_workspace(project_id):
     except CaseWorkspaceError:
         pass
 
+    # Case privacy enforcement point (ratified governance baseline): every
+    # listing, default-selection, and explicit ?case= lookup below resolves
+    # against visible_cases, never the raw workspace.cases list - a Case
+    # this reviewer cannot see must never become active_case, appear in the
+    # sidebar count/list, or be reachable by guessing/typing its id into
+    # the query string. See CaseWorkspaceStore.visible_cases_for.
+    visible_cases = store.visible_cases_for(workspace, _reviewer())
+
     active_case_id = request.args.get("case") or (
-        workspace.cases[0]["id"] if workspace.cases else None
+        visible_cases[0]["id"] if visible_cases else None
     )
-    active_case = next((c for c in workspace.cases if c["id"] == active_case_id), None)
+    active_case = next((c for c in visible_cases if c["id"] == active_case_id), None)
 
     focused_finding_id = session.get(f"focused_finding:{project_id}")
 
@@ -208,10 +216,17 @@ def show_workspace(project_id):
     rfi_preview = None
     preview_finding_id = request.args.get("preview_finding_id")
     if preview_finding_id:
-        try:
-            rfi_preview = store.build_reference_snapshot(workspace, preview_finding_id)
-        except CaseWorkspaceError:
-            rfi_preview = None
+        # Indirect-identifier guard: a finding_id typed/guessed into the
+        # query string must not bypass Case privacy - only build the
+        # preview if the finding actually belongs to a Case this reviewer
+        # can see.
+        preview_finding = next((f for f in workspace.findings if f["id"] == preview_finding_id), None)
+        visible_case_ids = {c["id"] for c in visible_cases}
+        if preview_finding is not None and preview_finding.get("case_id") in visible_case_ids:
+            try:
+                rfi_preview = store.build_reference_snapshot(workspace, preview_finding_id)
+            except CaseWorkspaceError:
+                rfi_preview = None
 
     revision_notices = (
         store.revision_notices_for_case(workspace, active_case["id"]) if active_case else []
@@ -221,6 +236,7 @@ def show_workspace(project_id):
         "case_workspace.html",
         document=document,
         workspace=workspace,
+        visible_cases=visible_cases,
         active_case=active_case,
         findings_view=findings_view,
         focused_finding_id=focused_finding_id,
@@ -249,17 +265,36 @@ def create_case(project_id):
         flash("A Case needs a title.", "error")
         return redirect(url_for("workspace.show_workspace", project_id=project_id))
 
-    case = store.create_case(workspace, title=title, objective=objective)
+    case = store.create_case(workspace, title=title, objective=objective, created_by=_reviewer())
 
     _log().append(
         project_id=project_id,
         event_type="case_created",
         actor=_reviewer(),
         role=session.get("role") or "unspecified",
-        payload={"case_id": case["id"], "title": title},
+        payload={"case_id": case["id"], "title": title, "visibility": case["visibility"]},
     )
 
     return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case["id"]))
+
+
+@workspace_bp.route("/projects/<project_id>/workspace/cases/<case_id>/share", methods=["POST"])
+@login_required
+def share_case(project_id, case_id):
+    """Explicit, human-authorized Private -> Shared transition only -
+    see CaseWorkspaceStore.share_case. The machine never performs this;
+    this route only ever forwards a real, authenticated human's own
+    request to share their own Case."""
+    _, store, workspace = _load_workspace_or_404(project_id)
+
+    try:
+        store.share_case(workspace, case_id=case_id, actor=_reviewer(), governance_log=_log())
+    except CaseWorkspaceError as exc:
+        flash(str(exc), "error")
+        return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
+
+    flash("Case shared.", "success")
+    return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
 
 
 @workspace_bp.route("/projects/<project_id>/workspace/cases/<case_id>/sources", methods=["POST"])
@@ -800,10 +835,17 @@ def issue_rfi_draft(project_id, draft_id):
 @workspace_bp.route("/projects/<project_id>/workspace/artifacts/<artifact_id>/image")
 @login_required
 def artifact_image(project_id, artifact_id):
-    _, _store_unused, workspace = _load_workspace_or_404(project_id)
+    _, store, workspace = _load_workspace_or_404(project_id)
 
     artifact = next((a for a in workspace.artifacts if a["id"] == artifact_id), None)
     if artifact is None or not artifact.get("image_path"):
+        abort(404)
+
+    # Indirect-identifier guard, same reasoning as the preview_finding_id
+    # check above: an artifact_id typed/guessed directly must not bypass
+    # Case privacy just because it skips the case listing/switcher.
+    visible_case_ids = {c["id"] for c in store.visible_cases_for(workspace, _reviewer())}
+    if artifact.get("case_id") not in visible_case_ids:
         abort(404)
 
     image_path = Path(current_app.config["REGISTRY_STORE_PATH"]) / "workspace_artifacts" / artifact["image_path"]
