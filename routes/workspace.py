@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import io
 import uuid
+from dataclasses import asdict
 from pathlib import Path
 
 from flask import (
@@ -42,6 +43,8 @@ from werkzeug.utils import secure_filename
 
 from services.auth import login_required
 from services.case_workspace import (
+    ANALYSIS_TRIGGER_USER_INITIATED,
+    AnalysisTrigger,
     CaseWorkspaceError,
     CaseWorkspaceStore,
     DISPOSITIONS,
@@ -523,6 +526,93 @@ def set_disposition(project_id, finding_id):
         role=session.get("role") or "unspecified",
         payload={"finding_id": finding_id, "disposition": disposition},
     )
+
+    return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
+
+
+@workspace_bp.route(
+    "/projects/<project_id>/workspace/cases/<case_id>/requirement-items/<requirement_item_id>/promote",
+    methods=["POST"],
+)
+@login_required
+def promote_requirement_item_route(project_id, case_id, requirement_item_id):
+    """Bridges one extracted RequirementItem (services/bhive_parser.py's
+    legacy extraction pipeline) into a governed Requirement. See
+    CaseWorkspaceStore.promote_requirement_item and
+    governance/specified-unbuilt/investigation-lifecycle-extensions.md
+    for the finalized promotion contract this route exercises unchanged
+    - it never infers source_id, it only forwards what the form
+    explicitly asserts."""
+    document, store, workspace = _load_workspace_or_404(project_id)
+
+    item = next((r for r in document.requirements if r.id == requirement_item_id), None)
+    if item is None:
+        abort(404)
+
+    source_id = request.form.get("source_id")
+    if not source_id:
+        flash(
+            "Select the Source this requirement was actually extracted from before promoting it.",
+            "error",
+        )
+        return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
+
+    trigger = AnalysisTrigger(
+        trigger_type=ANALYSIS_TRIGGER_USER_INITIATED,
+        triggered_by_actor=_reviewer(),
+    )
+
+    try:
+        result = store.promote_requirement_item(
+            workspace,
+            case_id=case_id,
+            source_id=source_id,
+            requirement_item=asdict(item),
+            actor=_reviewer(),
+            trigger=trigger,
+            governance_log=_log(),
+        )
+    except CaseWorkspaceError as exc:
+        flash(str(exc), "error")
+        return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
+
+    flash(
+        f"Promoted requirement item {requirement_item_id} to governed "
+        f"Requirement {result['requirement']['id']}.",
+        "success",
+    )
+    return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
+
+
+@workspace_bp.route("/projects/<project_id>/workspace/requirements/<requirement_id>/adjudicate", methods=["POST"])
+@login_required
+def adjudicate_requirement(project_id, requirement_id):
+    """Records a RequirementAdjudication (Foundation Batch K) - the human
+    compliance determination against a governed Requirement, distinct
+    from Finding Disposition. See
+    CaseWorkspaceStore.record_requirement_adjudication."""
+    _, store, workspace = _load_workspace_or_404(project_id)
+
+    outcome = request.form.get("outcome")
+    reasoning = request.form.get("reasoning")
+    case_id = request.form.get("case_id")
+    evidence_finding_ids = [v for v in request.form.getlist("evidence_finding_id") if v]
+    evidence_relationship_ids = [v for v in request.form.getlist("evidence_relationship_id") if v]
+
+    try:
+        store.record_requirement_adjudication(
+            workspace,
+            requirement_id=requirement_id,
+            outcome=outcome,
+            adjudicator=_reviewer(),
+            reasoning=reasoning,
+            evidence_finding_ids=evidence_finding_ids or None,
+            evidence_relationship_ids=evidence_relationship_ids or None,
+            governance_log=_log(),
+        )
+    except CaseWorkspaceError as exc:
+        flash(str(exc), "error")
+        return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
 
     return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
 

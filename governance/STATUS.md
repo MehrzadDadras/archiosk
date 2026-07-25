@@ -20,7 +20,7 @@ Everything actually implemented today is a strict, uncontradicted subset of this
 
 ## What's actually implemented (real, tested, running code)
 
-`services/case_workspace.py` (backend repo), 4,594 lines, 10 Foundation Batches, 166 passing `unittest` tests. Full detail and code anchors: `current/kernel-object-model.md`. In one sentence: `Source`, `Requirement`, `Finding`, `Relationship`, `Case`, `ReviewerValidation`, `Disposition`, `RequirementAdjudication`, `Snapshot`, `Supersession`, `TemporalObligation`, `AnalysisRun`/`AnalysisTrigger`, and `GovernanceLog` all exist, are tested, and are the ground truth for everything else in this baseline.
+`services/case_workspace.py` (backend repo), 10 Foundation Batches plus the `promote_requirement_item()` bridge tranche, 185 passing `unittest` tests. Full detail and code anchors: `current/kernel-object-model.md`. In one sentence: `Source`, `Requirement`, `Finding`, `Relationship`, `Case`, `ReviewerValidation`, `Disposition`, `RequirementAdjudication`, `Snapshot`, `Supersession`, `TemporalObligation`, `AnalysisRun`/`AnalysisTrigger`, `GovernanceLog`, and the `promote_requirement_item()` bridge all exist, are tested, and are the ground truth for everything else in this baseline. `RequirementAdjudication` and the promotion bridge are also now reachable through minimal route wiring in `routes/workspace.py` (`promote_requirement_item_route`, `adjudicate_requirement`).
 
 ## What's specified but unbuilt (fully designed, zero code)
 
@@ -39,9 +39,9 @@ Machine Model / Installed Asset Identity; infrastructure/tenant hosting isolatio
 | Architecture (the nine-round review this baseline documents) | **RATIFIED** |
 | Application implementation, broadly | **STILL FROZEN** |
 | Foundation Batch K (`RequirementAdjudication`) | Already implemented in code; **further feature expansion NOT AUTHORIZED** |
-| `promote_requirement_item()` design | **READY** (see `specified-unbuilt/` for the finalized contract) |
-| `promote_requirement_item()` implementation | **NOT YET AUTHORIZED** |
-| `RequirementAdjudication` route wiring (`routes/workspace.py`) | **NOT YET AUTHORIZED** |
+| `promote_requirement_item()` design | READY (superseded by implementation below) |
+| `promote_requirement_item()` implementation | **IMPLEMENTED** — `services/case_workspace.py` (`CaseWorkspaceStore.promote_requirement_item`), 14 tests in `tests/test_requirement_promotion.py::PromoteRequirementItemTests`. Further feature expansion beyond this narrow tranche remains **NOT AUTHORIZED**. |
+| `RequirementAdjudication` route wiring (`routes/workspace.py`) | **IMPLEMENTED** — `promote_requirement_item_route` and `adjudicate_requirement`, 5 tests in `tests/test_requirement_promotion.py::RequirementRouteWiringTests`. No broader UI/route architecture authorized beyond these two routes. |
 | Scenario, ViabilityAssessment, Perspective, Contract DNA, Published Procurement Instrument, Neutral Workspace, Experience Corpus | **NOT AUTHORIZED** — specified only |
 | Repository migration/consolidation | **FROZEN** — both repos remain physically separate |
 

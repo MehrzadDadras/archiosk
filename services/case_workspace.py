@@ -3174,6 +3174,149 @@ class CaseWorkspaceStore:
             return REQUIREMENT_ADJUDICATION_STATE_NOT_YET_ASSESSED
         return latest["outcome"]
 
+    # -- requirement item promotion bridge (ratified governance baseline) ----------
+
+    def promote_requirement_item(
+        self,
+        workspace: ProjectWorkspace,
+        case_id: str,
+        source_id: str,
+        requirement_item: dict,
+        actor: str,
+        trigger: AnalysisTrigger,
+        governance_log: Optional[GovernanceLog] = None,
+    ) -> dict:
+        """
+        Bridges a `RequirementItem` (the legacy, day-one extraction
+        pipeline in services/bhive_parser.py - `{"id", "text",
+        "category", "confidence", "source_line"}`) into the governed
+        `Requirement` primitive. Deliberately takes a plain dict, not a
+        typed import from bhive_parser - this module has never imported
+        that one and keeps the two pipelines structurally decoupled, per
+        the architecture review's own finding that they are different
+        stages of one river, not a duplicate-truth risk requiring tighter
+        coupling to resolve.
+
+        `source_id` is never inferred - the caller must explicitly assert
+        which real Source the extracted text actually came from (no-
+        silent-provenance-fabrication discipline, governance/specified-
+        unbuilt/investigation-lifecycle-extensions.md). `trigger` is
+        required, not defaulted, mirroring record_analysis's own honesty
+        discipline that every Analysis must say why it started.
+
+        Preserves confidence, reasoning-bearing context, and provenance by
+        creating an accompanying Finding + AnalysisRun (not just the bare
+        Requirement) - this is the promotion's "explicit AnalysisTrigger"
+        requirement satisfied concretely, not just documented. All three
+        new records (Finding, AnalysisRun, Requirement) are constructed in
+        memory and written in exactly one self.save(workspace) call, so a
+        failure can never leave an orphan Finding without its Requirement
+        or vice versa - the same single-save-per-governed-operation
+        pattern already used by register_table_evidence, not a new
+        transaction mechanism.
+
+        Never touches Requirement.status beyond its ordinary default
+        (REQUIREMENT_STATUS_ACTIVE) and never creates a Disposition or
+        RequirementAdjudication - promotion only ever produces an
+        un-adjudicated, ordinary Requirement. It still requires the normal
+        RequirementAdjudication process before its compliance status means
+        anything; this function performs no authority escalation of its
+        own.
+        """
+        case = self._find(workspace.cases, case_id)
+        if case is None:
+            raise CaseWorkspaceError(f"Case {case_id} was not found.")
+
+        source = self._find(workspace.sources, source_id)
+        if source is None:
+            raise CaseWorkspaceError(f"Source {source_id} was not found.")
+
+        missing = [f for f in ("id", "text", "confidence") if f not in requirement_item]
+        if missing:
+            raise CaseWorkspaceError(
+                "requirement_item is missing required field(s): "
+                f"{', '.join(missing)}."
+            )
+
+        source_location = None
+        if requirement_item.get("source_line") is not None:
+            source_location = {
+                "location_type": REQUIREMENT_LOCATION_TYPE_PARAGRAPH,
+                "line": requirement_item["source_line"],
+            }
+
+        started_at = _now()
+        analysis_id = _new_id()
+        finding_id = _new_id()
+
+        finding = Finding(
+            id=finding_id,
+            project_id=workspace.project_id,
+            case_id=case_id,
+            analysis_id=analysis_id,
+            statement=requirement_item["text"],
+            machine_confidence=requirement_item["confidence"],
+            created_at=_now(),
+        )
+
+        analysis = AnalysisRun(
+            id=analysis_id,
+            project_id=workspace.project_id,
+            case_id=case_id,
+            source_ids=[source_id],
+            objective=(
+                f"Promote extracted requirement item {requirement_item['id']} "
+                "to a governed Requirement."
+            ),
+            engine_name="requirement_item_promotion",
+            engine_version="1.0",
+            started_at=started_at,
+            completed_at=_now(),
+            trigger=asdict(trigger),
+            finding_ids=[finding_id],
+        )
+
+        requirement = Requirement(
+            id=_new_id(),
+            project_id=workspace.project_id,
+            source_id=source_id,
+            original_requirement_identifier=requirement_item["id"],
+            text_reference=requirement_item["text"],
+            created_at=_now(),
+            created_by=actor,
+            registration_method=REQUIREMENT_REGISTRATION_MACHINE_EXTRACTED,
+            subject_domain=requirement_item.get("category"),
+            source_location=source_location,
+        )
+
+        workspace.findings.append(asdict(finding))
+        case["finding_ids"].append(finding_id)
+        workspace.analyses.append(asdict(analysis))
+        case["analysis_ids"].append(analysis_id)
+        workspace.requirements.append(asdict(requirement))
+
+        self.save(workspace)
+
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id, event_type="requirement_item_promoted",
+                actor=actor, role="system",
+                payload={
+                    "requirement_item_id": requirement_item["id"],
+                    "requirement_id": requirement.id,
+                    "finding_id": finding_id,
+                    "analysis_id": analysis_id,
+                    "source_id": source_id,
+                },
+                correlation_id=requirement.id,
+            )
+
+        return {
+            "requirement": asdict(requirement),
+            "finding": asdict(finding),
+            "analysis": asdict(analysis),
+        }
+
     def revise_requirement(
         self,
         workspace: ProjectWorkspace,
