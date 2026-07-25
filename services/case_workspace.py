@@ -214,6 +214,7 @@ OBJECT_KIND_TABLE_ROW = "table_row"  # Batch J
 OBJECT_KIND_TABLE_CELL = "table_cell"  # Batch J
 OBJECT_KIND_SOURCE_REFERENCE = "source_reference"  # Batch J
 OBJECT_KIND_REQUIREMENT_ADJUDICATION = "requirement_adjudication"  # Batch K
+OBJECT_KIND_REVIEW_MESSAGE = "review_message"  # Selective Adopt/Carry-Forward tranche - distinct from OBJECT_KIND_REVIEW_THREAD, since a carried-forward comment points at the specific historical message, not its whole thread
 
 KNOWN_OBJECT_KINDS = (
     OBJECT_KIND_SOURCE,
@@ -240,6 +241,7 @@ KNOWN_OBJECT_KINDS = (
     OBJECT_KIND_TABLE_CELL,
     OBJECT_KIND_SOURCE_REFERENCE,
     OBJECT_KIND_REQUIREMENT_ADJUDICATION,
+    OBJECT_KIND_REVIEW_MESSAGE,
 )
 
 # -- Typed relationship vocabulary (Prompt 8 #1) -----------------------------
@@ -328,6 +330,7 @@ MESSAGE_TYPE_INTERPRETATION = "interpretation"
 MESSAGE_TYPE_DECISION_NOTE = "decision_note"
 MESSAGE_TYPE_EVIDENCE_NOTE = "evidence_note"
 MESSAGE_TYPE_RESOLUTION_NOTE = "resolution_note"
+MESSAGE_TYPE_CARRIED_FORWARD = "carried_forward"  # Selective Adopt/Carry-Forward tranche - a historical comment deliberately reconsidered in a derived active Case, authored by the adopting actor, not the original commenter
 
 KNOWN_MESSAGE_TYPES = (
     MESSAGE_TYPE_OBSERVATION,
@@ -340,6 +343,7 @@ KNOWN_MESSAGE_TYPES = (
     MESSAGE_TYPE_DECISION_NOTE,
     MESSAGE_TYPE_EVIDENCE_NOTE,
     MESSAGE_TYPE_RESOLUTION_NOTE,
+    MESSAGE_TYPE_CARRIED_FORWARD,
 )
 
 MESSAGE_ORIGIN_HUMAN = "human"
@@ -1152,6 +1156,63 @@ class Relationship:
     related_finding_id: Optional[str] = None
 
 
+CARRIED_FORWARD_OBJECT_TYPE_FINDING = "finding"
+CARRIED_FORWARD_OBJECT_TYPE_REVIEW_MESSAGE = "review_message"
+
+KNOWN_CARRIED_FORWARD_OBJECT_TYPES = (
+    CARRIED_FORWARD_OBJECT_TYPE_FINDING,
+    CARRIED_FORWARD_OBJECT_TYPE_REVIEW_MESSAGE,
+)
+
+
+@dataclass
+class CarriedForwardAdoption:
+    """
+    Selective Adopt/Carry-Forward tranche: the one governed record that
+    answers, uniformly across every supported object type, "which active
+    items in a derived Case were deliberately carried forward from its
+    archived predecessor, from which historical item, by whom, and
+    when" - a single, cheaply filterable list rather than a different
+    query shape per adopted object type.
+
+    Deliberately its own minimal primitive, not a reuse of the
+    Relationship substrate (contrast with CaseRecord.derived_from_case_id
+    + the RELATIONSHIP_TYPE_DERIVED_FROM Relationship, which correctly
+    reuses Relationship for a Case-to-Case edge): Relationship's
+    from/to-object schema has no source-Case/target-Case concept of its
+    own, and reconstructing "which Case did this get adopted INTO" from
+    it would require re-deriving that through `_cases_referencing_object`
+    on every query. This record exists specifically because that Case-
+    to-Case-via-one-item bridge is this whole capability's job, and no
+    existing primitive expresses it directly.
+
+    object_type is open-world (KNOWN_CARRIED_FORWARD_OBJECT_TYPES) -
+    deliberately narrow today (Finding, ReviewMessage only - see
+    adopt_finding_into_case/adopt_review_message_into_case), extensible
+    later without a schema change, same discipline as Supersession's
+    predecessor_type/successor_type.
+
+    This record never substitutes for the object-type-native pointer
+    each successor object also carries - Finding's accompanying
+    AnalysisRun/AnalysisTrigger.trigger_reference_id, ReviewMessage's
+    own related_object_type/related_object_id - both exist together,
+    the same denormalized-pointer-plus-governed-record pattern already
+    used throughout this file (Source.supersedes_source_id +
+    Supersession; CaseRecord.derived_from_case_id + the derived_from
+    Relationship).
+    """
+
+    id: str
+    project_id: str
+    source_case_id: str
+    target_case_id: str
+    object_type: str
+    source_object_id: str
+    successor_object_id: str
+    adopted_by: str
+    adopted_at: str
+
+
 @dataclass
 class TemporalObligation:
     """
@@ -1881,6 +1942,7 @@ class ProjectWorkspace:
     table_rows: list[dict] = field(default_factory=list)
     source_references: list[dict] = field(default_factory=list)
     requirement_adjudications: list[dict] = field(default_factory=list)
+    carried_forward_adoptions: list[dict] = field(default_factory=list)
 
 
 def _snapshot_reference_lists(workspace: ProjectWorkspace) -> dict:
@@ -3173,6 +3235,292 @@ class CaseWorkspaceStore:
             )
 
         return asdict(new_case)
+
+    def _validate_carry_forward_authority(
+        self,
+        workspace: ProjectWorkspace,
+        source_case_id: str,
+        target_case_id: str,
+        actor: str,
+        actor_role: Optional[str],
+    ) -> tuple[dict, dict]:
+        """
+        Shared validation for every adopt_*_into_case method: the source
+        Case must be archived (carry-forward, like Derive, is only
+        defined from an archived predecessor - not a general Copy/Adopt
+        of arbitrary active material), the target Case must actually be
+        that source's own recorded derivation (`derived_from_case_id` -
+        prevents carrying material into an unrelated Case merely because
+        the actor happens to have write access to it), and authority is
+        the same owner-or-admin pattern used throughout this tranche
+        sequence, checked against the TARGET Case - "unauthorized
+        participants must not carry historical material into another
+        person's private derived Case" is a statement about who controls
+        the destination, not the source.
+        """
+        source_case = self._find(workspace.cases, source_case_id)
+        if source_case is None or source_case.get("status") != CASE_STATUS_ARCHIVED:
+            raise CaseWorkspaceError(
+                f"Case {source_case_id} is not archived - carry-forward in this "
+                "tranche is only defined from an archived predecessor into its "
+                "own derived active Case."
+            )
+
+        target_case = self._find(workspace.cases, target_case_id)
+        if target_case is None:
+            raise CaseWorkspaceError(f"Case {target_case_id} was not found.")
+        if target_case.get("derived_from_case_id") != source_case_id:
+            raise CaseWorkspaceError(
+                f"Case {target_case_id} was not derived from Case {source_case_id} - "
+                "carry-forward is only defined from an archived Case into its own "
+                "derived active successor, not an arbitrary destination."
+            )
+
+        is_owner = target_case.get("created_by") is not None and actor == target_case["created_by"]
+        is_admin_override = actor_role == "admin"
+        if not (is_owner or is_admin_override):
+            raise CaseWorkspaceError(
+                "Only the target Case's own creator, or an actor with the "
+                "admin role, may carry historical material into it."
+            )
+
+        self._require_case_not_archived(workspace, target_case_id)
+        return source_case, target_case
+
+    def carried_forward_adoptions_for_case(self, workspace: ProjectWorkspace, target_case_id: str) -> list[dict]:
+        """Answers "which active items in this Case were carried forward,
+        from which historical item, by whom, and when" in one filter -
+        see CarriedForwardAdoption's own docstring for why this is a
+        dedicated record rather than a Relationship query."""
+        return [a for a in workspace.carried_forward_adoptions if a["target_case_id"] == target_case_id]
+
+    def adopt_finding_into_case(
+        self,
+        workspace: ProjectWorkspace,
+        source_finding_id: str,
+        target_case_id: str,
+        actor: str,
+        actor_role: Optional[str] = None,
+        governance_log: Optional[GovernanceLog] = None,
+    ) -> dict:
+        """
+        Selective, human-authorized carry-forward of one historical
+        Finding from its archived Case into that Case's own derived
+        active successor. The original Finding is never touched, never
+        moved, never re-cased - it remains exactly where it was
+        recorded, in the archived Case, forever.
+
+        A NEW Finding is created in the target Case, because continued
+        review (ReviewerValidation/Disposition/Apply) requires a real,
+        mutable Finding to attach to - not a read-only reference. Per
+        this tranche's explicit architectural requirement: the adopted
+        Finding re-enters as FINDING_STATUS_PROVISIONAL (Finding's own
+        ordinary default - never anything stronger), honestly stating
+        that a conclusion reached against the archived Case's old
+        evidence context has NOT been re-validated against the target
+        Case's current state merely by being carried forward. Renewed
+        ReviewerValidation/Disposition against the new Finding is
+        required exactly as it would be for any other Finding - nothing
+        about carry-forward skips or shortcuts that.
+
+        Finding has no generic related-object pointer of its own (unlike
+        ReviewMessage), so provenance back to the original is carried on
+        the accompanying AnalysisRun's AnalysisTrigger instead
+        (trigger_reference_type/trigger_reference_id - already-existing
+        fields, reused rather than adding a new one to Finding) - this
+        mirrors promote_requirement_item's own precedent of creating an
+        honest accompanying AnalysisRun rather than fabricating Finding
+        provenance. The authoritative, uniformly-queryable lineage
+        record is the new CarriedForwardAdoption row either way.
+        """
+        source_finding = self._find(workspace.findings, source_finding_id)
+        if source_finding is None:
+            raise CaseWorkspaceError(f"Finding {source_finding_id} was not found.")
+        source_case_id = source_finding.get("case_id")
+        if not source_case_id:
+            raise CaseWorkspaceError(
+                f"Finding {source_finding_id} has no recorded Case - carry-forward "
+                "requires a known archived source Case to establish lineage from."
+            )
+
+        self._validate_carry_forward_authority(workspace, source_case_id, target_case_id, actor, actor_role)
+        target_case = self._find(workspace.cases, target_case_id)
+
+        adopted_at = _now()
+        analysis_id = _new_id()
+        finding_id = _new_id()
+
+        trigger = AnalysisTrigger(
+            trigger_type=ANALYSIS_TRIGGER_USER_INITIATED,
+            triggered_by_actor=actor,
+            trigger_reference_type=OBJECT_KIND_FINDING,
+            trigger_reference_id=source_finding_id,
+        )
+        analysis = AnalysisRun(
+            id=analysis_id,
+            project_id=workspace.project_id,
+            case_id=target_case_id,
+            source_ids=[],
+            objective=(
+                f"Carry-forward review of Finding {source_finding_id} from "
+                f"archived Case {source_case_id}."
+            ),
+            engine_name="carry_forward_adoption",
+            engine_version="1.0",
+            started_at=adopted_at,
+            completed_at=adopted_at,
+            trigger=asdict(trigger),
+            finding_ids=[finding_id],
+        )
+        new_finding = Finding(
+            id=finding_id,
+            project_id=workspace.project_id,
+            case_id=target_case_id,
+            analysis_id=analysis_id,
+            statement=source_finding["statement"],
+            machine_confidence=source_finding["machine_confidence"],
+            created_at=adopted_at,
+            claim_status=FINDING_STATUS_PROVISIONAL,
+        )
+        adoption = CarriedForwardAdoption(
+            id=_new_id(),
+            project_id=workspace.project_id,
+            source_case_id=source_case_id,
+            target_case_id=target_case_id,
+            object_type=CARRIED_FORWARD_OBJECT_TYPE_FINDING,
+            source_object_id=source_finding_id,
+            successor_object_id=finding_id,
+            adopted_by=actor,
+            adopted_at=adopted_at,
+        )
+
+        workspace.analyses.append(asdict(analysis))
+        workspace.findings.append(asdict(new_finding))
+        target_case["analysis_ids"].append(analysis_id)
+        target_case["finding_ids"].append(finding_id)
+        workspace.carried_forward_adoptions.append(asdict(adoption))
+        self.save(workspace)
+
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id, event_type="finding_carried_forward",
+                actor=actor, role="human",
+                payload={
+                    "source_case_id": source_case_id, "target_case_id": target_case_id,
+                    "source_finding_id": source_finding_id, "successor_finding_id": finding_id,
+                    "adoption_id": adoption.id,
+                },
+                correlation_id=finding_id,
+            )
+
+        return asdict(new_finding)
+
+    def adopt_review_message_into_case(
+        self,
+        workspace: ProjectWorkspace,
+        source_message_id: str,
+        target_case_id: str,
+        actor: str,
+        actor_role: Optional[str] = None,
+        note: Optional[str] = None,
+        governance_log: Optional[GovernanceLog] = None,
+    ) -> dict:
+        """
+        Selective, human-authorized carry-forward of one historical
+        review comment from its archived Case into that Case's own
+        derived active successor. The original ReviewMessage (and its
+        thread) is never touched - it remains exactly where it was
+        authored, in the archived Case, unresolved or not, forever.
+
+        A NEW ReviewThread + ReviewMessage is created, anchored to the
+        target Case, so the reconsideration can actually be discussed/
+        resolved in the target Case's own live context. Critically, the
+        new message's `actor` is the ADOPTING actor, never the original
+        commenter - "the original commenter must not falsely become the
+        author of the new active item" (this tranche's own requirement,
+        and the reason an unavailable/former contributor is never a
+        blocker: they need not do or approve anything for their prior
+        concern to be reconsidered). The original voice is preserved
+        without being misattributed: `text` quotes the original message
+        verbatim, clearly framed as a carried-forward quotation, and
+        `related_object_type`/`related_object_id` (ReviewMessage's own
+        existing generic pointer fields) point directly at the original
+        message - no new field needed. The authoritative,
+        uniformly-queryable lineage record is the new
+        CarriedForwardAdoption row.
+        """
+        source_message = self._find(workspace.review_messages, source_message_id)
+        if source_message is None:
+            raise CaseWorkspaceError(f"Review message {source_message_id} was not found.")
+        source_thread = self._find(workspace.review_threads, source_message["thread_id"])
+        source_case_id = source_thread.get("case_id") if source_thread else None
+        if not source_case_id:
+            raise CaseWorkspaceError(
+                f"Review message {source_message_id}'s thread has no recorded Case - "
+                "carry-forward requires a known archived source Case to establish lineage from."
+            )
+
+        self._validate_carry_forward_authority(workspace, source_case_id, target_case_id, actor, actor_role)
+
+        adopted_at = _now()
+        anchor = Anchor(anchor_type=OBJECT_KIND_CASE, anchor_id=target_case_id)
+        thread = ReviewThread(
+            id=_new_id(),
+            project_id=workspace.project_id,
+            title=f"Carried forward: {source_thread['title']}",
+            anchor=asdict(anchor),
+            created_at=adopted_at,
+            created_by=actor,
+            case_id=target_case_id,
+        )
+        carried_text = (
+            f"[Carried forward from archived Case {source_case_id}, "
+            f"originally raised by {source_message['actor']}]\n\n{source_message['text']}"
+        )
+        if note:
+            carried_text += f"\n\n[Adoption note from {actor}]: {note}"
+        message = ReviewMessage(
+            id=_new_id(),
+            thread_id=thread.id,
+            project_id=workspace.project_id,
+            origin=MESSAGE_ORIGIN_HUMAN,
+            actor=actor,
+            message_type=MESSAGE_TYPE_CARRIED_FORWARD,
+            text=carried_text,
+            created_at=adopted_at,
+            related_object_type=OBJECT_KIND_REVIEW_MESSAGE,
+            related_object_id=source_message_id,
+        )
+        adoption = CarriedForwardAdoption(
+            id=_new_id(),
+            project_id=workspace.project_id,
+            source_case_id=source_case_id,
+            target_case_id=target_case_id,
+            object_type=CARRIED_FORWARD_OBJECT_TYPE_REVIEW_MESSAGE,
+            source_object_id=source_message_id,
+            successor_object_id=message.id,
+            adopted_by=actor,
+            adopted_at=adopted_at,
+        )
+
+        workspace.review_threads.append(asdict(thread))
+        workspace.review_messages.append(asdict(message))
+        workspace.carried_forward_adoptions.append(asdict(adoption))
+        self.save(workspace)
+
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id, event_type="review_message_carried_forward",
+                actor=actor, role="human",
+                payload={
+                    "source_case_id": source_case_id, "target_case_id": target_case_id,
+                    "source_message_id": source_message_id, "successor_message_id": message.id,
+                    "successor_thread_id": thread.id, "adoption_id": adoption.id,
+                },
+                correlation_id=message.id,
+            )
+
+        return asdict(message)
 
     def attach_source_to_case(self, workspace: ProjectWorkspace, case_id: str, source_id: str) -> None:
         case = self._find(workspace.cases, case_id)

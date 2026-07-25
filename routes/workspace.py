@@ -367,6 +367,57 @@ def derive_case(project_id, case_id):
     return redirect(url_for("workspace.show_workspace", project_id=project_id, case=new_case["id"]))
 
 
+@workspace_bp.route("/projects/<project_id>/workspace/cases/<case_id>/adopt-finding", methods=["POST"])
+@login_required
+def adopt_finding(project_id, case_id):
+    """Selectively carry one historical Finding from its archived Case
+    forward into `case_id` (the derived active Case) - see
+    CaseWorkspaceStore.adopt_finding_into_case. Owner or admin-role only
+    on the TARGET Case; the machine never performs this. Nothing is
+    carried forward automatically - this route only ever acts on a
+    specific `finding_id` an authorized human explicitly submitted."""
+    _, store, workspace = _load_workspace_or_404(project_id)
+    finding_id = request.form.get("finding_id", "").strip()
+
+    try:
+        store.adopt_finding_into_case(
+            workspace, source_finding_id=finding_id, target_case_id=case_id,
+            actor=_reviewer(), actor_role=session.get("role"), governance_log=_log(),
+        )
+    except CaseWorkspaceError as exc:
+        flash(str(exc), "error")
+        return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
+
+    flash("Finding carried forward for renewed review.", "success")
+    return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
+
+
+@workspace_bp.route("/projects/<project_id>/workspace/cases/<case_id>/adopt-message", methods=["POST"])
+@login_required
+def adopt_review_message(project_id, case_id):
+    """Selectively carry one historical review comment from its archived
+    Case forward into `case_id` (the derived active Case) - see
+    CaseWorkspaceStore.adopt_review_message_into_case. Owner or
+    admin-role only on the TARGET Case; the machine never performs this.
+    The original commenter is never recorded as the author of the new
+    active item - see the store method's own docstring."""
+    _, store, workspace = _load_workspace_or_404(project_id)
+    message_id = request.form.get("message_id", "").strip()
+    note = request.form.get("note", "").strip() or None
+
+    try:
+        store.adopt_review_message_into_case(
+            workspace, source_message_id=message_id, target_case_id=case_id,
+            actor=_reviewer(), actor_role=session.get("role"), note=note, governance_log=_log(),
+        )
+    except CaseWorkspaceError as exc:
+        flash(str(exc), "error")
+        return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
+
+    flash("Review comment carried forward for renewed consideration.", "success")
+    return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
+
+
 @workspace_bp.route("/projects/<project_id>/workspace/cases/<case_id>/sources", methods=["POST"])
 @login_required
 def add_drawing_source(project_id, case_id):
