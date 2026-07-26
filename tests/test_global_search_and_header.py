@@ -269,7 +269,7 @@ class TypographyCorrectionTests(unittest.TestCase):
             ".btn {", ".text-input {", ".workspace-form button {",
             ".side-rail-link {", ".workspace-pane-label {",
             ".review-btn {", ".review-decision-badge {", ".applied-badge {",
-            ".registry-table th {", ".site-footer {", ".eyebrow {",
+            ".registry-table th {", ".eyebrow {",
             ".projects-sort {", ".project-card-meta {",
         ]
         for selector in no_longer_mono:

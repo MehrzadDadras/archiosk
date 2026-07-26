@@ -316,16 +316,6 @@ html.nav-expanded .side-rail-tree-items { display: flex; }
 
 main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
 
-.site-footer {
-    text-align: center;
-    padding: 2.5rem;
-    color: var(--text-metadata);
-    font-family: var(--font-body);
-    font-size: 0.88rem;
-    border-top: 1px solid var(--border);
-    margin-top: 4rem;
-}
-
 /* -- global search overlay -------------------------------------------------
    Opens over the current page (never a separate Search page) so the user
    keeps their place. Compact and restrained, not a full-screen takeover. */
