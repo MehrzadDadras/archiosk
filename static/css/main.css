@@ -197,9 +197,6 @@ html.nav-expanded .side-rail { width: 240px; }
     transition: max-width 0.15s ease, opacity 0.15s ease;
 }
 html.nav-expanded .side-rail-brand-label { max-width: 160px; opacity: 1; }
-/* The one small identity moment (Prompt: BEEHIVE Visual Color System #4) -
-   bee-yellow belongs here and almost nowhere else. */
-.brand-mark { color: var(--bee-yellow); font-size: 1.3rem; }
 
 .side-rail-links {
     display: flex;
@@ -763,7 +760,7 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
     overflow: hidden;
 }
 .gateway-brand { display: flex; align-items: center; gap: 1.2rem; padding: 2rem 2rem 1.5rem; }
-/* The application's identity mark, flat bee-yellow - see .brand-mark. */
+/* The application's identity mark, flat bee-yellow. */
 .gateway-logo {
     display: grid;
     place-items: center;
