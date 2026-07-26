@@ -157,8 +157,21 @@ html.nav-expanded .side-rail { width: 240px; }
     white-space: nowrap;
     overflow: hidden;
 }
-.side-rail-brand-label { display: none; }
-html.nav-expanded .side-rail-brand-label { display: inline; }
+/* Reveal via max-width/opacity, not display:none<->inline - display cannot
+   be transitioned, so toggling it in the same frame the .side-rail width
+   transition starts forced an instant text reflow inside the
+   still-narrow rail (the reported single-click "shake"). This keeps the
+   label's reveal a continuous, animatable part of the same 0.15s motion
+   instead of a discrete pop fighting it. */
+.side-rail-brand-label {
+    display: inline-block;
+    max-width: 0;
+    opacity: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    transition: max-width 0.15s ease, opacity 0.15s ease;
+}
+html.nav-expanded .side-rail-brand-label { max-width: 160px; opacity: 1; }
 /* The one small identity moment (Prompt: BEEHIVE Visual Color System #4) -
    bee-yellow belongs here and almost nowhere else. */
 .brand-mark { color: var(--bee-yellow); font-size: 1.3rem; }
@@ -185,17 +198,41 @@ html.nav-expanded .side-rail-brand-label { display: inline; }
 .side-rail-link:hover { background: var(--surface-hover); color: var(--text-primary); text-decoration: none; }
 .side-rail-link.active { background: var(--surface-selected); color: var(--text-primary); }
 .side-rail-icon { flex-shrink: 0; width: 1.2rem; text-align: center; font-size: 1rem; }
-.side-rail-label { display: none; }
-html.nav-expanded .side-rail-label { display: inline; }
+/* Same reasoning as .side-rail-brand-label above - animatable reveal, not
+   a discrete display toggle competing with the width transition. */
+.side-rail-label {
+    display: inline-block;
+    max-width: 0;
+    opacity: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    transition: max-width 0.15s ease, opacity 0.15s ease;
+}
+html.nav-expanded .side-rail-label { max-width: 160px; opacity: 1; }
 
+/* Same reasoning again, adapted for a block (not single-line) reveal:
+   max-height/opacity instead of display:none<->block, so this panel's
+   appearance - and the consequent reflow of .side-rail-bottom below it
+   (margin-top: auto) - happens smoothly over the same 0.15s instead of
+   snapping .side-rail-bottom into a new position in one frame. */
 .side-rail-context {
-    display: none;
+    max-height: 0;
+    opacity: 0;
+    padding: 0 0.9rem;
+    margin-top: 0;
+    border-top: 1px solid transparent;
+    overflow: hidden;
+    transition: max-height 0.15s ease, opacity 0.15s ease, padding 0.15s ease,
+        margin-top 0.15s ease, border-color 0.15s ease;
+}
+html.nav-expanded .side-rail-context {
+    max-height: 480px;
+    opacity: 1;
     padding: 0.9rem 0.9rem 0.4rem;
-    border-top: 1px solid var(--border);
     margin-top: 0.4rem;
+    border-top-color: var(--border);
     overflow-y: auto;
 }
-html.nav-expanded .side-rail-context { display: block; }
 .side-rail-context-label {
     font-family: var(--font-mono);
     text-transform: uppercase;
