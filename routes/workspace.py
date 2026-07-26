@@ -60,7 +60,7 @@ from services.case_workspace import (
 )
 from services.conversation_interpreter import interpret_message
 from services.governance import GovernanceLog
-from services.ingestion import get_registry
+from services.ingestion import document_source_payload, get_registry
 from services.project_clock import open_project
 from services.rfi_export import RFIExportError, build_rfi_docx, build_rfi_draft_docx
 from models import User
@@ -113,15 +113,7 @@ def _load_workspace_or_404(project_id: str):
 
     store = _store()
     workspace = store.get_or_create(
-        project_id,
-        register_document_source={
-            "filename": document.filename,
-            "ingested_at": document.ingested_at,
-            "requirement_count": len(document.requirements),
-            "milestone_count": len(document.milestones),
-            "file_path": document.original_file_path,
-            "file_hash": document.original_file_hash,
-        },
+        project_id, register_document_source=document_source_payload(document),
     )
     return document, store, workspace
 

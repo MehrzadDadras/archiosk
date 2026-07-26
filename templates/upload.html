@@ -15,6 +15,10 @@
 {% endif %}
 
 <form method="post" enctype="multipart/form-data" class="upload-form">
+    <input
+        type="text" name="project_name" class="text-input" style="max-width:480px;"
+        value="{{ request.form.get('project_name', '') }}"
+        placeholder="Project name (optional &mdash; defaults to the file name; must be unique)">
     <input type="file" name="file" required accept=".pdf,.docx,.txt,.csv,.md">
     <div class="upload-form-optional">
         <input type="text" name="actor" class="text-input" placeholder="Your name (optional, for the audit trail)">

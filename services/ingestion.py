@@ -57,7 +57,7 @@ def _display_name_of(document: ParsedDocument, store: CaseWorkspaceStore) -> str
     return (workspace.display_title if workspace else None) or document.filename
 
 
-def _reject_if_name_taken(app: Flask, filename: str) -> None:
+def _reject_if_name_taken(app: Flask, entry_name: str) -> None:
     """
     Project Entry Rule: entry names must be unique. Checked against every
     existing project's current effective display name (not just raw
@@ -71,8 +71,26 @@ def _reject_if_name_taken(app: Flask, filename: str) -> None:
         for pid in registry.list_ids()
         if (document := registry.get(pid)) is not None
     }
-    if filename in existing_names:
+    if entry_name in existing_names:
         raise UploadError("Entry names must be unique.")
+
+
+def document_source_payload(document: ParsedDocument) -> dict:
+    """
+    The register_document_source payload CaseWorkspaceStore.get_or_create
+    expects - shared here so ingest_upload (naming a project at creation
+    time) and routes/workspace.py's _load_workspace_or_404 (opening a
+    Case Workspace for the first time) build the identical dict from one
+    place, not two independently-drifting copies.
+    """
+    return {
+        "filename": document.filename,
+        "ingested_at": document.ingested_at,
+        "requirement_count": len(document.requirements),
+        "milestone_count": len(document.milestones),
+        "file_path": document.original_file_path,
+        "file_hash": document.original_file_hash,
+    }
 
 
 def ingest_upload(
@@ -80,8 +98,17 @@ def ingest_upload(
     app: Flask,
     actor: str | None = None,
     role: str | None = None,
+    project_name: str | None = None,
 ) -> ParsedDocument:
-    """Validate, parse, and persist an uploaded RFP/RFQ. Raises UploadError on bad input."""
+    """
+    Validate, parse, and persist an uploaded RFP/RFQ. Raises UploadError
+    on bad input. `project_name`, if given, becomes the project's
+    display_title (its visible identity everywhere - sidebar, Projects
+    directory, Dashboard, Case Workspace) instead of leaving it as
+    whichever filename happened to be uploaded - see pagescape correction
+    #11. Optional and backward-compatible: omitted, the project's
+    identity is exactly what it always was, the filename.
+    """
     if file_storage is None or not file_storage.filename:
         raise UploadError("No file was provided.")
 
@@ -93,7 +120,8 @@ def ingest_upload(
             f"Unsupported file type '{ext}'. Allowed types: {', '.join(sorted(allowed))}."
         )
 
-    _reject_if_name_taken(app, filename)
+    project_name = (project_name or "").strip() or None
+    _reject_if_name_taken(app, project_name or filename)
 
     raw_bytes = file_storage.read()
     parser = BHiveParser(
@@ -123,7 +151,8 @@ def ingest_upload(
     document.original_file_hash = hashlib.sha256(raw_bytes).hexdigest()
 
     get_registry(app).save(document)
-    get_governance_log(app).append(
+    governance_log = get_governance_log(app)
+    governance_log.append(
         project_id=document.project_id,
         event_type="document_ingested",
         actor=actor or _DEFAULT_ACTOR,
@@ -134,4 +163,22 @@ def ingest_upload(
             "milestone_count": len(document.milestones),
         },
     )
+
+    if project_name:
+        # Creates the Case Workspace eagerly (idempotent - the same
+        # get_or_create routes/workspace.py's _load_workspace_or_404 calls
+        # on first open; finding it already exists there is the normal,
+        # expected case, not a conflict) purely so the chosen name is set
+        # from the very first moment the project exists, not left showing
+        # the filename until someone happens to open Case Workspace and
+        # use Edit Project Details.
+        store = CaseWorkspaceStore(app.config["REGISTRY_STORE_PATH"])
+        workspace = store.get_or_create(
+            document.project_id, register_document_source=document_source_payload(document),
+        )
+        store.set_project_details(
+            workspace, actor=actor or _DEFAULT_ACTOR, display_title=project_name,
+            governance_log=governance_log,
+        )
+
     return document

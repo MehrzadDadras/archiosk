@@ -343,6 +343,7 @@ def upload():
             current_app,
             actor=request.form.get('actor'),
             role=request.form.get('role'),
+            project_name=request.form.get('project_name'),
         )
     except (UploadError, GovernanceError) as exc:
         return render_template(

@@ -31,6 +31,7 @@ def ingest_document():
             current_app,
             actor=request.form.get('actor'),
             role=request.form.get('role'),
+            project_name=request.form.get('project_name'),
         )
     except UploadError as exc:
         return jsonify(error="invalid_upload", message=str(exc)), 400
