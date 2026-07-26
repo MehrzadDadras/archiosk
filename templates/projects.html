@@ -13,9 +13,6 @@
     <input
         type="search" name="q" value="{{ query }}"
         placeholder="Search projects" class="text-input projects-search" aria-label="Search projects">
-    <select name="sort" class="projects-sort" aria-label="Sort projects" onchange="this.form.submit()">
-        <option value="name" {% if sort == 'name' %}selected{% endif %}>Project Name</option>
-    </select>
 </form>
 
 {% if projects %}

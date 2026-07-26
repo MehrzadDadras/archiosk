@@ -270,7 +270,7 @@ class TypographyCorrectionTests(unittest.TestCase):
             ".side-rail-link {", ".workspace-pane-label {",
             ".review-btn {", ".review-decision-badge {", ".applied-badge {",
             ".registry-table th {", ".eyebrow {",
-            ".projects-sort {", ".project-card-meta {",
+            ".project-card-meta {",
         ]
         for selector in no_longer_mono:
             start = self.css.index(selector)

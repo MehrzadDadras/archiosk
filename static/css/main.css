@@ -501,15 +501,6 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
     flex-wrap: wrap;
 }
 .projects-search { max-width: 280px; margin: 0; }
-.projects-sort {
-    font-family: var(--font-body);
-    font-size: 0.85rem;
-    padding: 0.6rem 0.8rem;
-    background: var(--surface-primary);
-    border: 1px solid var(--border);
-    border-radius: 3px;
-    color: var(--text-primary);
-}
 .project-card-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.7rem; }
 .project-card {
     display: flex;
