@@ -75,6 +75,17 @@
 
 * { box-sizing: border-box; }
 
+/* Browsers do NOT give form controls the page's font by default (they use
+   the OS UI font unless told otherwise) - every <button>/<input>/<select>/
+   <textarea> in this app has its own explicit font-family already, but
+   this is the backstop: any control that doesn't (now or in the future)
+   still reads as the same one UI typeface instead of silently falling
+   back to the platform default. */
+button, input, select, textarea {
+    font-family: inherit;
+    font-size: inherit;
+}
+
 html, body {
     margin: 0;
     padding: 0;
@@ -191,12 +202,15 @@ html.nav-expanded .side-rail { width: 240px; }
 .nav-toggle:hover { color: var(--text-primary); border-color: var(--border-strong); }
 .nav-toggle svg { flex-shrink: 0; }
 
+/* The Archiosk wordmark is the deliberate exception to the UI-wide
+   Arial Nova Cond rule below - restored to its original family/weight,
+   never Arial Nova/Arial Narrow. */
 .side-rail-brand {
     display: flex;
     align-items: baseline;
     gap: 0.4rem;
-    font-family: var(--font-display);
-    font-weight: 400;
+    font-family: "Space Grotesk", sans-serif;
+    font-weight: 700;
     font-size: 1.1rem;
     color: var(--text-primary);
     white-space: nowrap;
@@ -232,7 +246,7 @@ html.nav-expanded .side-rail-brand-label { max-width: 160px; opacity: 1; }
     padding: 0.55rem 0.55rem;
     border-radius: 5px;
     color: var(--text-secondary);
-    font-family: var(--font-mono);
+    font-family: var(--font-body);
     font-size: 0.82rem;
     white-space: nowrap;
     overflow: hidden;
@@ -276,7 +290,7 @@ html.nav-expanded .side-rail-context {
     overflow-y: auto;
 }
 .side-rail-context-label {
-    font-family: var(--font-mono);
+    font-family: var(--font-body);
     text-transform: uppercase;
     letter-spacing: 0.1em;
     font-size: 0.8rem;
@@ -321,7 +335,7 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
     text-align: center;
     padding: 2.5rem;
     color: var(--text-metadata);
-    font-family: var(--font-mono);
+    font-family: var(--font-body);
     font-size: 0.88rem;
     border-top: 1px solid var(--border);
     margin-top: 4rem;
@@ -406,20 +420,20 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
 }
 .search-result:hover { background: var(--surface-hover); text-decoration: none; }
 .search-result-kind {
-    font-family: var(--font-mono);
-    font-size: 0.72rem;
+    font-family: var(--font-body);
+    font-size: 0.8rem;
     text-transform: uppercase;
     letter-spacing: 0.06em;
     color: var(--text-metadata);
     font-weight: 600;
 }
 .search-result-title { font-size: 0.95rem; }
-.search-result-subtitle { font-family: var(--font-mono); font-size: 0.8rem; color: var(--text-metadata); }
+.search-result-subtitle { font-family: var(--font-body); font-size: 0.8rem; color: var(--text-metadata); }
 
 /* -- hero ---------------------------------------------------------------- */
 .hero { padding: 5.5rem 0 3rem; max-width: 780px; }
 .eyebrow {
-    font-family: var(--font-mono);
+    font-family: var(--font-body);
     text-transform: uppercase;
     letter-spacing: 0.08em;
     font-size: 0.85rem;
@@ -440,7 +454,7 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
 .upload-form { margin-top: 2.2rem; display: flex; flex-direction: column; align-items: flex-start; gap: 1rem; }
 .upload-form-optional { display: flex; gap: 1rem; flex-wrap: wrap; }
 .text-input {
-    font-family: var(--font-mono);
+    font-family: var(--font-body);
     font-size: 0.85rem;
     padding: 0.6rem 0.8rem;
     background: var(--surface-primary);
@@ -458,7 +472,7 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
 }
 
 .btn {
-    font-family: var(--font-mono);
+    font-family: var(--font-body);
     font-size: 0.85rem;
     padding: 0.85rem 1.5rem;
     border-radius: 3px;
@@ -502,7 +516,7 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
 .project-row-link:hover { border-color: var(--border-strong); text-decoration: none; }
 .project-row-name { font-family: var(--font-display); font-size: 0.95rem; }
 .project-row-meta {
-    font-family: var(--font-mono);
+    font-family: var(--font-body);
     font-size: 0.85rem;
     color: var(--text-metadata);
 }
@@ -520,7 +534,7 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
 }
 .projects-search { max-width: 280px; margin: 0; }
 .projects-sort {
-    font-family: var(--font-mono);
+    font-family: var(--font-body);
     font-size: 0.85rem;
     padding: 0.6rem 0.8rem;
     background: var(--surface-primary);
@@ -563,7 +577,7 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
 }
 .project-card-id { font-size: 0.82rem; color: var(--text-metadata); }
 .project-card-meta {
-    font-family: var(--font-mono);
+    font-family: var(--font-body);
     font-size: 0.85rem;
     color: var(--text-metadata);
     display: flex;
@@ -574,7 +588,7 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
 }
 .project-card-dot { color: var(--border-strong); }
 .project-card-secondary {
-    font-family: var(--font-mono);
+    font-family: var(--font-body);
     font-size: 0.85rem;
     color: var(--text-metadata);
     padding: 0 1.2rem 0 0;
@@ -613,7 +627,7 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
     clip-path: polygon(8% 0, 92% 0, 100% 8%, 100% 92%, 92% 100%, 8% 100%, 0 92%, 0 8%);
 }
 .cell-index {
-    font-family: var(--font-mono);
+    font-family: var(--font-body);
     color: var(--text-secondary);
     font-size: 0.8rem;
 }
@@ -641,12 +655,12 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
     gap: 1.5rem;
 }
 .dash-head h1 { font-family: var(--font-display); font-size: 1.8rem; margin: 0.3rem 0 0; font-weight: 300; }
-.mono { font-family: var(--font-mono); color: var(--machine-blue); font-size: 1.1rem; }
+.mono { font-family: var(--font-body); color: var(--machine-blue); font-size: 1.1rem; }
 .form-error { color: var(--failure-red); }
 .dash-meta { display: flex; gap: 2.2rem; }
 .meta-stat { text-align: right; }
 .meta-num { display: block; font-family: var(--font-display); font-size: 1.9rem; color: var(--text-primary); }
-.meta-label { font-family: var(--font-mono); font-size: 0.85rem; color: var(--text-metadata); text-transform: uppercase; letter-spacing: 0.06em; }
+.meta-label { font-family: var(--font-body); font-size: 0.85rem; color: var(--text-metadata); text-transform: uppercase; letter-spacing: 0.06em; }
 
 /* -- honeycomb lattice (signature element) -------------------------------- */
 .lattice-wrap {
@@ -675,7 +689,7 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
     align-items: center;
     justify-content: center;
     text-align: center;
-    font-family: var(--font-mono);
+    font-family: var(--font-body);
     font-size: 0.82rem;
     color: var(--text-metadata);
     padding: 0.4rem;
@@ -690,7 +704,7 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
     50% { box-shadow: 0 0 0 6px rgba(44, 96, 121, 0); }
 }
 
-.legend { font-family: var(--font-mono); font-size: 0.8rem; color: var(--text-metadata); min-width: 160px; }
+.legend { font-family: var(--font-body); font-size: 0.8rem; color: var(--text-metadata); min-width: 160px; }
 .legend-title { text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.85rem; margin-bottom: 0.8rem; }
 .dot { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 0.5rem; }
 .dot-done { background: var(--accepted-green); }
@@ -702,7 +716,7 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
 .registry h2 { font-family: var(--font-display); font-size: 1.2rem; margin-bottom: 1rem; }
 .registry-filter { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1.2rem; }
 .chip {
-    font-family: var(--font-mono);
+    font-family: var(--font-body);
     font-size: 0.85rem;
     padding: 0.35rem 0.7rem;
     border: 1px solid var(--border);
@@ -717,7 +731,7 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
 .registry-table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
 .registry-table th {
     text-align: left;
-    font-family: var(--font-mono);
+    font-family: var(--font-body);
     font-size: 0.85rem;
     text-transform: uppercase;
     letter-spacing: 0.06em;
@@ -726,7 +740,7 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
     padding: 0.6rem 0.8rem;
 }
 .registry-table td { padding: 0.7rem 0.8rem; border-bottom: 1px solid var(--border); color: var(--text-primary); }
-.registry-table td:last-child { font-family: var(--font-mono); color: var(--machine-blue); }
+.registry-table td:last-child { font-family: var(--font-body); color: var(--machine-blue); }
 
 /* -- governance / audit trail ---------------------------------------------- */
 .governance { padding: 1.5rem 0 3rem; }
@@ -737,7 +751,7 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
 .consistency h2 { font-family: var(--font-display); font-size: 1.2rem; margin-bottom: 1rem; }
 .help-desk h2 { font-family: var(--font-display); font-size: 1.2rem; margin-bottom: 1rem; }
 .consistency-note, .consistency-clean {
-    font-family: var(--font-mono);
+    font-family: var(--font-body);
     font-size: 0.85rem;
     padding: 1rem 1.2rem;
     border: 1px solid var(--border);
@@ -760,7 +774,7 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
 .flag-req { font-size: 0.88rem; color: var(--text-primary); padding: 0.6rem 0.8rem; background: var(--surface-secondary); border-radius: 3px; }
 .flag-req-label {
     display: block;
-    font-family: var(--font-mono);
+    font-family: var(--font-body);
     font-size: 0.82rem;
     color: var(--text-metadata);
     text-transform: uppercase;
@@ -801,7 +815,7 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
 .gateway-divider { height: 1px; margin: 0 2rem; background: var(--border); }
 .gateway-section { padding: 1.6rem 2rem 2rem; }
 .gateway-section-label {
-    font-family: var(--font-mono);
+    font-family: var(--font-body);
     text-transform: uppercase;
     letter-spacing: 0.08em;
     font-size: 0.85rem;
@@ -812,7 +826,7 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
 
 .gateway-field { display: grid; gap: 0.35rem; margin-bottom: 1rem; }
 .gateway-field label {
-    font-family: var(--font-mono);
+    font-family: var(--font-body);
     font-size: 0.85rem;
     text-transform: uppercase;
     letter-spacing: 0.08em;
@@ -897,7 +911,7 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
     border-top: 1px solid var(--border);
     background: var(--surface-secondary);
     color: var(--text-metadata);
-    font-family: var(--font-mono);
+    font-family: var(--font-body);
     font-size: 0.8rem;
     letter-spacing: 0.02em;
 }
@@ -914,7 +928,7 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
 /* -- flash messages (post/redirect/get feedback) --------------------------- */
 .flash-stack { padding-top: 1.5rem; display: grid; gap: 0.6rem; }
 .flash-message {
-    font-family: var(--font-mono);
+    font-family: var(--font-body);
     font-size: 0.85rem;
     padding: 0.7rem 1rem;
     border-radius: 3px;
@@ -953,7 +967,7 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
     color: var(--text-primary);
 }
 .workspace-pane-label {
-    font-family: var(--font-mono);
+    font-family: var(--font-body);
     text-transform: uppercase;
     letter-spacing: 0.1em;
     font-size: 0.8rem;
@@ -964,7 +978,7 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
 /* -- left: project navigation ------------------------------------------------ */
 .lifecycle-strip { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-bottom: 1.4rem; }
 .lifecycle-stage {
-    font-family: var(--font-mono);
+    font-family: var(--font-body);
     font-size: 0.8rem;
     color: var(--text-metadata);
     padding: 0.25rem 0.5rem;
@@ -994,7 +1008,7 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
 .case-item:hover { border-color: var(--border-strong); text-decoration: none; }
 .case-item.active { background: var(--surface-selected); border-color: var(--border-strong); }
 .source-kind-badge, .case-status-badge {
-    font-family: var(--font-mono);
+    font-family: var(--font-body);
     font-size: 0.8rem;
     text-transform: uppercase;
     letter-spacing: 0.06em;
@@ -1006,7 +1020,7 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
 .workspace-form { display: grid; gap: 0.5rem; margin-top: 0.5rem; }
 .workspace-form input[type="text"],
 .workspace-form textarea {
-    font-family: var(--font-mono);
+    font-family: var(--font-body);
     font-size: 0.8rem;
     padding: 0.5rem 0.6rem;
     background: var(--surface-primary);
@@ -1016,7 +1030,7 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
     width: 100%;
 }
 .workspace-form button {
-    font-family: var(--font-mono);
+    font-family: var(--font-body);
     font-size: 0.88rem;
     padding: 0.5rem 0.8rem;
     border-radius: 3px;
@@ -1058,7 +1072,7 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
 }
 .conversation-message .role-label {
     display: block;
-    font-family: var(--font-mono);
+    font-family: var(--font-body);
     font-size: 0.8rem;
     text-transform: uppercase;
     letter-spacing: 0.08em;
@@ -1080,7 +1094,7 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
     color: var(--text-primary);
 }
 .conversation-input-form button {
-    font-family: var(--font-mono);
+    font-family: var(--font-body);
     font-size: 0.82rem;
     padding: 0.7rem 1.1rem;
     border-radius: 4px;
@@ -1093,7 +1107,7 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
 
 .add-source-details { margin-top: 1.2rem; }
 .add-source-details summary {
-    font-family: var(--font-mono);
+    font-family: var(--font-body);
     font-size: 0.85rem;
     color: var(--text-metadata);
     cursor: pointer;
@@ -1117,7 +1131,7 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
     align-items: center;
     justify-content: space-between;
     gap: 0.6rem;
-    font-family: var(--font-mono);
+    font-family: var(--font-body);
     text-transform: uppercase;
     letter-spacing: 0.1em;
     font-size: 0.8rem;
@@ -1145,7 +1159,7 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
 }
 .accordion-section[open] > .accordion-summary { margin-bottom: 0.7rem; }
 .collapse-all-btn {
-    font-family: var(--font-mono);
+    font-family: var(--font-body);
     font-size: 0.82rem;
     color: var(--text-metadata);
     background: transparent;
@@ -1252,7 +1266,7 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
 .finding-card.focused { border-left-color: var(--border-strong); box-shadow: 0 0 0 1px var(--border-strong); }
 .finding-statement { font-size: 0.9rem; color: var(--text-primary); margin: 0 0 0.5rem; }
 .finding-confidence {
-    font-family: var(--font-mono);
+    font-family: var(--font-body);
     font-size: 0.82rem;
     color: var(--machine-blue);
     text-transform: uppercase;
@@ -1284,7 +1298,7 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
 
 .finding-review-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.6rem; }
 .review-btn {
-    font-family: var(--font-mono);
+    font-family: var(--font-body);
     font-size: 0.85rem;
     padding: 0.4rem 0.7rem;
     border-radius: 999px;
@@ -1306,7 +1320,7 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
 
 .review-decision-badge {
     display: inline-block;
-    font-family: var(--font-mono);
+    font-family: var(--font-body);
     font-size: 0.8rem;
     text-transform: uppercase;
     letter-spacing: 0.06em;
@@ -1321,7 +1335,7 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
 
 .applied-badge {
     display: inline-block;
-    font-family: var(--font-mono);
+    font-family: var(--font-body);
     font-size: 0.8rem;
     text-transform: uppercase;
     letter-spacing: 0.08em;
@@ -1356,7 +1370,7 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
    sealing/formal decision. See the color-scarcity rule: this is one of
    the few buttons in the whole application that earns seal-red. */
 .apply-button {
-    font-family: var(--font-mono);
+    font-family: var(--font-body);
     font-size: 0.85rem;
     padding: 0.7rem 1.2rem;
     border-radius: 4px;
@@ -1376,7 +1390,7 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
    into one color/label so the distinction stays visible in the UI, not
    just in the data model. */
 .review-state-badge {
-    font-family: var(--font-mono);
+    font-family: var(--font-body);
     font-size: 0.8rem;
     text-transform: uppercase;
     letter-spacing: 0.05em;
@@ -1394,7 +1408,7 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
    relationship_type vocabulary onto the same semantic language already
    used above, not a new truth-status vocabulary. */
 .evidence-badge {
-    font-family: var(--font-mono);
+    font-family: var(--font-body);
     font-size: 0.8rem;
     text-transform: uppercase;
     letter-spacing: 0.05em;
@@ -1429,7 +1443,7 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
     padding: 0.9rem 1.1rem;
     margin-bottom: 1rem;
 }
-.revision-notice strong { color: var(--attention-amber); text-transform: uppercase; font-family: var(--font-mono); font-size: 0.88rem; letter-spacing: 0.05em; }
+.revision-notice strong { color: var(--attention-amber); text-transform: uppercase; font-family: var(--font-body); font-size: 0.88rem; letter-spacing: 0.05em; }
 .revision-notice p { color: var(--text-primary); font-size: 0.85rem; margin: 0.4rem 0 0.6rem; }
 .region-status { font-family: var(--font-mono); }
 .region-status-unchanged { color: var(--accepted-green); }

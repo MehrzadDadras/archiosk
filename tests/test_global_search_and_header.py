@@ -156,5 +156,69 @@ class HeaderAndBrandTests(unittest.TestCase):
         self.assertNotIn(".side-rail-context { display: none;", css)
 
 
+class TypographyCorrectionTests(unittest.TestCase):
+    """
+    Typography correction pass: the Archiosk wordmark is restored to its
+    pre-Arial-Nova appearance (the deliberate exception), every other
+    visible UI text uses one family (Arial Nova Cond / Arial Narrow /
+    Arial), and IBM Plex Mono is pulled back to only the two genuinely
+    fixed-column-technical spots left in the whole stylesheet.
+    """
+
+    def setUp(self):
+        self.css = Path("static/css/main.css").read_text(encoding="utf-8")
+
+    def test_wordmark_restored_to_original_family_and_weight(self):
+        self.assertIn('font-family: "Space Grotesk", sans-serif;', self.css)
+        # The rule immediately following the family declaration must be
+        # the original bold weight, not the Arial Nova era's 400.
+        idx = self.css.index('font-family: "Space Grotesk", sans-serif;')
+        following = self.css[idx:idx + 200]
+        self.assertIn("font-weight: 700;", following)
+        self.assertIn("font-size: 1.1rem;", following)
+
+    def test_wordmark_is_the_only_space_grotesk_usage(self):
+        # The wordmark is an explicit, isolated exception - Space Grotesk
+        # must not leak into any other rule.
+        self.assertEqual(self.css.count("Space Grotesk"), 1)
+
+    def test_font_mono_reduced_to_exactly_the_two_technical_exceptions(self):
+        self.assertEqual(self.css.count("font-family: var(--font-mono);"), 2)
+        self.assertIn(".region-status { font-family: var(--font-mono); }", self.css)
+
+    def test_common_ui_elements_no_longer_reference_font_mono(self):
+        # Spot-check a representative sample of exactly the element types
+        # named in the correction: buttons, inputs, badges, navigation,
+        # labels, footer, table headers.
+        no_longer_mono = [
+            ".btn {", ".text-input {", ".workspace-form button {",
+            ".side-rail-link {", ".workspace-pane-label {",
+            ".review-btn {", ".review-decision-badge {", ".applied-badge {",
+            ".registry-table th {", ".site-footer {", ".eyebrow {",
+            ".projects-sort {", ".project-card-meta {",
+        ]
+        for selector in no_longer_mono:
+            start = self.css.index(selector)
+            end = self.css.index("}", start)
+            rule_body = self.css[start:end]
+            self.assertNotIn("var(--font-mono)", rule_body, msg=f"{selector} still uses font-mono")
+
+    def test_form_controls_have_a_global_font_inherit_backstop(self):
+        self.assertIn("button, input, select, textarea {", self.css)
+        idx = self.css.index("button, input, select, textarea {")
+        rule_body = self.css[idx:self.css.index("}", idx)]
+        self.assertIn("font-family: inherit;", rule_body)
+
+    def test_no_font_size_below_11px_floor(self):
+        import re
+        sizes_rem = [float(m) for m in re.findall(r"font-size:\s*([0-9.]+)rem", self.css)]
+        sizes_px = [float(m) for m in re.findall(r"font-size:\s*([0-9.]+)px", self.css)]
+        self.assertTrue(sizes_rem, "expected to find rem-based font-size declarations")
+        for value in sizes_rem:
+            self.assertGreaterEqual(value * 16, 11, f"{value}rem is below the 11px floor")
+        for value in sizes_px:
+            self.assertGreaterEqual(value, 11, f"{value}px is below the 11px floor")
+
+
 if __name__ == "__main__":
     unittest.main()
