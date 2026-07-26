@@ -38,6 +38,21 @@ _DEMO_REQUIREMENTS = [
 ]
 
 
+def _safe_workspace(store: CaseWorkspaceStore, project_id: str):
+    """
+    Best-effort workspace load for DISPLAY purposes only (project summary
+    cards, sidebar names) - never used for anything that writes or governs.
+    A workspace file that predates the current schema must not crash an
+    entire listing page; _project_summary already tolerates workspace=None
+    everywhere, so degrading to "no display_title available yet" for that
+    one project is the honest, safe fallback.
+    """
+    try:
+        return store.get(project_id)
+    except TypeError:
+        return None
+
+
 def _project_summary(document, workspace, events) -> dict:
     """
     Shared, read-only project summary used by both the home page's
@@ -58,6 +73,11 @@ def _project_summary(document, workspace, events) -> dict:
     return {
         "project_id": document.project_id,
         "filename": document.filename,
+        # Pagescape correction #11: the professional-facing project
+        # identity should be its own display_title, not the accident of
+        # which document happened to be uploaded first - falls back to
+        # filename only until a human sets one via Edit Project Details.
+        "display_name": (workspace.display_title if workspace else None) or document.filename,
         "created_at": document.ingested_at,
         "last_activity": events[-1].created_at if events else document.ingested_at,
         "requirements_count": len(workspace.requirements) if workspace else 0,
@@ -91,7 +111,7 @@ def index():
     documents.sort(key=lambda d: d.ingested_at, reverse=True)
 
     recent_projects = [
-        _project_summary(document, store.get(document.project_id), governance_log.read(document.project_id))
+        _project_summary(document, _safe_workspace(store, document.project_id), governance_log.read(document.project_id))
         for document in documents[:6]
     ]
 
@@ -169,7 +189,7 @@ def gateway():
 
 _PROJECT_SORT_KEYS = {
     "last_updated": lambda p: p["last_activity"],
-    "name": lambda p: p["filename"].lower(),
+    "name": lambda p: p["display_name"].lower(),
     "created": lambda p: p["created_at"],
 }
 
@@ -207,7 +227,7 @@ def projects_list():
         ]
 
     projects = [
-        _project_summary(document, store.get(document.project_id), governance_log.read(document.project_id))
+        _project_summary(document, _safe_workspace(store, document.project_id), governance_log.read(document.project_id))
         for document in documents
     ]
     projects.sort(key=_PROJECT_SORT_KEYS[sort], reverse=(sort != 'name'))
@@ -289,6 +309,7 @@ def dashboard(project_id=None):
             is_demo=True,
             project_id=None,
             filename='sample_rfp.pdf (demo)',
+            display_name='sample_rfp.pdf (demo)',
             requirements=_DEMO_REQUIREMENTS,
             milestones=_DEMO_MILESTONES,
             categories=REQUIREMENT_CATEGORIES,
@@ -303,12 +324,20 @@ def dashboard(project_id=None):
         abort(404)
 
     governance_events = get_governance_log(current_app).read(project_id)
+    # Pagescape correction #11/#12: resolve the same display_title the
+    # Case Workspace already supports (Edit Project Details) so the
+    # legacy Dashboard shows the professional's chosen project identity
+    # too, not just whichever filename was ingested first - a read-only
+    # lookup, no CaseWorkspaceStore write happens on a GET.
+    workspace = _safe_workspace(CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"]), project_id)
+    display_name = (workspace.display_title if workspace else None) or document.filename
 
     return render_template(
         'dashboard.html',
         is_demo=False,
         project_id=document.project_id,
         filename=document.filename,
+        display_name=display_name,
         requirements=[r.__dict__ for r in document.requirements],
         milestones=document.milestones,
         categories=REQUIREMENT_CATEGORIES,

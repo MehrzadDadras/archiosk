@@ -112,6 +112,14 @@ class ParsedDocument:
     # consistency_flags being empty on its own can't tell you which happened.
     consistency_checked: bool = False
     consistency_note: str | None = None
+    # Where the ORIGINAL uploaded bytes are stored, if at all (services/
+    # ingestion.py persists them after a successful parse; a pre-existing
+    # ParsedDocument ingested before this field existed simply has None
+    # here — an honest gap, not backfilled/fabricated). Lets the
+    # professional actually open the source that generated this project's
+    # extracted requirements, not just read the extraction's output.
+    original_file_path: str | None = None
+    original_file_hash: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -124,6 +132,8 @@ class ParsedDocument:
             "consistency_flags": [f.__dict__ for f in self.consistency_flags],
             "consistency_checked": self.consistency_checked,
             "consistency_note": self.consistency_note,
+            "original_file_path": self.original_file_path,
+            "original_file_hash": self.original_file_hash,
         }
 
 

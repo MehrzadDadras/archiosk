@@ -22,6 +22,7 @@ implementationally separate (Prompt 4 #10):
 from __future__ import annotations
 
 import io
+import mimetypes
 import uuid
 from dataclasses import asdict
 from pathlib import Path
@@ -118,6 +119,8 @@ def _load_workspace_or_404(project_id: str):
             "ingested_at": document.ingested_at,
             "requirement_count": len(document.requirements),
             "milestone_count": len(document.milestones),
+            "file_path": document.original_file_path,
+            "file_hash": document.original_file_hash,
         },
     )
     return document, store, workspace
@@ -1085,6 +1088,40 @@ def add_drawing_source(project_id, case_id):
         return redirect(url_for("workspace.show_workspace", project_id=project_id))
 
     return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
+
+
+@workspace_bp.route("/projects/<project_id>/workspace/sources/<source_id>/file")
+@login_required
+def source_file(project_id, source_id):
+    """
+    Opens/downloads a Source's own stored file - the direct answer to
+    "where is the document I uploaded" (pagescape correction #10). A
+    read operation, not a write. Sources are project-scoped, not
+    Case-scoped (see kernel-object-model.md's "Case"/"Source" entries -
+    a Case draws on Sources, it does not own them), so this is gated on
+    the same login_required boundary as the rest of the Case Workspace,
+    not a per-Case visibility check. 404s honestly (not a fabricated
+    empty file) when the Source has no stored file at all - true for
+    every legacy-ingested document from before services/ingestion.py
+    started persisting the original upload.
+    """
+    _, _, workspace = _load_workspace_or_404(project_id)
+
+    source = next((s for s in workspace.sources if s["id"] == source_id), None)
+    if source is None or not source.get("file_path"):
+        abort(404)
+
+    file_path = Path(source["file_path"])
+    if not file_path.exists():
+        abort(404)
+
+    mimetype, _ = mimetypes.guess_type(source["name"])
+    return send_file(
+        file_path,
+        mimetype=mimetype or "application/octet-stream",
+        as_attachment=False,
+        download_name=source["name"],
+    )
 
 
 @workspace_bp.route("/projects/<project_id>/workspace/sources/<source_id>/revise", methods=["POST"])

@@ -7,11 +7,14 @@ duplicated (and drifting) across a JSON endpoint and an HTML form handler.
 """
 from __future__ import annotations
 
+import hashlib
+import uuid
 from pathlib import Path
 from typing import Optional
 
 from flask import Flask
 from werkzeug.datastructures import FileStorage
+from werkzeug.utils import secure_filename
 
 from services.bhive_parser import BHiveParser, ParsedDocument, ParserError
 from services.governance import GovernanceLog
@@ -65,6 +68,23 @@ def ingest_upload(
         document = parser.parse(raw_bytes, filename)
     except ParserError as exc:
         raise UploadError(str(exc)) from exc
+
+    # Persist the ORIGINAL uploaded bytes, not just what the parser
+    # extracted from them - the same "a Source is not its filename"
+    # discipline routes/workspace.py already applies to governed drawing/
+    # document Sources (opaque-prefixed name, original kept only as the
+    # display label). Written into the same workspace_sources/<project_id>
+    # directory Case Workspace's own add_document_source already uses, so
+    # there is one storage location for every project-held file, legacy
+    # or governed. Written only after a successful parse, matching the
+    # existing behavior of leaving nothing behind on a failed parse.
+    sources_dir = Path(app.config["REGISTRY_STORE_PATH"]) / "workspace_sources" / document.project_id
+    sources_dir.mkdir(parents=True, exist_ok=True)
+    safe_name = secure_filename(filename)
+    stored_path = sources_dir / f"{uuid.uuid4().hex}_{safe_name}"
+    stored_path.write_bytes(raw_bytes)
+    document.original_file_path = str(stored_path)
+    document.original_file_hash = hashlib.sha256(raw_bytes).hexdigest()
 
     get_registry(app).save(document)
     get_governance_log(app).append(

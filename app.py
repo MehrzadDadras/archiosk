@@ -119,18 +119,19 @@ def _register_template_filters(app: Flask) -> None:
 
 def _nav_recent_projects(app: Flask, limit: int = 15) -> list:
     """
-    Cheap, read-only project list feeding the sidebar's "Projects" tree
-    node (id + filename only - no per-project Case Workspace load).
+    Read-only project list feeding the sidebar's "Projects" tree node.
     Reuses the same RequirementsRegistry already used by
     routes/portal.py's project directory; no new storage or domain
     behavior. Runs on every authenticated page render (the rail is part
-    of the shared shell), so deliberately stays this minimal - the
-    richer, indicator-bearing recent-project list on the home page itself
-    is computed separately, only for that one page. Limit bumped from the
-    original 5 (a "recent projects" cap) since this list is now the
-    sidebar's one canonical project selector, not just a recency
-    convenience - still capped, not unbounded, for a 5-minute pass.
+    of the shared shell) and is capped at `limit` projects, so the added
+    per-project CaseWorkspaceStore.get() below (needed for display_name -
+    see pagescape correction #11: a project's visible identity should be
+    its own display_title, not whichever filename happened to be
+    ingested first) stays a bounded cost, not an unbounded one - the
+    same per-project store-load cost portal.py's own _project_summary
+    already pays for the Projects directory and Home.
     """
+    from services.case_workspace import CaseWorkspaceStore
     from services.ingestion import get_registry
 
     try:
@@ -139,7 +140,24 @@ def _nav_recent_projects(app: Flask, limit: int = 15) -> list:
     except OSError:
         return []
     documents.sort(key=lambda d: d.ingested_at, reverse=True)
-    return documents[:limit]
+    documents = documents[:limit]
+
+    store = CaseWorkspaceStore(app.config["REGISTRY_STORE_PATH"])
+    result = []
+    for d in documents:
+        # Best-effort, display-only: a workspace file that predates the
+        # current schema must not crash the sidebar on every authenticated
+        # page (including error pages, since this runs in inject_globals)
+        # - discovered live during this pass against a pre-existing
+        # instance/registry project. Degrades to the plain filename for
+        # that one project rather than taking the whole render down.
+        try:
+            workspace = store.get(d.project_id)
+        except TypeError:
+            workspace = None
+        display_name = (workspace.display_title if workspace else None) or d.filename
+        result.append({"project_id": d.project_id, "filename": d.filename, "display_name": display_name})
+    return result
 
 
 # Local dev entrypoint: `python app.py`

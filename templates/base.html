@@ -20,6 +20,7 @@
 <body>
     <div class="blueprint-grid"></div>
 
+    {% if authenticated %}
     <div class="search-overlay" id="search-overlay" hidden>
         <div class="search-overlay-backdrop" data-search-close></div>
         <div class="search-panel" role="dialog" aria-modal="true" aria-label="Search">
@@ -43,8 +44,10 @@
             </div>
         </div>
     </div>
+    {% endif %}
 
     <div class="app-shell">
+        {% if authenticated %}
         <nav class="side-rail" aria-label="Primary">
             <div class="side-rail-top">
                 <a class="side-rail-brand" href="{{ url_for('portal.index') }}">
@@ -72,7 +75,6 @@
                     <span class="side-rail-icon" aria-hidden="true">&#8962;</span>
                     <span class="side-rail-label">Home</span>
                 </a>
-                {% if authenticated %}
                 <!-- Category node: expand/collapse only, never navigates. Object
                      nodes (individual projects) below it are the only things
                      that activate a project - this is now the one canonical
@@ -88,7 +90,7 @@
                         {% for p in nav_recent_projects %}
                         <a class="side-rail-link side-rail-tree-item{% if project_id == p.project_id %} active{% endif %}"
                            href="{{ url_for('workspace.show_workspace', project_id=p.project_id) }}">
-                            <span class="side-rail-label">{{ p.filename }}</span>
+                            <span class="side-rail-label">{{ p.display_name }}</span>
                         </a>
                         {% endfor %}
                         {% if is_admin %}
@@ -99,23 +101,25 @@
                         {% endif %}
                     </div>
                 </details>
-                {% endif %}
             </div>
 
             <div class="side-rail-bottom">
-                {% if authenticated %}
                 <a class="side-rail-link" href="{{ url_for('portal.logout') }}">
                     <span class="side-rail-icon" aria-hidden="true">&#9099;</span>
                     <span class="side-rail-label">Sign out</span>
                 </a>
-                {% else %}
-                <a class="side-rail-link" href="{{ url_for('portal.login') }}">
-                    <span class="side-rail-icon" aria-hidden="true">&#8594;</span>
-                    <span class="side-rail-label">Sign in</span>
-                </a>
-                {% endif %}
             </div>
         </nav>
+        {% else %}
+        <!-- True zero state (State 0 - Unauthenticated): the authenticated
+             shell (nav rail, search, project/workspace controls) is not
+             rendered at all pre-auth, not merely hidden/blurred - see
+             memory note project-entry-state-invariant. Only a minimal
+             identity mark carries brand presence here. -->
+        <div class="entry-shell-brand">
+            <span class="entry-shell-mark">Archiosk</span>
+        </div>
+        {% endif %}
 
         <div class="app-main">
             <main>

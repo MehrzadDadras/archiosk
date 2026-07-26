@@ -4,7 +4,7 @@
 
 {% block content %}
 {% if active_case %}
-<div class="dash-head" style="padding-top:2rem;">
+<div class="dash-head">
     <div>
         <p class="eyebrow mono">{{ project_id }}</p>
         <h1>Case Workspace</h1>
@@ -105,6 +105,11 @@
                 <br><small style="color:var(--machine-blue);">Revision of a prior Source.</small>
                 {% endif %}
                 {% if source.note %}<br><small style="color:var(--text-secondary);">{{ source.note }}</small>{% endif %}
+                {% if source.file_path %}
+                <br><a href="{{ url_for('workspace.source_file', project_id=project_id, source_id=source.id) }}" target="_blank" rel="noopener">Open source file &rarr;</a>
+                {% elif source.kind == 'rfq_rfp_document' %}
+                <br><small style="color:var(--text-disabled);font-style:italic;">Original file not stored (ingested before file retention was added).</small>
+                {% endif %}
             </li>
             {% endfor %}
         </ul>
@@ -732,7 +737,11 @@
     </section>
 {% else %}
     <div class="project-home">
-        <p class="project-home-back"><a href="{{ url_for('portal.projects_list') }}">&larr; Projects</a></p>
+        <p class="project-home-back">
+            <a href="{{ url_for('portal.projects_list') }}">&larr; Projects</a>
+            <span style="color:var(--border-strong);">&middot;</span>
+            <a href="{{ url_for('portal.dashboard', project_id=project_id) }}">Legacy Dashboard &rarr;</a>
+        </p>
 
         <div class="project-home-header">
             <div>

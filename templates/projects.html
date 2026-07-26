@@ -3,7 +3,7 @@
 {% block title %}Projects &mdash; Archiosk{% endblock %}
 
 {% block content %}
-<div class="dash-head" style="padding-top:2rem;">
+<div class="dash-head">
     <div>
         <h1>Projects</h1>
     </div>
@@ -21,7 +21,7 @@
     <li class="project-card">
         <a class="project-card-link" href="{{ url_for('workspace.show_workspace', project_id=p.project_id) }}">
             <div class="project-card-main">
-                <span class="project-card-name">{{ p.filename }}</span>
+                <span class="project-card-name">{{ p.display_name }}</span>
                 <span class="project-card-id mono">{{ p.project_id }}</span>
             </div>
             <div class="project-card-meta">

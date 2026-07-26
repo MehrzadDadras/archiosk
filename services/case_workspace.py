@@ -2568,6 +2568,12 @@ class CaseWorkspaceStore:
                     f"{register_document_source.get('milestone_count', 0)} milestones "
                     "already extracted by the Extract/Segment/Classify/Assemble pipeline."
                 ),
+                # Only present for documents ingested after services/
+                # ingestion.py started persisting the original upload -
+                # None here is an honest gap for older projects, never
+                # backfilled/fabricated.
+                file_path=register_document_source.get("file_path"),
+                file_hash=register_document_source.get("file_hash"),
             )
             workspace.sources.append(asdict(source))
 

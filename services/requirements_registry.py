@@ -44,6 +44,8 @@ class RequirementsRegistry:
             consistency_flags=consistency_flags,
             consistency_checked=data.get("consistency_checked", False),
             consistency_note=data.get("consistency_note"),
+            original_file_path=data.get("original_file_path"),
+            original_file_hash=data.get("original_file_hash"),
         )
         return doc
 
