@@ -8,10 +8,13 @@
         <p class="eyebrow mono">{{ project_id }}</p>
         <h1>Case Workspace</h1>
     </div>
-    <a class="btn btn-ghost" href="{{ url_for('portal.dashboard', project_id=project_id) }}">&larr; Back to Dashboard</a>
+    <div style="display:flex;gap:0.6rem;align-items:center;">
+        <button type="button" id="collapse-all-btn" class="collapse-all-btn">Collapse All</button>
+        <a class="btn btn-ghost" href="{{ url_for('portal.dashboard', project_id=project_id) }}">&larr; Back to Dashboard</a>
+    </div>
 </div>
 
-<div class="case-workspace">
+<div class="case-workspace" data-project-id="{{ project_id }}">
 
     {# ---------------- Left: Project Navigation ---------------- #}
     <aside class="workspace-pane">
@@ -31,9 +34,10 @@
             forward — folders and filenames are views; this record is the canonical identity.
         </p>
 
-        <p class="workspace-pane-label">
-            Accepted Knowledge ({{ accepted_knowledge|length }})
-        </p>
+        <details class="accordion-section" data-accordion-group="left" data-accordion-id="accepted-knowledge">
+            <summary class="accordion-summary">
+                <span class="accordion-summary-text">Accepted Knowledge ({{ accepted_knowledge|length }})</span>
+            </summary>
         <p style="color:var(--muted);font-size:0.72rem;margin:-0.6rem 0 0.6rem;">
             Every Applied Finding across this Project's Cases, independent of which Case produced it —
             the Project's accumulated intelligence, not a per-Case log. This is the visible result of
@@ -63,8 +67,12 @@
             </ul>
         </details>
         {% endif %}
+        </details>
 
-        <p class="workspace-pane-label">Sources ({{ workspace.sources|length }})</p>
+        <details class="accordion-section" data-accordion-group="left" data-accordion-id="sources">
+            <summary class="accordion-summary">
+                <span class="accordion-summary-text">Sources ({{ workspace.sources|length }})</span>
+            </summary>
         <ul class="source-list">
             {% for source in workspace.sources %}
             <li class="source-item">
@@ -80,8 +88,12 @@
             </li>
             {% endfor %}
         </ul>
+        </details>
 
-        <p class="workspace-pane-label">Cases ({{ visible_cases|length }})</p>
+        <details class="accordion-section" data-accordion-group="left" data-accordion-id="cases" open>
+            <summary class="accordion-summary">
+                <span class="accordion-summary-text">Cases ({{ visible_cases|length }})</span>
+            </summary>
         <ul class="case-list">
             {% for case in visible_cases %}
             <li>
@@ -123,8 +135,13 @@
                 <button type="submit">Create Case</button>
             </form>
         </details>
+        </details>
 
-        <p class="workspace-pane-label">Requirement Compliance</p>
+        <details class="accordion-section" data-accordion-group="left" data-accordion-id="requirement-compliance">
+            <summary class="accordion-summary">
+                <span class="accordion-summary-text">Requirement Compliance</span>
+                {% if requirements_view %}<span class="accordion-summary-status">{{ requirements_view|length }} governed</span>{% endif %}
+            </summary>
         {% if requirements_view %}
         <p style="font-size:0.75rem;color:var(--muted);margin:-0.6rem 0 0.8rem;">
             {{ requirements_view|length }} governed Requirement(s) —
@@ -136,8 +153,13 @@
         {% else %}
         <p style="font-size:0.75rem;color:var(--muted);margin:-0.6rem 0 0.8rem;">No Requirements have been promoted to governed state yet.</p>
         {% endif %}
+        </details>
 
-        <p class="workspace-pane-label">RFI Export</p>
+        <details class="accordion-section" data-accordion-group="left" data-accordion-id="rfi-export">
+            <summary class="accordion-summary">
+                <span class="accordion-summary-text">RFI Export</span>
+                {% if document.consistency_flags %}<span class="accordion-summary-status">{{ document.consistency_flags|length }} flagged</span>{% endif %}
+            </summary>
         {% if document.consistency_flags %}
         <p style="font-size:0.75rem;color:var(--muted);margin:-0.6rem 0 0.8rem;">
             {{ document.consistency_flags|length }} flagged cross-requirement contradiction(s) detected by this
@@ -149,8 +171,12 @@
         {% else %}
         <p style="font-size:0.75rem;color:var(--muted);margin:-0.6rem 0 0.8rem;">The consistency check hasn't run for this Project yet — RFI export needs flagged contradictions to build from.</p>
         {% endif %}
+        </details>
 
-        <p class="workspace-pane-label">Requirements ({{ requirements_view|length }})</p>
+        <details class="accordion-section" data-accordion-group="left" data-accordion-id="requirements">
+            <summary class="accordion-summary">
+                <span class="accordion-summary-text">Requirements ({{ requirements_view|length }})</span>
+            </summary>
         {% if unpromoted_requirement_items %}
         <details class="add-source-details">
             <summary>Extracted, not yet governed ({{ unpromoted_requirement_items|length }})</summary>
@@ -245,9 +271,12 @@
             {% endfor %}
         </details>
         {% endif %}
+        </details>
 
-        <details class="add-source-details">
-            <summary>History ({{ recent_governance_events|length }})</summary>
+        <details class="accordion-section" data-accordion-group="left" data-accordion-id="history">
+            <summary class="accordion-summary">
+                <span class="accordion-summary-text">History ({{ recent_governance_events|length }})</span>
+            </summary>
             {% if recent_governance_events %}
             <ul class="source-list">
                 {% for event in recent_governance_events %}
@@ -322,6 +351,10 @@
         </details>
         {% endif %}
 
+        <details class="accordion-section" data-accordion-group="center" data-accordion-id="conversation" open>
+            <summary class="accordion-summary">
+                <span class="accordion-summary-text">Conversation ({{ active_case.conversation|length }})</span>
+            </summary>
         <div class="conversation-thread">
             {% for message in active_case.conversation %}
             <div class="conversation-message {{ message.role }}">
@@ -376,8 +409,12 @@
             <input type="text" name="text" placeholder="Analyze this drawing for datum inconsistencies…" autocomplete="off" required>
             <button type="submit">Send</button>
         </form>
+        </details>
 
-        <p class="workspace-pane-label" style="margin-top:1.2rem;">Discussion ({{ threads_view|length }})</p>
+        <details class="accordion-section" data-accordion-group="center" data-accordion-id="discussion">
+            <summary class="accordion-summary">
+                <span class="accordion-summary-text">Discussion ({{ threads_view|length }})</span>
+            </summary>
         {% if active_case.status == 'archived' %}
         <p style="color:var(--muted);font-size:0.78rem;">
             This Case is archived — the discussion below is preserved exactly as it stood and is read-only.
@@ -516,6 +553,7 @@
             </form>
         </details>
         {% endif %}
+        </details>
         {% else %}
         <h2>No Case selected</h2>
         <p style="color:var(--muted);">Create a Case on the left to begin a conversation and open a drawing for review.</p>
@@ -527,6 +565,11 @@
         <h2>Artifact Workspace</h2>
 
         {% if active_case %}
+        <details class="accordion-section" data-accordion-group="right" data-accordion-id="findings" open>
+            <summary class="accordion-summary">
+                <span class="accordion-summary-text">Findings ({{ findings_view|length }})</span>
+                {% if applied_count %}<span class="accordion-summary-status">{{ applied_count }} applied</span>{% endif %}
+            </summary>
         <div class="finding-list">
             {% for row in findings_view %}
             {% set finding = row.finding %}
@@ -646,9 +689,14 @@
                 <button type="submit" class="apply-button">Apply Confirmed Findings</button>
             </form>
         </div>
+        </details>
         {% else %}
         <p style="color:var(--muted);">Select or create a Case to see its Findings and Artifacts here.</p>
         {% endif %}
     </section>
 </div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{{ url_for('static', filename='js/case_workspace.js') }}?v={{ static_version }}"></script>
 {% endblock %}

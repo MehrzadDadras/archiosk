@@ -666,6 +666,62 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; }
     margin-bottom: 0.6rem;
 }
 
+/* -- Case Workspace accordion/focus sections ------------------------------- */
+.accordion-section {
+    border-top: 1px solid var(--line);
+    margin-top: 1rem;
+    padding-top: 1rem;
+}
+.workspace-pane > .accordion-section:first-of-type,
+.workspace-pane > h2 + .accordion-section {
+    border-top: none;
+    margin-top: 0;
+    padding-top: 0;
+}
+.accordion-summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.6rem;
+    font-family: var(--font-mono);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    font-size: 0.65rem;
+    color: var(--muted);
+    cursor: pointer;
+    list-style: none;
+}
+.accordion-summary::-webkit-details-marker { display: none; }
+.accordion-summary::before {
+    content: "\25B8";
+    display: inline-block;
+    margin-right: 0.5rem;
+    color: var(--amber);
+    font-size: 0.7rem;
+    transition: transform 0.12s ease;
+}
+.accordion-section[open] > .accordion-summary::before { transform: rotate(90deg); }
+.accordion-summary-text { flex: 1; }
+.accordion-summary-status {
+    color: var(--teal);
+    font-size: 0.62rem;
+    text-transform: none;
+    letter-spacing: normal;
+    white-space: nowrap;
+}
+.accordion-section[open] > .accordion-summary { margin-bottom: 0.7rem; }
+.collapse-all-btn {
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    color: var(--muted);
+    background: transparent;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 0.35rem 0.65rem;
+    cursor: pointer;
+}
+.collapse-all-btn:hover { color: var(--parchment); border-color: var(--teal); }
+
 /* -- right: artifact workspace -------------------------------------------- */
 .finding-list { display: grid; gap: 1rem; }
 .finding-card {
