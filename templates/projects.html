@@ -16,7 +16,6 @@
     <select name="sort" class="projects-sort" aria-label="Sort projects" onchange="this.form.submit()">
         <option value="last_updated" {% if sort == 'last_updated' %}selected{% endif %}>Last Updated</option>
         <option value="name" {% if sort == 'name' %}selected{% endif %}>Project Name</option>
-        <option value="created" {% if sort == 'created' %}selected{% endif %}>Created Date</option>
     </select>
 </form>
 
