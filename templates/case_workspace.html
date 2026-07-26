@@ -27,7 +27,7 @@
             <span class="lifecycle-stage{% if stage in ['RFP'] %} current{% endif %}">{{ stage }}</span>
             {% endfor %}
         </div>
-        <p class="workspace-pane-label" style="margin-top:-0.6rem;margin-bottom:1.2rem;color:var(--muted);font-family:var(--font-body);text-transform:none;letter-spacing:normal;font-size:0.75rem;">
+        <p class="workspace-pane-label" style="margin-top:-0.6rem;margin-bottom:1.2rem;color:var(--text-secondary);font-family:var(--font-body);text-transform:none;letter-spacing:normal;font-size:0.75rem;">
             This Project began as an RFQ/RFP ingestion. Extract &rarr; Segment &rarr; Classify &rarr; Assemble already ran
             as this Project's first Analysis, producing the {{ document.requirements|length }} requirement(s) as
             governed Sources of truth. The same Project / Case / Source / Artifact / Analysis / Finding / Review /
@@ -39,7 +39,7 @@
             <summary class="accordion-summary">
                 <span class="accordion-summary-text">Accepted Knowledge ({{ accepted_knowledge|length }})</span>
             </summary>
-        <p style="color:var(--muted);font-size:0.72rem;margin:-0.6rem 0 0.6rem;">
+        <p style="color:var(--text-secondary);font-size:0.72rem;margin:-0.6rem 0 0.6rem;">
             Every Applied Finding across this Project's Cases, independent of which Case produced it —
             the Project's accumulated intelligence, not a per-Case log. This is the visible result of
             &ldquo;Apply Confirmed Findings&rdquo; below — the concrete effect an investigation had on governed project state.
@@ -52,11 +52,11 @@
                 {% set item = row.item %}
                 <li class="source-item">
                     {{ item.statement }}
-                    <br><small style="color:var(--muted);">
+                    <br><small style="color:var(--text-secondary);">
                         established by {{ item.established_by }} &middot; {{ item.established_at }}
                         &middot; from {{ row.source_case_title or 'an unknown Case' }}
                     </small>
-                    <br><small style="color:var(--muted);">
+                    <br><small style="color:var(--text-secondary);">
                         {% if row.linked_requirements %}
                         Linked Requirement(s): {% for req in row.linked_requirements %}{{ req.text_reference[:40] }}{% if not loop.last %}; {% endif %}{% endfor %}
                         {% else %}
@@ -75,7 +75,7 @@
                 <span class="accordion-summary-text">Project Instructions</span>
                 <span class="accordion-summary-status">+</span>
             </summary>
-            <p style="font-size:0.72rem;color:var(--muted);margin:-0.6rem 0 0.6rem;">
+            <p style="font-size:0.72rem;color:var(--text-secondary);margin:-0.6rem 0 0.6rem;">
                 Project / Case Operating Instructions guide terminology, conventions, and known assumptions
                 for this Project. Always subordinate to BEEHIVE governance &mdash; Stone Wall, source
                 authority, provenance, and approval boundaries take precedence and can never be overridden
@@ -83,9 +83,9 @@
             </p>
             {% if workspace.operating_instructions %}
             <p style="font-size:0.8rem;white-space:pre-wrap;">{{ workspace.operating_instructions }}</p>
-            <p style="font-size:0.66rem;color:var(--muted);">Last updated by {{ workspace.operating_instructions_updated_by }} &middot; {{ workspace.operating_instructions_updated_at }}</p>
+            <p style="font-size:0.66rem;color:var(--text-secondary);">Last updated by {{ workspace.operating_instructions_updated_by }} &middot; {{ workspace.operating_instructions_updated_at }}</p>
             {% else %}
-            <p style="font-size:0.78rem;color:var(--muted);">No Project Instructions set yet.</p>
+            <p style="font-size:0.78rem;color:var(--text-secondary);">No Project Instructions set yet.</p>
             {% endif %}
             <details class="add-source-details">
                 <summary>Edit Project Instructions</summary>
@@ -107,12 +107,12 @@
                 <span class="source-kind-badge">{{ source.kind.replace('_', ' ') }}</span>
                 {{ source.name }}
                 {% if source.superseded_by_source_id %}
-                <br><small style="color:var(--amber);">Superseded by a newer revision.</small>
+                <br><small style="color:var(--attention-amber);">Superseded by a newer revision.</small>
                 {% endif %}
                 {% if source.supersedes_source_id %}
-                <br><small style="color:var(--teal);">Revision of a prior Source.</small>
+                <br><small style="color:var(--machine-blue);">Revision of a prior Source.</small>
                 {% endif %}
-                {% if source.note %}<br><small style="color:var(--muted);">{{ source.note }}</small>{% endif %}
+                {% if source.note %}<br><small style="color:var(--text-secondary);">{{ source.note }}</small>{% endif %}
             </li>
             {% endfor %}
         </ul>
@@ -136,7 +136,7 @@
 
         <details class="add-source-details">
             <summary>+ Add External Source</summary>
-            <p style="font-size:0.72rem;color:var(--muted);">
+            <p style="font-size:0.72rem;color:var(--text-secondary);">
                 Not yet available &mdash; no external source connector is configured for this deployment.
             </p>
         </details>
@@ -175,7 +175,7 @@
                 {% endif %}
             </li>
             {% else %}
-            <li style="color:var(--muted);font-size:0.82rem;">No Cases yet.</li>
+            <li style="color:var(--text-secondary);font-size:0.82rem;">No Cases yet.</li>
             {% endfor %}
         </ul>
 
@@ -195,7 +195,7 @@
                 {% if requirements_view %}<span class="accordion-summary-status">{{ requirements_view|length }} governed</span>{% endif %}
             </summary>
         {% if requirements_view %}
-        <p style="font-size:0.75rem;color:var(--muted);margin:-0.6rem 0 0.8rem;">
+        <p style="font-size:0.75rem;color:var(--text-secondary);margin:-0.6rem 0 0.8rem;">
             {{ requirements_view|length }} governed Requirement(s) —
             {% for state, count in compliance_rollup.items() %}
             <span class="review-state-badge">{{ count }} {{ state }}</span>{% if not loop.last %} {% endif %}
@@ -203,7 +203,7 @@
             <br><a href="#governed-requirements">View Requirements &darr;</a>
         </p>
         {% else %}
-        <p style="font-size:0.75rem;color:var(--muted);margin:-0.6rem 0 0.8rem;">No Requirements have been promoted to governed state yet.</p>
+        <p style="font-size:0.75rem;color:var(--text-secondary);margin:-0.6rem 0 0.8rem;">No Requirements have been promoted to governed state yet.</p>
         {% endif %}
         </details>
 
@@ -213,15 +213,15 @@
                 {% if document.consistency_flags %}<span class="accordion-summary-status">{{ document.consistency_flags|length }} flagged</span>{% endif %}
             </summary>
         {% if document.consistency_flags %}
-        <p style="font-size:0.75rem;color:var(--muted);margin:-0.6rem 0 0.8rem;">
+        <p style="font-size:0.75rem;color:var(--text-secondary);margin:-0.6rem 0 0.8rem;">
             {{ document.consistency_flags|length }} flagged cross-requirement contradiction(s) detected by this
             Project's consistency check.
             <br><a class="btn btn-ghost" href="{{ url_for('workspace.export_rfi', project_id=project_id) }}">Download RFI (.docx)</a>
         </p>
         {% elif document.consistency_checked %}
-        <p style="font-size:0.75rem;color:var(--muted);margin:-0.6rem 0 0.8rem;">Consistency check ran — no contradictions were flagged, so there is nothing to export.</p>
+        <p style="font-size:0.75rem;color:var(--text-secondary);margin:-0.6rem 0 0.8rem;">Consistency check ran — no contradictions were flagged, so there is nothing to export.</p>
         {% else %}
-        <p style="font-size:0.75rem;color:var(--muted);margin:-0.6rem 0 0.8rem;">The consistency check hasn't run for this Project yet — RFI export needs flagged contradictions to build from.</p>
+        <p style="font-size:0.75rem;color:var(--text-secondary);margin:-0.6rem 0 0.8rem;">The consistency check hasn't run for this Project yet — RFI export needs flagged contradictions to build from.</p>
         {% endif %}
         </details>
 
@@ -233,7 +233,7 @@
         <details class="add-source-details">
             <summary>Extracted, not yet governed ({{ unpromoted_requirement_items|length }})</summary>
             {% for item in unpromoted_requirement_items %}
-            <p style="color:var(--muted);font-size:0.78rem;margin:0.3rem 0;">
+            <p style="color:var(--text-secondary);font-size:0.78rem;margin:0.3rem 0;">
                 {{ item.text }}
                 <br><small>{{ item.category.replace('_', ' ') }} &middot; confidence {{ (item.confidence * 100)|round|int }}%</small>
             </p>
@@ -248,7 +248,7 @@
                 <button type="submit">Promote to governed Requirement</button>
             </form>
             {% else %}
-            <p style="color:var(--muted);font-size:0.7rem;">Select or create an Investigation to promote this item.</p>
+            <p style="color:var(--text-secondary);font-size:0.7rem;">Select or create an Investigation to promote this item.</p>
             {% endif %}
             {% endfor %}
         </details>
@@ -259,9 +259,9 @@
             <summary>Governed Requirements ({{ requirements_view|length }})</summary>
             {% for row in requirements_view %}
             {% set requirement = row.requirement %}
-            <div style="border-top:1px solid var(--line);padding:0.5rem 0;">
+            <div style="border-top:1px solid var(--border);padding:0.5rem 0;">
                 <p style="font-size:0.78rem;margin:0 0 0.3rem;">{{ requirement.text_reference }}</p>
-                <p style="color:var(--muted);font-size:0.7rem;margin:0 0 0.4rem;">
+                <p style="color:var(--text-secondary);font-size:0.7rem;margin:0 0 0.4rem;">
                     {{ requirement.original_requirement_identifier }}
                     {% if requirement.subject_domain %} &middot; {{ requirement.subject_domain.replace('_', ' ') }}{% endif %}
                     &middot; <span class="review-state-badge">{{ row.adjudication_state }}</span>
@@ -271,7 +271,7 @@
                 </p>
 
                 {% if row.latest_adjudication %}
-                <div style="font-size:0.7rem;color:var(--muted);margin:0 0 0.5rem;">
+                <div style="font-size:0.7rem;color:var(--text-secondary);margin:0 0 0.5rem;">
                     {% if row.evidence_findings %}
                     <strong>Evidence Findings:</strong><br>
                     {% for ef in row.evidence_findings %}
@@ -309,9 +309,9 @@
                     </select>
                     <input type="text" name="reasoning" placeholder="Reasoning (required)" required>
                     {% if active_case and findings_view %}
-                    <span style="color:var(--muted);font-size:0.7rem;">Evidence Findings:</span>
+                    <span style="color:var(--text-secondary);font-size:0.7rem;">Evidence Findings:</span>
                     {% for row2 in findings_view %}
-                    <label style="display:block;font-size:0.72rem;color:var(--muted);">
+                    <label style="display:block;font-size:0.72rem;color:var(--text-secondary);">
                         <input type="checkbox" name="evidence_finding_id" value="{{ row2.finding.id }}">
                         {{ row2.finding.statement[:60] }}
                     </label>
@@ -335,12 +335,12 @@
                 <li class="source-item" style="font-size:0.72rem;">
                     <span class="source-kind-badge">{{ event.event_type.replace('_', ' ') }}</span>
                     {{ event.actor }} ({{ event.role }})
-                    <br><small style="color:var(--muted);">{{ event.created_at }}</small>
+                    <br><small style="color:var(--text-secondary);">{{ event.created_at }}</small>
                 </li>
                 {% endfor %}
             </ul>
             {% else %}
-            <p style="color:var(--muted);font-size:0.78rem;">No governed events recorded yet.</p>
+            <p style="color:var(--text-secondary);font-size:0.78rem;">No governed events recorded yet.</p>
             {% endif %}
         </details>
     </aside>
@@ -349,7 +349,7 @@
     {# ---------------- Center: Conversation ---------------- #}
     <section class="workspace-pane">
         <h2>{{ active_case.title }}</h2>
-        {% if active_case.objective %}<p style="color:var(--muted);font-size:0.85rem;margin-top:-0.6rem;">{{ active_case.objective }}</p>{% endif %}
+        {% if active_case.objective %}<p style="color:var(--text-secondary);font-size:0.85rem;margin-top:-0.6rem;">{{ active_case.objective }}</p>{% endif %}
 
         {% if activities %}
         <p class="workspace-pane-label">Activities ({{ activities|length }})</p>
@@ -358,7 +358,7 @@
             <li class="source-item">
                 <span class="source-kind-badge">{{ activity.kind }}</span>
                 {{ activity.description }}
-                <br><small style="color:var(--muted);">{{ activity.status }} &middot; {{ activity.created_by }}</small>
+                <br><small style="color:var(--text-secondary);">{{ activity.status }} &middot; {{ activity.created_by }}</small>
             </li>
             {% endfor %}
         </ul>
@@ -395,7 +395,7 @@
             <form class="workspace-form" method="post" enctype="multipart/form-data"
                   action="{{ url_for('workspace.revise_source', project_id=project_id, source_id=source.id) }}">
                 <input type="hidden" name="case_id" value="{{ active_case.id }}">
-                <label style="font-family:var(--font-mono);font-size:0.72rem;color:var(--muted);">{{ source.name }}</label>
+                <label style="font-family:var(--font-mono);font-size:0.72rem;color:var(--text-secondary);">{{ source.name }}</label>
                 <input type="file" name="drawing" accept=".png,.jpg,.jpeg" required>
                 <button type="submit">Register Revision</button>
             </form>
@@ -468,7 +468,7 @@
                 <span class="accordion-summary-text">Discussion ({{ threads_view|length }})</span>
             </summary>
         {% if active_case.status == 'archived' %}
-        <p style="color:var(--muted);font-size:0.78rem;">
+        <p style="color:var(--text-secondary);font-size:0.78rem;">
             This Case is archived — the discussion below is preserved exactly as it stood and is read-only.
         </p>
         {% endif %}
@@ -479,7 +479,7 @@
             <summary>
                 {{ thread.title }}
                 <span class="review-state-badge">{{ thread.status.replace('_', ' ') }}</span>
-                {% if thread.anchor.anchor_type == 'finding' %}<small style="color:var(--muted);">&middot; re: a Finding</small>{% endif %}
+                {% if thread.anchor.anchor_type == 'finding' %}<small style="color:var(--text-secondary);">&middot; re: a Finding</small>{% endif %}
             </summary>
 
             {% if thread.resolution %}
@@ -491,7 +491,7 @@
             {% endif %}
 
             {% if thread.resolution_history %}
-            <p style="font-size:0.7rem;color:var(--muted);">
+            <p style="font-size:0.7rem;color:var(--text-secondary);">
                 {% for entry in thread.resolution_history %}
                 Previously {{ entry.resolution.resolution_outcome.replace('_', ' ') }} ({{ entry.resolution.summary }}) &mdash;
                 reopened by {{ entry.reopened_by }} on {{ entry.reopened_at }}: {{ entry.reopen_reason }}<br>
@@ -503,9 +503,9 @@
                 {% for message in row.messages %}
                 <div class="conversation-message {{ 'human' if message.origin == 'human' else 'system' }}">
                     <span class="role-label">{{ message.actor }}</span>
-                    <span style="color:var(--muted);font-size:0.68rem;">{{ message.origin }} &middot; {{ message.created_at }}</span>
+                    <span style="color:var(--text-secondary);font-size:0.68rem;">{{ message.origin }} &middot; {{ message.created_at }}</span>
                     {% if message.message_type == 'carried_forward' %}
-                    <br><small style="color:var(--amber);">Carried forward from an archived predecessor Case for renewed consideration — not originally authored here.</small>
+                    <br><small style="color:var(--attention-amber);">Carried forward from an archived predecessor Case for renewed consideration — not originally authored here.</small>
                     {% endif %}
                     <p style="margin:0.3rem 0;">{{ message.text }}</p>
                     {% if active_case.status != 'archived' %}
@@ -528,11 +528,11 @@
             <div style="margin:0.4rem 0;">
                 {% for entry in row.attentions %}
                 {% set attention = entry.attention %}
-                <div style="border-top:1px solid var(--line);padding:0.4rem 0;font-size:0.72rem;">
-                    <strong>Attention</strong> for {{ attention.intended_actor }}{% if attention.intended_actor == session.username %} <span style="color:var(--amber);">(you)</span>{% endif %}
+                <div style="border-top:1px solid var(--border);padding:0.4rem 0;font-size:0.72rem;">
+                    <strong>Attention</strong> for {{ attention.intended_actor }}{% if attention.intended_actor == session.username %} <span style="color:var(--attention-amber);">(you)</span>{% endif %}
                     &middot; requested by {{ attention.created_by }} on {{ attention.created_at }}
                     {% if entry.about_message %}
-                    <br><span style="color:var(--muted);">Re: &ldquo;{{ entry.about_message.text[:80] }}&rdquo;</span>
+                    <br><span style="color:var(--text-secondary);">Re: &ldquo;{{ entry.about_message.text[:80] }}&rdquo;</span>
                     {% endif %}
                     <br>
                     {% if attention.status == 'responded' %}
@@ -584,7 +584,7 @@
             {% endif %}
         </details>
         {% else %}
-        <p style="color:var(--muted);font-size:0.82rem;">No discussion yet on this Case.</p>
+        <p style="color:var(--text-secondary);font-size:0.82rem;">No discussion yet on this Case.</p>
         {% endfor %}
 
         {% if active_case.status != 'archived' %}
@@ -687,7 +687,7 @@
                       action="{{ url_for('workspace.validate_finding', project_id=project_id, finding_id=finding.id) }}">
                     <input type="hidden" name="case_id" value="{{ active_case.id }}">
                     <input type="hidden" name="validation" value="Incorrect">
-                    <input type="text" name="correction_note" placeholder="Add Correction…" style="flex:1;font-family:var(--font-mono);font-size:0.75rem;background:var(--ink);border:1px solid var(--line);border-radius:3px;color:var(--parchment);padding:0.4rem 0.6rem;">
+                    <input type="text" name="correction_note" placeholder="Add Correction…" style="flex:1;font-family:var(--font-mono);font-size:0.75rem;background:var(--surface-primary);border:1px solid var(--border);border-radius:3px;color:var(--text-primary);padding:0.4rem 0.6rem;">
                     <button type="submit" class="review-btn correction">Add Correction</button>
                 </form>
                 {% endif %}
@@ -704,7 +704,7 @@
                     {% if draft.status != "issued" %}
                     <form method="post" action="{{ url_for('workspace.update_rfi_question', project_id=project_id, draft_id=draft.id) }}">
                         <input type="hidden" name="case_id" value="{{ active_case.id }}">
-                        <textarea name="question_text" placeholder="RFI question…" style="width:100%;font-family:var(--font-body);background:var(--ink);border:1px solid var(--line);color:var(--parchment);border-radius:3px;padding:0.5rem;">{{ draft.question_text }}</textarea>
+                        <textarea name="question_text" placeholder="RFI question…" style="width:100%;font-family:var(--font-body);background:var(--surface-primary);border:1px solid var(--border);color:var(--text-primary);border-radius:3px;padding:0.5rem;">{{ draft.question_text }}</textarea>
                         <button type="submit" class="review-btn needs_evidence">Save question</button>
                     </form>
                     <form method="post" action="{{ url_for('workspace.issue_rfi_draft', project_id=project_id, draft_id=draft.id) }}">
@@ -790,7 +790,7 @@
 
         <div class="workspace-pane">
             <h2>Project State</h2>
-            <p style="font-size:0.7rem;color:var(--muted);margin:-0.6rem 0 0.8rem;">
+            <p style="font-size:0.7rem;color:var(--text-secondary);margin:-0.6rem 0 0.8rem;">
                 Project Instructions and Project Sources are on the left &mdash; the same governed state whether
                 you're here or inside an Investigation.
             </p>
@@ -819,7 +819,7 @@
                         {% endfor %}
                     </ul>
                     {% else %}
-                    <p style="font-size:0.78rem;color:var(--muted);">No open Investigations yet.</p>
+                    <p style="font-size:0.78rem;color:var(--text-secondary);">No open Investigations yet.</p>
                     {% endif %}
                 </details>
 
@@ -840,7 +840,7 @@
                         <button type="submit">Create Snapshot</button>
                     </form>
                     {% if workspace.snapshots %}
-                    <p style="font-size:0.7rem;color:var(--muted);margin-top:0.4rem;">{{ workspace.snapshots|length }} Snapshot(s) recorded.</p>
+                    <p style="font-size:0.7rem;color:var(--text-secondary);margin-top:0.4rem;">{{ workspace.snapshots|length }} Snapshot(s) recorded.</p>
                     {% endif %}
                 </details>
             </details>

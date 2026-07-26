@@ -7,13 +7,13 @@
     <section class="workspace-pane approval-gate">
         <p class="workspace-pane-label">Approval required</p>
         <h2>This action changes governed project state</h2>
-        <p style="color:var(--parchment);">{{ description }}</p>
+        <p style="color:var(--text-primary);">{{ description }}</p>
 
         <form method="post" action="{{ action_url }}" class="approval-gate-actions">
-            <button type="submit" name="confirm" value="once" class="review-btn accept">
+            <button type="submit" name="confirm" value="once" class="review-btn seal">
                 Yes &mdash; perform this action once
             </button>
-            <button type="submit" name="confirm" value="session" class="review-btn accept">
+            <button type="submit" name="confirm" value="session" class="review-btn seal">
                 Yes &mdash; allow this class of action for the rest of this session
             </button>
             <button type="submit" name="confirm" value="no" class="review-btn reject">
@@ -22,7 +22,7 @@
         </form>
 
         <p class="workspace-pane-label" style="margin-top:1.4rem;">
-            <a href="{{ url_for('workspace.show_workspace', project_id=project_id, case=case_id) }}" style="color:var(--muted);">
+            <a href="{{ url_for('workspace.show_workspace', project_id=project_id, case=case_id) }}" style="color:var(--text-secondary);">
                 &larr; Back without deciding
             </a>
         </p>
