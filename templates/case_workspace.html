@@ -3,6 +3,7 @@
 {% block title %}Case Workspace &mdash; {{ document.filename }}{% endblock %}
 
 {% block content %}
+{% if active_case %}
 <div class="dash-head" style="padding-top:2rem;">
     <div>
         <p class="eyebrow mono">{{ project_id }}</p>
@@ -13,10 +14,10 @@
         <a class="btn btn-ghost" href="{{ url_for('portal.dashboard', project_id=project_id) }}">&larr; Back to Dashboard</a>
     </div>
 </div>
+{% endif %}
 
 <div class="case-workspace" data-project-id="{{ project_id }}">
-
-    {# ---------------- Left: Project Navigation ---------------- #}
+    {# ---------------- Left: Project Navigation (always visible - project-scoped, not Case-scoped) ---------------- #}
     <aside class="workspace-pane">
         <h2>Project</h2>
 
@@ -69,9 +70,36 @@
         {% endif %}
         </details>
 
-        <details class="accordion-section" data-accordion-group="left" data-accordion-id="sources">
+        <details class="accordion-section" data-accordion-group="left" data-accordion-id="instructions">
+            <summary class="accordion-summary">
+                <span class="accordion-summary-text">Project Instructions</span>
+                <span class="accordion-summary-status">+</span>
+            </summary>
+            <p style="font-size:0.72rem;color:var(--muted);margin:-0.6rem 0 0.6rem;">
+                Project / Case Operating Instructions guide terminology, conventions, and known assumptions
+                for this Project. Always subordinate to BEEHIVE governance &mdash; Stone Wall, source
+                authority, provenance, and approval boundaries take precedence and can never be overridden
+                here.
+            </p>
+            {% if workspace.operating_instructions %}
+            <p style="font-size:0.8rem;white-space:pre-wrap;">{{ workspace.operating_instructions }}</p>
+            <p style="font-size:0.66rem;color:var(--muted);">Last updated by {{ workspace.operating_instructions_updated_by }} &middot; {{ workspace.operating_instructions_updated_at }}</p>
+            {% else %}
+            <p style="font-size:0.78rem;color:var(--muted);">No Project Instructions set yet.</p>
+            {% endif %}
+            <details class="add-source-details">
+                <summary>Edit Project Instructions</summary>
+                <form class="workspace-form" method="post" action="{{ url_for('workspace.edit_operating_instructions', project_id=project_id) }}">
+                    <textarea name="instructions" placeholder="Owner priorities, terminology, known assumptions, reviewer conventions&hellip;">{{ workspace.operating_instructions }}</textarea>
+                    <button type="submit">Save Instructions</button>
+                </form>
+            </details>
+        </details>
+
+        <details class="accordion-section" data-accordion-group="left" data-accordion-id="sources" id="project-sources">
             <summary class="accordion-summary">
                 <span class="accordion-summary-text">Sources ({{ workspace.sources|length }})</span>
+                <span class="accordion-summary-status">+</span>
             </summary>
         <ul class="source-list">
             {% for source in workspace.sources %}
@@ -88,6 +116,30 @@
             </li>
             {% endfor %}
         </ul>
+
+        <details class="add-source-details" id="project-sources-add-document">
+            <summary>+ Add Documents</summary>
+            <form class="workspace-form" method="post" enctype="multipart/form-data" action="{{ url_for('workspace.add_document_source', project_id=project_id) }}">
+                <input type="file" name="document" accept=".pdf,.docx,.txt,.csv,.md" required>
+                <button type="submit">Add Document</button>
+            </form>
+        </details>
+
+        <details class="add-source-details">
+            <summary>+ Add Text Record</summary>
+            <form class="workspace-form" method="post" action="{{ url_for('workspace.add_text_record_source', project_id=project_id) }}">
+                <input type="text" name="title" placeholder="Title (e.g. Site visit note &mdash; May 3)" required>
+                <textarea name="content" placeholder="Content" required></textarea>
+                <button type="submit">Add Record</button>
+            </form>
+        </details>
+
+        <details class="add-source-details">
+            <summary>+ Add External Source</summary>
+            <p style="font-size:0.72rem;color:var(--muted);">
+                Not yet available &mdash; no external source connector is configured for this deployment.
+            </p>
+        </details>
         </details>
 
         <details class="accordion-section" data-accordion-group="left" data-accordion-id="cases" open>
@@ -180,14 +232,14 @@
         {% if unpromoted_requirement_items %}
         <details class="add-source-details">
             <summary>Extracted, not yet governed ({{ unpromoted_requirement_items|length }})</summary>
-            {% if active_case %}
             {% for item in unpromoted_requirement_items %}
+            <p style="color:var(--muted);font-size:0.78rem;margin:0.3rem 0;">
+                {{ item.text }}
+                <br><small>{{ item.category.replace('_', ' ') }} &middot; confidence {{ (item.confidence * 100)|round|int }}%</small>
+            </p>
+            {% if active_case %}
             <form class="workspace-form" method="post"
                   action="{{ url_for('workspace.promote_requirement_item_route', project_id=project_id, case_id=active_case.id, requirement_item_id=item.id) }}">
-                <p style="color:var(--muted);font-size:0.78rem;margin:0.3rem 0;">
-                    {{ item.text }}
-                    <br><small>{{ item.category.replace('_', ' ') }} &middot; confidence {{ (item.confidence * 100)|round|int }}%</small>
-                </p>
                 <select name="source_id" required>
                     {% for source in workspace.sources %}
                     <option value="{{ source.id }}"{% if source.kind == 'rfq_rfp_document' %} selected{% endif %}>{{ source.name }} ({{ source.kind.replace('_', ' ') }})</option>
@@ -195,10 +247,10 @@
                 </select>
                 <button type="submit">Promote to governed Requirement</button>
             </form>
-            {% endfor %}
             {% else %}
-            <p style="color:var(--muted);font-size:0.78rem;">Select or create a Case first — promotion attributes the new Requirement's evidence to a Case.</p>
+            <p style="color:var(--muted);font-size:0.7rem;">Select or create an Investigation to promote this item.</p>
             {% endif %}
+            {% endfor %}
         </details>
         {% endif %}
 
@@ -293,9 +345,9 @@
         </details>
     </aside>
 
+{% if active_case %}
     {# ---------------- Center: Conversation ---------------- #}
     <section class="workspace-pane">
-        {% if active_case %}
         <h2>{{ active_case.title }}</h2>
         {% if active_case.objective %}<p style="color:var(--muted);font-size:0.85rem;margin-top:-0.6rem;">{{ active_case.objective }}</p>{% endif %}
 
@@ -554,17 +606,12 @@
         </details>
         {% endif %}
         </details>
-        {% else %}
-        <h2>No Case selected</h2>
-        <p style="color:var(--muted);">Create a Case on the left to begin a conversation and open a drawing for review.</p>
-        {% endif %}
     </section>
 
     {# ---------------- Right: Artifact Workspace ---------------- #}
     <section class="workspace-pane">
         <h2>Artifact Workspace</h2>
 
-        {% if active_case %}
         <details class="accordion-section" data-accordion-group="right" data-accordion-id="findings" open>
             <summary class="accordion-summary">
                 <span class="accordion-summary-text">Findings ({{ findings_view|length }})</span>
@@ -690,10 +737,116 @@
             </form>
         </div>
         </details>
-        {% else %}
-        <p style="color:var(--muted);">Select or create a Case to see its Findings and Artifacts here.</p>
-        {% endif %}
     </section>
+{% else %}
+    <div class="project-home">
+        <p class="project-home-back"><a href="{{ url_for('portal.projects_list') }}">&larr; Projects</a></p>
+
+        <div class="project-home-header">
+            <div>
+                <h1>{{ workspace.display_title or document.filename }}</h1>
+                {% if workspace.display_description %}
+                <p class="project-home-subtitle">{{ workspace.display_description }}</p>
+                {% endif %}
+            </div>
+            <div class="project-home-controls">
+                <button type="button" id="collapse-all-btn" class="project-home-icon-btn" title="Collapse All" aria-label="Collapse all sections">&#8722;</button>
+                <form method="post" action="{{ url_for('workspace.toggle_star', project_id=project_id) }}">
+                    <button type="submit" class="project-home-icon-btn{% if workspace.starred %} active{% endif %}" aria-label="{{ 'Unstar project' if workspace.starred else 'Star project' }}">{{ '&#9733;'|safe if workspace.starred else '&#9734;'|safe }}</button>
+                </form>
+                <details class="project-home-overflow">
+                    <summary class="project-home-icon-btn" aria-label="Project administration">&#8942;</summary>
+                    <div class="project-home-overflow-panel">
+                        <p class="workspace-pane-label">Edit Project Details</p>
+                        <form class="workspace-form" method="post" action="{{ url_for('workspace.edit_project_details', project_id=project_id) }}">
+                            <input type="text" name="display_title" placeholder="Project title" value="{{ workspace.display_title or '' }}">
+                            <textarea name="display_description" placeholder="Short description">{{ workspace.display_description or '' }}</textarea>
+                            <button type="submit">Save</button>
+                        </form>
+                    </div>
+                </details>
+            </div>
+        </div>
+
+        <div class="project-home-composer">
+            <form class="conversation-input-form" method="post" action="{{ url_for('workspace.quick_start', project_id=project_id) }}">
+                <input type="text" name="text" placeholder="What are we working on?" autocomplete="off" required>
+                <button type="submit">Send</button>
+            </form>
+            <details class="composer-plus">
+                <summary>+</summary>
+                <p class="composer-plus-links">
+                    <a href="#project-sources-add-document">Add Document</a>
+                    <a href="#active-work-new-case">Start Investigation</a>
+                    <a href="#project-sources">Open Project Source</a>
+                    <a href="#active-work-snapshot">Create Snapshot</a>
+                </p>
+            </details>
+        </div>
+
+        <p class="project-home-state-message">
+            You are working inside the current governed project state. New work inherits its sources, provenance, decisions, and constraints.
+        </p>
+
+        <div class="workspace-pane">
+            <h2>Project State</h2>
+            <p style="font-size:0.7rem;color:var(--muted);margin:-0.6rem 0 0.8rem;">
+                Project Instructions and Project Sources are on the left &mdash; the same governed state whether
+                you're here or inside an Investigation.
+            </p>
+
+            <details class="accordion-section" data-accordion-group="project-home" data-accordion-id="active-work" open>
+                <summary class="accordion-summary">
+                    <span class="accordion-summary-text">Active Work</span>
+                </summary>
+                <p style="font-size:0.85rem;margin:-0.6rem 0 0.8rem;">
+                    {{ project_home_summary.investigations_count }} Investigation{{ 's' if project_home_summary.investigations_count != 1 else '' }}
+                    &middot; {{ project_home_summary.unresolved_findings_count }} Unresolved Finding{{ 's' if project_home_summary.unresolved_findings_count != 1 else '' }}
+                    &middot; {{ project_home_summary.awaiting_pass_count }} Awaiting Pass
+                </p>
+
+                <details class="add-source-details">
+                    <summary>View Investigations ({{ project_home_summary.open_cases|length }})</summary>
+                    {% if project_home_summary.open_cases %}
+                    <ul class="case-list">
+                        {% for case in project_home_summary.open_cases %}
+                        <li>
+                            <a class="case-item" href="{{ url_for('workspace.show_workspace', project_id=project_id, case=case.id) }}">
+                                <span class="case-status-badge">{{ case.visibility }}</span>
+                                {{ case.title }}
+                            </a>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                    {% else %}
+                    <p style="font-size:0.78rem;color:var(--muted);">No open Investigations yet.</p>
+                    {% endif %}
+                </details>
+
+                <details class="add-source-details" id="active-work-new-case">
+                    <summary>+ Start Investigation</summary>
+                    <form class="workspace-form" method="post" action="{{ url_for('workspace.create_case', project_id=project_id) }}">
+                        <input type="text" name="title" placeholder="Investigation title (e.g. Drawing Review &mdash; Sheet A101)" required>
+                        <input type="text" name="objective" placeholder="Objective (optional)">
+                        <button type="submit">Create Investigation</button>
+                    </form>
+                </details>
+
+                <details class="add-source-details" id="active-work-snapshot">
+                    <summary>+ Create Snapshot</summary>
+                    <form class="workspace-form" method="post" action="{{ url_for('workspace.create_project_snapshot', project_id=project_id) }}">
+                        <input type="text" name="label" placeholder="Snapshot label (e.g. Pre-Award baseline)" required>
+                        <input type="text" name="note" placeholder="Note (optional)">
+                        <button type="submit">Create Snapshot</button>
+                    </form>
+                    {% if workspace.snapshots %}
+                    <p style="font-size:0.7rem;color:var(--muted);margin-top:0.4rem;">{{ workspace.snapshots|length }} Snapshot(s) recorded.</p>
+                    {% endif %}
+                </details>
+            </details>
+        </div>
+    </div>
+{% endif %}
 </div>
 {% endblock %}
 

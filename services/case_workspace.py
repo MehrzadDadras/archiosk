@@ -48,6 +48,14 @@ from services.governance import GovernanceLog
 # beginning of the same persistent Project, not a separate product.
 SOURCE_KIND_RFQ_RFP_DOCUMENT = "rfq_rfp_document"
 SOURCE_KIND_DRAWING = "drawing"
+# Prompt 3 (Project Home): a non-drawing document added directly as a
+# Project Source (not tied to any one Case - see add_source) and a
+# first-class textual evidence record (meeting note, site observation,
+# telephone instruction, pasted requirement, etc.) - both open-world
+# strings like every other Source.kind, not validated against a closed
+# list, exactly like SOURCE_KIND_DRAWING already is.
+SOURCE_KIND_PROJECT_DOCUMENT = "project_document"
+SOURCE_KIND_TEXT_RECORD = "text_record"
 
 FINDING_STATUS_PROVISIONAL = "provisional"
 FINDING_STATUS_APPLIED = "applied"
@@ -1944,6 +1952,29 @@ class ProjectWorkspace:
     requirement_adjudications: list[dict] = field(default_factory=list)
     carried_forward_adoptions: list[dict] = field(default_factory=list)
 
+    # -- Project Home presentation state (Prompt 3) ---------------------------
+    # UI/orientation state only - never forensic or compliance records, and
+    # never consulted by any governance/authority decision in this module.
+    # `starred` is a personal bookmark with no governance meaning: starring
+    # or unstarring writes no GovernanceLog event and affects no Case,
+    # Finding, or Requirement (Prompt 3 #3).
+    starred: bool = False
+    # `display_title`/`display_description` override the Project's
+    # otherwise-inherited identity (the ingested document's filename) for
+    # presentation only - never a Source's own recorded `name`/
+    # `document_id`, which remain that Source's actual forensic identity.
+    display_title: Optional[str] = None
+    display_description: Optional[str] = None
+    # Project / Case Operating Instructions (Prompt 3 #7): human-authored
+    # guidance (terminology, delivery-method context, reviewer conventions,
+    # known assumptions) that is explicitly SUBORDINATE to governance -
+    # nothing in this module ever reads operating_instructions to decide
+    # Source authority, provenance, approval-gate behavior, or any Stone
+    # Wall/constitutional rule. Presentation/context text only.
+    operating_instructions: str = ""
+    operating_instructions_updated_by: Optional[str] = None
+    operating_instructions_updated_at: Optional[str] = None
+
 
 def _snapshot_reference_lists(workspace: ProjectWorkspace) -> dict:
     """
@@ -2541,6 +2572,65 @@ class CaseWorkspaceStore:
             workspace.sources.append(asdict(source))
 
         self.save(workspace)
+        return workspace
+
+    # -- Project Home presentation state (Prompt 3) ---------------------------
+
+    def set_starred(self, workspace: ProjectWorkspace, starred: bool) -> ProjectWorkspace:
+        """Toggle the Project's personal bookmark flag - see
+        ProjectWorkspace.starred. No governance meaning and deliberately no
+        GovernanceLog event (Prompt 3 #3)."""
+        workspace.starred = starred
+        return self.save(workspace)
+
+    def set_project_details(
+        self,
+        workspace: ProjectWorkspace,
+        actor: str,
+        display_title: Optional[str] = None,
+        display_description: Optional[str] = None,
+        governance_log: Optional[GovernanceLog] = None,
+    ) -> ProjectWorkspace:
+        """Presentation-only override of the Project's displayed
+        name/description - see ProjectWorkspace.display_title. Never
+        touches any Source's own name/document_id."""
+        workspace.display_title = display_title or None
+        workspace.display_description = display_description or None
+        self.save(workspace)
+
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id, event_type="project_details_updated",
+                actor=actor, role="system",
+                payload={"display_title": workspace.display_title},
+            )
+        return workspace
+
+    def set_operating_instructions(
+        self,
+        workspace: ProjectWorkspace,
+        text: str,
+        actor: str,
+        governance_log: Optional[GovernanceLog] = None,
+    ) -> ProjectWorkspace:
+        """
+        Records human-authored Project / Case Operating Instructions - see
+        ProjectWorkspace.operating_instructions. These are always
+        subordinate to governance: nothing in this store ever consults them
+        to authorize a write, resolve Source authority, or bypass an
+        approval gate (Prompt 3 #7).
+        """
+        workspace.operating_instructions = text
+        workspace.operating_instructions_updated_by = actor
+        workspace.operating_instructions_updated_at = _now()
+        self.save(workspace)
+
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id, event_type="operating_instructions_updated",
+                actor=actor, role="system",
+                payload={"length": len(text)},
+            )
         return workspace
 
     # -- lookups -------------------------------------------------------------

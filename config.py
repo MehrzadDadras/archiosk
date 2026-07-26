@@ -47,7 +47,7 @@ class BaseConfig:
     # is only safe because changing this value changes the requested URL —
     # bump it any time main.css or dashboard.js changes, or browsers that
     # already cached the old file won't see the update for up to 30 days.
-    STATIC_VERSION = os.getenv("STATIC_VERSION", "7")
+    STATIC_VERSION = os.getenv("STATIC_VERSION", "8")
 
     # HTTPOnly/SameSite are safe in every environment; Secure requires HTTPS,
     # which only nginx terminates in production — off in dev so the login

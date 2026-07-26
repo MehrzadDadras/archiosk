@@ -49,6 +49,8 @@ from services.case_workspace import (
     OBJECT_KIND_CASE,
     OBJECT_KIND_FINDING,
     REQUIREMENT_ADJUDICATION_OUTCOMES,
+    SOURCE_KIND_PROJECT_DOCUMENT,
+    SOURCE_KIND_TEXT_RECORD,
     AnalysisTrigger,
     CaseWorkspaceError,
     CaseWorkspaceStore,
@@ -65,6 +67,7 @@ from models import User
 workspace_bp = Blueprint("workspace", __name__)
 
 ALLOWED_DRAWING_EXTENSIONS = {".png", ".jpg", ".jpeg"}
+ALLOWED_DOCUMENT_EXTENSIONS = {".pdf", ".docx", ".txt", ".csv", ".md"}
 
 # Requirement-evidence explainability: maps the EXISTING, already-governed
 # Relationship.relationship_type vocabulary (case_workspace.py's
@@ -261,11 +264,42 @@ def show_workspace(project_id):
     # sidebar count/list, or be reachable by guessing/typing its id into
     # the query string. See CaseWorkspaceStore.visible_cases_for.
     visible_cases = store.visible_cases_for(workspace, _reviewer())
+    visible_case_ids = {c["id"] for c in visible_cases}
 
-    active_case_id = request.args.get("case") or (
-        visible_cases[0]["id"] if visible_cases else None
-    )
+    # Prompt 3 (Project Home): opening a Project no longer auto-jumps into
+    # its first Case - a Project with Cases now lands on Project Home just
+    # like a brand-new one, and a Case is only ever entered through an
+    # explicit ?case= (a real link: "Open Investigation", a Project Home
+    # composer submission, an existing bookmark). Everything below that
+    # depends on active_case already degrades to its own honest empty
+    # state when active_case is None (findings_view=[], threads_view=[],
+    # etc.) - this is the one behavioral change that makes Project Home
+    # the default landing state, not a new rendering path of its own.
+    active_case_id = request.args.get("case")
     active_case = next((c for c in visible_cases if c["id"] == active_case_id), None)
+
+    # Project Home's compact "Active Work" summary - project-wide (across
+    # every Case this reviewer can see), computed only when actually
+    # needed (Project Home is showing) since it's an extra pass over
+    # workspace.findings that a Case-focused render has no use for.
+    # "Unresolved" / "Awaiting Pass" reuse existing, already-governed
+    # fields (Finding.claim_status, Disposition) - no new status
+    # vocabulary invented for this summary.
+    project_home_summary = None
+    if active_case is None:
+        open_visible_cases = [c for c in visible_cases if c["status"] != "archived"]
+        visible_findings = [f for f in workspace.findings if f["case_id"] in visible_case_ids]
+        unresolved_findings = [f for f in visible_findings if f["claim_status"] != "applied"]
+        awaiting_pass = [
+            f for f in unresolved_findings
+            if store.latest_disposition(workspace, f["id"]) is None
+        ]
+        project_home_summary = {
+            "investigations_count": len(open_visible_cases),
+            "unresolved_findings_count": len(unresolved_findings),
+            "awaiting_pass_count": len(awaiting_pass),
+            "open_cases": open_visible_cases,
+        }
 
     focused_finding_id = session.get(f"focused_finding:{project_id}")
 
@@ -354,7 +388,7 @@ def show_workspace(project_id):
     # visible_cases - the store layer's query is Case-visibility-blind by
     # design (it's a pure project-level read), so the redaction decision
     # belongs here, the one place that actually knows who's asking.
-    visible_case_ids = {c["id"] for c in visible_cases}
+    # (visible_case_ids computed once, above, alongside visible_cases.)
     requirements_view = []
     for requirement in governed_requirements:
         evidence = store.requirement_evidence(workspace, requirement["id"])
@@ -487,6 +521,7 @@ def show_workspace(project_id):
         threads_view=threads_view,
         known_usernames=known_usernames,
         resolution_outcomes=KNOWN_RESOLUTION_OUTCOMES,
+        project_home_summary=project_home_summary,
     )
 
 
@@ -512,6 +547,149 @@ def create_case(project_id):
     )
 
     return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case["id"]))
+
+
+# -- Project Home: star, details, instructions, project-level Sources, Snapshot ----
+
+@workspace_bp.route("/projects/<project_id>/workspace/star", methods=["POST"])
+@login_required
+def toggle_star(project_id):
+    """Personal bookmark only - see CaseWorkspaceStore.set_starred. No
+    governance meaning, no GovernanceLog event (Prompt 3 #3)."""
+    _, store, workspace = _load_workspace_or_404(project_id)
+    store.set_starred(workspace, not workspace.starred)
+    return redirect(url_for("workspace.show_workspace", project_id=project_id))
+
+
+@workspace_bp.route("/projects/<project_id>/workspace/details", methods=["POST"])
+@login_required
+def edit_project_details(project_id):
+    """Overflow menu -> Edit Project Details (Prompt 3 #3) - presentation
+    only, see CaseWorkspaceStore.set_project_details."""
+    _, store, workspace = _load_workspace_or_404(project_id)
+    store.set_project_details(
+        workspace,
+        actor=_reviewer(),
+        display_title=(request.form.get("display_title") or "").strip(),
+        display_description=(request.form.get("display_description") or "").strip(),
+        governance_log=_log(),
+    )
+    flash("Project details updated.", "success")
+    return redirect(url_for("workspace.show_workspace", project_id=project_id))
+
+
+@workspace_bp.route("/projects/<project_id>/workspace/instructions", methods=["POST"])
+@login_required
+def edit_operating_instructions(project_id):
+    """Project Instructions + (Prompt 3 #7) - human guidance explicitly
+    subordinate to governance. See
+    CaseWorkspaceStore.set_operating_instructions."""
+    _, store, workspace = _load_workspace_or_404(project_id)
+    store.set_operating_instructions(
+        workspace,
+        text=(request.form.get("instructions") or "").strip(),
+        actor=_reviewer(),
+        governance_log=_log(),
+    )
+    flash("Project Operating Instructions updated.", "success")
+    return redirect(url_for("workspace.show_workspace", project_id=project_id))
+
+
+@workspace_bp.route("/projects/<project_id>/workspace/sources/document", methods=["POST"])
+@login_required
+def add_document_source(project_id):
+    """
+    Project Sources + -> Add Documents (Prompt 3 #8). Project-scoped, not
+    Case-scoped: CaseWorkspaceStore.add_source itself takes no case_id -
+    a Case draws on Sources, it does not own them.
+    """
+    _, store, workspace = _load_workspace_or_404(project_id)
+
+    file_storage = request.files.get("document")
+    if file_storage is None or not file_storage.filename:
+        flash("Choose a document to add as a Project Source.", "error")
+        return redirect(url_for("workspace.show_workspace", project_id=project_id))
+
+    ext = Path(file_storage.filename).suffix.lower()
+    if ext not in ALLOWED_DOCUMENT_EXTENSIONS:
+        flash(f"Unsupported document format '{ext}'.", "error")
+        return redirect(url_for("workspace.show_workspace", project_id=project_id))
+
+    sources_dir = Path(current_app.config["REGISTRY_STORE_PATH"]) / "workspace_sources" / project_id
+    sources_dir.mkdir(parents=True, exist_ok=True)
+    safe_name = secure_filename(file_storage.filename)
+    stored_path = sources_dir / f"{uuid.uuid4().hex}_{safe_name}"
+    stored_path.write_bytes(file_storage.read())
+
+    store.add_source(
+        workspace,
+        name=safe_name,
+        file_path=str(stored_path),
+        kind=SOURCE_KIND_PROJECT_DOCUMENT,
+        actor=_reviewer(),
+        governance_log=_log(),
+    )
+    flash("Document added as a Project Source.", "success")
+    return redirect(url_for("workspace.show_workspace", project_id=project_id))
+
+
+@workspace_bp.route("/projects/<project_id>/workspace/sources/text-record", methods=["POST"])
+@login_required
+def add_text_record_source(project_id):
+    """
+    Project Sources + -> Add Text Record (Prompt 3 #8): a meeting note,
+    site observation, telephone instruction, or other textual evidence,
+    made a first-class provenance-bearing Project Source rather than
+    disposable chat text (Prompt 3 #10).
+    """
+    _, store, workspace = _load_workspace_or_404(project_id)
+
+    title = (request.form.get("title") or "").strip()
+    content = (request.form.get("content") or "").strip()
+    if not title or not content:
+        flash("A Text Record needs both a title and content.", "error")
+        return redirect(url_for("workspace.show_workspace", project_id=project_id))
+
+    sources_dir = Path(current_app.config["REGISTRY_STORE_PATH"]) / "workspace_sources" / project_id
+    sources_dir.mkdir(parents=True, exist_ok=True)
+    safe_name = secure_filename(title) or "text-record"
+    stored_path = sources_dir / f"{uuid.uuid4().hex}_{safe_name}.txt"
+    stored_path.write_text(content, encoding="utf-8")
+
+    store.add_source(
+        workspace,
+        name=title,
+        file_path=str(stored_path),
+        kind=SOURCE_KIND_TEXT_RECORD,
+        actor=_reviewer(),
+        governance_log=_log(),
+    )
+    flash("Text Record added as a Project Source.", "success")
+    return redirect(url_for("workspace.show_workspace", project_id=project_id))
+
+
+@workspace_bp.route("/projects/<project_id>/workspace/snapshots", methods=["POST"])
+@login_required
+def create_project_snapshot(project_id):
+    """Active Work -> Create Snapshot (Prompt 3 #9) - freezes a governed
+    reference to current Project state. See
+    CaseWorkspaceStore.create_snapshot (existing, unmodified)."""
+    _, store, workspace = _load_workspace_or_404(project_id)
+
+    label = (request.form.get("label") or "").strip()
+    if not label:
+        flash("A Snapshot needs a label.", "error")
+        return redirect(url_for("workspace.show_workspace", project_id=project_id))
+
+    store.create_snapshot(
+        workspace,
+        label=label,
+        created_by=_reviewer(),
+        note=(request.form.get("note") or "").strip() or None,
+        governance_log=_log(),
+    )
+    flash("Snapshot created.", "success")
+    return redirect(url_for("workspace.show_workspace", project_id=project_id))
 
 
 @workspace_bp.route("/projects/<project_id>/workspace/cases/<case_id>/share", methods=["POST"])
@@ -987,21 +1165,18 @@ def revise_source(project_id, source_id):
     return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
 
 
-@workspace_bp.route("/projects/<project_id>/workspace/cases/<case_id>/messages", methods=["POST"])
-@login_required
-def post_message(project_id, case_id):
-    _, store, workspace = _load_workspace_or_404(project_id)
-    _require_visible_case(store, workspace, case_id)
-
-    case = next((c for c in workspace.cases if c["id"] == case_id), None)
-    if case is None:
-        abort(404)
-
-    text = (request.form.get("text") or "").strip()
-    if not text:
-        return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
-
-    human_message = store.add_message(workspace, case_id, role="human", text=text)
+def _run_conversation_turn(project_id: str, store: CaseWorkspaceStore, workspace, case: dict, text: str) -> None:
+    """
+    Posts a human message into `case`'s conversation, interprets it
+    (Analysis/focus/compare/RFI-intent/correction via
+    services.conversation_interpreter.interpret_message), and posts the
+    resulting system reply. The shared turn logic behind both an existing
+    Case's composer (post_message) and Project Home's central composer
+    (quick_start, Prompt 3 #4/#9) - the same conversational entry point,
+    just reached from two different places (an existing Case, or a
+    brand-new one just created from Project Home).
+    """
+    human_message = store.add_message(workspace, case["id"], role="human", text=text)
 
     artifacts_dir = Path(current_app.config["REGISTRY_STORE_PATH"]) / "workspace_artifacts"
     focused_finding_id = session.get(f"focused_finding:{project_id}")
@@ -1019,7 +1194,7 @@ def post_message(project_id, case_id):
 
     store.add_message(
         workspace,
-        case_id,
+        case["id"],
         role="system",
         text=result.reply_text,
         action_taken=result.action_taken,
@@ -1041,7 +1216,7 @@ def post_message(project_id, case_id):
             event_type="analysis_started",
             actor=_reviewer(),
             role=session.get("role") or "unspecified",
-            payload={"case_id": case_id, "analysis_id": analysis_id},
+            payload={"case_id": case["id"], "analysis_id": analysis_id},
             trigger={
                 "trigger_type": "user_initiated",
                 "trigger_reference_type": "conversation_message",
@@ -1050,7 +1225,60 @@ def post_message(project_id, case_id):
             correlation_id=analysis_id,
         )
 
+
+@workspace_bp.route("/projects/<project_id>/workspace/cases/<case_id>/messages", methods=["POST"])
+@login_required
+def post_message(project_id, case_id):
+    _, store, workspace = _load_workspace_or_404(project_id)
+    _require_visible_case(store, workspace, case_id)
+
+    case = next((c for c in workspace.cases if c["id"] == case_id), None)
+    if case is None:
+        abort(404)
+
+    text = (request.form.get("text") or "").strip()
+    if not text:
+        return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
+
+    _run_conversation_turn(project_id, store, workspace, case, text)
+
     return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
+
+
+@workspace_bp.route("/projects/<project_id>/workspace/quick-start", methods=["POST"])
+@login_required
+def quick_start(project_id):
+    """
+    Project Home's central composer (Prompt 3 #4): "What are we working
+    on?" Creates a new Case - "New Working Context / Investigation Entry"
+    in Prompt 3 #19's Claude<->BEEHIVE mapping - titled from the user's
+    own opening text, using the same CaseWorkspaceStore.create_case every
+    other Case-creation path already uses, then runs the same
+    conversation turn as an existing Case's composer
+    (_run_conversation_turn) so the user's actual request becomes the new
+    Case's first message rather than being discarded.
+    """
+    _, store, workspace = _load_workspace_or_404(project_id)
+
+    text = (request.form.get("text") or "").strip()
+    if not text:
+        flash("Describe what you want to work on to start.", "error")
+        return redirect(url_for("workspace.show_workspace", project_id=project_id))
+
+    title = text if len(text) <= 80 else text[:77] + "..."
+    case = store.create_case(workspace, title=title, objective="", created_by=_reviewer())
+
+    _log().append(
+        project_id=project_id,
+        event_type="case_created",
+        actor=_reviewer(),
+        role=session.get("role") or "unspecified",
+        payload={"case_id": case["id"], "title": title, "visibility": case["visibility"]},
+    )
+
+    _run_conversation_turn(project_id, store, workspace, case, text)
+
+    return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case["id"]))
 
 
 @workspace_bp.route("/projects/<project_id>/workspace/findings/<finding_id>/validate", methods=["POST"])

@@ -65,7 +65,7 @@ class RequirementEvidenceWorkflowTests(unittest.TestCase):
     def _store(self):
         return CaseWorkspaceStore(self.tmp_dir)
 
-    def _create_case(self, client, title="Investigation"):
+    def _create_case(self, client, title="Structural Drawing Review"):
         response = client.post(
             f"/projects/{self.project_id}/workspace/cases",
             data={"title": title, "objective": "x"}, follow_redirects=True,

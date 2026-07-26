@@ -75,9 +75,15 @@ class SnapshotTests(unittest.TestCase):
         source, requirement = self._register_one_of_everything()
         snapshot = self.store.create_snapshot(self.workspace, label="Full state", created_by="tester")
 
+        # Matches _snapshot_reference_lists' own criterion (list-typed
+        # fields only) rather than a hardcoded name exclusion, so a future
+        # non-list field (e.g. Prompt 3's starred/display_title/
+        # operating_instructions) doesn't false-fail this test the way a
+        # name-only exclusion would.
         expected_list_names = {
             f.name for f in dataclass_fields(ProjectWorkspace)
             if f.name not in ("project_id", "version", "snapshots")
+            and isinstance(getattr(self.workspace, f.name), list)
         }
         self.assertEqual(set(snapshot["reference_lists"].keys()), expected_list_names)
         self.assertEqual(snapshot["reference_lists"]["sources"], [source["id"]])
