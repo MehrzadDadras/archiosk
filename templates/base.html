@@ -20,16 +20,52 @@
 <body>
     <div class="blueprint-grid"></div>
 
+    <div class="search-overlay" id="search-overlay" hidden>
+        <div class="search-overlay-backdrop" data-search-close></div>
+        <div class="search-panel" role="dialog" aria-modal="true" aria-label="Search">
+            <form class="search-panel-form" id="search-form">
+                <span class="search-panel-icon" aria-hidden="true">
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+                        <circle cx="8.5" cy="8.5" r="6"></circle>
+                        <line x1="13.2" y1="13.2" x2="18" y2="18"></line>
+                    </svg>
+                </span>
+                <input type="search" id="search-input" name="q" placeholder="Search projects&hellip;" autocomplete="off" aria-label="Search">
+                <button type="button" class="search-panel-close" id="search-close" aria-label="Close search">
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+                        <line x1="4" y1="4" x2="16" y2="16"></line>
+                        <line x1="16" y1="4" x2="4" y2="16"></line>
+                    </svg>
+                </button>
+            </form>
+            <div class="search-panel-results" id="search-results">
+                <p class="search-panel-hint">Search across your projects. More object types are coming.</p>
+            </div>
+        </div>
+    </div>
+
     <div class="app-shell">
         <nav class="side-rail" aria-label="Primary">
             <div class="side-rail-top">
-                <button type="button" id="nav-toggle" class="nav-toggle" aria-label="Expand navigation" aria-expanded="false">
-                    <span aria-hidden="true">&#9776;</span>
-                </button>
                 <a class="side-rail-brand" href="{{ url_for('portal.index') }}">
                     <span class="brand-mark" aria-hidden="true">&#8961;</span>
-                    <span class="side-rail-brand-label">Archiosk<span class="brand-sub">B-Hive</span></span>
+                    <span class="side-rail-brand-label">Archiosk</span>
                 </a>
+                <div class="side-rail-top-controls">
+                    <button type="button" id="search-toggle" class="nav-toggle" aria-label="Search" aria-haspopup="dialog" aria-expanded="false">
+                        <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+                            <circle cx="8.5" cy="8.5" r="6"></circle>
+                            <line x1="13.2" y1="13.2" x2="18" y2="18"></line>
+                        </svg>
+                    </button>
+                    <button type="button" id="nav-toggle" class="nav-toggle" aria-label="Expand navigation" aria-expanded="false">
+                        <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+                            <line x1="2.5" y1="5.5" x2="17.5" y2="5.5"></line>
+                            <line x1="2.5" y1="10" x2="17.5" y2="10"></line>
+                            <line x1="2.5" y1="14.5" x2="17.5" y2="14.5"></line>
+                        </svg>
+                    </button>
+                </div>
             </div>
 
             <div class="side-rail-links">
@@ -100,7 +136,7 @@
             </main>
 
             <footer class="site-footer">
-                &copy; {{ current_year }} Archiosk &mdash; B-Hive Core Chassis
+                &copy; {{ current_year }} Archiosk
             </footer>
         </div>
     </div>
@@ -115,6 +151,107 @@
                 try { window.localStorage.setItem('beehive:nav:expanded', expanded ? 'true' : 'false'); } catch (e) { /* ignore */ }
             });
             toggle.setAttribute('aria-expanded', document.documentElement.classList.contains('nav-expanded') ? 'true' : 'false');
+        })();
+    </script>
+
+    <script>
+        (function () {
+            var overlay = document.getElementById('search-overlay');
+            var openBtn = document.getElementById('search-toggle');
+            if (!overlay || !openBtn) return;
+
+            var closeBtn = document.getElementById('search-close');
+            var backdrop = overlay.querySelector('[data-search-close]');
+            var input = document.getElementById('search-input');
+            var form = document.getElementById('search-form');
+            var results = document.getElementById('search-results');
+
+            function openSearch() {
+                overlay.hidden = false;
+                openBtn.setAttribute('aria-expanded', 'true');
+                if (input) input.focus();
+            }
+
+            function closeSearch() {
+                overlay.hidden = true;
+                openBtn.setAttribute('aria-expanded', 'false');
+                openBtn.focus();
+            }
+
+            openBtn.addEventListener('click', openSearch);
+            if (closeBtn) closeBtn.addEventListener('click', closeSearch);
+            if (backdrop) backdrop.addEventListener('click', closeSearch);
+            document.addEventListener('keydown', function (e) {
+                if (e.key === 'Escape' && !overlay.hidden) closeSearch();
+            });
+
+            function renderHint(text) {
+                results.textContent = '';
+                var p = document.createElement('p');
+                p.className = 'search-panel-hint';
+                p.textContent = text;
+                results.appendChild(p);
+            }
+
+            function renderResults(list) {
+                results.textContent = '';
+                if (!list.length) {
+                    var empty = document.createElement('p');
+                    empty.className = 'search-panel-empty';
+                    empty.textContent = 'No matches.';
+                    results.appendChild(empty);
+                    return;
+                }
+                list.forEach(function (r) {
+                    var a = document.createElement('a');
+                    a.className = 'search-result';
+                    a.href = r.url;
+
+                    var kind = document.createElement('span');
+                    kind.className = 'search-result-kind';
+                    kind.textContent = r.kind;
+
+                    var title = document.createElement('span');
+                    title.className = 'search-result-title';
+                    title.textContent = r.title;
+
+                    var subtitle = document.createElement('span');
+                    subtitle.className = 'search-result-subtitle';
+                    subtitle.textContent = r.subtitle;
+
+                    a.appendChild(kind);
+                    a.appendChild(title);
+                    a.appendChild(subtitle);
+                    results.appendChild(a);
+                });
+            }
+
+            var debounceTimer = null;
+            function runSearch(query) {
+                if (!query) {
+                    renderHint('Search across your projects. More object types are coming.');
+                    return;
+                }
+                fetch('/search?q=' + encodeURIComponent(query))
+                    .then(function (r) { return r.json(); })
+                    .then(function (data) { renderResults(data.results || []); })
+                    .catch(function () { renderHint('Search is unavailable right now.'); });
+            }
+
+            if (input) {
+                input.addEventListener('input', function () {
+                    clearTimeout(debounceTimer);
+                    var query = input.value.trim();
+                    debounceTimer = setTimeout(function () { runSearch(query); }, 200);
+                });
+            }
+            if (form) {
+                form.addEventListener('submit', function (e) {
+                    e.preventDefault();
+                    clearTimeout(debounceTimer);
+                    runSearch(input.value.trim());
+                });
+            }
         })();
     </script>
     {% block extra_scripts %}{% endblock %}

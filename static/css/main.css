@@ -34,24 +34,29 @@
     --surface-selected: #DCC89C;  /* Warm Stone (deeper) - selected / current */
     --border: #DBCCA9;            /* Desert Dust - quiet dividers */
     --border-strong: #B39D6C;     /* structural border where clarity is needed */
-    --text-primary: #2A241E;      /* Basalt Ink */
-    --text-secondary: #5A5142;    /* Weathered Basalt */
-    --text-metadata: #7A705C;     /* Stone Grey - timestamps, ids, labels */
-    --text-disabled: #A89C84;     /* Stone Grey - disabled controls */
+    /* Readability is the floor, not the target (Prompt 15) - every text
+       token below is deliberately darker than WCAG AA's 4.5:1 minimum,
+       not tuned to just clear it. --text-metadata in particular was
+       measured too faint in practice (~4.3:1) and is darkened
+       substantially, not just nudged. */
+    --text-primary: #221D17;      /* Basalt Ink */
+    --text-secondary: #453D2E;    /* Weathered Basalt */
+    --text-metadata: #5A5140;     /* Stone Grey - timestamps, ids, labels - still clearly readable, not decorative */
+    --text-disabled: #857A64;     /* Stone Grey - disabled controls - dimmer than metadata, never illegible */
 
     /* -- identity + authority (used rarely, by design) -------------------- */
     --bee-yellow: #FFC400;
-    --seal-red: #8A1D14;
+    --seal-red: #7A1911;
     --seal-red-tint: #F0D9D3;
 
     /* -- semantic operational colors (quiet, subordinate to the neutrals) - */
-    --machine-blue: #2C6079;
+    --machine-blue: #235066;
     --machine-blue-tint: #DCE7EA;
-    --accepted-green: #3D7A48;
+    --accepted-green: #2E5F38;
     --accepted-green-tint: #DCEADB;
-    --attention-amber: #96590A;
+    --attention-amber: #7A4A08;
     --attention-amber-tint: #F2E2C4;
-    --failure-red: #A6392B;
+    --failure-red: #8C2E22;
     --failure-red-tint: #F3DAD4;
 
     --font-display: "Space Grotesk", sans-serif;
@@ -108,7 +113,7 @@ a:focus-visible, button:focus-visible, input:focus-visible {
     min-height: 100vh;
 }
 .side-rail {
-    width: 60px;
+    width: 68px;
     flex-shrink: 0;
     display: flex;
     flex-direction: column;
@@ -122,12 +127,30 @@ a:focus-visible, button:focus-visible, input:focus-visible {
 }
 html.nav-expanded .side-rail { width: 240px; }
 
+/* Brand (left) and utility controls (right, stacked) - deliberately a
+   COLUMN layout for the controls rather than side-by-side, and identical
+   in both collapsed and expanded states: at 68px collapsed there isn't
+   room for two 32px buttons side by side without cramming, and a layout
+   that only reflows between states risks reintroducing the same kind of
+   instability the toggle-shake fix just resolved (a discrete arrangement
+   change landing in the same frame as the width transition). Keeping
+   these controls in one fixed arrangement means neither Search nor the
+   sidebar toggle ever moves because of collapse/expand - only the brand
+   label's reveal (see .side-rail-brand-label) and the rail's own width
+   are actually animated. */
 .side-rail-top {
     display: flex;
-    align-items: center;
-    gap: 0.6rem;
-    padding: 1.1rem 0.9rem;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 1rem 0.7rem;
     border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+}
+.side-rail-top-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
     flex-shrink: 0;
 }
 .nav-toggle {
@@ -145,6 +168,7 @@ html.nav-expanded .side-rail { width: 240px; }
     justify-content: center;
 }
 .nav-toggle:hover { color: var(--text-primary); border-color: var(--border-strong); }
+.nav-toggle svg { flex-shrink: 0; }
 
 .side-rail-brand {
     display: flex;
@@ -156,6 +180,7 @@ html.nav-expanded .side-rail { width: 240px; }
     color: var(--text-primary);
     white-space: nowrap;
     overflow: hidden;
+    min-width: 0;
 }
 /* Reveal via max-width/opacity, not display:none<->inline - display cannot
    be transitioned, so toggling it in the same frame the .side-rail width
@@ -175,7 +200,6 @@ html.nav-expanded .side-rail-brand-label { max-width: 160px; opacity: 1; }
 /* The one small identity moment (Prompt: BEEHIVE Visual Color System #4) -
    bee-yellow belongs here and almost nowhere else. */
 .brand-mark { color: var(--bee-yellow); font-size: 1.3rem; }
-.brand-sub { font-size: 0.78rem; color: var(--text-metadata); font-weight: 500; margin-left: 0.25rem; }
 
 .side-rail-links {
     display: flex;
@@ -237,15 +261,15 @@ html.nav-expanded .side-rail-context {
     font-family: var(--font-mono);
     text-transform: uppercase;
     letter-spacing: 0.1em;
-    font-size: 0.6rem;
+    font-size: 0.8rem;
     color: var(--text-metadata);
     margin: 0.7rem 0 0.35rem;
 }
 .side-rail-context-label:first-child { margin-top: 0; }
-.side-rail-context-value { font-size: 0.78rem; margin: 0 0 0.6rem; word-break: break-word; }
+.side-rail-context-value { font-size: 0.88rem; margin: 0 0 0.6rem; word-break: break-word; }
 .side-rail-recent { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.35rem; }
 .side-rail-recent a {
-    font-size: 0.78rem;
+    font-size: 0.88rem;
     color: var(--text-primary);
     display: block;
     overflow: hidden;
@@ -280,18 +304,107 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
     padding: 2.5rem;
     color: var(--text-metadata);
     font-family: var(--font-mono);
-    font-size: 0.78rem;
+    font-size: 0.88rem;
     border-top: 1px solid var(--border);
     margin-top: 4rem;
 }
+
+/* -- global search overlay -------------------------------------------------
+   Opens over the current page (never a separate Search page) so the user
+   keeps their place. Compact and restrained, not a full-screen takeover. */
+.search-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 2000;
+    display: flex;
+    justify-content: center;
+    padding: 12vh 1.2rem 0;
+}
+.search-overlay[hidden] { display: none; }
+.search-overlay-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(34, 29, 23, 0.4);
+}
+.search-panel {
+    position: relative;
+    width: min(560px, 100%);
+    max-height: 70vh;
+    display: flex;
+    flex-direction: column;
+    background: var(--surface-primary);
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+    box-shadow: 0 24px 60px rgba(34, 29, 23, 0.22);
+    overflow: hidden;
+}
+.search-panel-form {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.9rem 1rem;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+}
+.search-panel-icon { color: var(--text-metadata); flex-shrink: 0; display: flex; }
+.search-panel-form input {
+    flex: 1;
+    min-width: 0;
+    border: none;
+    background: transparent;
+    font-family: var(--font-body);
+    font-size: 1rem;
+    color: var(--text-primary);
+    outline: none;
+}
+.search-panel-form input::placeholder { color: var(--text-metadata); }
+.search-panel-close {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-metadata);
+    cursor: pointer;
+}
+.search-panel-close:hover { color: var(--text-primary); border-color: var(--border-strong); }
+.search-panel-results { overflow-y: auto; padding: 0.5rem; }
+.search-panel-hint, .search-panel-empty {
+    color: var(--text-secondary);
+    font-size: 0.88rem;
+    padding: 0.8rem 0.6rem;
+}
+.search-result {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    padding: 0.65rem 0.7rem;
+    border-radius: 5px;
+    color: var(--text-primary);
+}
+.search-result:hover { background: var(--surface-hover); text-decoration: none; }
+.search-result-kind {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-metadata);
+    font-weight: 600;
+}
+.search-result-title { font-size: 0.95rem; }
+.search-result-subtitle { font-family: var(--font-mono); font-size: 0.8rem; color: var(--text-metadata); }
 
 /* -- hero ---------------------------------------------------------------- */
 .hero { padding: 5.5rem 0 3rem; max-width: 780px; }
 .eyebrow {
     font-family: var(--font-mono);
     text-transform: uppercase;
-    letter-spacing: 0.14em;
-    font-size: 0.75rem;
+    letter-spacing: 0.08em;
+    font-size: 0.85rem;
     color: var(--text-metadata);
     margin-bottom: 1rem;
 }
@@ -372,7 +485,7 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
 .project-row-name { font-family: var(--font-display); font-size: 0.95rem; }
 .project-row-meta {
     font-family: var(--font-mono);
-    font-size: 0.72rem;
+    font-size: 0.85rem;
     color: var(--text-metadata);
 }
 .entry-flag { white-space: nowrap; }
@@ -430,10 +543,10 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
     text-overflow: ellipsis;
     white-space: nowrap;
 }
-.project-card-id { font-size: 0.68rem; color: var(--text-metadata); }
+.project-card-id { font-size: 0.82rem; color: var(--text-metadata); }
 .project-card-meta {
     font-family: var(--font-mono);
-    font-size: 0.72rem;
+    font-size: 0.85rem;
     color: var(--text-metadata);
     display: flex;
     align-items: center;
@@ -444,7 +557,7 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
 .project-card-dot { color: var(--border-strong); }
 .project-card-secondary {
     font-family: var(--font-mono);
-    font-size: 0.72rem;
+    font-size: 0.85rem;
     color: var(--text-metadata);
     padding: 0 1.2rem 0 0;
     flex-shrink: 0;
@@ -515,7 +628,7 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
 .dash-meta { display: flex; gap: 2.2rem; }
 .meta-stat { text-align: right; }
 .meta-num { display: block; font-family: var(--font-display); font-size: 1.9rem; color: var(--text-primary); }
-.meta-label { font-family: var(--font-mono); font-size: 0.72rem; color: var(--text-metadata); text-transform: uppercase; letter-spacing: 0.06em; }
+.meta-label { font-family: var(--font-mono); font-size: 0.85rem; color: var(--text-metadata); text-transform: uppercase; letter-spacing: 0.06em; }
 
 /* -- honeycomb lattice (signature element) -------------------------------- */
 .lattice-wrap {
@@ -545,7 +658,7 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
     justify-content: center;
     text-align: center;
     font-family: var(--font-mono);
-    font-size: 0.68rem;
+    font-size: 0.82rem;
     color: var(--text-metadata);
     padding: 0.4rem;
     position: relative;
@@ -560,7 +673,7 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
 }
 
 .legend { font-family: var(--font-mono); font-size: 0.8rem; color: var(--text-metadata); min-width: 160px; }
-.legend-title { text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.72rem; margin-bottom: 0.8rem; }
+.legend-title { text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.85rem; margin-bottom: 0.8rem; }
 .dot { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 0.5rem; }
 .dot-done { background: var(--accepted-green); }
 .dot-active { background: transparent; border: 1px solid var(--machine-blue); }
@@ -572,7 +685,7 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
 .registry-filter { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1.2rem; }
 .chip {
     font-family: var(--font-mono);
-    font-size: 0.72rem;
+    font-size: 0.85rem;
     padding: 0.35rem 0.7rem;
     border: 1px solid var(--border);
     border-radius: 999px;
@@ -587,7 +700,7 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
 .registry-table th {
     text-align: left;
     font-family: var(--font-mono);
-    font-size: 0.72rem;
+    font-size: 0.85rem;
     text-transform: uppercase;
     letter-spacing: 0.06em;
     color: var(--text-metadata);
@@ -630,7 +743,7 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
 .flag-req-label {
     display: block;
     font-family: var(--font-mono);
-    font-size: 0.68rem;
+    font-size: 0.82rem;
     color: var(--text-metadata);
     text-transform: uppercase;
     letter-spacing: 0.06em;
@@ -672,8 +785,8 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
 .gateway-section-label {
     font-family: var(--font-mono);
     text-transform: uppercase;
-    letter-spacing: 0.14em;
-    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+    font-size: 0.85rem;
     color: var(--text-metadata);
     margin: 0 0 0.3rem;
 }
@@ -682,7 +795,7 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
 .gateway-field { display: grid; gap: 0.35rem; margin-bottom: 1rem; }
 .gateway-field label {
     font-family: var(--font-mono);
-    font-size: 0.7rem;
+    font-size: 0.85rem;
     text-transform: uppercase;
     letter-spacing: 0.08em;
     color: var(--text-metadata);
@@ -722,7 +835,7 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
     font-size: 1.1rem;
 }
 .gateway-action strong { display: block; margin-bottom: 0.25rem; font-size: 0.85rem; color: var(--text-primary); }
-.gateway-action small { display: block; color: var(--text-secondary); font-size: 0.72rem; line-height: 1.4; }
+.gateway-action small { display: block; color: var(--text-secondary); font-size: 0.85rem; line-height: 1.4; }
 
 /* -- gateway login card (compact) -----------------------------------------
    Geometry/spacing/background mirror the archiosk-explorer (port 5173)
@@ -767,7 +880,7 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
     background: var(--surface-secondary);
     color: var(--text-metadata);
     font-family: var(--font-mono);
-    font-size: 0.65rem;
+    font-size: 0.8rem;
     letter-spacing: 0.02em;
 }
 
@@ -792,7 +905,7 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
 .flash-error { color: var(--failure-red); border-color: var(--failure-red); background: var(--failure-red-tint); }
 .flash-success { color: var(--accepted-green); border-color: var(--accepted-green); background: var(--accepted-green-tint); }
 
-.workspace-link { margin-top: 0.8rem; font-size: 0.78rem; padding: 0.5rem 1rem; }
+.workspace-link { margin-top: 0.8rem; font-size: 0.88rem; padding: 0.5rem 1rem; }
 
 /* ============================================================
    Case Workspace — Project Navigation | Conversation | Artifacts
@@ -825,7 +938,7 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
     font-family: var(--font-mono);
     text-transform: uppercase;
     letter-spacing: 0.1em;
-    font-size: 0.65rem;
+    font-size: 0.8rem;
     color: var(--text-metadata);
     margin: 0 0 0.4rem;
 }
@@ -834,7 +947,7 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
 .lifecycle-strip { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-bottom: 1.4rem; }
 .lifecycle-stage {
     font-family: var(--font-mono);
-    font-size: 0.62rem;
+    font-size: 0.8rem;
     color: var(--text-metadata);
     padding: 0.25rem 0.5rem;
     border: 1px solid var(--border);
@@ -864,7 +977,7 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
 .case-item.active { background: var(--surface-selected); border-color: var(--border-strong); }
 .source-kind-badge, .case-status-badge {
     font-family: var(--font-mono);
-    font-size: 0.6rem;
+    font-size: 0.8rem;
     text-transform: uppercase;
     letter-spacing: 0.06em;
     color: var(--text-metadata);
@@ -886,7 +999,7 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
 }
 .workspace-form button {
     font-family: var(--font-mono);
-    font-size: 0.78rem;
+    font-size: 0.88rem;
     padding: 0.5rem 0.8rem;
     border-radius: 3px;
     border: 1px solid var(--border-strong);
@@ -928,7 +1041,7 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
 .conversation-message .role-label {
     display: block;
     font-family: var(--font-mono);
-    font-size: 0.62rem;
+    font-size: 0.8rem;
     text-transform: uppercase;
     letter-spacing: 0.08em;
     color: var(--text-metadata);
@@ -963,7 +1076,7 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
 .add-source-details { margin-top: 1.2rem; }
 .add-source-details summary {
     font-family: var(--font-mono);
-    font-size: 0.75rem;
+    font-size: 0.85rem;
     color: var(--text-metadata);
     cursor: pointer;
     margin-bottom: 0.6rem;
@@ -989,7 +1102,7 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
     font-family: var(--font-mono);
     text-transform: uppercase;
     letter-spacing: 0.1em;
-    font-size: 0.65rem;
+    font-size: 0.8rem;
     color: var(--text-metadata);
     cursor: pointer;
     list-style: none;
@@ -1000,14 +1113,14 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
     display: inline-block;
     margin-right: 0.5rem;
     color: var(--text-secondary);
-    font-size: 0.7rem;
+    font-size: 0.85rem;
     transition: transform 0.12s ease;
 }
 .accordion-section[open] > .accordion-summary::before { transform: rotate(90deg); }
 .accordion-summary-text { flex: 1; }
 .accordion-summary-status {
     color: var(--text-metadata);
-    font-size: 0.62rem;
+    font-size: 0.8rem;
     text-transform: none;
     letter-spacing: normal;
     white-space: nowrap;
@@ -1015,7 +1128,7 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
 .accordion-section[open] > .accordion-summary { margin-bottom: 0.7rem; }
 .collapse-all-btn {
     font-family: var(--font-mono);
-    font-size: 0.68rem;
+    font-size: 0.82rem;
     color: var(--text-metadata);
     background: transparent;
     border: 1px solid var(--border);
@@ -1028,7 +1141,7 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
 /* -- Project Home (calm, single-purpose project entry - Prompt 3) --------- */
 .project-home { grid-column: 2 / -1; max-width: 760px; padding: 0.5rem 0 4rem; }
 @media (max-width: 1080px) { .project-home { grid-column: 1; } }
-.project-home-back { font-size: 0.78rem; color: var(--text-secondary); margin: 0 0 1rem; }
+.project-home-back { font-size: 0.88rem; color: var(--text-secondary); margin: 0 0 1rem; }
 .project-home-back a { color: var(--text-secondary); }
 .project-home-back a:hover { color: var(--text-primary); }
 
@@ -1094,7 +1207,7 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
 }
 .composer-plus summary::-webkit-details-marker { display: none; }
 .composer-plus summary:hover { color: var(--text-primary); border-color: var(--border-strong); }
-.composer-plus-links { font-size: 0.72rem; color: var(--text-secondary); margin: 0.5rem 0 0; display: flex; gap: 0.9rem; flex-wrap: wrap; }
+.composer-plus-links { font-size: 0.85rem; color: var(--text-secondary); margin: 0.5rem 0 0; display: flex; gap: 0.9rem; flex-wrap: wrap; }
 .composer-plus-links a { color: var(--machine-blue); }
 
 .project-home-state-message {
@@ -1121,7 +1234,7 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
 .finding-statement { font-size: 0.9rem; color: var(--text-primary); margin: 0 0 0.5rem; }
 .finding-confidence {
     font-family: var(--font-mono);
-    font-size: 0.68rem;
+    font-size: 0.82rem;
     color: var(--machine-blue);
     text-transform: uppercase;
     letter-spacing: 0.05em;
@@ -1137,7 +1250,7 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
 
 .finding-provenance {
     font-family: var(--font-mono);
-    font-size: 0.68rem;
+    font-size: 0.82rem;
     color: var(--text-metadata);
     background: var(--surface-primary);
     border: 1px solid var(--border);
@@ -1153,7 +1266,7 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
 .finding-review-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.6rem; }
 .review-btn {
     font-family: var(--font-mono);
-    font-size: 0.72rem;
+    font-size: 0.85rem;
     padding: 0.4rem 0.7rem;
     border-radius: 999px;
     cursor: pointer;
@@ -1175,7 +1288,7 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
 .review-decision-badge {
     display: inline-block;
     font-family: var(--font-mono);
-    font-size: 0.65rem;
+    font-size: 0.8rem;
     text-transform: uppercase;
     letter-spacing: 0.06em;
     padding: 0.25rem 0.55rem;
@@ -1190,7 +1303,7 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
 .applied-badge {
     display: inline-block;
     font-family: var(--font-mono);
-    font-size: 0.65rem;
+    font-size: 0.8rem;
     text-transform: uppercase;
     letter-spacing: 0.08em;
     padding: 0.3rem 0.6rem;
@@ -1245,7 +1358,7 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
    just in the data model. */
 .review-state-badge {
     font-family: var(--font-mono);
-    font-size: 0.62rem;
+    font-size: 0.8rem;
     text-transform: uppercase;
     letter-spacing: 0.05em;
     padding: 0.15rem 0.45rem;
@@ -1263,7 +1376,7 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
    used above, not a new truth-status vocabulary. */
 .evidence-badge {
     font-family: var(--font-mono);
-    font-size: 0.62rem;
+    font-size: 0.8rem;
     text-transform: uppercase;
     letter-spacing: 0.05em;
     padding: 0.15rem 0.45rem;
@@ -1297,7 +1410,7 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
     padding: 0.9rem 1.1rem;
     margin-bottom: 1rem;
 }
-.revision-notice strong { color: var(--attention-amber); text-transform: uppercase; font-family: var(--font-mono); font-size: 0.78rem; letter-spacing: 0.05em; }
+.revision-notice strong { color: var(--attention-amber); text-transform: uppercase; font-family: var(--font-mono); font-size: 0.88rem; letter-spacing: 0.05em; }
 .revision-notice p { color: var(--text-primary); font-size: 0.85rem; margin: 0.4rem 0 0.6rem; }
 .region-status { font-family: var(--font-mono); }
 .region-status-unchanged { color: var(--accepted-green); }

@@ -215,6 +215,47 @@ def projects_list():
     return render_template('projects.html', projects=projects, query=query, sort=sort)
 
 
+@portal_bp.route('/search')
+@login_required
+def global_search():
+    """
+    Global search overlay's backend (UI design-development pass: sidebar
+    header / search). Projects are the one real, already-indexed,
+    cross-project searchable object in this application today - the same
+    filename/project_id substring match the Projects directory's own
+    search already uses (see projects_list above), just exposed as JSON
+    for the overlay instead of a full-page GET.
+
+    The result shape (kind/title/subtitle/url) is deliberately generic so
+    Requirements/Investigations/Findings/RFIs/etc. can become real search
+    sources later without changing this shape or the overlay's rendering
+    - this route must never claim search coverage the backend doesn't
+    actually have.
+    """
+    query = (request.args.get('q') or '').strip()
+    if not query:
+        return jsonify(results=[])
+
+    needle = query.lower()
+    registry = get_registry(current_app)
+    documents = [d for pid in registry.list_ids() if (d := registry.get(pid)) is not None]
+    matches = [
+        d for d in documents
+        if needle in d.filename.lower() or needle in d.project_id.lower()
+    ][:20]
+
+    results = [
+        {
+            "kind": "Project",
+            "title": d.filename,
+            "subtitle": d.project_id,
+            "url": url_for('workspace.show_workspace', project_id=d.project_id),
+        }
+        for d in matches
+    ]
+    return jsonify(results=results)
+
+
 @portal_bp.route('/upload', methods=['GET', 'POST'])
 @admin_required
 def upload():

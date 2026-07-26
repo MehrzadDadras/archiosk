@@ -135,7 +135,7 @@ class ProjectHomeTests(unittest.TestCase):
         body = response.get_data(as_text=True)
 
         self.assertIn("Owner priority: schedule over cost.", body)
-        self.assertIn("subordinate to BEEHIVE governance", body)
+        self.assertIn("subordinate to Archiosk governance", body)
         workspace = self._store().get(self.project_id)
         self.assertEqual(workspace.operating_instructions, "Owner priority: schedule over cost.")
         self.assertEqual(workspace.operating_instructions_updated_by, "tester")
