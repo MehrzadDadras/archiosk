@@ -512,6 +512,12 @@ KNOWN_REQUIREMENT_LOCATION_TYPES = (
 # risk, now structurally prevented from being silent about it.
 REQUIREMENT_REGISTRATION_MACHINE_EXTRACTED = "machine_extracted"
 REQUIREMENT_REGISTRATION_MANUAL_TEST_FIXTURE = "manually_registered_test_fixture"
+# Distinct from the TEST_FIXTURE value above, which its own name commits to
+# meaning exactly what it says - discovered live (Cedar Harbour discovery
+# journey) that the vocabulary had no honest word for a real reviewer
+# reading a real Source and directly asserting a Requirement's text, with
+# no machine extraction and no test-fixture pretense involved.
+REQUIREMENT_REGISTRATION_HUMAN_REGISTERED = "human_registered"
 REQUIREMENT_REGISTRATION_DERIVED_FROM_STRUCTURED_SOURCE = "derived_from_structured_source"
 REQUIREMENT_REGISTRATION_IMPORTED = "imported"
 REQUIREMENT_REGISTRATION_OTHER = "other"
@@ -519,6 +525,7 @@ REQUIREMENT_REGISTRATION_OTHER = "other"
 KNOWN_REQUIREMENT_REGISTRATION_METHODS = (
     REQUIREMENT_REGISTRATION_MACHINE_EXTRACTED,
     REQUIREMENT_REGISTRATION_MANUAL_TEST_FIXTURE,
+    REQUIREMENT_REGISTRATION_HUMAN_REGISTERED,
     REQUIREMENT_REGISTRATION_DERIVED_FROM_STRUCTURED_SOURCE,
     REQUIREMENT_REGISTRATION_IMPORTED,
     REQUIREMENT_REGISTRATION_OTHER,

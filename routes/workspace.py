@@ -50,6 +50,7 @@ from services.case_workspace import (
     OBJECT_KIND_CASE,
     OBJECT_KIND_FINDING,
     REQUIREMENT_ADJUDICATION_OUTCOMES,
+    REQUIREMENT_REGISTRATION_HUMAN_REGISTERED,
     SOURCE_KIND_PROJECT_DOCUMENT,
     SOURCE_KIND_TEXT_RECORD,
     AnalysisTrigger,
@@ -1436,6 +1437,51 @@ def promote_requirement_item_route(project_id, case_id, requirement_item_id):
         "success",
     )
     return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
+
+
+@workspace_bp.route("/projects/<project_id>/workspace/requirements/register", methods=["POST"])
+@login_required
+def register_requirement_route(project_id):
+    """
+    Manually register a Requirement directly from any Source - governed
+    or legacy, drawing or document - with no Finding and no Investigation
+    involved. This is the gap the Cedar Harbour discovery journey actually
+    found: CaseWorkspaceStore.register_requirement already existed,
+    already correctly took no case_id (Requirement is project-scoped, and
+    this path produces no accompanying Finding the way
+    promote_requirement_item deliberately does), but had no route at all -
+    a real reviewer had no way to assert "this Requirement's text lives in
+    this Source" for anything the legacy extractor never touched (which is
+    everything added after the first upload). Deliberately NOT
+    Case-scoped, matching the store method's own signature exactly, not a
+    judgment call layered on top of it.
+    """
+    _, store, workspace = _load_workspace_or_404(project_id)
+
+    source_id = request.form.get("source_id")
+    original_requirement_identifier = (request.form.get("original_requirement_identifier") or "").strip()
+    text_reference = (request.form.get("text_reference") or "").strip()
+
+    if not source_id or not original_requirement_identifier or not text_reference:
+        flash("A registered Requirement needs a Source, a clause/identifier, and its text.", "error")
+        return redirect(url_for("workspace.show_workspace", project_id=project_id))
+
+    try:
+        store.register_requirement(
+            workspace,
+            source_id=source_id,
+            original_requirement_identifier=original_requirement_identifier,
+            text_reference=text_reference,
+            created_by=_reviewer(),
+            registration_method=REQUIREMENT_REGISTRATION_HUMAN_REGISTERED,
+            governance_log=_log(),
+        )
+    except CaseWorkspaceError as exc:
+        flash(str(exc), "error")
+        return redirect(url_for("workspace.show_workspace", project_id=project_id))
+
+    flash("Requirement registered.", "success")
+    return redirect(url_for("workspace.show_workspace", project_id=project_id))
 
 
 @workspace_bp.route("/projects/<project_id>/workspace/requirements/<requirement_id>/adjudicate", methods=["POST"])

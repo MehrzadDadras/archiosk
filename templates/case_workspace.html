@@ -253,6 +253,27 @@
         </details>
         {% endif %}
 
+        <details class="add-source-details">
+            <summary>+ Register a Requirement</summary>
+            <p style="font-size:0.82rem;color:var(--text-secondary);margin:-0.4rem 0 0.6rem;">
+                For a Requirement's text that lives in a Source the legacy extraction pipeline
+                never saw - any governed Source, drawing or document. No Investigation needed;
+                a Requirement belongs to the Project, not to a Case.
+            </p>
+            <form class="workspace-form" method="post"
+                  action="{{ url_for('workspace.register_requirement_route', project_id=project_id) }}">
+                <select name="source_id" required>
+                    <option value="" disabled selected>Which Source states this?</option>
+                    {% for source in workspace.sources %}
+                    <option value="{{ source.id }}">{{ source.name }} ({{ source.kind.replace('_', ' ') }})</option>
+                    {% endfor %}
+                </select>
+                <input type="text" name="original_requirement_identifier" placeholder="Clause/identifier (e.g. ADD-04-2, Section 3.1)" required>
+                <textarea name="text_reference" placeholder="Requirement text, as stated in the Source" required></textarea>
+                <button type="submit">Register Requirement</button>
+            </form>
+        </details>
+
         {% if requirements_view %}
         <details class="add-source-details" id="governed-requirements">
             <summary>Governed Requirements ({{ requirements_view|length }})</summary>
