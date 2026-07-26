@@ -106,7 +106,30 @@ def _register_context_processors(app: Flask) -> None:
             "static_version": app.config["STATIC_VERSION"],
             "authenticated": is_authenticated(),
             "is_admin": is_admin(),
+            "nav_recent_projects": _nav_recent_projects(app) if is_authenticated() else [],
         }
+
+
+def _nav_recent_projects(app: Flask, limit: int = 5) -> list:
+    """
+    Cheap, read-only project list for the navigation rail's "Recent
+    Projects" context (id + filename only - no per-project Case Workspace
+    load). Reuses the same RequirementsRegistry already used by
+    routes/portal.py's project directory; no new storage or domain
+    behavior. Runs on every authenticated page render (the rail is part
+    of the shared shell), so deliberately stays this minimal - the
+    richer, indicator-bearing recent-project list on the home page itself
+    is computed separately, only for that one page.
+    """
+    from services.ingestion import get_registry
+
+    try:
+        registry = get_registry(app)
+        documents = [d for pid in registry.list_ids() if (d := registry.get(pid)) is not None]
+    except OSError:
+        return []
+    documents.sort(key=lambda d: d.ingested_at, reverse=True)
+    return documents[:limit]
 
 
 # Local dev entrypoint: `python app.py`

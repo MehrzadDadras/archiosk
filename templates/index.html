@@ -1,50 +1,59 @@
 {% extends "base.html" %}
 
-{% block title %}Archiosk &mdash; B-Hive RFP Intelligence{% endblock %}
+{% block title %}Archiosk &mdash; BEEHIVE{% endblock %}
 
 {% block content %}
-<section class="hero">
+<section class="entry">
     <p class="eyebrow">B-Hive Core Chassis</p>
-    <h1>Turn RFPs into a structured requirements registry.</h1>
-    <p class="hero-copy">
-        Upload an RFP or RFQ and B-Hive extracts, segments, and classifies
-        every clause into scope, technical, compliance, budget, schedule,
-        submission, and evaluation buckets &mdash; then builds a milestone
-        timeline automatically.
+    <h1>What project are we working on?</h1>
+    {% if not authenticated %}
+    <p class="entry-copy">
+        Governed project intelligence, from source evidence to professional decision.
     </p>
-    <div class="hero-actions">
-        {% if authenticated %}
-        <a class="btn btn-primary" href="{{ url_for('portal.upload') }}">Ingest a document</a>
-        <a class="btn btn-ghost" href="{{ url_for('portal.dashboard') }}">View dashboard</a>
+    {% endif %}
+
+    {% if authenticated %}
+    <div class="entry-actions">
+        {% if is_admin %}
+        <a class="btn btn-primary" href="{{ url_for('portal.upload') }}">New Project</a>
+        {% endif %}
+        <a class="btn btn-ghost" href="{{ url_for('portal.projects_list') }}">Open Project</a>
+    </div>
+
+    <div class="entry-recent">
+        <p class="workspace-pane-label">Recent Projects</p>
+        {% if recent_projects %}
+        <ul class="project-row-list">
+            {% for p in recent_projects %}
+            <li class="project-row">
+                <a class="project-row-link" href="{{ url_for('workspace.show_workspace', project_id=p.project_id) }}">
+                    <span class="project-row-name">{{ p.filename }}</span>
+                    <span class="project-row-meta">
+                        {{ p.requirements_count }} requirement(s)
+                        &middot; {{ p.open_rfi_count }} open RFI(s)
+                        &middot; last activity {{ p.last_activity }}
+                        {% if p.unresolved_conflict_count %}
+                        &middot; <span class="entry-flag entry-flag-red">&#128308; {{ p.unresolved_conflict_count }} unresolved</span>
+                        {% endif %}
+                        {% if p.pending_attention_count %}
+                        &middot; <span class="entry-flag entry-flag-amber">&#128992; {{ p.pending_attention_count }} pending attention</span>
+                        {% endif %}
+                    </span>
+                </a>
+            </li>
+            {% endfor %}
+        </ul>
         {% else %}
-        <a class="btn btn-primary" href="{{ url_for('portal.login') }}">Sign in to get started</a>
+        <p class="entry-empty">
+            No projects yet.
+            {% if is_admin %}<a href="{{ url_for('portal.upload') }}">Create the first one</a>.{% else %}Ask an administrator to ingest one.{% endif %}
+        </p>
         {% endif %}
     </div>
-</section>
-
-<section class="hive-strip">
-    <h2>Pipeline</h2>
-    <div class="cell-row">
-        <div class="cell">
-            <span class="cell-index">01</span>
-            <h3>Extract</h3>
-            <p>Pull raw text out of PDF, DOCX, TXT, or CSV uploads.</p>
-        </div>
-        <div class="cell">
-            <span class="cell-index">02</span>
-            <h3>Segment</h3>
-            <p>Split raw text into candidate requirement clauses.</p>
-        </div>
-        <div class="cell">
-            <span class="cell-index">03</span>
-            <h3>Classify</h3>
-            <p>Categorize each clause with Claude, or a rule-based fallback when no API key is set.</p>
-        </div>
-        <div class="cell">
-            <span class="cell-index">04</span>
-            <h3>Assemble</h3>
-            <p>Build the requirements registry and derive the milestone timeline.</p>
-        </div>
+    {% else %}
+    <div class="entry-actions">
+        <a class="btn btn-primary" href="{{ url_for('portal.login') }}">Sign in to get started</a>
     </div>
+    {% endif %}
 </section>
 {% endblock %}

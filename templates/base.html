@@ -5,48 +5,118 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block title %}Archiosk{% endblock %}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v={{ static_version }}">
+    <script>
+        // Applied before first paint (inline, in <head>) so expanded/collapsed
+        // navigation never flashes the wrong state on a fresh page load - this
+        // is a full server-rendered page reload per navigation, not an SPA.
+        try {
+            if (window.localStorage.getItem('beehive:nav:expanded') === 'true') {
+                document.documentElement.classList.add('nav-expanded');
+            }
+        } catch (e) { /* localStorage unavailable - default to collapsed */ }
+    </script>
     {% block extra_head %}{% endblock %}
 </head>
 <body>
     <div class="blueprint-grid"></div>
 
-    <header class="site-header">
-        <a class="brand" href="{{ url_for('portal.index') }}">
-            <span class="brand-mark">&#8961;</span>
-            Archiosk<span class="brand-sub">B-Hive</span>
-        </a>
-        <nav class="site-nav">
-            <a href="{{ url_for('portal.index') }}">Home</a>
+    <div class="app-shell">
+        <nav class="side-rail" aria-label="Primary">
+            <div class="side-rail-top">
+                <button type="button" id="nav-toggle" class="nav-toggle" aria-label="Expand navigation" aria-expanded="false">
+                    <span aria-hidden="true">&#9776;</span>
+                </button>
+                <a class="side-rail-brand" href="{{ url_for('portal.index') }}">
+                    <span class="brand-mark" aria-hidden="true">&#8961;</span>
+                    <span class="side-rail-brand-label">Archiosk<span class="brand-sub">B-Hive</span></span>
+                </a>
+            </div>
+
+            <div class="side-rail-links">
+                <a class="side-rail-link{% if request.path == url_for('portal.index') %} active{% endif %}" href="{{ url_for('portal.index') }}">
+                    <span class="side-rail-icon" aria-hidden="true">&#8962;</span>
+                    <span class="side-rail-label">Home</span>
+                </a>
+                {% if authenticated %}
+                <a class="side-rail-link{% if request.path == url_for('portal.projects_list') %} active{% endif %}" href="{{ url_for('portal.projects_list') }}">
+                    <span class="side-rail-icon" aria-hidden="true">&#9638;</span>
+                    <span class="side-rail-label">Projects</span>
+                </a>
+                {% if is_admin %}
+                <a class="side-rail-link{% if request.path == url_for('portal.upload') %} active{% endif %}" href="{{ url_for('portal.upload') }}">
+                    <span class="side-rail-icon" aria-hidden="true">+</span>
+                    <span class="side-rail-label">New Project</span>
+                </a>
+                {% endif %}
+                {% endif %}
+            </div>
+
             {% if authenticated %}
-            {% if is_admin %}
-            <a href="{{ url_for('portal.upload') }}">Upload</a>
+            <div class="side-rail-context">
+                {% if project_id %}
+                <p class="side-rail-context-label">Current Project</p>
+                <p class="side-rail-context-value mono">
+                    <a href="{{ url_for('workspace.show_workspace', project_id=project_id) }}">{{ project_id }}</a>
+                </p>
+                {% endif %}
+                {% if nav_recent_projects %}
+                <p class="side-rail-context-label">Recent Projects</p>
+                <ul class="side-rail-recent">
+                    {% for p in nav_recent_projects %}
+                    <li><a href="{{ url_for('workspace.show_workspace', project_id=p.project_id) }}">{{ p.filename }}</a></li>
+                    {% endfor %}
+                </ul>
+                {% endif %}
+            </div>
             {% endif %}
-            <a href="{{ url_for('portal.projects_list') }}">Projects</a>
-            <a href="{{ url_for('portal.dashboard') }}">Dashboard</a>
-            <a href="{{ url_for('portal.logout') }}">Sign out</a>
-            {% else %}
-            <a href="{{ url_for('portal.login') }}">Sign in</a>
-            {% endif %}
+
+            <div class="side-rail-bottom">
+                {% if authenticated %}
+                <a class="side-rail-link" href="{{ url_for('portal.logout') }}">
+                    <span class="side-rail-icon" aria-hidden="true">&#9099;</span>
+                    <span class="side-rail-label">Sign out</span>
+                </a>
+                {% else %}
+                <a class="side-rail-link" href="{{ url_for('portal.login') }}">
+                    <span class="side-rail-icon" aria-hidden="true">&#8594;</span>
+                    <span class="side-rail-label">Sign in</span>
+                </a>
+                {% endif %}
+            </div>
         </nav>
-    </header>
 
-    <main>
-        {% with flashed = get_flashed_messages(with_categories=true) %}
-        {% if flashed %}
-        <div class="flash-stack">
-            {% for category, message in flashed %}
-            <div class="flash-message flash-{{ category }}">{{ message }}</div>
-            {% endfor %}
+        <div class="app-main">
+            <main>
+                {% with flashed = get_flashed_messages(with_categories=true) %}
+                {% if flashed %}
+                <div class="flash-stack">
+                    {% for category, message in flashed %}
+                    <div class="flash-message flash-{{ category }}">{{ message }}</div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+                {% endwith %}
+                {% block content %}{% endblock %}
+            </main>
+
+            <footer class="site-footer">
+                &copy; {{ current_year }} Archiosk &mdash; B-Hive Core Chassis
+            </footer>
         </div>
-        {% endif %}
-        {% endwith %}
-        {% block content %}{% endblock %}
-    </main>
+    </div>
 
-    <footer class="site-footer">
-        &copy; {{ current_year }} Archiosk &mdash; B-Hive Core Chassis
-    </footer>
-
+    <script>
+        (function () {
+            var toggle = document.getElementById('nav-toggle');
+            if (!toggle) return;
+            toggle.addEventListener('click', function () {
+                var expanded = document.documentElement.classList.toggle('nav-expanded');
+                toggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+                try { window.localStorage.setItem('beehive:nav:expanded', expanded ? 'true' : 'false'); } catch (e) { /* ignore */ }
+            });
+            toggle.setAttribute('aria-expanded', document.documentElement.classList.contains('nav-expanded') ? 'true' : 'false');
+        })();
+    </script>
     {% block extra_scripts %}{% endblock %}
 </body>
 </html>

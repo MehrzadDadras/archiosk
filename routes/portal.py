@@ -5,8 +5,9 @@ from __future__ import annotations
 
 from flask import Blueprint, abort, current_app, jsonify, redirect, render_template, request, url_for
 
-from services.auth import admin_required, check_credentials, log_in, log_out, login_required
+from services.auth import admin_required, check_credentials, is_authenticated, log_in, log_out, login_required
 from services.bhive_parser import REQUIREMENT_CATEGORIES
+from services.case_workspace import CaseWorkspaceStore
 from services.governance import GovernanceError
 from services.ingestion import UploadError, get_governance_log, get_registry, ingest_upload
 
@@ -39,7 +40,54 @@ _DEMO_REQUIREMENTS = [
 
 @portal_bp.route('/')
 def index():
-    return render_template('index.html')
+    """
+    Project-first entry point: "what project are we working on," not a
+    marketing page and not "how can I help you today." Anonymous visitors
+    see the identity line + sign-in only. Authenticated visitors see a
+    small, restrained recent-projects list with real, already-governed
+    indicators - never a fabricated project-health score:
+    - requirements: len(workspace.requirements) - existing, unmodified.
+    - open_rfi_count: RFIDrafts not yet issued - existing status field.
+    - pending_attention_count (amber): Attentions still pending response.
+    - unresolved_conflict_count (red): the legacy consistency-check's own
+      flagged cross-requirement contradictions (document.consistency_flags)
+      - the one real "conflict" signal that already exists, not invented
+        for this page.
+    - last_activity: the most recent GovernanceLog event's timestamp where
+      one exists, else the document's own ingested_at.
+    No new domain/store methods were added for this - every value above
+    comes from an existing, unmodified public read (RequirementsRegistry,
+    CaseWorkspaceStore.get, GovernanceLog.read).
+    """
+    if not is_authenticated():
+        return render_template('index.html', recent_projects=[])
+
+    registry = get_registry(current_app)
+    store = CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"])
+    governance_log = get_governance_log(current_app)
+
+    documents = [d for pid in registry.list_ids() if (d := registry.get(pid)) is not None]
+    documents.sort(key=lambda d: d.ingested_at, reverse=True)
+
+    recent_projects = []
+    for document in documents[:6]:
+        workspace = store.get(document.project_id)
+        events = governance_log.read(document.project_id)
+        recent_projects.append({
+            "project_id": document.project_id,
+            "filename": document.filename,
+            "last_activity": events[-1].created_at if events else document.ingested_at,
+            "requirements_count": len(workspace.requirements) if workspace else 0,
+            "open_rfi_count": (
+                len([d for d in workspace.rfi_drafts if d["status"] != "issued"]) if workspace else 0
+            ),
+            "pending_attention_count": (
+                len([a for a in workspace.attentions if a["status"] == "pending"]) if workspace else 0
+            ),
+            "unresolved_conflict_count": len(document.consistency_flags) if document.consistency_checked else 0,
+        })
+
+    return render_template('index.html', recent_projects=recent_projects)
 
 
 @portal_bp.route('/health')

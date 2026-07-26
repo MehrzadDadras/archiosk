@@ -70,35 +70,148 @@ a:focus-visible, button:focus-visible, input:focus-visible {
     opacity: 0.18;
 }
 
-/* -- header / nav ------------------------------------------------------- */
-.site-header {
+/* -- app shell: expandable left navigation rail -------------------------
+   Two states, toggled by adding/removing .nav-expanded on <html> (see
+   base.html's inline pre-paint script + nav.js-equivalent inline script -
+   avoids a flash of the wrong state on every full-page navigation, since
+   this is a classic server-rendered app, not an SPA). Collapsed = a
+   narrow icon-only rail that maximizes work-area width; expanded = a
+   wider labeled panel that also reveals compact orientation context
+   (current project, recent projects). Toggling never navigates or
+   reloads anything - purely a CSS width/visibility change. */
+.app-shell {
     display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 1.5rem 3rem;
-    border-bottom: 1px solid var(--line);
+    align-items: stretch;
+    min-height: 100vh;
 }
-.brand {
+.side-rail {
+    width: 60px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    border-right: 1px solid var(--line);
+    background: var(--panel);
+    transition: width 0.15s ease;
+    overflow-x: hidden;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+}
+html.nav-expanded .side-rail { width: 240px; }
+
+.side-rail-top {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 1.1rem 0.9rem;
+    border-bottom: 1px solid var(--line);
+    flex-shrink: 0;
+}
+.nav-toggle {
+    background: transparent;
+    border: 1px solid var(--line);
+    color: var(--muted);
+    border-radius: 4px;
+    width: 32px;
+    height: 32px;
+    flex-shrink: 0;
+    cursor: pointer;
+    font-size: 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.nav-toggle:hover { color: var(--parchment); border-color: var(--teal); }
+
+.side-rail-brand {
     display: flex;
     align-items: baseline;
-    gap: 0.6rem;
+    gap: 0.4rem;
     font-family: var(--font-display);
     font-weight: 700;
-    font-size: 1.3rem;
+    font-size: 1.1rem;
     color: var(--parchment);
+    white-space: nowrap;
+    overflow: hidden;
 }
-.brand-mark { color: var(--amber); font-size: 1.4rem; }
-.brand-sub { font-size: 0.85rem; color: var(--muted); font-weight: 500; margin-left: 0.3rem; }
-.site-nav a {
-    margin-left: 2rem;
-    font-family: var(--font-mono);
-    font-size: 0.85rem;
-    color: var(--muted);
-    letter-spacing: 0.02em;
-}
-.site-nav a:hover { color: var(--amber); }
+.side-rail-brand-label { display: none; }
+html.nav-expanded .side-rail-brand-label { display: inline; }
+.brand-mark { color: var(--amber); font-size: 1.3rem; }
+.brand-sub { font-size: 0.78rem; color: var(--muted); font-weight: 500; margin-left: 0.25rem; }
 
-main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; }
+.side-rail-links {
+    display: flex;
+    flex-direction: column;
+    padding: 0.8rem 0.5rem;
+    gap: 0.15rem;
+}
+.side-rail-link {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.55rem 0.55rem;
+    border-radius: 5px;
+    color: var(--muted);
+    font-family: var(--font-mono);
+    font-size: 0.82rem;
+    white-space: nowrap;
+    overflow: hidden;
+}
+.side-rail-link:hover { background: var(--panel-raised); color: var(--parchment); text-decoration: none; }
+.side-rail-link.active { background: var(--panel-raised); color: var(--amber); }
+.side-rail-icon { flex-shrink: 0; width: 1.2rem; text-align: center; font-size: 1rem; }
+.side-rail-label { display: none; }
+html.nav-expanded .side-rail-label { display: inline; }
+
+.side-rail-context {
+    display: none;
+    padding: 0.9rem 0.9rem 0.4rem;
+    border-top: 1px solid var(--line);
+    margin-top: 0.4rem;
+    overflow-y: auto;
+}
+html.nav-expanded .side-rail-context { display: block; }
+.side-rail-context-label {
+    font-family: var(--font-mono);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    font-size: 0.6rem;
+    color: var(--muted);
+    margin: 0.7rem 0 0.35rem;
+}
+.side-rail-context-label:first-child { margin-top: 0; }
+.side-rail-context-value { font-size: 0.78rem; margin: 0 0 0.6rem; word-break: break-word; }
+.side-rail-recent { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.35rem; }
+.side-rail-recent a {
+    font-size: 0.78rem;
+    color: var(--parchment);
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.side-rail-recent a:hover { color: var(--amber); }
+
+.side-rail-bottom {
+    margin-top: auto;
+    padding: 0.6rem 0.5rem 1rem;
+    border-top: 1px solid var(--line);
+    flex-shrink: 0;
+}
+
+.app-main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+@media (max-width: 720px) {
+    html.nav-expanded .side-rail { width: 200px; }
+    main { padding: 0 1.2rem; }
+}
+
+main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
 
 .site-footer {
     text-align: center;
@@ -163,6 +276,44 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; }
 .btn-primary:hover { background: #f2b459; text-decoration: none; }
 .btn-ghost { color: var(--parchment); }
 .btn-ghost:hover { border-color: var(--amber); text-decoration: none; }
+
+/* -- home / project entry (deliberately quiet, not a marketing hero) ---- */
+.entry { padding: 3.5rem 0 2.5rem; max-width: 720px; }
+.entry h1 {
+    font-family: var(--font-display);
+    font-size: 1.9rem;
+    line-height: 1.2;
+    margin: 0 0 0.9rem;
+    font-weight: 600;
+}
+.entry-copy { color: var(--muted); font-size: 0.95rem; max-width: 56ch; margin: 0 0 1.8rem; }
+.entry-actions { display: flex; gap: 1rem; margin-top: 1.3rem; margin-bottom: 2.6rem; }
+
+.entry-recent { max-width: 900px; }
+.entry-empty { color: var(--muted); font-size: 0.85rem; }
+.project-row-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.6rem; }
+.project-row {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+}
+.project-row-link {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    padding: 0.9rem 1.1rem;
+    color: var(--parchment);
+}
+.project-row-link:hover { border-color: var(--teal); text-decoration: none; }
+.project-row-name { font-family: var(--font-display); font-size: 0.95rem; }
+.project-row-meta {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    color: var(--muted);
+}
+.entry-flag { white-space: nowrap; }
+.entry-flag-red { color: var(--workspace-red); }
+.entry-flag-amber { color: var(--amber); }
 
 /* -- chassis step cells (hexagon-clipped) -------------------------------- */
 .hive-strip { padding: 3rem 0 5rem; }
