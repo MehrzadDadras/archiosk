@@ -232,7 +232,7 @@
         <details class="add-source-details">
             <summary>Extracted, not yet governed ({{ unpromoted_requirement_items|length }})</summary>
             {% for item in unpromoted_requirement_items %}
-            <p style="color:var(--text-secondary);font-size:0.88rem;margin:0.3rem 0;">
+            <p class="unpromoted-requirement" style="color:var(--text-secondary);font-size:0.88rem;">
                 {{ item.text }}
                 <br><small>{{ item.category.replace('_', ' ') }} &middot; confidence {{ (item.confidence * 100)|round|int }}%</small>
             </p>

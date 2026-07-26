@@ -35,13 +35,27 @@
          without it.
    ============================================================ */
 :root {
-    /* -- material scale (warm architectural neutrals) -------------------- */
-    --canvas: #F5EFE2;            /* Sand Cotton - main app background */
-    --surface-primary: #FBF8F2;   /* Alabaster - panels, cards, dialogs */
-    --surface-secondary: #EEE5D1; /* Limestone - nav surfaces, grouped controls */
-    --surface-hover: #E7DBC2;     /* Warm Stone (lighter) - hover */
+    /* -- material scale (warm architectural neutrals) --------------------
+       Recalibrated for tonal separation ("same desert family, clearer
+       air" - visual language review): canvas desaturated and lifted
+       slightly so it reads as clean pale stone rather than a yellow-tinted
+       haze; surface-secondary/surface-hover/border each pushed further
+       from canvas in actual measured contrast, not just hue-identical
+       darker steps, so panel edges and dividers separate crisply instead
+       of blending together. Hue held at ~38-42deg throughout - same sand
+       family, not a different palette. text-primary and its relationship
+       to canvas are deliberately UNTOUCHED: that pairing is what produces
+       the letterpress/ink-on-paper quality, which lives one layer away
+       from the haziness this recalibration fixes. Verified: every
+       existing text/semantic-color contrast ratio holds or improves
+       against these new values - see the visual-language-review
+       commit for the full before/after numbers. */
+    --canvas: #F4F0E9;            /* Sand Cotton - main app background */
+    --surface-primary: #FBFAF8;   /* Alabaster - panels, cards, dialogs */
+    --surface-secondary: #E1D7C1; /* Limestone - nav surfaces, grouped controls */
+    --surface-hover: #D9CBAF;     /* Warm Stone (lighter) - hover */
     --surface-selected: #DCC89C;  /* Warm Stone (deeper) - selected / current */
-    --border: #DBCCA9;            /* Desert Dust - quiet dividers */
+    --border: #BFAB7D;            /* Desert Dust - quiet dividers */
     --border-strong: #B39D6C;     /* structural border where clarity is needed */
     /* Readability is the floor, not the target (Prompt 15) - every text
        token below is deliberately darker than WCAG AA's 4.5:1 minimum,
@@ -1252,6 +1266,21 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
     max-width: 62ch;
     margin: 0.3rem 0 1rem;
 }
+
+/* -- left: unpromoted (machine-extracted) Requirements ---------------------
+   Same signal as .finding-card's left border below - this is
+   machine-produced, provisional-by-nature content too, and previously had
+   no visual distinction from ordinary governed text at all (visual
+   language review finding: the one concrete gap on a near-empty Project
+   Home). Lighter-weight than a full card since this sits inside an
+   already-nested accordion, not the main Artifact Workspace list - same
+   signal, proportionate to context. */
+.unpromoted-requirement {
+    border-left: 3px solid var(--machine-blue);
+    padding: 0.3rem 0 0.3rem 0.6rem;
+    margin: 0.3rem 0;
+}
+.unpromoted-requirement small { color: var(--machine-blue); }
 
 /* -- right: artifact workspace -------------------------------------------- */
 .finding-list { display: grid; gap: 1rem; }
