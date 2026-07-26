@@ -41,6 +41,11 @@
             </div>
         </a>
         <a class="project-card-secondary" href="{{ url_for('portal.dashboard', project_id=p.project_id) }}">Dashboard</a>
+        {% if is_admin %}
+        <form method="post" action="{{ url_for('portal.delete_project', project_id=p.project_id) }}">
+            <button type="submit" class="link-button">Delete</button>
+        </form>
+        {% endif %}
     </li>
     {% endfor %}
 </ul>

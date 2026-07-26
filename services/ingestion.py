@@ -17,6 +17,7 @@ from werkzeug.datastructures import FileStorage
 from werkzeug.utils import secure_filename
 
 from services.bhive_parser import BHiveParser, ParsedDocument, ParserError
+from services.case_workspace import CaseWorkspaceStore
 from services.governance import GovernanceLog
 from services.requirements_registry import RequirementsRegistry
 
@@ -41,6 +42,39 @@ def get_governance_log(app: Flask) -> GovernanceLog:
     return GovernanceLog(app.config["REGISTRY_STORE_PATH"])
 
 
+def _display_name_of(document: ParsedDocument, store: CaseWorkspaceStore) -> str:
+    """
+    A project's effective visible identity - its own display_title once a
+    human has set one (see CaseWorkspaceStore.set_project_details), else
+    the filename it was ingested under. A workspace file that predates the
+    current schema must not block every future upload; degrades to the
+    plain filename for that one project rather than raising.
+    """
+    try:
+        workspace = store.get(document.project_id)
+    except TypeError:
+        workspace = None
+    return (workspace.display_title if workspace else None) or document.filename
+
+
+def _reject_if_name_taken(app: Flask, filename: str) -> None:
+    """
+    Project Entry Rule: entry names must be unique. Checked against every
+    existing project's current effective display name (not just raw
+    filenames) so a name collision is caught even if the earlier project
+    was later given a custom display_title matching the new upload.
+    """
+    registry = get_registry(app)
+    store = CaseWorkspaceStore(app.config["REGISTRY_STORE_PATH"])
+    existing_names = {
+        _display_name_of(document, store)
+        for pid in registry.list_ids()
+        if (document := registry.get(pid)) is not None
+    }
+    if filename in existing_names:
+        raise UploadError("Entry names must be unique.")
+
+
 def ingest_upload(
     file_storage: Optional[FileStorage],
     app: Flask,
@@ -58,6 +92,8 @@ def ingest_upload(
         raise UploadError(
             f"Unsupported file type '{ext}'. Allowed types: {', '.join(sorted(allowed))}."
         )
+
+    _reject_if_name_taken(app, filename)
 
     raw_bytes = file_storage.read()
     parser = BHiveParser(

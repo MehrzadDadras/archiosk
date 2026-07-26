@@ -3,7 +3,10 @@ HTML pages: marketing home, upload form, and the Agility Engine dashboard.
 """
 from __future__ import annotations
 
-from flask import Blueprint, abort, current_app, jsonify, redirect, render_template, request, url_for
+import shutil
+from pathlib import Path
+
+from flask import Blueprint, abort, current_app, flash, jsonify, redirect, render_template, request, url_for
 
 from services.auth import admin_required, check_credentials, is_authenticated, log_in, log_out, login_required
 from services.bhive_parser import REQUIREMENT_CATEGORIES
@@ -233,6 +236,56 @@ def projects_list():
     projects.sort(key=_PROJECT_SORT_KEYS[sort], reverse=(sort != 'name'))
 
     return render_template('projects.html', projects=projects, query=query, sort=sort)
+
+
+def _delete_project_files(app, project_id: str) -> None:
+    """
+    Permanently removes every stored artifact for a project - the legacy
+    RequirementsRegistry record, its GovernanceLog, its CaseWorkspaceStore
+    workspace, and any project-scoped uploaded files. Deliberately NOT a
+    governed operation: no Supersession, no Snapshot, nothing preserved -
+    this exists for removing unwanted/duplicate/test project entries
+    (Project Entry Rule), never for real project history, which is why it
+    carries its own honest confirmation wording rather than reusing the
+    Approval Gate's "this changes governed project state" framing (this
+    is the opposite of a governed state change - it's erasure).
+    """
+    store_path = Path(app.config["REGISTRY_STORE_PATH"])
+    for suffix in (".json", ".governance.jsonl", ".workspace.json"):
+        (store_path / f"{project_id}{suffix}").unlink(missing_ok=True)
+
+    sources_dir = store_path / "workspace_sources" / project_id
+    if sources_dir.exists():
+        shutil.rmtree(sources_dir)
+
+
+@portal_bp.route('/projects/<project_id>/delete', methods=['POST'])
+@admin_required
+def delete_project(project_id):
+    """
+    Same confirm-gate idiom already used for consequential actions
+    elsewhere in this app (submit once with no `confirm` value -> shown
+    the gate; submit again with confirm=yes/no -> acted on) - not a new
+    pattern, just this route's own honestly-worded version of it, since
+    deletion is not a governed action the existing Approval Gate wording
+    could accurately describe.
+    """
+    document = get_registry(current_app).get(project_id)
+    if document is None:
+        abort(404)
+
+    confirm = request.form.get('confirm')
+    if confirm == 'no':
+        flash('Deletion cancelled - no change was made.', 'success')
+        return redirect(url_for('portal.projects_list'))
+    if confirm != 'yes':
+        return render_template(
+            'confirm_delete_project.html', project_id=project_id, filename=document.filename,
+        )
+
+    _delete_project_files(current_app, project_id)
+    flash(f'Project "{document.filename}" permanently deleted.', 'success')
+    return redirect(url_for('portal.projects_list'))
 
 
 @portal_bp.route('/search')
