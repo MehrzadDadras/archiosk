@@ -27,14 +27,6 @@
             <span class="lifecycle-stage{% if stage in ['RFP'] %} current{% endif %}">{{ stage }}</span>
             {% endfor %}
         </div>
-        <p class="workspace-pane-label" style="margin-top:-0.6rem;margin-bottom:1.2rem;color:var(--text-secondary);font-family:var(--font-body);text-transform:none;letter-spacing:normal;font-size:0.85rem;">
-            This Project began as an RFQ/RFP ingestion. Extract &rarr; Segment &rarr; Classify &rarr; Assemble already ran
-            as this Project's first Analysis, producing the {{ document.requirements|length }} requirement(s) as
-            governed Sources of truth. The same Project / Case / Source / Artifact / Analysis / Finding / Review /
-            Apply machinery continues into later Cases (drawing review, RFIs, construction) as the Project moves
-            forward — folders and filenames are views; this record is the canonical identity.
-        </p>
-
         <details class="accordion-section" data-accordion-group="left" data-accordion-id="accepted-knowledge">
             <summary class="accordion-summary">
                 <span class="accordion-summary-text">Accepted Knowledge ({{ accepted_knowledge|length }})</span>

@@ -266,49 +266,34 @@ html.nav-expanded .side-rail-brand-label { max-width: 160px; opacity: 1; }
 }
 html.nav-expanded .side-rail-label { max-width: 160px; opacity: 1; }
 
-/* Same reasoning again, adapted for a block (not single-line) reveal:
-   max-height/opacity instead of display:none<->block, so this panel's
-   appearance - and the consequent reflow of .side-rail-bottom below it
-   (margin-top: auto) - happens smoothly over the same 0.15s instead of
-   snapping .side-rail-bottom into a new position in one frame. */
-.side-rail-context {
-    max-height: 0;
-    opacity: 0;
-    padding: 0 0.9rem;
-    margin-top: 0;
-    border-top: 1px solid transparent;
-    overflow: hidden;
-    transition: max-height 0.15s ease, opacity 0.15s ease, padding 0.15s ease,
-        margin-top 0.15s ease, border-color 0.15s ease;
-}
-html.nav-expanded .side-rail-context {
-    max-height: 480px;
-    opacity: 1;
-    padding: 0.9rem 0.9rem 0.4rem;
-    margin-top: 0.4rem;
-    border-top-color: var(--border);
-    overflow-y: auto;
-}
-.side-rail-context-label {
-    font-family: var(--font-body);
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    font-size: 0.8rem;
+/* Category node: expand/collapse only, via native <details> - no JS, same
+   mechanism already used for every accordion section elsewhere. Object
+   nodes (individual projects) inside are indented to read as children.
+   The whole item list hides while the rail is collapsed rather than
+   showing empty rows with nothing legible in them - same reveal
+   discipline as every other sidebar label. */
+.side-rail-tree-summary { cursor: pointer; list-style: none; }
+.side-rail-tree-summary::-webkit-details-marker { display: none; }
+.side-rail-tree-summary::after {
+    content: "\25B8";
+    display: none;
+    margin-left: auto;
     color: var(--text-metadata);
-    margin: 0.7rem 0 0.35rem;
+    font-size: 0.7rem;
+    flex-shrink: 0;
+    transition: transform 0.12s ease;
 }
-.side-rail-context-label:first-child { margin-top: 0; }
-.side-rail-context-value { font-size: 0.88rem; margin: 0 0 0.6rem; word-break: break-word; }
-.side-rail-recent { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.35rem; }
-.side-rail-recent a {
-    font-size: 0.88rem;
-    color: var(--text-primary);
-    display: block;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+html.nav-expanded .side-rail-tree-summary::after { display: inline-block; }
+.side-rail-tree[open] > .side-rail-tree-summary::after { transform: rotate(90deg); }
+
+.side-rail-tree-items {
+    display: none;
+    flex-direction: column;
+    gap: 0.1rem;
+    padding: 0.15rem 0 0.3rem;
 }
-.side-rail-recent a:hover { color: var(--machine-blue); }
+html.nav-expanded .side-rail-tree-items { display: flex; }
+.side-rail-tree-item { padding-left: 2.1rem; }
 
 .side-rail-bottom {
     margin-top: auto;

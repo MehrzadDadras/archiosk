@@ -17,9 +17,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from services.bhive_parser import ParsedDocument, RequirementItem
-from services.case_workspace import ANALYSIS_TRIGGER_USER_INITIATED, AnalysisTrigger, CaseWorkspaceStore
-from services.governance import GovernanceLog
+from services.bhive_parser import ParsedDocument
 from services.requirements_registry import RequirementsRegistry
 
 
@@ -62,48 +60,33 @@ class HomeNavigationShellTests(unittest.TestCase):
         self.assertIn("What project are we working on?", body)
         self.assertIn("New Project", body)
         self.assertIn("Open Project", body)
-        self.assertIn("No projects yet.", body)
 
-    def test_authenticated_home_lists_recent_project_with_governed_counts(self):
+    def test_home_no_longer_duplicates_the_project_selector(self):
+        # 5-minute tree-prototype pass: the sidebar's Projects tree is now
+        # the one canonical project selector - Home's own separate
+        # "Recent Projects" card list (and its governed-count computation)
+        # is gone, not just visually hidden. That counting logic is still
+        # covered where it's still rendered - the Projects directory
+        # page - see tests/test_projects_directory_redesign.py.
         project_id = "home-nav-test-project"
-        document = ParsedDocument(
-            project_id=project_id,
-            filename="rfp.md",
-            ingested_at="2026-01-01T00:00:00+00:00",
-            requirements=[
-                RequirementItem(id="r1", text="x", category="other", confidence=0.5, source_line=1)
-            ],
-        )
-        RequirementsRegistry(self.tmp_dir).save(document)
-
-        # Promote the candidate into a governed Requirement -- the home
-        # page's "requirements" count reflects governed state, not raw
-        # extraction candidates, so this is required for a non-zero count.
-        store = CaseWorkspaceStore(self.tmp_dir)
-        workspace = store.get_or_create(project_id)
-        source = store.add_source(
-            workspace, name="rfp.md", file_path="/tmp/rfp.md",
-            kind="owner_project_requirements",
-        )
-        case = store.create_case(workspace, title="Review", objective="Promote extracted items")
-        store.promote_requirement_item(
-            workspace,
-            case_id=case["id"],
-            source_id=source["id"],
-            requirement_item={"id": "r1", "text": "x", "category": "other", "confidence": 0.5, "source_line": 1},
-            actor="tester",
-            trigger=AnalysisTrigger(trigger_type=ANALYSIS_TRIGGER_USER_INITIATED, triggered_by_actor="tester"),
-            governance_log=GovernanceLog(self.tmp_dir),
-        )
+        RequirementsRegistry(self.tmp_dir).save(ParsedDocument(
+            project_id=project_id, filename="rfp.md", ingested_at="2026-01-01T00:00:00+00:00",
+        ))
 
         client = self.flask_app.test_client()
         self._login(client)
         response = client.get("/")
         body = response.get_data(as_text=True)
 
-        self.assertIn("rfp.md", body)
-        self.assertIn("1 requirement(s)", body)
-        self.assertNotIn("0 requirement(s)", body)
+        self.assertNotIn("entry-recent", body)
+        # Checked as the rendered label pattern, not a bare substring,
+        # since this app's own explanatory comments legitimately mention
+        # the old "Recent Projects" block by name.
+        self.assertNotIn('side-rail-context-label">Recent Projects<', body)
+        self.assertNotIn('class="workspace-pane-label">Recent Projects<', body)
+        # The project still appears exactly once - as an object node in
+        # the sidebar's Projects tree, not a second time in page content.
+        self.assertEqual(body.count("rfp.md"), 1)
 
     def test_nav_rail_present_with_collapsed_default_and_toggle(self):
         client = self.flask_app.test_client()

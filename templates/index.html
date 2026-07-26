@@ -14,41 +14,7 @@
 
     {% if authenticated %}
     <div class="entry-actions">
-        {% if is_admin %}
-        <a class="btn btn-primary" href="{{ url_for('portal.upload') }}">New Project</a>
-        {% endif %}
-        <a class="btn btn-ghost" href="{{ url_for('portal.projects_list') }}">Open Project</a>
-    </div>
-
-    <div class="entry-recent">
-        <p class="workspace-pane-label">Recent Projects</p>
-        {% if recent_projects %}
-        <ul class="project-row-list">
-            {% for p in recent_projects %}
-            <li class="project-row">
-                <a class="project-row-link" href="{{ url_for('workspace.show_workspace', project_id=p.project_id) }}">
-                    <span class="project-row-name">{{ p.filename }}</span>
-                    <span class="project-row-meta">
-                        {{ p.requirements_count }} requirement(s)
-                        &middot; {{ p.open_rfi_count }} open RFI(s)
-                        &middot; last activity {{ p.last_activity }}
-                        {% if p.unresolved_conflict_count %}
-                        &middot; <span class="entry-flag entry-flag-red">&#128308; {{ p.unresolved_conflict_count }} unresolved</span>
-                        {% endif %}
-                        {% if p.pending_attention_count %}
-                        &middot; <span class="entry-flag entry-flag-amber">&#128992; {{ p.pending_attention_count }} pending attention</span>
-                        {% endif %}
-                    </span>
-                </a>
-            </li>
-            {% endfor %}
-        </ul>
-        {% else %}
-        <p class="entry-empty">
-            No projects yet.
-            {% if is_admin %}<a href="{{ url_for('portal.upload') }}">Create the first one</a>.{% else %}Ask an administrator to ingest one.{% endif %}
-        </p>
-        {% endif %}
+        <a class="btn btn-primary" href="{{ url_for('portal.projects_list') }}">Open Project</a>
     </div>
     {% else %}
     <div class="entry-actions">

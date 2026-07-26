@@ -117,16 +117,19 @@ def _register_template_filters(app: Flask) -> None:
     app.jinja_env.filters["humanize"] = humanize_timestamp
 
 
-def _nav_recent_projects(app: Flask, limit: int = 5) -> list:
+def _nav_recent_projects(app: Flask, limit: int = 15) -> list:
     """
-    Cheap, read-only project list for the navigation rail's "Recent
-    Projects" context (id + filename only - no per-project Case Workspace
-    load). Reuses the same RequirementsRegistry already used by
+    Cheap, read-only project list feeding the sidebar's "Projects" tree
+    node (id + filename only - no per-project Case Workspace load).
+    Reuses the same RequirementsRegistry already used by
     routes/portal.py's project directory; no new storage or domain
     behavior. Runs on every authenticated page render (the rail is part
     of the shared shell), so deliberately stays this minimal - the
     richer, indicator-bearing recent-project list on the home page itself
-    is computed separately, only for that one page.
+    is computed separately, only for that one page. Limit bumped from the
+    original 5 (a "recent projects" cap) since this list is now the
+    sidebar's one canonical project selector, not just a recency
+    convenience - still capped, not unbounded, for a 5-minute pass.
     """
     from services.ingestion import get_registry
 

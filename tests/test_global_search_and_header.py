@@ -156,6 +156,81 @@ class HeaderAndBrandTests(unittest.TestCase):
         self.assertNotIn(".side-rail-context { display: none;", css)
 
 
+class ProjectsTreeTests(unittest.TestCase):
+    """
+    5-minute cleanup pass: Projects becomes an expandable tree node in
+    the sidebar (category node - expand/collapse only, never navigates)
+    with individual projects as object nodes (activate on click). The
+    old separate "Current Project" / "Recent Projects" sidebar blocks
+    and the RFQ/RFP explanatory paragraph are gone.
+    """
+
+    def setUp(self):
+        import app as app_module
+        from services.bhive_parser import ParsedDocument
+        from services.requirements_registry import RequirementsRegistry
+
+        self.tmp_dir = Path(tempfile.mkdtemp(prefix="beehive_test_tree_"))
+        self.flask_app = app_module.create_app("testing")
+        self.flask_app.config["REGISTRY_STORE_PATH"] = str(self.tmp_dir)
+
+        registry = RequirementsRegistry(self.tmp_dir)
+        registry.save(ParsedDocument(project_id="alpha", filename="Alpha.pdf", ingested_at="2026-01-01T00:00:00+00:00"))
+        registry.save(ParsedDocument(project_id="beta", filename="Beta.pdf", ingested_at="2026-02-01T00:00:00+00:00"))
+
+        self.client = self.flask_app.test_client()
+        with self.client.session_transaction() as sess:
+            sess["user_id"] = 1
+            sess["username"] = "tester"
+            sess["role"] = "admin"
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp_dir, ignore_errors=True)
+
+    def test_projects_summary_is_not_a_link_to_the_projects_page(self):
+        # The category node itself must never navigate - only expand or
+        # collapse. Its <summary> carries no href to /projects.
+        body = self.client.get("/").get_data(as_text=True)
+        import re
+        match = re.search(r'<summary class="side-rail-link side-rail-tree-summary">.*?</summary>', body, re.S)
+        self.assertIsNotNone(match)
+        self.assertNotIn("href=", match.group(0))
+
+    def test_individual_projects_are_real_links_into_their_workspace(self):
+        body = self.client.get("/").get_data(as_text=True)
+        self.assertIn('href="/projects/alpha/workspace"', body)
+        self.assertIn('href="/projects/beta/workspace"', body)
+        self.assertIn("Alpha.pdf", body)
+        self.assertIn("Beta.pdf", body)
+
+    def test_active_project_highlighted_in_tree_not_via_separate_block(self):
+        body = self.client.get("/projects/alpha/workspace").get_data(as_text=True)
+        self.assertIn("side-rail-tree-item active", body)
+        # The old standalone "Current Project" orientation block is gone -
+        # the tree's own highlighting is the only signal now. Checked as
+        # the rendered label pattern, not a bare substring, since this
+        # file's own explanatory comments legitimately mention the old
+        # block by name.
+        self.assertNotIn('side-rail-context-label">Current Project<', body)
+
+    def test_recent_projects_block_removed_from_sidebar(self):
+        body = self.client.get("/").get_data(as_text=True)
+        self.assertNotIn("side-rail-context", body)
+        self.assertNotIn("side-rail-recent", body)
+
+    def test_new_project_appears_exactly_once_in_sidebar_tree(self):
+        body = self.client.get("/").get_data(as_text=True)
+        self.assertEqual(body.count(">New Project<"), 1)
+
+    def test_projects_directory_header_no_longer_has_its_own_new_project_button(self):
+        body = self.client.get("/projects").get_data(as_text=True)
+        self.assertNotIn('<a class="btn btn-primary" href="/upload">New Project</a>', body)
+
+    def test_rfq_explanatory_paragraph_removed_from_case_workspace(self):
+        body = self.client.get("/projects/alpha/workspace").get_data(as_text=True)
+        self.assertNotIn("This Project began as an RFQ/RFP ingestion", body)
+
+
 class TypographyCorrectionTests(unittest.TestCase):
     """
     Typography correction pass: the Archiosk wordmark is restored to its

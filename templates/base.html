@@ -73,37 +73,34 @@
                     <span class="side-rail-label">Home</span>
                 </a>
                 {% if authenticated %}
-                <a class="side-rail-link{% if request.path == url_for('portal.projects_list') %} active{% endif %}" href="{{ url_for('portal.projects_list') }}">
-                    <span class="side-rail-icon" aria-hidden="true">&#9638;</span>
-                    <span class="side-rail-label">Projects</span>
-                </a>
-                {% if is_admin %}
-                <a class="side-rail-link{% if request.path == url_for('portal.upload') %} active{% endif %}" href="{{ url_for('portal.upload') }}">
-                    <span class="side-rail-icon" aria-hidden="true">+</span>
-                    <span class="side-rail-label">New Project</span>
-                </a>
-                {% endif %}
-                {% endif %}
-            </div>
-
-            {% if authenticated %}
-            <div class="side-rail-context">
-                {% if project_id %}
-                <p class="side-rail-context-label">Current Project</p>
-                <p class="side-rail-context-value mono">
-                    <a href="{{ url_for('workspace.show_workspace', project_id=project_id) }}">{{ project_id }}</a>
-                </p>
-                {% endif %}
-                {% if nav_recent_projects %}
-                <p class="side-rail-context-label">Recent Projects</p>
-                <ul class="side-rail-recent">
-                    {% for p in nav_recent_projects %}
-                    <li><a href="{{ url_for('workspace.show_workspace', project_id=p.project_id) }}">{{ p.filename }}</a></li>
-                    {% endfor %}
-                </ul>
+                <!-- Category node: expand/collapse only, never navigates. Object
+                     nodes (individual projects) below it are the only things
+                     that activate a project - this is now the one canonical
+                     project selector; the old separate "Current Project" /
+                     "Recent Projects" blocks are gone, and the active project
+                     is shown by highlighting its own row here instead. -->
+                <details class="side-rail-tree" open>
+                    <summary class="side-rail-link side-rail-tree-summary">
+                        <span class="side-rail-icon" aria-hidden="true">&#9638;</span>
+                        <span class="side-rail-label">Projects</span>
+                    </summary>
+                    <div class="side-rail-tree-items">
+                        {% for p in nav_recent_projects %}
+                        <a class="side-rail-link side-rail-tree-item{% if project_id == p.project_id %} active{% endif %}"
+                           href="{{ url_for('workspace.show_workspace', project_id=p.project_id) }}">
+                            <span class="side-rail-label">{{ p.filename }}</span>
+                        </a>
+                        {% endfor %}
+                        {% if is_admin %}
+                        <a class="side-rail-link side-rail-tree-item" href="{{ url_for('portal.upload') }}">
+                            <span class="side-rail-icon" aria-hidden="true">+</span>
+                            <span class="side-rail-label">New Project</span>
+                        </a>
+                        {% endif %}
+                    </div>
+                </details>
                 {% endif %}
             </div>
-            {% endif %}
 
             <div class="side-rail-bottom">
                 {% if authenticated %}
