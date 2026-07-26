@@ -22,8 +22,17 @@
    these same semantic token NAMES with different values - no page
    should ever invent its own shade.
 
-   Type: Space Grotesk (display), IBM Plex Sans (body),
-         IBM Plex Mono (data / labels / mono details)
+   Type: Arial Nova Condensed (display + body) - condensed is the
+         visual character; light weight where text is large enough to
+         stay comfortably readable at that weight, regular weight
+         everywhere else (readability overrides the weight preference).
+         IBM Plex Mono stays the mono/technical-register font - Arial
+         Nova has no monospace face, and the two-register distinction
+         (prose vs. identifiers/paths/logs/technical state) is
+         load-bearing elsewhere in this file.
+         Arial Nova ships with Windows 11 / Microsoft 365; Arial Narrow
+         and Arial are the condensed-then-plain fallback for systems
+         without it.
    ============================================================ */
 :root {
     /* -- material scale (warm architectural neutrals) -------------------- */
@@ -59,8 +68,8 @@
     --failure-red: #8C2E22;
     --failure-red-tint: #F3DAD4;
 
-    --font-display: "Space Grotesk", sans-serif;
-    --font-body: "IBM Plex Sans", sans-serif;
+    --font-display: "Arial Nova Cond", "Arial Narrow", Arial, sans-serif;
+    --font-body: "Arial Nova Cond", "Arial Narrow", Arial, sans-serif;
     --font-mono: "IBM Plex Mono", monospace;
 }
 
@@ -72,8 +81,20 @@ html, body {
     background: var(--canvas);
     color: var(--text-primary);
     font-family: var(--font-body);
+    /* Supplementary hint alongside the explicit "Cond" family names above -
+       harmless no-op if unsupported, picks up the condensed face directly
+       if the installed Arial Nova exposes width as a variable-font axis
+       rather than (or in addition to) separate named families. */
+    font-stretch: condensed;
     line-height: 1.55;
 }
+
+/* Light where large text stays comfortably readable at that weight;
+   regular weight is the default everywhere else - see the large-heading
+   overrides below (hero/entry/gateway/dashboard/project-home h1s) for
+   where 300 actually gets used. Never bold-by-default the way the
+   browser UA stylesheet would. */
+h1, h2, h3, h4, h5, h6 { font-weight: 500; }
 
 a { color: var(--machine-blue); text-decoration: none; }
 a:hover { text-decoration: underline; }
@@ -175,7 +196,7 @@ html.nav-expanded .side-rail { width: 240px; }
     align-items: baseline;
     gap: 0.4rem;
     font-family: var(--font-display);
-    font-weight: 700;
+    font-weight: 400;
     font-size: 1.1rem;
     color: var(--text-primary);
     white-space: nowrap;
@@ -410,7 +431,7 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
     font-size: 3rem;
     line-height: 1.12;
     margin: 0 0 1.5rem;
-    font-weight: 600;
+    font-weight: 300;
 }
 .hero-copy { color: var(--text-secondary); font-size: 1.05rem; max-width: 60ch; }
 .hero-actions { margin-top: 2.2rem; display: flex; gap: 1rem; }
@@ -458,7 +479,7 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
     font-size: 1.9rem;
     line-height: 1.2;
     margin: 0 0 0.9rem;
-    font-weight: 600;
+    font-weight: 300;
 }
 .entry-copy { color: var(--text-secondary); font-size: 0.95rem; max-width: 56ch; margin: 0 0 1.8rem; }
 .entry-actions { display: flex; gap: 1rem; margin-top: 1.3rem; margin-bottom: 2.6rem; }
@@ -619,7 +640,7 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
     flex-wrap: wrap;
     gap: 1.5rem;
 }
-.dash-head h1 { font-family: var(--font-display); font-size: 1.8rem; margin: 0.3rem 0 0; }
+.dash-head h1 { font-family: var(--font-display); font-size: 1.8rem; margin: 0.3rem 0 0; font-weight: 300; }
 .mono { font-family: var(--font-mono); color: var(--machine-blue); font-size: 1.1rem; }
 .form-error { color: var(--failure-red); }
 .dash-meta { display: flex; gap: 2.2rem; }
@@ -775,7 +796,7 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
     font-size: 1.6rem;
     font-weight: 700;
 }
-.gateway-brand h1 { font-family: var(--font-display); font-size: 1.8rem; font-weight: 600; margin: 0; color: var(--text-primary); }
+.gateway-brand h1 { font-family: var(--font-display); font-size: 1.8rem; font-weight: 300; margin: 0; color: var(--text-primary); }
 .gateway-subtitle { margin: 0.3rem 0 0; color: var(--text-secondary); font-size: 0.82rem; }
 .gateway-divider { height: 1px; margin: 0 2rem; background: var(--border); }
 .gateway-section { padding: 1.6rem 2rem 2rem; }
@@ -888,7 +909,7 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
 }
 
 .error-page { padding: 6rem 0; text-align: center; }
-.error-page h1 { font-family: var(--font-display); font-size: 2.2rem; }
+.error-page h1 { font-family: var(--font-display); font-size: 2.2rem; font-weight: 300; }
 
 /* -- flash messages (post/redirect/get feedback) --------------------------- */
 .flash-stack { padding-top: 1.5rem; display: grid; gap: 0.6rem; }
@@ -1154,6 +1175,7 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
     font-size: 1.5rem;
     margin: 0;
     color: var(--text-primary);
+    font-weight: 300;
 }
 .project-home-subtitle { color: var(--text-secondary); font-size: 0.85rem; margin: 0.35rem 0 0; max-width: 56ch; }
 
