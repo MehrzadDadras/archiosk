@@ -38,13 +38,12 @@ class HomeNavigationShellTests(unittest.TestCase):
             sess["username"] = "tester"
             sess["role"] = role
 
-    def test_anonymous_home_shows_project_question_and_sign_in_only(self):
+    def test_anonymous_home_shows_sign_in_only(self):
         client = self.flask_app.test_client()
         response = client.get("/")
         body = response.get_data(as_text=True)
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn("What project are we working on?", body)
         self.assertIn("Sign in to get started", body)
         self.assertNotIn("New Project", body)
         self.assertNotIn("Open Project", body)
@@ -57,7 +56,6 @@ class HomeNavigationShellTests(unittest.TestCase):
         body = response.get_data(as_text=True)
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn("What project are we working on?", body)
         self.assertIn("New Project", body)
         self.assertIn("Open Project", body)
 

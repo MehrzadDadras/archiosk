@@ -463,13 +463,6 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
 
 /* -- home / project entry (deliberately quiet, not a marketing hero) ---- */
 .entry { padding: 3.5rem 0 2.5rem; max-width: 720px; }
-.entry h1 {
-    font-family: var(--font-display);
-    font-size: 1.9rem;
-    line-height: 1.2;
-    margin: 0 0 0.9rem;
-    font-weight: 300;
-}
 .entry-copy { color: var(--text-secondary); font-size: 0.95rem; max-width: 56ch; margin: 0 0 1.8rem; }
 .entry-actions { display: flex; gap: 1rem; margin-top: 1.3rem; margin-bottom: 2.6rem; }
 
