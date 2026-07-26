@@ -38,26 +38,47 @@ _DEMO_REQUIREMENTS = [
 ]
 
 
+def _project_summary(document, workspace, events) -> dict:
+    """
+    Shared, read-only project summary used by both the home page's
+    recent-projects list and the Projects directory - one real, already-
+    governed indicator set, never a fabricated project-health score:
+    - requirements_count: len(workspace.requirements) - existing, unmodified.
+    - open_rfi_count: RFIDrafts not yet issued - existing status field.
+    - pending_attention_count (amber): Attentions still pending response.
+    - unresolved_conflict_count (red): the legacy consistency-check's own
+      flagged cross-requirement contradictions (document.consistency_flags)
+      - the one real "conflict" signal that already exists, not invented.
+    - last_activity: the most recent GovernanceLog event's timestamp where
+      one exists, else the document's own ingested_at ("created_at").
+    No new domain/store methods were added for this - every value above
+    comes from an existing, unmodified public read (RequirementsRegistry,
+    CaseWorkspaceStore.get, GovernanceLog.read).
+    """
+    return {
+        "project_id": document.project_id,
+        "filename": document.filename,
+        "created_at": document.ingested_at,
+        "last_activity": events[-1].created_at if events else document.ingested_at,
+        "requirements_count": len(workspace.requirements) if workspace else 0,
+        "open_rfi_count": (
+            len([d for d in workspace.rfi_drafts if d["status"] != "issued"]) if workspace else 0
+        ),
+        "pending_attention_count": (
+            len([a for a in workspace.attentions if a["status"] == "pending"]) if workspace else 0
+        ),
+        "unresolved_conflict_count": len(document.consistency_flags) if document.consistency_checked else 0,
+    }
+
+
 @portal_bp.route('/')
 def index():
     """
     Project-first entry point: "what project are we working on," not a
     marketing page and not "how can I help you today." Anonymous visitors
     see the identity line + sign-in only. Authenticated visitors see a
-    small, restrained recent-projects list with real, already-governed
-    indicators - never a fabricated project-health score:
-    - requirements: len(workspace.requirements) - existing, unmodified.
-    - open_rfi_count: RFIDrafts not yet issued - existing status field.
-    - pending_attention_count (amber): Attentions still pending response.
-    - unresolved_conflict_count (red): the legacy consistency-check's own
-      flagged cross-requirement contradictions (document.consistency_flags)
-      - the one real "conflict" signal that already exists, not invented
-        for this page.
-    - last_activity: the most recent GovernanceLog event's timestamp where
-      one exists, else the document's own ingested_at.
-    No new domain/store methods were added for this - every value above
-    comes from an existing, unmodified public read (RequirementsRegistry,
-    CaseWorkspaceStore.get, GovernanceLog.read).
+    small, restrained recent-projects list - see _project_summary for the
+    indicator set.
     """
     if not is_authenticated():
         return render_template('index.html', recent_projects=[])
@@ -69,23 +90,10 @@ def index():
     documents = [d for pid in registry.list_ids() if (d := registry.get(pid)) is not None]
     documents.sort(key=lambda d: d.ingested_at, reverse=True)
 
-    recent_projects = []
-    for document in documents[:6]:
-        workspace = store.get(document.project_id)
-        events = governance_log.read(document.project_id)
-        recent_projects.append({
-            "project_id": document.project_id,
-            "filename": document.filename,
-            "last_activity": events[-1].created_at if events else document.ingested_at,
-            "requirements_count": len(workspace.requirements) if workspace else 0,
-            "open_rfi_count": (
-                len([d for d in workspace.rfi_drafts if d["status"] != "issued"]) if workspace else 0
-            ),
-            "pending_attention_count": (
-                len([a for a in workspace.attentions if a["status"] == "pending"]) if workspace else 0
-            ),
-            "unresolved_conflict_count": len(document.consistency_flags) if document.consistency_checked else 0,
-        })
+    recent_projects = [
+        _project_summary(document, store.get(document.project_id), governance_log.read(document.project_id))
+        for document in documents[:6]
+    ]
 
     return render_template('index.html', recent_projects=recent_projects)
 
@@ -159,6 +167,13 @@ def gateway():
     return render_template('gateway.html')
 
 
+_PROJECT_SORT_KEYS = {
+    "last_updated": lambda p: p["last_activity"],
+    "name": lambda p: p["filename"].lower(),
+    "created": lambda p: p["created_at"],
+}
+
+
 @portal_bp.route('/projects')
 @login_required
 def projects_list():
@@ -167,16 +182,37 @@ def projects_list():
     project_id or having bookmarked its dashboard URL. Before this route
     existed, the only way back into a project was the redirect landed on
     right after uploading it -- there was no way to "reopen tomorrow"
-    through the UI at all."""
+    through the UI at all.
+
+    Search and sort are both server-side over fields the application
+    already has (filename/project_id, and the same last-updated/created
+    timestamps _project_summary already computes for the home page) - no
+    new metadata or search index was introduced.
+    """
     registry = get_registry(current_app)
-    projects = []
-    for project_id in registry.list_ids():
-        document = registry.get(project_id)
-        if document is None:
-            continue
-        projects.append(document)
-    projects.sort(key=lambda d: d.ingested_at, reverse=True)
-    return render_template('projects.html', projects=projects)
+    store = CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"])
+    governance_log = get_governance_log(current_app)
+
+    query = request.args.get('q', '').strip()
+    sort = request.args.get('sort', 'last_updated')
+    if sort not in _PROJECT_SORT_KEYS:
+        sort = 'last_updated'
+
+    documents = [d for pid in registry.list_ids() if (d := registry.get(pid)) is not None]
+    if query:
+        needle = query.lower()
+        documents = [
+            d for d in documents
+            if needle in d.filename.lower() or needle in d.project_id.lower()
+        ]
+
+    projects = [
+        _project_summary(document, store.get(document.project_id), governance_log.read(document.project_id))
+        for document in documents
+    ]
+    projects.sort(key=_PROJECT_SORT_KEYS[sort], reverse=(sort != 'name'))
+
+    return render_template('projects.html', projects=projects, query=query, sort=sort)
 
 
 @portal_bp.route('/upload', methods=['GET', 'POST'])

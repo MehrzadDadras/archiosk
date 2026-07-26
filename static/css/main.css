@@ -315,6 +315,86 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
 .entry-flag-red { color: var(--workspace-red); }
 .entry-flag-amber { color: var(--amber); }
 
+/* -- projects directory (cards, not a developer table) ------------------- */
+.projects-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    margin: 1.6rem 0 2rem;
+    flex-wrap: wrap;
+}
+.projects-search { max-width: 280px; margin: 0; }
+.projects-sort {
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+    padding: 0.6rem 0.8rem;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    color: var(--parchment);
+}
+.project-card-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.7rem; }
+.project-card {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+}
+.project-card-link {
+    display: flex;
+    flex: 1;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 1rem 1.2rem;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    color: var(--parchment);
+    min-width: 0;
+}
+.project-card-link:hover { border-color: var(--teal); text-decoration: none; }
+.project-card-main {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    min-width: 0;
+}
+.project-card-name {
+    font-family: var(--font-display);
+    font-size: 1rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.project-card-id { font-size: 0.68rem; color: var(--muted); }
+.project-card-meta {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+.project-card-dot { color: var(--line); }
+.project-card-secondary {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    color: var(--muted);
+    padding: 0 1.2rem 0 0;
+    flex-shrink: 0;
+}
+.project-card-secondary:hover { color: var(--amber); }
+.projects-empty { color: var(--muted); font-size: 0.9rem; padding: 1.5rem 0; }
+.projects-empty .btn { margin-top: 1rem; }
+
+@media (max-width: 640px) {
+    .project-card-link { flex-direction: column; align-items: flex-start; }
+    .project-card { flex-direction: column; align-items: stretch; }
+    .project-card-secondary { padding: 0 1.2rem 0.9rem; }
+}
+
 /* -- chassis step cells (hexagon-clipped) -------------------------------- */
 .hive-strip { padding: 3rem 0 5rem; }
 .hive-strip h2 {

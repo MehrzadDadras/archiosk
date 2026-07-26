@@ -5,49 +5,65 @@
 {% block content %}
 <div class="dash-head" style="padding-top:2rem;">
     <div>
-        <p class="eyebrow">Every project ever ingested</p>
+        <p class="eyebrow">Governed project environments</p>
         <h1>Projects</h1>
     </div>
     {% if is_admin %}
-    <a class="btn btn-ghost" href="{{ url_for('portal.upload') }}">+ Ingest a new document</a>
+    <a class="btn btn-primary" href="{{ url_for('portal.upload') }}">New Project</a>
     {% endif %}
 </div>
 
+<form class="projects-controls" method="get" action="{{ url_for('portal.projects_list') }}">
+    <input
+        type="search" name="q" value="{{ query }}"
+        placeholder="Search projects" class="text-input projects-search" aria-label="Search projects">
+    <select name="sort" class="projects-sort" aria-label="Sort projects" onchange="this.form.submit()">
+        <option value="last_updated" {% if sort == 'last_updated' %}selected{% endif %}>Last Updated</option>
+        <option value="name" {% if sort == 'name' %}selected{% endif %}>Project Name</option>
+        <option value="created" {% if sort == 'created' %}selected{% endif %}>Created Date</option>
+    </select>
+    <button type="submit" class="btn btn-ghost">Search</button>
+</form>
+
 {% if projects %}
-<div class="table-scroll">
-    <table class="registry-table">
-        <thead>
-            <tr>
-                <th>Project</th>
-                <th>Ingested</th>
-                <th>Requirements</th>
-                <th>Milestones</th>
-                <th></th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for document in projects %}
-            <tr>
-                <td>
-                    {{ document.filename }}<br>
-                    <small class="mono" style="color:var(--muted);">{{ document.project_id }}</small>
-                </td>
-                <td>{{ document.ingested_at }}</td>
-                <td>{{ document.requirements|length }}</td>
-                <td>{{ document.milestones|length }}</td>
-                <td>
-                    <a class="btn btn-ghost" href="{{ url_for('portal.dashboard', project_id=document.project_id) }}">Dashboard</a>
-                    <a class="btn btn-ghost" href="{{ url_for('workspace.show_workspace', project_id=document.project_id) }}">Case Workspace &rarr;</a>
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-</div>
+<ul class="project-card-list">
+    {% for p in projects %}
+    <li class="project-card">
+        <a class="project-card-link" href="{{ url_for('workspace.show_workspace', project_id=p.project_id) }}">
+            <div class="project-card-main">
+                <span class="project-card-name">{{ p.filename }}</span>
+                <span class="project-card-id mono">{{ p.project_id }}</span>
+            </div>
+            <div class="project-card-meta">
+                <span>Updated {{ p.last_activity | humanize }}</span>
+                <span class="project-card-dot" aria-hidden="true">&middot;</span>
+                <span>{{ p.requirements_count }} requirement(s)</span>
+                {% if p.open_rfi_count %}
+                <span class="project-card-dot" aria-hidden="true">&middot;</span>
+                <span>{{ p.open_rfi_count }} open RFI(s)</span>
+                {% endif %}
+                {% if p.unresolved_conflict_count %}
+                <span class="entry-flag entry-flag-red">&#128308; {{ p.unresolved_conflict_count }} unresolved</span>
+                {% endif %}
+                {% if p.pending_attention_count %}
+                <span class="entry-flag entry-flag-amber">&#128992; {{ p.pending_attention_count }} needs evidence</span>
+                {% endif %}
+            </div>
+        </a>
+        <a class="project-card-secondary" href="{{ url_for('portal.dashboard', project_id=p.project_id) }}">Dashboard</a>
+    </li>
+    {% endfor %}
+</ul>
 {% else %}
-<p class="consistency-note">
-    No projects have been ingested yet.
-    {% if is_admin %}<a href="{{ url_for('portal.upload') }}">Ingest one now</a>.{% endif %}
-</p>
+<div class="projects-empty">
+    {% if query %}
+    <p>No projects match &ldquo;{{ query }}&rdquo;.</p>
+    {% else %}
+    <p>No projects yet.</p>
+    {% if is_admin %}
+    <a class="btn btn-primary" href="{{ url_for('portal.upload') }}">Create New Project</a>
+    {% endif %}
+    {% endif %}
+</div>
 {% endif %}
 {% endblock %}

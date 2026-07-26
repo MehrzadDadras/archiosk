@@ -28,6 +28,7 @@ def create_app(config_name: str | None = None) -> Flask:
     _register_blueprints(app)
     _register_error_handlers(app)
     _register_context_processors(app)
+    _register_template_filters(app)
 
     return app
 
@@ -108,6 +109,12 @@ def _register_context_processors(app: Flask) -> None:
             "is_admin": is_admin(),
             "nav_recent_projects": _nav_recent_projects(app) if is_authenticated() else [],
         }
+
+
+def _register_template_filters(app: Flask) -> None:
+    from services.formatting import humanize_timestamp
+
+    app.jinja_env.filters["humanize"] = humanize_timestamp
 
 
 def _nav_recent_projects(app: Flask, limit: int = 5) -> list:
