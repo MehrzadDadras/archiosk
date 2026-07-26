@@ -413,6 +413,14 @@ def show_workspace(project_id):
             "requirement": requirement,
             "adjudication_state": store.requirement_adjudication_state(workspace, requirement["id"]),
             "latest_adjudication": evidence["adjudication"],
+            # Full history, not just latest - the data was always
+            # non-destructively preserved (requirement_adjudications_for
+            # already existed, unused by any route or template); this was
+            # a rendering gap, not a storage gap. Surfacing it is the
+            # "what has this project already taught us to re-check" view:
+            # honest re-display of what actually happened, not a new
+            # inferred pattern/suggestion layered on top of it.
+            "adjudication_history": store.requirement_adjudications_for(workspace, requirement["id"]),
             "evidence_findings": evidence_findings_view,
             "evidence_relationships": evidence_relationships_view,
             # AcceptedKnowledge is deliberately project-wide, not Case-gated,
@@ -432,6 +440,13 @@ def show_workspace(project_id):
     for row in requirements_view:
         state = row["adjudication_state"]
         compliance_rollup[state] = compliance_rollup.get(state, 0) + 1
+
+    # Plain, structural fact, not a synthesized "pattern" or suggestion:
+    # how many governed Requirements have needed more than one
+    # Adjudication. Says nothing about outcomes or why - purely a count,
+    # answering "how much has this project already had to re-check its
+    # own conclusions" at a glance.
+    revisited_requirements_count = sum(1 for row in requirements_view if len(row["adjudication_history"]) > 1)
 
     # Recent provenance, visible from inside the workspace itself rather
     # than only on the separate legacy dashboard - most-recent-first,
@@ -512,6 +527,7 @@ def show_workspace(project_id):
         unpromoted_requirement_items=unpromoted_requirement_items,
         requirements_view=requirements_view,
         compliance_rollup=compliance_rollup,
+        revisited_requirements_count=revisited_requirements_count,
         adjudication_outcomes=REQUIREMENT_ADJUDICATION_OUTCOMES,
         recent_governance_events=recent_governance_events,
         threads_view=threads_view,

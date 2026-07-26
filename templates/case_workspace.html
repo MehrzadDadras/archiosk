@@ -199,6 +199,9 @@
             {% for state, count in compliance_rollup.items() %}
             <span class="review-state-badge">{{ count }} {{ state }}</span>{% if not loop.last %} {% endif %}
             {% endfor %}
+            {% if revisited_requirements_count %}
+            <br><small style="color:var(--text-metadata);">{{ revisited_requirements_count }} Requirement(s) have needed more than one Adjudication — this project has already had to revisit its own conclusion at least once.</small>
+            {% endif %}
             <br><a href="#governed-requirements">View Requirements &darr;</a>
         </p>
         {% else %}
@@ -285,10 +288,22 @@
                     {{ requirement.original_requirement_identifier }}
                     {% if requirement.subject_domain %} &middot; {{ requirement.subject_domain.replace('_', ' ') }}{% endif %}
                     &middot; <span class="review-state-badge">{{ row.adjudication_state }}</span>
-                    {% if row.latest_adjudication %}
-                    <br>Last: {{ row.latest_adjudication.outcome }} by {{ row.latest_adjudication.adjudicator }} &mdash; {{ row.latest_adjudication.reasoning }}
+                    {% if row.adjudication_history|length == 1 %}
+                    <br>{{ row.latest_adjudication.outcome }} by {{ row.latest_adjudication.adjudicator }} &mdash; {{ row.latest_adjudication.reasoning }}
                     {% endif %}
                 </p>
+
+                {% if row.adjudication_history|length > 1 %}
+                <details class="add-source-details">
+                    <summary>Adjudication history ({{ row.adjudication_history|length }}) &mdash; this Requirement has been re-examined</summary>
+                    {% for a in row.adjudication_history %}
+                    <p style="font-size:0.85rem;color:var(--text-secondary);margin:0.3rem 0;border-left:3px solid var(--border-strong);padding-left:0.6rem;">
+                        <span class="review-state-badge">{{ a.outcome }}</span> by {{ a.adjudicator }} &middot; {{ a.adjudicated_at }}
+                        <br>{{ a.reasoning }}
+                    </p>
+                    {% endfor %}
+                </details>
+                {% endif %}
 
                 {% if row.latest_adjudication %}
                 <div style="font-size:0.85rem;color:var(--text-secondary);margin:0 0 0.5rem;">
