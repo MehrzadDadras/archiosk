@@ -97,7 +97,11 @@
             {% for source in workspace.sources %}
             <li class="source-item">
                 <span class="source-kind-badge">{{ source.kind.replace('_', ' ') }}</span>
+                {% if source.file_path %}
+                <a href="{{ url_for('workspace.source_file', project_id=project_id, source_id=source.id) }}" target="_blank" rel="noopener">{{ source.name }}</a>
+                {% else %}
                 {{ source.name }}
+                {% endif %}
                 {% if source.superseded_by_source_id %}
                 <br><small style="color:var(--attention-amber);">Superseded by a newer revision.</small>
                 {% endif %}
@@ -105,9 +109,7 @@
                 <br><small style="color:var(--machine-blue);">Revision of a prior Source.</small>
                 {% endif %}
                 {% if source.note %}<br><small style="color:var(--text-secondary);">{{ source.note }}</small>{% endif %}
-                {% if source.file_path %}
-                <br><a href="{{ url_for('workspace.source_file', project_id=project_id, source_id=source.id) }}" target="_blank" rel="noopener">Open source file &rarr;</a>
-                {% elif source.kind == 'rfq_rfp_document' %}
+                {% if not source.file_path and source.kind == 'rfq_rfp_document' %}
                 <br><small style="color:var(--text-disabled);font-style:italic;">Original file not stored (ingested before file retention was added).</small>
                 {% endif %}
             </li>
