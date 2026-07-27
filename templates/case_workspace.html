@@ -384,6 +384,34 @@
                     {% endif %}
                     <button type="submit">Adjudicate</button>
                 </form>
+
+                {% if row.revision_history %}
+                {% call macros.subdisclosure('Revision history (' ~ row.revision_history|length ~ ') — this Requirement\'s wording has changed') %}
+                    {% for entry in row.revision_history %}
+                    <p style="font-size:0.85rem;color:var(--text-secondary);margin:0.3rem 0;border-left:3px solid var(--border-strong);padding-left:0.6rem;">
+                        {{ entry.requirement.text_reference }}
+                        <br>Revised by {{ entry.supersession.actor }} on {{ entry.supersession.authorized_at }}
+                        {% if entry.supersession.authority_class %} &middot; {{ entry.supersession.authority_class }}{% endif %}
+                        {% if entry.supersession.reason %}<br>{{ entry.supersession.reason }}{% endif %}
+                    </p>
+                    {% endfor %}
+                {% endcall %}
+                {% endif %}
+
+                {% call macros.subdisclosure('+ Revise (Addendum)') %}
+                    <p style="font-size:0.82rem;color:var(--text-secondary);margin:-0.4rem 0 0.6rem;">
+                        Records a governed correction to this Requirement's own stated text -
+                        the original remains, superseded and still reconstructable, exactly
+                        like a Source revision. Use this when an Addendum (or similar) changes
+                        what was actually required, not to fix a typo in how it was transcribed.
+                    </p>
+                    <form class="workspace-form" method="post" action="{{ url_for('workspace.revise_requirement_route', project_id=project_id, requirement_id=requirement.id) }}">
+                        <textarea name="text_reference" placeholder="The Requirement's new text, as stated in the Source" required>{{ requirement.text_reference }}</textarea>
+                        <input type="text" name="reason" placeholder="Reason (e.g. Addendum 2, Section 4.3)" required>
+                        <input type="text" name="authority_class" placeholder="Authority (optional, e.g. addendum)">
+                        <button type="submit">Revise Requirement</button>
+                    </form>
+                {% endcall %}
             </div>
             {% endfor %}
         {% endcall %}

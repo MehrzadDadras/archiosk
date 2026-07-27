@@ -50,8 +50,10 @@ from services.case_workspace import (
     MESSAGE_ORIGIN_HUMAN,
     OBJECT_KIND_CASE,
     OBJECT_KIND_FINDING,
+    OBJECT_KIND_REQUIREMENT,
     REQUIREMENT_ADJUDICATION_OUTCOMES,
     REQUIREMENT_REGISTRATION_HUMAN_REGISTERED,
+    REQUIREMENT_STATUS_SUPERSEDED,
     SOURCE_KIND_PROJECT_DOCUMENT,
     SOURCE_KIND_TEXT_RECORD,
     AnalysisTrigger,
@@ -421,8 +423,43 @@ def show_workspace(project_id):
     # design (it's a pure project-level read), so the redaction decision
     # belongs here, the one place that actually knows who's asking.
     # (visible_case_ids computed once, above, alongside visible_cases.)
+    #
+    # revise_requirement (services/case_workspace.py) was fully built and
+    # tested - the real, governed way to represent an Addendum amending a
+    # Requirement's text, per the method's own documented intent ("An
+    # Addendum amending/qualifying/superseding an earlier requirement is
+    # exactly this call") - but had no route at all. Wiring it means the
+    # main list must stop showing a Requirement's now-superseded
+    # predecessors as if they were separate, still-current entries -
+    # governed_requirements itself is deliberately unfiltered (needed
+    # whole, above, for promoted_item_ids), so the filter happens only
+    # here, at display time.
+    def _requirement_revision_history(requirement_id):
+        history = []
+        current_id = requirement_id
+        while True:
+            predecessor_supersession = next(
+                (
+                    s for s in workspace.supersessions
+                    if s["successor_type"] == OBJECT_KIND_REQUIREMENT and s["successor_id"] == current_id
+                ),
+                None,
+            )
+            if predecessor_supersession is None:
+                break
+            predecessor = next(
+                (r for r in governed_requirements if r["id"] == predecessor_supersession["predecessor_id"]), None,
+            )
+            if predecessor is None:
+                break
+            history.append({"requirement": predecessor, "supersession": predecessor_supersession})
+            current_id = predecessor["id"]
+        return history
+
     requirements_view = []
     for requirement in governed_requirements:
+        if requirement["status"] == REQUIREMENT_STATUS_SUPERSEDED:
+            continue
         evidence = store.requirement_evidence(workspace, requirement["id"])
         evidence_findings_view = []
         for finding in evidence["findings"]:
@@ -447,6 +484,7 @@ def show_workspace(project_id):
         ]
         requirements_view.append({
             "requirement": requirement,
+            "revision_history": _requirement_revision_history(requirement["id"]),
             "adjudication_state": store.requirement_adjudication_state(workspace, requirement["id"]),
             "latest_adjudication": evidence["adjudication"],
             # Full history, not just latest - the data was always
@@ -1641,6 +1679,41 @@ def adjudicate_requirement(project_id, requirement_id):
         return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
 
     return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
+
+
+@workspace_bp.route("/projects/<project_id>/workspace/requirements/<requirement_id>/revise", methods=["POST"])
+@login_required
+def revise_requirement_route(project_id, requirement_id):
+    """
+    First route wiring for CaseWorkspaceStore.revise_requirement -
+    previously fully implemented and tested but unreachable through the
+    UI. Scoped to the one case the method's own docstring names as its
+    primary purpose ("An Addendum amending/qualifying/superseding an
+    earlier requirement is exactly this call") - only text_reference is
+    exposed as an override here, not every optional Requirement field
+    revise_requirement's **overrides accepts. A revision that needs to
+    also change classification/subject_domain/etc. isn't blocked by
+    this route (the store method still accepts those kwargs), it's just
+    not reachable from this first, narrower form.
+    """
+    _, store, workspace = _load_workspace_or_404(project_id)
+
+    text_reference = (request.form.get("text_reference") or "").strip()
+    reason = (request.form.get("reason") or "").strip()
+    authority_class = (request.form.get("authority_class") or "").strip() or None
+    if not text_reference or not reason:
+        flash("A revision needs the new text and a reason (e.g. which Addendum).", "error")
+        return redirect(url_for("workspace.show_workspace", project_id=project_id))
+
+    try:
+        store.revise_requirement(
+            workspace, requirement_id=requirement_id, actor=_reviewer(),
+            reason=reason, authority_class=authority_class,
+            governance_log=_log(), text_reference=text_reference,
+        )
+    except CaseWorkspaceError as exc:
+        flash(str(exc), "error")
+    return redirect(url_for("workspace.show_workspace", project_id=project_id))
 
 
 @workspace_bp.route("/projects/<project_id>/workspace/cases/<case_id>/apply", methods=["POST"])
