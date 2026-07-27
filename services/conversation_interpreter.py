@@ -1,15 +1,24 @@
 """
 Conversation-as-control-surface prototype for the Case Workspace.
 
-Honesty note: this is deterministic keyword pattern-matching, not natural
-language understanding. It recognizes exactly the shapes of message the
-Case Workspace prototype is built to demonstrate (see Prompt 4 #6):
-"Analyze ...", "Show me the evidence supporting Finding N", "Compare ...",
-and a free-text correction addressed at whatever Finding is currently
-focused. Anything else gets an honest "I didn't recognize an action"
-reply rather than a guessed one. This keeps the conversation surface real
-and traceable rather than an unlabeled black box, in the same spirit as
-services/drawing_analysis.py's mock findings.
+Honesty note: TRIGGER RECOGNITION here is deterministic keyword
+pattern-matching, not natural language understanding, and stays that
+way - it recognizes exactly the shapes of message the Case Workspace
+prototype is built to demonstrate (see Prompt 4 #6): "Analyze ...",
+"Show me the evidence supporting Finding N", "Compare ...", a free-text
+correction addressed at whatever Finding is currently focused, and (CLAUDE-
+P04) an investigation-shaped question anchored to a Requirement ("Why is
+this like this?", "Check this.", "Something is wrong here."). Anything
+else gets an honest "I didn't recognize an action" reply rather than a
+guessed one.
+
+What happens AFTER a Requirement-anchored investigation question is
+recognized is genuinely different from every other action here: real
+reasoning via services/requirement_investigation.py's Anthropic call,
+not a canned reply or a mock finding. Every other recognized action
+(Analyze a drawing, Compare) still calls services/drawing_analysis.py's
+mock engine - CLAUDE-P04 deliberately proved real reasoning on
+Requirements ONLY, not across every action this file recognizes.
 
 Every recognized action still goes through the same governed operations
 (record_analysis / record_review) explicit controls use — conversation is
@@ -17,6 +26,7 @@ an additional control surface, not a bypass of Analyze -> Review -> Apply.
 """
 from __future__ import annotations
 
+import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -30,6 +40,7 @@ from services.case_workspace import (
     ProjectWorkspace,
 )
 from services.drawing_analysis import analyze_drawing, make_comparison_artifact
+from services.requirement_investigation import investigate_requirement
 
 
 @dataclass
@@ -77,11 +88,17 @@ def interpret_message(
             reply_text="No instruction was recognized in an empty message.",
         )
 
+    is_requirement_investigation_question = (
+        anchor is not None
+        and anchor.get("anchor_type") == "requirement"
+        and _looks_like_investigation_request(lowered)
+    )
     needs_case = (
         lowered.startswith(("analyze", "analyse"))
         or ("evidence" in lowered and "finding" in lowered)
         or lowered.startswith("compare") or " compare " in f" {lowered} "
         or (focused_finding_id is not None and _looks_like_correction(lowered))
+        or is_requirement_investigation_question
     )
     if needs_case and case is None:
         # The "conversation -> Investigation" escalation offer (routes/
@@ -117,6 +134,9 @@ def interpret_message(
 
     if focused_finding_id is not None and _looks_like_correction(lowered):
         return _handle_correction(text, workspace, case, store, focused_finding_id, reviewer)
+
+    if is_requirement_investigation_question:
+        return _handle_investigate_requirement(text, workspace, case, store, reviewer, anchor, triggering_message_id)
 
     if anchor is not None:
         return InterpretationResult(
@@ -296,6 +316,108 @@ def _looks_like_correction(lowered: str) -> bool:
         "this is not", "that is not", "actually,", "no, it", "it is not",
         "this isn't", "that isn't",
     ))
+
+
+# CLAUDE-P04: the deliberately narrow set of "unspecific" phrasings that
+# route an anchored Requirement question to real investigation instead
+# of the generic anchor_acknowledged fallback - matches the exact
+# example phrasings this feature was scoped against ("Why is this like
+# this?", "Check this.", "Something is wrong here.", "Where did this
+# come from?"). Still keyword matching, per this module's own honesty
+# note - only what happens AFTER a match is genuinely different here.
+_INVESTIGATION_PHRASES = (
+    "why is this", "why does this", "why was this", "why isn't this", "why is that",
+    "check this", "something is wrong", "something's wrong", "something wrong here",
+    "where did this come from", "where does this come from",
+    "investigate this", "look into this",
+)
+
+
+def _looks_like_investigation_request(lowered: str) -> bool:
+    return any(phrase in lowered for phrase in _INVESTIGATION_PHRASES)
+
+
+def _handle_investigate_requirement(
+    text: str,
+    workspace: ProjectWorkspace,
+    case: dict,
+    store: CaseWorkspaceStore,
+    reviewer: str,
+    anchor: dict,
+    triggering_message_id: Optional[str],
+) -> InterpretationResult:
+    """
+    The one real reasoning path in this file (CLAUDE-P04) - everything
+    else above still calls services/drawing_analysis.py's mock engine.
+    Requires an open Case (like _handle_analyze) because Finding/Artifact
+    remain Case-scoped (record_analysis's own enforced constraint) - a
+    Project-level Analysis literally cannot carry a real Finding, so
+    there is no honest way to run this without one.
+    """
+    requirement = next((r for r in workspace.requirements if r["id"] == anchor["anchor_id"]), None)
+    if requirement is None:
+        return InterpretationResult(
+            action_taken="investigate_failed",
+            reply_text="That Requirement no longer exists in this Project.",
+        )
+
+    evidence = store.requirement_evidence(workspace, requirement["id"])
+    adjudication_history = store.requirement_adjudications_for(workspace, requirement["id"])
+
+    result = investigate_requirement(
+        question=text,
+        requirement=requirement,
+        adjudication_history=adjudication_history,
+        evidence=evidence,
+    )
+
+    if not result.ran:
+        return InterpretationResult(
+            action_taken="investigation_unavailable",
+            reply_text=(
+                f"Real investigation can't run right now: {result.skipped_reason} "
+                "Nothing was fabricated - the evidence already shown for this "
+                "Requirement is what there is; the judgment call is yours to make "
+                "from it, or ask again once this is configured."
+            ),
+        )
+
+    trigger = AnalysisTrigger(
+        trigger_type=ANALYSIS_TRIGGER_USER_INITIATED,
+        trigger_reference_type="conversation_message" if triggering_message_id else None,
+        trigger_reference_id=triggering_message_id,
+        triggered_by_actor=reviewer,
+    )
+    analysis = store.record_analysis(
+        workspace,
+        case_id=case["id"],
+        source_ids=[requirement["source_id"]],
+        objective=text,
+        engine_name="anthropic-requirement-investigation",
+        engine_version=os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-6"),
+        findings=[{"statement": result.assessment, "machine_confidence": result.confidence}],
+        trigger=trigger,
+    )
+
+    reply_parts = [f"Assessment (confidence {result.confidence:.0%}): {result.assessment}"]
+    if result.supporting_points:
+        reply_parts.append("Based on: " + "; ".join(result.supporting_points))
+    if result.open_questions:
+        reply_parts.append("Open question(s) for you: " + "; ".join(result.open_questions))
+    if result.needs_human_judgment:
+        reply_parts.append(
+            "This needs your professional judgment before it's treated as anything "
+            "more than a provisional Finding."
+        )
+    reply_parts.append(
+        "Recorded as a provisional machine Finding in this Investigation's Artifact "
+        "Workspace - review it there like any other."
+    )
+
+    return InterpretationResult(
+        action_taken=f"analysis:{analysis['id']}",
+        reply_text=" ".join(reply_parts),
+    )
 
 
 def _handle_correction(
