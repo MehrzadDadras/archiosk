@@ -343,9 +343,18 @@
         {% call macros.subdisclosure('Governed Requirements (' ~ requirements_view|length ~ ')', html_id='governed-requirements') %}
             {% for row in requirements_view %}
             {% set requirement = row.requirement %}
+            {# Visual pressure ("stable geometry, variable emphasis" - see
+               routes/workspace.py's own comment for the settled/old-news/
+               not-currently-focused rule behind row.quiet): only the
+               neutral text below ever changes class - the badge two lines
+               down keeps its own explicit color regardless, by
+               construction (see .pressure-quiet-text's own comment in
+               main.css on why this can never be done via a shared
+               ancestor's opacity). Nothing here changes position, order,
+               or whether this Requirement renders at all. #}
             <div id="requirement-{{ requirement.id }}" style="border-top:1px solid var(--border);padding:0.5rem 0;">
-                <p style="font-size:0.88rem;margin:0 0 0.3rem;">{{ requirement.text_reference }}</p>
-                <p style="color:var(--text-secondary);font-size:0.85rem;margin:0 0 0.4rem;">
+                <p class="{{ 'pressure-quiet-text' if row.quiet }}" style="font-size:0.88rem;margin:0 0 0.3rem;">{{ requirement.text_reference }}</p>
+                <p class="{{ 'pressure-quiet-text' if row.quiet else 'text-muted' }}" style="font-size:0.85rem;margin:0 0 0.4rem;">
                     {{ requirement.original_requirement_identifier }}
                     {% if requirement.subject_domain %} &middot; {{ requirement.subject_domain.replace('_', ' ') }}{% endif %}
                     &middot; <span class="review-state-badge">{{ row.adjudication_state }}</span>
@@ -443,20 +452,7 @@
                     </form>
                 {% endcall %}
 
-                {% call macros.subdisclosure('Discuss this Requirement') %}
-                    <p class="pane-note">
-                        Talk about this specific Requirement from right here &mdash; no need to open an
-                        Investigation first. Lands in the Project Conversation, below, already
-                        knowing which Requirement you meant.
-                    </p>
-                    <form class="workspace-form" method="post" action="{{ url_for('workspace.discuss_object', project_id=project_id) }}">
-                        <input type="hidden" name="anchor_type" value="requirement">
-                        <input type="hidden" name="anchor_id" value="{{ requirement.id }}">
-                        <input type="hidden" name="anchor_description" value="{{ requirement.original_requirement_identifier }}">
-                        <input type="text" name="text" placeholder="Ask or note something about this Requirement&hellip;" required>
-                        <button type="submit">Send</button>
-                    </form>
-                {% endcall %}
+                {{ macros.aperture(project_id, 'requirement', requirement.id, requirement.original_requirement_identifier, label='Discuss this Requirement') }}
             </div>
             {% endfor %}
         {% endcall %}
@@ -1051,6 +1047,17 @@
                         <br><small class="text-muted">Re: {{ message.anchor.anchor_type.replace('_', ' ') }}{% if message.anchor.description %} &mdash; {{ message.anchor.description }}{% endif %}</small>
                         {% endif %}
                         {{ message.text }}
+                        {# The "conversation -> Investigation" escalation offer: only for the
+                           MOST RECENT message, and only when interpret_message actually
+                           recognized a Case-shaped action (needs_case) - never for an ordinary
+                           unmatched question, and it naturally stops being offered the moment
+                           anything else gets posted (see start_investigation_from_aperture's
+                           own docstring for what accepting it does). #}
+                        {% if loop.last and message.role == "system" and message.action_taken and message.action_taken.startswith("needs_case:") %}
+                        <form method="post" action="{{ url_for('workspace.start_investigation_from_aperture', project_id=project_id, message_id=message.action_taken.split(':', 1)[1]) }}">
+                            <button type="submit" class="review-btn needs_evidence">Start an Investigation from this</button>
+                        </form>
+                        {% endif %}
                     </div>
                     {% else %}
                     <p class="conversation-empty">No Project Conversation yet.</p>

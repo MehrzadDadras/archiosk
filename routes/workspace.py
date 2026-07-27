@@ -52,6 +52,7 @@ from services.case_workspace import (
     OBJECT_KIND_FINDING,
     OBJECT_KIND_REQUIREMENT,
     REQUIREMENT_ADJUDICATION_OUTCOMES,
+    REQUIREMENT_ADJUDICATION_STATE_NOT_YET_ASSESSED,
     REQUIREMENT_REGISTRATION_HUMAN_REGISTERED,
     REQUIREMENT_STATUS_SUPERSEDED,
     SOURCE_KIND_PROJECT_DOCUMENT,
@@ -344,9 +345,15 @@ def show_workspace(project_id):
     if active_case is None:
         project_conversation_view = store.project_conversation_for(workspace)
 
+    # Read before any write below touches it - this is also the boundary
+    # visual pressure (below) uses to tell "settled, and already known to
+    # you" apart from "settled, but news to you since your last visit" -
+    # the same global "what's new" marker, reused rather than a second,
+    # separately-invented time threshold.
+    previous_visit_at = workspace.last_viewed_by.get(_reviewer())
+
     since_last_visit = None
     if active_case is None:
-        previous_visit_at = workspace.last_viewed_by.get(_reviewer())
         if previous_visit_at is not None:
             new_event_count = sum(
                 1 for e in _log().read(project_id) if e.created_at > previous_visit_at
@@ -617,6 +624,31 @@ def show_workspace(project_id):
             "created_at": message["created_at"],
             "case_id": message.get("case_id"),
         })
+
+    # Visual pressure ("stable geometry, variable emphasis" - never
+    # existence or position): a governed Requirement recedes to quieter
+    # text ONLY when it is (a) settled - adjudicated at all, not still
+    # Not Yet Assessed, (b) that settlement is old news, not new since
+    # THIS reviewer's own last visit (previous_visit_at, above - the
+    # same boundary since_last_visit already uses, not a second
+    # invented time threshold), and (c) it isn't the object this
+    # reviewer is personally still engaged with right now (recent_focus_
+    # anchor_ids, below) - actively focused-on work never quiets down
+    # just because its formal state happens to be settled. Every
+    # Requirement still renders, in the same place, in the same order;
+    # only its text token changes (see .pressure-quiet in main.css).
+    recent_focus_anchor_ids = {row["anchor"]["anchor_id"] for row in recent_focus_view}
+    for row in requirements_view:
+        activity_timestamps = [
+            a["adjudicated_at"] for a in row["adjudication_history"]
+        ] + [
+            e["supersession"]["authorized_at"] for e in row["revision_history"]
+        ]
+        latest_activity_at = max(activity_timestamps) if activity_timestamps else row["requirement"]["created_at"]
+        is_settled = row["adjudication_state"] != REQUIREMENT_ADJUDICATION_STATE_NOT_YET_ASSESSED
+        is_old_news = previous_visit_at is not None and latest_activity_at <= previous_visit_at
+        is_currently_focused = row["requirement"]["id"] in recent_focus_anchor_ids
+        row["quiet"] = is_settled and is_old_news and not is_currently_focused
 
     # Human discussion (ReviewThread/ReviewMessage/Attention), scoped to
     # whichever Case is active - same read/write boundary as everything
@@ -1593,6 +1625,49 @@ def discuss_object(project_id):
     _run_conversation_turn(project_id, store, workspace, None, text, anchor=anchor)
 
     return redirect(url_for("workspace.show_workspace", project_id=project_id))
+
+
+@workspace_bp.route("/projects/<project_id>/workspace/apertures/<message_id>/start-investigation", methods=["POST"])
+@login_required
+def start_investigation_from_aperture(project_id, message_id):
+    """
+    The "contextual aperture -> Conversation -> Investigation" escalation:
+    a project-level message interpret_message honestly declined
+    (action_taken="needs_case:<this message's id>") because no
+    Investigation was open when a Case-shaped action (Analyze/evidence/
+    Compare/correction) was recognized. Rather than silently creating a
+    Case at message time, the decline itself carries the offer; this is
+    what happens when the reviewer accepts it - start a real Case,
+    titled from what they were looking at, and re-run their own original
+    text (with its Anchor still attached) as that Case's first message,
+    so the Case-bound action they actually asked for can now really run.
+    The original project-level message is left exactly as it was -
+    append-only, like every other record here - not deleted or moved;
+    store.recent_anchors_for will simply prefer this newer, Case-attached
+    one once it exists (same anchor, later timestamp).
+    """
+    _, store, workspace = _load_workspace_or_404(project_id)
+
+    message = next((m for m in workspace.project_conversation if m["id"] == message_id), None)
+    if message is None:
+        abort(404)
+
+    anchor = message.get("anchor")
+    title_source = (anchor or {}).get("description") or message["text"]
+    title = title_source if len(title_source) <= 80 else title_source[:77] + "..."
+    case = store.create_case(workspace, title=title, objective="", created_by=_reviewer())
+
+    _log().append(
+        project_id=project_id,
+        event_type="case_created",
+        actor=_reviewer(),
+        role=session.get("role") or "unspecified",
+        payload={"case_id": case["id"], "title": title, "visibility": case["visibility"]},
+    )
+
+    _run_conversation_turn(project_id, store, workspace, case, message["text"], anchor=anchor)
+
+    return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case["id"]))
 
 
 @workspace_bp.route("/projects/<project_id>/workspace/findings/<finding_id>/validate", methods=["POST"])

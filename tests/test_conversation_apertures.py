@@ -214,6 +214,132 @@ class InterpretMessageWithoutACaseTests(unittest.TestCase):
         self.assertIn("Section 3.1", result.reply_text)
 
 
+class ApertureEscalationTests(unittest.TestCase):
+    """
+    The "contextual aperture -> Conversation -> Investigation" escalation:
+    a project-level message that got an honest needs_case decline can be
+    turned into a real Case that re-runs the same text (with its Anchor)
+    for real - offered, never silent, and never for an ordinary
+    unmatched question.
+    """
+
+    def setUp(self):
+        import app as app_module
+
+        self.tmp_dir = Path(tempfile.mkdtemp(prefix="beehive_test_aperture_escalation_"))
+        self.flask_app = app_module.create_app("testing")
+        self.flask_app.config["REGISTRY_STORE_PATH"] = str(self.tmp_dir)
+        self.project_id = "test-project-aperture-escalation"
+
+        RequirementsRegistry(self.tmp_dir).save(
+            ParsedDocument(project_id=self.project_id, filename="rfp.md", ingested_at="2026-01-01T00:00:00+00:00")
+        )
+        self.client = self.flask_app.test_client()
+        with self.client.session_transaction() as sess:
+            sess["user_id"] = 1
+            sess["username"] = "owner1"
+            sess["role"] = "admin"
+        self.store = CaseWorkspaceStore(self.tmp_dir)
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp_dir, ignore_errors=True)
+
+    def _register_requirement(self):
+        self.client.get(f"/projects/{self.project_id}/workspace")
+        workspace = self.store.get(self.project_id)
+        source_id = workspace.sources[0]["id"]
+        return self.store.register_requirement(
+            workspace,
+            source_id=source_id,
+            original_requirement_identifier="Section 3.1",
+            text_reference="Contractor shall provide as-built drawings.",
+            created_by="owner1",
+            registration_method=REQUIREMENT_REGISTRATION_HUMAN_REGISTERED,
+        )
+
+    def test_case_shaped_question_offers_start_investigation(self):
+        requirement = self._register_requirement()
+        self.client.post(
+            f"/projects/{self.project_id}/workspace/discuss",
+            data={
+                "text": "Analyze this drawing for datum inconsistencies",
+                "anchor_type": "requirement",
+                "anchor_id": requirement["id"],
+                "anchor_description": "Section 3.1",
+            },
+        )
+        resp = self.client.get(f"/projects/{self.project_id}/workspace")
+        self.assertIn("Start an Investigation from this", resp.get_data(as_text=True))
+
+    def test_ordinary_unmatched_question_does_not_offer_it(self):
+        requirement = self._register_requirement()
+        self.client.post(
+            f"/projects/{self.project_id}/workspace/discuss",
+            data={
+                "text": "just wondering about this one",
+                "anchor_type": "requirement",
+                "anchor_id": requirement["id"],
+                "anchor_description": "Section 3.1",
+            },
+        )
+        resp = self.client.get(f"/projects/{self.project_id}/workspace")
+        self.assertNotIn("Start an Investigation from this", resp.get_data(as_text=True))
+
+    def test_accepting_creates_a_case_titled_from_the_anchor_and_reruns_the_text(self):
+        requirement = self._register_requirement()
+        self.client.post(
+            f"/projects/{self.project_id}/workspace/discuss",
+            data={
+                "text": "Analyze this drawing for datum inconsistencies",
+                "anchor_type": "requirement",
+                "anchor_id": requirement["id"],
+                "anchor_description": "Section 3.1",
+            },
+        )
+        workspace = self.store.get(self.project_id)
+        system_message = workspace.project_conversation[1]
+        self.assertTrue(system_message["action_taken"].startswith("needs_case:"))
+        human_message_id = system_message["action_taken"].split(":", 1)[1]
+        self.assertEqual(human_message_id, workspace.project_conversation[0]["id"])
+
+        resp = self.client.post(
+            f"/projects/{self.project_id}/workspace/apertures/{human_message_id}/start-investigation",
+        )
+        self.assertEqual(resp.status_code, 302)
+
+        workspace = self.store.get(self.project_id)
+        self.assertEqual(len(workspace.cases), 1)
+        case = workspace.cases[0]
+        self.assertEqual(case["title"], "Section 3.1")
+        self.assertEqual(len(case["conversation"]), 2)
+        self.assertEqual(case["conversation"][0]["text"], "Analyze this drawing for datum inconsistencies")
+        self.assertEqual(case["conversation"][0]["anchor"]["anchor_id"], requirement["id"])
+        # Case-bound now for real - "analyze_failed" (no drawing Source
+        # in the new Case), not another needs_case decline.
+        self.assertEqual(case["conversation"][1]["action_taken"], "analyze_failed")
+
+        # The original project-level message is untouched, not moved.
+        self.assertEqual(len(workspace.project_conversation), 2)
+
+    def test_delegation_button_disappears_after_a_later_message(self):
+        requirement = self._register_requirement()
+        self.client.post(
+            f"/projects/{self.project_id}/workspace/discuss",
+            data={
+                "text": "Analyze this drawing for datum inconsistencies",
+                "anchor_type": "requirement",
+                "anchor_id": requirement["id"],
+                "anchor_description": "Section 3.1",
+            },
+        )
+        self.client.post(
+            f"/projects/{self.project_id}/workspace/discuss",
+            data={"text": "never mind, something else entirely"},
+        )
+        resp = self.client.get(f"/projects/{self.project_id}/workspace")
+        self.assertNotIn("Start an Investigation from this", resp.get_data(as_text=True))
+
+
 class RecentFocusTests(unittest.TestCase):
     """
     The contextual-companion continuity trail: a reviewer's own recent

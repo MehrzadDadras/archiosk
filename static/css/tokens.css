@@ -140,4 +140,27 @@
     --space-10: 1.5rem;
     --space-11: 2rem;
     --space-12: 3rem;
+
+    /* -- visual pressure (emphasis) ---------------------------------------
+       A fourth token axis, alongside color/type/space: how much
+       perceptual weight a piece of governed, still-fully-present
+       content currently carries. Orthogonal to the semantic color
+       grammar above - pressure never substitutes for or dims a
+       semantic color; every --review-state-*/--evidence-*/verdict
+       badge stays at full strength regardless of a --pressure-quiet-
+       text class applied to surrounding neutral text, so "this has
+       gone quiet" can never be mistaken for "this verdict is wrong" or
+       "this needs approval." One step only - the unmarked default, and
+       --pressure-quiet-text for governed content that has settled and
+       isn't what the reviewer is presently engaged with (see
+       routes/workspace.py's "Visual pressure" comment for the actual
+       settled/old-news/not-currently-focused rule) - not a numeric
+       scale, because nothing today needs more than one step down, and
+       inventing more before something needs them is exactly the
+       speculative machinery the density-scale note above already warns
+       against. Aliases --text-metadata (an existing, already-contrast-
+       verified value) rather than a new hex, under its own name so a
+       future reader knows WHY it's applied here and not just that it
+       happens to look the same as a metadata label. */
+    --pressure-quiet-text: var(--text-metadata);
 }

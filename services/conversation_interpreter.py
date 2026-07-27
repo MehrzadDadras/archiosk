@@ -84,11 +84,22 @@ def interpret_message(
         or (focused_finding_id is not None and _looks_like_correction(lowered))
     )
     if needs_case and case is None:
+        # The "conversation -> Investigation" escalation offer (routes/
+        # workspace.py's start_investigation_from_aperture) reads this
+        # exact message back out later by id - encoded here, not in a
+        # new piece of session state, because the message itself is
+        # already the durable record of what was asked and what it was
+        # anchored to. Only offered when a Case-SHAPED action was
+        # actually recognized (this branch) - never for an ordinary
+        # unmatched question (anchor_acknowledged, below), so asking
+        # "why is this like this?" never itself pushes toward creating
+        # an Investigation just because it went unrecognized.
+        action_taken = f"needs_case:{triggering_message_id}" if triggering_message_id else "needs_case"
         return InterpretationResult(
-            action_taken="needs_case",
+            action_taken=action_taken,
             reply_text=(
                 "That needs an open Investigation (drawings and Findings live "
-                "inside one) - open or start one first, then ask again."
+                "inside one) - start one from this below, or open one and ask again."
             ),
         )
 

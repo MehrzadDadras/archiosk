@@ -1036,6 +1036,16 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
     padding-left: var(--space-6);
 }
 
+/* Visual pressure - see tokens.css's own comment on --pressure-quiet-text
+   for the token-level rule. Apply only to neutral text nodes (a
+   statement, a metadata line) - NEVER to a .review-state-badge or any
+   other semantic-colored element, and never via `opacity` on a shared
+   ancestor (opacity composites the whole subtree, including badges,
+   toward the background - it cannot be selectively "restored" on a
+   child). This is a color swap on plain text only, so a badge sitting
+   next to quieted text is completely unaffected by construction. */
+.pressure-quiet-text { color: var(--pressure-quiet-text); }
+
 /* -- left: project navigation ------------------------------------------------ */
 .lifecycle-strip { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-bottom: 0.8rem; }
 .lifecycle-stage {
