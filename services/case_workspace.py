@@ -2942,10 +2942,20 @@ class CaseWorkspaceStore:
         NOT sufficient here - see this method's own callers for where
         an authenticated-but-non-owner actor is still excluded.
         """
-        return [
-            c for c in workspace.cases
-            if c["visibility"] != CASE_VISIBILITY_PRIVATE or c.get("created_by") == actor
-        ]
+        # Open Cases before archived ones (stable within each group, so
+        # relative creation order is otherwise unchanged) - archived Cases
+        # accumulate over a project's life and would otherwise crowd out
+        # active work in every caller that renders this list in order.
+        # Safe to sort here, not just at render time: every other caller
+        # (see this method's own callers) only uses this for set-membership
+        # checks, never list order/indexing.
+        return sorted(
+            (
+                c for c in workspace.cases
+                if c["visibility"] != CASE_VISIBILITY_PRIVATE or c.get("created_by") == actor
+            ),
+            key=lambda c: c["status"] == CASE_STATUS_ARCHIVED,
+        )
 
     def share_case(
         self,
