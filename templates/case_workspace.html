@@ -44,8 +44,33 @@
                    href="{{ url_for('workspace.show_workspace', project_id=project_id, case=case.id) }}">
                     <span class="case-status-badge">{{ case.status }}</span>
                     <span class="case-status-badge">{{ case.visibility }}</span>
+                    {% set outcome_state = case_outcome_states.get(case.id, 'unresolved') %}
+                    {% if outcome_state != 'unresolved' %}
+                    <span class="review-state-badge">{{ outcome_state }}</span>
+                    {% endif %}
                     {{ case.title }}
                 </a>
+                {% call macros.subdisclosure('Record Outcome') %}
+                    <p class="pane-note">
+                        Did the hypothesis that justified opening this Investigation hold up?
+                        Reasoning is required - a bare outcome word is never enough on its own.
+                    </p>
+                    <form class="workspace-form" method="post" action="{{ url_for('workspace.record_case_outcome_route', project_id=project_id, case_id=case.id) }}">
+                        <select name="outcome" required>
+                            {% for outcome in case_outcome_options %}
+                            <option value="{{ outcome }}">{{ outcome }}</option>
+                            {% endfor %}
+                        </select>
+                        <input type="text" name="reasoning" placeholder="Reasoning (required)" required>
+                        <select name="duplicate_of_case_id">
+                            <option value="">If duplicate, which Case? (optional)</option>
+                            {% for other_case in visible_cases if other_case.id != case.id %}
+                            <option value="{{ other_case.id }}">{{ other_case.title }}</option>
+                            {% endfor %}
+                        </select>
+                        <button type="submit">Record Outcome</button>
+                    </form>
+                {% endcall %}
                 {% if case.status != 'archived' and case.visibility == 'private' and case.created_by == session.username %}
                 <form method="post" action="{{ url_for('workspace.share_case', project_id=project_id, case_id=case.id) }}">
                     <button type="submit" class="link-button">Share</button>
@@ -132,6 +157,43 @@
             </ul>
             {% else %}
             <p style="color:var(--text-secondary);font-size:0.88rem;">Nothing yet &mdash; anchored conversation (like &ldquo;Discuss this Requirement&rdquo;) will show up here.</p>
+            {% endif %}
+        {% endcall %}
+
+        {# CLAUDE-P11: is Archiosk generating useful investigative hypotheses -
+           not "how many Cases exist." Counted only from Investigations opened
+           by escalating a machine-recognized question (case_origin_anchor) -
+           a Case a human opened outright was never a machine suggestion, so
+           its outcome says nothing about investigation quality. Read-only:
+           nothing here feeds back into how the interpreter recognizes a
+           question or how requirement_investigation.py reasons - "BEEHIVE may
+           learn how to investigate without learning what to believe." #}
+        {% call macros.accordion('Investigation Quality', group='left', id='investigation-quality') %}
+            <p class="pane-note">
+                Machine-suggested Investigations, by outcome. &ldquo;Unresolved&rdquo; means no
+                verdict has been recorded yet - not that nothing happened. Record an outcome from
+                a Case's own &ldquo;Record Outcome&rdquo; disclosure above.
+            </p>
+            {% if investigation_quality_view.anchored_by_type %}
+            {% for anchor_type, counts in investigation_quality_view.anchored_by_type.items() %}
+            <p class="workspace-pane-label" style="margin-top:0.6rem;">{{ anchor_type.replace('_', ' ') }}-anchored ({{ counts.values()|sum }})</p>
+            <ul class="source-list">
+                {% for outcome, count in counts.items() %}
+                <li class="source-item"><span class="review-state-badge">{{ outcome }}</span> {{ count }}</li>
+                {% endfor %}
+            </ul>
+            {% endfor %}
+            {% else %}
+            <p style="color:var(--text-secondary);font-size:0.88rem;">No Investigations have been opened from an anchored question yet.</p>
+            {% endif %}
+            {% if investigation_quality_view.unanchored %}
+            {% call macros.subdisclosure('Directly-opened Investigations (' ~ investigation_quality_view.unanchored.values()|sum ~ ') - not counted above') %}
+                <ul class="source-list">
+                    {% for outcome, count in investigation_quality_view.unanchored.items() %}
+                    <li class="source-item"><span class="review-state-badge">{{ outcome }}</span> {{ count }}</li>
+                    {% endfor %}
+                </ul>
+            {% endcall %}
             {% endif %}
         {% endcall %}
 

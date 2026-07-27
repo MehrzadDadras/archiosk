@@ -1789,6 +1789,36 @@ KNOWN_CASE_STATUSES = (
     CASE_STATUS_ARCHIVED,
 )
 
+# CLAUDE-P11: the Case-level HYPOTHESIS verdict - a distinct question from
+# CASE_STATUS above (existence/lifecycle: is this Case still open or
+# archived) and from Disposition (what happens to one FINDING next). This
+# is "did the premise that justified opening this Investigation hold up",
+# at the Case's own grain - the same never-conflate-distinct-questions
+# discipline Disposition/ReviewerValidation/RequirementAdjudication/
+# Requirement.status all already keep separate from each other.
+#
+# A deliberately small, closed vocabulary - matching REQUIREMENT_
+# ADJUDICATION_OUTCOMES' own restraint. "unresolved" is deliberately NOT
+# a member: like REQUIREMENT_ADJUDICATION_STATE_NOT_YET_ASSESSED, it is
+# never a stored value, only ever the DERIVED absence of any CaseOutcome
+# record (see case_outcome_state) - an un-adjudicated Case has no row,
+# not a placeholder row saying so.
+CASE_OUTCOME_CONFIRMED = "confirmed"    # the hypothesis survived scrutiny to the point of mattering
+CASE_OUTCOME_DEFEATED = "defeated"      # evidence contradicted the hypothesis that prompted this Investigation
+CASE_OUTCOME_DUPLICATE = "duplicate"    # the same question as another Case, already covered there
+CASE_OUTCOME_IRRELEVANT = "irrelevant"  # this Investigation should not have been opened - poorly grounded trigger
+
+CASE_OUTCOME_STATES = (
+    CASE_OUTCOME_CONFIRMED,
+    CASE_OUTCOME_DEFEATED,
+    CASE_OUTCOME_DUPLICATE,
+    CASE_OUTCOME_IRRELEVANT,
+)
+
+# The derived state case_outcome_state() returns when no CaseOutcome has
+# been recorded - never accepted by record_case_outcome, never stored.
+CASE_OUTCOME_STATE_UNRESOLVED = "unresolved"
+
 
 @dataclass
 class CaseRecord:
@@ -1861,6 +1891,40 @@ class CaseRecord:
     finding_ids: list[str] = field(default_factory=list)
     artifact_ids: list[str] = field(default_factory=list)
     activity_ids: list[str] = field(default_factory=list)
+
+
+@dataclass
+class CaseOutcome:
+    """
+    CLAUDE-P11: a human's verdict on whether the hypothesis that justified
+    opening this Case held up - CASE_OUTCOME_STATES above. Append-only,
+    like ReviewerValidation/Disposition/RequirementAdjudication - a later
+    record supersedes an earlier one IN EFFECT (see
+    latest_case_outcome_for/case_outcome_state), never overwrites or
+    deletes it, so a reviewer who first calls something "defeated" and
+    later reopens it as "confirmed" leaves both judgments on the record.
+
+    This is deliberately the ONLY place a machine-generated investigation
+    hypothesis is ever declared right or wrong - the machine (see
+    services/requirement_investigation.py, conversation_interpreter.py's
+    needs_case/start_investigation_from_aperture) may say "there is enough
+    here to investigate" by recognizing a pattern and a human accepting
+    the escalation offer; it never gets to also say "and this hypothesis
+    survived." `recorded_by` is never machine-populated.
+
+    `duplicate_of_case_id` is only meaningful when outcome ==
+    CASE_OUTCOME_DUPLICATE - a plain id reference (like Source.supersedes_
+    source_id), not a copy of the other Case's content.
+    """
+
+    id: str
+    project_id: str
+    case_id: str
+    outcome: str  # CASE_OUTCOME_STATES
+    reasoning: str
+    recorded_by: str
+    recorded_at: str
+    duplicate_of_case_id: Optional[str] = None
 
 
 @dataclass
@@ -2076,6 +2140,7 @@ class ProjectWorkspace:
     requirement_adjudications: list[dict] = field(default_factory=list)
     carried_forward_adoptions: list[dict] = field(default_factory=list)
     investigation_steps: list[dict] = field(default_factory=list)  # CLAUDE-P08 - see InvestigationStep
+    case_outcomes: list[dict] = field(default_factory=list)  # CLAUDE-P11 - see CaseOutcome
 
     # -- Project Home presentation state (Prompt 3) ---------------------------
     # UI/orientation state only - never forensic or compliance records, and
@@ -4080,6 +4145,140 @@ class CaseWorkspaceStore:
 
     def investigation_step_for_analysis(self, workspace: ProjectWorkspace, analysis_id: str) -> Optional[dict]:
         return next((s for s in workspace.investigation_steps if s.get("analysis_id") == analysis_id), None)
+
+    # -- investigation hypothesis survival / quality signal (CLAUDE-P11) -----------
+
+    def record_case_outcome(
+        self,
+        workspace: ProjectWorkspace,
+        case_id: str,
+        outcome: str,
+        reasoning: str,
+        recorded_by: str,
+        duplicate_of_case_id: Optional[str] = None,
+        governance_log: Optional[GovernanceLog] = None,
+    ) -> dict:
+        """Records a human's verdict on this Case's own hypothesis. Same
+        validation discipline as record_requirement_adjudication:
+        existence-checked, closed vocabulary, reasoning required (a bare
+        outcome word is never sufficient - see CaseOutcome's own
+        docstring on why this is the one place a machine's investigative
+        suggestion is ever declared right or wrong, and why that must
+        always carry a human's stated basis)."""
+        case = self._find(workspace.cases, case_id)
+        if case is None:
+            raise CaseWorkspaceError(f"Case {case_id} was not found.")
+
+        if outcome not in CASE_OUTCOME_STATES:
+            raise CaseWorkspaceError(
+                f"'{outcome}' is not a recognized Case Outcome. "
+                f"Use one of: {', '.join(CASE_OUTCOME_STATES)}."
+            )
+
+        if not reasoning or not reasoning.strip():
+            raise CaseWorkspaceError(
+                "A Case Outcome requires reasoning - the human basis for the "
+                "verdict must be recorded, not just its outcome word."
+            )
+
+        if outcome == CASE_OUTCOME_DUPLICATE and not duplicate_of_case_id:
+            raise CaseWorkspaceError(
+                "A 'duplicate' outcome requires duplicate_of_case_id - which Case "
+                "this one duplicates."
+            )
+        if duplicate_of_case_id and self._find(workspace.cases, duplicate_of_case_id) is None:
+            raise CaseWorkspaceError(f"Case {duplicate_of_case_id} was not found.")
+
+        record = CaseOutcome(
+            id=_new_id(),
+            project_id=workspace.project_id,
+            case_id=case_id,
+            outcome=outcome,
+            reasoning=reasoning,
+            recorded_by=recorded_by,
+            recorded_at=_now(),
+            duplicate_of_case_id=duplicate_of_case_id,
+        )
+        workspace.case_outcomes.append(asdict(record))
+        self.save(workspace)
+
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id, event_type="case_outcome_recorded",
+                actor=recorded_by, role="human",
+                payload={"case_id": case_id, "outcome": outcome},
+                correlation_id=case_id,
+            )
+
+        return asdict(record)
+
+    def case_outcomes_for(self, workspace: ProjectWorkspace, case_id: str) -> list[dict]:
+        return [o for o in workspace.case_outcomes if o["case_id"] == case_id]
+
+    def latest_case_outcome_for(self, workspace: ProjectWorkspace, case_id: str) -> Optional[dict]:
+        records = self.case_outcomes_for(workspace, case_id)
+        return records[-1] if records else None
+
+    def case_outcome_state(self, workspace: ProjectWorkspace, case_id: str) -> str:
+        """Derived, never stored - mirrors requirement_adjudication_state's
+        own derived-absence pattern: a Case with no recorded CaseOutcome
+        is 'unresolved', not a placeholder row saying so."""
+        latest = self.latest_case_outcome_for(workspace, case_id)
+        return latest["outcome"] if latest is not None else CASE_OUTCOME_STATE_UNRESOLVED
+
+    def case_origin_anchor(self, workspace: ProjectWorkspace, case: dict) -> Optional[dict]:
+        """
+        Whether this Case's own first Conversation message carried an
+        Anchor - i.e. it was opened by escalating a machine-recognized,
+        Case-shaped question (see start_investigation_from_aperture),
+        rather than a human opening a Case outright with no machine
+        involvement at all. Deliberately NOT a new stored field: a Case
+        created via quick_start or the plain "+New Case" form has no
+        anchor on its first message (or no conversation at all yet) and
+        this simply returns None for those - reusing what
+        _run_conversation_turn already records rather than adding a
+        parallel "origin" field that could drift from what actually
+        happened.
+        """
+        conversation = case.get("conversation") or []
+        if not conversation:
+            return None
+        return conversation[0].get("anchor")
+
+    def investigation_quality_rollup_for_project(self, workspace: ProjectWorkspace) -> dict:
+        """
+        The system-health signal (CLAUDE-P11): a plain count of real,
+        human-recorded CaseOutcomes (plus the derived 'unresolved' state),
+        split by whether the Case was opened by escalating a machine-
+        recognized question (anchored - see case_origin_anchor) or opened
+        directly with no machine involvement, and further split by anchor
+        type where that applies (today only ever "requirement" - the one
+        aperture that exists). This is the question "is Archiosk
+        generating useful investigative hypotheses" made measurable,
+        answered ONLY from the anchored bucket - an outright human-opened
+        Case was never a machine suggestion in the first place, so its
+        outcome says nothing about investigation quality.
+
+        Deliberately read-only and consumed by nothing else in this
+        codebase: not the interpreter's trigger matching, not
+        requirement_investigation.py's prompt, not any model or engine
+        choice. "BEEHIVE may learn how to investigate without learning
+        what to believe" is a property of what ISN'T wired to this
+        method's return value, not just what is - a future change that
+        feeds this rollup back into how the machine decides what to
+        investigate or what to assert would cross that line.
+        """
+        anchored_by_type: dict[str, dict[str, int]] = {}
+        unanchored: dict[str, int] = {}
+        for case in workspace.cases:
+            outcome_state = self.case_outcome_state(workspace, case["id"])
+            anchor = self.case_origin_anchor(workspace, case)
+            if anchor is not None:
+                bucket = anchored_by_type.setdefault(anchor.get("anchor_type", "unknown"), {})
+            else:
+                bucket = unanchored
+            bucket[outcome_state] = bucket.get(outcome_state, 0) + 1
+        return {"anchored_by_type": anchored_by_type, "unanchored": unanchored}
 
     # -- reviewer validation --------------------------------------------------------
 

@@ -46,6 +46,7 @@ from werkzeug.utils import secure_filename
 from services.auth import login_required
 from services.case_workspace import (
     ANALYSIS_TRIGGER_USER_INITIATED,
+    CASE_OUTCOME_STATES,
     KNOWN_RESOLUTION_OUTCOMES,
     MESSAGE_ORIGIN_HUMAN,
     OBJECT_KIND_CASE,
@@ -304,6 +305,12 @@ def show_workspace(project_id):
         ]
         if case_unresolved:
             needs_attention_view.append({"case": case, "findings": case_unresolved})
+
+    # CLAUDE-P11: this reviewer's own visible Cases' recorded hypothesis
+    # verdicts (or the derived "unresolved" when none is recorded yet) -
+    # keyed by case_id so the Cases list can show a badge without a
+    # per-case query each time it's rendered.
+    case_outcome_states = {c["id"]: store.case_outcome_state(workspace, c["id"]) for c in visible_cases}
 
     # Project Home's compact "Active Work" summary - project-wide (across
     # every Case this reviewer can see), computed only when actually
@@ -632,6 +639,12 @@ def show_workspace(project_id):
             "case_id": message.get("case_id"),
         })
 
+    # CLAUDE-P11: the system-health signal - is Archiosk generating useful
+    # investigative hypotheses, not "how many Cases exist." Computed
+    # unconditionally (like Needs Attention/Recent Focus) so it stays
+    # reachable from inside a Case too, not just Project Home.
+    investigation_quality_view = store.investigation_quality_rollup_for_project(workspace)
+
     # Visual pressure ("stable geometry, variable emphasis" - never
     # existence or position): a governed Requirement recedes to quieter
     # text ONLY when it is (a) settled - adjudicated at all, not still
@@ -747,6 +760,9 @@ def show_workspace(project_id):
         project_home_summary=project_home_summary,
         since_last_visit=since_last_visit,
         project_conversation_view=project_conversation_view,
+        case_outcome_states=case_outcome_states,
+        case_outcome_options=CASE_OUTCOME_STATES,
+        investigation_quality_view=investigation_quality_view,
     )
 
 
@@ -1004,6 +1020,35 @@ def derive_case(project_id, case_id):
 
     flash("New active Case derived from archive.", "success")
     return redirect(url_for("workspace.show_workspace", project_id=project_id, case=new_case["id"]))
+
+
+@workspace_bp.route("/projects/<project_id>/workspace/cases/<case_id>/outcome", methods=["POST"])
+@login_required
+def record_case_outcome_route(project_id, case_id):
+    """
+    CLAUDE-P11: a human's verdict on whether this Case's own hypothesis
+    held up - see CaseWorkspaceStore.record_case_outcome and CaseOutcome's
+    own docstring on why this is the one place that verdict is ever
+    recorded, and why it is never machine-populated.
+    """
+    _, store, workspace = _load_workspace_or_404(project_id)
+
+    outcome = (request.form.get("outcome") or "").strip()
+    reasoning = (request.form.get("reasoning") or "").strip()
+    duplicate_of_case_id = (request.form.get("duplicate_of_case_id") or "").strip() or None
+
+    try:
+        store.record_case_outcome(
+            workspace, case_id=case_id, outcome=outcome, reasoning=reasoning,
+            recorded_by=_reviewer(), duplicate_of_case_id=duplicate_of_case_id,
+            governance_log=_log(),
+        )
+    except CaseWorkspaceError as exc:
+        flash(str(exc), "error")
+        return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
+
+    flash("Investigation outcome recorded.", "success")
+    return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
 
 
 @workspace_bp.route("/projects/<project_id>/workspace/cases/<case_id>/adopt-finding", methods=["POST"])
