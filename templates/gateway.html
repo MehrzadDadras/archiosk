@@ -1,56 +1,39 @@
-{% extends "base.html" %}
+{% extends "gateway_base.html" %}
 
-{% block title %}Project Gateway &mdash; Archiosk{% endblock %}
-
-{% block content %}
-<div class="gateway-page">
-    <div class="gateway-card">
-        <div class="gateway-brand">
-            <div class="gateway-logo">A</div>
-            <div>
-                <h1>Archiosk</h1>
-                <p class="gateway-subtitle">Architectural Project Investigation Workspace</p>
-            </div>
-        </div>
-
-        <div class="gateway-divider"></div>
-
-        <section class="gateway-section">
-            <p class="gateway-section-label">Project Gateway</p>
-            <h2>Begin a session</h2>
-
-            <div class="gateway-actions">
-                {% if is_admin %}
-                <a class="gateway-action gateway-action-primary" href="{{ url_for('portal.upload') }}">
-                    <span class="gateway-action-icon">+</span>
-                    <span>
-                        <strong>Ingest a new document</strong>
-                        <small>Upload an RFP/RFQ and run it through the Archiosk pipeline</small>
-                    </span>
-                </a>
-                {% endif %}
-                <a class="gateway-action" href="{{ url_for('portal.projects_list') }}">
-                    <span class="gateway-action-icon">&#8963;</span>
-                    <span>
-                        <strong>Open an existing project</strong>
-                        <small>Reopen a project you or a teammate already ingested</small>
-                    </span>
-                </a>
-                <a class="gateway-action" href="{{ url_for('portal.dashboard') }}">
-                    <span class="gateway-action-icon">&#9635;</span>
-                    <span>
-                        <strong>View demo dashboard</strong>
-                        <small>Browse the sample requirements/milestones/consistency layout</small>
-                    </span>
-                </a>
-            </div>
-        </section>
-
-        <footer class="gateway-footer">
-            <span>Flat-JSON registry</span>
-            <span>Archiosk</span>
-            <span>Static build v{{ static_version }}</span>
-        </footer>
-    </div>
+{% block gateway_title %}Project Gateway &mdash; Archiosk{% endblock %}
+{% block gateway_subtitle %}<p class="gateway-subtitle">Architectural Project Investigation Workspace</p>{% endblock %}
+{% block gateway_section_heading %}<h2>Begin a session</h2>{% endblock %}
+{% block gateway_body %}
+<div class="gateway-actions">
+    {% if is_admin %}
+    <a class="gateway-action gateway-action-primary" href="{{ url_for('portal.upload') }}">
+        <span class="gateway-action-icon">+</span>
+        <span>
+            <strong>Ingest a new document</strong>
+            <small>Upload an RFP/RFQ and run it through the Archiosk pipeline</small>
+        </span>
+    </a>
+    {% endif %}
+    <a class="gateway-action" href="{{ url_for('portal.projects_list') }}">
+        <span class="gateway-action-icon">&#8963;</span>
+        <span>
+            <strong>Open an existing project</strong>
+            <small>Reopen a project you or a teammate already ingested</small>
+        </span>
+    </a>
+    <a class="gateway-action" href="{{ url_for('portal.dashboard') }}">
+        <span class="gateway-action-icon">&#9635;</span>
+        <span>
+            <strong>View demo dashboard</strong>
+            <small>Browse the sample requirements/milestones/consistency layout</small>
+        </span>
+    </a>
 </div>
+{% endblock %}
+{% block gateway_footer %}
+<footer class="gateway-footer">
+    <span>Flat-JSON registry</span>
+    <span>Archiosk</span>
+    <span>Static build v{{ static_version }}</span>
+</footer>
 {% endblock %}

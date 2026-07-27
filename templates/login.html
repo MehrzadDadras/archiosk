@@ -1,37 +1,20 @@
-{% extends "base.html" %}
+{% extends "gateway_base.html" %}
 
-{% block title %}Sign in &mdash; Archiosk{% endblock %}
-
-{% block content %}
-<div class="gateway-page">
-    <div class="gateway-card gateway-card-compact">
-        <div class="gateway-brand">
-            <div class="gateway-logo">A</div>
-            <div>
-                <h1>Archiosk</h1>
-            </div>
-        </div>
-
-        <div class="gateway-divider"></div>
-
-        <section class="gateway-section">
-            <p class="gateway-section-label">Project Gateway</p>
-
-            <form method="post">
-                <div class="gateway-field">
-                    <label for="username">Username</label>
-                    <input type="text" id="username" name="username" class="text-input" required autofocus>
-                </div>
-                <div class="gateway-field">
-                    <label for="password">Password</label>
-                    <input type="password" id="password" name="password" class="text-input" required>
-                </div>
-                {% if error %}
-                <div class="mono form-error">{{ error }}</div>
-                {% endif %}
-                <button type="submit" class="btn btn-primary gateway-signin-button">Sign in</button>
-            </form>
-        </section>
+{% block gateway_title %}Sign in &mdash; Archiosk{% endblock %}
+{% block gateway_card_modifier %} gateway-card-compact{% endblock %}
+{% block gateway_body %}
+<form method="post">
+    <div class="gateway-field">
+        <label for="username">Username</label>
+        <input type="text" id="username" name="username" class="text-input" required autofocus>
     </div>
-</div>
+    <div class="gateway-field">
+        <label for="password">Password</label>
+        <input type="password" id="password" name="password" class="text-input" required>
+    </div>
+    {% if error %}
+    <div class="mono form-error">{{ error }}</div>
+    {% endif %}
+    <button type="submit" class="btn btn-primary gateway-signin-button">Sign in</button>
+</form>
 {% endblock %}

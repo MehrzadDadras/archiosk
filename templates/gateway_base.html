@@ -1,0 +1,34 @@
+{# ============================================================
+   Entry/gateway page family: login.html and gateway.html - a centered
+   card, the Archiosk brand lockup, one primary decision. Both are real,
+   live pages (see the "gateway.html is not dead" correction in
+   main.css's page-template-families note - login() redirects here by
+   default), not a family of one.
+   ============================================================ #}
+{% extends "base.html" %}
+
+{% block title %}{% block gateway_title %}Archiosk{% endblock %}{% endblock %}
+
+{% block content %}
+<div class="gateway-page">
+    <div class="gateway-card{% block gateway_card_modifier %}{% endblock %}">
+        <div class="gateway-brand">
+            <div class="gateway-logo">A</div>
+            <div>
+                <h1>Archiosk</h1>
+                {% block gateway_subtitle %}{% endblock %}
+            </div>
+        </div>
+
+        <div class="gateway-divider"></div>
+
+        <section class="gateway-section">
+            <p class="gateway-section-label">Project Gateway</p>
+            {% block gateway_section_heading %}{% endblock %}
+            {% block gateway_body %}{% endblock %}
+        </section>
+
+        {% block gateway_footer %}{% endblock %}
+    </div>
+</div>
+{% endblock %}
