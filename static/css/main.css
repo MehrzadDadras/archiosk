@@ -13,7 +13,14 @@
                     taken (Apply, Issue RFI, an Approval Gate "Yes"),
                     never ordinary error/failure
      --machine-blue machine/system/reference (focus rings, links,
-                    machine-generated Finding markers)
+                    machine-generated Finding markers) - also given a
+                    literal second life as the blueprint-grid backdrop
+                    line, since this product's own visual metaphor
+                    (a blueprint) is properly blue, not sand
+     --highlight-orange the one current/active position in a lifecycle
+                    or sequence - narrow and singular by design, not a
+                    general-purpose "selected" color (ordinary list/nav
+                    selection stays tonal, as before)
      --accepted-green   accepted / confirmed
      --attention-amber  needs evidence / pending attention
      --failure-red      contradiction / failure - distinct from the
@@ -61,8 +68,13 @@
        token below is deliberately darker than WCAG AA's 4.5:1 minimum,
        not tuned to just clear it. --text-metadata in particular was
        measured too faint in practice (~4.3:1) and is darkened
-       substantially, not just nudged. */
-    --text-primary: #221D17;      /* Basalt Ink */
+       substantially, not just nudged. text-primary's hue was later
+       given more saturation (19%->41%, same ~12% lightness) so the ink
+       itself reads as a richer, more pigmented brown-black rather than
+       a near-neutral grey-black - contrast against canvas barely moves
+       (14.7:1 -> 14.4:1, both far past the AA floor) because contrast
+       here is luminance-driven, not saturation-driven. */
+    --text-primary: #2B1D12;      /* Basalt Ink */
     --text-secondary: #453D2E;    /* Weathered Basalt */
     --text-metadata: #5A5140;     /* Stone Grey - timestamps, ids, labels - still clearly readable, not decorative */
     --text-disabled: #857A64;     /* Stone Grey - disabled controls - dimmer than metadata, never illegible */
@@ -75,6 +87,8 @@
     /* -- semantic operational colors (quiet, subordinate to the neutrals) - */
     --machine-blue: #235066;
     --machine-blue-tint: #DCE7EA;
+    --highlight-orange: #AF571D;
+    --highlight-orange-tint: #F8E2D3;
     --accepted-green: #2E5F38;
     --accepted-green-tint: #DCEADB;
     --attention-amber: #7A4A08;
@@ -132,16 +146,21 @@ a:focus-visible, button:focus-visible, input:focus-visible {
     * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
 
-/* -- blueprint grid backdrop ------------------------------------------ */
+/* -- blueprint grid backdrop ------------------------------------------
+   Genuinely blue, not the sand --border tone: a blueprint's own defining
+   feature is its cyanotype blue line, and blue sits roughly complementary
+   to this app's warm ~40deg canvas hue - the one place a structural blue
+   wash belongs, kept faint enough (0.3 opacity) to stay a backdrop, not a
+   foreground color. */
 .blueprint-grid {
     position: fixed;
     inset: 0;
     z-index: -1;
     background-image:
-        linear-gradient(var(--border) 1px, transparent 1px),
-        linear-gradient(90deg, var(--border) 1px, transparent 1px);
+        linear-gradient(#5995C0 1px, transparent 1px),
+        linear-gradient(90deg, #5995C0 1px, transparent 1px);
     background-size: 48px 48px;
-    opacity: 0.4;
+    opacity: 0.3;
 }
 
 /* -- app shell: expandable left navigation rail -------------------------
@@ -979,12 +998,14 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
     border: 1px solid var(--border);
     border-radius: 999px;
 }
-/* "Current position" reads through tone (Warm Stone), not a color -
-   consistent with every other "this is the active/selected one" state. */
+/* Deliberately the one place ordinary list/nav "selected" tone (Warm
+   Stone) is replaced with real color: a project's current lifecycle
+   position is a singular, rare fact worth a dedicated highlight, not
+   just another selected-row state - see --highlight-orange above. */
 .lifecycle-stage.current {
-    color: var(--text-primary);
-    background: var(--surface-selected);
-    border-color: var(--border-strong);
+    color: var(--surface-primary);
+    background: var(--highlight-orange);
+    border-color: var(--highlight-orange);
     font-weight: 600;
 }
 
