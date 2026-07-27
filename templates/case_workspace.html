@@ -806,6 +806,52 @@
                 </div>
                 {% endif %}
 
+                {% if row.investigation_step %}
+                {% set step = row.investigation_step %}
+                {% call macros.subdisclosure('How this was investigated') %}
+                    <p class="pane-note">
+                        Governed record of the investigation itself, not the model's raw reasoning
+                        (never captured or stored) - what was asked, what evidence was actually
+                        examined, and what came of it.
+                    </p>
+                    <p class="history-entry">
+                        <strong>Question asked:</strong> {{ step.question }}
+                    </p>
+                    <p class="history-entry">
+                        <strong>Evidence examined:</strong>
+                        {% if step.evidence_examined_ids.adjudication_ids %}{{ step.evidence_examined_ids.adjudication_ids|length }} adjudication(s){% endif %}
+                        {% if step.evidence_examined_ids.finding_ids %}, {{ step.evidence_examined_ids.finding_ids|length }} linked Finding(s){% endif %}
+                        {% if step.evidence_examined_ids.relationship_ids %}, {{ step.evidence_examined_ids.relationship_ids|length }} linked Relationship(s){% endif %}
+                        {% if step.evidence_examined_ids.accepted_knowledge_ids %}, {{ step.evidence_examined_ids.accepted_knowledge_ids|length }} Accepted Knowledge item(s){% endif %}
+                        {% if not (step.evidence_examined_ids.adjudication_ids or step.evidence_examined_ids.finding_ids or step.evidence_examined_ids.relationship_ids or step.evidence_examined_ids.accepted_knowledge_ids) %}
+                        none on record for this Requirement yet
+                        {% endif %}
+                    </p>
+                    {% if step.supporting_points %}
+                    <p class="history-entry">
+                        <strong>Grounded in:</strong>
+                        <ul>
+                            {% for point in step.supporting_points %}<li>{{ point }}</li>{% endfor %}
+                        </ul>
+                    </p>
+                    {% endif %}
+                    {% if step.open_questions %}
+                    <p class="history-entry">
+                        <strong>Open question(s):</strong>
+                        <ul>
+                            {% for q in step.open_questions %}<li>{{ q }}</li>{% endfor %}
+                        </ul>
+                    </p>
+                    {% endif %}
+                    <p class="history-entry">
+                        <strong>Confidence:</strong> {{ (step.confidence * 100)|round|int }}%
+                        {% if step.needs_human_judgment %}
+                        &middot; <span class="review-state-badge review-state-due">needs your judgment</span>
+                        {% endif %}
+                    </p>
+                {% endcall %}
+                {% endif %}
+
                 {% for validation in row.reviewer_validations if validation.correction_note %}
                 <div class="correction-note"><strong>Correction</strong> ({{ validation.reviewer }}): {{ validation.correction_note }}</div>
                 {% endfor %}

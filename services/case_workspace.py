@@ -157,6 +157,19 @@ ANALYSIS_TRIGGER_TYPES = (
     ANALYSIS_TRIGGER_LEGACY_UNSPECIFIED,
 )
 
+# CLAUDE-P08: InvestigationStep.step_kind vocabulary - open-world, same
+# pattern as KNOWN_RELATIONSHIP_TYPES (a single dataclass shape, a kind
+# label, not a family of subclasses). Exactly ONE value is ever produced
+# by real code today - see InvestigationStep's own docstring for why the
+# others a fuller agentic loop would eventually need (a real evidence-
+# retrieval step, a real branch, a human-gate action distinct from
+# ReviewerValidation) are not listed here: naming a kind before anything
+# produces it would be recording a capability that doesn't exist.
+INVESTIGATION_STEP_KIND_REQUIREMENT_INVESTIGATION = "requirement_investigation"
+KNOWN_INVESTIGATION_STEP_KINDS = (
+    INVESTIGATION_STEP_KIND_REQUIREMENT_INVESTIGATION,
+)
+
 
 # -- Open-World classification pattern (Prompt 8 #3) ------------------------
 # Generalizes the trigger_type/"other" shape Batch A already established for
@@ -1016,6 +1029,77 @@ class AnalysisRun:
     trigger: Optional[dict] = None  # asdict(AnalysisTrigger) - see record_analysis
     finding_ids: list[str] = field(default_factory=list)
     prior_corrections_considered: int = 0
+
+
+@dataclass
+class InvestigationStep:
+    """
+    CLAUDE-P08: one observable, auditable unit of investigation work -
+    what was being investigated, what evidence was gathered, what
+    conclusion/uncertainty resulted - deliberately never the model's raw
+    reasoning tokens. The Anthropic messages API doesn't expose those
+    for an ordinary text completion in the first place, so this schema
+    isn't choosing to hide something it could otherwise show - there is
+    nothing there to hide.
+
+    One dataclass, an open-world `step_kind` (KNOWN_INVESTIGATION_STEP_
+    KINDS - same pattern as Relationship.relationship_type/Supersession's
+    object-kind normalization), not a family of subclasses for query/
+    retrieval/comparison/branch/human-gate/conclusion - because exactly
+    ONE kind of real investigative event exists today: a single grounded
+    model call that bundles evidence-examination, conclusion,
+    uncertainty, and a human-judgment signal into one round trip (see
+    services/requirement_investigation.py's own docstring on why this is
+    deliberately not yet a multi-step agentic loop). Distinct kinds
+    become honest to add only once an actual multi-round loop produces
+    them as separate observable events - inventing that taxonomy now,
+    before anything real produces a second kind, would be modeling a
+    capability that doesn't exist rather than describing one that does.
+
+    `evidence_requested` is a plain description of what evidence
+    CATEGORIES were gathered - honest because retrieval today is fixed/
+    deterministic (see _handle_investigate_requirement), not a claim
+    that the model itself chose what to look at.
+
+    `evidence_examined_ids` references real governed records by id
+    (adjudication/finding/relationship/accepted-knowledge ids already
+    returned by requirement_adjudications_for/requirement_evidence) -
+    never a text copy, so this can never drift from the record it
+    describes, and every id here is independently look-up-able.
+
+    `branched_from_step_id` is the schema's extension point for a future
+    Investigation that exists because an earlier step's own
+    open_questions prompted it - present now so no migration is needed
+    later, but nothing in this pass ever sets it: whether an open
+    question should ever automatically or manually spin off a new
+    Investigation is a real product decision, not inferred here.
+
+    The human-gate itself is NOT reinvented here - `needs_human_judgment`
+    is a signal surfaced for display, but the actual gated act is the
+    EXISTING ReviewerValidation on whatever Finding this step produced
+    (`analysis_id` -> AnalysisRun.finding_ids). One Approval Gate
+    mechanism, not two.
+    """
+
+    id: str
+    project_id: str
+    case_id: str
+    step_kind: str
+    anchor: dict  # asdict(Anchor) - what was being investigated
+    question: str  # the reviewer's own question, verbatim
+    triggered_by_actor: str
+    created_at: str
+    evidence_requested: list[str] = field(default_factory=list)
+    evidence_examined_ids: dict = field(default_factory=dict)
+    ran: bool = False
+    skipped_reason: Optional[str] = None
+    assessment: Optional[str] = None
+    confidence: Optional[float] = None
+    supporting_points: list[str] = field(default_factory=list)
+    open_questions: list[str] = field(default_factory=list)
+    needs_human_judgment: bool = True
+    analysis_id: Optional[str] = None
+    branched_from_step_id: Optional[str] = None
 
 
 @dataclass
@@ -1991,6 +2075,7 @@ class ProjectWorkspace:
     source_references: list[dict] = field(default_factory=list)
     requirement_adjudications: list[dict] = field(default_factory=list)
     carried_forward_adoptions: list[dict] = field(default_factory=list)
+    investigation_steps: list[dict] = field(default_factory=list)  # CLAUDE-P08 - see InvestigationStep
 
     # -- Project Home presentation state (Prompt 3) ---------------------------
     # UI/orientation state only - never forensic or compliance records, and
@@ -3937,6 +4022,64 @@ class CaseWorkspaceStore:
             )
 
         return asdict(analysis)
+
+    # -- investigation worklist (CLAUDE-P08) ----------------------------------------
+
+    def record_investigation_step(
+        self,
+        workspace: ProjectWorkspace,
+        case_id: str,
+        step_kind: str,
+        anchor: dict,
+        question: str,
+        triggered_by_actor: str,
+        evidence_requested: Optional[list[str]] = None,
+        evidence_examined_ids: Optional[dict] = None,
+        ran: bool = False,
+        skipped_reason: Optional[str] = None,
+        assessment: Optional[str] = None,
+        confidence: Optional[float] = None,
+        supporting_points: Optional[list[str]] = None,
+        open_questions: Optional[list[str]] = None,
+        needs_human_judgment: bool = True,
+        analysis_id: Optional[str] = None,
+        branched_from_step_id: Optional[str] = None,
+    ) -> dict:
+        """Persists one InvestigationStep - always, whether the underlying
+        reasoning actually ran or was honestly skipped (ran=False,
+        skipped_reason set). Recording the ATTEMPT, not only successful
+        runs, is what makes "how the system fails honestly" itself
+        auditable rather than leaving a silent gap in the worklist."""
+        step = InvestigationStep(
+            id=_new_id(),
+            project_id=workspace.project_id,
+            case_id=case_id,
+            step_kind=normalize_open_world_value(step_kind, KNOWN_INVESTIGATION_STEP_KINDS),
+            anchor=anchor,
+            question=question,
+            triggered_by_actor=triggered_by_actor,
+            created_at=_now(),
+            evidence_requested=evidence_requested or [],
+            evidence_examined_ids=evidence_examined_ids or {},
+            ran=ran,
+            skipped_reason=skipped_reason,
+            assessment=assessment,
+            confidence=confidence,
+            supporting_points=supporting_points or [],
+            open_questions=open_questions or [],
+            needs_human_judgment=needs_human_judgment,
+            analysis_id=analysis_id,
+            branched_from_step_id=branched_from_step_id,
+        )
+        workspace.investigation_steps.append(asdict(step))
+        self.save(workspace)
+        return asdict(step)
+
+    def investigation_steps_for_case(self, workspace: ProjectWorkspace, case_id: str) -> list[dict]:
+        return [s for s in workspace.investigation_steps if s["case_id"] == case_id]
+
+    def investigation_step_for_analysis(self, workspace: ProjectWorkspace, analysis_id: str) -> Optional[dict]:
+        return next((s for s in workspace.investigation_steps if s.get("analysis_id") == analysis_id), None)
 
     # -- reviewer validation --------------------------------------------------------
 

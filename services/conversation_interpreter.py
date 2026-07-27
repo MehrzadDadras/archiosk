@@ -34,6 +34,7 @@ from typing import Optional
 
 from services.case_workspace import (
     ANALYSIS_TRIGGER_USER_INITIATED,
+    INVESTIGATION_STEP_KIND_REQUIREMENT_INVESTIGATION,
     AnalysisTrigger,
     CaseWorkspaceError,
     CaseWorkspaceStore,
@@ -364,6 +365,22 @@ def _handle_investigate_requirement(
     evidence = store.requirement_evidence(workspace, requirement["id"])
     adjudication_history = store.requirement_adjudications_for(workspace, requirement["id"])
 
+    # CLAUDE-P08: fixed, honest description of what was gathered - not a
+    # claim the model chose what to look at, since retrieval today is
+    # deterministic (see requirement_evidence/requirement_adjudications_
+    # for, both called unconditionally above, same for every question).
+    evidence_requested = [
+        "This Requirement's own recorded fields (text, classification, subject domain)",
+        "Full adjudication history for this Requirement",
+        "Findings/Relationships/AcceptedKnowledge cited by its latest adjudication",
+    ]
+    evidence_examined_ids = {
+        "adjudication_ids": [a["id"] for a in adjudication_history],
+        "finding_ids": [f["id"] for f in evidence.get("findings", [])],
+        "relationship_ids": [r["id"] for r in evidence.get("relationships", [])],
+        "accepted_knowledge_ids": [k["id"] for k in evidence.get("accepted_knowledge", [])],
+    }
+
     result = investigate_requirement(
         question=text,
         requirement=requirement,
@@ -372,6 +389,18 @@ def _handle_investigate_requirement(
     )
 
     if not result.ran:
+        store.record_investigation_step(
+            workspace,
+            case_id=case["id"],
+            step_kind=INVESTIGATION_STEP_KIND_REQUIREMENT_INVESTIGATION,
+            anchor=anchor,
+            question=text,
+            triggered_by_actor=reviewer,
+            evidence_requested=evidence_requested,
+            evidence_examined_ids=evidence_examined_ids,
+            ran=False,
+            skipped_reason=result.skipped_reason,
+        )
         return InterpretationResult(
             action_taken="investigation_unavailable",
             reply_text=(
@@ -397,6 +426,24 @@ def _handle_investigate_requirement(
         engine_version=os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-6"),
         findings=[{"statement": result.assessment, "machine_confidence": result.confidence}],
         trigger=trigger,
+    )
+
+    store.record_investigation_step(
+        workspace,
+        case_id=case["id"],
+        step_kind=INVESTIGATION_STEP_KIND_REQUIREMENT_INVESTIGATION,
+        anchor=anchor,
+        question=text,
+        triggered_by_actor=reviewer,
+        evidence_requested=evidence_requested,
+        evidence_examined_ids=evidence_examined_ids,
+        ran=True,
+        assessment=result.assessment,
+        confidence=result.confidence,
+        supporting_points=result.supporting_points,
+        open_questions=result.open_questions,
+        needs_human_judgment=result.needs_human_judgment,
+        analysis_id=analysis["id"],
     )
 
     reply_parts = [f"Assessment (confidence {result.confidence:.0%}): {result.assessment}"]

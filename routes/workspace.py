@@ -407,6 +407,13 @@ def show_workspace(project_id):
                         d for d in store.rfi_drafts_for_case(workspace, active_case["id"])
                         if d["finding_id"] == finding_id
                     ],
+                    # CLAUDE-P08: the auditable worklist entry behind this
+                    # Finding, if a real investigation produced it - None
+                    # for every mock drawing-analysis Finding, which never
+                    # records one.
+                    "investigation_step": store.investigation_step_for_analysis(
+                        workspace, finding["analysis_id"]
+                    ),
                 }
             )
 
