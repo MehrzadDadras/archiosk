@@ -1009,9 +1009,31 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
     font-family: var(--font-body);
     text-transform: uppercase;
     letter-spacing: 0.1em;
-    font-size: 0.8rem;
+    font-size: var(--text-xs);
     color: var(--text-metadata);
-    margin: 0 0 0.3rem;
+    margin: 0 0 var(--space-2);
+}
+
+/* -- shared text utilities ------------------------------------------------
+   Consolidates inline style="" patterns that had drifted into
+   near-duplicates across templates (font-size:0.85rem vs 0.82rem vs
+   0.88rem all meaning "small secondary text", margin -0.6rem vs -0.4rem
+   both meaning "pull this note up under the section title") - now one
+   canonical value each, referencing tokens.css. Prefer these classes
+   over a new inline style="" for anything this general; keep inline
+   styles for genuinely one-off, non-reusable positioning only. */
+.text-muted { color: var(--text-secondary); }
+.pane-note {
+    font-size: var(--text-sm);
+    color: var(--text-secondary);
+    margin: calc(-1 * var(--space-5)) 0 var(--space-6);
+}
+.history-entry {
+    font-size: var(--text-sm);
+    color: var(--text-secondary);
+    margin: var(--space-3) 0;
+    border-left: 3px solid var(--border-strong);
+    padding-left: var(--space-6);
 }
 
 /* -- left: project navigation ------------------------------------------------ */

@@ -81,7 +81,7 @@
 
         {% set needs_attention_count = needs_attention_view|map(attribute='findings')|map('length')|sum %}
         {% call macros.accordion('Needs Attention (' ~ needs_attention_count ~ ')', group='left', id='needs-attention', open=(needs_attention_count > 0)) %}
-            <p style="font-size:0.85rem;color:var(--text-secondary);margin:-0.6rem 0 0.6rem;">
+            <p class="pane-note">
                 Every unresolved Finding across every Investigation you can see in this
                 Project, not just whichever one is open right now - grouped by
                 Investigation, click through to work on one.
@@ -118,11 +118,11 @@
                 {% set item = row.item %}
                 <li class="source-item">
                     {{ item.statement }}
-                    <br><small style="color:var(--text-secondary);">
+                    <br><small class="text-muted">
                         established by {{ item.established_by }} &middot; {{ item.established_at }}
                         &middot; from {{ row.source_case_title or 'an unknown Case' }}
                     </small>
-                    <br><small style="color:var(--text-secondary);">
+                    <br><small class="text-muted">
                         {% if row.linked_requirements %}
                         Linked Requirement(s): {% for req in row.linked_requirements %}{{ req.text_reference[:40] }}{% if not loop.last %}; {% endif %}{% endfor %}
                         {% else %}
@@ -137,7 +137,7 @@
         {% endcall %}
 
         {% call macros.accordion('Project Instructions', status='+', group='left', id='instructions') %}
-            <p style="font-size:0.85rem;color:var(--text-secondary);margin:-0.6rem 0 0.6rem;">
+            <p class="pane-note">
                 Project / Case Operating Instructions guide terminology, conventions, and known assumptions
                 for this Project. Always subordinate to Archiosk governance &mdash; Stone Wall, source
                 authority, provenance, and approval boundaries take precedence and can never be overridden
@@ -184,7 +184,7 @@
                 {% if source.supersedes_source_id %}
                 <br><small style="color:var(--machine-blue);">Revision of a prior Source.</small>
                 {% endif %}
-                {% if source.note %}<br><small style="color:var(--text-secondary);">{{ source.note }}</small>{% endif %}
+                {% if source.note %}<br><small class="text-muted">{{ source.note }}</small>{% endif %}
                 {% if not source.file_path and source.kind == 'rfq_rfp_document' %}
                 <br><small style="color:var(--text-disabled);font-style:italic;">Original file not stored (ingested before file retention was added).</small>
                 {% endif %}
@@ -216,7 +216,7 @@
 
         {% call macros.accordion('Requirement Compliance', status=(requirements_view|length ~ ' governed' if requirements_view else None), group='left', id='requirement-compliance') %}
         {% if requirements_view %}
-        <p style="font-size:0.85rem;color:var(--text-secondary);margin:-0.6rem 0 0.8rem;">
+        <p class="pane-note">
             {{ requirements_view|length }} governed Requirement(s) —
             {% for state, count in compliance_rollup.items() %}
             <span class="review-state-badge">{{ count }} {{ state }}</span>{% if not loop.last %} {% endif %}
@@ -227,13 +227,13 @@
             <br><a href="#governed-requirements">View Requirements &darr;</a>
         </p>
         {% else %}
-        <p style="font-size:0.85rem;color:var(--text-secondary);margin:-0.6rem 0 0.8rem;">No Requirements have been promoted to governed state yet.</p>
+        <p class="pane-note">No Requirements have been promoted to governed state yet.</p>
         {% endif %}
         {% endcall %}
 
         {% call macros.accordion('RFI Export', status=(document.consistency_flags|length ~ ' flagged' if document.consistency_flags else None), group='left', id='rfi-export') %}
         {% if document.consistency_flags %}
-        <p style="font-size:0.85rem;color:var(--text-secondary);margin:-0.6rem 0 0.8rem;">
+        <p class="pane-note">
             {{ document.consistency_flags|length }} flagged cross-requirement contradiction(s) detected by this
             Project's consistency check.
             <br><a class="btn btn-ghost" href="{{ url_for('workspace.export_rfi', project_id=project_id) }}">Download RFI (.docx)</a>
@@ -258,9 +258,9 @@
             </div>
         {% endcall %}
         {% elif document.consistency_checked %}
-        <p style="font-size:0.85rem;color:var(--text-secondary);margin:-0.6rem 0 0.8rem;">Consistency check ran — no contradictions were flagged, so there is nothing to export.</p>
+        <p class="pane-note">Consistency check ran — no contradictions were flagged, so there is nothing to export.</p>
         {% else %}
-        <p style="font-size:0.85rem;color:var(--text-secondary);margin:-0.6rem 0 0.8rem;">The consistency check hasn't run for this Project yet — RFI export needs flagged contradictions to build from.</p>
+        <p class="pane-note">The consistency check hasn't run for this Project yet — RFI export needs flagged contradictions to build from.</p>
         {% endif %}
         {% endcall %}
 
@@ -290,7 +290,7 @@
         {% endif %}
 
         {% call macros.subdisclosure('+ Register a Requirement') %}
-            <p style="font-size:0.82rem;color:var(--text-secondary);margin:-0.4rem 0 0.6rem;">
+            <p class="pane-note">
                 For a Requirement's text that lives in a Source the legacy extraction pipeline
                 never saw - any governed Source, drawing or document. No Investigation needed;
                 a Requirement belongs to the Project, not to a Case.
@@ -327,7 +327,7 @@
                 {% if row.adjudication_history|length > 1 %}
                 {% call macros.subdisclosure('Adjudication history (' ~ row.adjudication_history|length ~ ') — this Requirement has been re-examined') %}
                     {% for a in row.adjudication_history %}
-                    <p style="font-size:0.85rem;color:var(--text-secondary);margin:0.3rem 0;border-left:3px solid var(--border-strong);padding-left:0.6rem;">
+                    <p class="history-entry">
                         <span class="review-state-badge">{{ a.outcome }}</span> by {{ a.adjudicator }} &middot; {{ a.adjudicated_at }}
                         <br>{{ a.reasoning }}
                     </p>
@@ -388,7 +388,7 @@
                 {% if row.revision_history %}
                 {% call macros.subdisclosure('Revision history (' ~ row.revision_history|length ~ ') — this Requirement\'s wording has changed') %}
                     {% for entry in row.revision_history %}
-                    <p style="font-size:0.85rem;color:var(--text-secondary);margin:0.3rem 0;border-left:3px solid var(--border-strong);padding-left:0.6rem;">
+                    <p class="history-entry">
                         {{ entry.requirement.text_reference }}
                         <br>Revised by {{ entry.supersession.actor }} on {{ entry.supersession.authorized_at }}
                         {% if entry.supersession.authority_class %} &middot; {{ entry.supersession.authority_class }}{% endif %}
@@ -399,7 +399,7 @@
                 {% endif %}
 
                 {% call macros.subdisclosure('+ Revise (Addendum)') %}
-                    <p style="font-size:0.82rem;color:var(--text-secondary);margin:-0.4rem 0 0.6rem;">
+                    <p class="pane-note">
                         Records a governed correction to this Requirement's own stated text -
                         the original remains, superseded and still reconstructable, exactly
                         like a Source revision. Use this when an Addendum (or similar) changes
@@ -419,7 +419,7 @@
         {% endcall %}
 
         {% call macros.accordion('Key Dates (' ~ temporal_obligations_view|length ~ ')', group='left', id='temporal-obligations') %}
-            <p style="font-size:0.85rem;color:var(--text-secondary);margin:-0.6rem 0 0.6rem;">
+            <p class="pane-note">
                 Project-wide due dates - RFI responses, submittal review periods, design
                 deliverables, and the like - sorted by what needs attention first, not by
                 when they were added.
@@ -431,7 +431,7 @@
                 <li class="source-item">
                     <span class="review-state-badge review-state-{{ row.condition|replace('_', '-') }}">{{ row.condition.replace('_', ' ') }}</span>
                     {{ obligation.title }}
-                    <br><small style="color:var(--text-secondary);">
+                    <br><small class="text-muted">
                         {{ obligation.required_action }} by {{ obligation.current_accepted_date }}
                         {% if obligation.responsible_actor %} &middot; {{ obligation.responsible_actor }}{% endif %}
                     </small>
@@ -464,7 +464,7 @@
                 <li class="source-item" style="font-size:0.85rem;">
                     <span class="source-kind-badge">{{ event.event_type.replace('_', ' ') }}</span>
                     {{ event.actor }} ({{ event.role }})
-                    <br><small style="color:var(--text-secondary);">{{ event.created_at }}</small>
+                    <br><small class="text-muted">{{ event.created_at }}</small>
                 </li>
                 {% endfor %}
             </ul>
@@ -487,7 +487,7 @@
             <li class="source-item">
                 <span class="source-kind-badge">{{ activity.kind }}</span>
                 {{ activity.description }}
-                <br><small style="color:var(--text-secondary);">{{ activity.status }} &middot; {{ activity.created_by }}</small>
+                <br><small class="text-muted">{{ activity.status }} &middot; {{ activity.created_by }}</small>
             </li>
             {% endfor %}
         </ul>
@@ -600,7 +600,7 @@
             <summary>
                 {{ thread.title }}
                 <span class="review-state-badge">{{ thread.status.replace('_', ' ') }}</span>
-                {% if thread.anchor.anchor_type == 'finding' %}<small style="color:var(--text-secondary);">&middot; re: a Finding</small>{% endif %}
+                {% if thread.anchor.anchor_type == 'finding' %}<small class="text-muted">&middot; re: a Finding</small>{% endif %}
             </summary>
 
             {% if thread.resolution %}
@@ -653,7 +653,7 @@
                     <strong>Attention</strong> for {{ attention.intended_actor }}{% if attention.intended_actor == session.username %} <span style="color:var(--attention-amber);">(you)</span>{% endif %}
                     &middot; requested by {{ attention.created_by }} on {{ attention.created_at }}
                     {% if entry.about_message %}
-                    <br><span style="color:var(--text-secondary);">Re: &ldquo;{{ entry.about_message.text[:80] }}&rdquo;</span>
+                    <br><span class="text-muted">Re: &ldquo;{{ entry.about_message.text[:80] }}&rdquo;</span>
                     {% endif %}
                     <br>
                     {% if attention.status == 'responded' %}
@@ -902,7 +902,7 @@
 
         <div class="workspace-pane">
             <h2>Project State</h2>
-            <p style="font-size:0.85rem;color:var(--text-secondary);margin:-0.6rem 0 0.8rem;">
+            <p class="pane-note">
                 Project Instructions and Project Sources are on the left &mdash; the same governed state whether
                 you're here or inside an Investigation.
             </p>
@@ -965,11 +965,11 @@
                         {% for snapshot in workspace.snapshots|sort(attribute='frozen_at', reverse=True) %}
                         <li class="source-item">
                             {{ snapshot.label }}
-                            <br><small style="color:var(--text-secondary);">
+                            <br><small class="text-muted">
                                 Frozen {{ snapshot.frozen_at }} by {{ snapshot.created_by }}
                                 {% if snapshot.note %}&middot; {{ snapshot.note }}{% endif %}
                             </small>
-                            <br><small style="color:var(--text-secondary);">
+                            <br><small class="text-muted">
                                 {% for list_name, ids in snapshot.reference_lists.items() %}{% if ids %}{{ list_name.replace('_', ' ') }}: {{ ids|length }}{% if not loop.last %} &middot; {% endif %}{% endif %}{% endfor %}
                             </small>
                         </li>
