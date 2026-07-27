@@ -917,8 +917,38 @@
                         <input type="text" name="note" placeholder="Note (optional)">
                         <button type="submit">Create Snapshot</button>
                     </form>
+                {% endcall %}
+
+                {# Snapshots could be created but never viewed again anywhere -
+                   creation existed (create_project_snapshot, above) but
+                   snapshots_for_project/get_snapshot never had a route or
+                   template at all, so "N Snapshot(s) recorded" was a dead
+                   end: no way to ever see what a Snapshot actually froze.
+                   A Snapshot is references, not copies (see the Snapshot
+                   dataclass's own docstring) - reference_lists' ids are
+                   resolved back to CURRENT content here, so counts can
+                   look different from what was true at freeze time if
+                   those objects were later mutated in place; an honest
+                   limitation the dataclass itself documents, not one
+                   introduced by this view. #}
+                {% call macros.subdisclosure('View Snapshots (' ~ workspace.snapshots|length ~ ')') %}
                     {% if workspace.snapshots %}
-                    <p style="font-size:0.85rem;color:var(--text-secondary);margin-top:0.4rem;">{{ workspace.snapshots|length }} Snapshot(s) recorded.</p>
+                    <ul class="source-list">
+                        {% for snapshot in workspace.snapshots|sort(attribute='frozen_at', reverse=True) %}
+                        <li class="source-item">
+                            {{ snapshot.label }}
+                            <br><small style="color:var(--text-secondary);">
+                                Frozen {{ snapshot.frozen_at }} by {{ snapshot.created_by }}
+                                {% if snapshot.note %}&middot; {{ snapshot.note }}{% endif %}
+                            </small>
+                            <br><small style="color:var(--text-secondary);">
+                                {% for list_name, ids in snapshot.reference_lists.items() %}{% if ids %}{{ list_name.replace('_', ' ') }}: {{ ids|length }}{% if not loop.last %} &middot; {% endif %}{% endif %}{% endfor %}
+                            </small>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                    {% else %}
+                    <p style="font-size:0.88rem;color:var(--text-secondary);">No Snapshots recorded yet.</p>
                     {% endif %}
                 {% endcall %}
             {% endcall %}
