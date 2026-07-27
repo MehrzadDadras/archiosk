@@ -299,6 +299,16 @@ def show_workspace(project_id):
 
     focused_finding_id = session.get(f"focused_finding:{project_id}")
 
+    # OPEN, NOT YET JUSTIFIED TO FIX: findings_view (and requirements_view,
+    # below) render in active_case["finding_ids"] / governed_requirements
+    # order - i.e. whatever order they were created/registered in, not
+    # sorted by what needs attention. A finding still awaiting review sits
+    # wherever it was created, not ahead of ones already Confirmed/Applied.
+    # Same class of bug as the Case Workspace pane-priority fix, but a real
+    # fix here means choosing a review-state priority ranking, which is a
+    # workflow/domain judgment call this project has historically made
+    # deliberately (see the Reviewer Validation / Disposition / Adjudication
+    # model) - not something to decide as a side effect of a geometry pass.
     findings_view = []
     applied_count = 0
     awaiting_apply_count = 0
