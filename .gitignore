@@ -25,3 +25,11 @@ instance/
 
 # Node (if frontend tooling is added later)
 node_modules/
+
+# Generated static-preview build output (regenerate via tools/static_preview/)
+tools/static_preview/build/
+
+# Claude Code local, machine-specific state - never the shared project
+# config (.claude/skills/, a future .claude/settings.json belong in git;
+# this doesn't)
+.claude/settings.local.json

@@ -47,6 +47,9 @@ class BaseConfig:
     # is only safe because changing this value changes the requested URL —
     # bump it any time main.css or dashboard.js changes, or browsers that
     # already cached the old file won't see the update for up to 30 days.
+    # NOTE: the "19" default below is dead in practice once .env sets a
+    # real STATIC_VERSION - python-dotenv never overrides an already-set
+    # env var. .env is the actual source of truth; bump it there.
     STATIC_VERSION = os.getenv("STATIC_VERSION", "19")
 
     # HTTPOnly/SameSite are safe in every environment; Secure requires HTTPS,

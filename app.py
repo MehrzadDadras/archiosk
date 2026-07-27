@@ -161,6 +161,11 @@ def _nav_recent_projects(app: Flask, limit: int = 15) -> list:
 
 
 # Local dev entrypoint: `python app.py`
+# debug=True's reloader can leave orphaned parent/child chains behind
+# across repeated restarts in some environments; a stale process in that
+# chain keeps serving a stale .env snapshot. Use the `restart-app` skill
+# (.claude/skills/restart-app/) for a clean restart instead of trusting
+# that killing the PID on the port is enough.
 if __name__ == "__main__":
     application = create_app()
     application.run(host="127.0.0.1", port=int(os.getenv("PORT", "5000")), debug=True)
