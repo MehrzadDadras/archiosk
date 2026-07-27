@@ -25,6 +25,8 @@ from pathlib import Path
 
 from services.case_workspace import (
     ANALYSIS_TRIGGER_USER_INITIATED,
+    CASE_STATUS_ARCHIVED,
+    CASE_STATUS_OPEN,
     CASE_VISIBILITY_PRIVATE,
     CASE_VISIBILITY_SHARED,
     AnalysisTrigger,
@@ -84,6 +86,22 @@ class CasePrivacyTests(unittest.TestCase):
         # owner1 sees only their own; the count itself must not leak owner2's Case
         visible_to_owner1 = self.store.visible_cases_for(self.workspace, "owner1")
         self.assertEqual(len(visible_to_owner1), 1)
+
+    def test_open_cases_precede_archived_regardless_of_creation_order(self):
+        case_a = self.store.create_case(self.workspace, title="A", objective="x", created_by="owner1")
+        case_b = self.store.create_case(self.workspace, title="B", objective="x", created_by="owner1")
+        case_c = self.store.create_case(self.workspace, title="C", objective="x", created_by="owner1")
+        # A was created first but gets archived - it must not lead the
+        # list on creation order alone once it's no longer active work.
+        self.store.archive_case(self.workspace, case_id=case_a["id"], actor="owner1")
+        visible = self.store.visible_cases_for(self.workspace, "owner1")
+        self.assertEqual(
+            [c["status"] for c in visible],
+            [CASE_STATUS_OPEN, CASE_STATUS_OPEN, CASE_STATUS_ARCHIVED],
+        )
+        # relative order within each group (open, then archived) is
+        # otherwise unchanged - B before C, both created after A.
+        self.assertEqual([c["id"] for c in visible], [case_b["id"], case_c["id"], case_a["id"]])
 
     # -- sharing ---------------------------------------------------------------
 
