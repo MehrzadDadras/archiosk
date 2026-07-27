@@ -1009,7 +1009,27 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
    (.project-home, below) isn't part of this named layout - it only ever
    shares this grid with .workspace-pane-nav, placed via its own
    grid-column span, which coexists fine with named areas used
-   elsewhere in the same grid. */
+   elsewhere in the same grid.
+
+   OPEN ACCESSIBILITY CONCERN, not yet resolved: .workspace-pane-nav is
+   still first in the actual DOM (see case_workspace.html - it has to
+   stay there for Project Home's own layout), so at the two breakpoints
+   below, keyboard/screen-reader tab order still reaches it before
+   conversation/findings even though it now renders visually last. The
+   visual reorder here fixes the bigger, more universal problem (every
+   user on a narrow viewport landing on reference material instead of
+   their active work); it does not fix tab order for keyboard-only
+   users at these widths. A real fix needs the nav markup itself moved
+   later in the template, reconciled with Project Home's use of the
+   same pane - deliberately not attempted in the same pass as the CSS
+   fix. Don't close this out by only touching CSS again.
+
+   ALSO NOT YET DONE: the three reflow states below (wide/medium/narrow)
+   are reasoned from CSS Grid's specified behavior, not confirmed against
+   a real rendered browser at each width - no browser/screenshot access
+   was available when this was written. Treat this geometry as reasoned,
+   not proven, until someone actually resizes a real window through all
+   three states. */
 .case-workspace {
     display: grid;
     grid-template-columns: 240px minmax(0, 1fr) minmax(0, 1.15fr);

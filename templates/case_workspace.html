@@ -14,7 +14,11 @@
 {% endif %}
 
 <div class="case-workspace" data-project-id="{{ project_id }}">
-    {# ---------------- Left: Project Navigation (always visible - project-scoped, not Case-scoped) ---------------- #}
+    {# ---------------- Left: Project Navigation (always visible - project-scoped, not Case-scoped) ----------------
+       Stays first in DOM (Project Home, below, needs it here) even
+       though main.css visually reorders it after conversation/findings
+       at narrower widths - open tab-order concern, see the OPEN
+       ACCESSIBILITY CONCERN comment on .case-workspace in main.css. #}
     <aside class="workspace-pane workspace-pane-nav">
         <h2>Project</h2>
 
@@ -24,6 +28,57 @@
             <span class="lifecycle-stage{% if stage in ['RFP'] %} current{% endif %}">{{ stage }}</span>
             {% endfor %}
         </div>
+
+        {# Cases is the one accordion the app itself already marks as
+           primary (open=True, the only one) - it belongs first, not
+           after three closed reference accordions a user would have to
+           scroll past to reach the thing they actually opened this pane
+           for. Everything else below keeps its prior relative order;
+           this is a targeted fix for a signal (open=True) contradicting
+           its own position, not a full re-ranking of the pane. #}
+        {% call macros.accordion('Cases (' ~ visible_cases|length ~ ')', group='left', id='cases', open=True) %}
+        <ul class="case-list">
+            {% for case in visible_cases %}
+            <li>
+                <a class="case-item{% if active_case and case.id == active_case.id %} active{% endif %}"
+                   href="{{ url_for('workspace.show_workspace', project_id=project_id, case=case.id) }}">
+                    <span class="case-status-badge">{{ case.status }}</span>
+                    <span class="case-status-badge">{{ case.visibility }}</span>
+                    {{ case.title }}
+                </a>
+                {% if case.status != 'archived' and case.visibility == 'private' and case.created_by == session.username %}
+                <form method="post" action="{{ url_for('workspace.share_case', project_id=project_id, case_id=case.id) }}">
+                    <button type="submit" class="link-button">Share</button>
+                </form>
+                {% elif case.status != 'archived' and case.visibility == 'shared' and case.created_by == session.username %}
+                <form method="post" action="{{ url_for('workspace.retract_case', project_id=project_id, case_id=case.id) }}">
+                    <button type="submit" class="link-button">Retract to Private</button>
+                </form>
+                {% endif %}
+                {% if case.status != 'archived' and (case.created_by == session.username or session.role == 'admin') %}
+                <form method="post" action="{{ url_for('workspace.archive_case', project_id=project_id, case_id=case.id) }}">
+                    <button type="submit" class="link-button">Archive</button>
+                </form>
+                {% elif case.status == 'archived' and (case.created_by == session.username or session.role == 'admin') %}
+                <form method="post" action="{{ url_for('workspace.derive_case', project_id=project_id, case_id=case.id) }}">
+                    <button type="submit" class="link-button">Derive Active Case</button>
+                </form>
+                {% endif %}
+            </li>
+            {% else %}
+            <li style="color:var(--text-secondary);font-size:0.82rem;">No Cases yet.</li>
+            {% endfor %}
+        </ul>
+
+        {% call macros.subdisclosure('+ New Case') %}
+            <form class="workspace-form" method="post" action="{{ url_for('workspace.create_case', project_id=project_id) }}">
+                <input type="text" name="title" placeholder="Case title (e.g. Drawing Review — Sheet A101)" required>
+                <input type="text" name="objective" placeholder="Objective (optional)">
+                <button type="submit">Create Case</button>
+            </form>
+        {% endcall %}
+        {% endcall %}
+
         {% call macros.accordion('Accepted Knowledge (' ~ accepted_knowledge|length ~ ')', group='left', id='accepted-knowledge') %}
         <p style="color:var(--text-secondary);font-size:0.85rem;margin:-0.6rem 0 0.6rem;">
             Every Applied Finding across this Project's Cases, independent of which Case produced it —
@@ -119,49 +174,6 @@
             <p style="font-size:0.85rem;color:var(--text-secondary);">
                 Not yet available &mdash; no external source connector is configured for this deployment.
             </p>
-        {% endcall %}
-        {% endcall %}
-
-        {% call macros.accordion('Cases (' ~ visible_cases|length ~ ')', group='left', id='cases', open=True) %}
-        <ul class="case-list">
-            {% for case in visible_cases %}
-            <li>
-                <a class="case-item{% if active_case and case.id == active_case.id %} active{% endif %}"
-                   href="{{ url_for('workspace.show_workspace', project_id=project_id, case=case.id) }}">
-                    <span class="case-status-badge">{{ case.status }}</span>
-                    <span class="case-status-badge">{{ case.visibility }}</span>
-                    {{ case.title }}
-                </a>
-                {% if case.status != 'archived' and case.visibility == 'private' and case.created_by == session.username %}
-                <form method="post" action="{{ url_for('workspace.share_case', project_id=project_id, case_id=case.id) }}">
-                    <button type="submit" class="link-button">Share</button>
-                </form>
-                {% elif case.status != 'archived' and case.visibility == 'shared' and case.created_by == session.username %}
-                <form method="post" action="{{ url_for('workspace.retract_case', project_id=project_id, case_id=case.id) }}">
-                    <button type="submit" class="link-button">Retract to Private</button>
-                </form>
-                {% endif %}
-                {% if case.status != 'archived' and (case.created_by == session.username or session.role == 'admin') %}
-                <form method="post" action="{{ url_for('workspace.archive_case', project_id=project_id, case_id=case.id) }}">
-                    <button type="submit" class="link-button">Archive</button>
-                </form>
-                {% elif case.status == 'archived' and (case.created_by == session.username or session.role == 'admin') %}
-                <form method="post" action="{{ url_for('workspace.derive_case', project_id=project_id, case_id=case.id) }}">
-                    <button type="submit" class="link-button">Derive Active Case</button>
-                </form>
-                {% endif %}
-            </li>
-            {% else %}
-            <li style="color:var(--text-secondary);font-size:0.82rem;">No Cases yet.</li>
-            {% endfor %}
-        </ul>
-
-        {% call macros.subdisclosure('+ New Case') %}
-            <form class="workspace-form" method="post" action="{{ url_for('workspace.create_case', project_id=project_id) }}">
-                <input type="text" name="title" placeholder="Case title (e.g. Drawing Review — Sheet A101)" required>
-                <input type="text" name="objective" placeholder="Objective (optional)">
-                <button type="submit">Create Case</button>
-            </form>
         {% endcall %}
         {% endcall %}
 
