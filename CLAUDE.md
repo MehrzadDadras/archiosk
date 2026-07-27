@@ -106,6 +106,11 @@ not just the one you're focused on.
 - **`rebuild-static-preview`** — rebuild and locally serve the static
   HTML preview (source lives in `tools/static_preview/`, output is
   git-ignored).
+- **`verify-template-refactor`** — prove a `templates/`/CSS-class
+  restructuring didn't change rendered output, via
+  `tools/static_preview/diff_snapshot.py`. A passing test suite is not
+  proof of this on its own — this codebase's tests check status codes
+  and data, not markup geometry.
 
 ## Large, irreversible reasoning before acting
 
@@ -113,13 +118,34 @@ For architecture-level questions where no code change is wanted yet (a
 route/root map, a build-vs-don't-build question, a purpose-alignment
 review) — prefer Plan Mode over a long inline message: it produces an
 explicit, approvable plan instead of relying on a "proceed" being read
-correctly out of several paragraphs of prose.
+correctly out of several paragraphs of prose. This does not apply once
+the user has already authorized direct action for a described class of
+work ("materialize what you think is appropriate," "keep moving") — at
+that point the investigation and the action are the same authorized
+step, and inserting a plan-approval pause fights the explicit
+instruction rather than serving it.
 
 ## Investigating noisy problems
 
 Prefer forking (the `Agent` tool with `subagent_type: "fork"`) for
 open-ended diagnostic side-quests that generate a lot of throwaway tool
-output — process-tree dumps, wide greps, log diffing. It keeps that
-noise out of the main conversation instead of filling context that then
-has to be compacted, which can lose fidelity on whatever the user said
-right before the noisy investigation started.
+output — process-tree dumps, wide greps, log diffing, before/after
+snapshot verification. It keeps that noise out of the main conversation
+instead of filling context that then has to be compacted, which can
+lose fidelity on whatever the user said right before the noisy
+investigation started. The test is whether the work is self-contained
+and independently verifiable (a fork can report "done, tests pass,
+diffs clean" and that's genuinely sufficient) — if later steps in the
+same turn need the specific file content just read to make further
+judgment calls against it, keep it in the main thread instead of
+forking and then immediately needing to re-read the same files.
+
+## Multi-part requests
+
+When a single message contains more than one distinct, sizeable piece
+of work (e.g. "do X, then after that do Y"), use `TaskCreate`/`TaskUpdate`
+to track each part rather than just working through them silently. It
+costs nothing, gives the user visibility into which part is in
+progress, and matches how this repository's own work has actually
+arrived in practice — as large, multi-phase single messages, not one
+request at a time.
