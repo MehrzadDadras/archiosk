@@ -25,7 +25,7 @@ import io
 import mimetypes
 import uuid
 from dataclasses import asdict
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from flask import (
@@ -324,6 +324,26 @@ def show_workspace(project_id):
             "awaiting_pass_count": len(awaiting_pass),
             "open_cases": open_visible_cases,
         }
+
+    # "What has just changed?" - a returning reviewer currently has no way
+    # to know what's new without re-reading the whole History log
+    # themselves. Read the OLD marker before overwriting it (so this
+    # render can still say what changed since THAT visit, not since the
+    # one about to be recorded), count real governance events since
+    # then, then record now as the new marker. Deliberately just a count
+    # + timestamp, not per-item "new" tags scattered across every
+    # accordion - a small, honest signal rather than a bigger UI change
+    # made as a side effect of this one.
+    since_last_visit = None
+    if active_case is None:
+        previous_visit_at = workspace.last_viewed_by.get(_reviewer())
+        if previous_visit_at is not None:
+            new_event_count = sum(
+                1 for e in _log().read(project_id) if e.created_at > previous_visit_at
+            )
+            since_last_visit = {"previous_visit_at": previous_visit_at, "new_event_count": new_event_count}
+        workspace.last_viewed_by[_reviewer()] = datetime.now(timezone.utc).isoformat()
+        store.save(workspace)
 
     focused_finding_id = session.get(f"focused_finding:{project_id}")
 
@@ -637,6 +657,7 @@ def show_workspace(project_id):
         known_usernames=known_usernames,
         resolution_outcomes=KNOWN_RESOLUTION_OUTCOMES,
         project_home_summary=project_home_summary,
+        since_last_visit=since_last_visit,
     )
 
 

@@ -1966,6 +1966,15 @@ class ProjectWorkspace:
     # or unstarring writes no GovernanceLog event and affects no Case,
     # Finding, or Requirement (Prompt 3 #3).
     starred: bool = False
+    # Per-reviewer "last visited Project Home" marker (username -> ISO
+    # timestamp), personal/display-only like `starred` - no governance
+    # meaning, no event, affects nothing else. Exists so a returning
+    # reviewer can be told what changed since they were last here,
+    # rather than having to re-read the whole History log to reconstruct
+    # it themselves. Missing key = never visited, not "visited at time
+    # zero" - callers must check for absence, not default to an ancient
+    # timestamp.
+    last_viewed_by: dict = field(default_factory=dict)
     # `display_title`/`display_description` override the Project's
     # otherwise-inherited identity (the ingested document's filename) for
     # presentation only - never a Source's own recorded `name`/

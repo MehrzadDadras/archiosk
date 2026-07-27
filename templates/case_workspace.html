@@ -896,6 +896,16 @@
             </details>
         </div>
 
+        {% if since_last_visit %}
+        <p class="project-home-state-message">
+            {% if since_last_visit.new_event_count %}
+            {{ since_last_visit.new_event_count }} update{{ 's' if since_last_visit.new_event_count != 1 else '' }} since your last visit ({{ since_last_visit.previous_visit_at | humanize }}).
+            {% else %}
+            Nothing new since your last visit ({{ since_last_visit.previous_visit_at | humanize }}).
+            {% endif %}
+        </p>
+        {% endif %}
+
         <p class="project-home-state-message">
             You are working inside the current governed project state. New work inherits its sources, provenance, decisions, and constraints.
         </p>
