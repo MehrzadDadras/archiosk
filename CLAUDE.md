@@ -44,6 +44,15 @@ contradicts it.
   so once `.env` has a real value, `config.py`'s `os.getenv(..., default)`
   fallback is dead code for that variable. If a CSS/JS change isn't
   showing up live, check `.env` first, not `config.py`.
+  **Bump it every time `static/css/main.css` or a `static/js/*.js` file
+  changes, in the same work session as the change** — not just "know
+  the mechanism exists." Three commits in a row once touched `main.css`
+  significantly (shared macros, template families, the Case Workspace
+  grid rework) without the bump, because `.env` isn't git-tracked and
+  so never shows up in the diff being reviewed at commit time — nothing
+  about looking at `git status` after a CSS commit surfaces this on its
+  own. Check it explicitly, as its own step, not something the commit
+  workflow will remind you of.
 - **The Werkzeug dev-server reloader can accumulate orphaned
   parent/child process chains** across repeated `python app.py` starts,
   and a stale process in that chain keeps serving a stale `.env`
