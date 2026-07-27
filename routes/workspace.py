@@ -275,6 +275,32 @@ def show_workspace(project_id):
     active_case_id = request.args.get("case")
     active_case = next((c for c in visible_cases if c["id"] == active_case_id), None)
 
+    # Project-wide "Needs Attention": every unresolved Finding (not yet
+    # "applied") across every non-archived visible Case, not just
+    # whichever one is currently open. Real, recorded user gap: the
+    # Cedar Harbour walkthrough asked for exactly this - "a central page
+    # that compiles all discrepancies within the project so we can do
+    # the adjustment centrally... clicking on the highlighted issue
+    # takes us to [it]" - and it was never built. The count alone
+    # already existed (project_home_summary, below, reused this same
+    # filter) but only as a number, and only on Project Home - once any
+    # Case was open, visibility into every OTHER Case's unresolved work
+    # disappeared entirely. Computed unconditionally now, not gated on
+    # active_case being None, and grouped by Case (in visible_cases'
+    # already-open-before-archived order) rather than given its own new
+    # priority ranking - the same restraint as the open, not-yet-fixed
+    # findings_view ordering question below: which Finding matters most
+    # is a review-state judgment call, not a geometry one.
+    open_visible_cases = [c for c in visible_cases if c["status"] != "archived"]
+    needs_attention_view = []
+    for case in open_visible_cases:
+        case_unresolved = [
+            f for f in workspace.findings
+            if f["case_id"] == case["id"] and f["claim_status"] != "applied"
+        ]
+        if case_unresolved:
+            needs_attention_view.append({"case": case, "findings": case_unresolved})
+
     # Project Home's compact "Active Work" summary - project-wide (across
     # every Case this reviewer can see), computed only when actually
     # needed (Project Home is showing) since it's an extra pass over
@@ -284,7 +310,6 @@ def show_workspace(project_id):
     # vocabulary invented for this summary.
     project_home_summary = None
     if active_case is None:
-        open_visible_cases = [c for c in visible_cases if c["status"] != "archived"]
         visible_findings = [f for f in workspace.findings if f["case_id"] in visible_case_ids]
         unresolved_findings = [f for f in visible_findings if f["claim_status"] != "applied"]
         awaiting_pass = [
@@ -549,6 +574,7 @@ def show_workspace(project_id):
         workspace=workspace,
         visible_cases=visible_cases,
         active_case=active_case,
+        needs_attention_view=needs_attention_view,
         findings_view=findings_view,
         focused_finding_id=focused_finding_id,
         applied_count=applied_count,

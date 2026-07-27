@@ -79,6 +79,32 @@
         {% endcall %}
         {% endcall %}
 
+        {% set needs_attention_count = needs_attention_view|map(attribute='findings')|map('length')|sum %}
+        {% call macros.accordion('Needs Attention (' ~ needs_attention_count ~ ')', group='left', id='needs-attention', open=(needs_attention_count > 0)) %}
+            <p style="font-size:0.85rem;color:var(--text-secondary);margin:-0.6rem 0 0.6rem;">
+                Every unresolved Finding across every Investigation you can see in this
+                Project, not just whichever one is open right now - grouped by
+                Investigation, click through to work on one.
+            </p>
+            {% if needs_attention_view %}
+            {% for group in needs_attention_view %}
+            <p class="workspace-pane-label" style="margin-top:0.6rem;">
+                <a href="{{ url_for('workspace.show_workspace', project_id=project_id, case=group.case.id) }}">{{ group.case.title }}</a>
+                ({{ group.findings|length }})
+            </p>
+            <ul class="source-list">
+                {% for finding in group.findings %}
+                <li class="source-item">
+                    <a href="{{ url_for('workspace.show_workspace', project_id=project_id, case=group.case.id) }}">{{ finding.statement[:100] }}</a>
+                </li>
+                {% endfor %}
+            </ul>
+            {% endfor %}
+            {% else %}
+            <p style="color:var(--text-secondary);font-size:0.88rem;">Nothing outstanding - every Finding across every open Investigation has been applied.</p>
+            {% endif %}
+        {% endcall %}
+
         {% call macros.accordion('Accepted Knowledge (' ~ accepted_knowledge|length ~ ')', group='left', id='accepted-knowledge') %}
         <p style="color:var(--text-secondary);font-size:0.85rem;margin:-0.6rem 0 0.6rem;">
             Every Applied Finding across this Project's Cases, independent of which Case produced it —
