@@ -212,6 +212,25 @@
             Project's consistency check.
             <br><a class="btn btn-ghost" href="{{ url_for('workspace.export_rfi', project_id=project_id) }}">Download RFI (.docx)</a>
         </p>
+        {% call macros.subdisclosure('View flagged contradiction(s)') %}
+            <div class="flag-list">
+                {% for flag in document.consistency_flags %}
+                <div class="flag-card">
+                    <div class="flag-pair">
+                        <div class="flag-req">
+                            <span class="flag-req-label">Requirement A</span>
+                            {{ flag.requirement_a_text }}
+                        </div>
+                        <div class="flag-req">
+                            <span class="flag-req-label">Requirement B</span>
+                            {{ flag.requirement_b_text }}
+                        </div>
+                    </div>
+                    <p class="flag-explanation">{{ flag.explanation }}</p>
+                </div>
+                {% endfor %}
+            </div>
+        {% endcall %}
         {% elif document.consistency_checked %}
         <p style="font-size:0.85rem;color:var(--text-secondary);margin:-0.6rem 0 0.8rem;">Consistency check ran — no contradictions were flagged, so there is nothing to export.</p>
         {% else %}
