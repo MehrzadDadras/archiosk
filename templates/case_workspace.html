@@ -131,6 +131,17 @@
             {% endcall %}
         {% endcall %}
 
+        {# OPEN, NOT YET JUSTIFIED TO FIX: workspace.sources renders in
+           storage order, and a superseded Source (source.superseded_by_source_id
+           set) is never moved after its replacement - superseded revisions
+           accumulate ahead of the current one exactly like archived Cases
+           did before that fix. Structurally the same binary, low-ambiguity
+           signal (superseded vs. current) that made the Cases sort safe -
+           but unlike Cases, there's no existing query-layer method
+           (visible_cases_for's equivalent) to extend; workspace.sources is
+           read raw everywhere. Fixing this safely means introducing a new
+           method and auditing every existing raw-access call site first,
+           which is more scope than this pass justifies - not attempted. #}
         {% call macros.accordion('Sources (' ~ workspace.sources|length ~ ')', status='+', group='left', id='sources', html_id='project-sources') %}
         <ul class="source-list">
             {% for source in workspace.sources %}
