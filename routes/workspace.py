@@ -1826,10 +1826,11 @@ def export_rfi(project_id):
     Project-scoped, not Case-scoped: the underlying RFI is built from
     the legacy consistency-check pipeline's flagged contradictions
     (ParsedDocument.consistency_flags), which has no Case/visibility
-    concept of its own - the same access rule already governing
-    portal.dashboard (any authenticated user may view/download; there is
-    no per-project membership model in this legacy pipeline to check
-    against).
+    concept of its own - the same access rule this route's own
+    accordion (RFI Export, in case_workspace.html) already relies on:
+    any authenticated user may view/download, since there is no
+    per-project membership model in this legacy pipeline to check
+    against.
     """
     document = get_registry(current_app).get(project_id)
     if document is None:

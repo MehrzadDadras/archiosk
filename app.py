@@ -105,7 +105,7 @@ def _register_error_handlers(app: Flask) -> None:
             return jsonify(error="forbidden", message="You do not have permission to access this resource."), 403
         return _render_error(
             403, "Access restricted", "Your account doesn't have permission to view this page.",
-            url_for("portal.dashboard"), "Back to dashboard",
+            url_for("portal.projects_list"), "Back to Projects",
         ), 403
 
     def _wants_json() -> bool:

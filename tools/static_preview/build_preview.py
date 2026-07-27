@@ -259,7 +259,8 @@ captures = {
     "gateway.html": get(owner, "/gateway").data,
     "upload.html": get(owner, "/upload").data,
     "projects.html": get(owner, "/projects").data,
-    f"dashboard-{PROJECT_ID}.html": get(owner, f"/dashboard/{PROJECT_ID}").data,
+    # /dashboard/<id> is retired (redirects into Case Workspace - see
+    # routes/portal.py's dashboard()) - nothing left to capture there.
     f"project-home-{PROJECT_ID}.html": get(owner, f"/projects/{PROJECT_ID}/workspace").data,
     "workspace-case1-drawing-review.html": get(owner, f"/projects/{PROJECT_ID}/workspace?case={case1['id']}").data,
     "workspace-case2-spec-compliance.html": get(owner, f"/projects/{PROJECT_ID}/workspace?case={case2['id']}").data,

@@ -38,8 +38,9 @@ cp .env.example .env        # then fill in FLASK_SECRET_KEY and ANTHROPIC_API_KE
 flask --app app run --debug
 ```
 
-Visit `http://127.0.0.1:5000`. The dashboard works with demo data even
-before you ingest anything — visit `/dashboard` directly.
+Visit `http://127.0.0.1:5000` and sign in. To see the UI populated
+without ingesting anything yourself, open any project already sitting
+in `instance/registry/` from the Projects directory.
 
 To ingest a document:
 

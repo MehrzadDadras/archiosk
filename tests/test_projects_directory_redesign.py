@@ -136,8 +136,10 @@ class ProjectsDirectoryRedesignTests(unittest.TestCase):
         body = self._card_list(response.get_data(as_text=True))
 
         self.assertIn("/projects/proj-alpha/workspace", body)
-        # Dashboard is preserved but de-emphasized, not a competing button.
-        self.assertIn("project-card-secondary", body)
+        # The legacy Dashboard is retired (redirects into Case Workspace -
+        # see routes/portal.py's dashboard()), so Case Workspace is the
+        # only card action now, not a de-emphasized second one beside it.
+        self.assertNotIn("project-card-secondary", body)
 
     def test_empty_state_with_no_projects_offers_new_project_not_ingestion(self):
         empty_dir = Path(tempfile.mkdtemp(prefix="beehive_test_projects_empty_"))

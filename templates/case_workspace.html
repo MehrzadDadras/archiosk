@@ -8,7 +8,7 @@
 {% call macros.page_header('Case Workspace', eyebrow=project_id) %}
     <div class="dash-head-actions">
         <button type="button" id="collapse-all-btn" class="collapse-all-btn">Collapse All</button>
-        <a class="btn btn-ghost" href="{{ url_for('portal.dashboard', project_id=project_id) }}">&larr; Back to Dashboard</a>
+        <a class="btn btn-ghost" href="{{ url_for('workspace.show_workspace', project_id=project_id) }}">&larr; Back to Project</a>
     </div>
 {% endcall %}
 {% endif %}
@@ -765,8 +765,6 @@
     <div class="project-home">
         <p class="project-home-back">
             <a href="{{ url_for('portal.projects_list') }}">&larr; Projects</a>
-            <span style="color:var(--border-strong);">&middot;</span>
-            <a href="{{ url_for('portal.dashboard', project_id=project_id) }}">Legacy Dashboard &rarr;</a>
         </p>
 
         {% call macros.page_header(workspace.display_title or document.filename, subtitle=workspace.display_description, subtitle_class="project-home-subtitle") %}

@@ -57,7 +57,7 @@ CASE_FILES = {
 
 STATIC_PAGE_NAMES = {
     "index.html", "login.html", "gateway.html", "upload.html", "projects.html",
-    f"dashboard-{PROJECT_ID}.html", f"project-home-{PROJECT_ID}.html",
+    f"project-home-{PROJECT_ID}.html",
     f"project-home-{QUIET_PROJECT_ID}.html", *CASE_FILES.values(),
 }
 
@@ -65,7 +65,6 @@ if SITE_DIR.exists():
     shutil.rmtree(SITE_DIR)
 (SITE_DIR / "assets").mkdir(parents=True, exist_ok=True)
 shutil.copy(REPO_ROOT / "static" / "css" / "main.css", SITE_DIR / "assets" / "main.css")
-shutil.copy(REPO_ROOT / "static" / "js" / "dashboard.js", SITE_DIR / "assets" / "dashboard.js")
 shutil.copy(REPO_ROOT / "static" / "js" / "case_workspace.js", SITE_DIR / "assets" / "case_workspace.js")
 
 # Real generated Artifact crop images (the actual current mock-engine
@@ -166,8 +165,6 @@ REWRITES = [
     (r'href="/gateway"', 'href="gateway.html"'),
     (r'href="/upload"', 'href="upload.html"'),
     (r'href="/projects"', 'href="projects.html"'),
-    (rf'href="/dashboard/{PROJECT_ID}"', f'href="dashboard-{PROJECT_ID}.html"'),
-    (r'href="/dashboard"', f'href="dashboard-{PROJECT_ID}.html"'),
     (rf'href="/projects/{PROJECT_ID}/workspace"', f'href="project-home-{PROJECT_ID}.html"'),
     (rf'href="/projects/{QUIET_PROJECT_ID}/workspace"', f'href="project-home-{QUIET_PROJECT_ID}.html"'),
 ]
@@ -176,7 +173,6 @@ for case_id, filename in CASE_FILES.items():
 
 ASSET_REWRITES = [
     (r'href="/static/css/main\.css\?v=\d+"', 'href="assets/main.css"'),
-    (r'src="/static/js/dashboard\.js\?v=\d+"', 'src="assets/dashboard.js"'),
     (r'src="/static/js/case_workspace\.js\?v=\d+"', 'src="assets/case_workspace.js"'),
 ]
 

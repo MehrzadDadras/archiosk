@@ -904,7 +904,11 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
     color: var(--text-metadata);
 }
 
-.gateway-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem; }
+/* auto-fit, not a fixed 2 columns: one action (a read_only session, which
+   only ever sees "Open an existing project") should fill the row, not
+   sit half-width with dead space beside it - composition should follow
+   how many actions there actually are, not assume a fixed count. */
+.gateway-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 0.8rem; }
 .gateway-action {
     display: flex;
     align-items: center;
@@ -988,7 +992,9 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
 }
 
 @media (max-width: 560px) {
-    .gateway-actions { grid-template-columns: 1fr; }
+    /* .gateway-actions no longer needs an override here - auto-fit with
+       a minmax floor already collapses to one column once 240px no
+       longer fits two side by side. */
     .gateway-footer { flex-direction: column; gap: 0.3rem; }
     .flag-pair { grid-template-columns: 1fr; }
 }

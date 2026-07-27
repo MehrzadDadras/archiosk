@@ -9,36 +9,11 @@ from pathlib import Path
 from flask import Blueprint, abort, current_app, flash, jsonify, redirect, render_template, request, url_for
 
 from services.auth import admin_required, check_credentials, is_authenticated, log_in, log_out, login_required
-from services.bhive_parser import REQUIREMENT_CATEGORIES
 from services.case_workspace import CaseWorkspaceStore
 from services.governance import GovernanceError
 from services.ingestion import UploadError, get_governance_log, get_registry, ingest_upload
 
 portal_bp = Blueprint('portal', __name__)
-
-# Shown on GET /dashboard (no project_id yet) so the UI is visible before
-# anyone has ingested a real document — see README "Without an ingested doc".
-_DEMO_MILESTONES = [
-    {"id": "demo-1", "label": "Submit pre-qualification packet", "status": "done", "source_line": 4},
-    {"id": "demo-2", "label": "Site walkthrough deadline", "status": "done", "source_line": 12},
-    {"id": "demo-3", "label": "Final proposal due", "status": "active", "source_line": 30},
-    {"id": "demo-4", "label": "Award notification", "status": "pending", "source_line": 41},
-]
-
-_DEMO_REQUIREMENTS = [
-    {"id": "demo-r1", "text": "Contractor shall provide licensed and insured labor.",
-     "category": "compliance_legal", "confidence": 0.7, "source_line": 6},
-    {"id": "demo-r2", "text": "Work shall include demolition and site preparation.",
-     "category": "scope_of_work", "confidence": 0.68, "source_line": 9},
-    {"id": "demo-r3", "text": "Proposal must include an itemized cost breakdown.",
-     "category": "budget_commercial", "confidence": 0.72, "source_line": 18},
-    {"id": "demo-r4", "text": "Materials shall comply with ASTM specifications.",
-     "category": "technical_specification", "confidence": 0.66, "source_line": 22},
-    {"id": "demo-r5", "text": "Submissions must be received by 5:00 PM on the due date.",
-     "category": "submission_instruction", "confidence": 0.7, "source_line": 28},
-    {"id": "demo-r6", "text": "Proposals will be evaluated on cost, schedule, and experience.",
-     "category": "evaluation_criteria", "confidence": 0.75, "source_line": 33},
-]
 
 
 def _safe_workspace(store: CaseWorkspaceStore, project_id: str):
@@ -350,53 +325,32 @@ def upload():
             'upload.html', max_upload_mb=max_upload_mb, error=str(exc)
         ), 400
 
-    return redirect(url_for('portal.dashboard', project_id=document.project_id))
+    return redirect(url_for('workspace.show_workspace', project_id=document.project_id))
 
 
 @portal_bp.route('/dashboard')
 @portal_bp.route('/dashboard/<project_id>')
 @login_required
 def dashboard(project_id=None):
+    """
+    Retired as a real page - Case Workspace is now the one authoritative
+    project view (it already showed everything the legacy Dashboard did:
+    extracted-not-governed Requirements, governed Requirements, RFI
+    Export with the actual flagged-contradiction cards, History/audit
+    trail). The one piece deliberately NOT carried forward is the
+    milestone lattice: _derive_milestones (bhive_parser.py) only ever
+    produces status="pending" for real projects - "done"/"active" only
+    ever appeared in this route's own hardcoded demo data - so it never
+    reflected real project state and there was nothing genuine to port.
+
+    Kept as a redirect, not deleted outright, so an old bookmark or
+    external link to /dashboard/<id> still lands somewhere real instead
+    of 404ing.
+    """
     if project_id is None:
-        return render_template(
-            'dashboard.html',
-            is_demo=True,
-            project_id=None,
-            filename='sample_rfp.pdf (demo)',
-            display_name='sample_rfp.pdf (demo)',
-            requirements=_DEMO_REQUIREMENTS,
-            milestones=_DEMO_MILESTONES,
-            categories=REQUIREMENT_CATEGORIES,
-            consistency_flags=[],
-            consistency_checked=False,
-            consistency_note='Demo data — the consistency check requires a real document and an Anthropic API key.',
-            governance_events=[],
-        )
+        return redirect(url_for('portal.projects_list'))
 
     document = get_registry(current_app).get(project_id)
     if document is None:
         abort(404)
-
-    governance_events = get_governance_log(current_app).read(project_id)
-    # Pagescape correction #11/#12: resolve the same display_title the
-    # Case Workspace already supports (Edit Project Details) so the
-    # legacy Dashboard shows the professional's chosen project identity
-    # too, not just whichever filename was ingested first - a read-only
-    # lookup, no CaseWorkspaceStore write happens on a GET.
-    workspace = _safe_workspace(CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"]), project_id)
-    display_name = (workspace.display_title if workspace else None) or document.filename
-
-    return render_template(
-        'dashboard.html',
-        is_demo=False,
-        project_id=document.project_id,
-        filename=document.filename,
-        display_name=display_name,
-        requirements=[r.__dict__ for r in document.requirements],
-        milestones=document.milestones,
-        categories=REQUIREMENT_CATEGORIES,
-        consistency_flags=[f.__dict__ for f in document.consistency_flags],
-        consistency_checked=document.consistency_checked,
-        consistency_note=document.consistency_note,
-        governance_events=[e.__dict__ for e in reversed(governance_events)],
-    )
+    return redirect(url_for('workspace.show_workspace', project_id=project_id))
