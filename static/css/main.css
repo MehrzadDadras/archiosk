@@ -40,6 +40,42 @@
          Arial Nova ships with Windows 11 / Microsoft 365; Arial Narrow
          and Arial are the condensed-then-plain fallback for systems
          without it.
+
+   Page-template families: derived from actually inspecting every route's
+   composition and interaction mode, not assumed up front. Two were real,
+   already-duplicated geometries and are now real shared templates:
+     - Dead-end (templates/errors/error.html): one message, one way out,
+       no ongoing state, reachable pre- or post-auth. 403/404/500 used to
+       be three near-identical files; now one parameterized template.
+     - Confirm interrupt (templates/confirm_base.html, .confirm-page):
+       one centered card, one question, one action set, one way back,
+       always mid-flow inside the authenticated shell. Approval Gate
+       actions and project deletion used to each hijack .case-workspace's
+       grid via an inline style for this; now a real family with two
+       members (confirm_action.html, confirm_delete_project.html).
+   Others are single-instance today - named here so a second member
+   inherits the grammar deliberately instead of being invented fresh, not
+   built out as empty template scaffolding for a family of one:
+     - Entry (login.html): centered card, pre-auth shell, one credential
+       form. (gateway.html shares the card CSS but isn't linked from any
+       current navigation - effectively dead, not a live second member.)
+     - Single-task capture (upload.html): hero intro, one primary input,
+       one submit, inline validation error.
+     - Directory (projects.html): search + filterable card list.
+     - Instrumented workspace (case_workspace.html, case open): three
+       panes, heavy disclosure, high information density. Already
+       correctly ONE template governing four behavioral states (private/
+       shared/collaborative, archived read-only, derived) via data, not
+       four duplicated files - the reference example other families
+       should match, not a gap.
+     - Hub (case_workspace.html, no case open / "Project Home"):
+       single column, conversational composer, light disclosure.
+   Deliberately NOT templated: the legacy dashboard (dashboard.html)
+   has its own header/stats/lattice/table composition, but the product
+   is actively moving traffic off it (see the "Open Case Workspace" /
+   "Legacy Dashboard" cross-links in both this file and case_workspace.html)
+   - investing in a family template for a surface being superseded would
+     be building for the wrong direction.
    ============================================================ */
 :root {
     /* -- material scale (warm architectural neutrals) --------------------
@@ -1510,6 +1546,13 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
     gap: 0.6rem;
 }
 .delegation-choice form, .rfi-preview form, .rfi-draft-card form { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
+
+/* -- Confirm page family (templates/confirm_base.html) -----------------------
+   The one-decision interrupt: Approval Gate actions and project deletion
+   both need a single centered card, no page header, no nav-adjacent chrome
+   - a real, named geometry now, not two copies of an inline-styled
+   .case-workspace grid override repurposed for one column. */
+.confirm-page { max-width: 560px; margin: 3rem auto; padding: 0 1rem; }
 
 /* -- Approval Gate ----------------------------------------------------------- */
 .approval-gate h2 { font-family: var(--font-display); font-size: 1.1rem; margin: 0.4rem 0 1rem; }

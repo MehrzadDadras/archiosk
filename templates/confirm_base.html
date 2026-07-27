@@ -1,0 +1,27 @@
+{# ============================================================
+   Confirm page family: the one-decision interrupt (Approval Gate
+   actions, project deletion, and any future single-decision page).
+   One centered card, one question, one set of actions, one way back -
+   never a page header, never nav-adjacent chrome. If a future
+   confirmation needs more than that, it isn't this family - don't
+   stretch these blocks to fit it.
+   ============================================================ #}
+{% extends "base.html" %}
+
+{% block title %}{% block confirm_title %}Confirm{% endblock %} &mdash; Archiosk{% endblock %}
+
+{% block content %}
+<div class="confirm-page">
+    <section class="workspace-pane approval-gate">
+        <p class="workspace-pane-label">{% block confirm_label %}{% endblock %}</p>
+        <h2>{% block confirm_heading %}{% endblock %}</h2>
+        {% block confirm_body %}{% endblock %}
+        {% block confirm_actions %}{% endblock %}
+        <p class="workspace-pane-label" style="margin-top:1.4rem;">
+            <a href="{% block confirm_back_url %}{% endblock %}" style="color:var(--text-secondary);">
+                &larr; {% block confirm_back_label %}Back without deciding{% endblock %}
+            </a>
+        </p>
+    </section>
+</div>
+{% endblock %}

@@ -1,32 +1,23 @@
-{% extends "base.html" %}
+{% extends "confirm_base.html" %}
 
-{% block title %}Delete Project &mdash; Archiosk{% endblock %}
-
-{% block content %}
-<div class="case-workspace" style="grid-template-columns: 1fr; max-width: 560px; margin: 3rem auto;">
-    <section class="workspace-pane approval-gate">
-        <p class="workspace-pane-label">Permanent deletion</p>
-        <h2>Delete &ldquo;{{ filename }}&rdquo;?</h2>
-        <p style="color:var(--text-primary);">
-            This permanently removes the project&rsquo;s entire record &mdash; Sources, Requirements,
-            Findings, Decisions, and History &mdash; from disk. This is <strong>not</strong> a governed
-            action: nothing is superseded, snapshotted, or otherwise preserved. It cannot be undone.
-        </p>
-
-        <form method="post" action="{{ url_for('portal.delete_project', project_id=project_id) }}" class="approval-gate-actions">
-            <button type="submit" name="confirm" value="yes" class="review-btn reject">
-                Yes &mdash; permanently delete this project
-            </button>
-            <button type="submit" name="confirm" value="no" class="btn btn-ghost">
-                No &mdash; keep this project
-            </button>
-        </form>
-
-        <p class="workspace-pane-label" style="margin-top:1.4rem;">
-            <a href="{{ url_for('portal.projects_list') }}" style="color:var(--text-secondary);">
-                &larr; Back without deciding
-            </a>
-        </p>
-    </section>
-</div>
+{% block confirm_title %}Delete Project{% endblock %}
+{% block confirm_label %}Permanent deletion{% endblock %}
+{% block confirm_heading %}Delete &ldquo;{{ filename }}&rdquo;?{% endblock %}
+{% block confirm_body %}
+<p style="color:var(--text-primary);">
+    This permanently removes the project&rsquo;s entire record &mdash; Sources, Requirements,
+    Findings, Decisions, and History &mdash; from disk. This is <strong>not</strong> a governed
+    action: nothing is superseded, snapshotted, or otherwise preserved. It cannot be undone.
+</p>
 {% endblock %}
+{% block confirm_actions %}
+<form method="post" action="{{ url_for('portal.delete_project', project_id=project_id) }}" class="approval-gate-actions">
+    <button type="submit" name="confirm" value="yes" class="review-btn reject">
+        Yes &mdash; permanently delete this project
+    </button>
+    <button type="submit" name="confirm" value="no" class="btn btn-ghost">
+        No &mdash; keep this project
+    </button>
+</form>
+{% endblock %}
+{% block confirm_back_url %}{{ url_for('portal.projects_list') }}{% endblock %}

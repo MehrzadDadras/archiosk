@@ -1,31 +1,19 @@
-{% extends "base.html" %}
+{% extends "confirm_base.html" %}
 
-{% block title %}Confirm &mdash; Archiosk{% endblock %}
-
-{% block content %}
-<div class="case-workspace" style="grid-template-columns: 1fr; max-width: 560px; margin: 3rem auto;">
-    <section class="workspace-pane approval-gate">
-        <p class="workspace-pane-label">Approval required</p>
-        <h2>This action changes governed project state</h2>
-        <p style="color:var(--text-primary);">{{ description }}</p>
-
-        <form method="post" action="{{ action_url }}" class="approval-gate-actions">
-            <button type="submit" name="confirm" value="once" class="review-btn seal">
-                Yes &mdash; perform this action once
-            </button>
-            <button type="submit" name="confirm" value="session" class="review-btn seal">
-                Yes &mdash; allow this class of action for the rest of this session
-            </button>
-            <button type="submit" name="confirm" value="no" class="review-btn reject">
-                No
-            </button>
-        </form>
-
-        <p class="workspace-pane-label" style="margin-top:1.4rem;">
-            <a href="{{ url_for('workspace.show_workspace', project_id=project_id, case=case_id) }}" style="color:var(--text-secondary);">
-                &larr; Back without deciding
-            </a>
-        </p>
-    </section>
-</div>
+{% block confirm_label %}Approval required{% endblock %}
+{% block confirm_heading %}This action changes governed project state{% endblock %}
+{% block confirm_body %}<p style="color:var(--text-primary);">{{ description }}</p>{% endblock %}
+{% block confirm_actions %}
+<form method="post" action="{{ action_url }}" class="approval-gate-actions">
+    <button type="submit" name="confirm" value="once" class="review-btn seal">
+        Yes &mdash; perform this action once
+    </button>
+    <button type="submit" name="confirm" value="session" class="review-btn seal">
+        Yes &mdash; allow this class of action for the rest of this session
+    </button>
+    <button type="submit" name="confirm" value="no" class="review-btn reject">
+        No
+    </button>
+</form>
 {% endblock %}
+{% block confirm_back_url %}{{ url_for('workspace.show_workspace', project_id=project_id, case=case_id) }}{% endblock %}

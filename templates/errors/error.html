@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+
+{% block title %}{{ heading }} &mdash; Archiosk{% endblock %}
+
+{% block content %}
+<section class="error-page">
+    <p class="eyebrow">{{ code }}</p>
+    <h1>{{ heading }}</h1>
+    <p class="hero-copy">{{ message }}</p>
+    <div class="hero-actions hero-actions-center">
+        <a class="btn btn-primary" href="{{ action_url }}">{{ action_label }}</a>
+    </div>
+</section>
+{% endblock %}

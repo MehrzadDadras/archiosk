@@ -69,26 +69,44 @@ def _register_blueprints(app: Flask) -> None:
 
 
 def _register_error_handlers(app: Flask) -> None:
-    from flask import jsonify, render_template
+    from flask import jsonify, render_template, url_for
+
+    # All three dead-end error pages (403/404/500) are the same shape - one
+    # message, one way out, no ongoing state - so they're one parameterized
+    # template (errors/error.html), not three near-identical files.
+    def _render_error(code, heading, message, action_url, action_label):
+        return render_template(
+            "errors/error.html", code=code, heading=heading, message=message,
+            action_url=action_url, action_label=action_label,
+        )
 
     @app.errorhandler(404)
     def not_found(_err):
         if _wants_json():
             return jsonify(error="not_found", message="Resource not found."), 404
-        return render_template("errors/404.html"), 404
+        return _render_error(
+            404, "Page not found", "The page or document you're looking for doesn't exist.",
+            url_for("portal.index"), "Back to home",
+        ), 404
 
     @app.errorhandler(500)
     def server_error(err):
         app.logger.exception("Unhandled server error: %s", err)
         if _wants_json():
             return jsonify(error="server_error", message="Something went wrong."), 500
-        return render_template("errors/500.html"), 500
+        return _render_error(
+            500, "Something went wrong", "The error has been logged. Please try again shortly.",
+            url_for("portal.index"), "Back to home",
+        ), 500
 
     @app.errorhandler(403)
     def forbidden(_err):
         if _wants_json():
             return jsonify(error="forbidden", message="You do not have permission to access this resource."), 403
-        return render_template("errors/403.html"), 403
+        return _render_error(
+            403, "Access restricted", "Your account doesn't have permission to view this page.",
+            url_for("portal.dashboard"), "Back to dashboard",
+        ), 403
 
     def _wants_json() -> bool:
         from flask import request
