@@ -64,6 +64,7 @@ STATIC_PAGE_NAMES = {
 if SITE_DIR.exists():
     shutil.rmtree(SITE_DIR)
 (SITE_DIR / "assets").mkdir(parents=True, exist_ok=True)
+shutil.copy(REPO_ROOT / "static" / "css" / "tokens.css", SITE_DIR / "assets" / "tokens.css")
 shutil.copy(REPO_ROOT / "static" / "css" / "main.css", SITE_DIR / "assets" / "main.css")
 shutil.copy(REPO_ROOT / "static" / "js" / "case_workspace.js", SITE_DIR / "assets" / "case_workspace.js")
 
@@ -172,6 +173,7 @@ for case_id, filename in CASE_FILES.items():
     REWRITES.append((rf'href="/projects/{PROJECT_ID}/workspace\?case={re.escape(case_id)}"', f'href="{filename}"'))
 
 ASSET_REWRITES = [
+    (r'href="/static/css/tokens\.css\?v=\d+"', 'href="assets/tokens.css"'),
     (r'href="/static/css/main\.css\?v=\d+"', 'href="assets/main.css"'),
     (r'src="/static/js/case_workspace\.js\?v=\d+"', 'src="assets/case_workspace.js"'),
 ]

@@ -1,0 +1,143 @@
+/* ============================================================
+   ArchiOSK / B-Hive — Design Tokens
+
+   The ONE controlled place for the visual character of the whole
+   application: color, typography, spacing/density. Every other CSS
+   file (main.css) and every template's inline style should reference
+   these custom properties, never hardcode a raw hex/rem value that
+   duplicates what a token already names - a value typed twice always
+   drifts eventually (0.85rem/0.82rem/0.88rem all meant "small
+   secondary text" before this file existed and consolidated them).
+
+   Governing principle: tonal contrast first, chromatic contrast
+   second. The interface is dominated by one quiet family of warm
+   architectural neutrals (sand cotton canvas, alabaster/limestone
+   surfaces, basalt-ink text). Color appears rarely, and only where
+   it carries real information - the token NAMES below are what
+   protect that discipline. They are named for MEANING (--seal-red,
+   --machine-blue), never for raw appearance (no --red-500,
+   --blue-3) - that is what stops a future "arbitrary styling" pass
+   from quietly repainting human authority the same color as machine
+   inference just because they happen to look similar. Add a new
+   semantic color only when a new kind of information genuinely needs
+   distinguishing, never as decoration:
+     --bee-yellow   the BEEHIVE identity mark only (icon-level,
+                    never spread across buttons/nav/cards)
+     --seal-red     human authority / deliberate commitment - the
+                    moment a consequential, approval-gated action is
+                    taken (Apply, Issue RFI, an Approval Gate "Yes"),
+                    never ordinary error/failure
+     --machine-blue machine/system/reference (focus rings, links,
+                    machine-generated Finding markers) - also given a
+                    literal second life as the blueprint-grid backdrop
+                    line, since this product's own visual metaphor
+                    (a blueprint) is properly blue, not sand
+     --highlight-orange the one current/active position in a lifecycle
+                    or sequence - narrow and singular by design, not a
+                    general-purpose "selected" color (ordinary list/nav
+                    selection stays tonal)
+     --accepted-green   accepted / confirmed
+     --attention-amber  needs evidence / pending attention
+     --failure-red      contradiction / failure - distinct from the
+                    deeper --seal-red authority accent
+
+   Type: Arial Nova Condensed (display + body) - condensed is the
+         visual character; light weight where text is large enough to
+         stay comfortably readable at that weight, regular weight
+         everywhere else. IBM Plex Mono stays the mono/technical-
+         register font - the prose-vs-identifiers/paths/logs
+         distinction is load-bearing elsewhere. Arial Nova ships with
+         Windows 11 / Microsoft 365; Arial Narrow and Arial are the
+         condensed-then-plain fallback for systems without it.
+
+   Named profiles/modes later (dark theme, a denser or roomier
+   density, a high-contrast mode): a NEW file like this one,
+   redefining these same token names with different values, swapped
+   in base.html's <link> for whichever one is active - main.css and
+   every template stay completely unchanged, because they only ever
+   reference the names, never a raw value. Don't add a --density-scale
+   calc() indirection or any other multi-mode machinery ahead of an
+   actual second mode existing - that's solving a problem this project
+   doesn't have yet. Verify any new or changed color pairing with
+   tools/check_contrast.py before shipping it - contrast here is a
+   floor, not a target (see --text-metadata below), and that discipline
+   should survive a future palette change too, not just this one.
+   ============================================================ */
+:root {
+    /* -- material scale (warm architectural neutrals) --------------------
+       Hue held at ~38-42deg throughout - same sand family, not a
+       different palette. text-primary's relationship to canvas is what
+       produces the letterpress/ink-on-paper quality - the single most
+       load-bearing contrast pairing in the app. */
+    --canvas: #F4F0E9;            /* Sand Cotton - main app background */
+    --surface-primary: #FBFAF8;   /* Alabaster - panels, cards, dialogs */
+    --surface-secondary: #E1D7C1; /* Limestone - nav surfaces, grouped controls */
+    --surface-hover: #D9CBAF;     /* Warm Stone (lighter) - hover */
+    --surface-selected: #DCC89C;  /* Warm Stone (deeper) - selected / current */
+    --border: #BFAB7D;            /* Desert Dust - quiet dividers */
+    --border-strong: #B39D6C;     /* structural border where clarity is needed */
+    /* Readability is the floor, not the target - every text token below
+       is deliberately darker than WCAG AA's 4.5:1 minimum, not tuned to
+       just clear it. --text-metadata in particular was measured too
+       faint in practice (~4.3:1) and is darkened substantially. */
+    --text-primary: #2B1D12;      /* Basalt Ink */
+    --text-secondary: #453D2E;    /* Weathered Basalt */
+    --text-metadata: #5A5140;     /* Stone Grey - timestamps, ids, labels - still clearly readable, not decorative */
+    --text-disabled: #857A64;     /* Stone Grey - disabled controls - dimmer than metadata, never illegible */
+
+    /* -- identity + authority (used rarely, by design) -------------------- */
+    --bee-yellow: #FFC400;
+    --seal-red: #7A1911;
+    --seal-red-tint: #F0D9D3;
+
+    /* -- semantic operational colors (quiet, subordinate to the neutrals) - */
+    --machine-blue: #235066;
+    --machine-blue-tint: #DCE7EA;
+    --highlight-orange: #AF571D;
+    --highlight-orange-tint: #F8E2D3;
+    --accepted-green: #2E5F38;
+    --accepted-green-tint: #DCEADB;
+    --attention-amber: #7A4A08;
+    --attention-amber-tint: #F2E2C4;
+    --failure-red: #8C2E22;
+    --failure-red-tint: #F3DAD4;
+
+    --font-display: "Arial Nova Cond", "Arial Narrow", Arial, sans-serif;
+    --font-body: "Arial Nova Cond", "Arial Narrow", Arial, sans-serif;
+    --font-mono: "IBM Plex Mono", monospace;
+
+    /* -- type scale ---------------------------------------------------------
+       Named for role, not just size, so a future pass can tell what a
+       given step is FOR. Values match the most common raw sizes already
+       in use (see the header note above) - this consolidates the
+       0.82rem/0.85rem/0.88rem drift into one canonical --text-sm rather
+       than changing how anything currently looks. */
+    --text-2xs: 0.7rem;   /* uppercase letter-spaced micro-labels */
+    --text-xs: 0.8rem;    /* mono details, badges, chips */
+    --text-sm: 0.85rem;   /* the default secondary/metadata/body-detail size */
+    --text-base: 0.9rem;  /* base running text where it needs to be explicit */
+    --text-md: 1rem;      /* default control/body text */
+    --text-lg: 1.1rem;    /* sub-headings (h2 inside a pane) */
+    --text-xl: 1.5rem;    /* project-scale headings (Project Home h1) */
+    --text-2xl: 1.8rem;   /* page-level headings (.dash-head h1) */
+    --text-3xl: 2.2rem;   /* largest display headings */
+
+    /* -- spacing scale --------------------------------------------------
+       Same principle: named steps matching the values already in use
+       throughout main.css, so migrating a rule to a token is a rename,
+       not a value change. A future denser or roomier mode redefines
+       these in its own file - components should never hardcode a
+       margin/padding/gap value that one of these already names. */
+    --space-1: 0.15rem;
+    --space-2: 0.3rem;
+    --space-3: 0.4rem;
+    --space-4: 0.5rem;
+    --space-5: 0.6rem;
+    --space-6: 0.7rem;
+    --space-7: 0.85rem;
+    --space-8: 1rem;
+    --space-9: 1.2rem;
+    --space-10: 1.5rem;
+    --space-11: 2rem;
+    --space-12: 3rem;
+}
