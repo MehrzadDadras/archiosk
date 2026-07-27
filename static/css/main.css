@@ -56,9 +56,18 @@
    Others are single-instance today - named here so a second member
    inherits the grammar deliberately instead of being invented fresh, not
    built out as empty template scaffolding for a family of one:
-     - Entry (login.html): centered card, pre-auth shell, one credential
-       form. (gateway.html shares the card CSS but isn't linked from any
-       current navigation - effectively dead, not a live second member.)
+     - Entry/gateway (login.html, gateway.html): centered card, one
+       primary decision. CORRECTED: an earlier pass here called
+       gateway.html dead because no template links to it - wrong,
+       checked only navigation links, not redirect targets.
+       routes/portal.py's login() redirects here by default whenever no
+       `?next=` is present (see its own comment), and index.html's
+       "Sign in to get started" link never sets one - so this is the
+       actual, frequently-hit landing page for a fresh login, not an
+       orphan. This makes Entry a real two-member family already
+       sharing CSS (.gateway-page/.gateway-card/.gateway-brand) but
+       still duplicating the brand-lockup markup between the two files
+       - a genuine consolidation candidate, not yet done.
      - Single-task capture (upload.html): hero intro, one primary input,
        one submit, inline validation error.
      - Directory (projects.html): search + filterable card list.
