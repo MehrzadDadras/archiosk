@@ -56,6 +56,7 @@ from services.case_workspace import (
     REQUIREMENT_STATUS_SUPERSEDED,
     SOURCE_KIND_PROJECT_DOCUMENT,
     SOURCE_KIND_TEXT_RECORD,
+    Anchor,
     AnalysisTrigger,
     CaseWorkspaceError,
     CaseWorkspaceStore,
@@ -334,6 +335,15 @@ def show_workspace(project_id):
     # + timestamp, not per-item "new" tags scattered across every
     # accordion - a small, honest signal rather than a bigger UI change
     # made as a side effect of this one.
+    # The project-level conversational aperture (no Case): messages posted
+    # against the Project itself, or anchored to a project-level object
+    # (a Requirement's "Discuss this" affordance) rather than any one
+    # Investigation. Only ever shown on Project Home - Case conversation
+    # stays exactly where it already was, embedded on the Case itself.
+    project_conversation_view = None
+    if active_case is None:
+        project_conversation_view = store.project_conversation_for(workspace)
+
     since_last_visit = None
     if active_case is None:
         previous_visit_at = workspace.last_viewed_by.get(_reviewer())
@@ -658,6 +668,7 @@ def show_workspace(project_id):
         resolution_outcomes=KNOWN_RESOLUTION_OUTCOMES,
         project_home_summary=project_home_summary,
         since_last_visit=since_last_visit,
+        project_conversation_view=project_conversation_view,
     )
 
 
@@ -1380,18 +1391,30 @@ def revise_source(project_id, source_id):
     return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
 
 
-def _run_conversation_turn(project_id: str, store: CaseWorkspaceStore, workspace, case: dict, text: str) -> None:
+def _run_conversation_turn(
+    project_id: str, store: CaseWorkspaceStore, workspace, case: Optional[dict], text: str,
+    anchor: Optional[dict] = None,
+) -> None:
     """
-    Posts a human message into `case`'s conversation, interprets it
+    Posts a human message (into `case`'s conversation, or
+    workspace.project_conversation if `case` is None), interprets it
     (Analysis/focus/compare/RFI-intent/correction via
     services.conversation_interpreter.interpret_message), and posts the
-    resulting system reply. The shared turn logic behind both an existing
-    Case's composer (post_message) and Project Home's central composer
-    (quick_start, Prompt 3 #4/#9) - the same conversational entry point,
-    just reached from two different places (an existing Case, or a
-    brand-new one just created from Project Home).
+    resulting system reply. The shared turn logic behind an existing
+    Case's composer (post_message), Project Home's central composer
+    (quick_start, which still always creates a Case first - unchanged),
+    and a project-level aperture with no Case at all (discuss_object) -
+    the same conversational entry point, reached from three places.
+
+    `anchor` (Anchor shape - anchor_type/anchor_id/source_id/location/
+    description) records what the sender was actually looking at,
+    independent of which conversation this lands in - see
+    ConversationMessage's own docstring. Only ever set on the human
+    message; the system's reply isn't "about" anything itself, it's a
+    response to one.
     """
-    human_message = store.add_message(workspace, case["id"], role="human", text=text)
+    case_id = case["id"] if case is not None else None
+    human_message = store.add_message(workspace, case_id, role="human", text=text, anchor=anchor)
 
     artifacts_dir = Path(current_app.config["REGISTRY_STORE_PATH"]) / "workspace_artifacts"
     focused_finding_id = session.get(f"focused_finding:{project_id}")
@@ -1405,11 +1428,12 @@ def _run_conversation_turn(project_id: str, store: CaseWorkspaceStore, workspace
         reviewer=_reviewer(),
         focused_finding_id=focused_finding_id,
         triggering_message_id=human_message["id"],
+        anchor=anchor,
     )
 
     store.add_message(
         workspace,
-        case["id"],
+        case_id,
         role="system",
         text=result.reply_text,
         action_taken=result.action_taken,
@@ -1431,7 +1455,7 @@ def _run_conversation_turn(project_id: str, store: CaseWorkspaceStore, workspace
             event_type="analysis_started",
             actor=_reviewer(),
             role=session.get("role") or "unspecified",
-            payload={"case_id": case["id"], "analysis_id": analysis_id},
+            payload={"case_id": case_id, "analysis_id": analysis_id},
             trigger={
                 "trigger_type": "user_initiated",
                 "trigger_reference_type": "conversation_message",
@@ -1494,6 +1518,40 @@ def quick_start(project_id):
     _run_conversation_turn(project_id, store, workspace, case, text)
 
     return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case["id"]))
+
+
+@workspace_bp.route("/projects/<project_id>/workspace/discuss", methods=["POST"])
+@login_required
+def discuss_object(project_id):
+    """
+    A project-level conversational aperture (no Case): the reviewer was
+    looking at some governed, project-level object - a Requirement today,
+    others later - and starts talking about it without first opening an
+    Investigation. Posts into workspace.project_conversation (case=None,
+    via the same _run_conversation_turn every other composer uses) with
+    an Anchor naming what was in view, so the reply and everything
+    downstream can honestly refer back to it - see ConversationMessage's
+    own docstring on why this is a second list, not a migration.
+    """
+    _, store, workspace = _load_workspace_or_404(project_id)
+
+    text = (request.form.get("text") or "").strip()
+    if not text:
+        return redirect(url_for("workspace.show_workspace", project_id=project_id))
+
+    anchor_type = (request.form.get("anchor_type") or "").strip()
+    anchor_id = (request.form.get("anchor_id") or "").strip()
+    anchor = None
+    if anchor_type and anchor_id:
+        anchor = asdict(Anchor(
+            anchor_type=anchor_type,
+            anchor_id=anchor_id,
+            description=(request.form.get("anchor_description") or None),
+        ))
+
+    _run_conversation_turn(project_id, store, workspace, None, text, anchor=anchor)
+
+    return redirect(url_for("workspace.show_workspace", project_id=project_id))
 
 
 @workspace_bp.route("/projects/<project_id>/workspace/findings/<finding_id>/validate", methods=["POST"])

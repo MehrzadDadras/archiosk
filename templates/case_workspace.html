@@ -412,6 +412,21 @@
                         <button type="submit">Revise Requirement</button>
                     </form>
                 {% endcall %}
+
+                {% call macros.subdisclosure('Discuss this Requirement') %}
+                    <p class="pane-note">
+                        Talk about this specific Requirement from right here &mdash; no need to open an
+                        Investigation first. Lands in the Project Conversation, below, already
+                        knowing which Requirement you meant.
+                    </p>
+                    <form class="workspace-form" method="post" action="{{ url_for('workspace.discuss_object', project_id=project_id) }}">
+                        <input type="hidden" name="anchor_type" value="requirement">
+                        <input type="hidden" name="anchor_id" value="{{ requirement.id }}">
+                        <input type="hidden" name="anchor_description" value="{{ requirement.original_requirement_identifier }}">
+                        <input type="text" name="text" placeholder="Ask or note something about this Requirement&hellip;" required>
+                        <button type="submit">Send</button>
+                    </form>
+                {% endcall %}
             </div>
             {% endfor %}
         {% endcall %}
@@ -989,6 +1004,32 @@
                     <p style="font-size:0.88rem;color:var(--text-secondary);">No Snapshots recorded yet.</p>
                     {% endif %}
                 {% endcall %}
+            {% endcall %}
+
+            {% call macros.accordion('Project Conversation (' ~ project_conversation_view|length ~ ')', group='project-home', id='project-conversation') %}
+                <p class="pane-note">
+                    Talk to the Project itself &mdash; general notes, or anything opened from a
+                    &ldquo;Discuss this&hellip;&rdquo; link elsewhere on this page (each message below
+                    shows what it was about, if anything). Separate from an Investigation's own
+                    Conversation, which stays with that Investigation.
+                </p>
+                <div class="conversation-thread">
+                    {% for message in project_conversation_view %}
+                    <div class="conversation-message {{ message.role }}">
+                        <span class="role-label">{{ "You" if message.role == "human" else "Archiosk" }}</span>
+                        {% if message.anchor %}
+                        <br><small class="text-muted">Re: {{ message.anchor.anchor_type.replace('_', ' ') }}{% if message.anchor.description %} &mdash; {{ message.anchor.description }}{% endif %}</small>
+                        {% endif %}
+                        {{ message.text }}
+                    </div>
+                    {% else %}
+                    <p class="conversation-empty">No Project Conversation yet.</p>
+                    {% endfor %}
+                </div>
+                <form class="conversation-input-form" method="post" action="{{ url_for('workspace.discuss_object', project_id=project_id) }}">
+                    <input type="text" name="text" placeholder="Talk to this Project&hellip;" autocomplete="off" required>
+                    <button type="submit">Send</button>
+                </form>
             {% endcall %}
         </div>
     </div>

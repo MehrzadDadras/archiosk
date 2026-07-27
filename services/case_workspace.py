@@ -813,12 +813,37 @@ class Requirement:
 
 @dataclass
 class ConversationMessage:
+    """
+    case_id is optional (matching the same extension AnalysisRun and
+    ReviewThread already made): a message sent from a project-level
+    context (a Requirement, a Source, no Case open at all) has nowhere
+    case-shaped to live, and forcing one into existence just to hold a
+    message is exactly the surprise quick_start currently causes (it
+    silently creates a whole new Case for this reason). Case-scoped
+    messages keep living inside their Case's own `conversation` list
+    (unchanged, no migration); a case_id=None message lives in
+    ProjectWorkspace.project_conversation instead - two lists, not one
+    polymorphic one, matching how Requirement (project-level) and
+    Finding (Case-level) already stay genuinely separate rather than
+    being forced into a single "governed thing" abstraction.
+
+    `anchor` (same Anchor shape ReviewThread already uses - anchor_type/
+    anchor_id/source_id/location/description) records what the sender
+    was actually looking at when they spoke, independent of which
+    conversation the message landed in. This is the "aperture" - the
+    system knows what was in view even though there is still only one
+    conversation per Case (or one per project-level context), not a
+    separate fragmented conversation per object a message happens to
+    mention.
+    """
+
     id: str
-    case_id: str
     role: str  # "human" | "system"
     text: str
     created_at: str
+    case_id: Optional[str] = None
     action_taken: Optional[str] = None
+    anchor: Optional[dict] = None  # asdict(Anchor) - what was in view when this was sent
 
 
 @dataclass
@@ -1975,6 +2000,13 @@ class ProjectWorkspace:
     # zero" - callers must check for absence, not default to an ancient
     # timestamp.
     last_viewed_by: dict = field(default_factory=dict)
+    # Conversation messages sent from a project-level context - no Case
+    # open, nowhere case-shaped for the message to live (see
+    # ConversationMessage's own docstring). A genuine second home for
+    # Conversation, not a dumping ground: Case-scoped conversation stays
+    # exactly where it already was (each Case's own `conversation` list),
+    # unmigrated, unchanged.
+    project_conversation: list[dict] = field(default_factory=list)
     # `display_title`/`display_description` override the Project's
     # otherwise-inherited identity (the ingested document's filename) for
     # presentation only - never a Source's own recorded `name`/
@@ -3653,7 +3685,26 @@ class CaseWorkspaceStore:
             case["source_ids"].append(source_id)
         self.save(workspace)
 
-    def add_message(self, workspace: ProjectWorkspace, case_id: str, role: str, text: str, action_taken: Optional[str] = None) -> dict:
+    def add_message(
+        self, workspace: ProjectWorkspace, case_id: Optional[str], role: str, text: str,
+        action_taken: Optional[str] = None, anchor: Optional[dict] = None,
+    ) -> dict:
+        """
+        case_id=None posts into ProjectWorkspace.project_conversation
+        instead of a Case's own conversation list - the project-level
+        home for a message sent with no Investigation open (see
+        ConversationMessage's own docstring for why this is a second
+        list, not a migration of the existing one).
+        """
+        if case_id is None:
+            message = ConversationMessage(
+                id=_new_id(), role=role, text=text, created_at=_now(),
+                action_taken=action_taken, anchor=anchor,
+            )
+            workspace.project_conversation.append(asdict(message))
+            self.save(workspace)
+            return asdict(message)
+
         case = self._find(workspace.cases, case_id)
         if case is None:
             raise CaseWorkspaceError(f"Case {case_id} was not found.")
@@ -3665,10 +3716,14 @@ class CaseWorkspaceStore:
             text=text,
             created_at=_now(),
             action_taken=action_taken,
+            anchor=anchor,
         )
         case["conversation"].append(asdict(message))
         self.save(workspace)
         return asdict(message)
+
+    def project_conversation_for(self, workspace: ProjectWorkspace) -> list[dict]:
+        return list(workspace.project_conversation)
 
     # -- analysis / findings / artifacts ----------------------------------------
 

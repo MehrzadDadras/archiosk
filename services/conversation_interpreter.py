@@ -45,19 +45,51 @@ _FINDING_NUMBER_PATTERN = re.compile(r"finding\s*#?\s*(\d+)", re.IGNORECASE)
 def interpret_message(
     text: str,
     workspace: ProjectWorkspace,
-    case: dict,
+    case: Optional[dict],
     store: CaseWorkspaceStore,
     artifacts_dir: Path,
     reviewer: str,
     focused_finding_id: Optional[str],
     triggering_message_id: Optional[str] = None,
+    anchor: Optional[dict] = None,
 ) -> InterpretationResult:
+    """
+    `case` is now optional (a project-level aperture - no Investigation
+    open - see ConversationMessage's own docstring). The existing
+    recognized actions (Analyze, evidence, Compare, correction) all
+    genuinely need a Case (drawings and Findings are Case-scoped) and
+    stay exactly as narrow as before - honestly declining, not
+    guessing, when one isn't open - rather than being stretched to
+    half-work without one.
+
+    `anchor` (what the sender was actually looking at) does NOT expand
+    what this interpreter understands - it is still deterministic
+    keyword matching, not reasoning. What it changes is the fallback
+    reply for anything unrecognized: acknowledging the anchor by name
+    is an honest demonstration that the context was actually captured
+    and carried through, not a claim that the message was understood.
+    """
     lowered = text.strip().lower()
 
     if not lowered:
         return InterpretationResult(
             action_taken="none",
             reply_text="No instruction was recognized in an empty message.",
+        )
+
+    needs_case = (
+        lowered.startswith(("analyze", "analyse"))
+        or ("evidence" in lowered and "finding" in lowered)
+        or lowered.startswith("compare") or " compare " in f" {lowered} "
+        or (focused_finding_id is not None and _looks_like_correction(lowered))
+    )
+    if needs_case and case is None:
+        return InterpretationResult(
+            action_taken="needs_case",
+            reply_text=(
+                "That needs an open Investigation (drawings and Findings live "
+                "inside one) - open or start one first, then ask again."
+            ),
         )
 
     if lowered.startswith(("analyze", "analyse")):
@@ -75,6 +107,12 @@ def interpret_message(
     if focused_finding_id is not None and _looks_like_correction(lowered):
         return _handle_correction(text, workspace, case, store, focused_finding_id, reviewer)
 
+    if anchor is not None:
+        return InterpretationResult(
+            action_taken="anchor_acknowledged",
+            reply_text=_describe_anchor_acknowledgment(anchor),
+        )
+
     return InterpretationResult(
         action_taken="unrecognized",
         reply_text=(
@@ -84,6 +122,23 @@ def interpret_message(
             "or, with a Finding focused, a direct correction (e.g. \"This is not "
             "a datum, it is a civil reference\")."
         ),
+    )
+
+
+def _describe_anchor_acknowledgment(anchor: dict) -> str:
+    """
+    Honest, narrow reply proving the aperture's context actually
+    arrived, without claiming the message itself was understood -
+    this interpreter is still deterministic keyword matching (see this
+    module's own docstring), not reasoning about what was said.
+    """
+    kind = (anchor.get("anchor_type") or "item").replace("_", " ")
+    label = anchor.get("description") or anchor.get("anchor_id", "")
+    return (
+        f"Noted, in the context of this {kind}"
+        f"{' (' + label + ')' if label else ''} - I didn't recognize a specific "
+        "action in that message, but what you were looking at is on record "
+        "against it."
     )
 
 
