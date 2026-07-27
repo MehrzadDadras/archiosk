@@ -16,6 +16,21 @@ from config import get_config
 
 
 def create_app(config_name: str | None = None) -> Flask:
+    if (config_name or os.getenv("FLASK_ENV", "production")) == "testing":
+        # Tests must be hermetic regardless of what's configured in the
+        # developer's local .env — a real ANTHROPIC_API_KEY set for local
+        # dev/live verification must never cause the automated suite to
+        # make real (billed, network-dependent, non-deterministic) model
+        # calls. services/bhive_parser.py's classify/consistency stages
+        # and services/requirement_investigation.py both read this env
+        # var directly (not via app.config), so clearing it here, before
+        # anything else runs, is the one point that actually controls
+        # every call site. A test that wants to exercise the real-call
+        # code path patches this back in locally for just that test (see
+        # tests/test_requirement_investigation.py) rather than relying on
+        # ambient environment state.
+        os.environ["ANTHROPIC_API_KEY"] = ""
+
     app = Flask(
         __name__,
         static_folder="static",
