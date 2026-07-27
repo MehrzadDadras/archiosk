@@ -53,6 +53,19 @@ is that script, written once. Use it instead of rewriting it a third time.
    tell whether it's a real regression or another deliberate change that
    needs to be passed as a normalization pair.
 
+## Known limitation
+
+The old/new pairs in step 3 are a plain string `.replace()` across the
+whole page - if the *same* old substring needs to become two *different*
+new values depending on where it appears (e.g. three elements that all
+started as `class="workspace-pane">` and each got a different modifier
+class), one pair can't express that and will misreport a real diff.
+When that happens, don't force it through a pair - `grep -o` the actual
+built HTML for the specific attribute/class directly and eyeball it,
+then re-run the diff with the class value itself normalized away
+(`class="workspace-pane[^"]*"` → a fixed placeholder) to confirm nothing
+*else* changed.
+
 ## Don't
 
 - Don't treat a passing test suite alone as proof the refactor is safe.

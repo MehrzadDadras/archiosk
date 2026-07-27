@@ -15,7 +15,7 @@
 
 <div class="case-workspace" data-project-id="{{ project_id }}">
     {# ---------------- Left: Project Navigation (always visible - project-scoped, not Case-scoped) ---------------- #}
-    <aside class="workspace-pane">
+    <aside class="workspace-pane workspace-pane-nav">
         <h2>Project</h2>
 
         <p class="workspace-pane-label">Lifecycle</p>
@@ -341,7 +341,7 @@
 
 {% if active_case %}
     {# ---------------- Center: Conversation ---------------- #}
-    <section class="workspace-pane">
+    <section class="workspace-pane workspace-pane-conversation">
         <h2>{{ active_case.title }}</h2>
         {% if active_case.objective %}<p style="color:var(--text-secondary);font-size:0.85rem;margin-top:-0.6rem;">{{ active_case.objective }}</p>{% endif %}
 
@@ -594,7 +594,7 @@
     </section>
 
     {# ---------------- Right: Artifact Workspace ---------------- #}
-    <section class="workspace-pane">
+    <section class="workspace-pane workspace-pane-findings">
         <h2>Artifact Workspace</h2>
 
         {% call macros.accordion('Findings (' ~ findings_view|length ~ ')', status=(applied_count ~ ' applied' if applied_count else None), group='right', id='findings', open=True) %}

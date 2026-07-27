@@ -67,7 +67,12 @@
        correctly ONE template governing four behavioral states (private/
        shared/collaborative, archived read-only, derived) via data, not
        four duplicated files - the reference example other families
-       should match, not a gap.
+       should match, not a gap. Its geometry is also explicitly
+       space-driven, not just state-driven - see .case-workspace below:
+       named grid areas keep the reference/navigation pane last in
+       priority at every width, instead of a single "collapse to one
+       column" breakpoint dumping eight accordions above the actual
+       conversation.
      - Hub (case_workspace.html, no case open / "Project Home"):
        single column, conversational composer, light disclosure.
    Deliberately NOT templated: the legacy dashboard (dashboard.html)
@@ -999,16 +1004,49 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
 /* ============================================================
    Case Workspace — Project Navigation | Conversation | Artifacts
    ============================================================ */
+/* Named areas (not source order) decide position, so the reference/
+   navigation pane can move without touching markup order. Project Home
+   (.project-home, below) isn't part of this named layout - it only ever
+   shares this grid with .workspace-pane-nav, placed via its own
+   grid-column span, which coexists fine with named areas used
+   elsewhere in the same grid. */
 .case-workspace {
     display: grid;
     grid-template-columns: 240px minmax(0, 1fr) minmax(0, 1.15fr);
+    grid-template-areas: "nav conversation findings";
     gap: 1rem;
     padding: 1rem 0 2rem;
     align-items: start;
 }
+.workspace-pane-nav { grid-area: nav; }
+.workspace-pane-conversation { grid-area: conversation; }
+.workspace-pane-findings { grid-area: findings; }
 
+/* Medium: Project reference/navigation is secondary to the active work -
+   it drops to its own full-width row below instead of competing with
+   conversation+findings for the first screenful, while the two panes
+   that make up the actual task keep a side-by-side row as long as
+   there's room for it. */
 @media (max-width: 1080px) {
-    .case-workspace { grid-template-columns: 1fr; }
+    .case-workspace {
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+        grid-template-areas:
+            "conversation findings"
+            "nav nav";
+    }
+}
+
+/* Narrow: even conversation+findings can't stay side by side legibly -
+   full single-column stack. Nav still stays last - the priority order
+   doesn't change just because the screen got narrower still. */
+@media (max-width: 720px) {
+    .case-workspace {
+        grid-template-columns: 1fr;
+        grid-template-areas:
+            "conversation"
+            "findings"
+            "nav";
+    }
 }
 
 .workspace-pane {
@@ -1253,7 +1291,13 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
 
 /* -- Project Home (calm, single-purpose project entry - Prompt 3) --------- */
 .project-home { grid-column: 2 / -1; max-width: 760px; padding: 0.25rem 0 1.5rem; }
-@media (max-width: 1080px) { .project-home { grid-column: 1; } }
+/* Project Home doesn't participate in the conversation/findings named
+   areas above (it's a different render branch, never on screen at the
+   same time) - it needs its own explicit placement once .case-workspace
+   stops being a simple 3-track row at <=1080px, so it stays full-width
+   and, like the case-open view, ahead of the nav pane rather than
+   pushed below it. */
+@media (max-width: 1080px) { .project-home { grid-column: 1 / -1; grid-row: 1; } }
 .project-home-back { font-size: 0.88rem; color: var(--text-secondary); margin: 0 0 0.6rem; }
 .project-home-back a { color: var(--text-secondary); }
 .project-home-back a:hover { color: var(--text-primary); }
