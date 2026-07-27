@@ -478,6 +478,16 @@ REQUIREMENT_STATUS_SUPERSEDED = "superseded"
 REQUIREMENT_STATUS_WITHDRAWN = "withdrawn"
 REQUIREMENT_STATUS_FUTURE_EFFECTIVE = "future_effective"
 REQUIREMENT_STATUS_UNKNOWN = "unknown"
+# CLAUDE-P13: the one seam this pass adds - not yet issued/authoritative,
+# distinct from FUTURE_EFFECTIVE (which IS already issued, just not yet
+# the operative rule). Nothing in this codebase sets or reads this value
+# yet; it exists only so an Owner/issuer drafting a Requirement before
+# issuance has an honest status to record it under, without registering
+# a not-yet-real clause as REQUIREMENT_STATUS_ACTIVE (which would
+# misrepresent it as already authoritative). No route, form, or workflow
+# uses this today - see the accompanying analysis for why issuer-side
+# authoring is examined but deliberately not built in this pass.
+REQUIREMENT_STATUS_DRAFT = "draft"
 
 KNOWN_REQUIREMENT_STATUSES = (
     REQUIREMENT_STATUS_ACTIVE,
@@ -485,6 +495,7 @@ KNOWN_REQUIREMENT_STATUSES = (
     REQUIREMENT_STATUS_WITHDRAWN,
     REQUIREMENT_STATUS_FUTURE_EFFECTIVE,
     REQUIREMENT_STATUS_UNKNOWN,
+    REQUIREMENT_STATUS_DRAFT,
 )
 
 # Hard denylist, not an open-world "known" vocabulary (see
