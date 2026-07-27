@@ -148,6 +148,26 @@ def _nav_recent_projects(app: Flask, limit: int = 15) -> list:
     ingested first) stays a bounded cost, not an unbounded one - the
     same per-project store-load cost portal.py's own _project_summary
     already pays for the Projects directory and Home.
+
+    OPEN, NOT YET JUSTIFIED TO FIX: "recent" here means ingested_at - a
+    timestamp set once, at creation, that never changes. A project
+    ingested weeks ago but actively worked on today can rank below one
+    ingested yesterday and never opened since, in the one navigation
+    element shown on every authenticated page. routes/portal.py's
+    _project_summary already computes a truer signal
+    (last_activity = the most recent GovernanceLog event, falling back
+    to ingested_at) for the Projects directory's own "Last Updated"
+    sort - but it needs each project's governance log read to get it,
+    and this function's whole cost structure depends on sorting+capping
+    on a free, already-in-memory field before paying any per-project
+    I/O (see above). Sorting by last_activity here would mean reading
+    every project's governance log on every authenticated page load,
+    not just the capped 15 - trading a real, currently-bounded cost for
+    a real, worse one, not a free correctness win. A real fix needs
+    last_activity cached cheaply (e.g. a field on the registry record
+    itself, updated incrementally when a governance event is appended)
+    so it's as free to sort on as ingested_at is now - not attempted
+    here.
     """
     from services.case_workspace import CaseWorkspaceStore
     from services.ingestion import get_registry
