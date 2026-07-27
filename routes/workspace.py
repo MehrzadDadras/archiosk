@@ -469,6 +469,11 @@ def show_workspace(project_id):
     # else on this page (a thread only ever appears here if its own
     # case_id equals active_case's id, so a Private Case's discussion is
     # exactly as invisible to a non-owner as its Findings already are).
+    # Same open, not-yet-justified-to-fix ordering gap as findings_view
+    # above: store.threads_for_case returns creation order, not (e.g.)
+    # threads with a pending Attention first - confirmed here to be a
+    # systemic characteristic of CaseWorkspaceStore's flat, append-only
+    # lists, not an isolated oversight in findings_view alone.
     threads_view = []
     if active_case is not None:
         for thread in store.threads_for_case(workspace, active_case["id"]):
