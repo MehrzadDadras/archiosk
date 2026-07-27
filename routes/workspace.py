@@ -1,9 +1,9 @@
 """
-Case Workspace routes — the experimental Project / Case / Source /
-Artifact / Analysis / Finding / Review / Apply interaction prototype.
-Mounted alongside the existing portal/api blueprints; changes nothing
-about the existing upload -> dashboard pipeline, which keeps working
-exactly as before.
+Case Workspace routes — the Project / Case / Source / Artifact /
+Analysis / Finding / Review / Apply interaction surface. Mounted
+alongside the existing portal/api blueprints. Case Workspace is now the
+one authoritative project view - the legacy Dashboard (routes/portal.py's
+dashboard()) is retired and redirects here.
 
 Classic Flask form-POST -> redirect -> re-render throughout, matching the
 rest of this app (no client-side build step, no fetch/JSON layer) — see
@@ -25,6 +25,7 @@ import io
 import mimetypes
 import uuid
 from dataclasses import asdict
+from datetime import datetime
 from pathlib import Path
 
 from flask import (
@@ -464,6 +465,28 @@ def show_workspace(project_id):
     # unbounded log viewer.
     recent_governance_events = list(reversed(_log().read(project_id)))[:25]
 
+    # TemporalObligation (services/case_workspace.py) was fully built
+    # (create/revise/list/evaluate_temporal_condition) but never wired to
+    # any route - the real, tested replacement for the old milestone
+    # lattice, which was dropped for being non-functional (see the
+    # Dashboard-retirement commit). Project-wide, not Case-filtered
+    # (temporal_obligations_for_project takes no case_id), same as
+    # History above. Sorted by actual urgency - explicit priority, not
+    # creation order - since this is exactly a "what needs attention"
+    # list: overdue first, then due, due soon, not yet due, and the
+    # three terminal statuses last (nothing to act on there).
+    _CONDITION_PRIORITY = {
+        "overdue": 0, "due": 1, "due_soon": 2, "not_yet_due": 3,
+        "completed": 4, "cancelled": 4, "superseded": 4,
+    }
+    temporal_obligations_view = sorted(
+        (
+            {"obligation": ob, "condition": store.temporal_condition_for(workspace, ob["id"])}
+            for ob in store.temporal_obligations_for_project(workspace)
+        ),
+        key=lambda row: _CONDITION_PRIORITY.get(row["condition"], 3),
+    )
+
     # Human discussion (ReviewThread/ReviewMessage/Attention), scoped to
     # whichever Case is active - same read/write boundary as everything
     # else on this page (a thread only ever appears here if its own
@@ -545,6 +568,7 @@ def show_workspace(project_id):
         revisited_requirements_count=revisited_requirements_count,
         adjudication_outcomes=REQUIREMENT_ADJUDICATION_OUTCOMES,
         recent_governance_events=recent_governance_events,
+        temporal_obligations_view=temporal_obligations_view,
         threads_view=threads_view,
         known_usernames=known_usernames,
         resolution_outcomes=KNOWN_RESOLUTION_OUTCOMES,
@@ -904,6 +928,51 @@ def create_thread(project_id, case_id):
         except CaseWorkspaceError as exc:
             flash(str(exc), "error")
 
+    return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
+
+
+@workspace_bp.route("/projects/<project_id>/workspace/cases/<case_id>/temporal-obligations", methods=["POST"])
+@login_required
+def create_temporal_obligation_route(project_id, case_id):
+    """
+    First route wiring for CaseWorkspaceStore.create_temporal_obligation -
+    previously fully implemented and tested but never reachable through
+    the UI at all. Scoped to Case-originated obligations only for this
+    first pass (origin_type=case, origin_id=case_id, matching the
+    class's own primary documented example - "RFI response dates,
+    submittal review periods"); project-level obligations with no
+    originating Case (the class docstring's other documented example,
+    a project-wide risk-reassessment date) are a real, valid future
+    extension, deliberately not built here - scope kept to what has
+    a clear, unambiguous origin.
+    """
+    _, store, workspace = _load_workspace_or_404(project_id)
+    _require_visible_case(store, workspace, case_id)
+
+    title = (request.form.get("title") or "").strip()
+    required_action = (request.form.get("required_action") or "").strip()
+    accepted_date = (request.form.get("accepted_date") or "").strip()
+    responsible_actor = (request.form.get("responsible_actor") or "").strip() or None
+    if not title or not required_action or not accepted_date:
+        flash("A key date needs a title, the action required, and a date.", "error")
+        return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
+
+    try:
+        datetime.fromisoformat(accepted_date)
+    except ValueError:
+        flash("That date isn't valid.", "error")
+        return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
+
+    store.create_temporal_obligation(
+        workspace, title=title, origin_type=OBJECT_KIND_CASE, origin_id=case_id,
+        required_action=required_action, accepted_date=accepted_date,
+        created_by=_reviewer(), case_id=case_id, responsible_actor=responsible_actor,
+    )
+    _log().append(
+        project_id=project_id, event_type="temporal_obligation_created",
+        actor=_reviewer(), role=session.get("role") or "unspecified",
+        payload={"case_id": case_id, "title": title, "accepted_date": accepted_date},
+    )
     return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
 
 

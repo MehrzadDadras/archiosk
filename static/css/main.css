@@ -1565,6 +1565,13 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
 .review-state-badge.review-state-verified { color: var(--accepted-green); border-color: var(--accepted-green); }
 .review-state-badge.review-state-not-verified { color: var(--failure-red); border-color: var(--failure-red); }
 .review-state-badge.review-state-unverified { color: var(--text-metadata); border-color: var(--border); }
+/* TemporalObligation's derived condition (evaluate_temporal_condition) -
+   only the two states someone actually needs to notice get color;
+   not-yet-due and the terminal statuses (completed/cancelled/superseded)
+   stay the neutral default pill, same "color is rare, only where it
+   carries real information" rule as everywhere else in this file. */
+.review-state-badge.review-state-overdue { color: var(--failure-red); border-color: var(--failure-red); }
+.review-state-badge.review-state-due, .review-state-badge.review-state-due-soon { color: var(--attention-amber); border-color: var(--attention-amber); }
 
 /* Requirement-evidence explainability (Connect Accepted Knowledge to
    Requirement Impact tranche) - maps the existing Relationship.

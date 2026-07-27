@@ -364,6 +364,45 @@
         {% endif %}
         {% endcall %}
 
+        {% call macros.accordion('Key Dates (' ~ temporal_obligations_view|length ~ ')', group='left', id='temporal-obligations') %}
+            <p style="font-size:0.85rem;color:var(--text-secondary);margin:-0.6rem 0 0.6rem;">
+                Project-wide due dates - RFI responses, submittal review periods, design
+                deliverables, and the like - sorted by what needs attention first, not by
+                when they were added.
+            </p>
+            {% if temporal_obligations_view %}
+            <ul class="source-list">
+                {% for row in temporal_obligations_view %}
+                {% set obligation = row.obligation %}
+                <li class="source-item">
+                    <span class="review-state-badge review-state-{{ row.condition|replace('_', '-') }}">{{ row.condition.replace('_', ' ') }}</span>
+                    {{ obligation.title }}
+                    <br><small style="color:var(--text-secondary);">
+                        {{ obligation.required_action }} by {{ obligation.current_accepted_date }}
+                        {% if obligation.responsible_actor %} &middot; {{ obligation.responsible_actor }}{% endif %}
+                    </small>
+                </li>
+                {% endfor %}
+            </ul>
+            {% else %}
+            <p style="color:var(--text-secondary);font-size:0.88rem;">No key dates recorded yet.</p>
+            {% endif %}
+
+            {% if active_case %}
+            {% call macros.subdisclosure('+ Add a key date') %}
+                <form class="workspace-form" method="post" action="{{ url_for('workspace.create_temporal_obligation_route', project_id=project_id, case_id=active_case.id) }}">
+                    <input type="text" name="title" placeholder="Title (e.g. RFI response due)" required>
+                    <input type="text" name="required_action" placeholder="What's required (e.g. Submit written response)" required>
+                    <input type="date" name="accepted_date" required>
+                    <input type="text" name="responsible_actor" placeholder="Responsible (optional)">
+                    <button type="submit">Add Key Date</button>
+                </form>
+            {% endcall %}
+            {% else %}
+            <p style="font-size:0.82rem;color:var(--text-secondary);">Open an Investigation to add a key date to it.</p>
+            {% endif %}
+        {% endcall %}
+
         {% call macros.accordion('History (' ~ recent_governance_events|length ~ ')', group='left', id='history') %}
             {% if recent_governance_events %}
             <ul class="source-list">
