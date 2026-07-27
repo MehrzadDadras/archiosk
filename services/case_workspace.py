@@ -835,6 +835,13 @@ class ConversationMessage:
     conversation per Case (or one per project-level context), not a
     separate fragmented conversation per object a message happens to
     mention.
+
+    `actor` names who sent a human message (role="system" replies leave
+    it None - there is exactly one reply-generator, naming it would be
+    noise). A shared/collaborative Case's conversation was previously
+    unattributed beyond "human" vs "system" - this is what lets
+    recent_anchors_for build a genuinely per-reviewer "where did I
+    leave off" trail rather than a project-wide one.
     """
 
     id: str
@@ -842,6 +849,7 @@ class ConversationMessage:
     text: str
     created_at: str
     case_id: Optional[str] = None
+    actor: Optional[str] = None  # who sent it, when role == "human" - see recent_anchors_for
     action_taken: Optional[str] = None
     anchor: Optional[dict] = None  # asdict(Anchor) - what was in view when this was sent
 
@@ -3688,6 +3696,7 @@ class CaseWorkspaceStore:
     def add_message(
         self, workspace: ProjectWorkspace, case_id: Optional[str], role: str, text: str,
         action_taken: Optional[str] = None, anchor: Optional[dict] = None,
+        actor: Optional[str] = None,
     ) -> dict:
         """
         case_id=None posts into ProjectWorkspace.project_conversation
@@ -3699,7 +3708,7 @@ class CaseWorkspaceStore:
         if case_id is None:
             message = ConversationMessage(
                 id=_new_id(), role=role, text=text, created_at=_now(),
-                action_taken=action_taken, anchor=anchor,
+                actor=actor, action_taken=action_taken, anchor=anchor,
             )
             workspace.project_conversation.append(asdict(message))
             self.save(workspace)
@@ -3715,6 +3724,7 @@ class CaseWorkspaceStore:
             role=role,
             text=text,
             created_at=_now(),
+            actor=actor,
             action_taken=action_taken,
             anchor=anchor,
         )
@@ -3724,6 +3734,53 @@ class CaseWorkspaceStore:
 
     def project_conversation_for(self, workspace: ProjectWorkspace) -> list[dict]:
         return list(workspace.project_conversation)
+
+    def recent_anchors_for(
+        self, workspace: ProjectWorkspace, reviewer: str, case_ids: set, limit: int = 5,
+    ) -> list[dict]:
+        """
+        This reviewer's own anchored human messages - the durable,
+        derived basis for a "where did I leave off" trail (the
+        contextual-companion continuity discussed against the Windshield/
+        Rear-view/Carousel model). Deliberately NOT a new persisted
+        "memory" object: every entry here is read straight from
+        ConversationMessage records that already exist for other
+        reasons, so this can never drift from what actually happened or
+        become an opaque second source of truth. Newest first, deduped
+        by anchor_id (only the most recent mention of a given object
+        survives - "here's where you last talked about X", not a full
+        log), capped at `limit` so this stays a quick trail, not another
+        unbounded history viewer.
+
+        `case_ids` should be the caller's already-computed
+        visible_case_ids - a Private Case's messages must be exactly as
+        invisible here as its Findings already are everywhere else.
+        """
+        candidates = [
+            m for m in workspace.project_conversation
+            if m["role"] == "human" and m.get("actor") == reviewer and m.get("anchor")
+        ]
+        for case in workspace.cases:
+            if case["id"] not in case_ids:
+                continue
+            candidates.extend(
+                m for m in case["conversation"]
+                if m["role"] == "human" and m.get("actor") == reviewer and m.get("anchor")
+            )
+
+        candidates.sort(key=lambda m: m["created_at"], reverse=True)
+
+        seen_anchor_ids = set()
+        result = []
+        for message in candidates:
+            anchor_id = message["anchor"]["anchor_id"]
+            if anchor_id in seen_anchor_ids:
+                continue
+            seen_anchor_ids.add(anchor_id)
+            result.append(message)
+            if len(result) >= limit:
+                break
+        return result
 
     # -- analysis / findings / artifacts ----------------------------------------
 

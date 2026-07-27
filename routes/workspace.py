@@ -580,6 +580,44 @@ def show_workspace(project_id):
         key=lambda row: _CONDITION_PRIORITY.get(row["condition"], 3),
     )
 
+    # "Where did I leave off?" - the contextual-companion continuity
+    # trail: this reviewer's own recent anchored conversation (from
+    # store.recent_anchors_for, itself derived purely from existing
+    # ConversationMessage records - no separate "memory" store to drift
+    # out of sync). Shown regardless of active_case (like Needs
+    # Attention) since the whole point is to stay reachable even while
+    # deep inside one Investigation. Only anchor_type == "requirement"
+    # is resolved to a real current-state label today (the only aperture
+    # that exists yet); anything else falls back to its own recorded
+    # description rather than guessing.
+    recent_focus_view = []
+    for message in store.recent_anchors_for(workspace, _reviewer(), visible_case_ids):
+        anchor = message["anchor"]
+        label = anchor.get("description") or anchor.get("anchor_id")
+        current_state = None
+        changed_since = False
+        if anchor["anchor_type"] == "requirement":
+            req_row = next(
+                (r for r in requirements_view if r["requirement"]["id"] == anchor["anchor_id"]), None,
+            )
+            if req_row is not None:
+                label = req_row["requirement"]["text_reference"][:60]
+                current_state = req_row["adjudication_state"]
+                changed_since = any(
+                    a["adjudicated_at"] > message["created_at"] for a in req_row["adjudication_history"]
+                ) or any(
+                    e["supersession"]["authorized_at"] > message["created_at"]
+                    for e in req_row["revision_history"]
+                )
+        recent_focus_view.append({
+            "anchor": anchor,
+            "label": label,
+            "current_state": current_state,
+            "changed_since": changed_since,
+            "created_at": message["created_at"],
+            "case_id": message.get("case_id"),
+        })
+
     # Human discussion (ReviewThread/ReviewMessage/Attention), scoped to
     # whichever Case is active - same read/write boundary as everything
     # else on this page (a thread only ever appears here if its own
@@ -663,6 +701,7 @@ def show_workspace(project_id):
         adjudication_outcomes=REQUIREMENT_ADJUDICATION_OUTCOMES,
         recent_governance_events=recent_governance_events,
         temporal_obligations_view=temporal_obligations_view,
+        recent_focus_view=recent_focus_view,
         threads_view=threads_view,
         known_usernames=known_usernames,
         resolution_outcomes=KNOWN_RESOLUTION_OUTCOMES,
@@ -1414,7 +1453,9 @@ def _run_conversation_turn(
     response to one.
     """
     case_id = case["id"] if case is not None else None
-    human_message = store.add_message(workspace, case_id, role="human", text=text, anchor=anchor)
+    human_message = store.add_message(
+        workspace, case_id, role="human", text=text, anchor=anchor, actor=_reviewer(),
+    )
 
     artifacts_dir = Path(current_app.config["REGISTRY_STORE_PATH"]) / "workspace_artifacts"
     focused_finding_id = session.get(f"focused_finding:{project_id}")

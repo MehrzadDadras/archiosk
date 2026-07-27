@@ -105,6 +105,36 @@
             {% endif %}
         {% endcall %}
 
+        {# "Where did I leave off?" - the contextual-companion continuity trail
+           (Windshield/Rear-view/Carousel discussion): this reviewer's own
+           recently-anchored conversation, most recent per object, independent
+           of which Investigation or Requirement is open right now. Deliberately
+           just a list of links back, not a rearranged workspace - see
+           store.recent_anchors_for's own docstring on why this is derived from
+           existing records rather than a new memory store. #}
+        {% call macros.accordion('Recent Focus (' ~ recent_focus_view|length ~ ')', group='left', id='recent-focus') %}
+            <p class="pane-note">
+                Where you last left off, most recent first &mdash; one entry per object,
+                regardless of which Investigation or Requirement you're looking at right now.
+            </p>
+            {% if recent_focus_view %}
+            <ul class="source-list">
+                {% for row in recent_focus_view %}
+                <li class="source-item">
+                    <a href="{% if row.case_id %}{{ url_for('workspace.show_workspace', project_id=project_id, case=row.case_id) }}{% else %}{{ url_for('workspace.show_workspace', project_id=project_id) }}#requirement-{{ row.anchor.anchor_id }}{% endif %}">
+                        {{ row.label }}
+                    </a>
+                    {% if row.current_state %}<span class="review-state-badge">{{ row.current_state }}</span>{% endif %}
+                    {% if row.changed_since %}<span class="review-state-badge review-state-due">changed since you looked</span>{% endif %}
+                    <br><small class="text-muted">{{ row.created_at | humanize }}</small>
+                </li>
+                {% endfor %}
+            </ul>
+            {% else %}
+            <p style="color:var(--text-secondary);font-size:0.88rem;">Nothing yet &mdash; anchored conversation (like &ldquo;Discuss this Requirement&rdquo;) will show up here.</p>
+            {% endif %}
+        {% endcall %}
+
         {% call macros.accordion('Accepted Knowledge (' ~ accepted_knowledge|length ~ ')', group='left', id='accepted-knowledge') %}
         <p style="color:var(--text-secondary);font-size:0.85rem;margin:-0.6rem 0 0.6rem;">
             Every Applied Finding across this Project's Cases, independent of which Case produced it —
@@ -313,7 +343,7 @@
         {% call macros.subdisclosure('Governed Requirements (' ~ requirements_view|length ~ ')', html_id='governed-requirements') %}
             {% for row in requirements_view %}
             {% set requirement = row.requirement %}
-            <div style="border-top:1px solid var(--border);padding:0.5rem 0;">
+            <div id="requirement-{{ requirement.id }}" style="border-top:1px solid var(--border);padding:0.5rem 0;">
                 <p style="font-size:0.88rem;margin:0 0 0.3rem;">{{ requirement.text_reference }}</p>
                 <p style="color:var(--text-secondary);font-size:0.85rem;margin:0 0 0.4rem;">
                     {{ requirement.original_requirement_identifier }}

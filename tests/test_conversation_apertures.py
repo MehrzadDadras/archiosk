@@ -214,5 +214,114 @@ class InterpretMessageWithoutACaseTests(unittest.TestCase):
         self.assertIn("Section 3.1", result.reply_text)
 
 
+class RecentFocusTests(unittest.TestCase):
+    """
+    The contextual-companion continuity trail: a reviewer's own recent
+    anchored conversation, resolved to each anchor's current state.
+    Deliberately tested as a derived VIEW over ordinary
+    ConversationMessage records, not a separate memory store - these
+    tests exist to prove that property, not just the happy path.
+    """
+
+    def setUp(self):
+        import app as app_module
+
+        self.tmp_dir = Path(tempfile.mkdtemp(prefix="beehive_test_recent_focus_"))
+        self.flask_app = app_module.create_app("testing")
+        self.flask_app.config["REGISTRY_STORE_PATH"] = str(self.tmp_dir)
+        self.project_id = "test-project-recent-focus"
+
+        RequirementsRegistry(self.tmp_dir).save(
+            ParsedDocument(project_id=self.project_id, filename="rfp.md", ingested_at="2026-01-01T00:00:00+00:00")
+        )
+        self.client = self.flask_app.test_client()
+        with self.client.session_transaction() as sess:
+            sess["user_id"] = 1
+            sess["username"] = "owner1"
+            sess["role"] = "admin"
+        self.store = CaseWorkspaceStore(self.tmp_dir)
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp_dir, ignore_errors=True)
+
+    def _register_requirement(self, client, identifier="Section 3.1"):
+        client.get(f"/projects/{self.project_id}/workspace")  # registers the auto document Source
+        workspace = self.store.get(self.project_id)
+        source_id = workspace.sources[0]["id"]
+        return self.store.register_requirement(
+            workspace,
+            source_id=source_id,
+            original_requirement_identifier=identifier,
+            text_reference="Contractor shall provide as-built drawings.",
+            created_by="owner1",
+            registration_method=REQUIREMENT_REGISTRATION_HUMAN_REGISTERED,
+        )
+
+    def _discuss(self, client, requirement, text="Any update?"):
+        client.post(
+            f"/projects/{self.project_id}/workspace/discuss",
+            data={
+                "text": text,
+                "anchor_type": "requirement",
+                "anchor_id": requirement["id"],
+                "anchor_description": requirement["original_requirement_identifier"],
+            },
+        )
+
+    def test_discussing_a_requirement_surfaces_it_in_recent_focus(self):
+        requirement = self._register_requirement(self.client)
+        self._discuss(self.client, requirement)
+
+        resp = self.client.get(f"/projects/{self.project_id}/workspace")
+        body = resp.get_data(as_text=True)
+        self.assertIn("Recent Focus (1)", body)
+        self.assertIn("Contractor shall provide as-built drawings.", body)
+
+    def test_recent_focus_is_per_reviewer_not_shared(self):
+        requirement = self._register_requirement(self.client)
+        self._discuss(self.client, requirement)
+
+        other_client = self.flask_app.test_client()
+        with other_client.session_transaction() as sess:
+            sess["user_id"] = 2
+            sess["username"] = "owner2"
+            sess["role"] = "admin"
+
+        resp = other_client.get(f"/projects/{self.project_id}/workspace")
+        body = resp.get_data(as_text=True)
+        self.assertIn("Recent Focus (0)", body)
+        # owner2 can still see the message itself in Project Conversation -
+        # that stays project-wide - just not in owner2's OWN focus trail.
+        self.assertIn("Project Conversation (2)", body)
+
+    def test_recent_focus_deduplicates_by_anchor_keeping_only_the_latest(self):
+        requirement = self._register_requirement(self.client)
+        self._discuss(self.client, requirement, text="first pass")
+        self._discuss(self.client, requirement, text="second pass, still current?")
+
+        resp = self.client.get(f"/projects/{self.project_id}/workspace")
+        body = resp.get_data(as_text=True)
+        self.assertIn("Recent Focus (1)", body)
+
+    def test_recent_focus_flags_a_requirement_adjudicated_after_the_message(self):
+        requirement = self._register_requirement(self.client)
+        self._discuss(self.client, requirement)
+
+        self.client.post(
+            f"/projects/{self.project_id}/workspace/requirements/{requirement['id']}/adjudicate",
+            data={"outcome": "Satisfied", "reasoning": "As-built set received.", "case_id": ""},
+        )
+
+        resp = self.client.get(f"/projects/{self.project_id}/workspace")
+        body = resp.get_data(as_text=True)
+        self.assertIn("changed since you looked", body)
+
+    def test_recent_focus_empty_state(self):
+        resp = self.client.get(f"/projects/{self.project_id}/workspace")
+        body = resp.get_data(as_text=True)
+        self.assertIn("Recent Focus (0)", body)
+        self.assertIn("anchored conversation", body)
+
+
 if __name__ == "__main__":
     unittest.main()
