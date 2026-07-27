@@ -648,7 +648,14 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
     .dash-meta { width: 100%; justify-content: space-between; }
 }
 
-/* -- dashboard header ----------------------------------------------------- */
+/* -- page header (dashboard, Case Workspace, Project Home - via the
+   `page_header` macro in _macros.html) -------------------------------
+   One shape for every page-level header: title block on the left,
+   a controls slot on the right. Project Home used to have its own
+   separate .project-home-header with a smaller h1 (1.5rem), top-aligned
+   instead of bottom-aligned, and no divider - undocumented drift with
+   no evidence it was deliberate, reconciled onto this one rule when the
+   macro was introduced. */
 .dash-head {
     display: flex;
     justify-content: space-between;
@@ -659,6 +666,7 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
     gap: 1.5rem;
 }
 .dash-head h1 { font-family: var(--font-display); font-size: 1.8rem; margin: 0.3rem 0 0; font-weight: 300; }
+.dash-head-actions { display: flex; gap: 0.6rem; align-items: center; }
 .mono { font-family: var(--font-body); color: var(--machine-blue); font-size: 1.1rem; }
 .form-error { color: var(--failure-red); }
 .dash-meta { display: flex; gap: 2.2rem; }
@@ -1214,20 +1222,8 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
 .project-home-back a { color: var(--text-secondary); }
 .project-home-back a:hover { color: var(--text-primary); }
 
-.project-home-header {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 1rem;
-    margin-bottom: 1rem;
-}
-.project-home-header h1 {
-    font-family: var(--font-display);
-    font-size: 1.5rem;
-    margin: 0;
-    color: var(--text-primary);
-    font-weight: 300;
-}
+/* Project Home's title/actions row is now the shared .dash-head (see
+   above) instead of its own parallel rule. */
 .project-home-subtitle { color: var(--text-secondary); font-size: 0.85rem; margin: 0.35rem 0 0; max-width: 56ch; }
 
 .project-home-controls { display: flex; align-items: center; gap: 0.4rem; flex-shrink: 0; }

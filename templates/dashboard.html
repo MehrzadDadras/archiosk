@@ -1,36 +1,28 @@
 {% extends "base.html" %}
+{% import "_macros.html" as macros %}
 
 {% block title %}Dashboard &mdash; Archiosk{% endblock %}
 
 {% block content %}
-<div class="dash-head">
-    <div>
-        {% if is_demo %}
-        <p class="eyebrow">Demo data &mdash; ingest a document to replace this</p>
-        {% else %}
-        <p class="eyebrow mono">{{ project_id }}</p>
-        {% endif %}
-        <h1>{{ display_name }}</h1>
-        {% if display_name != filename %}
-        <p class="eyebrow mono" style="margin-top:0.3rem;">{{ filename }}</p>
-        {% endif %}
-        {% if not is_demo %}
-        <a class="btn btn-ghost workspace-link" href="{{ url_for('workspace.show_workspace', project_id=project_id) }}">
-            Open Case Workspace &rarr;
-        </a>
-        {% endif %}
+{% call macros.page_header(
+    display_name,
+    eyebrow=('Demo data — ingest a document to replace this' if is_demo else project_id),
+    eyebrow_mono=(not is_demo),
+    subtitle=(filename if display_name != filename else None),
+    link_url=(None if is_demo else url_for('workspace.show_workspace', project_id=project_id)),
+    link_label='Open Case Workspace'
+) %}
+<div class="dash-meta">
+    <div class="meta-stat">
+        <span class="meta-num">{{ requirements|length }}</span>
+        <span class="meta-label">Requirements</span>
     </div>
-    <div class="dash-meta">
-        <div class="meta-stat">
-            <span class="meta-num">{{ requirements|length }}</span>
-            <span class="meta-label">Requirements</span>
-        </div>
-        <div class="meta-stat">
-            <span class="meta-num">{{ milestones|length }}</span>
-            <span class="meta-label">Milestones</span>
-        </div>
+    <div class="meta-stat">
+        <span class="meta-num">{{ milestones|length }}</span>
+        <span class="meta-label">Milestones</span>
     </div>
 </div>
+{% endcall %}
 
 <div class="lattice-wrap">
     <div class="lattice">
@@ -81,11 +73,7 @@
 </section>
 
 <section class="registry">
-    <details class="accordion-section">
-        <summary class="accordion-summary">
-            <span class="accordion-summary-text">Requirements registry</span>
-            <span class="accordion-summary-status">{{ requirements|length }} extracted</span>
-        </summary>
+    {% call macros.accordion('Requirements registry', status=(requirements|length ~ ' extracted')) %}
         <div class="registry-filter">
             <button class="chip active" data-category="">All</button>
             {% for c in categories %}
@@ -114,15 +102,11 @@
                 </tbody>
             </table>
         </div>
-    </details>
+    {% endcall %}
 </section>
 
 <section class="governance">
-    <details class="accordion-section">
-        <summary class="accordion-summary">
-            <span class="accordion-summary-text">Audit trail</span>
-            <span class="accordion-summary-status">{{ governance_events|length }} events</span>
-        </summary>
+    {% call macros.accordion('Audit trail', status=(governance_events|length ~ ' events')) %}
         {% if governance_events %}
         <div class="table-scroll">
             <table class="registry-table">
@@ -151,7 +135,7 @@
         {% else %}
         <p class="consistency-note">No events recorded yet.</p>
         {% endif %}
-    </details>
+    {% endcall %}
 </section>
 {% if not is_admin %}
 <section class="help-desk">

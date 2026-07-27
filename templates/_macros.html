@@ -1,0 +1,65 @@
+{# ============================================================
+   Shared page-geometry macros.
+
+   These exist because the same three shapes were being hand-copied
+   across templates with small, accidental drift each time (see the
+   page_header note below for a concrete example that was found and
+   fixed when this file was introduced). Import with:
+       {% import "_macros.html" as macros %}
+   ============================================================ #}
+
+{# -- page_header ---------------------------------------------------------
+   Title-left / controls-right page header. Used for: the legacy
+   dashboard, the Case Workspace header (case open), the Project Home
+   header, and any future page-level header. Before this macro existed,
+   Project Home had its own separate .project-home-header/-controls CSS
+   with a smaller h1 (1.5rem vs 1.8rem), align-items:flex-start instead
+   of flex-end, and no bottom border - three small, undocumented
+   differences from every other page header, with no evidence any of
+   them was a deliberate design choice rather than drift. Consolidated
+   onto one shape; call with a `{% call %}` block for the right-hand
+   control cluster (buttons, stats, icon buttons - content there
+   legitimately varies by page and is intentionally NOT templated). #}
+{% macro page_header(title, eyebrow=None, eyebrow_mono=True, subtitle=None, subtitle_class="eyebrow mono", link_url=None, link_label=None) %}
+<div class="dash-head">
+    <div>
+        {% if eyebrow %}<p class="eyebrow{% if eyebrow_mono %} mono{% endif %}">{{ eyebrow }}</p>{% endif %}
+        <h1>{{ title }}</h1>
+        {% if subtitle %}<p class="{{ subtitle_class }}" style="margin-top:0.3rem;">{{ subtitle }}</p>{% endif %}
+        {% if link_url %}<a class="btn btn-ghost workspace-link" href="{{ link_url }}">{{ link_label }} &rarr;</a>{% endif %}
+    </div>
+    {% if caller %}{{ caller() }}{% endif %}
+</div>
+{% endmacro %}
+
+{# -- accordion ------------------------------------------------------------
+   The top-level disclosure section used throughout the dashboard and
+   Case Workspace panes: <details class="accordion-section"> with a
+   consistent summary (title + optional status badge). `group`/`id` wire
+   into case_workspace.js's collapse-all/mutual-exclusion behavior
+   (data-accordion-group/-id) - omit both on pages without that JS
+   (e.g. the legacy dashboard). `html_id` is a plain element id, for
+   in-page anchor links (`#some-id`) - independent of the JS `id` above,
+   and only needed when something actually links to this section. #}
+{% macro accordion(title, status=None, group=None, id=None, html_id=None, open=False) %}
+<details class="accordion-section"{% if group %} data-accordion-group="{{ group }}"{% endif %}{% if id %} data-accordion-id="{{ id }}"{% endif %}{% if html_id %} id="{{ html_id }}"{% endif %}{% if open %} open{% endif %}>
+    <summary class="accordion-summary">
+        <span class="accordion-summary-text">{{ title }}</span>
+        {% if status %}<span class="accordion-summary-status">{{ status }}</span>{% endif %}
+    </summary>
+    {{ caller() }}
+</details>
+{% endmacro %}
+
+{# -- subdisclosure ---------------------------------------------------------
+   The secondary, nested "+ Add X" / "View Y" disclosure used inside an
+   accordion's body (<details class="add-source-details">). Plain text
+   summary, no status badge - if a section ever needs one, that's a sign
+   it should be a top-level `accordion` instead, not a reason to add a
+   status param here. #}
+{% macro subdisclosure(label, html_id=None) %}
+<details class="add-source-details"{% if html_id %} id="{{ html_id }}"{% endif %}>
+    <summary>{{ label }}</summary>
+    {{ caller() }}
+</details>
+{% endmacro %}

@@ -1,19 +1,16 @@
 {% extends "base.html" %}
+{% import "_macros.html" as macros %}
 
 {% block title %}Case Workspace &mdash; {{ document.filename }}{% endblock %}
 
 {% block content %}
 {% if active_case %}
-<div class="dash-head">
-    <div>
-        <p class="eyebrow mono">{{ project_id }}</p>
-        <h1>Case Workspace</h1>
-    </div>
-    <div style="display:flex;gap:0.6rem;align-items:center;">
+{% call macros.page_header('Case Workspace', eyebrow=project_id) %}
+    <div class="dash-head-actions">
         <button type="button" id="collapse-all-btn" class="collapse-all-btn">Collapse All</button>
         <a class="btn btn-ghost" href="{{ url_for('portal.dashboard', project_id=project_id) }}">&larr; Back to Dashboard</a>
     </div>
-</div>
+{% endcall %}
 {% endif %}
 
 <div class="case-workspace" data-project-id="{{ project_id }}">
@@ -27,18 +24,14 @@
             <span class="lifecycle-stage{% if stage in ['RFP'] %} current{% endif %}">{{ stage }}</span>
             {% endfor %}
         </div>
-        <details class="accordion-section" data-accordion-group="left" data-accordion-id="accepted-knowledge">
-            <summary class="accordion-summary">
-                <span class="accordion-summary-text">Accepted Knowledge ({{ accepted_knowledge|length }})</span>
-            </summary>
+        {% call macros.accordion('Accepted Knowledge (' ~ accepted_knowledge|length ~ ')', group='left', id='accepted-knowledge') %}
         <p style="color:var(--text-secondary);font-size:0.85rem;margin:-0.6rem 0 0.6rem;">
             Every Applied Finding across this Project's Cases, independent of which Case produced it —
             the Project's accumulated intelligence, not a per-Case log. This is the visible result of
             &ldquo;Apply Confirmed Findings&rdquo; below — the concrete effect an investigation had on governed project state.
         </p>
         {% if accepted_knowledge %}
-        <details class="add-source-details">
-            <summary>View accepted knowledge</summary>
+        {% call macros.subdisclosure('View accepted knowledge') %}
             <ul class="source-list">
                 {% for row in accepted_knowledge %}
                 {% set item = row.item %}
@@ -58,15 +51,11 @@
                 </li>
                 {% endfor %}
             </ul>
-        </details>
+        {% endcall %}
         {% endif %}
-        </details>
+        {% endcall %}
 
-        <details class="accordion-section" data-accordion-group="left" data-accordion-id="instructions">
-            <summary class="accordion-summary">
-                <span class="accordion-summary-text">Project Instructions</span>
-                <span class="accordion-summary-status">+</span>
-            </summary>
+        {% call macros.accordion('Project Instructions', status='+', group='left', id='instructions') %}
             <p style="font-size:0.85rem;color:var(--text-secondary);margin:-0.6rem 0 0.6rem;">
                 Project / Case Operating Instructions guide terminology, conventions, and known assumptions
                 for this Project. Always subordinate to Archiosk governance &mdash; Stone Wall, source
@@ -79,20 +68,15 @@
             {% else %}
             <p style="font-size:0.88rem;color:var(--text-secondary);">No Project Instructions set yet.</p>
             {% endif %}
-            <details class="add-source-details">
-                <summary>Edit Project Instructions</summary>
+            {% call macros.subdisclosure('Edit Project Instructions') %}
                 <form class="workspace-form" method="post" action="{{ url_for('workspace.edit_operating_instructions', project_id=project_id) }}">
                     <textarea name="instructions" placeholder="Owner priorities, terminology, known assumptions, reviewer conventions&hellip;">{{ workspace.operating_instructions }}</textarea>
                     <button type="submit">Save Instructions</button>
                 </form>
-            </details>
-        </details>
+            {% endcall %}
+        {% endcall %}
 
-        <details class="accordion-section" data-accordion-group="left" data-accordion-id="sources" id="project-sources">
-            <summary class="accordion-summary">
-                <span class="accordion-summary-text">Sources ({{ workspace.sources|length }})</span>
-                <span class="accordion-summary-status">+</span>
-            </summary>
+        {% call macros.accordion('Sources (' ~ workspace.sources|length ~ ')', status='+', group='left', id='sources', html_id='project-sources') %}
         <ul class="source-list">
             {% for source in workspace.sources %}
             <li class="source-item">
@@ -116,35 +100,29 @@
             {% endfor %}
         </ul>
 
-        <details class="add-source-details" id="project-sources-add-document">
-            <summary>+ Add Documents</summary>
+        {% call macros.subdisclosure('+ Add Documents', html_id='project-sources-add-document') %}
             <form class="workspace-form" method="post" enctype="multipart/form-data" action="{{ url_for('workspace.add_document_source', project_id=project_id) }}">
                 <input type="file" name="document" accept=".pdf,.docx,.txt,.csv,.md" required>
                 <button type="submit">Add Document</button>
             </form>
-        </details>
+        {% endcall %}
 
-        <details class="add-source-details">
-            <summary>+ Add Text Record</summary>
+        {% call macros.subdisclosure('+ Add Text Record') %}
             <form class="workspace-form" method="post" action="{{ url_for('workspace.add_text_record_source', project_id=project_id) }}">
                 <input type="text" name="title" placeholder="Title (e.g. Site visit note &mdash; May 3)" required>
                 <textarea name="content" placeholder="Content" required></textarea>
                 <button type="submit">Add Record</button>
             </form>
-        </details>
+        {% endcall %}
 
-        <details class="add-source-details">
-            <summary>+ Add External Source</summary>
+        {% call macros.subdisclosure('+ Add External Source') %}
             <p style="font-size:0.85rem;color:var(--text-secondary);">
                 Not yet available &mdash; no external source connector is configured for this deployment.
             </p>
-        </details>
-        </details>
+        {% endcall %}
+        {% endcall %}
 
-        <details class="accordion-section" data-accordion-group="left" data-accordion-id="cases" open>
-            <summary class="accordion-summary">
-                <span class="accordion-summary-text">Cases ({{ visible_cases|length }})</span>
-            </summary>
+        {% call macros.accordion('Cases (' ~ visible_cases|length ~ ')', group='left', id='cases', open=True) %}
         <ul class="case-list">
             {% for case in visible_cases %}
             <li>
@@ -178,21 +156,16 @@
             {% endfor %}
         </ul>
 
-        <details class="add-source-details">
-            <summary>+ New Case</summary>
+        {% call macros.subdisclosure('+ New Case') %}
             <form class="workspace-form" method="post" action="{{ url_for('workspace.create_case', project_id=project_id) }}">
                 <input type="text" name="title" placeholder="Case title (e.g. Drawing Review — Sheet A101)" required>
                 <input type="text" name="objective" placeholder="Objective (optional)">
                 <button type="submit">Create Case</button>
             </form>
-        </details>
-        </details>
+        {% endcall %}
+        {% endcall %}
 
-        <details class="accordion-section" data-accordion-group="left" data-accordion-id="requirement-compliance">
-            <summary class="accordion-summary">
-                <span class="accordion-summary-text">Requirement Compliance</span>
-                {% if requirements_view %}<span class="accordion-summary-status">{{ requirements_view|length }} governed</span>{% endif %}
-            </summary>
+        {% call macros.accordion('Requirement Compliance', status=(requirements_view|length ~ ' governed' if requirements_view else None), group='left', id='requirement-compliance') %}
         {% if requirements_view %}
         <p style="font-size:0.85rem;color:var(--text-secondary);margin:-0.6rem 0 0.8rem;">
             {{ requirements_view|length }} governed Requirement(s) —
@@ -207,13 +180,9 @@
         {% else %}
         <p style="font-size:0.85rem;color:var(--text-secondary);margin:-0.6rem 0 0.8rem;">No Requirements have been promoted to governed state yet.</p>
         {% endif %}
-        </details>
+        {% endcall %}
 
-        <details class="accordion-section" data-accordion-group="left" data-accordion-id="rfi-export">
-            <summary class="accordion-summary">
-                <span class="accordion-summary-text">RFI Export</span>
-                {% if document.consistency_flags %}<span class="accordion-summary-status">{{ document.consistency_flags|length }} flagged</span>{% endif %}
-            </summary>
+        {% call macros.accordion('RFI Export', status=(document.consistency_flags|length ~ ' flagged' if document.consistency_flags else None), group='left', id='rfi-export') %}
         {% if document.consistency_flags %}
         <p style="font-size:0.85rem;color:var(--text-secondary);margin:-0.6rem 0 0.8rem;">
             {{ document.consistency_flags|length }} flagged cross-requirement contradiction(s) detected by this
@@ -225,15 +194,11 @@
         {% else %}
         <p style="font-size:0.85rem;color:var(--text-secondary);margin:-0.6rem 0 0.8rem;">The consistency check hasn't run for this Project yet — RFI export needs flagged contradictions to build from.</p>
         {% endif %}
-        </details>
+        {% endcall %}
 
-        <details class="accordion-section" data-accordion-group="left" data-accordion-id="requirements">
-            <summary class="accordion-summary">
-                <span class="accordion-summary-text">Requirements ({{ requirements_view|length }})</span>
-            </summary>
+        {% call macros.accordion('Requirements (' ~ requirements_view|length ~ ')', group='left', id='requirements') %}
         {% if unpromoted_requirement_items %}
-        <details class="add-source-details">
-            <summary>Extracted, not yet governed ({{ unpromoted_requirement_items|length }})</summary>
+        {% call macros.subdisclosure('Extracted, not yet governed (' ~ unpromoted_requirement_items|length ~ ')') %}
             {% for item in unpromoted_requirement_items %}
             <p class="unpromoted-requirement" style="color:var(--text-secondary);font-size:0.88rem;">
                 {{ item.text }}
@@ -253,11 +218,10 @@
             <p style="color:var(--text-secondary);font-size:0.85rem;">Select or create an Investigation to promote this item.</p>
             {% endif %}
             {% endfor %}
-        </details>
+        {% endcall %}
         {% endif %}
 
-        <details class="add-source-details">
-            <summary>+ Register a Requirement</summary>
+        {% call macros.subdisclosure('+ Register a Requirement') %}
             <p style="font-size:0.82rem;color:var(--text-secondary);margin:-0.4rem 0 0.6rem;">
                 For a Requirement's text that lives in a Source the legacy extraction pipeline
                 never saw - any governed Source, drawing or document. No Investigation needed;
@@ -275,11 +239,10 @@
                 <textarea name="text_reference" placeholder="Requirement text, as stated in the Source" required></textarea>
                 <button type="submit">Register Requirement</button>
             </form>
-        </details>
+        {% endcall %}
 
         {% if requirements_view %}
-        <details class="add-source-details" id="governed-requirements">
-            <summary>Governed Requirements ({{ requirements_view|length }})</summary>
+        {% call macros.subdisclosure('Governed Requirements (' ~ requirements_view|length ~ ')', html_id='governed-requirements') %}
             {% for row in requirements_view %}
             {% set requirement = row.requirement %}
             <div style="border-top:1px solid var(--border);padding:0.5rem 0;">
@@ -294,15 +257,14 @@
                 </p>
 
                 {% if row.adjudication_history|length > 1 %}
-                <details class="add-source-details">
-                    <summary>Adjudication history ({{ row.adjudication_history|length }}) &mdash; this Requirement has been re-examined</summary>
+                {% call macros.subdisclosure('Adjudication history (' ~ row.adjudication_history|length ~ ') — this Requirement has been re-examined') %}
                     {% for a in row.adjudication_history %}
                     <p style="font-size:0.85rem;color:var(--text-secondary);margin:0.3rem 0;border-left:3px solid var(--border-strong);padding-left:0.6rem;">
                         <span class="review-state-badge">{{ a.outcome }}</span> by {{ a.adjudicator }} &middot; {{ a.adjudicated_at }}
                         <br>{{ a.reasoning }}
                     </p>
                     {% endfor %}
-                </details>
+                {% endcall %}
                 {% endif %}
 
                 {% if row.latest_adjudication %}
@@ -356,14 +318,11 @@
                 </form>
             </div>
             {% endfor %}
-        </details>
+        {% endcall %}
         {% endif %}
-        </details>
+        {% endcall %}
 
-        <details class="accordion-section" data-accordion-group="left" data-accordion-id="history">
-            <summary class="accordion-summary">
-                <span class="accordion-summary-text">History ({{ recent_governance_events|length }})</span>
-            </summary>
+        {% call macros.accordion('History (' ~ recent_governance_events|length ~ ')', group='left', id='history') %}
             {% if recent_governance_events %}
             <ul class="source-list">
                 {% for event in recent_governance_events %}
@@ -377,7 +336,7 @@
             {% else %}
             <p style="color:var(--text-secondary);font-size:0.88rem;">No governed events recorded yet.</p>
             {% endif %}
-        </details>
+        {% endcall %}
     </aside>
 
 {% if active_case %}
@@ -413,19 +372,17 @@
         </div>
         {% endfor %}
 
-        <details class="add-source-details">
-            <summary>+ Add drawing Source to this Case</summary>
+        {% call macros.subdisclosure('+ Add drawing Source to this Case') %}
             <form class="workspace-form" method="post" enctype="multipart/form-data"
                   action="{{ url_for('workspace.add_drawing_source', project_id=project_id, case_id=active_case.id) }}">
                 <input type="file" name="drawing" accept=".png,.jpg,.jpeg" required>
                 <button type="submit">Add Drawing</button>
             </form>
-        </details>
+        {% endcall %}
 
         {% set drawing_sources = workspace.sources|selectattr("kind", "equalto", "drawing")|selectattr("id", "in", active_case.source_ids)|list %}
         {% if drawing_sources %}
-        <details class="add-source-details">
-            <summary>+ Register a new revision of an existing drawing Source</summary>
+        {% call macros.subdisclosure('+ Register a new revision of an existing drawing Source') %}
             {% for source in drawing_sources if not source.superseded_by_source_id %}
             <form class="workspace-form" method="post" enctype="multipart/form-data"
                   action="{{ url_for('workspace.revise_source', project_id=project_id, source_id=source.id) }}">
@@ -435,13 +392,10 @@
                 <button type="submit">Register Revision</button>
             </form>
             {% endfor %}
-        </details>
+        {% endcall %}
         {% endif %}
 
-        <details class="accordion-section" data-accordion-group="center" data-accordion-id="conversation" open>
-            <summary class="accordion-summary">
-                <span class="accordion-summary-text">Conversation ({{ active_case.conversation|length }})</span>
-            </summary>
+        {% call macros.accordion('Conversation (' ~ active_case.conversation|length ~ ')', group='center', id='conversation', open=True) %}
         <div class="conversation-thread">
             {% for message in active_case.conversation %}
             <div class="conversation-message {{ message.role }}">
@@ -496,12 +450,9 @@
             <input type="text" name="text" placeholder="Analyze this drawing for datum inconsistencies…" autocomplete="off" required>
             <button type="submit">Send</button>
         </form>
-        </details>
+        {% endcall %}
 
-        <details class="accordion-section" data-accordion-group="center" data-accordion-id="discussion">
-            <summary class="accordion-summary">
-                <span class="accordion-summary-text">Discussion ({{ threads_view|length }})</span>
-            </summary>
+        {% call macros.accordion('Discussion (' ~ threads_view|length ~ ')', group='center', id='discussion') %}
         {% if active_case.status == 'archived' %}
         <p style="color:var(--text-secondary);font-size:0.88rem;">
             This Case is archived — the discussion below is preserved exactly as it stood and is read-only.
@@ -623,8 +574,7 @@
         {% endfor %}
 
         {% if active_case.status != 'archived' %}
-        <details class="add-source-details">
-            <summary>+ Start a discussion</summary>
+        {% call macros.subdisclosure('+ Start a discussion') %}
             <form class="workspace-form" method="post" action="{{ url_for('workspace.create_thread', project_id=project_id, case_id=active_case.id) }}">
                 <input type="text" name="title" placeholder="Discussion title" required>
                 {% if findings_view %}
@@ -638,20 +588,16 @@
                 <textarea name="text" placeholder="Opening comment (optional)"></textarea>
                 <button type="submit">Start Discussion</button>
             </form>
-        </details>
+        {% endcall %}
         {% endif %}
-        </details>
+        {% endcall %}
     </section>
 
     {# ---------------- Right: Artifact Workspace ---------------- #}
     <section class="workspace-pane">
         <h2>Artifact Workspace</h2>
 
-        <details class="accordion-section" data-accordion-group="right" data-accordion-id="findings" open>
-            <summary class="accordion-summary">
-                <span class="accordion-summary-text">Findings ({{ findings_view|length }})</span>
-                {% if applied_count %}<span class="accordion-summary-status">{{ applied_count }} applied</span>{% endif %}
-            </summary>
+        {% call macros.accordion('Findings (' ~ findings_view|length ~ ')', status=(applied_count ~ ' applied' if applied_count else None), group='right', id='findings', open=True) %}
         <div class="finding-list">
             {% for row in findings_view %}
             {% set finding = row.finding %}
@@ -771,7 +717,7 @@
                 <button type="submit" class="apply-button">Apply Confirmed Findings</button>
             </form>
         </div>
-        </details>
+        {% endcall %}
     </section>
 {% else %}
     <div class="project-home">
@@ -781,13 +727,7 @@
             <a href="{{ url_for('portal.dashboard', project_id=project_id) }}">Legacy Dashboard &rarr;</a>
         </p>
 
-        <div class="project-home-header">
-            <div>
-                <h1>{{ workspace.display_title or document.filename }}</h1>
-                {% if workspace.display_description %}
-                <p class="project-home-subtitle">{{ workspace.display_description }}</p>
-                {% endif %}
-            </div>
+        {% call macros.page_header(workspace.display_title or document.filename, subtitle=workspace.display_description, subtitle_class="project-home-subtitle") %}
             <div class="project-home-controls">
                 <button type="button" id="collapse-all-btn" class="project-home-icon-btn" title="Collapse All" aria-label="Collapse all sections">&#8722;</button>
                 <form method="post" action="{{ url_for('workspace.toggle_star', project_id=project_id) }}">
@@ -805,7 +745,7 @@
                     </div>
                 </details>
             </div>
-        </div>
+        {% endcall %}
 
         <div class="project-home-composer">
             <form class="conversation-input-form" method="post" action="{{ url_for('workspace.quick_start', project_id=project_id) }}">
@@ -834,18 +774,14 @@
                 you're here or inside an Investigation.
             </p>
 
-            <details class="accordion-section" data-accordion-group="project-home" data-accordion-id="active-work" open>
-                <summary class="accordion-summary">
-                    <span class="accordion-summary-text">Active Work</span>
-                </summary>
+            {% call macros.accordion('Active Work', group='project-home', id='active-work', open=True) %}
                 <p style="font-size:0.85rem;margin:-0.6rem 0 0.8rem;">
                     {{ project_home_summary.investigations_count }} Investigation{{ 's' if project_home_summary.investigations_count != 1 else '' }}
                     &middot; {{ project_home_summary.unresolved_findings_count }} Unresolved Finding{{ 's' if project_home_summary.unresolved_findings_count != 1 else '' }}
                     &middot; {{ project_home_summary.awaiting_pass_count }} Awaiting Pass
                 </p>
 
-                <details class="add-source-details">
-                    <summary>View Investigations ({{ project_home_summary.open_cases|length }})</summary>
+                {% call macros.subdisclosure('View Investigations (' ~ project_home_summary.open_cases|length ~ ')') %}
                     {% if project_home_summary.open_cases %}
                     <ul class="case-list">
                         {% for case in project_home_summary.open_cases %}
@@ -860,19 +796,17 @@
                     {% else %}
                     <p style="font-size:0.88rem;color:var(--text-secondary);">No open Investigations yet.</p>
                     {% endif %}
-                </details>
+                {% endcall %}
 
-                <details class="add-source-details" id="active-work-new-case">
-                    <summary>+ Start Investigation</summary>
+                {% call macros.subdisclosure('+ Start Investigation', html_id='active-work-new-case') %}
                     <form class="workspace-form" method="post" action="{{ url_for('workspace.create_case', project_id=project_id) }}">
                         <input type="text" name="title" placeholder="Investigation title (e.g. Drawing Review &mdash; Sheet A101)" required>
                         <input type="text" name="objective" placeholder="Objective (optional)">
                         <button type="submit">Create Investigation</button>
                     </form>
-                </details>
+                {% endcall %}
 
-                <details class="add-source-details" id="active-work-snapshot">
-                    <summary>+ Create Snapshot</summary>
+                {% call macros.subdisclosure('+ Create Snapshot', html_id='active-work-snapshot') %}
                     <form class="workspace-form" method="post" action="{{ url_for('workspace.create_project_snapshot', project_id=project_id) }}">
                         <input type="text" name="label" placeholder="Snapshot label (e.g. Pre-Award baseline)" required>
                         <input type="text" name="note" placeholder="Note (optional)">
@@ -881,8 +815,8 @@
                     {% if workspace.snapshots %}
                     <p style="font-size:0.85rem;color:var(--text-secondary);margin-top:0.4rem;">{{ workspace.snapshots|length }} Snapshot(s) recorded.</p>
                     {% endif %}
-                </details>
-            </details>
+                {% endcall %}
+            {% endcall %}
         </div>
     </div>
 {% endif %}
