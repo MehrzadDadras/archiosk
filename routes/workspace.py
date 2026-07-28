@@ -47,11 +47,14 @@ from services.auth import login_required
 from services.case_workspace import (
     ANALYSIS_TRIGGER_USER_INITIATED,
     CASE_OUTCOME_STATES,
+    KNOWN_PARTICIPANT_ROLES,
+    KNOWN_PERSPECTIVE_POLARITIES,
     KNOWN_RESOLUTION_OUTCOMES,
     MESSAGE_ORIGIN_HUMAN,
     OBJECT_KIND_CASE,
     OBJECT_KIND_FINDING,
     OBJECT_KIND_REQUIREMENT,
+    PERSPECTIVE_ORIGIN_HUMAN,
     REQUIREMENT_ADJUDICATION_OUTCOMES,
     REQUIREMENT_ADJUDICATION_STATE_NOT_YET_ASSESSED,
     REQUIREMENT_REGISTRATION_HUMAN_REGISTERED,
@@ -507,6 +510,12 @@ def show_workspace(project_id):
             current_id = predecessor["id"]
         return history
 
+    # CLAUDE-P12R: which Participant THIS reviewer currently represents -
+    # a personal setting (store.represented_party_for), not a governed
+    # fact. None until they've explicitly set one; nothing below treats
+    # that as an error, only as "no perspective to show yet."
+    represented_party = store.represented_party_for(workspace, _reviewer())
+
     requirements_view = []
     for requirement in governed_requirements:
         if requirement["status"] == REQUIREMENT_STATUS_SUPERSEDED:
@@ -554,6 +563,16 @@ def show_workspace(project_id):
             # Finding's substance into project knowledge, independent of its
             # source Case's own visibility) - not re-decided here.
             "accepted_knowledge": evidence["accepted_knowledge"],
+            # CLAUDE-P12R: the represented reviewer's own mark vs. the
+            # machine's independently-reached one, for the SAME
+            # Requirement+Participant - None entirely when no represented
+            # party is set, never a guess at what it would be.
+            "perspective": (
+                store.perspective_convergence_for(
+                    workspace, OBJECT_KIND_REQUIREMENT, requirement["id"], represented_party["id"],
+                )
+                if represented_party else None
+            ),
         })
 
     # Compliance rollup: a transparent count of ACTUAL requirement_
@@ -763,6 +782,10 @@ def show_workspace(project_id):
         case_outcome_states=case_outcome_states,
         case_outcome_options=CASE_OUTCOME_STATES,
         investigation_quality_view=investigation_quality_view,
+        participants_view=store.participants_for_project(workspace),
+        represented_party=represented_party,
+        participant_role_options=KNOWN_PARTICIPANT_ROLES,
+        perspective_polarity_options=KNOWN_PERSPECTIVE_POLARITIES,
     )
 
 
@@ -1957,6 +1980,87 @@ def revise_requirement_route(project_id, requirement_id):
             workspace, requirement_id=requirement_id, actor=_reviewer(),
             reason=reason, authority_class=authority_class,
             governance_log=_log(), text_reference=text_reference,
+        )
+    except CaseWorkspaceError as exc:
+        flash(str(exc), "error")
+    return redirect(url_for("workspace.show_workspace", project_id=project_id))
+
+
+@workspace_bp.route("/projects/<project_id>/workspace/participants", methods=["POST"])
+@login_required
+def register_participant_route(project_id):
+    """CLAUDE-P12R: register a project party (Owner/Design-Builder/
+    Proponent/etc.) - see CaseWorkspaceStore.record_participant."""
+    _, store, workspace = _load_workspace_or_404(project_id)
+
+    name = (request.form.get("name") or "").strip()
+    role_type = (request.form.get("role_type") or "").strip()
+    note = (request.form.get("note") or "").strip() or None
+    if not name or not role_type:
+        flash("A Participant needs a name and a role.", "error")
+        return redirect(url_for("workspace.show_workspace", project_id=project_id))
+
+    try:
+        store.record_participant(
+            workspace, name=name, role_type=role_type, created_by=_reviewer(),
+            note=note, governance_log=_log(),
+        )
+    except CaseWorkspaceError as exc:
+        flash(str(exc), "error")
+    return redirect(url_for("workspace.show_workspace", project_id=project_id))
+
+
+@workspace_bp.route("/projects/<project_id>/workspace/represented-party", methods=["POST"])
+@login_required
+def set_represented_party_route(project_id):
+    """
+    CLAUDE-P12R: which Participant THIS reviewer represents in this
+    Project - a personal setting (see CaseWorkspaceStore.
+    set_represented_party), not a governed fact. Setting/changing this
+    never touches any Requirement, Finding, or existing Perspective
+    Assessment - it only affects what a NEW machine investigation is
+    asked to assess going forward.
+    """
+    _, store, workspace = _load_workspace_or_404(project_id)
+
+    participant_id = (request.form.get("participant_id") or "").strip()
+    try:
+        store.set_represented_party(workspace, reviewer=_reviewer(), participant_id=participant_id)
+    except CaseWorkspaceError as exc:
+        flash(str(exc), "error")
+    return redirect(url_for("workspace.show_workspace", project_id=project_id))
+
+
+@workspace_bp.route("/projects/<project_id>/workspace/requirements/<requirement_id>/perspective", methods=["POST"])
+@login_required
+def record_perspective_assessment_route(project_id, requirement_id):
+    """
+    CLAUDE-P12R: a human's own risk/opportunity mark on a Requirement,
+    FROM their currently-represented Participant's position - see
+    CaseWorkspaceStore.record_perspective_assessment and Perspective
+    Assessment's own docstring on why this is never inferred from
+    anything but this explicit, intentional act.
+    """
+    _, store, workspace = _load_workspace_or_404(project_id)
+
+    represented_party = store.represented_party_for(workspace, _reviewer())
+    if represented_party is None:
+        flash("Set who you represent in this Project before marking a perspective.", "error")
+        return redirect(url_for("workspace.show_workspace", project_id=project_id))
+
+    polarity = (request.form.get("polarity") or "").strip()
+    reasoning = (request.form.get("reasoning") or "").strip()
+
+    try:
+        store.record_perspective_assessment(
+            workspace,
+            anchor=asdict(Anchor(anchor_type=OBJECT_KIND_REQUIREMENT, anchor_id=requirement_id)),
+            participant_id=represented_party["id"],
+            polarity=polarity,
+            origin=PERSPECTIVE_ORIGIN_HUMAN,
+            reasoning=reasoning,
+            recorded_by=_reviewer(),
+            governance_log=_log(),
         )
     except CaseWorkspaceError as exc:
         flash(str(exc), "error")

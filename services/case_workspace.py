@@ -236,6 +236,7 @@ OBJECT_KIND_TABLE_CELL = "table_cell"  # Batch J
 OBJECT_KIND_SOURCE_REFERENCE = "source_reference"  # Batch J
 OBJECT_KIND_REQUIREMENT_ADJUDICATION = "requirement_adjudication"  # Batch K
 OBJECT_KIND_REVIEW_MESSAGE = "review_message"  # Selective Adopt/Carry-Forward tranche - distinct from OBJECT_KIND_REVIEW_THREAD, since a carried-forward comment points at the specific historical message, not its whole thread
+OBJECT_KIND_PARTICIPANT = "participant"  # CLAUDE-P12R - a project party (Owner/Design-Builder/Proponent/etc.), so a Relationship/Anchor can point at one like anything else
 
 KNOWN_OBJECT_KINDS = (
     OBJECT_KIND_SOURCE,
@@ -263,6 +264,7 @@ KNOWN_OBJECT_KINDS = (
     OBJECT_KIND_SOURCE_REFERENCE,
     OBJECT_KIND_REQUIREMENT_ADJUDICATION,
     OBJECT_KIND_REVIEW_MESSAGE,
+    OBJECT_KIND_PARTICIPANT,
 )
 
 # -- Typed relationship vocabulary (Prompt 8 #1) -----------------------------
@@ -1830,6 +1832,115 @@ CASE_OUTCOME_STATES = (
 # been recorded - never accepted by record_case_outcome, never stored.
 CASE_OUTCOME_STATE_UNRESOLVED = "unresolved"
 
+# CLAUDE-P12R: a project party - Owner, Design-Builder, Proponent,
+# Consultant, etc. Open-world (like REQUIREMENT_CLASSIFICATION or
+# RELATIONSHIP_TYPE): a real project may have a party this list doesn't
+# anticipate, and rejecting that would be worse than tolerating an
+# unrecognized-but-preserved role_type.
+PARTICIPANT_ROLE_OWNER = "owner"
+PARTICIPANT_ROLE_DESIGN_BUILDER = "design_builder"
+PARTICIPANT_ROLE_PROPONENT = "proponent"
+PARTICIPANT_ROLE_CONSULTANT = "consultant"
+PARTICIPANT_ROLE_CONTRACTOR = "contractor"
+PARTICIPANT_ROLE_OTHER = "other"
+
+KNOWN_PARTICIPANT_ROLES = (
+    PARTICIPANT_ROLE_OWNER,
+    PARTICIPANT_ROLE_DESIGN_BUILDER,
+    PARTICIPANT_ROLE_PROPONENT,
+    PARTICIPANT_ROLE_CONSULTANT,
+    PARTICIPANT_ROLE_CONTRACTOR,
+    PARTICIPANT_ROLE_OTHER,
+)
+
+# CLAUDE-P12R: risk/opportunity polarity - a canonical governed object's
+# meaning FROM one participant's position, never a rewrite of the object
+# itself. A deliberately small, closed vocabulary (like CASE_OUTCOME_
+# STATES) - "shared"/"transferred"/etc. are real words the underlying
+# idea uses, but the polarity a record actually stores stays this three-
+# way axis; finer distinctions belong in `reasoning` (free text), not in
+# a proliferating enum, until real usage shows three isn't enough.
+PERSPECTIVE_POLARITY_RISK = "risk"
+PERSPECTIVE_POLARITY_OPPORTUNITY = "opportunity"
+PERSPECTIVE_POLARITY_NEUTRAL = "neutral"
+
+KNOWN_PERSPECTIVE_POLARITIES = (
+    PERSPECTIVE_POLARITY_RISK,
+    PERSPECTIVE_POLARITY_OPPORTUNITY,
+    PERSPECTIVE_POLARITY_NEUTRAL,
+)
+
+# Whose judgment a PerspectiveAssessment records - never inferred, always
+# one of these two, explicitly.
+PERSPECTIVE_ORIGIN_HUMAN = "human"
+PERSPECTIVE_ORIGIN_MACHINE = "machine"
+
+KNOWN_PERSPECTIVE_ORIGINS = (
+    PERSPECTIVE_ORIGIN_HUMAN,
+    PERSPECTIVE_ORIGIN_MACHINE,
+)
+
+
+@dataclass
+class Participant:
+    """
+    CLAUDE-P12R (both sides of procurement / represented-party
+    perspective): a party to the project - Owner, Design-Builder,
+    Proponent, Consultant, etc. Exists so "who does the current reviewer
+    represent" has something real to point at, and so a Relationship/
+    Anchor can reference a Participant like any other object kind
+    (OBJECT_KIND_PARTICIPANT). Deliberately minimal - a name and an
+    open-world role, nothing about contact info/authority/contract
+    terms, which belong to a real contract-management capability this
+    is not attempting to become.
+    """
+
+    id: str
+    project_id: str
+    name: str
+    role_type: str  # open-world, KNOWN_PARTICIPANT_ROLES
+    created_at: str
+    created_by: str
+    note: Optional[str] = None
+
+
+@dataclass
+class PerspectiveAssessment:
+    """
+    CLAUDE-P12R: canonical governed object + represented party ->
+    perspective-sensitive interpretation. This is the ENTIRE mechanism -
+    never a rewrite of the Requirement/Finding/Source it's about, never a
+    second copy of evidence, just an attributed, append-only annotation
+    of what a governed object looks like FROM one Participant's position.
+
+    Same anchor shape as Conversation/ReviewThread (asdict(Anchor)) - not
+    a new attachment mechanism. `origin` distinguishes a human's own
+    explicit mark - a governed reviewer act, NEVER inferred from cursor/
+    mouse position or any other passive signal - from the machine's
+    independently-reached assessment (see services/requirement_
+    investigation.py's optional risk-polarity extension). Both are
+    stored identically, so "do the human and machine agree" is a plain
+    read of two records sharing the same anchor+participant (see
+    perspective_convergence_for), not a second comparison mechanism.
+
+    `confidence`/`investigation_step_id` are only ever set when
+    origin == PERSPECTIVE_ORIGIN_MACHINE; `recorded_by` only when
+    origin == PERSPECTIVE_ORIGIN_HUMAN - enforced in record_
+    perspective_assessment, not just documented here.
+    """
+
+    id: str
+    project_id: str
+    anchor: dict  # asdict(Anchor)
+    participant_id: str  # whose perspective this assessment is FROM
+    polarity: str  # KNOWN_PERSPECTIVE_POLARITIES
+    origin: str  # KNOWN_PERSPECTIVE_ORIGINS
+    reasoning: str
+    created_at: str
+    recorded_by: Optional[str] = None
+    confidence: Optional[float] = None
+    investigation_step_id: Optional[str] = None
+
 
 @dataclass
 class CaseRecord:
@@ -2152,6 +2263,17 @@ class ProjectWorkspace:
     carried_forward_adoptions: list[dict] = field(default_factory=list)
     investigation_steps: list[dict] = field(default_factory=list)  # CLAUDE-P08 - see InvestigationStep
     case_outcomes: list[dict] = field(default_factory=list)  # CLAUDE-P11 - see CaseOutcome
+    participants: list[dict] = field(default_factory=list)  # CLAUDE-P12R - see Participant
+    perspective_assessments: list[dict] = field(default_factory=list)  # CLAUDE-P12R - see PerspectiveAssessment
+    # Per-reviewer "who do I represent in this Project" (username ->
+    # participant_id) - same personal/display-only shape as
+    # last_viewed_by/starred: no governance meaning of its own, affects
+    # no Case/Finding/Requirement directly. What it DOES do is select
+    # whose perspective requirement_investigation.py's optional risk-
+    # polarity extension reasons from, and whose PerspectiveAssessments
+    # render for this reviewer - missing key = no represented party set,
+    # not a default participant.
+    represented_party_by: dict = field(default_factory=dict)
 
     # -- Project Home presentation state (Prompt 3) ---------------------------
     # UI/orientation state only - never forensic or compliance records, and
@@ -4290,6 +4412,170 @@ class CaseWorkspaceStore:
                 bucket = unanchored
             bucket[outcome_state] = bucket.get(outcome_state, 0) + 1
         return {"anchored_by_type": anchored_by_type, "unanchored": unanchored}
+
+    # -- participants + represented-party perspective (CLAUDE-P12R) ----------------
+
+    def record_participant(
+        self, workspace: ProjectWorkspace, name: str, role_type: str, created_by: str,
+        note: Optional[str] = None, governance_log: Optional[GovernanceLog] = None,
+    ) -> dict:
+        """Registers a project party. Deliberately no supersession/edit
+        path in this pass - a Participant is a lightweight reference
+        record (name + role), not a governed document; if a name needs
+        correcting later that's a normal edit, not a lineage event, the
+        same restraint ExpectedInformationProfile's own scope keeps."""
+        if not name or not name.strip():
+            raise CaseWorkspaceError("A Participant requires a name.")
+
+        participant = Participant(
+            id=_new_id(),
+            project_id=workspace.project_id,
+            name=name.strip(),
+            role_type=normalize_open_world_value(role_type, KNOWN_PARTICIPANT_ROLES),
+            created_at=_now(),
+            created_by=created_by,
+            note=note,
+        )
+        workspace.participants.append(asdict(participant))
+        self.save(workspace)
+
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id, event_type="participant_registered",
+                actor=created_by, role="human",
+                payload={"participant_id": participant.id, "name": participant.name, "role_type": participant.role_type},
+            )
+
+        return asdict(participant)
+
+    def participants_for_project(self, workspace: ProjectWorkspace) -> list[dict]:
+        return list(workspace.participants)
+
+    def set_represented_party(self, workspace: ProjectWorkspace, reviewer: str, participant_id: str) -> None:
+        """Which Participant `reviewer` currently represents in this
+        Project - a personal setting, like last_viewed_by, not a
+        governed fact about the Participant itself."""
+        if self._find(workspace.participants, participant_id) is None:
+            raise CaseWorkspaceError(f"Participant {participant_id} was not found.")
+        workspace.represented_party_by[reviewer] = participant_id
+        self.save(workspace)
+
+    def represented_party_for(self, workspace: ProjectWorkspace, reviewer: str) -> Optional[dict]:
+        participant_id = workspace.represented_party_by.get(reviewer)
+        if participant_id is None:
+            return None
+        return self._find(workspace.participants, participant_id)
+
+    def record_perspective_assessment(
+        self,
+        workspace: ProjectWorkspace,
+        anchor: dict,
+        participant_id: str,
+        polarity: str,
+        origin: str,
+        reasoning: str,
+        recorded_by: Optional[str] = None,
+        confidence: Optional[float] = None,
+        investigation_step_id: Optional[str] = None,
+        governance_log: Optional[GovernanceLog] = None,
+    ) -> dict:
+        """
+        Records what a governed object looks like FROM one Participant's
+        position - never a rewrite of the object itself (see
+        PerspectiveAssessment's own docstring). Append-only, same
+        validation discipline as record_case_outcome/record_requirement_
+        adjudication: existence-checked, closed vocabulary, reasoning
+        required.
+        """
+        if self._find(workspace.participants, participant_id) is None:
+            raise CaseWorkspaceError(f"Participant {participant_id} was not found.")
+
+        if polarity not in KNOWN_PERSPECTIVE_POLARITIES:
+            raise CaseWorkspaceError(
+                f"'{polarity}' is not a recognized perspective polarity. "
+                f"Use one of: {', '.join(KNOWN_PERSPECTIVE_POLARITIES)}."
+            )
+
+        if origin not in KNOWN_PERSPECTIVE_ORIGINS:
+            raise CaseWorkspaceError(
+                f"'{origin}' is not a recognized perspective origin. "
+                f"Use one of: {', '.join(KNOWN_PERSPECTIVE_ORIGINS)}."
+            )
+
+        if not reasoning or not reasoning.strip():
+            raise CaseWorkspaceError(
+                "A Perspective Assessment requires reasoning - the basis for the "
+                "risk/opportunity call must be recorded, not just its polarity word."
+            )
+
+        if origin == PERSPECTIVE_ORIGIN_HUMAN and not recorded_by:
+            raise CaseWorkspaceError(
+                "A human-origin Perspective Assessment requires recorded_by - this "
+                "is never inferred, only ever an explicit reviewer act."
+            )
+        if origin == PERSPECTIVE_ORIGIN_MACHINE and recorded_by:
+            raise CaseWorkspaceError(
+                "A machine-origin Perspective Assessment must not carry recorded_by "
+                "- that field exists only to attribute a genuinely human act."
+            )
+
+        record = PerspectiveAssessment(
+            id=_new_id(),
+            project_id=workspace.project_id,
+            anchor=anchor,
+            participant_id=participant_id,
+            polarity=polarity,
+            origin=origin,
+            reasoning=reasoning,
+            created_at=_now(),
+            recorded_by=recorded_by,
+            confidence=confidence,
+            investigation_step_id=investigation_step_id,
+        )
+        workspace.perspective_assessments.append(asdict(record))
+        self.save(workspace)
+
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id, event_type="perspective_assessment_recorded",
+                actor=recorded_by or "system", role="human" if origin == PERSPECTIVE_ORIGIN_HUMAN else "machine",
+                payload={
+                    "anchor_type": anchor.get("anchor_type"), "anchor_id": anchor.get("anchor_id"),
+                    "participant_id": participant_id, "polarity": polarity, "origin": origin,
+                },
+            )
+
+        return asdict(record)
+
+    def perspective_assessments_for_anchor(
+        self, workspace: ProjectWorkspace, anchor_type: str, anchor_id: str, participant_id: Optional[str] = None,
+    ) -> list[dict]:
+        return [
+            a for a in workspace.perspective_assessments
+            if a["anchor"].get("anchor_type") == anchor_type
+            and a["anchor"].get("anchor_id") == anchor_id
+            and (participant_id is None or a["participant_id"] == participant_id)
+        ]
+
+    def perspective_convergence_for(
+        self, workspace: ProjectWorkspace, anchor_type: str, anchor_id: str, participant_id: str,
+    ) -> dict:
+        """
+        The convergence signal (CLAUDE-P12R #6): this Participant's
+        latest human-recorded polarity and latest machine-recorded
+        polarity for the same anchor, plus whether they agree - a plain
+        read of two append-only records sharing an anchor+participant,
+        not a new comparison mechanism. `agree` is None (not True/False)
+        when either side hasn't recorded one yet - "no data" must never
+        render as "disagreement."
+        """
+        records = self.perspective_assessments_for_anchor(workspace, anchor_type, anchor_id, participant_id)
+        human = next((r for r in reversed(records) if r["origin"] == PERSPECTIVE_ORIGIN_HUMAN), None)
+        machine = next((r for r in reversed(records) if r["origin"] == PERSPECTIVE_ORIGIN_MACHINE), None)
+        agree = None
+        if human is not None and machine is not None:
+            agree = human["polarity"] == machine["polarity"]
+        return {"human": human, "machine": machine, "agree": agree}
 
     # -- reviewer validation --------------------------------------------------------
 

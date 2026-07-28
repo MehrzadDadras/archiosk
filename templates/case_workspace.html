@@ -197,6 +197,51 @@
             {% endif %}
         {% endcall %}
 
+        {# CLAUDE-P12R: both sides of procurement + represented-party perspective.
+           The governed project truth stays common to everyone; what a Participant
+           is set here does is select WHOSE risk/opportunity position a new machine
+           investigation reasons from, and whose mark renders on each Requirement's
+           own Perspective disclosure below. #}
+        {% call macros.accordion('Participants & Perspective (' ~ participants_view|length ~ ')', group='left', id='participants') %}
+            <p class="pane-note">
+                The governed project record is the same for everyone. Setting who you represent
+                only changes whose risk/opportunity position a new machine investigation reasons
+                from, and whose mark you're recording when you flag a Requirement below.
+            </p>
+            {% if represented_party %}
+            <p class="workspace-pane-label">You currently represent: {{ represented_party.name }} ({{ represented_party.role_type.replace('_', ' ') }})</p>
+            {% else %}
+            <p style="color:var(--text-secondary);font-size:0.88rem;">You haven't set who you represent in this Project yet.</p>
+            {% endif %}
+            {% if participants_view %}
+            <ul class="source-list">
+                {% for participant in participants_view %}
+                <li class="source-item">
+                    {{ participant.name }} <small class="text-muted">({{ participant.role_type.replace('_', ' ') }})</small>
+                    {% if not represented_party or represented_party.id != participant.id %}
+                    <form method="post" action="{{ url_for('workspace.set_represented_party_route', project_id=project_id) }}" style="display:inline;">
+                        <input type="hidden" name="participant_id" value="{{ participant.id }}">
+                        <button type="submit" class="link-button">Represent this party</button>
+                    </form>
+                    {% endif %}
+                </li>
+                {% endfor %}
+            </ul>
+            {% endif %}
+            {% call macros.subdisclosure('+ Register a Participant') %}
+                <form class="workspace-form" method="post" action="{{ url_for('workspace.register_participant_route', project_id=project_id) }}">
+                    <input type="text" name="name" placeholder="Name (e.g. Cedar Harbour Design-Build JV)" required>
+                    <select name="role_type" required>
+                        {% for role in participant_role_options %}
+                        <option value="{{ role }}">{{ role.replace('_', ' ') }}</option>
+                        {% endfor %}
+                    </select>
+                    <input type="text" name="note" placeholder="Note (optional)">
+                    <button type="submit">Register Participant</button>
+                </form>
+            {% endcall %}
+        {% endcall %}
+
         {% call macros.accordion('Accepted Knowledge (' ~ accepted_knowledge|length ~ ')', group='left', id='accepted-knowledge') %}
         <p style="color:var(--text-secondary);font-size:0.85rem;margin:-0.6rem 0 0.6rem;">
             Every Applied Finding across this Project's Cases, independent of which Case produced it —
@@ -515,6 +560,50 @@
                 {% endcall %}
 
                 {{ macros.aperture(project_id, 'requirement', requirement.id, requirement.original_requirement_identifier, label='Discuss this Requirement') }}
+
+                {# CLAUDE-P12R: never renders a color, never rewrites the Requirement
+                   above - a plain, attributed record of what this looks like FROM
+                   whoever you've said you represent, alongside the machine's own
+                   independently-reached mark for the same party, if any. #}
+                {% call macros.subdisclosure('Perspective' ~ (' (' ~ represented_party.name ~ ')' if represented_party else '')) %}
+                    {% if represented_party %}
+                    {% set perspective = row.perspective %}
+                    <p class="pane-note">
+                        The governed Requirement above is unchanged by this - this is only what
+                        it looks like from {{ represented_party.name }}'s position.
+                    </p>
+                    <p class="history-entry">
+                        <strong>You:</strong>
+                        {% if perspective.human %}{{ perspective.human.polarity }} &mdash; {{ perspective.human.reasoning }}{% else %}not marked yet{% endif %}
+                    </p>
+                    <p class="history-entry">
+                        <strong>Machine:</strong>
+                        {% if perspective.machine %}
+                        {{ perspective.machine.polarity }} (confidence {{ (perspective.machine.confidence * 100)|round|int }}%) &mdash; {{ perspective.machine.reasoning }}
+                        {% else %}
+                        no independent assessment yet - ask a Case-shaped question anchored to this Requirement
+                        {% endif %}
+                    </p>
+                    {% if perspective.agree is not none %}
+                    <p class="history-entry">
+                        <span class="review-state-badge">{{ 'Agree' if perspective.agree else 'Disagreement' }}</span>
+                    </p>
+                    {% endif %}
+                    <form class="workspace-form" method="post" action="{{ url_for('workspace.record_perspective_assessment_route', project_id=project_id, requirement_id=requirement.id) }}">
+                        <select name="polarity" required>
+                            {% for polarity in perspective_polarity_options %}
+                            <option value="{{ polarity }}">{{ polarity }}</option>
+                            {% endfor %}
+                        </select>
+                        <input type="text" name="reasoning" placeholder="Why, from your position (required)" required>
+                        <button type="submit">Mark Perspective</button>
+                    </form>
+                    {% else %}
+                    <p style="color:var(--text-secondary);font-size:0.88rem;">
+                        Set who you represent (Participants &amp; Perspective, above) to mark this.
+                    </p>
+                    {% endif %}
+                {% endcall %}
             </div>
             {% endfor %}
         {% endcall %}

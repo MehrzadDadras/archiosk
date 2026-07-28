@@ -35,6 +35,7 @@ from typing import Optional
 from services.case_workspace import (
     ANALYSIS_TRIGGER_USER_INITIATED,
     INVESTIGATION_STEP_KIND_REQUIREMENT_INVESTIGATION,
+    PERSPECTIVE_ORIGIN_MACHINE,
     AnalysisTrigger,
     CaseWorkspaceError,
     CaseWorkspaceStore,
@@ -381,11 +382,17 @@ def _handle_investigate_requirement(
         "accepted_knowledge_ids": [k["id"] for k in evidence.get("accepted_knowledge", [])],
     }
 
+    # CLAUDE-P12R: purely additive - None (no represented party set for
+    # this reviewer) means investigate_requirement asks for and returns
+    # nothing risk-related, identical to before this existed.
+    represented_party = store.represented_party_for(workspace, reviewer)
+
     result = investigate_requirement(
         question=text,
         requirement=requirement,
         adjudication_history=adjudication_history,
         evidence=evidence,
+        represented_party=represented_party,
     )
 
     if not result.ran:
@@ -428,7 +435,7 @@ def _handle_investigate_requirement(
         trigger=trigger,
     )
 
-    store.record_investigation_step(
+    step = store.record_investigation_step(
         workspace,
         case_id=case["id"],
         step_kind=INVESTIGATION_STEP_KIND_REQUIREMENT_INVESTIGATION,
@@ -446,11 +453,32 @@ def _handle_investigate_requirement(
         analysis_id=analysis["id"],
     )
 
+    # CLAUDE-P12R: an attributed annotation of what this looks like FROM
+    # the represented party's position - never a rewrite of the
+    # Requirement/Finding above, and never recorded when no represented
+    # party was set (so risk_polarity is None and this is skipped).
+    if represented_party is not None and result.risk_polarity:
+        store.record_perspective_assessment(
+            workspace,
+            anchor=anchor,
+            participant_id=represented_party["id"],
+            polarity=result.risk_polarity,
+            origin=PERSPECTIVE_ORIGIN_MACHINE,
+            reasoning=result.risk_reasoning or result.assessment,
+            confidence=result.risk_confidence,
+            investigation_step_id=step["id"],
+        )
+
     reply_parts = [f"Assessment (confidence {result.confidence:.0%}): {result.assessment}"]
     if result.supporting_points:
         reply_parts.append("Based on: " + "; ".join(result.supporting_points))
     if result.open_questions:
         reply_parts.append("Open question(s) for you: " + "; ".join(result.open_questions))
+    if result.risk_polarity:
+        reply_parts.append(
+            f"From {represented_party['name']}'s position, this reads as "
+            f"{result.risk_polarity} (confidence {result.risk_confidence:.0%}): {result.risk_reasoning}"
+        )
     if result.needs_human_judgment:
         reply_parts.append(
             "This needs your professional judgment before it's treated as anything "

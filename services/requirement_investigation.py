@@ -31,6 +31,17 @@ original document text (not currently queryable in one place for a
 document Source; see the analysis) and not every other Requirement in
 the Project (which would balloon prompt size for a scope this pass
 deliberately keeps narrow: one Requirement, one question).
+
+CLAUDE-P12R: when a `represented_party` dict (name/role_type) is given,
+the SAME one call is also asked for a risk/opportunity polarity FROM
+that party's position - not a second model call, not a second
+capability, just one more field in the same requested JSON. This is
+deliberately optional and off by default: no represented party means no
+polarity is asked for or returned, so a reviewer who hasn't declared who
+they represent gets exactly the same behavior as before this existed.
+The result is never itself governed truth - see PerspectiveAssessment's
+own docstring in services/case_workspace.py for why this is recorded as
+an attributed annotation, never a rewrite of the Requirement.
 """
 from __future__ import annotations
 
@@ -64,6 +75,10 @@ class RequirementInvestigationResult:
     open_questions: list[str] = field(default_factory=list)
     needs_human_judgment: bool = True
     skipped_reason: Optional[str] = None
+    # CLAUDE-P12R - only ever set when a represented_party was given.
+    risk_polarity: Optional[str] = None
+    risk_confidence: Optional[float] = None
+    risk_reasoning: Optional[str] = None
 
 
 def investigate_requirement(
@@ -71,6 +86,7 @@ def investigate_requirement(
     requirement: dict,
     adjudication_history: list[dict],
     evidence: dict,
+    represented_party: Optional[dict] = None,
     api_key: Optional[str] = None,
     model: Optional[str] = None,
     timeout: Optional[float] = None,
@@ -90,7 +106,7 @@ def investigate_requirement(
     import anthropic  # imported lazily so the dep is optional in dev
 
     client = anthropic.Anthropic(api_key=api_key, timeout=timeout)
-    prompt = _build_prompt(question, requirement, adjudication_history, evidence)
+    prompt = _build_prompt(question, requirement, adjudication_history, evidence, represented_party)
 
     try:
         response = client.messages.create(
@@ -121,7 +137,7 @@ def investigate_requirement(
             ran=False, skipped_reason="Model returned malformed output.",
         )
 
-    return RequirementInvestigationResult(
+    result = RequirementInvestigationResult(
         ran=True,
         assessment=str(parsed.get("assessment", "")).strip(),
         confidence=float(parsed.get("confidence", 0.5)),
@@ -129,10 +145,16 @@ def investigate_requirement(
         open_questions=[str(q) for q in parsed.get("open_questions", [])],
         needs_human_judgment=bool(parsed.get("needs_human_judgment", True)),
     )
+    if represented_party is not None and parsed.get("risk_polarity"):
+        result.risk_polarity = str(parsed["risk_polarity"]).strip()
+        result.risk_confidence = float(parsed.get("risk_confidence", 0.5))
+        result.risk_reasoning = str(parsed.get("risk_reasoning", "")).strip()
+    return result
 
 
 def _build_prompt(
     question: str, requirement: dict, adjudication_history: list[dict], evidence: dict,
+    represented_party: Optional[dict] = None,
 ) -> str:
     lines = [
         "You are assisting a construction/design professional reviewing a governed "
@@ -173,8 +195,8 @@ def _build_prompt(
             lines.append(f"- {k.get('statement', '')}")
 
     lines.append(f"\nThe reviewer's question: \"{question}\"")
-    lines.append(
-        "\nRespond ONLY with a JSON object, no prose, no markdown fences: "
+
+    schema_fields = (
         '{"assessment": "<direct answer to the question, grounded only in the '
         'evidence above>", "confidence": <0-1 float, your own genuine confidence>, '
         '"supporting_points": ["<short evidence citations>", ...], '
@@ -182,8 +204,31 @@ def _build_prompt(
         'evidence given>", ...], "needs_human_judgment": <true if this genuinely '
         "requires the reviewer's professional judgment rather than being fully "
         'settled by the evidence, false only if the evidence above is fully '
-        'conclusive>}. If the evidence given is insufficient to answer '
-        'confidently, say so plainly in "assessment" and list what is missing in '
-        '"open_questions" - do not guess.'
+        "conclusive>"
+    )
+    if represented_party is not None:
+        lines.append(
+            f"\nThe reviewer represents {represented_party.get('name', '')} "
+            f"({represented_party.get('role_type', '')}) on this project. Also assess, "
+            "STRICTLY from that party's own position (not a neutral or overall view): "
+            "does this Requirement, as currently understood, read as risk exposure, an "
+            "opportunity, or neutral for that specific party. This is a perspective-"
+            "sensitive judgment, not a claim about the Requirement's own meaning - the "
+            "same Requirement can honestly be risk for one party and opportunity for "
+            "another."
+        )
+        schema_fields += (
+            ', "risk_polarity": "<one of: risk, opportunity, neutral - from that '
+            'party\'s position specifically>", "risk_confidence": <0-1 float>, '
+            '"risk_reasoning": "<why, from that party\'s position>"'
+        )
+    schema_fields += "}"
+
+    lines.append(
+        "\nRespond ONLY with a JSON object, no prose, no markdown fences: "
+        + schema_fields
+        + ". If the evidence given is insufficient to answer confidently, say so "
+        'plainly in "assessment" and list what is missing in "open_questions" - do '
+        "not guess."
     )
     return "\n".join(lines)
