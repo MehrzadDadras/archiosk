@@ -73,4 +73,22 @@ document.addEventListener('DOMContentLoaded', () => {
             sections.forEach((el) => setOpen(el, false));
         });
     }
+
+    // CLAUDE-P13: navigation-membrane layer toggle - purely a client-side
+    // class flip, same shape as nav-expanded in base.html. The badges
+    // themselves are already server-rendered (or absent, when there's
+    // nothing to show); this only ever shows/hides what's already there.
+    const riskLayerToggle = document.getElementById('layer-risk-toggle');
+    if (riskLayerToggle) {
+        const layerKey = 'beehive:layer:risk';
+        const stored = window.localStorage.getItem(layerKey);
+        if (stored === 'on') {
+            document.documentElement.classList.add('layer-risk-active');
+            riskLayerToggle.checked = true;
+        }
+        riskLayerToggle.addEventListener('change', () => {
+            document.documentElement.classList.toggle('layer-risk-active', riskLayerToggle.checked);
+            window.localStorage.setItem(layerKey, riskLayerToggle.checked ? 'on' : 'off');
+        });
+    }
 });

@@ -29,6 +29,22 @@
             {% endfor %}
         </div>
 
+        {# CLAUDE-P13: navigation membrane - a toggleable perceptual layer over
+           the governed Requirements below, not a rewrite of them ("map over
+           terrain"). Off by default; badges only ever appear for a Requirement
+           that already has a real PerspectiveAssessment - nothing is guessed
+           to fill in the layer. #}
+        <p class="workspace-pane-label">Layers</p>
+        <label style="display:flex;align-items:center;gap:0.4rem;font-size:0.85rem;margin-bottom:0.6rem;">
+            <input type="checkbox" id="layer-risk-toggle">
+            Risk / Opportunity{% if represented_party %} &mdash; {{ represented_party.name }}{% endif %}
+        </label>
+        {% if not represented_party %}
+        <p style="color:var(--text-secondary);font-size:0.8rem;margin:-0.4rem 0 0.6rem;">
+            Set who you represent (Participants &amp; Perspective, below) to see anything on this layer.
+        </p>
+        {% endif %}
+
         {# Cases is the one accordion the app itself already marks as
            primary (open=True, the only one) - it belongs first, not
            after three closed reference accordions a user would have to
@@ -44,6 +60,9 @@
                    href="{{ url_for('workspace.show_workspace', project_id=project_id, case=case.id) }}">
                     <span class="case-status-badge">{{ case.status }}</span>
                     <span class="case-status-badge">{{ case.visibility }}</span>
+                    {% if case_origin_kinds.get(case.id) == case_origin_autonomous %}
+                    <span class="case-status-badge" title="The machine opened this on its own - not itself authority, only a suggestion worth investigating.">autonomous</span>
+                    {% endif %}
                     {% set outcome_state = case_outcome_states.get(case.id, 'unresolved') %}
                     {% if outcome_state != 'unresolved' %}
                     <span class="review-state-badge">{{ outcome_state }}</span>
@@ -176,7 +195,7 @@
             </p>
             {% if investigation_quality_view.anchored_by_type %}
             {% for anchor_type, counts in investigation_quality_view.anchored_by_type.items() %}
-            <p class="workspace-pane-label" style="margin-top:0.6rem;">{{ anchor_type.replace('_', ' ') }}-anchored ({{ counts.values()|sum }})</p>
+            <p class="workspace-pane-label" style="margin-top:0.6rem;">{{ anchor_type.replace('_', ' ') }}-anchored, human-accepted ({{ counts.values()|sum }})</p>
             <ul class="source-list">
                 {% for outcome, count in counts.items() %}
                 <li class="source-item"><span class="review-state-badge">{{ outcome }}</span> {{ count }}</li>
@@ -185,6 +204,22 @@
             {% endfor %}
             {% else %}
             <p style="color:var(--text-secondary);font-size:0.88rem;">No Investigations have been opened from an anchored question yet.</p>
+            {% endif %}
+            {# CLAUDE-P13R: kept in its own bucket, never merged into anchored_by_type above -
+               this is what lets deterioration specifically in UNSUPERVISED machine judgment
+               (no human clicked anything to open these) be told apart from deterioration in
+               human-accepted escalations. #}
+            {% if investigation_quality_view.autonomous_by_type %}
+            {% for anchor_type, counts in investigation_quality_view.autonomous_by_type.items() %}
+            <p class="workspace-pane-label" style="margin-top:0.6rem;">{{ anchor_type.replace('_', ' ') }}-anchored, machine-opened ({{ counts.values()|sum }})</p>
+            <ul class="source-list">
+                {% for outcome, count in counts.items() %}
+                <li class="source-item"><span class="review-state-badge">{{ outcome }}</span> {{ count }}</li>
+                {% endfor %}
+            </ul>
+            {% endfor %}
+            {% else %}
+            <p style="color:var(--text-secondary);font-size:0.88rem;">No Investigations opened autonomously by the machine yet.</p>
             {% endif %}
             {% if investigation_quality_view.unanchored %}
             {% call macros.subdisclosure('Directly-opened Investigations (' ~ investigation_quality_view.unanchored.values()|sum ~ ') - not counted above') %}
@@ -465,6 +500,13 @@
                     {{ requirement.original_requirement_identifier }}
                     {% if requirement.subject_domain %} &middot; {{ requirement.subject_domain.replace('_', ' ') }}{% endif %}
                     &middot; <span class="review-state-badge">{{ row.adjudication_state }}</span>
+                    {% if row.perspective and (row.perspective.machine or row.perspective.human) %}
+                    {% set primary_perspective = row.perspective.machine or row.perspective.human %}
+                    <span class="review-state-badge review-state-{{ primary_perspective.polarity }}" data-layer="risk">{{ primary_perspective.polarity }}</span>
+                    {% if row.perspective.agree is not none and not row.perspective.agree %}
+                    <span class="review-state-badge" data-layer="risk">disagreement</span>
+                    {% endif %}
+                    {% endif %}
                     {% if row.adjudication_history|length == 1 %}
                     <br>{{ row.latest_adjudication.outcome }} by {{ row.latest_adjudication.adjudicator }} &mdash; {{ row.latest_adjudication.reasoning }}
                     {% endif %}

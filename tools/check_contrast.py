@@ -48,6 +48,9 @@ REQUIRED_PAIRINGS = [
     ("--attention-amber", "--attention-amber-tint", 3.0, "attention-amber on its own tint"),
     ("--failure-red", "--canvas", 3.0, "failure-red accent/badge text"),
     ("--failure-red", "--failure-red-tint", 3.0, "failure-red on its own tint"),
+    ("--risk-red", "--canvas", 3.0, "risk-red accent/badge text"),
+    ("--risk-red", "--surface-primary", 3.0, "risk-red on panels/cards"),
+    ("--risk-red", "--risk-red-tint", 3.0, "risk-red on its own tint"),
 ]
 
 

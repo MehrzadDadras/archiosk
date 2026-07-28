@@ -1513,6 +1513,22 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
    carries real information" rule as everywhere else in this file. */
 .review-state-badge.review-state-overdue { color: var(--failure-red); border-color: var(--failure-red); }
 .review-state-badge.review-state-due, .review-state-badge.review-state-due-soon { color: var(--attention-amber); border-color: var(--attention-amber); }
+/* CLAUDE-P13: PerspectiveAssessment polarity, reusing the same badge
+   component - "risk"/"opportunity" are just two more states in the same
+   vocabulary as verified/overdue/etc., not a new visual component. */
+.review-state-badge.review-state-risk { color: var(--risk-red); border-color: var(--risk-red); }
+.review-state-badge.review-state-opportunity { color: var(--accepted-green); border-color: var(--accepted-green); }
+
+/* CLAUDE-P13: navigation-membrane layer toggle. Layer annotations
+   (currently just the risk/opportunity badge below) render into the
+   page unconditionally - cheap, they're small badges - and are shown or
+   hidden by one class on <html>, exactly like nav-expanded above. No
+   server round-trip to toggle; nothing changes until a reviewer
+   explicitly turns a layer on, and the governed content underneath
+   (the Requirement's own text, its Perspective disclosure) is completely
+   unaffected either way - the map, not the terrain. */
+[data-layer] { display: none; }
+.layer-risk-active [data-layer="risk"] { display: inline; }
 
 /* Requirement-evidence explainability (Connect Accepted Knowledge to
    Requirement Impact tranche) - maps the existing Relationship.

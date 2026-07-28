@@ -170,7 +170,7 @@ class InvestigationQualityRollupTests(unittest.TestCase):
 
     def test_empty_project_has_empty_rollup(self):
         rollup = self.store.investigation_quality_rollup_for_project(self.workspace)
-        self.assertEqual(rollup, {"anchored_by_type": {}, "unanchored": {}})
+        self.assertEqual(rollup, {"anchored_by_type": {}, "autonomous_by_type": {}, "unanchored": {}})
 
 
 class ArchitecturalBoundaryTests(unittest.TestCase):
@@ -280,7 +280,7 @@ class CaseOutcomeRouteAndRenderTests(unittest.TestCase):
         page = self.client.get(f"/projects/{self.project_id}/workspace")
         body = page.get_data(as_text=True)
         self.assertIn("Investigation Quality", body)
-        self.assertIn("requirement-anchored (1)", body)
+        self.assertIn("requirement-anchored, human-accepted (1)", body)
         self.assertIn(CASE_OUTCOME_IRRELEVANT, body)
 
 

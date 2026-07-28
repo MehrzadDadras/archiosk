@@ -34,6 +34,7 @@ from typing import Optional
 
 from services.case_workspace import (
     ANALYSIS_TRIGGER_USER_INITIATED,
+    AUTONOMOUS_BRANCH_CONFIDENCE_THRESHOLD,
     INVESTIGATION_STEP_KIND_REQUIREMENT_INVESTIGATION,
     PERSPECTIVE_ORIGIN_MACHINE,
     AnalysisTrigger,
@@ -65,6 +66,7 @@ def interpret_message(
     focused_finding_id: Optional[str],
     triggering_message_id: Optional[str] = None,
     anchor: Optional[dict] = None,
+    governance_log=None,
 ) -> InterpretationResult:
     """
     `case` is now optional (a project-level aperture - no Investigation
@@ -138,7 +140,9 @@ def interpret_message(
         return _handle_correction(text, workspace, case, store, focused_finding_id, reviewer)
 
     if is_requirement_investigation_question:
-        return _handle_investigate_requirement(text, workspace, case, store, reviewer, anchor, triggering_message_id)
+        return _handle_investigate_requirement(
+            text, workspace, case, store, reviewer, anchor, triggering_message_id, governance_log,
+        )
 
     if anchor is not None:
         return InterpretationResult(
@@ -347,6 +351,7 @@ def _handle_investigate_requirement(
     reviewer: str,
     anchor: dict,
     triggering_message_id: Optional[str],
+    governance_log=None,
 ) -> InterpretationResult:
     """
     The one real reasoning path in this file (CLAUDE-P04) - everything
@@ -469,6 +474,29 @@ def _handle_investigate_requirement(
             investigation_step_id=step["id"],
         )
 
+    # CLAUDE-P13R: opportunistic autonomous branching - begun inside
+    # reasoning already legitimately running here, never a scheduler.
+    # Bounded by a real confidence threshold AND CaseWorkspaceStore's own
+    # stop conditions (a project-wide cap, a same-anchor duplicate
+    # check) - both checked before anything is created. Opening this
+    # Case is not itself authority (see create_autonomous_case's own
+    # docstring); it only ever asserts "there is enough here to
+    # investigate."
+    branch_case = None
+    if (
+        result.suggested_branch
+        and (result.suggested_branch_confidence or 0) >= AUTONOMOUS_BRANCH_CONFIDENCE_THRESHOLD
+        and store.can_open_autonomous_case_for(workspace, anchor)
+    ):
+        branch_title = (
+            result.suggested_branch if len(result.suggested_branch) <= 80
+            else result.suggested_branch[:77] + "..."
+        )
+        branch_case = store.create_autonomous_case(
+            workspace, title=branch_title, objective=result.suggested_branch,
+            anchor=anchor, spawned_from_step_id=step["id"], governance_log=governance_log,
+        )
+
     reply_parts = [f"Assessment (confidence {result.confidence:.0%}): {result.assessment}"]
     if result.supporting_points:
         reply_parts.append("Based on: " + "; ".join(result.supporting_points))
@@ -478,6 +506,13 @@ def _handle_investigate_requirement(
         reply_parts.append(
             f"From {represented_party['name']}'s position, this reads as "
             f"{result.risk_polarity} (confidence {result.risk_confidence:.0%}): {result.risk_reasoning}"
+        )
+    if branch_case is not None:
+        reply_parts.append(
+            f"This also surfaced a separate, sufficiently-grounded concern, so a new "
+            f"provisional Investigation was opened on its own: \"{branch_case['title']}\" - "
+            "opening it isn't a claim that it's true, only that it's worth looking into; "
+            "review it like any other Case."
         )
     if result.needs_human_judgment:
         reply_parts.append(

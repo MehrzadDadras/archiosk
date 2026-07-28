@@ -101,6 +101,23 @@
     --attention-amber-tint: #F2E2C4;
     --failure-red: #8C2E22;
     --failure-red-tint: #F3DAD4;
+    /* CLAUDE-P13: perspective-sensitive risk exposure (PerspectiveAssessment,
+       polarity="risk") - a genuinely different meaning from both existing
+       reds, so it gets its own value rather than reusing either: --seal-red
+       is human authority/consequential commitment; --failure-red is a
+       CONCLUDED verdict (a contradiction actually found). Risk is neither -
+       it's a prospective, perspective-dependent exposure that may never
+       become either one. Deliberately chosen with enough hue/lightness
+       distance from both (verified in tools/check_contrast.py) that the
+       three are never mistakable for each other at a glance, not just
+       different in a color-picker. Opportunity reuses --accepted-green
+       (positive valence already exists) rather than minting a second new
+       hue - "risk" needed a genuinely new meaning; "opportunity" did not.
+       Neutral/uncertain stays --attention-amber - already means "pending/
+       uncertain," which fits perspective-neutral honestly enough not to
+       need a fourth new token. */
+    --risk-red: #A6371F;
+    --risk-red-tint: #F5DCCF;
 
     --font-display: "Arial Nova Cond", "Arial Narrow", Arial, sans-serif;
     --font-body: "Arial Nova Cond", "Arial Narrow", Arial, sans-serif;

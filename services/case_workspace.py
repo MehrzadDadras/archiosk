@@ -1832,6 +1832,39 @@ CASE_OUTCOME_STATES = (
 # been recorded - never accepted by record_case_outcome, never stored.
 CASE_OUTCOME_STATE_UNRESOLVED = "unresolved"
 
+# CLAUDE-P13R: autonomous investigation, begun opportunistically inside
+# reasoning already legitimately running (services/requirement_
+# investigation.py's real call), never from a free-running scheduler. A
+# named, attributable system actor - never a real username, never bare
+# None (which already means something else on CaseRecord.created_by:
+# "predates Case visibility") - so an autonomous Case is unambiguously
+# distinguishable from every human-created one by this one field, not a
+# second parallel flag.
+AUTONOMOUS_INVESTIGATOR_ACTOR = "archiosk-autonomous-investigator"
+
+# Stop conditions (Prompt: "bounded API/cost/branch controls... rather
+# than interrupting the reviewer"). A global per-project cap plus a
+# same-anchor duplicate check are deliberately the ONLY two guards - see
+# can_open_autonomous_case_for's own docstring for why finer-grained
+# topic-level dedup is a real, named gap rather than something faked
+# with a naive heuristic.
+MAX_OPEN_AUTONOMOUS_CASES_PER_PROJECT = 3
+AUTONOMOUS_BRANCH_CONFIDENCE_THRESHOLD = 0.75
+
+# CLAUDE-P13R: three distinct ways a Case comes to exist - a human
+# creating one outright (create_case/quick_start), a human accepting the
+# aperture's escalation offer (start_investigation_from_aperture - the
+# Case is human-authorized but the QUESTION that prompted it was
+# machine-recognized), and the machine opening one entirely on its own
+# during otherwise-normal reasoning. Case creation is never itself
+# authority (see CaseOutcome's own docstring) regardless of which of
+# these three produced it - only investigation_quality_rollup_for_
+# project's bucketing differs by origin, nothing about a Case's
+# governance status does.
+CASE_ORIGIN_DIRECT = "direct"
+CASE_ORIGIN_ANCHOR_ESCALATED = "anchor_escalated"
+CASE_ORIGIN_AUTONOMOUS = "autonomous"
+
 # CLAUDE-P12R: a project party - Owner, Design-Builder, Proponent,
 # Consultant, etc. Open-world (like REQUIREMENT_CLASSIFICATION or
 # RELATIONSHIP_TYPE): a real project may have a party this list doesn't
@@ -4378,40 +4411,133 @@ class CaseWorkspaceStore:
             return None
         return conversation[0].get("anchor")
 
+    def case_origin_kind(self, workspace: ProjectWorkspace, case: dict) -> str:
+        """CASE_ORIGIN_DIRECT/ANCHOR_ESCALATED/AUTONOMOUS - checked in
+        that priority order: AUTONOMOUS_INVESTIGATOR_ACTOR is checked
+        first because an autonomous Case's own first message IS anchored
+        (see create_autonomous_case) and would otherwise be indistinguishable
+        from a human's anchor-escalated one by case_origin_anchor alone."""
+        if case.get("created_by") == AUTONOMOUS_INVESTIGATOR_ACTOR:
+            return CASE_ORIGIN_AUTONOMOUS
+        return CASE_ORIGIN_ANCHOR_ESCALATED if self.case_origin_anchor(workspace, case) is not None else CASE_ORIGIN_DIRECT
+
+    def can_open_autonomous_case_for(
+        self, workspace: ProjectWorkspace, anchor: dict, max_open: int = MAX_OPEN_AUTONOMOUS_CASES_PER_PROJECT,
+    ) -> bool:
+        """
+        The two bounded stop conditions (CLAUDE-P13R) checked BEFORE any
+        autonomous Case is created - this is what keeps "opportunistic"
+        from becoming "uncontrolled": a global per-project cap on
+        currently-open autonomous Cases, and a same-anchor duplicate
+        check (never open a second autonomous Case already investigating
+        the exact same anchor). This is deliberately coarse, not a real
+        topic-similarity dedup - two autonomous Cases about genuinely
+        different aspects of the SAME Requirement would still both be
+        blocked once one exists. A finer-grained check is a real,
+        acknowledged gap, not something a naive heuristic should pretend
+        to solve.
+        """
+        open_autonomous = [
+            c for c in workspace.cases
+            if c.get("created_by") == AUTONOMOUS_INVESTIGATOR_ACTOR and c["status"] != CASE_STATUS_ARCHIVED
+        ]
+        if len(open_autonomous) >= max_open:
+            return False
+        for case in open_autonomous:
+            existing_anchor = self.case_origin_anchor(workspace, case)
+            if (
+                existing_anchor is not None
+                and existing_anchor.get("anchor_type") == anchor.get("anchor_type")
+                and existing_anchor.get("anchor_id") == anchor.get("anchor_id")
+            ):
+                return False
+        return True
+
+    def create_autonomous_case(
+        self,
+        workspace: ProjectWorkspace,
+        title: str,
+        objective: str,
+        anchor: dict,
+        spawned_from_step_id: Optional[str] = None,
+        governance_log: Optional[GovernanceLog] = None,
+    ) -> dict:
+        """
+        The one real autonomous Case-creation path (CLAUDE-P13R) - always
+        AUTONOMOUS_INVESTIGATOR_ACTOR, never a human. Callers MUST check
+        can_open_autonomous_case_for first; this method itself does not
+        re-check the stop conditions, so it stays a plain, honest
+        "create this" primitive rather than silently swallowing a
+        rejected request. The first Conversation message is system-
+        authored (role="system") and anchored - never attributed to any
+        human, never pretending a person asked this - recording WHY the
+        machine opened it. Opening this Case is not itself authority: it
+        says "there is enough here to investigate," nothing more (see
+        CaseOutcome's own docstring) - the Approval Gate, ReviewerValidation,
+        and CaseOutcome all remain exactly as they were for any other Case.
+        """
+        case = self.create_case(workspace, title=title, objective=objective, created_by=AUTONOMOUS_INVESTIGATOR_ACTOR)
+        action_taken = f"autonomous_branch:{spawned_from_step_id}" if spawned_from_step_id else "autonomous_branch"
+        self.add_message(workspace, case["id"], role="system", text=objective, anchor=anchor, action_taken=action_taken)
+
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id, event_type="case_created",
+                actor=AUTONOMOUS_INVESTIGATOR_ACTOR, role="machine",
+                payload={
+                    "case_id": case["id"], "title": title, "visibility": case["visibility"],
+                    "origin": CASE_ORIGIN_AUTONOMOUS, "spawned_from_step_id": spawned_from_step_id,
+                },
+            )
+
+        return self._find(workspace.cases, case["id"])
+
     def investigation_quality_rollup_for_project(self, workspace: ProjectWorkspace) -> dict:
         """
-        The system-health signal (CLAUDE-P11): a plain count of real,
-        human-recorded CaseOutcomes (plus the derived 'unresolved' state),
-        split by whether the Case was opened by escalating a machine-
-        recognized question (anchored - see case_origin_anchor) or opened
-        directly with no machine involvement, and further split by anchor
-        type where that applies (today only ever "requirement" - the one
-        aperture that exists). This is the question "is Archiosk
-        generating useful investigative hypotheses" made measurable,
-        answered ONLY from the anchored bucket - an outright human-opened
-        Case was never a machine suggestion in the first place, so its
-        outcome says nothing about investigation quality.
+        The system-health signal (CLAUDE-P11, extended CLAUDE-P13R): a
+        plain count of real, human-recorded CaseOutcomes (plus the
+        derived 'unresolved' state), split three ways by case_origin_kind
+        - anchor-escalated (a human accepted the aperture's offer),
+        autonomous (the machine opened it entirely on its own), and
+        direct (a human opened it outright, no machine involvement) -
+        each of the first two further split by anchor type where that
+        applies. This is the question "is Archiosk generating useful
+        investigative hypotheses" made measurable, answered from the
+        first two buckets - a directly-opened Case was never a machine
+        suggestion, so its outcome says nothing about investigation
+        quality. Keeping autonomous Cases in their OWN bucket (not merged
+        into anchor_escalated, even though both are "anchored") is what
+        lets deterioration specifically in UNSUPERVISED machine judgment
+        be told apart from deterioration in human-accepted escalations.
 
         Deliberately read-only and consumed by nothing else in this
         codebase: not the interpreter's trigger matching, not
         requirement_investigation.py's prompt, not any model or engine
-        choice. "BEEHIVE may learn how to investigate without learning
-        what to believe" is a property of what ISN'T wired to this
-        method's return value, not just what is - a future change that
-        feeds this rollup back into how the machine decides what to
-        investigate or what to assert would cross that line.
+        choice, not can_open_autonomous_case_for's own stop conditions.
+        "BEEHIVE may learn how to investigate without learning what to
+        believe" is a property of what ISN'T wired to this method's
+        return value, not just what is.
         """
         anchored_by_type: dict[str, dict[str, int]] = {}
+        autonomous_by_type: dict[str, dict[str, int]] = {}
         unanchored: dict[str, int] = {}
         for case in workspace.cases:
             outcome_state = self.case_outcome_state(workspace, case["id"])
-            anchor = self.case_origin_anchor(workspace, case)
-            if anchor is not None:
+            origin_kind = self.case_origin_kind(workspace, case)
+            if origin_kind == CASE_ORIGIN_AUTONOMOUS:
+                anchor = self.case_origin_anchor(workspace, case)
+                bucket = autonomous_by_type.setdefault(anchor.get("anchor_type", "unknown") if anchor else "unknown", {})
+            elif origin_kind == CASE_ORIGIN_ANCHOR_ESCALATED:
+                anchor = self.case_origin_anchor(workspace, case)
                 bucket = anchored_by_type.setdefault(anchor.get("anchor_type", "unknown"), {})
             else:
                 bucket = unanchored
             bucket[outcome_state] = bucket.get(outcome_state, 0) + 1
-        return {"anchored_by_type": anchored_by_type, "unanchored": unanchored}
+        return {
+            "anchored_by_type": anchored_by_type,
+            "autonomous_by_type": autonomous_by_type,
+            "unanchored": unanchored,
+        }
 
     # -- participants + represented-party perspective (CLAUDE-P12R) ----------------
 

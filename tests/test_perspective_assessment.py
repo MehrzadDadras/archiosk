@@ -320,5 +320,136 @@ class PerspectiveRouteAndRenderTests(unittest.TestCase):
         self.assertIn("Design-Builder", page.get_data(as_text=True))
 
 
+class NavigationMembraneLayerTests(unittest.TestCase):
+    """
+    CLAUDE-P13: the navigation-membrane layer toggle - "map over terrain."
+    The Risk/Opportunity layer is the first concrete layer, built on top
+    of PerspectiveAssessment rather than a bespoke heatmap. Badges are
+    marked data-layer="risk" and shown/hidden purely client-side (see
+    static/js/case_workspace.js) - these tests only prove the SERVER
+    renders the right markup (present vs. absent, correct polarity),
+    since the show/hide toggle itself is untestable without a browser.
+    """
+
+    def setUp(self):
+        import app as app_module
+
+        self.tmp_dir = Path(tempfile.mkdtemp(prefix="beehive_test_layer_"))
+        self.flask_app = app_module.create_app("testing")
+        self.flask_app.config["REGISTRY_STORE_PATH"] = str(self.tmp_dir)
+        self.project_id = "test-project-layer"
+
+        RequirementsRegistry(self.tmp_dir).save(
+            ParsedDocument(project_id=self.project_id, filename="rfp.md", ingested_at="2026-01-01T00:00:00+00:00")
+        )
+        self.client = self.flask_app.test_client()
+        with self.client.session_transaction() as sess:
+            sess["user_id"] = 1
+            sess["username"] = "owner1"
+            sess["role"] = "admin"
+        self.store = CaseWorkspaceStore(self.tmp_dir)
+        self.client.get(f"/projects/{self.project_id}/workspace")
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp_dir, ignore_errors=True)
+
+    def _register_requirement(self):
+        workspace = self.store.get(self.project_id)
+        source_id = workspace.sources[0]["id"]
+        return self.store.register_requirement(
+            workspace, source_id=source_id, original_requirement_identifier="Section 3.1",
+            text_reference="Contractor shall provide as-built drawings.", created_by="owner1",
+            registration_method=REQUIREMENT_REGISTRATION_HUMAN_REGISTERED,
+        )
+
+    def test_layer_toggle_control_always_renders(self):
+        resp = self.client.get(f"/projects/{self.project_id}/workspace")
+        self.assertIn('id="layer-risk-toggle"', resp.get_data(as_text=True))
+
+    def test_no_badge_when_nothing_recorded(self):
+        self._register_requirement()
+        resp = self.client.get(f"/projects/{self.project_id}/workspace")
+        self.assertNotIn('data-layer="risk"', resp.get_data(as_text=True))
+
+    def test_badge_appears_with_correct_polarity_once_marked(self):
+        requirement = self._register_requirement()
+        self.client.post(
+            f"/projects/{self.project_id}/workspace/participants",
+            data={"name": "Cedar Harbour DB JV", "role_type": PARTICIPANT_ROLE_DESIGN_BUILDER},
+        )
+        participant = self.store.get(self.project_id).participants[0]
+        self.client.post(
+            f"/projects/{self.project_id}/workspace/represented-party",
+            data={"participant_id": participant["id"]},
+        )
+        self.client.post(
+            f"/projects/{self.project_id}/workspace/requirements/{requirement['id']}/perspective",
+            data={"polarity": PERSPECTIVE_POLARITY_OPPORTUNITY, "reasoning": "Favorable to us."},
+        )
+        body = self.client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
+        self.assertIn('data-layer="risk"', body)
+        self.assertIn(f'review-state-{PERSPECTIVE_POLARITY_OPPORTUNITY}', body)
+
+    def test_disagreement_badge_when_human_and_machine_differ(self):
+        requirement = self._register_requirement()
+        self.client.post(
+            f"/projects/{self.project_id}/workspace/participants",
+            data={"name": "Cedar Harbour DB JV", "role_type": PARTICIPANT_ROLE_DESIGN_BUILDER},
+        )
+        participant = self.store.get(self.project_id).participants[0]
+        self.client.post(
+            f"/projects/{self.project_id}/workspace/represented-party",
+            data={"participant_id": participant["id"]},
+        )
+        self.client.post(
+            f"/projects/{self.project_id}/workspace/requirements/{requirement['id']}/perspective",
+            data={"polarity": PERSPECTIVE_POLARITY_OPPORTUNITY, "reasoning": "You side."},
+        )
+        workspace = self.store.get(self.project_id)
+        self.store.record_perspective_assessment(
+            workspace,
+            anchor={"anchor_type": OBJECT_KIND_REQUIREMENT, "anchor_id": requirement["id"]},
+            participant_id=participant["id"], polarity=PERSPECTIVE_POLARITY_RISK,
+            origin=PERSPECTIVE_ORIGIN_MACHINE, reasoning="Machine side.", confidence=0.6,
+        )
+        body = self.client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
+        self.assertIn("disagreement", body)
+
+
+class SnapshotCapturesNewListsTests(unittest.TestCase):
+    """
+    CLAUDE-P13: "freeze" is already the existing Snapshot mechanism -
+    _snapshot_reference_lists walks every list field on ProjectWorkspace
+    generically, so it picked up participants/perspective_assessments
+    automatically the moment those fields were added, with zero Snapshot
+    code touched. This proves that claim rather than just asserting it.
+    """
+
+    def setUp(self):
+        self.tmp_dir = Path(tempfile.mkdtemp(prefix="beehive_test_snapshot_capture_"))
+        self.store = CaseWorkspaceStore(self.tmp_dir)
+        self.workspace = self.store.get_or_create("proj-x")
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp_dir, ignore_errors=True)
+
+    def test_snapshot_captures_participants_and_perspective_assessments(self):
+        participant = self.store.record_participant(
+            self.workspace, name="Cedar Harbour DB JV", role_type=PARTICIPANT_ROLE_DESIGN_BUILDER,
+            created_by="owner1",
+        )
+        self.store.record_perspective_assessment(
+            self.workspace,
+            anchor={"anchor_type": OBJECT_KIND_REQUIREMENT, "anchor_id": "req-1"},
+            participant_id=participant["id"], polarity=PERSPECTIVE_POLARITY_RISK,
+            origin=PERSPECTIVE_ORIGIN_HUMAN, reasoning="x", recorded_by="owner1",
+        )
+
+        snapshot = self.store.create_snapshot(self.workspace, label="Pre-Award baseline", created_by="owner1")
+
+        self.assertIn(participant["id"], snapshot["reference_lists"]["participants"])
+        self.assertEqual(len(snapshot["reference_lists"]["perspective_assessments"]), 1)
+
+
 if __name__ == "__main__":
     unittest.main()

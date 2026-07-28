@@ -79,6 +79,16 @@ class RequirementInvestigationResult:
     risk_polarity: Optional[str] = None
     risk_confidence: Optional[float] = None
     risk_reasoning: Optional[str] = None
+    # CLAUDE-P13R: opportunistic autonomous branching - a DIFFERENT,
+    # sufficiently-grounded issue the model noticed while answering the
+    # original question, distinct from open_questions (which are
+    # uncertainties about THIS question, not new questions). The caller
+    # (conversation_interpreter.py) decides whether to actually act on
+    # this (bounded by AUTONOMOUS_BRANCH_CONFIDENCE_THRESHOLD and
+    # CaseWorkspaceStore.can_open_autonomous_case_for's stop conditions) -
+    # this module never creates a Case itself.
+    suggested_branch: Optional[str] = None
+    suggested_branch_confidence: Optional[float] = None
 
 
 def investigate_requirement(
@@ -149,6 +159,9 @@ def investigate_requirement(
         result.risk_polarity = str(parsed["risk_polarity"]).strip()
         result.risk_confidence = float(parsed.get("risk_confidence", 0.5))
         result.risk_reasoning = str(parsed.get("risk_reasoning", "")).strip()
+    if parsed.get("suggested_branch"):
+        result.suggested_branch = str(parsed["suggested_branch"]).strip()
+        result.suggested_branch_confidence = float(parsed.get("suggested_branch_confidence", 0.5))
     return result
 
 
@@ -222,6 +235,21 @@ def _build_prompt(
             'party\'s position specifically>", "risk_confidence": <0-1 float>, '
             '"risk_reasoning": "<why, from that party\'s position>"'
         )
+
+    lines.append(
+        "\nSeparately: while answering, you may have noticed something ELSE - a "
+        "different, genuinely concerning issue this Requirement's own evidence "
+        "raises, distinct from the question you were actually asked (not just "
+        "restating an open_question above - something substantial enough that it "
+        "would deserve its own separate Investigation). Only report one if you are "
+        "genuinely confident it is real and grounded in the evidence already given "
+        "- leave it out entirely rather than manufacturing one to seem thorough."
+    )
+    schema_fields += (
+        ', "suggested_branch": "<a different, separately-investigable issue, or '
+        'omit/empty if none>", "suggested_branch_confidence": <0-1 float, only if '
+        "suggested_branch is given>"
+    )
     schema_fields += "}"
 
     lines.append(

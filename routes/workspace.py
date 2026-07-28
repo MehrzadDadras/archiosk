@@ -47,6 +47,7 @@ from services.auth import login_required
 from services.case_workspace import (
     ANALYSIS_TRIGGER_USER_INITIATED,
     CASE_OUTCOME_STATES,
+    CASE_ORIGIN_AUTONOMOUS,
     KNOWN_PARTICIPANT_ROLES,
     KNOWN_PERSPECTIVE_POLARITIES,
     KNOWN_RESOLUTION_OUTCOMES,
@@ -314,6 +315,13 @@ def show_workspace(project_id):
     # keyed by case_id so the Cases list can show a badge without a
     # per-case query each time it's rendered.
     case_outcome_states = {c["id"]: store.case_outcome_state(workspace, c["id"]) for c in visible_cases}
+
+    # CLAUDE-P13R: which visible Cases the machine opened entirely on its
+    # own (case_origin_kind), so the Cases list can flag them plainly -
+    # opening one is never itself authority (see CaseOutcome), but a
+    # reviewer should always be able to tell at a glance that no human
+    # decided this was worth investigating.
+    case_origin_kinds = {c["id"]: store.case_origin_kind(workspace, c) for c in visible_cases}
 
     # Project Home's compact "Active Work" summary - project-wide (across
     # every Case this reviewer can see), computed only when actually
@@ -780,6 +788,8 @@ def show_workspace(project_id):
         since_last_visit=since_last_visit,
         project_conversation_view=project_conversation_view,
         case_outcome_states=case_outcome_states,
+        case_origin_kinds=case_origin_kinds,
+        case_origin_autonomous=CASE_ORIGIN_AUTONOMOUS,
         case_outcome_options=CASE_OUTCOME_STATES,
         investigation_quality_view=investigation_quality_view,
         participants_view=store.participants_for_project(workspace),
@@ -1577,6 +1587,7 @@ def _run_conversation_turn(
         focused_finding_id=focused_finding_id,
         triggering_message_id=human_message["id"],
         anchor=anchor,
+        governance_log=_log(),
     )
 
     store.add_message(
