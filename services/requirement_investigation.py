@@ -65,6 +65,16 @@ their independent texts. conversation_interpreter.py now gathers this
 automatically for every real investigation (Supersession neighbors and
 direct Relationships alike), not only when a test explicitly supplies
 it - the production path, not a benchmark-only enrichment.
+
+CLAUDE-P17: the represented-party prompt block gained three guardrails
+against specific ways a perspective-sensitive polarity call could go
+wrong even with correct underlying reasoning ability - assuming risk/
+opportunity is zero-sum between two parties, recasting a statutory or
+life-safety obligation as a commercial "opportunity" for whichever
+party doesn't hold it, and manufacturing confident opposite answers
+for two parties when the governed evidence genuinely does not settle
+an allocation. No new evidence-gathering was needed here - the gap was
+in what the model was told NOT to assume, not in what it could see.
 """
 from __future__ import annotations
 
@@ -153,7 +163,14 @@ def investigate_requirement(
     try:
         response = client.messages.create(
             model=model,
-            max_tokens=1000,
+            # CLAUDE-P17: 1000 was tight enough to sometimes truncate valid
+            # JSON mid-string once represented_party (risk_polarity block)
+            # and a populated suggested_branch are BOTH present in one
+            # response - a real, discovered token-budget bug, not just a
+            # theoretical risk (an early perspective-tier lab run hit
+            # exactly this). 2048 gives room for every optional field this
+            # module can request simultaneously.
+            max_tokens=2048,
             messages=[{"role": "user", "content": prompt}],
         )
     except anthropic.APITimeoutError:
@@ -174,6 +191,11 @@ def investigate_requirement(
     try:
         parsed = json.loads(cleaned)
     except json.JSONDecodeError:
+        if response.stop_reason == "max_tokens":
+            logger.warning("Requirement investigation was truncated at max_tokens: %r", text_out[-200:])
+            return RequirementInvestigationResult(
+                ran=False, skipped_reason="Model's response was cut off before it finished (max_tokens).",
+            )
         logger.warning("Requirement investigation returned non-JSON output: %r", text_out[:200])
         return RequirementInvestigationResult(
             ran=False, skipped_reason="Model returned malformed output.",
@@ -287,6 +309,41 @@ def _build_prompt(
             "sensitive judgment, not a claim about the Requirement's own meaning - the "
             "same Requirement can honestly be risk for one party and opportunity for "
             "another."
+        )
+        # CLAUDE-P17: three guardrails found necessary while building the
+        # perspective-sensitive risk/opportunity tier - each addresses a
+        # specific way an honest-sounding polarity call could still be
+        # wrong, none of them a claim about any particular Requirement's
+        # content.
+        lines.append(
+            "Do not assume this is zero-sum. Risk for one party does NOT imply "
+            "opportunity for another, and opportunity for one party does NOT imply "
+            "risk for another - each party's polarity must be judged independently "
+            "from what the evidence actually says about THAT party's own exposure, "
+            "never inferred as the mirror image of a different party's position. It "
+            "is entirely possible, and often correct, for a condition to be risk for "
+            "both parties (for different reasons), opportunity for one party with no "
+            "corresponding harm to the other, or neutral for a party the evidence "
+            "does not actually implicate."
+        )
+        lines.append(
+            "If this Requirement states a statutory, life-safety, regulatory-"
+            "compliance, or public-interest obligation, its underlying character does "
+            "not change merely because a different party bears responsibility for it. "
+            "Perspective may change WHO must manage the obligation and how exposed "
+            "they are to the consequences of getting it wrong, but never turns the "
+            "obligation itself into a commercial 'opportunity' for whichever party "
+            "does not hold it - the party not holding it, if anything, is relieved of "
+            "a burden, which is neutral or a reduced-risk position, not a gain."
+        )
+        lines.append(
+            "If the evidence given genuinely does not establish which party bears an "
+            "allocation (no clause, Relationship, or other governed fact actually "
+            "settles it), say so plainly in risk_reasoning and give a low "
+            "risk_confidence rather than manufacturing a confident answer - and "
+            "recognize that genuine allocation ambiguity reads as uncertainty for "
+            "EVERY party asked about it, not as a confident but opposite answer for "
+            "each one."
         )
         schema_fields += (
             ', "risk_polarity": "<one of: risk, opportunity, neutral - from that '
