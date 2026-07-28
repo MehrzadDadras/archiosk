@@ -41,12 +41,11 @@ logger = logging.getLogger(__name__)
 # CLAUDE-P19: a real, bump-on-meaningful-change marker for the Golden
 # Laboratory regression suite's own "prompt/configuration version"
 # tracking - see requirement_investigation.py's INVESTIGATION_PROMPT_
-# VERSION for the same convention. Last touched by CLAUDE-P22's fix
-# moving the requirements list before the JSON-only formatting
-# instruction (previously last-read content was the requirements text,
-# not the format instruction, causing prose-before-JSON parse failures
-# under harder multi-clause cases).
-CONSISTENCY_PROMPT_VERSION = "p22"
+# VERSION for the same convention. Last touched by CLAUDE-P23's fix
+# requiring verbatim per-pair evidence and an explicit reconciliation-
+# checked field, addressing a controlled-experiment-confirmed order/
+# adjacency sensitivity in false-positive rate.
+CONSISTENCY_PROMPT_VERSION = "p23"
 
 # How long to wait on a single classification batch before giving up on it.
 DEFAULT_CLASSIFY_TIMEOUT_SECONDS = 30.0
@@ -101,6 +100,15 @@ class ConsistencyFlag:
     requirement_b_id: str
     requirement_b_text: str
     explanation: str
+    # CLAUDE-P23: forces the model to ground each flag in specific,
+    # verbatim text from BOTH sides and to have explicitly checked for a
+    # reconciling exception BEFORE the pair can appear in the output at
+    # all - see _build_consistency_prompt's own docstring for why. Empty-
+    # string/False defaults keep this backward compatible with anything
+    # constructing a ConsistencyFlag from an older-shaped response.
+    requirement_a_evidence: str = ""
+    requirement_b_evidence: str = ""
+    reconciliation_checked: bool = False
 
 
 @dataclass
@@ -523,7 +531,7 @@ class BHiveParser:
 
     # -- stage 4: consistency check -------------------------------------------
     def _check_consistency(
-        self, requirements: list[RequirementItem]
+        self, requirements: list[RequirementItem], usage_sink: dict | None = None,
     ) -> tuple[list[ConsistencyFlag], bool, str | None]:
         """Best-effort holistic pass for cross-requirement contradictions.
 
@@ -531,6 +539,15 @@ class BHiveParser:
         check didn't actually run (no API key, timeout, bad output) —
         callers must not treat an empty `flags` list alone as "verified
         clean", since that's indistinguishable from "never checked".
+
+        CLAUDE-P23: `usage_sink`, if given a dict, gets populated with
+        {"prompt", "raw_response_text", "input_tokens", "output_tokens",
+        "latency_seconds", "stop_reason"} - purely additive instrumentation
+        for the compounding-suspicion controlled experiment (tools/
+        self_test_compounding_suspicion_experiment.py) to preserve exact
+        prompts/token usage/latency against the REAL production call path,
+        without changing this method's return shape or any existing
+        caller's behavior (default None = no change at all).
         """
         if not self.api_key:
             return [], False, "Skipped: no ANTHROPIC_API_KEY configured."
@@ -546,6 +563,7 @@ class BHiveParser:
         client = anthropic.Anthropic(api_key=self.api_key, timeout=self.consistency_timeout)
         prompt = self._build_consistency_prompt(candidates)
 
+        start = time.perf_counter()
         try:
             response = client.messages.create(
                 model=self.model,
@@ -563,10 +581,19 @@ class BHiveParser:
             # down ingestion.
             logger.warning("Consistency check failed; skipping.", exc_info=True)
             return [], False, "Skipped: an error occurred."
+        latency_seconds = time.perf_counter() - start
 
         text_out = "".join(
             block.text for block in response.content if getattr(block, "type", None) == "text"
         )
+        if usage_sink is not None:
+            usage_sink["prompt"] = prompt
+            usage_sink["raw_response_text"] = text_out
+            usage_sink["latency_seconds"] = latency_seconds
+            usage_sink["stop_reason"] = response.stop_reason
+            usage = getattr(response, "usage", None)
+            usage_sink["input_tokens"] = getattr(usage, "input_tokens", None)
+            usage_sink["output_tokens"] = getattr(usage, "output_tokens", None)
         cleaned = re.sub(r"^```(json)?|```$", "", text_out.strip(), flags=re.MULTILINE).strip()
         try:
             parsed = json.loads(cleaned)
@@ -589,6 +616,9 @@ class BHiveParser:
                     requirement_b_id=req_b.id,
                     requirement_b_text=req_b.text,
                     explanation=entry.get("explanation", ""),
+                    requirement_a_evidence=entry.get("requirement_a_evidence", ""),
+                    requirement_b_evidence=entry.get("requirement_b_evidence", ""),
+                    reconciliation_checked=bool(entry.get("reconciliation_checked", False)),
                 )
             )
 
@@ -625,6 +655,23 @@ class BHiveParser:
         # standard fix for this class of instruction-adherence issue -
         # every real ingestion's consistency check benefits, not just this
         # one specimen.
+        # CLAUDE-P23: a controlled experiment (tools/self_test_compounding_
+        # suspicion_experiment.py) found that when two requirements about
+        # the SAME topic are NOT adjacent in this list (separated by
+        # unrelated items), false-positive risk rises sharply - the model's
+        # pairwise comparison quality degrades with distance, producing
+        # flags grounded in surface features (e.g. a differing party label)
+        # rather than the actual obligation. A same-run example also showed
+        # the model's OWN prose reasoning conclude "should not be flagged"
+        # for a reconciled pair while still including it in the output -
+        # reasoning and action diverging within one response. Forcing a
+        # verbatim quote from BOTH sides plus an explicit reconciliation-
+        # checked flag, as STRUCTURED JSON fields (never free prose, so this
+        # doesn't reopen the CLAUDE-P22 parsing issue), makes "did I actually
+        # re-anchor on the real text" and "did I check for an exception"
+        # explicit per-pair commitments tied directly to inclusion in the
+        # output, rather than an implicit judgment call that can silently
+        # diverge from what gets reported.
         lines = "\n".join(f"{r.id}: [{r.category}] {r.text}" for r in requirements)
         return (
             "You are reviewing a procurement document's extracted requirements "
@@ -645,11 +692,19 @@ class BHiveParser:
             "control requirement) - unless a third requirement explicitly "
             "provides the exception or mechanism that reconciles them, in "
             "which case there is no contradiction to report.\n\n"
-            "Two guardrails against false positives:\n"
+            "Three guardrails against false positives:\n"
             "- Different WORDING for the same requirement is not a "
             "contradiction - do not flag two requirements merely because "
             "project-native terminology differs; judge whether the actual "
-            "obligation differs, not the vocabulary.\n"
+            "obligation differs, not the vocabulary. This also covers "
+            "different PARTY OR ROLE labels (e.g. 'the Contractor' vs 'the "
+            "Design-Builder') describing what may be the same real party "
+            "under a different name - do not flag a 'duplicative obligation' "
+            "or 'which party is responsible' conflict based solely on "
+            "differing role labels; that is an assumption you are making, "
+            "not evidence given to you. Only flag a role/party mismatch if "
+            "the requirements THEMSELVES state or clearly imply these are "
+            "genuinely different, simultaneously-obligated parties.\n"
             "- Do not assume two statements are equivalent just because they "
             "share the same number or subject - a requirement can restate a "
             "figure while changing what is actually being measured or "
@@ -658,8 +713,29 @@ class BHiveParser:
             "to 96 hours' is a design-basis estimate - not the same "
             "obligation despite the shared number). Flag this kind of drift "
             "as a contradiction if it changes what's actually required.\n\n"
+            "Before including ANY pair, you MUST be able to quote a SPECIFIC, "
+            "VERBATIM phrase from EACH side that actually conflicts, and you "
+            "MUST have checked every OTHER requirement given above for a "
+            "reconciling exception, qualification, or resolving mechanism. "
+            "If you cannot quote specific verbatim text from both sides, or "
+            "if a reconciling exception exists anywhere in the given "
+            "requirements, DO NOT include the pair - a requirement's own "
+            "distance from another in this list is never itself evidence of "
+            "a conflict; judge every pair the same way regardless of where "
+            "each one appears. Your explanation must describe ONLY what the "
+            "two quoted phrases themselves say - if the actual conflict you "
+            "want to describe depends on some OTHER fact not present in "
+            "either quoted phrase (e.g. which party is named elsewhere, or "
+            "context outside those two phrases), that is not a contradiction "
+            "between these two phrases and the pair must not be included.\n\n"
             "Respond ONLY with a JSON array of objects, one per contradiction "
             'found: [{"a": "<requirement id>", "b": "<requirement id>", '
+            '"requirement_a_evidence": "<verbatim conflicting phrase quoted '
+            "from requirement a's own text>\", "
+            '"requirement_b_evidence": "<verbatim conflicting phrase quoted '
+            "from requirement b's own text>\", "
+            '"reconciliation_checked": <true only if you checked every other '
+            'given requirement for a reconciling exception and found none>, '
             '"explanation": "<one concrete sentence>"}]. If there are no '
             "contradictions, respond with an empty JSON array: []. No prose, "
             "no reasoning, no markdown fences - the JSON array must be the "

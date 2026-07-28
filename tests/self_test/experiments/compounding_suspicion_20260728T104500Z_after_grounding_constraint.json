@@ -1,0 +1,315 @@
+[
+  {
+    "permutation": "f_all_together_shuffled_order",
+    "repetition": 1,
+    "requirement_ids_in_order": [
+      "CONTRA-C1",
+      "BAIT-B1",
+      "DIFFICULT-D1",
+      "CLEAN-A1",
+      "AMBIGUOUS-E1",
+      "DIFFICULT-D2",
+      "CONTRA-C2",
+      "CLEAN-A2",
+      "DIFFICULT-D3",
+      "AMBIGUOUS-E2",
+      "BAIT-B2"
+    ],
+    "model": "claude-sonnet-4-6",
+    "prompt_version": "p23",
+    "prompt": "You are reviewing a procurement document's extracted requirements for internal contradictions.\n\nCONTRA-C1: [technical_specification] The Facility shall support 72 hours of autonomous backup power operation for critical loads without normal utility power.\nBAIT-B1: [scope_of_work] The Contractor shall furnish record drawings reflecting as-constructed conditions within 30 days of Substantial Completion.\nDIFFICULT-D1: [scope_of_work] All perimeter gates shall remain unlocked at all times to allow emergency vehicle access.\nCLEAN-A1: [submission_instruction] Proposals shall be submitted no later than 45 days after the Request for Proposals issue date.\nAMBIGUOUS-E1: [scope_of_work] The facility shall provide unrestricted 24-hour emergency access.\nDIFFICULT-D2: [scope_of_work] All perimeter gates shall be secured and locked outside of normal operating hours for site security.\nCONTRA-C2: [technical_specification] Backup generator fuel storage shall be sized to provide 48 hours of continuous operation at full critical load, per the autonomy requirement in R1.\nCLEAN-A2: [evaluation_criteria] Evaluation of proposals shall weigh technical merit at 60% and price at 40%.\nDIFFICULT-D3: [scope_of_work] Notwithstanding the site security requirement, perimeter gates shall be equipped with an emergency-override lock mechanism (knox-box or equivalent) providing immediate emergency-vehicle access at all times, including outside normal operating hours - this satisfies both the security-lockdown and emergency-access requirements.\nAMBIGUOUS-E2: [scope_of_work] All external doors shall remain locked outside normal business hours and may only be opened by on-site security personnel.\nBAIT-B2: [scope_of_work] The Design-Builder shall submit as-built documentation within 30 days of Substantial Completion.\n\nConsider BOTH kinds of contradiction:\n1. Numeric/schedule/scope contradictions - e.g. a technical specification that cannot physically be satisfied by a scheduled milestone deadline, a budget figure that conflicts with the stated scope, or compliance terms that conflict with the schedule.\n2. Semantic/operational contradictions - two individually reasonable requirements that cannot BOTH govern as written (e.g. one requires a system remain continuously operational while another requires the same equipment shut down under the same condition), or a constraint/qualification elsewhere that changes what a requirement effectively permits in practice (e.g. an 'unrestricted access' requirement narrowed by a separate access-control requirement) - unless a third requirement explicitly provides the exception or mechanism that reconciles them, in which case there is no contradiction to report.\n\nTwo guardrails against false positives:\n- Different WORDING for the same requirement is not a contradiction - do not flag two requirements merely because project-native terminology differs; judge whether the actual obligation differs, not the vocabulary.\n- Do not assume two statements are equivalent just because they share the same number or subject - a requirement can restate a figure while changing what is actually being measured or required (e.g. 'maintain operation for 96 hours' is a performance obligation; 'provide capacity nominally equivalent to 96 hours' is a design-basis estimate - not the same obligation despite the shared number). Flag this kind of drift as a contradiction if it changes what's actually required.\n\nBefore including ANY pair, you MUST be able to quote a SPECIFIC, VERBATIM phrase from EACH side that actually conflicts, and you MUST have checked every OTHER requirement given above for a reconciling exception, qualification, or resolving mechanism. If you cannot quote specific verbatim text from both sides, or if a reconciling exception exists anywhere in the given requirements, DO NOT include the pair - a requirement's own distance from another in this list is never itself evidence of a conflict; judge every pair the same way regardless of where each one appears. Your explanation must describe ONLY what the two quoted phrases themselves say - if the actual conflict you want to describe depends on some OTHER fact not present in either quoted phrase (e.g. which party is named elsewhere, or context outside those two phrases), that is not a contradiction between these two phrases and the pair must not be included.\n\nRespond ONLY with a JSON array of objects, one per contradiction found: [{\"a\": \"<requirement id>\", \"b\": \"<requirement id>\", \"requirement_a_evidence\": \"<verbatim conflicting phrase quoted from requirement a's own text>\", \"requirement_b_evidence\": \"<verbatim conflicting phrase quoted from requirement b's own text>\", \"reconciliation_checked\": <true only if you checked every other given requirement for a reconciling exception and found none>, \"explanation\": \"<one concrete sentence>\"}]. If there are no contradictions, respond with an empty JSON array: []. No prose, no reasoning, no markdown fences - the JSON array must be the entire response.",
+    "raw_response_text": "[{\"a\": \"CONTRA-C1\", \"b\": \"CONTRA-C2\", \"requirement_a_evidence\": \"72 hours of autonomous backup power operation for critical loads\", \"requirement_b_evidence\": \"sized to provide 48 hours of continuous operation at full critical load\", \"reconciliation_checked\": true, \"explanation\": \"CONTRA-C1 requires 72 hours of autonomous backup power operation while CONTRA-C2 sizes fuel storage for only 48 hours, meaning the fuel supply physically cannot satisfy the 72-hour autonomy requirement even though CONTRA-C2 purports to reference it.\"},{\"a\": \"DIFFICULT-D1\", \"b\": \"DIFFICULT-D2\", \"requirement_a_evidence\": \"All perimeter gates shall remain unlocked at all times\", \"requirement_b_evidence\": \"All perimeter gates shall be secured and locked outside of normal operating hours\", \"reconciliation_checked\": true, \"explanation\": \"DIFFICULT-D1 requires all perimeter gates to remain unlocked at all times while DIFFICULT-D2 requires those same gates to be secured and locked outside normal operating hours, but DIFFICULT-D3 explicitly provides a knox-box emergency-override mechanism that reconciles both requirements \u2014 however, D3 only resolves the emergency-access conflict and does not remove the direct contradiction between 'unlocked at all times' and 'secured and locked outside of normal operating hours' as absolute gate-state obligations, so the pair remains contradictory as written.\"},{\"a\": \"AMBIGUOUS-E1\", \"b\": \"AMBIGUOUS-E2\", \"requirement_a_evidence\": \"unrestricted 24-hour emergency access\", \"requirement_b_evidence\": \"All external doors shall remain locked outside normal business hours and may only be opened by on-site security personnel\", \"reconciliation_checked\": true, \"explanation\": \"AMBIGUOUS-E1 requires unrestricted 24-hour emergency access through all external entry points while AMBIGUOUS-E2 restricts all external doors to security-personnel-only access outside normal business hours, and no other requirement provides a reconciling mechanism for external doors specifically.\"},{\"a\": \"BAIT-B1\", \"b\": \"BAIT-B2\", \"requirement_a_evidence\": \"furnish record drawings reflecting as-constructed conditions within 30 days of Substantial Completion\", \"requirement_b_evidence\": \"submit as-built documentation within 30 days of Substantial Completion\", \"reconciliation_checked\": true, \"explanation\": \"BAIT-B1 assigns the obligation to furnish as-constructed record drawings to 'the Contractor' while BAIT-B2 assigns the obligation to submit as-built documentation to 'the Design-Builder', meaning if these are different contracting entities both are separately obligated to produce equivalent deliverables on the same schedule, creating a duplicative and potentially conflicting scope-of-work obligation.\"}]",
+    "input_tokens": 1094,
+    "output_tokens": 659,
+    "latency_seconds": 11.107779000070877,
+    "flags": [
+      {
+        "a": "CONTRA-C1",
+        "b": "CONTRA-C2",
+        "explanation": "CONTRA-C1 requires 72 hours of autonomous backup power operation while CONTRA-C2 sizes fuel storage for only 48 hours, meaning the fuel supply physically cannot satisfy the 72-hour autonomy requirement even though CONTRA-C2 purports to reference it."
+      },
+      {
+        "a": "DIFFICULT-D1",
+        "b": "DIFFICULT-D2",
+        "explanation": "DIFFICULT-D1 requires all perimeter gates to remain unlocked at all times while DIFFICULT-D2 requires those same gates to be secured and locked outside normal operating hours, but DIFFICULT-D3 explicitly provides a knox-box emergency-override mechanism that reconciles both requirements \u2014 however, D3 only resolves the emergency-access conflict and does not remove the direct contradiction between 'unlocked at all times' and 'secured and locked outside of normal operating hours' as absolute gate-state obligations, so the pair remains contradictory as written."
+      },
+      {
+        "a": "AMBIGUOUS-E1",
+        "b": "AMBIGUOUS-E2",
+        "explanation": "AMBIGUOUS-E1 requires unrestricted 24-hour emergency access through all external entry points while AMBIGUOUS-E2 restricts all external doors to security-personnel-only access outside normal business hours, and no other requirement provides a reconciling mechanism for external doors specifically."
+      },
+      {
+        "a": "BAIT-B1",
+        "b": "BAIT-B2",
+        "explanation": "BAIT-B1 assigns the obligation to furnish as-constructed record drawings to 'the Contractor' while BAIT-B2 assigns the obligation to submit as-built documentation to 'the Design-Builder', meaning if these are different contracting entities both are separately obligated to produce equivalent deliverables on the same schedule, creating a duplicative and potentially conflicting scope-of-work obligation."
+      }
+    ],
+    "bait_pair_flagged": true,
+    "bait_pair_explanation": "BAIT-B1 assigns the obligation to furnish as-constructed record drawings to 'the Contractor' while BAIT-B2 assigns the obligation to submit as-built documentation to 'the Design-Builder', meaning if these are different contracting entities both are separately obligated to produce equivalent deliverables on the same schedule, creating a duplicative and potentially conflicting scope-of-work obligation.",
+    "checked": true,
+    "note": null,
+    "timestamp": "2026-07-28T10:45:01.791683+00:00"
+  },
+  {
+    "permutation": "f_all_together_shuffled_order",
+    "repetition": 2,
+    "requirement_ids_in_order": [
+      "CONTRA-C1",
+      "BAIT-B1",
+      "DIFFICULT-D1",
+      "CLEAN-A1",
+      "AMBIGUOUS-E1",
+      "DIFFICULT-D2",
+      "CONTRA-C2",
+      "CLEAN-A2",
+      "DIFFICULT-D3",
+      "AMBIGUOUS-E2",
+      "BAIT-B2"
+    ],
+    "model": "claude-sonnet-4-6",
+    "prompt_version": "p23",
+    "prompt": "You are reviewing a procurement document's extracted requirements for internal contradictions.\n\nCONTRA-C1: [technical_specification] The Facility shall support 72 hours of autonomous backup power operation for critical loads without normal utility power.\nBAIT-B1: [scope_of_work] The Contractor shall furnish record drawings reflecting as-constructed conditions within 30 days of Substantial Completion.\nDIFFICULT-D1: [scope_of_work] All perimeter gates shall remain unlocked at all times to allow emergency vehicle access.\nCLEAN-A1: [submission_instruction] Proposals shall be submitted no later than 45 days after the Request for Proposals issue date.\nAMBIGUOUS-E1: [scope_of_work] The facility shall provide unrestricted 24-hour emergency access.\nDIFFICULT-D2: [scope_of_work] All perimeter gates shall be secured and locked outside of normal operating hours for site security.\nCONTRA-C2: [technical_specification] Backup generator fuel storage shall be sized to provide 48 hours of continuous operation at full critical load, per the autonomy requirement in R1.\nCLEAN-A2: [evaluation_criteria] Evaluation of proposals shall weigh technical merit at 60% and price at 40%.\nDIFFICULT-D3: [scope_of_work] Notwithstanding the site security requirement, perimeter gates shall be equipped with an emergency-override lock mechanism (knox-box or equivalent) providing immediate emergency-vehicle access at all times, including outside normal operating hours - this satisfies both the security-lockdown and emergency-access requirements.\nAMBIGUOUS-E2: [scope_of_work] All external doors shall remain locked outside normal business hours and may only be opened by on-site security personnel.\nBAIT-B2: [scope_of_work] The Design-Builder shall submit as-built documentation within 30 days of Substantial Completion.\n\nConsider BOTH kinds of contradiction:\n1. Numeric/schedule/scope contradictions - e.g. a technical specification that cannot physically be satisfied by a scheduled milestone deadline, a budget figure that conflicts with the stated scope, or compliance terms that conflict with the schedule.\n2. Semantic/operational contradictions - two individually reasonable requirements that cannot BOTH govern as written (e.g. one requires a system remain continuously operational while another requires the same equipment shut down under the same condition), or a constraint/qualification elsewhere that changes what a requirement effectively permits in practice (e.g. an 'unrestricted access' requirement narrowed by a separate access-control requirement) - unless a third requirement explicitly provides the exception or mechanism that reconciles them, in which case there is no contradiction to report.\n\nTwo guardrails against false positives:\n- Different WORDING for the same requirement is not a contradiction - do not flag two requirements merely because project-native terminology differs; judge whether the actual obligation differs, not the vocabulary.\n- Do not assume two statements are equivalent just because they share the same number or subject - a requirement can restate a figure while changing what is actually being measured or required (e.g. 'maintain operation for 96 hours' is a performance obligation; 'provide capacity nominally equivalent to 96 hours' is a design-basis estimate - not the same obligation despite the shared number). Flag this kind of drift as a contradiction if it changes what's actually required.\n\nBefore including ANY pair, you MUST be able to quote a SPECIFIC, VERBATIM phrase from EACH side that actually conflicts, and you MUST have checked every OTHER requirement given above for a reconciling exception, qualification, or resolving mechanism. If you cannot quote specific verbatim text from both sides, or if a reconciling exception exists anywhere in the given requirements, DO NOT include the pair - a requirement's own distance from another in this list is never itself evidence of a conflict; judge every pair the same way regardless of where each one appears. Your explanation must describe ONLY what the two quoted phrases themselves say - if the actual conflict you want to describe depends on some OTHER fact not present in either quoted phrase (e.g. which party is named elsewhere, or context outside those two phrases), that is not a contradiction between these two phrases and the pair must not be included.\n\nRespond ONLY with a JSON array of objects, one per contradiction found: [{\"a\": \"<requirement id>\", \"b\": \"<requirement id>\", \"requirement_a_evidence\": \"<verbatim conflicting phrase quoted from requirement a's own text>\", \"requirement_b_evidence\": \"<verbatim conflicting phrase quoted from requirement b's own text>\", \"reconciliation_checked\": <true only if you checked every other given requirement for a reconciling exception and found none>, \"explanation\": \"<one concrete sentence>\"}]. If there are no contradictions, respond with an empty JSON array: []. No prose, no reasoning, no markdown fences - the JSON array must be the entire response.",
+    "raw_response_text": "[{\"a\": \"CONTRA-C1\", \"b\": \"CONTRA-C2\", \"requirement_a_evidence\": \"72 hours of autonomous backup power operation for critical loads\", \"requirement_b_evidence\": \"sized to provide 48 hours of continuous operation at full critical load\", \"reconciliation_checked\": true, \"explanation\": \"CONTRA-C1 requires 72 hours of autonomous backup power, but CONTRA-C2 sizes the fuel storage for only 48 hours of continuous operation, making it physically impossible to meet the 72-hour autonomy requirement with the specified fuel capacity.\"},{\"a\": \"DIFFICULT-D1\", \"b\": \"DIFFICULT-D2\", \"requirement_a_evidence\": \"All perimeter gates shall remain unlocked at all times\", \"requirement_b_evidence\": \"All perimeter gates shall be secured and locked outside of normal operating hours\", \"reconciliation_checked\": true, \"explanation\": \"DIFFICULT-D3 provides an explicit reconciling mechanism (knox-box emergency-override lock) that satisfies both requirements simultaneously, so this pair is resolved \u2014 however, DIFFICULT-D1 and DIFFICULT-D2 as standalone texts do directly conflict; DIFFICULT-D3 is the reconciling exception, so this pair must NOT be flagged.\"},{\"a\": \"AMBIGUOUS-E1\", \"b\": \"AMBIGUOUS-E2\", \"requirement_a_evidence\": \"unrestricted 24-hour emergency access\", \"requirement_b_evidence\": \"may only be opened by on-site security personnel\", \"reconciliation_checked\": true, \"explanation\": \"AMBIGUOUS-E1 requires unrestricted 24-hour emergency access through external doors, while AMBIGUOUS-E2 restricts opening of all external doors outside normal business hours exclusively to on-site security personnel, and no other requirement provides a reconciling mechanism for these two obligations.\"},{\"a\": \"BAIT-B1\", \"b\": \"BAIT-B2\", \"requirement_a_evidence\": \"furnish record drawings reflecting as-constructed conditions within 30 days of Substantial Completion\", \"requirement_b_evidence\": \"submit as-built documentation within 30 days of Substantial Completion\", \"reconciliation_checked\": true, \"explanation\": \"These two requirements impose the same deadline and subject matter but name different responsible parties \u2014 'The Contractor' in BAIT-B1 and 'The Design-Builder' in BAIT-B2 \u2014 creating a conflict over which party bears the obligation, since both cannot simultaneously be the sole responsible party for the same deliverable.\"}]",
+    "input_tokens": 1094,
+    "output_tokens": 584,
+    "latency_seconds": 9.745676700025797,
+    "flags": [
+      {
+        "a": "CONTRA-C1",
+        "b": "CONTRA-C2",
+        "explanation": "CONTRA-C1 requires 72 hours of autonomous backup power, but CONTRA-C2 sizes the fuel storage for only 48 hours of continuous operation, making it physically impossible to meet the 72-hour autonomy requirement with the specified fuel capacity."
+      },
+      {
+        "a": "DIFFICULT-D1",
+        "b": "DIFFICULT-D2",
+        "explanation": "DIFFICULT-D3 provides an explicit reconciling mechanism (knox-box emergency-override lock) that satisfies both requirements simultaneously, so this pair is resolved \u2014 however, DIFFICULT-D1 and DIFFICULT-D2 as standalone texts do directly conflict; DIFFICULT-D3 is the reconciling exception, so this pair must NOT be flagged."
+      },
+      {
+        "a": "AMBIGUOUS-E1",
+        "b": "AMBIGUOUS-E2",
+        "explanation": "AMBIGUOUS-E1 requires unrestricted 24-hour emergency access through external doors, while AMBIGUOUS-E2 restricts opening of all external doors outside normal business hours exclusively to on-site security personnel, and no other requirement provides a reconciling mechanism for these two obligations."
+      },
+      {
+        "a": "BAIT-B1",
+        "b": "BAIT-B2",
+        "explanation": "These two requirements impose the same deadline and subject matter but name different responsible parties \u2014 'The Contractor' in BAIT-B1 and 'The Design-Builder' in BAIT-B2 \u2014 creating a conflict over which party bears the obligation, since both cannot simultaneously be the sole responsible party for the same deliverable."
+      }
+    ],
+    "bait_pair_flagged": true,
+    "bait_pair_explanation": "These two requirements impose the same deadline and subject matter but name different responsible parties \u2014 'The Contractor' in BAIT-B1 and 'The Design-Builder' in BAIT-B2 \u2014 creating a conflict over which party bears the obligation, since both cannot simultaneously be the sole responsible party for the same deliverable.",
+    "checked": true,
+    "note": null,
+    "timestamp": "2026-07-28T10:45:12.101818+00:00"
+  },
+  {
+    "permutation": "f_all_together_shuffled_order",
+    "repetition": 3,
+    "requirement_ids_in_order": [
+      "CONTRA-C1",
+      "BAIT-B1",
+      "DIFFICULT-D1",
+      "CLEAN-A1",
+      "AMBIGUOUS-E1",
+      "DIFFICULT-D2",
+      "CONTRA-C2",
+      "CLEAN-A2",
+      "DIFFICULT-D3",
+      "AMBIGUOUS-E2",
+      "BAIT-B2"
+    ],
+    "model": "claude-sonnet-4-6",
+    "prompt_version": "p23",
+    "prompt": "You are reviewing a procurement document's extracted requirements for internal contradictions.\n\nCONTRA-C1: [technical_specification] The Facility shall support 72 hours of autonomous backup power operation for critical loads without normal utility power.\nBAIT-B1: [scope_of_work] The Contractor shall furnish record drawings reflecting as-constructed conditions within 30 days of Substantial Completion.\nDIFFICULT-D1: [scope_of_work] All perimeter gates shall remain unlocked at all times to allow emergency vehicle access.\nCLEAN-A1: [submission_instruction] Proposals shall be submitted no later than 45 days after the Request for Proposals issue date.\nAMBIGUOUS-E1: [scope_of_work] The facility shall provide unrestricted 24-hour emergency access.\nDIFFICULT-D2: [scope_of_work] All perimeter gates shall be secured and locked outside of normal operating hours for site security.\nCONTRA-C2: [technical_specification] Backup generator fuel storage shall be sized to provide 48 hours of continuous operation at full critical load, per the autonomy requirement in R1.\nCLEAN-A2: [evaluation_criteria] Evaluation of proposals shall weigh technical merit at 60% and price at 40%.\nDIFFICULT-D3: [scope_of_work] Notwithstanding the site security requirement, perimeter gates shall be equipped with an emergency-override lock mechanism (knox-box or equivalent) providing immediate emergency-vehicle access at all times, including outside normal operating hours - this satisfies both the security-lockdown and emergency-access requirements.\nAMBIGUOUS-E2: [scope_of_work] All external doors shall remain locked outside normal business hours and may only be opened by on-site security personnel.\nBAIT-B2: [scope_of_work] The Design-Builder shall submit as-built documentation within 30 days of Substantial Completion.\n\nConsider BOTH kinds of contradiction:\n1. Numeric/schedule/scope contradictions - e.g. a technical specification that cannot physically be satisfied by a scheduled milestone deadline, a budget figure that conflicts with the stated scope, or compliance terms that conflict with the schedule.\n2. Semantic/operational contradictions - two individually reasonable requirements that cannot BOTH govern as written (e.g. one requires a system remain continuously operational while another requires the same equipment shut down under the same condition), or a constraint/qualification elsewhere that changes what a requirement effectively permits in practice (e.g. an 'unrestricted access' requirement narrowed by a separate access-control requirement) - unless a third requirement explicitly provides the exception or mechanism that reconciles them, in which case there is no contradiction to report.\n\nTwo guardrails against false positives:\n- Different WORDING for the same requirement is not a contradiction - do not flag two requirements merely because project-native terminology differs; judge whether the actual obligation differs, not the vocabulary.\n- Do not assume two statements are equivalent just because they share the same number or subject - a requirement can restate a figure while changing what is actually being measured or required (e.g. 'maintain operation for 96 hours' is a performance obligation; 'provide capacity nominally equivalent to 96 hours' is a design-basis estimate - not the same obligation despite the shared number). Flag this kind of drift as a contradiction if it changes what's actually required.\n\nBefore including ANY pair, you MUST be able to quote a SPECIFIC, VERBATIM phrase from EACH side that actually conflicts, and you MUST have checked every OTHER requirement given above for a reconciling exception, qualification, or resolving mechanism. If you cannot quote specific verbatim text from both sides, or if a reconciling exception exists anywhere in the given requirements, DO NOT include the pair - a requirement's own distance from another in this list is never itself evidence of a conflict; judge every pair the same way regardless of where each one appears. Your explanation must describe ONLY what the two quoted phrases themselves say - if the actual conflict you want to describe depends on some OTHER fact not present in either quoted phrase (e.g. which party is named elsewhere, or context outside those two phrases), that is not a contradiction between these two phrases and the pair must not be included.\n\nRespond ONLY with a JSON array of objects, one per contradiction found: [{\"a\": \"<requirement id>\", \"b\": \"<requirement id>\", \"requirement_a_evidence\": \"<verbatim conflicting phrase quoted from requirement a's own text>\", \"requirement_b_evidence\": \"<verbatim conflicting phrase quoted from requirement b's own text>\", \"reconciliation_checked\": <true only if you checked every other given requirement for a reconciling exception and found none>, \"explanation\": \"<one concrete sentence>\"}]. If there are no contradictions, respond with an empty JSON array: []. No prose, no reasoning, no markdown fences - the JSON array must be the entire response.",
+    "raw_response_text": "[{\"a\":\"CONTRA-C1\",\"b\":\"CONTRA-C2\",\"requirement_a_evidence\":\"72 hours of autonomous backup power operation for critical loads\",\"requirement_b_evidence\":\"sized to provide 48 hours of continuous operation at full critical load, per the autonomy requirement in R1\",\"reconciliation_checked\":true,\"explanation\":\"CONTRA-C1 requires 72 hours of backup power autonomy while CONTRA-C2 sizes fuel storage for only 48 hours, directly contradicting the 72-hour figure it claims to reference.\"},{\"a\":\"DIFFICULT-D1\",\"b\":\"DIFFICULT-D2\",\"requirement_a_evidence\":\"All perimeter gates shall remain unlocked at all times\",\"requirement_b_evidence\":\"All perimeter gates shall be secured and locked outside of normal operating hours\",\"reconciliation_checked\":true,\"explanation\":\"DIFFICULT-D1 requires gates unlocked at all times while DIFFICULT-D2 requires the same gates be locked outside normal operating hours; however, DIFFICULT-D3 provides an explicit reconciling mechanism (knox-box emergency-override) that satisfies both requirements, so this pair is reconciled \u2014 but D3 only addresses emergency access, not the flat 'unlocked at all times' versus 'secured and locked' conflict for non-emergency access, meaning a residual contradiction remains between D1 and D2 for non-emergency scenarios not covered by D3.\"},{\"a\":\"AMBIGUOUS-E1\",\"b\":\"AMBIGUOUS-E2\",\"requirement_a_evidence\":\"unrestricted 24-hour emergency access\",\"requirement_b_evidence\":\"All external doors shall remain locked outside normal business hours and may only be opened by on-site security personnel\",\"reconciliation_checked\":true,\"explanation\":\"AMBIGUOUS-E1 requires unrestricted 24-hour access while AMBIGUOUS-E2 restricts all external doors outside normal hours to security personnel only, and no other requirement provides a reconciling mechanism for this specific conflict.\"},{\"a\":\"BAIT-B1\",\"b\":\"BAIT-B2\",\"requirement_a_evidence\":\"furnish record drawings reflecting as-constructed conditions within 30 days of Substantial Completion\",\"requirement_b_evidence\":\"submit as-built documentation within 30 days of Substantial Completion\",\"reconciliation_checked\":true,\"explanation\":\"While the schedule is identical, BAIT-B1 assigns the obligation to 'the Contractor' to furnish 'record drawings' while BAIT-B2 assigns it to 'the Design-Builder' to submit 'as-built documentation,' creating potentially duplicative or conflicting deliverable obligations on differently named parties for the same milestone \u2014 however, because the deliverable types differ only in wording and the actual obligation (submit as-constructed documentation within 30 days) is substantively the same, this does not constitute a true contradiction under the stated guardrails.\"}]",
+    "input_tokens": 1094,
+    "output_tokens": 644,
+    "latency_seconds": 11.603343899943866,
+    "flags": [
+      {
+        "a": "CONTRA-C1",
+        "b": "CONTRA-C2",
+        "explanation": "CONTRA-C1 requires 72 hours of backup power autonomy while CONTRA-C2 sizes fuel storage for only 48 hours, directly contradicting the 72-hour figure it claims to reference."
+      },
+      {
+        "a": "DIFFICULT-D1",
+        "b": "DIFFICULT-D2",
+        "explanation": "DIFFICULT-D1 requires gates unlocked at all times while DIFFICULT-D2 requires the same gates be locked outside normal operating hours; however, DIFFICULT-D3 provides an explicit reconciling mechanism (knox-box emergency-override) that satisfies both requirements, so this pair is reconciled \u2014 but D3 only addresses emergency access, not the flat 'unlocked at all times' versus 'secured and locked' conflict for non-emergency access, meaning a residual contradiction remains between D1 and D2 for non-emergency scenarios not covered by D3."
+      },
+      {
+        "a": "AMBIGUOUS-E1",
+        "b": "AMBIGUOUS-E2",
+        "explanation": "AMBIGUOUS-E1 requires unrestricted 24-hour access while AMBIGUOUS-E2 restricts all external doors outside normal hours to security personnel only, and no other requirement provides a reconciling mechanism for this specific conflict."
+      },
+      {
+        "a": "BAIT-B1",
+        "b": "BAIT-B2",
+        "explanation": "While the schedule is identical, BAIT-B1 assigns the obligation to 'the Contractor' to furnish 'record drawings' while BAIT-B2 assigns it to 'the Design-Builder' to submit 'as-built documentation,' creating potentially duplicative or conflicting deliverable obligations on differently named parties for the same milestone \u2014 however, because the deliverable types differ only in wording and the actual obligation (submit as-constructed documentation within 30 days) is substantively the same, this does not constitute a true contradiction under the stated guardrails."
+      }
+    ],
+    "bait_pair_flagged": true,
+    "bait_pair_explanation": "While the schedule is identical, BAIT-B1 assigns the obligation to 'the Contractor' to furnish 'record drawings' while BAIT-B2 assigns it to 'the Design-Builder' to submit 'as-built documentation,' creating potentially duplicative or conflicting deliverable obligations on differently named parties for the same milestone \u2014 however, because the deliverable types differ only in wording and the actual obligation (submit as-constructed documentation within 30 days) is substantively the same, this does not constitute a true contradiction under the stated guardrails.",
+    "checked": true,
+    "note": null,
+    "timestamp": "2026-07-28T10:45:24.322705+00:00"
+  },
+  {
+    "permutation": "g_difficult_first",
+    "repetition": 1,
+    "requirement_ids_in_order": [
+      "DIFFICULT-D1",
+      "DIFFICULT-D2",
+      "DIFFICULT-D3",
+      "CLEAN-A1",
+      "CLEAN-A2",
+      "BAIT-B1",
+      "BAIT-B2"
+    ],
+    "model": "claude-sonnet-4-6",
+    "prompt_version": "p23",
+    "prompt": "You are reviewing a procurement document's extracted requirements for internal contradictions.\n\nDIFFICULT-D1: [scope_of_work] All perimeter gates shall remain unlocked at all times to allow emergency vehicle access.\nDIFFICULT-D2: [scope_of_work] All perimeter gates shall be secured and locked outside of normal operating hours for site security.\nDIFFICULT-D3: [scope_of_work] Notwithstanding the site security requirement, perimeter gates shall be equipped with an emergency-override lock mechanism (knox-box or equivalent) providing immediate emergency-vehicle access at all times, including outside normal operating hours - this satisfies both the security-lockdown and emergency-access requirements.\nCLEAN-A1: [submission_instruction] Proposals shall be submitted no later than 45 days after the Request for Proposals issue date.\nCLEAN-A2: [evaluation_criteria] Evaluation of proposals shall weigh technical merit at 60% and price at 40%.\nBAIT-B1: [scope_of_work] The Contractor shall furnish record drawings reflecting as-constructed conditions within 30 days of Substantial Completion.\nBAIT-B2: [scope_of_work] The Design-Builder shall submit as-built documentation within 30 days of Substantial Completion.\n\nConsider BOTH kinds of contradiction:\n1. Numeric/schedule/scope contradictions - e.g. a technical specification that cannot physically be satisfied by a scheduled milestone deadline, a budget figure that conflicts with the stated scope, or compliance terms that conflict with the schedule.\n2. Semantic/operational contradictions - two individually reasonable requirements that cannot BOTH govern as written (e.g. one requires a system remain continuously operational while another requires the same equipment shut down under the same condition), or a constraint/qualification elsewhere that changes what a requirement effectively permits in practice (e.g. an 'unrestricted access' requirement narrowed by a separate access-control requirement) - unless a third requirement explicitly provides the exception or mechanism that reconciles them, in which case there is no contradiction to report.\n\nTwo guardrails against false positives:\n- Different WORDING for the same requirement is not a contradiction - do not flag two requirements merely because project-native terminology differs; judge whether the actual obligation differs, not the vocabulary.\n- Do not assume two statements are equivalent just because they share the same number or subject - a requirement can restate a figure while changing what is actually being measured or required (e.g. 'maintain operation for 96 hours' is a performance obligation; 'provide capacity nominally equivalent to 96 hours' is a design-basis estimate - not the same obligation despite the shared number). Flag this kind of drift as a contradiction if it changes what's actually required.\n\nBefore including ANY pair, you MUST be able to quote a SPECIFIC, VERBATIM phrase from EACH side that actually conflicts, and you MUST have checked every OTHER requirement given above for a reconciling exception, qualification, or resolving mechanism. If you cannot quote specific verbatim text from both sides, or if a reconciling exception exists anywhere in the given requirements, DO NOT include the pair - a requirement's own distance from another in this list is never itself evidence of a conflict; judge every pair the same way regardless of where each one appears. Your explanation must describe ONLY what the two quoted phrases themselves say - if the actual conflict you want to describe depends on some OTHER fact not present in either quoted phrase (e.g. which party is named elsewhere, or context outside those two phrases), that is not a contradiction between these two phrases and the pair must not be included.\n\nRespond ONLY with a JSON array of objects, one per contradiction found: [{\"a\": \"<requirement id>\", \"b\": \"<requirement id>\", \"requirement_a_evidence\": \"<verbatim conflicting phrase quoted from requirement a's own text>\", \"requirement_b_evidence\": \"<verbatim conflicting phrase quoted from requirement b's own text>\", \"reconciliation_checked\": <true only if you checked every other given requirement for a reconciling exception and found none>, \"explanation\": \"<one concrete sentence>\"}]. If there are no contradictions, respond with an empty JSON array: []. No prose, no reasoning, no markdown fences - the JSON array must be the entire response.",
+    "raw_response_text": "[]",
+    "input_tokens": 951,
+    "output_tokens": 4,
+    "latency_seconds": 0.9600760000757873,
+    "flags": [],
+    "bait_pair_flagged": false,
+    "bait_pair_explanation": null,
+    "checked": true,
+    "note": null,
+    "timestamp": "2026-07-28T10:45:25.852529+00:00"
+  },
+  {
+    "permutation": "g_difficult_first",
+    "repetition": 2,
+    "requirement_ids_in_order": [
+      "DIFFICULT-D1",
+      "DIFFICULT-D2",
+      "DIFFICULT-D3",
+      "CLEAN-A1",
+      "CLEAN-A2",
+      "BAIT-B1",
+      "BAIT-B2"
+    ],
+    "model": "claude-sonnet-4-6",
+    "prompt_version": "p23",
+    "prompt": "You are reviewing a procurement document's extracted requirements for internal contradictions.\n\nDIFFICULT-D1: [scope_of_work] All perimeter gates shall remain unlocked at all times to allow emergency vehicle access.\nDIFFICULT-D2: [scope_of_work] All perimeter gates shall be secured and locked outside of normal operating hours for site security.\nDIFFICULT-D3: [scope_of_work] Notwithstanding the site security requirement, perimeter gates shall be equipped with an emergency-override lock mechanism (knox-box or equivalent) providing immediate emergency-vehicle access at all times, including outside normal operating hours - this satisfies both the security-lockdown and emergency-access requirements.\nCLEAN-A1: [submission_instruction] Proposals shall be submitted no later than 45 days after the Request for Proposals issue date.\nCLEAN-A2: [evaluation_criteria] Evaluation of proposals shall weigh technical merit at 60% and price at 40%.\nBAIT-B1: [scope_of_work] The Contractor shall furnish record drawings reflecting as-constructed conditions within 30 days of Substantial Completion.\nBAIT-B2: [scope_of_work] The Design-Builder shall submit as-built documentation within 30 days of Substantial Completion.\n\nConsider BOTH kinds of contradiction:\n1. Numeric/schedule/scope contradictions - e.g. a technical specification that cannot physically be satisfied by a scheduled milestone deadline, a budget figure that conflicts with the stated scope, or compliance terms that conflict with the schedule.\n2. Semantic/operational contradictions - two individually reasonable requirements that cannot BOTH govern as written (e.g. one requires a system remain continuously operational while another requires the same equipment shut down under the same condition), or a constraint/qualification elsewhere that changes what a requirement effectively permits in practice (e.g. an 'unrestricted access' requirement narrowed by a separate access-control requirement) - unless a third requirement explicitly provides the exception or mechanism that reconciles them, in which case there is no contradiction to report.\n\nTwo guardrails against false positives:\n- Different WORDING for the same requirement is not a contradiction - do not flag two requirements merely because project-native terminology differs; judge whether the actual obligation differs, not the vocabulary.\n- Do not assume two statements are equivalent just because they share the same number or subject - a requirement can restate a figure while changing what is actually being measured or required (e.g. 'maintain operation for 96 hours' is a performance obligation; 'provide capacity nominally equivalent to 96 hours' is a design-basis estimate - not the same obligation despite the shared number). Flag this kind of drift as a contradiction if it changes what's actually required.\n\nBefore including ANY pair, you MUST be able to quote a SPECIFIC, VERBATIM phrase from EACH side that actually conflicts, and you MUST have checked every OTHER requirement given above for a reconciling exception, qualification, or resolving mechanism. If you cannot quote specific verbatim text from both sides, or if a reconciling exception exists anywhere in the given requirements, DO NOT include the pair - a requirement's own distance from another in this list is never itself evidence of a conflict; judge every pair the same way regardless of where each one appears. Your explanation must describe ONLY what the two quoted phrases themselves say - if the actual conflict you want to describe depends on some OTHER fact not present in either quoted phrase (e.g. which party is named elsewhere, or context outside those two phrases), that is not a contradiction between these two phrases and the pair must not be included.\n\nRespond ONLY with a JSON array of objects, one per contradiction found: [{\"a\": \"<requirement id>\", \"b\": \"<requirement id>\", \"requirement_a_evidence\": \"<verbatim conflicting phrase quoted from requirement a's own text>\", \"requirement_b_evidence\": \"<verbatim conflicting phrase quoted from requirement b's own text>\", \"reconciliation_checked\": <true only if you checked every other given requirement for a reconciling exception and found none>, \"explanation\": \"<one concrete sentence>\"}]. If there are no contradictions, respond with an empty JSON array: []. No prose, no reasoning, no markdown fences - the JSON array must be the entire response.",
+    "raw_response_text": "[]",
+    "input_tokens": 951,
+    "output_tokens": 4,
+    "latency_seconds": 1.005910599953495,
+    "flags": [],
+    "bait_pair_flagged": false,
+    "bait_pair_explanation": null,
+    "checked": true,
+    "note": null,
+    "timestamp": "2026-07-28T10:45:27.490973+00:00"
+  },
+  {
+    "permutation": "a_clean_only",
+    "repetition": 1,
+    "requirement_ids_in_order": [
+      "CLEAN-A1",
+      "CLEAN-A2",
+      "BAIT-B1",
+      "BAIT-B2"
+    ],
+    "model": "claude-sonnet-4-6",
+    "prompt_version": "p23",
+    "prompt": "You are reviewing a procurement document's extracted requirements for internal contradictions.\n\nCLEAN-A1: [submission_instruction] Proposals shall be submitted no later than 45 days after the Request for Proposals issue date.\nCLEAN-A2: [evaluation_criteria] Evaluation of proposals shall weigh technical merit at 60% and price at 40%.\nBAIT-B1: [scope_of_work] The Contractor shall furnish record drawings reflecting as-constructed conditions within 30 days of Substantial Completion.\nBAIT-B2: [scope_of_work] The Design-Builder shall submit as-built documentation within 30 days of Substantial Completion.\n\nConsider BOTH kinds of contradiction:\n1. Numeric/schedule/scope contradictions - e.g. a technical specification that cannot physically be satisfied by a scheduled milestone deadline, a budget figure that conflicts with the stated scope, or compliance terms that conflict with the schedule.\n2. Semantic/operational contradictions - two individually reasonable requirements that cannot BOTH govern as written (e.g. one requires a system remain continuously operational while another requires the same equipment shut down under the same condition), or a constraint/qualification elsewhere that changes what a requirement effectively permits in practice (e.g. an 'unrestricted access' requirement narrowed by a separate access-control requirement) - unless a third requirement explicitly provides the exception or mechanism that reconciles them, in which case there is no contradiction to report.\n\nTwo guardrails against false positives:\n- Different WORDING for the same requirement is not a contradiction - do not flag two requirements merely because project-native terminology differs; judge whether the actual obligation differs, not the vocabulary.\n- Do not assume two statements are equivalent just because they share the same number or subject - a requirement can restate a figure while changing what is actually being measured or required (e.g. 'maintain operation for 96 hours' is a performance obligation; 'provide capacity nominally equivalent to 96 hours' is a design-basis estimate - not the same obligation despite the shared number). Flag this kind of drift as a contradiction if it changes what's actually required.\n\nBefore including ANY pair, you MUST be able to quote a SPECIFIC, VERBATIM phrase from EACH side that actually conflicts, and you MUST have checked every OTHER requirement given above for a reconciling exception, qualification, or resolving mechanism. If you cannot quote specific verbatim text from both sides, or if a reconciling exception exists anywhere in the given requirements, DO NOT include the pair - a requirement's own distance from another in this list is never itself evidence of a conflict; judge every pair the same way regardless of where each one appears. Your explanation must describe ONLY what the two quoted phrases themselves say - if the actual conflict you want to describe depends on some OTHER fact not present in either quoted phrase (e.g. which party is named elsewhere, or context outside those two phrases), that is not a contradiction between these two phrases and the pair must not be included.\n\nRespond ONLY with a JSON array of objects, one per contradiction found: [{\"a\": \"<requirement id>\", \"b\": \"<requirement id>\", \"requirement_a_evidence\": \"<verbatim conflicting phrase quoted from requirement a's own text>\", \"requirement_b_evidence\": \"<verbatim conflicting phrase quoted from requirement b's own text>\", \"reconciliation_checked\": <true only if you checked every other given requirement for a reconciling exception and found none>, \"explanation\": \"<one concrete sentence>\"}]. If there are no contradictions, respond with an empty JSON array: []. No prose, no reasoning, no markdown fences - the JSON array must be the entire response.",
+    "raw_response_text": "[]",
+    "input_tokens": 813,
+    "output_tokens": 4,
+    "latency_seconds": 1.1028027000138536,
+    "flags": [],
+    "bait_pair_flagged": false,
+    "bait_pair_explanation": null,
+    "checked": true,
+    "note": null,
+    "timestamp": "2026-07-28T10:45:29.091186+00:00"
+  },
+  {
+    "permutation": "a_clean_only",
+    "repetition": 2,
+    "requirement_ids_in_order": [
+      "CLEAN-A1",
+      "CLEAN-A2",
+      "BAIT-B1",
+      "BAIT-B2"
+    ],
+    "model": "claude-sonnet-4-6",
+    "prompt_version": "p23",
+    "prompt": "You are reviewing a procurement document's extracted requirements for internal contradictions.\n\nCLEAN-A1: [submission_instruction] Proposals shall be submitted no later than 45 days after the Request for Proposals issue date.\nCLEAN-A2: [evaluation_criteria] Evaluation of proposals shall weigh technical merit at 60% and price at 40%.\nBAIT-B1: [scope_of_work] The Contractor shall furnish record drawings reflecting as-constructed conditions within 30 days of Substantial Completion.\nBAIT-B2: [scope_of_work] The Design-Builder shall submit as-built documentation within 30 days of Substantial Completion.\n\nConsider BOTH kinds of contradiction:\n1. Numeric/schedule/scope contradictions - e.g. a technical specification that cannot physically be satisfied by a scheduled milestone deadline, a budget figure that conflicts with the stated scope, or compliance terms that conflict with the schedule.\n2. Semantic/operational contradictions - two individually reasonable requirements that cannot BOTH govern as written (e.g. one requires a system remain continuously operational while another requires the same equipment shut down under the same condition), or a constraint/qualification elsewhere that changes what a requirement effectively permits in practice (e.g. an 'unrestricted access' requirement narrowed by a separate access-control requirement) - unless a third requirement explicitly provides the exception or mechanism that reconciles them, in which case there is no contradiction to report.\n\nTwo guardrails against false positives:\n- Different WORDING for the same requirement is not a contradiction - do not flag two requirements merely because project-native terminology differs; judge whether the actual obligation differs, not the vocabulary.\n- Do not assume two statements are equivalent just because they share the same number or subject - a requirement can restate a figure while changing what is actually being measured or required (e.g. 'maintain operation for 96 hours' is a performance obligation; 'provide capacity nominally equivalent to 96 hours' is a design-basis estimate - not the same obligation despite the shared number). Flag this kind of drift as a contradiction if it changes what's actually required.\n\nBefore including ANY pair, you MUST be able to quote a SPECIFIC, VERBATIM phrase from EACH side that actually conflicts, and you MUST have checked every OTHER requirement given above for a reconciling exception, qualification, or resolving mechanism. If you cannot quote specific verbatim text from both sides, or if a reconciling exception exists anywhere in the given requirements, DO NOT include the pair - a requirement's own distance from another in this list is never itself evidence of a conflict; judge every pair the same way regardless of where each one appears. Your explanation must describe ONLY what the two quoted phrases themselves say - if the actual conflict you want to describe depends on some OTHER fact not present in either quoted phrase (e.g. which party is named elsewhere, or context outside those two phrases), that is not a contradiction between these two phrases and the pair must not be included.\n\nRespond ONLY with a JSON array of objects, one per contradiction found: [{\"a\": \"<requirement id>\", \"b\": \"<requirement id>\", \"requirement_a_evidence\": \"<verbatim conflicting phrase quoted from requirement a's own text>\", \"requirement_b_evidence\": \"<verbatim conflicting phrase quoted from requirement b's own text>\", \"reconciliation_checked\": <true only if you checked every other given requirement for a reconciling exception and found none>, \"explanation\": \"<one concrete sentence>\"}]. If there are no contradictions, respond with an empty JSON array: []. No prose, no reasoning, no markdown fences - the JSON array must be the entire response.",
+    "raw_response_text": "[]",
+    "input_tokens": 813,
+    "output_tokens": 4,
+    "latency_seconds": 1.027595499996096,
+    "flags": [],
+    "bait_pair_flagged": false,
+    "bait_pair_explanation": null,
+    "checked": true,
+    "note": null,
+    "timestamp": "2026-07-28T10:45:30.766287+00:00"
+  },
+  {
+    "permutation": "b_clean_plus_contra",
+    "repetition": 1,
+    "requirement_ids_in_order": [
+      "CLEAN-A1",
+      "CLEAN-A2",
+      "BAIT-B1",
+      "BAIT-B2",
+      "CONTRA-C1",
+      "CONTRA-C2"
+    ],
+    "model": "claude-sonnet-4-6",
+    "prompt_version": "p23",
+    "prompt": "You are reviewing a procurement document's extracted requirements for internal contradictions.\n\nCLEAN-A1: [submission_instruction] Proposals shall be submitted no later than 45 days after the Request for Proposals issue date.\nCLEAN-A2: [evaluation_criteria] Evaluation of proposals shall weigh technical merit at 60% and price at 40%.\nBAIT-B1: [scope_of_work] The Contractor shall furnish record drawings reflecting as-constructed conditions within 30 days of Substantial Completion.\nBAIT-B2: [scope_of_work] The Design-Builder shall submit as-built documentation within 30 days of Substantial Completion.\nCONTRA-C1: [technical_specification] The Facility shall support 72 hours of autonomous backup power operation for critical loads without normal utility power.\nCONTRA-C2: [technical_specification] Backup generator fuel storage shall be sized to provide 48 hours of continuous operation at full critical load, per the autonomy requirement in R1.\n\nConsider BOTH kinds of contradiction:\n1. Numeric/schedule/scope contradictions - e.g. a technical specification that cannot physically be satisfied by a scheduled milestone deadline, a budget figure that conflicts with the stated scope, or compliance terms that conflict with the schedule.\n2. Semantic/operational contradictions - two individually reasonable requirements that cannot BOTH govern as written (e.g. one requires a system remain continuously operational while another requires the same equipment shut down under the same condition), or a constraint/qualification elsewhere that changes what a requirement effectively permits in practice (e.g. an 'unrestricted access' requirement narrowed by a separate access-control requirement) - unless a third requirement explicitly provides the exception or mechanism that reconciles them, in which case there is no contradiction to report.\n\nTwo guardrails against false positives:\n- Different WORDING for the same requirement is not a contradiction - do not flag two requirements merely because project-native terminology differs; judge whether the actual obligation differs, not the vocabulary.\n- Do not assume two statements are equivalent just because they share the same number or subject - a requirement can restate a figure while changing what is actually being measured or required (e.g. 'maintain operation for 96 hours' is a performance obligation; 'provide capacity nominally equivalent to 96 hours' is a design-basis estimate - not the same obligation despite the shared number). Flag this kind of drift as a contradiction if it changes what's actually required.\n\nBefore including ANY pair, you MUST be able to quote a SPECIFIC, VERBATIM phrase from EACH side that actually conflicts, and you MUST have checked every OTHER requirement given above for a reconciling exception, qualification, or resolving mechanism. If you cannot quote specific verbatim text from both sides, or if a reconciling exception exists anywhere in the given requirements, DO NOT include the pair - a requirement's own distance from another in this list is never itself evidence of a conflict; judge every pair the same way regardless of where each one appears. Your explanation must describe ONLY what the two quoted phrases themselves say - if the actual conflict you want to describe depends on some OTHER fact not present in either quoted phrase (e.g. which party is named elsewhere, or context outside those two phrases), that is not a contradiction between these two phrases and the pair must not be included.\n\nRespond ONLY with a JSON array of objects, one per contradiction found: [{\"a\": \"<requirement id>\", \"b\": \"<requirement id>\", \"requirement_a_evidence\": \"<verbatim conflicting phrase quoted from requirement a's own text>\", \"requirement_b_evidence\": \"<verbatim conflicting phrase quoted from requirement b's own text>\", \"reconciliation_checked\": <true only if you checked every other given requirement for a reconciling exception and found none>, \"explanation\": \"<one concrete sentence>\"}]. If there are no contradictions, respond with an empty JSON array: []. No prose, no reasoning, no markdown fences - the JSON array must be the entire response.",
+    "raw_response_text": "[{\"a\": \"CONTRA-C1\", \"b\": \"CONTRA-C2\", \"requirement_a_evidence\": \"72 hours of autonomous backup power operation for critical loads\", \"requirement_b_evidence\": \"sized to provide 48 hours of continuous operation at full critical load\", \"reconciliation_checked\": true, \"explanation\": \"CONTRA-C1 requires 72 hours of backup power autonomy while CONTRA-C2 sizes fuel storage for only 48 hours, directly making it physically impossible to satisfy the 72-hour performance requirement with the specified fuel capacity.\"}]",
+    "input_tokens": 890,
+    "output_tokens": 134,
+    "latency_seconds": 2.982479300000705,
+    "flags": [
+      {
+        "a": "CONTRA-C1",
+        "b": "CONTRA-C2",
+        "explanation": "CONTRA-C1 requires 72 hours of backup power autonomy while CONTRA-C2 sizes fuel storage for only 48 hours, directly making it physically impossible to satisfy the 72-hour performance requirement with the specified fuel capacity."
+      }
+    ],
+    "bait_pair_flagged": false,
+    "bait_pair_explanation": null,
+    "checked": true,
+    "note": null,
+    "timestamp": "2026-07-28T10:45:34.350139+00:00"
+  },
+  {
+    "permutation": "b_clean_plus_contra",
+    "repetition": 2,
+    "requirement_ids_in_order": [
+      "CLEAN-A1",
+      "CLEAN-A2",
+      "BAIT-B1",
+      "BAIT-B2",
+      "CONTRA-C1",
+      "CONTRA-C2"
+    ],
+    "model": "claude-sonnet-4-6",
+    "prompt_version": "p23",
+    "prompt": "You are reviewing a procurement document's extracted requirements for internal contradictions.\n\nCLEAN-A1: [submission_instruction] Proposals shall be submitted no later than 45 days after the Request for Proposals issue date.\nCLEAN-A2: [evaluation_criteria] Evaluation of proposals shall weigh technical merit at 60% and price at 40%.\nBAIT-B1: [scope_of_work] The Contractor shall furnish record drawings reflecting as-constructed conditions within 30 days of Substantial Completion.\nBAIT-B2: [scope_of_work] The Design-Builder shall submit as-built documentation within 30 days of Substantial Completion.\nCONTRA-C1: [technical_specification] The Facility shall support 72 hours of autonomous backup power operation for critical loads without normal utility power.\nCONTRA-C2: [technical_specification] Backup generator fuel storage shall be sized to provide 48 hours of continuous operation at full critical load, per the autonomy requirement in R1.\n\nConsider BOTH kinds of contradiction:\n1. Numeric/schedule/scope contradictions - e.g. a technical specification that cannot physically be satisfied by a scheduled milestone deadline, a budget figure that conflicts with the stated scope, or compliance terms that conflict with the schedule.\n2. Semantic/operational contradictions - two individually reasonable requirements that cannot BOTH govern as written (e.g. one requires a system remain continuously operational while another requires the same equipment shut down under the same condition), or a constraint/qualification elsewhere that changes what a requirement effectively permits in practice (e.g. an 'unrestricted access' requirement narrowed by a separate access-control requirement) - unless a third requirement explicitly provides the exception or mechanism that reconciles them, in which case there is no contradiction to report.\n\nTwo guardrails against false positives:\n- Different WORDING for the same requirement is not a contradiction - do not flag two requirements merely because project-native terminology differs; judge whether the actual obligation differs, not the vocabulary.\n- Do not assume two statements are equivalent just because they share the same number or subject - a requirement can restate a figure while changing what is actually being measured or required (e.g. 'maintain operation for 96 hours' is a performance obligation; 'provide capacity nominally equivalent to 96 hours' is a design-basis estimate - not the same obligation despite the shared number). Flag this kind of drift as a contradiction if it changes what's actually required.\n\nBefore including ANY pair, you MUST be able to quote a SPECIFIC, VERBATIM phrase from EACH side that actually conflicts, and you MUST have checked every OTHER requirement given above for a reconciling exception, qualification, or resolving mechanism. If you cannot quote specific verbatim text from both sides, or if a reconciling exception exists anywhere in the given requirements, DO NOT include the pair - a requirement's own distance from another in this list is never itself evidence of a conflict; judge every pair the same way regardless of where each one appears. Your explanation must describe ONLY what the two quoted phrases themselves say - if the actual conflict you want to describe depends on some OTHER fact not present in either quoted phrase (e.g. which party is named elsewhere, or context outside those two phrases), that is not a contradiction between these two phrases and the pair must not be included.\n\nRespond ONLY with a JSON array of objects, one per contradiction found: [{\"a\": \"<requirement id>\", \"b\": \"<requirement id>\", \"requirement_a_evidence\": \"<verbatim conflicting phrase quoted from requirement a's own text>\", \"requirement_b_evidence\": \"<verbatim conflicting phrase quoted from requirement b's own text>\", \"reconciliation_checked\": <true only if you checked every other given requirement for a reconciling exception and found none>, \"explanation\": \"<one concrete sentence>\"}]. If there are no contradictions, respond with an empty JSON array: []. No prose, no reasoning, no markdown fences - the JSON array must be the entire response.",
+    "raw_response_text": "[{\"a\": \"CONTRA-C1\", \"b\": \"CONTRA-C2\", \"requirement_a_evidence\": \"72 hours of autonomous backup power operation for critical loads\", \"requirement_b_evidence\": \"sized to provide 48 hours of continuous operation at full critical load\", \"reconciliation_checked\": true, \"explanation\": \"CONTRA-C1 requires 72 hours of backup power autonomy for critical loads, while CONTRA-C2 sizes fuel storage for only 48 hours of operation at full critical load, making it physically impossible to satisfy the 72-hour performance requirement with fuel storage designed only for 48 hours.\"}]",
+    "input_tokens": 890,
+    "output_tokens": 148,
+    "latency_seconds": 3.146873499965295,
+    "flags": [
+      {
+        "a": "CONTRA-C1",
+        "b": "CONTRA-C2",
+        "explanation": "CONTRA-C1 requires 72 hours of backup power autonomy for critical loads, while CONTRA-C2 sizes fuel storage for only 48 hours of operation at full critical load, making it physically impossible to satisfy the 72-hour performance requirement with fuel storage designed only for 48 hours."
+      }
+    ],
+    "bait_pair_flagged": false,
+    "bait_pair_explanation": null,
+    "checked": true,
+    "note": null,
+    "timestamp": "2026-07-28T10:45:38.073205+00:00"
+  }
+]
