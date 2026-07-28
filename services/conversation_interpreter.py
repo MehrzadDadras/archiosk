@@ -435,6 +435,26 @@ def _handle_investigate_requirement(
             "relationship_type": rel["relationship_type"],
             "note": f"connected via a real, registered '{rel['relationship_type']}' Relationship",
         })
+        # CLAUDE-P18: a Relationship can point at a Requirement that has
+        # ITSELF since been superseded (a lifecycle can span several
+        # stages away from where a Relationship was originally drawn) -
+        # without this, the model would only ever see the STALE related
+        # text, never the current governing successor it's actually since
+        # become. Reuses current_requirement_for again, never a new
+        # supersession-walking mechanism.
+        if other["status"] == "superseded":
+            other_current = store.current_requirement_for(workspace, other["id"])
+            if other_current is not None and other_current["id"] != other["id"]:
+                related_requirements.append({
+                    "id": other_current["id"],
+                    "original_requirement_identifier": other_current["original_requirement_identifier"],
+                    "text_reference": other_current["text_reference"], "status": other_current["status"],
+                    "relationship_type": rel["relationship_type"],
+                    "note": (
+                        f"the CURRENT governing successor of the '{rel['relationship_type']}'-related "
+                        f"Requirement above, which has itself since been superseded"
+                    ),
+                })
     evidence_examined_ids["related_requirement_ids"] = [r["id"] for r in related_requirements]
 
     result = investigate_requirement(
