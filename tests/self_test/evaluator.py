@@ -18,13 +18,25 @@ from tests.self_test.mutation_schema import PlantedMutation, SelfTestResult
 def evaluate(flags: list[ConsistencyFlag], answer_key: list[PlantedMutation]) -> SelfTestResult:
     result = SelfTestResult()
     caught_mutation_ids: set[str] = set()
+    both_anchors_correct_ids: set[str] = set()
 
     for flag in flags:
         flagged_ids = {flag.requirement_a_id, flag.requirement_b_id}
-        matched_mutation = next((m for m in answer_key if m.location in flagged_ids), None)
+        matched_mutation = next(
+            (m for m in answer_key if m.location in flagged_ids or m.secondary_location in flagged_ids),
+            None,
+        )
 
         if matched_mutation is not None:
             caught_mutation_ids.add(matched_mutation.mutation_id)
+            # "identified the correct anchors on BOTH sides" - only a
+            # meaningful question for a mutation that HAS two sides.
+            if (
+                matched_mutation.secondary_location is not None
+                and matched_mutation.location in flagged_ids
+                and matched_mutation.secondary_location in flagged_ids
+            ):
+                both_anchors_correct_ids.add(matched_mutation.mutation_id)
             continue
 
         # Not a match for any planted mutation - check whether the golden
@@ -48,6 +60,8 @@ def evaluate(flags: list[ConsistencyFlag], answer_key: list[PlantedMutation]) ->
     for mutation in answer_key:
         if mutation.mutation_id in caught_mutation_ids:
             result.caught.append(mutation.mutation_id)
+            if mutation.mutation_id in both_anchors_correct_ids:
+                result.both_anchors_correct.append(mutation.mutation_id)
         else:
             result.missed.append(mutation.mutation_id)
 

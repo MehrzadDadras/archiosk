@@ -29,6 +29,7 @@ import unittest
 from services.bhive_parser import ConsistencyFlag
 from tests.self_test.evaluator import evaluate
 from tests.self_test.golden_corpus import golden_requirements
+from tests.self_test.mutation_schema import PlantedMutation
 from tests.self_test.mutations import apply_numerical_contradiction
 
 
@@ -108,6 +109,50 @@ class EvaluatorTests(unittest.TestCase):
         result = evaluate(flags=[], answer_key=[self.answer_key])
         self.assertIn("missed=1", result.summary())
         self.assertIn("caught=0", result.summary())
+
+
+class BothAnchorsCorrectTests(unittest.TestCase):
+    """CLAUDE-P14: a two-sided mutation (secondary_location set) is
+    evaluated on two separate questions - was it found at all, and were
+    BOTH real anchors correctly named - not collapsed into one."""
+
+    def setUp(self):
+        self.mutation = PlantedMutation(
+            mutation_id="MUT-TEST-cross", mutation_kind="cross_document_inconsistency",
+            difficulty_tier="cross_document", description="x", location="RFP-1",
+            secondary_location="APX-1", expected_detection="x",
+        )
+
+    def test_both_anchors_correctly_named_is_caught_and_marked_correct(self):
+        flag = ConsistencyFlag(
+            id="f1", requirement_a_id="RFP-1", requirement_a_text="96h",
+            requirement_b_id="APX-1", requirement_b_text="72h", explanation="mismatch",
+        )
+        result = evaluate(flags=[flag], answer_key=[self.mutation])
+        self.assertEqual(result.caught, [self.mutation.mutation_id])
+        self.assertEqual(result.both_anchors_correct, [self.mutation.mutation_id])
+
+    def test_only_one_anchor_named_is_caught_but_not_marked_both_correct(self):
+        """Real Requirement ids only ever come from THIS mutation's own
+        pair in this test, so any match here is inherently 'found it' -
+        but citing the wrong second id must not count as both-correct."""
+        flag = ConsistencyFlag(
+            id="f2", requirement_a_id="RFP-1", requirement_a_text="96h",
+            requirement_b_id="SOME-OTHER-ID", requirement_b_text="?", explanation="mismatch",
+        )
+        result = evaluate(flags=[flag], answer_key=[self.mutation])
+        self.assertEqual(result.caught, [self.mutation.mutation_id])
+        self.assertEqual(result.both_anchors_correct, [])
+
+    def test_single_sided_mutation_never_populates_both_anchors_correct(self):
+        _, single_sided = apply_numerical_contradiction(golden_requirements())
+        flag = ConsistencyFlag(
+            id="f3", requirement_a_id="R1", requirement_a_text="72h",
+            requirement_b_id="R2", requirement_b_text="48h", explanation="mismatch",
+        )
+        result = evaluate(flags=[flag], answer_key=[single_sided])
+        self.assertEqual(result.caught, [single_sided.mutation_id])
+        self.assertEqual(result.both_anchors_correct, [])
 
 
 if __name__ == "__main__":

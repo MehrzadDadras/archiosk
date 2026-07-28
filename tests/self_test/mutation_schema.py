@@ -45,6 +45,15 @@ class PlantedMutation:
     ConsistencyFlag.requirement_a_id/requirement_b_id, not a fuzzy text
     search, so evaluation is exact rather than approximate.
 
+    `secondary_location` is the SECOND requirement id, only for a defect
+    that genuinely spans two items (CLAUDE-P14's cross-document tier) -
+    None for a single-item defect like the obvious tier's numerical
+    contradiction, which only ever needed one. Set, it lets the
+    evaluator check "found the discrepancy" (location alone) and
+    "identified the correct anchors on BOTH sides" (location AND
+    secondary_location) as two separate, honest questions rather than
+    collapsing them into one.
+
     `non_defects` names things a naive reviewer (human or machine) might
     mistake for problems but are NOT planted defects - the evaluator uses
     this to tell a "confirmed false positive" apart from a flag that
@@ -59,6 +68,7 @@ class PlantedMutation:
     location: str  # the requirement id the defect lives at
     expected_detection: str  # what a correct investigator run should say
     non_defects: list[str] = field(default_factory=list)
+    secondary_location: str | None = None
 
 
 @dataclass
@@ -81,10 +91,16 @@ class SelfTestResult:
     missed: list[str] = field(default_factory=list)
     confirmed_false_positives: list[str] = field(default_factory=list)
     unplanted_and_unexplained: list[str] = field(default_factory=list)
+    # CLAUDE-P14: only ever populated for a mutation with secondary_location
+    # set - "found it" (caught) and "correctly named BOTH anchors" are
+    # different questions; a flag can catch a cross-document mutation
+    # while still mis-citing one side.
+    both_anchors_correct: list[str] = field(default_factory=list)
 
     def summary(self) -> str:
         return (
             f"caught={len(self.caught)} missed={len(self.missed)} "
+            f"both_anchors_correct={len(self.both_anchors_correct)} "
             f"confirmed_false_positives={len(self.confirmed_false_positives)} "
             f"unplanted_and_unexplained={len(self.unplanted_and_unexplained)}"
         )
