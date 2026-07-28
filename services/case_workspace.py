@@ -5173,6 +5173,55 @@ class CaseWorkspaceStore:
             "accepted_knowledge": [k for k in workspace.knowledge if k.get("source_finding_id") in finding_ids],
         }
 
+    def current_requirement_for(self, workspace: ProjectWorkspace, requirement_id: str) -> Optional[dict]:
+        """
+        CLAUDE-P15: walks the Supersession chain FORWARD from ANY
+        Requirement id - current or historical - to whichever version is
+        CURRENTLY governing (status == active). The complement of routes/
+        workspace.py's existing `_requirement_revision_history` closure,
+        which walks BACKWARD from a current Requirement to its
+        predecessors for display; this is the direction real
+        investigation needs - "given this (possibly stale) id, what
+        actually governs right now" - and is promoted to a real,
+        reusable store method rather than a second route-local closure,
+        so services/requirement_investigation.py can use the exact same
+        logic the template already relies on. Returns None only if the
+        id doesn't exist at all; returns the SAME requirement unchanged
+        if it is already current (zero-length walk).
+        """
+        requirement = self._find(workspace.requirements, requirement_id)
+        if requirement is None:
+            return None
+        current_id = requirement_id
+        while True:
+            successor_supersession = next(
+                (
+                    s for s in workspace.supersessions
+                    if s["predecessor_type"] == OBJECT_KIND_REQUIREMENT and s["predecessor_id"] == current_id
+                ),
+                None,
+            )
+            if successor_supersession is None:
+                break
+            current_id = successor_supersession["successor_id"]
+        return self._find(workspace.requirements, current_id)
+
+    def requirement_predecessor(self, workspace: ProjectWorkspace, requirement_id: str) -> Optional[dict]:
+        """The immediate prior version this Requirement superseded, if
+        any - one step of the same backward walk _requirement_revision_
+        history performs, promoted here so the investigator can compare
+        'what changed' without duplicating the traversal."""
+        predecessor_supersession = next(
+            (
+                s for s in workspace.supersessions
+                if s["successor_type"] == OBJECT_KIND_REQUIREMENT and s["successor_id"] == requirement_id
+            ),
+            None,
+        )
+        if predecessor_supersession is None:
+            return None
+        return self._find(workspace.requirements, predecessor_supersession["predecessor_id"])
+
     def requirements_evidenced_by_finding(self, workspace: ProjectWorkspace, finding_id: str) -> list[dict]:
         """Reverse of requirement_evidence's Finding side: every
         Requirement whose own latest RequirementAdjudication currently

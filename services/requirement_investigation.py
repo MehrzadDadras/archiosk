@@ -42,6 +42,19 @@ they represent gets exactly the same behavior as before this existed.
 The result is never itself governed truth - see PerspectiveAssessment's
 own docstring in services/case_workspace.py for why this is recorded as
 an attributed annotation, never a rewrite of the Requirement.
+
+CLAUDE-P15: this Requirement's own governance status (active/superseded)
+is now always stated in the prompt (a real, previously-missing gap - a
+caller could ask about an already-superseded record with the model given
+no signal at all). When `related_requirements` is given (each with its
+own real id/text/status), the SAME call is also asked to distinguish
+"different" from "wrong because it is no longer governing" - a
+superseded requirement disagreeing with what superseded it is expected,
+never itself a defect; only an ACTIVE requirement failing to match what
+currently governs elsewhere is one. Reuses CaseWorkspaceStore.
+current_requirement_for/requirement_predecessor to resolve which
+requirements are actually relevant - never a new supersession-walking
+mechanism.
 """
 from __future__ import annotations
 
@@ -89,6 +102,12 @@ class RequirementInvestigationResult:
     # this module never creates a Case itself.
     suggested_branch: Optional[str] = None
     suggested_branch_confidence: Optional[float] = None
+    # CLAUDE-P15 - only ever populated when related_requirements was
+    # given: ids AMONG related_requirements the model believes are no
+    # longer consistent with what currently governs. Never includes a
+    # requirement whose own status is "superseded" - a superseded
+    # requirement being historical is expected, not a finding.
+    flagged_stale_ids: list[str] = field(default_factory=list)
 
 
 def investigate_requirement(
@@ -97,6 +116,7 @@ def investigate_requirement(
     adjudication_history: list[dict],
     evidence: dict,
     represented_party: Optional[dict] = None,
+    related_requirements: Optional[list[dict]] = None,
     api_key: Optional[str] = None,
     model: Optional[str] = None,
     timeout: Optional[float] = None,
@@ -116,7 +136,9 @@ def investigate_requirement(
     import anthropic  # imported lazily so the dep is optional in dev
 
     client = anthropic.Anthropic(api_key=api_key, timeout=timeout)
-    prompt = _build_prompt(question, requirement, adjudication_history, evidence, represented_party)
+    prompt = _build_prompt(
+        question, requirement, adjudication_history, evidence, represented_party, related_requirements,
+    )
 
     try:
         response = client.messages.create(
@@ -162,12 +184,14 @@ def investigate_requirement(
     if parsed.get("suggested_branch"):
         result.suggested_branch = str(parsed["suggested_branch"]).strip()
         result.suggested_branch_confidence = float(parsed.get("suggested_branch_confidence", 0.5))
+    if related_requirements is not None:
+        result.flagged_stale_ids = [str(i) for i in parsed.get("flagged_stale_ids", [])]
     return result
 
 
 def _build_prompt(
     question: str, requirement: dict, adjudication_history: list[dict], evidence: dict,
-    represented_party: Optional[dict] = None,
+    represented_party: Optional[dict] = None, related_requirements: Optional[list[dict]] = None,
 ) -> str:
     lines = [
         "You are assisting a construction/design professional reviewing a governed "
@@ -181,6 +205,12 @@ def _build_prompt(
         lines.append(f"Classification: {requirement['classification']}")
     if requirement.get("subject_domain"):
         lines.append(f"Subject domain: {requirement['subject_domain']}")
+    # CLAUDE-P15: the requirement's own governance status was never
+    # surfaced before this - a real gap, since a caller could otherwise
+    # ask about an already-superseded record with the model given no way
+    # to know that. "active" is stated too, not left implicit, so silence
+    # on this point is never mistaken for uncertainty.
+    lines.append(f"This Requirement's own status: {requirement.get('status', 'active')}.")
 
     if adjudication_history:
         lines.append("\nAdjudication history (oldest first):")
@@ -206,6 +236,23 @@ def _build_prompt(
         lines.append("\nAccepted project knowledge citing this Requirement:")
         for k in knowledge:
             lines.append(f"- {k.get('statement', '')}")
+
+    if related_requirements:
+        lines.append(
+            "\nOther governed Requirements relevant to this question (each with its "
+            "own real status - a status of 'superseded' means this is PRESERVED "
+            "HISTORICAL RECORD, not currently governing; it existing alongside a "
+            "newer statement is expected and correct, not itself a problem. Only "
+            "flag a genuine issue where an ACTIVE requirement fails to match what "
+            "is CURRENTLY governing elsewhere - never flag a superseded one for "
+            "disagreeing with what superseded it):"
+        )
+        for related in related_requirements:
+            note = f" ({related['note']})" if related.get("note") else ""
+            lines.append(
+                f"- [{related['id']}] {related.get('original_requirement_identifier', '')} "
+                f"(status: {related.get('status', 'active')}){note}: {related.get('text_reference', '')}"
+            )
 
     lines.append(f"\nThe reviewer's question: \"{question}\"")
 
@@ -250,6 +297,14 @@ def _build_prompt(
         'omit/empty if none>", "suggested_branch_confidence": <0-1 float, only if '
         "suggested_branch is given>"
     )
+
+    if related_requirements:
+        schema_fields += (
+            ', "flagged_stale_ids": ["<id from the Other governed Requirements list '
+            "above whose CURRENT (active) text does not match what currently "
+            "governs elsewhere - empty array if none genuinely conflict>\"]"
+        )
+
     schema_fields += "}"
 
     lines.append(
