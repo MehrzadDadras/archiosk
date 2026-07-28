@@ -38,6 +38,13 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+# CLAUDE-P19: a real, bump-on-meaningful-change marker for the Golden
+# Laboratory regression suite's own "prompt/configuration version"
+# tracking - see requirement_investigation.py's INVESTIGATION_PROMPT_
+# VERSION for the same convention. Last touched by CLAUDE-P16's semantic/
+# operational-conflict and paraphrase/drift guardrails.
+CONSISTENCY_PROMPT_VERSION = "p16"
+
 # How long to wait on a single classification batch before giving up on it.
 DEFAULT_CLASSIFY_TIMEOUT_SECONDS = 30.0
 

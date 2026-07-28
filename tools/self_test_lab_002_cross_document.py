@@ -19,7 +19,11 @@ never which one was revised - so it cannot "remember the exam answers."
 Requires a real ANTHROPIC_API_KEY in .env - without one this honestly
 reports SKIPPED rather than fabricating a result.
 
-Run:
+CLAUDE-P19: `run_tier()` is this tier's entry point for tools/self_test_
+runner.py's cross-tier regression runner - see tools/self_test_lab.py's
+own docstring for the convention. `main()` is a thin wrapper so
+standalone hand-running is unchanged:
+
     venv/Scripts/python.exe tools/self_test_lab_002_cross_document.py
 """
 from __future__ import annotations
@@ -27,6 +31,7 @@ from __future__ import annotations
 import shutil
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -35,13 +40,19 @@ sys.path.insert(0, str(REPO_ROOT))
 from dotenv import load_dotenv  # noqa: E402
 load_dotenv(REPO_ROOT / ".env", override=True)
 
-from services.bhive_parser import BHiveParser, RequirementItem  # noqa: E402
+from services.bhive_parser import BHiveParser, CONSISTENCY_PROMPT_VERSION, RequirementItem  # noqa: E402
 from services.case_workspace import CaseWorkspaceStore  # noqa: E402
 from tests.self_test.evaluator import evaluate  # noqa: E402
 from tests.self_test.golden_corpus_cross_document import (  # noqa: E402
     build_cross_document_golden_project,
 )
+from tests.self_test.mutation_schema import DIFFICULTY_TIER_CROSS_DOCUMENT  # noqa: E402
 from tests.self_test.mutations_cross_document import apply_cross_document_inconsistency  # noqa: E402
+from tests.self_test.run_record import SpecimenResult  # noqa: E402
+
+CORPUS_VERSION = "1.0"
+MUTATION_VERSION = "1.0"
+PRODUCTION_REASONING_PATH = "BHiveParser._check_consistency"
 
 
 def as_requirement_items(workspace, requirement_ids: list[str]) -> list[RequirementItem]:
@@ -75,7 +86,9 @@ def run_consistency_check(requirements: list[RequirementItem]):
     return flags
 
 
-def main() -> int:
+def run_tier() -> list[SpecimenResult]:
+    specimens: list[SpecimenResult] = []
+    model = BHiveParser().model
     tmp_dir = Path(tempfile.mkdtemp(prefix="self_test_lab_cross_document_"))
     try:
         store = CaseWorkspaceStore(tmp_dir)
@@ -89,9 +102,18 @@ def main() -> int:
         print("=== STAGE 1: clean two-Source corpus (should find nothing) ===")
         print(f"RFP requirement ({rfp_id}) <- Source {project['rfp_source_id']}")
         print(f"Appendix requirement ({appendix_id}) <- Source {project['appendix_source_id']}")
+        start = time.perf_counter()
         clean_flags = run_consistency_check(as_requirement_items(workspace, [rfp_id, appendix_id]))
+        elapsed = time.perf_counter() - start
         if clean_flags is None:
-            return 1
+            specimens.append(SpecimenResult(
+                tier_id=DIFFICULTY_TIER_CROSS_DOCUMENT, specimen_id="002-clean",
+                description="Clean two-Source corpus (coordinated RFP + Appendix) - should find nothing.",
+                production_reasoning_path=PRODUCTION_REASONING_PATH, corpus_version=CORPUS_VERSION,
+                model=model, prompt_version=CONSISTENCY_PROMPT_VERSION,
+                ran=False, skipped_reason="No ANTHROPIC_API_KEY configured, or consistency check did not run.",
+            ))
+            return specimens
         print(f"Flags raised on the clean corpus: {len(clean_flags)}")
         for flag in clean_flags:
             print(f"  - ({flag.requirement_a_id}, {flag.requirement_b_id}): {flag.explanation}")
@@ -99,6 +121,14 @@ def main() -> int:
             print("NOTE: the corpus wasn't actually clean, or Archiosk manufactured a discrepancy - review needed.")
         else:
             print("PASS: Archiosk found the two coordinated Sources consistent.")
+        specimens.append(SpecimenResult(
+            tier_id=DIFFICULTY_TIER_CROSS_DOCUMENT, specimen_id="002-clean",
+            description="Clean two-Source corpus (coordinated RFP + Appendix) - should find nothing.",
+            production_reasoning_path=PRODUCTION_REASONING_PATH, corpus_version=CORPUS_VERSION,
+            expected_anchors=[rfp_id, appendix_id], model=model, prompt_version=CONSISTENCY_PROMPT_VERSION,
+            false_positives=[f.explanation for f in clean_flags],
+            model_call_count=1, latency_seconds=elapsed,
+        ))
 
         print("\n=== STAGE 2: Appendix revised 96h -> 72h (RFP untouched) ===")
         answer_key = apply_cross_document_inconsistency(store, workspace, rfp_id, appendix_id)
@@ -109,18 +139,28 @@ def main() -> int:
             f"-> {answer_key.secondary_location} (current, 72h)"
         )
 
+        start = time.perf_counter()
         mutated_flags = run_consistency_check(
             as_requirement_items(workspace, [rfp_id, answer_key.secondary_location])
         )
+        elapsed = time.perf_counter() - start
         if mutated_flags is None:
-            return 1
-        result = evaluate(flags=mutated_flags, answer_key=[answer_key])
+            specimens.append(SpecimenResult(
+                tier_id=DIFFICULTY_TIER_CROSS_DOCUMENT, specimen_id=answer_key.mutation_id,
+                description=answer_key.description, production_reasoning_path=PRODUCTION_REASONING_PATH,
+                corpus_version=CORPUS_VERSION, mutation_version=MUTATION_VERSION,
+                planted_condition=answer_key.description, expected_detection_type=answer_key.mutation_kind,
+                expected_anchors=[rfp_id, answer_key.secondary_location], expected_non_findings=answer_key.non_defects,
+                model=model, prompt_version=CONSISTENCY_PROMPT_VERSION,
+                ran=False, skipped_reason="No ANTHROPIC_API_KEY configured, or consistency check did not run.",
+            ))
+            return specimens
 
+        result = evaluate(flags=mutated_flags, answer_key=[answer_key])
         print(f"Flags raised: {len(mutated_flags)}")
         for flag in mutated_flags:
             print(f"  - ({flag.requirement_a_id}, {flag.requirement_b_id}): {flag.explanation}")
         print(f"\nResult: {result.summary()}")
-
         if result.caught:
             print("PASS: the planted cross-document discrepancy was caught.")
         if result.both_anchors_correct:
@@ -137,12 +177,6 @@ def main() -> int:
                 "hallucination, or a genuine discovery this corpus's author didn't anticipate."
             )
 
-        # Provenance check: confirm the mutation really did leave the
-        # original Appendix wording reconstructable (Supersession, not a
-        # silent overwrite) - proving "preserve... with provenance" held.
-        # `appendix_id` itself never changes identity on revision - it
-        # becomes the frozen, superseded predecessor; the NEW id
-        # (answer_key.secondary_location) is the one that now carries 72h.
         original_appendix = next((r for r in workspace.requirements if r["id"] == appendix_id), None)
         original_intact = (
             original_appendix is not None
@@ -151,9 +185,28 @@ def main() -> int:
         )
         print(f"\nOriginal Appendix wording (96h) still intact and reconstructable via Supersession: {original_intact}")
 
-        return 0 if result.missed == [] and result.confirmed_false_positives == [] else 1
+        specimens.append(SpecimenResult(
+            tier_id=DIFFICULTY_TIER_CROSS_DOCUMENT, specimen_id=answer_key.mutation_id,
+            description=answer_key.description, production_reasoning_path=PRODUCTION_REASONING_PATH,
+            corpus_version=CORPUS_VERSION, mutation_version=MUTATION_VERSION,
+            planted_condition=answer_key.description, expected_detection_type=answer_key.mutation_kind,
+            expected_anchors=[rfp_id, answer_key.secondary_location], expected_non_findings=answer_key.non_defects,
+            model=model, prompt_version=CONSISTENCY_PROMPT_VERSION,
+            caught=bool(result.caught), anchor_correctness=bool(result.both_anchors_correct) if result.caught else None,
+            false_positives=result.confirmed_false_positives, unexpected_valid_discoveries=result.unplanted_and_unexplained,
+            model_call_count=1, latency_seconds=elapsed,
+        ))
+        return specimens
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)
+
+
+def main() -> int:
+    specimens = run_tier()
+    verdicts = [s.passed() for s in specimens]
+    if not specimens or all(v is None for v in verdicts):
+        return 1
+    return 0 if all(v is not False for v in verdicts) else 1
 
 
 if __name__ == "__main__":

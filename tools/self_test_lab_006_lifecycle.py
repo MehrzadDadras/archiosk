@@ -34,14 +34,24 @@ Tests for the actual route-level proof).
 Requires a real ANTHROPIC_API_KEY in .env - without one this honestly
 reports SKIPPED rather than fabricating a result.
 
+CLAUDE-P19: `run_tier()` is this tier's entry point for tools/self_test_
+runner.py's cross-tier regression runner - see tools/self_test_lab.py's
+own docstring for the convention. `main()` is a thin wrapper so
+standalone hand-running is unchanged. The clean-lifecycle deterministic
+reconstruction is recorded as its own zero-model-call specimen -
+`current_vs_historical_correctness` proven for free, exactly matching
+this tier's own central claim.
+
 Run:
     venv/Scripts/python.exe tools/self_test_lab_006_lifecycle.py
 """
 from __future__ import annotations
 
+import os
 import shutil
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -50,9 +60,9 @@ sys.path.insert(0, str(REPO_ROOT))
 from dotenv import load_dotenv  # noqa: E402
 load_dotenv(REPO_ROOT / ".env", override=True)
 
-from services.bhive_parser import BHiveParser, RequirementItem  # noqa: E402
+from services.bhive_parser import BHiveParser, CONSISTENCY_PROMPT_VERSION, RequirementItem  # noqa: E402
 from services.case_workspace import CaseWorkspaceStore, OBJECT_KIND_REQUIREMENT  # noqa: E402
-from services.requirement_investigation import investigate_requirement  # noqa: E402
+from services.requirement_investigation import INVESTIGATION_PROMPT_VERSION, investigate_requirement  # noqa: E402
 from tests.self_test.evaluator import evaluate  # noqa: E402
 from tests.self_test.golden_corpus_lifecycle import (  # noqa: E402
     build_clean_lifecycle_golden_corpus,
@@ -61,12 +71,18 @@ from tests.self_test.golden_corpus_lifecycle import (  # noqa: E402
     extend_with_design_and_calc,
     extend_with_submittal,
 )
+from tests.self_test.mutation_schema import DIFFICULTY_TIER_LIFECYCLE  # noqa: E402
 from tests.self_test.mutations_lifecycle import (  # noqa: E402
     build_contract_vs_physical_project,
     build_missing_corrective_link_project,
     build_stale_downstream_design_project,
 )
+from tests.self_test.run_record import SpecimenResult  # noqa: E402
 
+CORPUS_VERSION = "1.0"
+MUTATION_VERSION = "1.0"
+CONSISTENCY_PATH = "BHiveParser._check_consistency"
+INVESTIGATION_PATH = "requirement_investigation.investigate_requirement"
 EMPTY_EVIDENCE = {"findings": [], "relationships": [], "accepted_knowledge": []}
 
 
@@ -150,9 +166,10 @@ def ask(requirement: dict, question: str, related_requirements=None, represented
     )
 
 
-def main() -> int:
+def run_tier() -> list[SpecimenResult]:  # noqa: C901 - one lab script tier, kept linear on purpose
+    specimens: list[SpecimenResult] = []
+    model = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-6")
     tmp_dir = Path(tempfile.mkdtemp(prefix="self_test_lab_lifecycle_"))
-    all_ok = True
     try:
         store = CaseWorkspaceStore(tmp_dir)
 
@@ -161,30 +178,69 @@ def main() -> int:
         cw = clean["workspace"]
         current_governing = store.current_requirement_for(cw, clean["rfp_72_id"])
         current_evidence = store.current_requirement_for(cw, clean["design_30_id"])
-        print(f"Current governing requirement (from RFP's own id): {current_governing['id'] == clean['cr17_96_id']}")
-        print(f"Current best evidence (from 30% design's own id): {current_evidence['id'] == clean['commissioning_98_id']}")
+        governing_ok = current_governing["id"] == clean["cr17_96_id"]
+        evidence_ok = current_evidence["id"] == clean["commissioning_98_id"]
+        print(f"Current governing requirement (from RFP's own id): {governing_ok}")
+        print(f"Current best evidence (from 30% design's own id): {evidence_ok}")
         print("Reconstructed chain: Owner Intent -> RFP(72h) -> Addendum(96h) -> CR-17(96h, contractual)")
         print("Evidence chain: 30%(~90h) -> 60%(101h) -> Submittal(94h, shortfall) -> Commissioning(98h, verified)")
+        specimens.append(SpecimenResult(
+            tier_id=DIFFICULTY_TIER_LIFECYCLE, specimen_id="006-clean-reconstruction",
+            description="Deterministic reconstruction of current governing requirement and current best evidence from any point in either chain.",
+            production_reasoning_path="CaseWorkspaceStore.current_requirement_for", corpus_version=CORPUS_VERSION,
+            expected_anchors=[clean["cr17_96_id"], clean["commissioning_98_id"]],
+            current_vs_historical_correctness=bool(governing_ok and evidence_ok),
+            model_call_count=0,
+        ))
 
         print("\n=== CASE A: requirement changes, downstream design remains stale ===")
         case_a = build_stale_downstream_design_project(store, "lifecycle-case-a", tmp_dir / "case_a")
+        start = time.perf_counter()
         flags_a = run_consistency_check(
             as_requirement_items(case_a["workspace"], [case_a["stale_design_30_id"], case_a["cr17_96_id"]])
         )
+        elapsed = time.perf_counter() - start
         if flags_a is None:
-            return 1
+            specimens.append(SpecimenResult(
+                tier_id=DIFFICULTY_TIER_LIFECYCLE, specimen_id=case_a["answer_key"].mutation_id,
+                description=case_a["answer_key"].description, production_reasoning_path=CONSISTENCY_PATH,
+                corpus_version=CORPUS_VERSION, mutation_version=MUTATION_VERSION, model=model,
+                prompt_version=CONSISTENCY_PROMPT_VERSION,
+                ran=False, skipped_reason="No ANTHROPIC_API_KEY configured, or consistency check did not run.",
+            ))
+            return specimens
         print_flags(flags_a)
         result_a = evaluate(flags=flags_a, answer_key=[case_a["answer_key"]])
         print(f"Result: {result_a.summary()}")
-        all_ok &= not result_a.missed
+        specimens.append(SpecimenResult(
+            tier_id=DIFFICULTY_TIER_LIFECYCLE, specimen_id=case_a["answer_key"].mutation_id,
+            description=case_a["answer_key"].description, production_reasoning_path=CONSISTENCY_PATH,
+            corpus_version=CORPUS_VERSION, mutation_version=MUTATION_VERSION,
+            planted_condition=case_a["answer_key"].description,
+            expected_detection_type=case_a["answer_key"].mutation_kind,
+            expected_anchors=[case_a["answer_key"].location, case_a["answer_key"].secondary_location],
+            model=model, prompt_version=CONSISTENCY_PROMPT_VERSION,
+            caught=bool(result_a.caught), authority_supersession_correctness=bool(result_a.caught),
+            false_positives=result_a.confirmed_false_positives, unexpected_valid_discoveries=result_a.unplanted_and_unexplained,
+            model_call_count=1, latency_seconds=elapsed,
+        ))
 
         print("\n=== CASE B: contract resolves wording, physical evidence still fails ===")
         case_b = build_contract_vs_physical_project(store, "lifecycle-case-b", tmp_dir / "case_b")
+        start = time.perf_counter()
         flags_b = run_consistency_check(
             as_requirement_items(case_b["workspace"], [case_b["submittal_94_id"], case_b["cr17_96_id"]])
         )
+        elapsed = time.perf_counter() - start
         if flags_b is None:
-            return 1
+            specimens.append(SpecimenResult(
+                tier_id=DIFFICULTY_TIER_LIFECYCLE, specimen_id=case_b["answer_key"].mutation_id,
+                description=case_b["answer_key"].description, production_reasoning_path=CONSISTENCY_PATH,
+                corpus_version=CORPUS_VERSION, mutation_version=MUTATION_VERSION, model=model,
+                prompt_version=CONSISTENCY_PROMPT_VERSION,
+                ran=False, skipped_reason="No ANTHROPIC_API_KEY configured, or consistency check did not run.",
+            ))
+            return specimens
         print_flags(flags_b)
         result_b = evaluate(flags=flags_b, answer_key=[case_b["answer_key"]])
         print(f"Result: {result_b.summary()}")
@@ -193,19 +249,39 @@ def main() -> int:
             "CONTRACTUAL resolution (CR-17, 96h) from PHYSICAL verification (Submittal, 94h, still a "
             "real shortfall), rather than treating one as curing the other."
         )
-        all_ok &= not result_b.missed
+        specimens.append(SpecimenResult(
+            tier_id=DIFFICULTY_TIER_LIFECYCLE, specimen_id=case_b["answer_key"].mutation_id,
+            description=case_b["answer_key"].description, production_reasoning_path=CONSISTENCY_PATH,
+            corpus_version=CORPUS_VERSION, mutation_version=MUTATION_VERSION,
+            planted_condition=case_b["answer_key"].description,
+            expected_detection_type=case_b["answer_key"].mutation_kind,
+            expected_anchors=[case_b["answer_key"].location, case_b["answer_key"].secondary_location],
+            model=model, prompt_version=CONSISTENCY_PROMPT_VERSION,
+            caught=bool(result_b.caught), false_positives=result_b.confirmed_false_positives,
+            unexpected_valid_discoveries=result_b.unplanted_and_unexplained,
+            qualitative_note="Additionally read whether contractual resolution is correctly distinguished from physical verification.",
+            model_call_count=1, latency_seconds=elapsed,
+        ))
 
         print("\n=== CASE C: current state vs. preserved historical shortfall (reuses the clean chain) ===")
         commissioning = next(r for r in cw.requirements if r["id"] == clean["commissioning_98_id"])
         related_for_commissioning = gather_related_requirements(store, cw, commissioning)
+        start = time.perf_counter()
         result_c = ask(
             commissioning,
             "Is the fuel autonomy requirement currently satisfied? Was there ever a shortfall, and if so is it still unresolved?",
             related_requirements=related_for_commissioning or None,
         )
+        elapsed = time.perf_counter() - start
         if not result_c.ran:
             print(f"SKIPPED: {result_c.skipped_reason}")
-            return 1
+            specimens.append(SpecimenResult(
+                tier_id=DIFFICULTY_TIER_LIFECYCLE, specimen_id="006C-current-vs-historical",
+                description="Current state vs. preserved historical shortfall.", production_reasoning_path=INVESTIGATION_PATH,
+                corpus_version=CORPUS_VERSION, model=model, prompt_version=INVESTIGATION_PROMPT_VERSION,
+                ran=False, skipped_reason=result_c.skipped_reason,
+            ))
+            return specimens
         print(f"Assessment: {result_c.assessment}")
         print(f"flagged_stale_ids: {result_c.flagged_stale_ids}")
         ok_c = clean["submittal_94_id"] not in result_c.flagged_stale_ids
@@ -213,25 +289,48 @@ def main() -> int:
             "PASS" if ok_c else "FAIL",
             "- the historical 94h shortfall (now superseded by 98h commissioning) must NOT be flagged as a currently unresolved problem.",
         )
-        all_ok &= ok_c
+        specimens.append(SpecimenResult(
+            tier_id=DIFFICULTY_TIER_LIFECYCLE, specimen_id="006C-current-vs-historical",
+            description="Current state vs. preserved historical shortfall - reuses the clean chain.",
+            production_reasoning_path=INVESTIGATION_PATH, corpus_version=CORPUS_VERSION,
+            expected_anchors=[clean["commissioning_98_id"], clean["submittal_94_id"]],
+            model=model, prompt_version=INVESTIGATION_PROMPT_VERSION,
+            current_vs_historical_correctness=bool(ok_c),
+            false_positives=[] if ok_c else [clean["submittal_94_id"]],
+            model_call_count=1, latency_seconds=elapsed,
+        ))
 
         print("\n=== CASE D: risk migration across five stages, both perspectives (reuses the clean chain) ===")
         owner, db = clean["owner"], clean["design_builder"]
         stages = [
-            ("RFP (72h, ambiguous allocation)", clean["rfp_72_id"]),
-            ("Addendum (96h, revised)", clean["addendum_96_id"]),
-            ("CR-17 (96h, contractual)", clean["cr17_96_id"]),
-            ("Submittal (94h, shortfall)", clean["submittal_94_id"]),
-            ("Commissioning (98h, verified)", clean["commissioning_98_id"]),
+            ("006D-rfp", "RFP (72h, ambiguous allocation)", clean["rfp_72_id"]),
+            ("006D-addendum", "Addendum (96h, revised)", clean["addendum_96_id"]),
+            ("006D-cr17", "CR-17 (96h, contractual)", clean["cr17_96_id"]),
+            ("006D-submittal", "Submittal (94h, shortfall)", clean["submittal_94_id"]),
+            ("006D-commissioning", "Commissioning (98h, verified)", clean["commissioning_98_id"]),
         ]
         migration_question = "How should this be understood in terms of risk and opportunity for the party I represent, at this point in the project?"
-        for label, req_id in stages:
+        for specimen_id, label, req_id in stages:
             requirement = next(r for r in cw.requirements if r["id"] == req_id)
+            start = time.perf_counter()
             r_owner = ask(requirement, migration_question, represented_party=owner)
             r_db = ask(requirement, migration_question, represented_party=db)
+            elapsed = time.perf_counter() - start
             print(f"-- {label} --")
             print(f"  Owner: polarity={r_owner.risk_polarity} confidence={r_owner.risk_confidence}")
             print(f"  Design-Builder: polarity={r_db.risk_polarity} confidence={r_db.risk_confidence}")
+            specimens.append(SpecimenResult(
+                tier_id=DIFFICULTY_TIER_LIFECYCLE, specimen_id=specimen_id,
+                description=f"Risk migration stage: {label}.", production_reasoning_path=INVESTIGATION_PATH,
+                corpus_version=CORPUS_VERSION, expected_anchors=[req_id], model=model,
+                prompt_version=INVESTIGATION_PROMPT_VERSION, requires_qualitative_read=True,
+                qualitative_note=(
+                    f"Owner: {r_owner.risk_polarity} ({r_owner.risk_confidence}); "
+                    f"Design-Builder: {r_db.risk_polarity} ({r_db.risk_confidence}). "
+                    "Read across all five stages together to confirm genuine migration, not a fixed polarity."
+                ),
+                model_call_count=2, latency_seconds=elapsed,
+            ))
         print(
             "NOTE: qualitative - confirm polarity/magnitude genuinely SHIFTS across stages for each party "
             "(e.g. DB risk should rise sharply at Submittal and fall at Commissioning) without a forced "
@@ -245,6 +344,7 @@ def main() -> int:
         cr17_e = next(r for r in corpus_e["workspace"].requirements if r["id"] == corpus_e["cr17_96_id"])
         calc_60_e = next(r for r in corpus_e["workspace"].requirements if r["id"] == corpus_e["calc_60_id"])
         early_question = "Based on the design evidence available so far, will the fuel autonomy requirement be met?"
+        start = time.perf_counter()
         result_early = ask(
             cr17_e, early_question,
             related_requirements=[{
@@ -253,16 +353,26 @@ def main() -> int:
                 "relationship_type": "supports", "note": "60% design calculation",
             }],
         )
+        elapsed_early = time.perf_counter() - start
         if not result_early.ran:
             print(f"SKIPPED: {result_early.skipped_reason}")
-            return 1
+            specimens.append(SpecimenResult(
+                tier_id=DIFFICULTY_TIER_LIFECYCLE, specimen_id="006E-late-evidence-reversal",
+                description="Early (60%-calc) conclusion vs. later, submittal/correction/commissioning-informed conclusion.",
+                production_reasoning_path=INVESTIGATION_PATH, corpus_version=CORPUS_VERSION,
+                model=model, prompt_version=INVESTIGATION_PROMPT_VERSION,
+                ran=False, skipped_reason=result_early.skipped_reason,
+            ))
+            return specimens
         print(f"EARLY (as of 60% calc, snapshot {snapshot['id'][:8]}): {result_early.assessment}")
 
         corpus_e = extend_with_submittal(store, corpus_e, tmp_dir / "case_e")
         corpus_e = extend_with_correction_and_commissioning(store, corpus_e, tmp_dir / "case_e")
         cr17_e = next(r for r in corpus_e["workspace"].requirements if r["id"] == corpus_e["cr17_96_id"])
         related_now = gather_related_requirements(store, corpus_e["workspace"], cr17_e)
+        start = time.perf_counter()
         result_now = ask(cr17_e, early_question, related_requirements=related_now or None)
+        elapsed_now = time.perf_counter() - start
         print(f"NOW (after submittal + correction + commissioning): {result_now.assessment}")
         print(
             "PASS - both assessments are immutable, independently-recorded text (never rewritten in place); "
@@ -270,18 +380,36 @@ def main() -> int:
             "InvestigationStep's own append-only design (Snapshot alone would NOT preserve this - see "
             "its own documented ids-not-values limitation, proven in tests/test_lifecycle_tier.py)."
         )
+        specimens.append(SpecimenResult(
+            tier_id=DIFFICULTY_TIER_LIFECYCLE, specimen_id="006E-late-evidence-reversal",
+            description="Early (60%-calc) conclusion vs. later, submittal/correction/commissioning-informed conclusion.",
+            production_reasoning_path=INVESTIGATION_PATH, corpus_version=CORPUS_VERSION,
+            expected_anchors=[corpus_e["cr17_96_id"]], model=model, prompt_version=INVESTIGATION_PROMPT_VERSION,
+            requires_qualitative_read=True,
+            qualitative_note=f"EARLY: {result_early.assessment}\n\nNOW: {result_now.assessment}",
+            model_call_count=2, latency_seconds=elapsed_early + elapsed_now,
+        ))
 
         print("\n=== CASE F: missing lifecycle link ===")
         case_f = build_missing_corrective_link_project(store, "lifecycle-case-f", tmp_dir / "case_f")
         commissioning_f = next(r for r in case_f["workspace"].requirements if r["id"] == case_f["standalone_commissioning_id"])
+        start = time.perf_counter()
         result_f = ask(
             commissioning_f,
             "Walk me through how the fuel autonomy shortfall identified in the submittal was resolved to reach this commissioning result.",
             related_requirements=gather_related_requirements(store, case_f["workspace"], commissioning_f) or None,
         )
+        elapsed = time.perf_counter() - start
         if not result_f.ran:
             print(f"SKIPPED: {result_f.skipped_reason}")
-            return 1
+            specimens.append(SpecimenResult(
+                tier_id=DIFFICULTY_TIER_LIFECYCLE, specimen_id=case_f["answer_key"].mutation_id,
+                description=case_f["answer_key"].description, production_reasoning_path=INVESTIGATION_PATH,
+                corpus_version=CORPUS_VERSION, mutation_version=MUTATION_VERSION, model=model,
+                prompt_version=INVESTIGATION_PROMPT_VERSION,
+                ran=False, skipped_reason=result_f.skipped_reason,
+            ))
+            return specimens
         print(f"Assessment: {result_f.assessment}")
         print(f"needs_human_judgment: {result_f.needs_human_judgment}")
         print(f"open_questions: {result_f.open_questions}")
@@ -290,12 +418,29 @@ def main() -> int:
             "PASS" if ok_f else "FAIL",
             "- must surface the missing corrective-action link as a genuine gap, not invent a bridging story.",
         )
-        all_ok &= ok_f
+        specimens.append(SpecimenResult(
+            tier_id=DIFFICULTY_TIER_LIFECYCLE, specimen_id=case_f["answer_key"].mutation_id,
+            description=case_f["answer_key"].description, production_reasoning_path=INVESTIGATION_PATH,
+            corpus_version=CORPUS_VERSION, mutation_version=MUTATION_VERSION,
+            planted_condition=case_f["answer_key"].description,
+            expected_detection_type=case_f["answer_key"].mutation_kind,
+            expected_anchors=[case_f["answer_key"].location, case_f["answer_key"].secondary_location],
+            model=model, prompt_version=INVESTIGATION_PROMPT_VERSION,
+            uncertainty_handling=bool(ok_f), model_call_count=1, latency_seconds=elapsed,
+        ))
 
-        print(f"\n=== OVERALL (structurally-graded cases: A, C, F): {'PASS' if all_ok else 'FAIL'} ===")
-        return 0 if all_ok else 1
+        return specimens
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)
+
+
+def main() -> int:
+    specimens = run_tier()
+    structural = [s for s in specimens if not s.requires_qualitative_read]
+    verdicts = [s.passed() for s in structural]
+    all_ok = bool(structural) and all(v is not False for v in verdicts)
+    print(f"\n=== OVERALL (structurally-graded cases: reconstruction, A, B, C, F): {'PASS' if all_ok else 'FAIL'} ===")
+    return 0 if all_ok else 1
 
 
 if __name__ == "__main__":

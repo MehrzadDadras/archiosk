@@ -89,6 +89,14 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_TIMEOUT_SECONDS = 30.0
 
+# CLAUDE-P19: a real, bump-on-meaningful-change marker for the Golden
+# Laboratory regression suite's own "prompt/configuration version"
+# tracking - NOT a claim that every wording tweak needs a bump, only
+# changes that could plausibly shift real reasoning behavior (a new
+# guardrail, a new requested field). Last touched by CLAUDE-P17's
+# anti-zero-sum/perspective-neutral-obligation/ambiguity guardrails.
+INVESTIGATION_PROMPT_VERSION = "p17"
+
 
 @dataclass
 class RequirementInvestigationResult:

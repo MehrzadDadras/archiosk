@@ -32,14 +32,20 @@ govern" is a real reasoning question, not a contradiction-detection one.
 Requires a real ANTHROPIC_API_KEY in .env - without one this honestly
 reports SKIPPED rather than fabricating a result.
 
-Run:
+CLAUDE-P19: `run_tier()` is this tier's entry point for tools/self_test_
+runner.py's cross-tier regression runner - see tools/self_test_lab.py's
+own docstring for the convention. `main()` is a thin wrapper so
+standalone hand-running is unchanged:
+
     venv/Scripts/python.exe tools/self_test_lab_003_supersession.py
 """
 from __future__ import annotations
 
+import os
 import shutil
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -49,13 +55,18 @@ from dotenv import load_dotenv  # noqa: E402
 load_dotenv(REPO_ROOT / ".env", override=True)
 
 from services.case_workspace import CaseWorkspaceStore  # noqa: E402
-from services.requirement_investigation import investigate_requirement  # noqa: E402
+from services.requirement_investigation import INVESTIGATION_PROMPT_VERSION, investigate_requirement  # noqa: E402
 from tests.self_test.golden_corpus_supersession import build_supersession_golden_project  # noqa: E402
+from tests.self_test.mutation_schema import DIFFICULTY_TIER_SUPERSESSION  # noqa: E402
 from tests.self_test.mutations_supersession import (  # noqa: E402
     build_partial_supersession_project,
     build_stale_downstream_project,
 )
+from tests.self_test.run_record import SpecimenResult  # noqa: E402
 
+CORPUS_VERSION = "1.0"
+MUTATION_VERSION = "1.0"
+PRODUCTION_REASONING_PATH = "requirement_investigation.investigate_requirement"
 QUESTION = "Are all coordinated references to this Requirement's autonomy period currently consistent with what governs?"
 
 
@@ -87,7 +98,7 @@ def run_governance_check(workspace, current_id, original_id, appendix_id):
     )
 
 
-def report(label: str, result, expected_stale_ids: set[str], appendix_id: str, original_id: str) -> bool:
+def report(label: str, result, expected_stale_ids: set) -> bool:
     print(f"\n--- {label} ---")
     if not result.ran:
         print(f"SKIPPED: {result.skipped_reason}")
@@ -101,54 +112,78 @@ def report(label: str, result, expected_stale_ids: set[str], appendix_id: str, o
     else:
         print(f"FAIL: expected flagged_stale_ids={expected_stale_ids or '{}'}, got {set(result.flagged_stale_ids)}.")
         ok = False
-
-    if original_id in result.flagged_stale_ids:
-        print("FAIL: flagged the SUPERSEDED historical predecessor as a live conflict - false conflict bait not resolved.")
-        ok = False
-    else:
-        print("PASS: did not flag the superseded historical predecessor.")
-
     return ok
 
 
-def main() -> int:
+def run_tier() -> list[SpecimenResult]:
+    specimens: list[SpecimenResult] = []
+    model = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-6")
     tmp_dir = Path(tempfile.mkdtemp(prefix="self_test_lab_supersession_"))
-    all_ok = True
     try:
         store = CaseWorkspaceStore(tmp_dir)
 
         print("=== SCENARIO 1: clean baseline (Addendum correctly coordinated) ===")
         clean = build_supersession_golden_project(store, "supersession-clean", tmp_dir / "clean")
+        start = time.perf_counter()
         result = run_governance_check(
             clean["workspace"], clean["current_rfp_requirement_id"],
             clean["original_rfp_requirement_id"], clean["appendix_requirement_id"],
         )
+        elapsed = time.perf_counter() - start
         if not result.ran:
             print(f"SKIPPED: {result.skipped_reason}")
-            return 1
-        all_ok &= report(
-            "Clean baseline (expect: nothing flagged - this is Case B too)", result,
-            expected_stale_ids=set(), appendix_id=clean["appendix_requirement_id"],
-            original_id=clean["original_rfp_requirement_id"],
-        )
+            specimens.append(SpecimenResult(
+                tier_id=DIFFICULTY_TIER_SUPERSESSION, specimen_id="003-clean",
+                description="Clean baseline (Addendum correctly coordinated) - expect nothing flagged.",
+                production_reasoning_path=PRODUCTION_REASONING_PATH, corpus_version=CORPUS_VERSION,
+                model=model, prompt_version=INVESTIGATION_PROMPT_VERSION, ran=False, skipped_reason=result.skipped_reason,
+            ))
+            return specimens
+        ok_clean = report("Clean baseline (expect: nothing flagged - this is Case B too)", result, expected_stale_ids=set())
+        specimens.append(SpecimenResult(
+            tier_id=DIFFICULTY_TIER_SUPERSESSION, specimen_id="003-clean",
+            description="Clean baseline (Addendum correctly coordinated) - expect nothing flagged.",
+            production_reasoning_path=PRODUCTION_REASONING_PATH, corpus_version=CORPUS_VERSION,
+            expected_anchors=[clean["current_rfp_requirement_id"]], model=model, prompt_version=INVESTIGATION_PROMPT_VERSION,
+            authority_supersession_correctness=ok_clean,
+            false_positives=list(result.flagged_stale_ids) if not ok_clean else [],
+            model_call_count=1, latency_seconds=elapsed,
+        ))
 
         print("\n=== SCENARIO A: stale downstream reference ===")
         stale = build_stale_downstream_project(store, "supersession-stale-downstream", tmp_dir / "stale")
+        start = time.perf_counter()
         result_a = run_governance_check(
             stale["workspace"], stale["current_rfp_requirement_id"],
             stale["original_rfp_requirement_id"], stale["appendix_requirement_id"],
         )
-        all_ok &= report(
+        elapsed = time.perf_counter() - start
+        ok_a = report(
             "Stale downstream reference (expect: Appendix flagged, historical RFP not)", result_a,
-            expected_stale_ids={stale["appendix_requirement_id"]}, appendix_id=stale["appendix_requirement_id"],
-            original_id=stale["original_rfp_requirement_id"],
+            expected_stale_ids={stale["appendix_requirement_id"]},
         )
+        historical_not_flagged = stale["original_rfp_requirement_id"] not in result_a.flagged_stale_ids
+        specimens.append(SpecimenResult(
+            tier_id=DIFFICULTY_TIER_SUPERSESSION, specimen_id="MUT-003A-stale-downstream-reference",
+            description="Addendum revised the autonomy period; the Appendix was never updated to match.",
+            production_reasoning_path=PRODUCTION_REASONING_PATH, corpus_version=CORPUS_VERSION,
+            mutation_version=MUTATION_VERSION,
+            planted_condition="Appendix reference left stale after the Addendum revised the governing figure.",
+            expected_detection_type="stale_downstream_reference",
+            expected_anchors=[stale["appendix_requirement_id"]], model=model, prompt_version=INVESTIGATION_PROMPT_VERSION,
+            caught=ok_a, authority_supersession_correctness=historical_not_flagged,
+            false_positives=(
+                [stale["original_rfp_requirement_id"]] if not historical_not_flagged else []
+            ),
+            model_call_count=1, latency_seconds=elapsed,
+        ))
 
         print("\n=== SCENARIO C: partial supersession of a compound requirement (qualitative) ===")
         partial = build_partial_supersession_project(store, "supersession-partial", tmp_dir / "partial")
         workspace = partial["workspace"]
         current_requirement = next(r for r in workspace.requirements if r["id"] == partial["current_requirement_id"])
         original_requirement = next(r for r in workspace.requirements if r["id"] == partial["original_requirement_id"])
+        start = time.perf_counter()
         result_c = investigate_requirement(
             question="What changed in this revision, and does the service-life commitment still apply?",
             requirement=current_requirement, adjudication_history=[],
@@ -160,8 +195,21 @@ def main() -> int:
                 "note": "the immediate predecessor this Requirement's Addendum superseded",
             }],
         )
+        elapsed = time.perf_counter() - start
+        specimen_c = SpecimenResult(
+            tier_id=DIFFICULTY_TIER_SUPERSESSION, specimen_id="MUT-003C-partial-supersession",
+            description="A compound requirement is partially revised; clause (b)'s unrelated commitment must still govern.",
+            production_reasoning_path=PRODUCTION_REASONING_PATH, corpus_version=CORPUS_VERSION,
+            mutation_version=MUTATION_VERSION,
+            planted_condition="Only clause (a) was revised by the Addendum; clause (b)'s 50-year service-life commitment was never touched.",
+            expected_detection_type="partial_supersession_of_compound_requirement",
+            expected_anchors=[partial["current_requirement_id"]], model=model, prompt_version=INVESTIGATION_PROMPT_VERSION,
+            requires_qualitative_read=True, model_call_count=1, latency_seconds=elapsed,
+        )
         if not result_c.ran:
             print(f"SKIPPED: {result_c.skipped_reason}")
+            specimen_c.ran = False
+            specimen_c.skipped_reason = result_c.skipped_reason
         else:
             print(f"Assessment: {result_c.assessment}")
             mentions_service_life = "50-year" in result_c.assessment or "service life" in result_c.assessment.lower()
@@ -174,11 +222,21 @@ def main() -> int:
             )
             if not mentions_service_life or claims_whole_thing_superseded:
                 print("FLAG FOR HUMAN REVIEW: assessment may not have correctly handled the partial supersession.")
+            specimen_c.qualitative_note = result_c.assessment
+        specimens.append(specimen_c)
 
-        print(f"\n=== OVERALL (Scenarios 1 and A, structurally graded): {'PASS' if all_ok else 'FAIL'} ===")
-        return 0 if all_ok else 1
+        return specimens
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)
+
+
+def main() -> int:
+    specimens = run_tier()
+    structural = [s for s in specimens if not s.requires_qualitative_read]
+    verdicts = [s.passed() for s in structural]
+    if not structural or all(v is None for v in verdicts):
+        return 1
+    return 0 if all(v is not False for v in verdicts) else 1
 
 
 if __name__ == "__main__":
