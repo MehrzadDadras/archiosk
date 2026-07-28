@@ -36,6 +36,7 @@ from services.case_workspace import (
     ANALYSIS_TRIGGER_USER_INITIATED,
     AUTONOMOUS_BRANCH_CONFIDENCE_THRESHOLD,
     INVESTIGATION_STEP_KIND_REQUIREMENT_INVESTIGATION,
+    OBJECT_KIND_REQUIREMENT,
     PERSPECTIVE_ORIGIN_MACHINE,
     AnalysisTrigger,
     CaseWorkspaceError,
@@ -376,9 +377,10 @@ def _handle_investigate_requirement(
     # deterministic (see requirement_evidence/requirement_adjudications_
     # for, both called unconditionally above, same for every question).
     evidence_requested = [
-        "This Requirement's own recorded fields (text, classification, subject domain)",
+        "This Requirement's own recorded fields (text, classification, subject domain, status)",
         "Full adjudication history for this Requirement",
         "Findings/Relationships/AcceptedKnowledge cited by its latest adjudication",
+        "Supersession neighbors (predecessor/current governing successor) and direct Relationships",
     ]
     evidence_examined_ids = {
         "adjudication_ids": [a["id"] for a in adjudication_history],
@@ -392,12 +394,56 @@ def _handle_investigate_requirement(
     # nothing risk-related, identical to before this existed.
     represented_party = store.represented_party_for(workspace, reviewer)
 
+    # CLAUDE-P15/P16: gathered for EVERY real investigation, not only
+    # when a test supplies it - this is the production evidence path,
+    # not a benchmark-only enrichment. Supersession neighbors (what this
+    # superseded, what superseded this) and direct Relationships (e.g.
+    # "qualifies") are both real, already-governed connections this
+    # Requirement has - reusing store.current_requirement_for/
+    # requirement_predecessor/relationships_for, never a new lookup.
+    related_requirements = []
+    if requirement["status"] == "superseded":
+        current = store.current_requirement_for(workspace, requirement["id"])
+        if current is not None and current["id"] != requirement["id"]:
+            related_requirements.append({
+                "id": current["id"],
+                "original_requirement_identifier": current["original_requirement_identifier"],
+                "text_reference": current["text_reference"], "status": current["status"],
+                "relationship_type": "supersedes_this", "note": "the current governing successor",
+            })
+    predecessor = store.requirement_predecessor(workspace, requirement["id"])
+    if predecessor is not None:
+        related_requirements.append({
+            "id": predecessor["id"],
+            "original_requirement_identifier": predecessor["original_requirement_identifier"],
+            "text_reference": predecessor["text_reference"], "status": predecessor["status"],
+            "relationship_type": "superseded_by_this",
+            "note": "the immediate predecessor this Requirement's own revision superseded",
+        })
+    for rel in store.relationships_for(workspace, OBJECT_KIND_REQUIREMENT, requirement["id"]):
+        other_is_from = rel["to_id"] == requirement["id"]
+        other_type = rel["from_type"] if other_is_from else rel["to_type"]
+        other_id = rel["from_id"] if other_is_from else rel["to_id"]
+        if other_type != OBJECT_KIND_REQUIREMENT:
+            continue
+        other = next((r for r in workspace.requirements if r["id"] == other_id), None)
+        if other is None:
+            continue
+        related_requirements.append({
+            "id": other["id"], "original_requirement_identifier": other["original_requirement_identifier"],
+            "text_reference": other["text_reference"], "status": other["status"],
+            "relationship_type": rel["relationship_type"],
+            "note": f"connected via a real, registered '{rel['relationship_type']}' Relationship",
+        })
+    evidence_examined_ids["related_requirement_ids"] = [r["id"] for r in related_requirements]
+
     result = investigate_requirement(
         question=text,
         requirement=requirement,
         adjudication_history=adjudication_history,
         evidence=evidence,
         represented_party=represented_party,
+        related_requirements=related_requirements or None,
     )
 
     if not result.ran:

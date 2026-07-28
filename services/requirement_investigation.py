@@ -55,6 +55,16 @@ currently governs elsewhere is one. Reuses CaseWorkspaceStore.
 current_requirement_for/requirement_predecessor to resolve which
 requirements are actually relevant - never a new supersession-walking
 mechanism.
+
+CLAUDE-P16: `related_requirements` entries may now also carry a real
+`relationship_type` (from CaseWorkspaceStore.relationships_for, an
+existing, previously-unused-here method - not a new lookup mechanism)
+- e.g. "qualifies" - so the model can reason about a genuine constraint
+or exception relationship between two governed Requirements, not just
+their independent texts. conversation_interpreter.py now gathers this
+automatically for every real investigation (Supersession neighbors and
+direct Relationships alike), not only when a test explicitly supplies
+it - the production path, not a benchmark-only enrichment.
 """
 from __future__ import annotations
 
@@ -249,8 +259,9 @@ def _build_prompt(
         )
         for related in related_requirements:
             note = f" ({related['note']})" if related.get("note") else ""
+            rel_type = f" [{related['relationship_type']}]" if related.get("relationship_type") else ""
             lines.append(
-                f"- [{related['id']}] {related.get('original_requirement_identifier', '')} "
+                f"- [{related['id']}] {related.get('original_requirement_identifier', '')}{rel_type} "
                 f"(status: {related.get('status', 'active')}){note}: {related.get('text_reference', '')}"
             )
 

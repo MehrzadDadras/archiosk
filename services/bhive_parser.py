@@ -590,13 +590,50 @@ class BHiveParser:
 
     @staticmethod
     def _build_consistency_prompt(requirements: list[RequirementItem]) -> str:
+        # CLAUDE-P16: extended beyond numeric/schedule contradictions to
+        # cover genuinely SEMANTIC/operational conflicts (two individually
+        # reasonable obligations that cannot both govern as written, or a
+        # constraint that changes what another requirement effectively
+        # permits) - a real production gap found while building the
+        # semantic-conflict smoke-test tier, fixed here rather than only
+        # inside the benchmark, since every real ingestion's consistency
+        # check benefits from it. The paraphrase/drift guardrails exist
+        # because "different wording" and "different number" are both
+        # weaker signals than "different obligation" - this prompt
+        # previously had no guardrail against manufacturing a false
+        # positive from wording alone, or missing a real one hidden
+        # behind matching wording/numbers.
         lines = "\n".join(f"{r.id}: [{r.category}] {r.text}" for r in requirements)
         return (
             "You are reviewing a procurement document's extracted requirements "
-            "for internal contradictions — e.g. a technical specification that "
-            "cannot physically be satisfied by a scheduled milestone deadline, "
-            "a budget figure that conflicts with the stated scope, or "
-            "compliance terms that conflict with the schedule.\n"
+            "for internal contradictions. Consider BOTH kinds:\n"
+            "1. Numeric/schedule/scope contradictions - e.g. a technical "
+            "specification that cannot physically be satisfied by a scheduled "
+            "milestone deadline, a budget figure that conflicts with the stated "
+            "scope, or compliance terms that conflict with the schedule.\n"
+            "2. Semantic/operational contradictions - two individually "
+            "reasonable requirements that cannot BOTH govern as written (e.g. "
+            "one requires a system remain continuously operational while "
+            "another requires the same equipment shut down under the same "
+            "condition), or a constraint/qualification elsewhere that changes "
+            "what a requirement effectively permits in practice (e.g. an "
+            "'unrestricted access' requirement narrowed by a separate access-"
+            "control requirement) - unless a third requirement explicitly "
+            "provides the exception or mechanism that reconciles them, in "
+            "which case there is no contradiction to report.\n\n"
+            "Two guardrails against false positives:\n"
+            "- Different WORDING for the same requirement is not a "
+            "contradiction - do not flag two requirements merely because "
+            "project-native terminology differs; judge whether the actual "
+            "obligation differs, not the vocabulary.\n"
+            "- Do not assume two statements are equivalent just because they "
+            "share the same number or subject - a requirement can restate a "
+            "figure while changing what is actually being measured or "
+            "required (e.g. 'maintain operation for 96 hours' is a "
+            "performance obligation; 'provide capacity nominally equivalent "
+            "to 96 hours' is a design-basis estimate - not the same "
+            "obligation despite the shared number). Flag this kind of drift "
+            "as a contradiction if it changes what's actually required.\n\n"
             "Respond ONLY with a JSON array of objects, one per contradiction "
             'found: [{"a": "<requirement id>", "b": "<requirement id>", '
             '"explanation": "<one concrete sentence>"}]. If there are no '
