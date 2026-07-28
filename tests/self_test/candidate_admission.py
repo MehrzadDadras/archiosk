@@ -26,7 +26,12 @@ from typing import Optional
 
 
 def extract_ceiling_ppm(text: str) -> Optional[float]:
-    match = re.search(r"up to (\d+(?:\.\d+)?)\s*ppm", text)
+    """Matches both "rated for... up to X ppm" (a stated ceiling/floor
+    figure) and "shall not be exposed to... exceeding X ppm" (an explicit
+    exposure-prohibition ceiling) - CLAUDE-P22 needed the second form once
+    the revised candidate's mutation was rewritten in unmistakable
+    ceiling/prohibition language rather than ambiguous "rated for" phrasing."""
+    match = re.search(r"(?:up to|exceed(?:ing)?)\s+(\d+(?:\.\d+)?)\s*ppm", text)
     return float(match.group(1)) if match else None
 
 
@@ -57,6 +62,17 @@ class DeterministicCheckResult:
 
 
 def deterministic_ceiling_check(mutated_text: str, reference_text: str) -> DeterministicCheckResult:
+    """
+    Honest scope limit (found while reviewing CLAUDE-P22's revised
+    candidate, worth stating plainly rather than overselling): this
+    confirms the NUMERIC PREMISE two clauses state (a lower figure here,
+    a higher one there) - it cannot verify an OPERATIONAL contradiction
+    that hinges on different wording entirely (e.g. one clause mandating
+    "isolate/bypass" during an event the other clause mandates
+    "continuous service" through). That kind of conflict is a genuine
+    reading question the deterministic check was never going to settle -
+    only the adversarial challenge and manual review can.
+    """
     mutated_ceiling = extract_ceiling_ppm(mutated_text)
     reference_ceiling = extract_ceiling_ppm(reference_text)
     mutated_ph = extract_ph_range(mutated_text)

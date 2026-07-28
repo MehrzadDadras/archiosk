@@ -41,9 +41,12 @@ logger = logging.getLogger(__name__)
 # CLAUDE-P19: a real, bump-on-meaningful-change marker for the Golden
 # Laboratory regression suite's own "prompt/configuration version"
 # tracking - see requirement_investigation.py's INVESTIGATION_PROMPT_
-# VERSION for the same convention. Last touched by CLAUDE-P16's semantic/
-# operational-conflict and paraphrase/drift guardrails.
-CONSISTENCY_PROMPT_VERSION = "p16"
+# VERSION for the same convention. Last touched by CLAUDE-P22's fix
+# moving the requirements list before the JSON-only formatting
+# instruction (previously last-read content was the requirements text,
+# not the format instruction, causing prose-before-JSON parse failures
+# under harder multi-clause cases).
+CONSISTENCY_PROMPT_VERSION = "p22"
 
 # How long to wait on a single classification batch before giving up on it.
 DEFAULT_CLASSIFY_TIMEOUT_SECONDS = 30.0
@@ -610,10 +613,24 @@ class BHiveParser:
         # previously had no guardrail against manufacturing a false
         # positive from wording alone, or missing a real one hidden
         # behind matching wording/numbers.
+        # CLAUDE-P22: the requirements list used to come AFTER the "Respond
+        # ONLY with JSON" instruction - meaning the actual content to reason
+        # about was the LAST thing in the prompt, not the formatting
+        # instruction. Under a harder, multi-clause operational-contradiction
+        # case (found while admission-reviewing a revised candidate
+        # specimen), the model reliably started answering in prose before
+        # emitting the JSON array, breaking parsing outright. Moving the
+        # requirements list before the reasoning guidance and restating the
+        # JSON-only instruction as the LAST thing in the prompt is the
+        # standard fix for this class of instruction-adherence issue -
+        # every real ingestion's consistency check benefits, not just this
+        # one specimen.
         lines = "\n".join(f"{r.id}: [{r.category}] {r.text}" for r in requirements)
         return (
             "You are reviewing a procurement document's extracted requirements "
-            "for internal contradictions. Consider BOTH kinds:\n"
+            "for internal contradictions.\n\n"
+            f"{lines}\n\n"
+            "Consider BOTH kinds of contradiction:\n"
             "1. Numeric/schedule/scope contradictions - e.g. a technical "
             "specification that cannot physically be satisfied by a scheduled "
             "milestone deadline, a budget figure that conflicts with the stated "
@@ -645,8 +662,8 @@ class BHiveParser:
             'found: [{"a": "<requirement id>", "b": "<requirement id>", '
             '"explanation": "<one concrete sentence>"}]. If there are no '
             "contradictions, respond with an empty JSON array: []. No prose, "
-            "no markdown fences.\n\n"
-            f"{lines}"
+            "no reasoning, no markdown fences - the JSON array must be the "
+            "entire response."
         )
 
     # -- stage 5: assemble (milestones) --------------------------------------

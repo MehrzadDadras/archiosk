@@ -27,6 +27,13 @@ class ExtractionTests(unittest.TestCase):
     def test_extract_ceiling_ppm_absent(self):
         self.assertIsNone(extract_ceiling_ppm("no ppm figure here"))
 
+    def test_extract_ceiling_ppm_exceeding_phrasing(self):
+        # CLAUDE-P22: unambiguous exposure-prohibition wording, not "rated for up to X".
+        self.assertEqual(extract_ceiling_ppm("shall not be exposed to concentrations exceeding 3.0 ppm"), 3.0)
+
+    def test_extract_ceiling_ppm_exceed_phrasing(self):
+        self.assertEqual(extract_ceiling_ppm("shall not be used where concentration may exceed 3.0 ppm"), 3.0)
+
     def test_extract_ph_range_within_the_range_of_phrasing(self):
         self.assertEqual(extract_ph_range("pH values within the range of 7.2 to 7.6"), (7.2, 7.6))
 

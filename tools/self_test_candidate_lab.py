@@ -189,12 +189,21 @@ def main() -> int:
             return 1
         print_flags(mutated_flags)
 
+        # CLAUDE-P22: the candidate's own generated answer key may name a
+        # SECOND anchor (the requirement the mutation actually conflicts
+        # with) via reference_identifier - optional and backward-
+        # compatible, since the original CLAUDE-P20 candidate never had
+        # this field and must be preserved unchanged, never retrofitted.
+        reference_identifier = candidate["proposed_mutation"].get("reference_identifier")
+        secondary_location = mutated_ids.get(reference_identifier) if reference_identifier else None
+
         answer_key = PlantedMutation(
             mutation_id=f"CANDIDATE-{candidate['candidate_id'][:8]}",
             mutation_kind=candidate["proposed_mutation"]["mutation_kind"],
             difficulty_tier=candidate.get("difficulty_tier", DIFFICULTY_TIER_OBVIOUS),
             description=candidate["proposed_mutation"]["description"],
             location=mutated_ids[target_identifier],
+            secondary_location=secondary_location,
             expected_detection=candidate["proposed_answer_key"]["expected_detection"],
             non_defects=candidate["proposed_answer_key"].get("non_defects", []),
         )
