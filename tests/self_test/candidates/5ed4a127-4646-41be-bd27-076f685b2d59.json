@@ -1,0 +1,61 @@
+{
+  "candidate_id": "5ed4a127-4646-41be-bd27-076f685b2d59",
+  "generated_at": "2026-07-28T08:48:30.765155+00:00",
+  "generator_model": "claude-sonnet-4-6",
+  "difficulty_tier": "obvious",
+  "domain_narrative": "A municipal aquatic center project requires the design and installation of a closed-loop pool water treatment and recirculation system serving three pools: a 50-meter competition pool, a leisure pool, and a children's splash pool. The requirements govern turnover rates, chemical dosing, filtration media, and flow balancing to ensure water quality and patron safety across all three pools simultaneously. All requirements were developed jointly by the mechanical engineer of record and the local public health authority and are intended to be read together.",
+  "requirements": [
+    {
+      "identifier": "SPEC-22-41-01",
+      "source_name": "Aquatic Mechanical Systems Specification, Section 22 41 01",
+      "text": "The recirculation system shall achieve a complete water turnover for the 50-meter competition pool within a maximum of 6 hours, for the leisure pool within a maximum of 4 hours, and for the children's splash pool within a maximum of 2 hours, with all three pools operating simultaneously at design flow rates."
+    },
+    {
+      "identifier": "SPEC-22-41-02",
+      "source_name": "Aquatic Mechanical Systems Specification, Section 22 41 02",
+      "text": "Each pool shall be served by a dedicated variable-speed recirculation pump sized to deliver no less than 110% of the flow rate required to achieve the turnover periods stated in SPEC-22-41-01, thereby providing a minimum 10% hydraulic reserve under simultaneous full-operation conditions."
+    },
+    {
+      "identifier": "SPEC-22-41-03",
+      "source_name": "Aquatic Mechanical Systems Specification, Section 22 41 03",
+      "text": "Filtration for each pool shall be provided by pressure sand filters loaded with NSF/ANSI 50-certified filter media. Filter vessel sizing shall be selected so that the design flow rate through the media does not exceed 15 gallons per minute per square foot of filter bed area for any pool under the conditions defined in SPEC-22-41-01."
+    },
+    {
+      "identifier": "SPEC-22-41-04",
+      "source_name": "Aquatic Mechanical Systems Specification, Section 22 41 04",
+      "text": "Automated chemical dosing equipment shall maintain free chlorine residual between 1.0 ppm and 3.0 ppm and pH between 7.2 and 7.6 in each pool at all times during occupied hours. Dosing system sensors shall be installed on the return line of each pool's recirculation loop, downstream of the filtration vessels described in SPEC-22-41-03 and upstream of the pool inlets."
+    },
+    {
+      "identifier": "SPEC-22-41-05",
+      "source_name": "Aquatic Mechanical Systems Specification, Section 22 41 05",
+      "text": "A common surge tank with a minimum working volume equal to 10% of the combined water volume of all three pools shall be provided. The surge tank shall be hydraulically connected to the return side of each pool's recirculation loop and shall serve as the suction source for the recirculation pumps specified in SPEC-22-41-02, ensuring pump suction is never drawn directly from pool floor or wall fittings."
+    },
+    {
+      "identifier": "SPEC-22-41-06",
+      "source_name": "Aquatic Mechanical Systems Specification, Section 22 41 06",
+      "text": "All pipe, fittings, valves, and pump casings in contact with pool water shall be fabricated from or lined with materials rated for continuous service in chlorinated water at free chlorine concentrations up to 5.0 ppm and pH values within the range of 7.0 to 8.0, consistent with the chemical parameters maintained under SPEC-22-41-04."
+    }
+  ],
+  "proposed_mutation": {
+    "target_identifier": "SPEC-22-41-04",
+    "mutated_text": "Automated chemical dosing equipment shall maintain free chlorine residual between 1.0 ppm and 3.0 ppm and pH between 7.2 and 7.6 in each pool at all times during occupied hours. Dosing system sensors shall be installed on the return line of each pool's recirculation loop, downstream of the filtration vessels described in SPEC-22-41-03 and upstream of the pool inlets. All wetted components of the dosing system shall be rated for continuous service at free chlorine concentrations up to 3.0 ppm and pH values within the range of 7.2 to 7.6.",
+    "mutation_kind": "numerical_contradiction",
+    "description": "SPEC-22-41-04 now specifies that dosing system wetted components must be rated for chlorine up to only 3.0 ppm and pH 7.2\u20137.6. However, SPEC-22-41-06 requires ALL pipe, fittings, valves, and pump casings in contact with pool water to be rated for continuous service at free chlorine concentrations up to 5.0 ppm and pH 7.0\u20138.0. The dosing system components are in contact with pool water and fall under the material scope of SPEC-22-41-06, creating a direct numerical contradiction: SPEC-22-41-04 demands rating only to 3.0 ppm / pH 7.2\u20137.6 while SPEC-22-41-06 demands rating to 5.0 ppm / pH 7.0\u20138.0 for the same components. A reviewer cannot simultaneously satisfy both requirements with a single material selection."
+  },
+  "proposed_answer_key": {
+    "expected_detection": "A careful reviewer should flag that SPEC-22-41-04 (as mutated) imposes a wetted-component chlorine rating ceiling of 3.0 ppm and a pH range of 7.2\u20137.6 for the dosing system, while SPEC-22-41-06 mandates a rating of up to 5.0 ppm and pH 7.0\u20138.0 for all components in contact with pool water. Because dosing system components are in contact with pool water, the two requirements are irreconcilable: the material specification in SPEC-22-41-04 is narrower and directly contradicts the broader mandatory rating in SPEC-22-41-06.",
+    "non_defects": [
+      "SPEC-22-41-01: Defines turnover periods only; no chemical or material content. No conflict introduced.",
+      "SPEC-22-41-02: Addresses pump sizing as a percentage of design flow rate; no chemical or material content. No conflict introduced.",
+      "SPEC-22-41-03: Addresses filter media type and bed loading rate; no chemical or material content. No conflict introduced.",
+      "SPEC-22-41-05: Addresses surge tank volume and hydraulic connection; no chemical or material content. No conflict introduced.",
+      "SPEC-22-41-06: Unchanged. It is the requirement that the mutated SPEC-22-41-04 now contradicts, but SPEC-22-41-06 itself was not altered and remains internally consistent with all other unchanged requirements."
+    ]
+  },
+  "validation_status": "lab_run_completed",
+  "lab_run_summary": {
+    "clean_stage_flags": 0,
+    "mutation_caught": true,
+    "confirmed_false_positives": 0
+  }
+}
