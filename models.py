@@ -52,6 +52,13 @@ class User(db.Model):
     password_hash = db.Column(db.String(255), nullable=False)
     role = db.Column(db.String(20), nullable=False, default=ROLE_READ_ONLY)
     created_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    # CLAUDE-P27-B: a suspended account can't sign in (services.auth.
+    # check_credentials) but is otherwise left alone -- no data touched,
+    # no cascading effect on projects/cases, reversible by flipping this
+    # back. Defaults True so every pre-existing and newly-created account
+    # is unaffected until an operator explicitly suspends one via
+    # tools/create_credentials.py --suspend.
+    is_active = db.Column(db.Boolean, nullable=False, default=True)
     # Nullable -- every account provisioned before CLAUDE-P28 (password
     # reset) lacks one; SQLite's UNIQUE constraint permits any number of
     # NULL rows, so this doesn't collide across those legacy accounts.

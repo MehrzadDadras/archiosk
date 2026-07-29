@@ -21,6 +21,13 @@ that already works fine day-to-day):
 
     python tools/create_credentials.py --username admin --email you@example.com --keep-password
 
+To suspend/re-activate an EXISTING account (CLAUDE-P27-B) -- it can no
+longer sign in while suspended, nothing else about it is touched or
+deleted:
+
+    python tools/create_credentials.py --username jdoe --suspend
+    python tools/create_credentials.py --username jdoe --activate
+
 Treat every non-primary account (a QA/reader/workspacetester-style
 account) as development/test unless its purpose is proven otherwise --
 never attach a real person's email to one "just because the field
@@ -127,7 +134,20 @@ def main(argv: list[str] | None = None) -> int:
             "doesn't exist yet (a brand-new account always needs a password)."
         ),
     )
+    active_group = parser.add_mutually_exclusive_group()
+    active_group.add_argument(
+        "--suspend", action="store_true",
+        help="Suspend an EXISTING account -- it can no longer sign in, nothing else is touched.",
+    )
+    active_group.add_argument(
+        "--activate", action="store_true",
+        help="Re-activate a previously --suspend'd account.",
+    )
     args = parser.parse_args(argv)
+
+    if (args.suspend or args.activate) and args.username is None:
+        print("--suspend/--activate require --username (an existing account).", file=sys.stderr)
+        return 1
 
     username = args.username or input("Username: ").strip()
     if not username:
@@ -144,9 +164,13 @@ def main(argv: list[str] | None = None) -> int:
         if args.keep_password and existing is None:
             print(f"No existing user {username!r} -- --keep-password requires an account that already exists.", file=sys.stderr)
             return 1
+        if (args.suspend or args.activate) and existing is None:
+            flag = "--suspend" if args.suspend else "--activate"
+            print(f"No existing user {username!r} -- {flag} requires an account that already exists.", file=sys.stderr)
+            return 1
 
         password = None
-        if not args.keep_password:
+        if not args.keep_password and not args.suspend and not args.activate:
             password = getpass.getpass("Password: ")
             confirm = getpass.getpass("Confirm password: ")
             if not password:
@@ -197,12 +221,19 @@ def main(argv: list[str] | None = None) -> int:
                     return 1
             user.email = candidate_email
 
+        if args.suspend:
+            user.is_active = False
+        elif args.activate:
+            user.is_active = True
+
         db.session.commit()
 
         role_for_message = user.role
+        active_for_message = user.is_active
         password_note = "password unchanged" if password is None else "password updated"
 
-    print(f"\n{verb} user {username!r} -- role: {role_for_message!r}, {password_note}.")
+    print(f"\n{verb} user {username!r} -- role: {role_for_message!r}, "
+          f"active: {active_for_message!r}, {password_note}.")
     if args.email is not None:
         print(f"Email set to {args.email.strip().lower() or None!r}.")
     if generated_secret:

@@ -74,6 +74,7 @@ def _register_database(app: Flask) -> None:
         # query.
         _migrate_users_email_column(app)
         _migrate_users_email_case_insensitive_index(app)
+        _migrate_users_is_active_column(app)
 
 
 def _migrate_users_email_column(app: Flask) -> None:
@@ -160,6 +161,32 @@ def _migrate_users_email_case_insensitive_index(app: Flask) -> None:
         if existing_sql:
             conn.execute(text("DROP INDEX ix_users_email"))
         conn.execute(text("CREATE UNIQUE INDEX ix_users_email ON users (email COLLATE NOCASE)"))
+
+
+def _migrate_users_is_active_column(app: Flask) -> None:
+    """
+    CLAUDE-P27-B: same column-presence-check pattern as
+    _migrate_users_email_column above -- adds `users.is_active` in place,
+    defaulted True, if it's missing. A fresh install's create_all()
+    already has it (models.py); an existing pre-P27-B database gets
+    exactly one ALTER, once, and every boot after that no-ops. SQLite's
+    ALTER TABLE ADD COLUMN requires a constant DEFAULT to satisfy the new
+    NOT NULL on existing rows -- `1` (true), matching every existing
+    account being unaffected until explicitly suspended.
+    """
+    from sqlalchemy import inspect, text
+
+    from models import db
+
+    inspector = inspect(db.engine)
+    if "users" not in inspector.get_table_names():
+        return
+    if "is_active" in {col["name"] for col in inspector.get_columns("users")}:
+        return
+
+    app.logger.info("Migrating 'users' table: adding missing 'is_active' column.")
+    with db.engine.begin() as conn:
+        conn.execute(text("ALTER TABLE users ADD COLUMN is_active BOOLEAN NOT NULL DEFAULT 1"))
 
 
 def _validate_production_config(app: Flask, config_cls) -> None:

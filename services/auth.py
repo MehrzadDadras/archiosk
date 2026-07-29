@@ -38,10 +38,17 @@ def check_credentials(username: str, password: str) -> Optional[User]:
     """Look up `username` and verify `password` against its stored hash.
 
     Returns the matching User on success, None otherwise -- deliberately
-    generic, doesn't distinguish "no such user" from "wrong password".
+    generic, doesn't distinguish "no such user", "wrong password", or
+    (CLAUDE-P27-B) "suspended account". A suspended user gets the exact
+    same login-page message as a wrong password, not a distinct
+    "your account is suspended" message -- consistent with this
+    module's existing refusal to reveal account state beyond
+    authenticated/not.
     """
     user = User.query.filter_by(username=username).first()
     if user is None or not check_password_hash(user.password_hash, password):
+        return None
+    if not user.is_active:
         return None
     return user
 
