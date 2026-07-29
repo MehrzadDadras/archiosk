@@ -71,6 +71,7 @@ def _register_database(app: Flask) -> None:
         # is reachable, so this always executes ahead of the first login
         # query.
         _migrate_users_email_column(app)
+        _migrate_users_email_case_insensitive_index(app)
 
 
 def _migrate_users_email_column(app: Flask) -> None:
@@ -103,7 +104,60 @@ def _migrate_users_email_column(app: Flask) -> None:
         # fresh install (verified against a fresh create_all() output) --
         # a later fresh install and a migrated old one end up with an
         # identical schema, not two different paths to the same effect.
+        # Not yet case-insensitive -- _migrate_users_email_case_
+        # insensitive_index (below) fixes that separately, since
+        # models.py didn't declare COLLATE NOCASE until CLAUDE-P30.
         conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_users_email ON users (email)"))
+
+
+def _migrate_users_email_case_insensitive_index(app: Flask) -> None:
+    """
+    CLAUDE-P30: the UNIQUE index on `users.email` (created either just
+    above, or by create_all() on a database old enough to predate this
+    function) is case-sensitive by default -- 'Admin@x.com' and
+    'admin@x.com' could each exist as a different row while being the
+    same real-world identity, which would make password-reset's email
+    lookup (services/password_reset.py's _find_user_by_email, itself
+    already case-insensitive) genuinely AMBIGUOUS between two accounts,
+    not merely inconvenient. models.py's User.email column now declares
+    COLLATE NOCASE, so a truly fresh install's own create_all() already
+    gets this right from the start; this migration brings an EXISTING
+    database's index up to the same guarantee without needing to
+    rebuild the users table itself -- SQLite can't ALTER a column's
+    collation in place, but a replacement index can specify its own
+    COLLATE independent of the underlying column's declared one
+    (verified empirically: a COLLATE NOCASE unique index rejects a
+    case-variant duplicate insert even against a plain, uncollated
+    column).
+
+    Checked via the index's own recorded SQL text in sqlite_master
+    (idempotent -- a NOCASE index found already is a no-op), not a
+    version table. If creating the replacement index ever fails here,
+    that means real case-variant duplicate emails already exist in the
+    table -- a genuine data problem this deliberately does not paper
+    over by silently deleting/merging rows on someone's behalf; the
+    IntegrityError is left to surface so a human resolves which of the
+    colliding accounts is correct.
+    """
+    from sqlalchemy import inspect, text
+
+    from models import db
+
+    inspector = inspect(db.engine)
+    if "users" not in inspector.get_table_names():
+        return
+
+    with db.engine.begin() as conn:
+        existing_sql = conn.execute(
+            text("SELECT sql FROM sqlite_master WHERE type='index' AND name='ix_users_email'"),
+        ).scalar()
+        if existing_sql and "NOCASE" in existing_sql:
+            return  # already case-insensitive
+
+        app.logger.info("Migrating 'users' table: making the email UNIQUE index case-insensitive.")
+        if existing_sql:
+            conn.execute(text("DROP INDEX ix_users_email"))
+        conn.execute(text("CREATE UNIQUE INDEX ix_users_email ON users (email COLLATE NOCASE)"))
 
 
 def _configure_logging(app: Flask) -> None:

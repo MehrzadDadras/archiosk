@@ -21,6 +21,19 @@ that already works fine day-to-day):
 
     python tools/create_credentials.py --username admin --email you@example.com --keep-password
 
+Treat every non-primary account (a QA/reader/workspacetester-style
+account) as development/test unless its purpose is proven otherwise --
+never attach a real person's email to one "just because the field
+exists." If a test genuinely needs an account to have SOME email (to
+exercise the reset flow against, say), give it a distinct,
+non-deliverable *.invalid address (RFC 2606 reserves that TLD for
+exactly this) -- e.g. --email reader-test@archiosk.invalid -- never a
+real inbox. One normalized (lower-cased) email may only ever belong to
+one account -- models.py's User.email is a case-insensitive UNIQUE
+constraint (COLLATE NOCASE) enforced by the database itself, and this
+script also checks for a collision up front with a clear error rather
+than a raw IntegrityError traceback.
+
 Also fills in FLASK_SECRET_KEY in .env if it's blank -- Flask raises at
 session-write time with no secret key configured, and log_in() writes
 session data on every successful sign-in.
@@ -160,8 +173,30 @@ def main(argv: list[str] | None = None) -> int:
         # repeat --role admin (real footgun this exact assignment surfaced,
         # not a hypothetical).
         user.role = args.role or (existing.role if existing is not None else "read_only")
+
         if args.email is not None:
-            user.email = args.email.strip().lower() or None
+            # Friendly, explicit check before commit -- the case-
+            # insensitive UNIQUE index (models.py's User.email,
+            # COLLATE NOCASE) is the real, authoritative backstop no
+            # matter what calls this, but a bare IntegrityError
+            # traceback here would be a bad way for an operator to
+            # learn "one email may only belong to one account."
+            candidate_email = args.email.strip().lower() or None
+            if candidate_email is not None:
+                collision_query = User.query.filter(db.func.lower(User.email) == candidate_email)
+                if existing is not None:
+                    collision_query = collision_query.filter(User.id != existing.id)
+                collision = collision_query.first()
+                if collision is not None:
+                    print(
+                        f"Email {candidate_email!r} is already assigned to user {collision.username!r} -- "
+                        "one email may only belong to one account, and password reset requires that to "
+                        "stay unambiguous. Choose a different address.",
+                        file=sys.stderr,
+                    )
+                    return 1
+            user.email = candidate_email
+
         db.session.commit()
 
         role_for_message = user.role
