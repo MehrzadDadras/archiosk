@@ -42,10 +42,12 @@ Visit `http://127.0.0.1:5000` and sign in. To see the UI populated
 without ingesting anything yourself, open any project already sitting
 in `instance/registry/` from the Projects directory.
 
-To ingest a document:
+To ingest a document (the API requires an authenticated admin session --
+sign in first and reuse the cookie jar):
 
 ```bash
-curl -F "file=@sample_rfp.pdf" http://127.0.0.1:5000/api/v1/documents/ingest
+curl -c cookies.txt -d "username=admin&password=..." http://127.0.0.1:5000/login
+curl -b cookies.txt -F "file=@sample_rfp.pdf" http://127.0.0.1:5000/api/v1/documents/ingest
 ```
 
 The response includes a `project_id`; view its dashboard at
@@ -231,12 +233,13 @@ everyone), rather than jumping straight into one. `login.html` and
 section label, and a footer telemetry row (registry type, chassis
 name, `STATIC_VERSION`).
 
-Scope: this only gates the HTML pages in `routes/portal.py`. The JSON
-API (`/api/v1/...`) is deliberately untouched — token/key-based API
-auth is a different concern from a session-cookie login gate and
-wasn't part of this feature. There's also no brute-force rate limiting
-on `/login`; this is a simple gate for a small internal tool, not a
-hardened multi-tenant login system.
+Scope: this gates the HTML pages in `routes/portal.py`. The JSON API
+(`/api/v1/...`, `routes/api.py`) reuses the same session cookie via a
+blueprint-wide `before_request` check — there's no separate API-key
+scheme, so a script/curl caller authenticates the same way a browser
+does (see the ingestion example above). There's also no brute-force
+rate limiting on `/login`; this is a simple gate for a small internal
+tool, not a hardened multi-tenant login system.
 
 Note on `tools/dependency_fit.py`'s `flat-json-storage` rule: that
 constraint is scoped specifically to `services/requirements_registry.py`

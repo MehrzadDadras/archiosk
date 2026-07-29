@@ -1,17 +1,42 @@
 """
 JSON API for the B-Hive document pipeline (mounted at /api/v1).
+
+Authentication: every route in this blueprint requires the same
+session-cookie login used by routes/portal.py (services.auth) -- a
+caller authenticates via POST /login first (curl -c/-b, or any client
+that keeps the session cookie) rather than via a separate API key.
+This is the smallest change compatible with the app's existing single
+auth mechanism; a dedicated token/key scheme remains a legitimate
+future direction (see services/auth.py's docstring) but is a distinct
+concern, not required to close the "no auth at all" defect this fixes.
+
+Enforced blueprint-wide via before_request (not a per-route decorator)
+specifically so a future new route can't omit it by accident. Role
+split mirrors the equivalent HTML routes exactly rather than inventing
+a new authorization axis: ingest is the API equivalent of
+routes/portal.py's `/upload` (@admin_required); every read route is
+the API equivalent of the @login_required dashboard/gateway pages.
 """
 from __future__ import annotations
 
 from flask import Blueprint, current_app, jsonify, request, send_file
 from werkzeug.exceptions import RequestEntityTooLarge
 
+from services.auth import is_admin, is_authenticated
 from services.bhive_parser import REQUIREMENT_CATEGORIES
 from services.governance import GovernanceError
 from services.ingestion import UploadError, get_governance_log, get_registry, ingest_upload
 from services.rfi_export import RFIExportError, build_rfi_docx
 
 api_bp = Blueprint('api', __name__)
+
+
+@api_bp.before_request
+def _require_api_auth():
+    if not is_authenticated():
+        return jsonify(error="unauthorized", message="Authentication required."), 401
+    if request.endpoint == "api.ingest_document" and not is_admin():
+        return jsonify(error="forbidden", message="Admin role required."), 403
 
 
 @api_bp.errorhandler(RequestEntityTooLarge)

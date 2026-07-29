@@ -16,10 +16,12 @@ sessions (no server-side session store), so there is no way to force-
 invalidate one specific session -- the only way to force everyone to
 re-authenticate immediately is rotating FLASK_SECRET_KEY.
 
-Scope: this only gates the HTML pages in routes/portal.py.
-routes/api.py's JSON endpoints are untouched -- token/key-based API auth
-is a different concern from a session-cookie login gate and wasn't part
-of this ask.
+Scope: this gates the HTML pages in routes/portal.py directly via the
+login_required/admin_required decorators below. routes/api.py's JSON
+endpoints reuse the same is_authenticated()/is_admin() checks, enforced
+blueprint-wide via a before_request hook there (see routes/api.py) --
+not through these two decorators, since a JSON API needs a 401/403
+response rather than the redirect-to-/login these produce.
 """
 from __future__ import annotations
 
