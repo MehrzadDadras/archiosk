@@ -69,18 +69,28 @@ def is_dev_fallback_active() -> bool:
     return bool(current_app.debug or current_app.testing)
 
 
-def request_password_reset(email: str, base_url: str) -> None:
+def request_password_reset(email: str, base_url: str) -> Optional[str]:
     """
-    Always returns None with no externally observable difference
-    between "no such account" and "account found, link issued" - the
-    caller shows the same neutral message either way. `base_url` is the
-    request's own host root (request.host_url), used to build the link
-    the recipient actually clicks.
+    Returns the raw reset URL ONLY when every one of these holds: a real
+    account matched, SMTP didn't actually deliver it (either unconfigured
+    or a real send failure), and is_dev_fallback_active() (never true
+    under ProductionConfig). Every other case - no match; SMTP genuinely
+    delivered - returns None.
+
+    This return value is the one deliberate, explicit exception to
+    "never reveal account existence": routes/portal.py is allowed to
+    render it directly on the page, but ONLY in that same dev/testing
+    gate, and its own user-facing CONFIRMATION MESSAGE must still never
+    vary with this return value or with whether a match happened -
+    only with whether SMTP is configured at all (a fact identical for
+    every request, not tied to any one email) - see that route's own
+    comment for why per-request delivery outcome can't safely drive the
+    message text without reintroducing an enumeration oracle.
     """
     user = _find_user_by_email(email)
     if user is None:
         logger.info("Password reset requested for an email with no matching account.")
-        return
+        return None
 
     # Single active token per user: an earlier, still-unused request is
     # superseded rather than left valid alongside the new one.
@@ -112,13 +122,24 @@ def request_password_reset(email: str, base_url: str) -> None:
                 "If you didn't request this, you can ignore this message."
             ),
         )
-        if not delivered:
-            logger.warning("Password reset email failed to send for user %r.", user.username)
+        # Explicit success AND failure logging - never inferred from the
+        # absence of a warning. This is the one place delivery outcome is
+        # ever reported; the HTTP response never reflects it (see above).
+        if delivered:
+            logger.info("Password reset email delivered to user %r.", user.username)
+        else:
+            logger.warning("Password reset email FAILED to send to user %r.", user.username)
 
-    if not delivered and is_dev_fallback_active():
+    if delivered:
+        return None
+
+    if is_dev_fallback_active():
         logger.warning(
             "DEV-ONLY password reset link (email not sent) for user %r: %s", user.username, reset_url,
         )
+        return reset_url
+
+    return None
 
 
 def get_valid_reset_token(raw_token: str) -> Optional[PasswordResetToken]:

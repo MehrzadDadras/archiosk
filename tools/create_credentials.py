@@ -12,6 +12,14 @@ access to:
 
 Re-running with an existing --username updates that user's password/role
 in place (upsert), rather than erroring on the unique username constraint.
+Omitting --role on an existing account leaves its current role unchanged
+(it does NOT reset to read_only).
+
+To attach/change an email on an EXISTING account without touching its
+password (e.g. enabling the "Forgot password?" flow for an admin account
+that already works fine day-to-day):
+
+    python tools/create_credentials.py --username admin --email you@example.com --keep-password
 
 Also fills in FLASK_SECRET_KEY in .env if it's blank -- Flask raises at
 session-write time with no secret key configured, and log_in() writes
@@ -82,8 +90,13 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--username", help="Login username (prompted if omitted).")
     parser.add_argument(
-        "--role", choices=["admin", "read_only"], default="read_only",
-        help="Account role -- 'admin' can use /upload, 'read_only' cannot. Default: read_only.",
+        "--role", choices=["admin", "read_only"], default=None,
+        help=(
+            "Account role -- 'admin' can use /upload, 'read_only' cannot. "
+            "Required when creating a new account (defaults to read_only if "
+            "omitted); on an EXISTING account, omitting this leaves its "
+            "current role unchanged rather than silently resetting it."
+        ),
     )
     parser.add_argument(
         "--email", default=None,
@@ -93,6 +106,14 @@ def main(argv: list[str] | None = None) -> int:
             "Optional -- omit to leave unset (or unchanged, on an existing account)."
         ),
     )
+    parser.add_argument(
+        "--keep-password", action="store_true",
+        help=(
+            "Update only --role/--email on an EXISTING account, without "
+            "prompting for or changing its password. Errors if the account "
+            "doesn't exist yet (a brand-new account always needs a password)."
+        ),
+    )
     args = parser.parse_args(argv)
 
     username = args.username or input("Username: ").strip()
@@ -100,35 +121,55 @@ def main(argv: list[str] | None = None) -> int:
         print("Username cannot be empty.", file=sys.stderr)
         return 1
 
-    password = getpass.getpass("Password: ")
-    confirm = getpass.getpass("Confirm password: ")
-    if not password:
-        print("Password cannot be empty.", file=sys.stderr)
-        return 1
-    if password != confirm:
-        print("Passwords did not match.", file=sys.stderr)
-        return 1
-
-    generated_secret = _ensure_secret_key()
-
     from app import create_app
     from models import User, db
 
     app = create_app()
     with app.app_context():
-        user = User.query.filter_by(username=username).first()
+        existing = User.query.filter_by(username=username).first()
+
+        if args.keep_password and existing is None:
+            print(f"No existing user {username!r} -- --keep-password requires an account that already exists.", file=sys.stderr)
+            return 1
+
+        password = None
+        if not args.keep_password:
+            password = getpass.getpass("Password: ")
+            confirm = getpass.getpass("Confirm password: ")
+            if not password:
+                print("Password cannot be empty.", file=sys.stderr)
+                return 1
+            if password != confirm:
+                print("Passwords did not match.", file=sys.stderr)
+                return 1
+
+        generated_secret = _ensure_secret_key()
+
+        user = existing
         verb = "Updated"
         if user is None:
             user = User(username=username)
             db.session.add(user)
             verb = "Created"
-        user.password_hash = generate_password_hash(password)
-        user.role = args.role
+
+        if password is not None:
+            user.password_hash = generate_password_hash(password)
+        # Preserve the existing role on an update unless --role was given
+        # explicitly -- the previous unconditional default("read_only")
+        # silently demoted an existing admin account if you forgot to
+        # repeat --role admin (real footgun this exact assignment surfaced,
+        # not a hypothetical).
+        user.role = args.role or (existing.role if existing is not None else "read_only")
         if args.email is not None:
             user.email = args.email.strip().lower() or None
         db.session.commit()
 
-    print(f"\n{verb} user {username!r} with role {args.role!r}.")
+        role_for_message = user.role
+        password_note = "password unchanged" if password is None else "password updated"
+
+    print(f"\n{verb} user {username!r} -- role: {role_for_message!r}, {password_note}.")
+    if args.email is not None:
+        print(f"Email set to {args.email.strip().lower() or None!r}.")
     if generated_secret:
         print(f"Generated FLASK_SECRET_KEY in {ENV_PATH} (was blank).")
     print("Restart the Flask app if it's running, then sign in at /login.")

@@ -18,7 +18,15 @@ Covers:
 - reset completes, invalidates the token, and a subsequent login with
   the new password succeeds while the old password no longer does;
 - an already-used or expired token is rejected without distinguishing
-  why; a second request supersedes the first token.
+  why; a second request supersedes the first token;
+- CLAUDE-P29: the dev-only reset link renders directly on the
+  /forgot-password page (not just the server log) for a real match,
+  in dev/testing only, and is absent for a non-match; actual SMTP
+  delivery success/failure is always logged explicitly, and never
+  changes the HTTP response text (which is decided purely by whether
+  SMTP is configured at all, not by any one request's outcome or
+  match) - proven by comparing a matched-but-failed-delivery response
+  against a no-match response under the same SMTP-configured state.
 
 Run via:
 
@@ -30,6 +38,7 @@ import re
 import shutil
 import tempfile
 import unittest
+import unittest.mock
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -104,7 +113,11 @@ class PasswordResetTests(unittest.TestCase):
             "/forgot-password", data={"email": "nobody@example.com"}, follow_redirects=True,
         )
         body = resp.get_data(as_text=True)
-        self.assertIn("If an account with that email exists, a password reset link has been sent.", body)
+        self.assertIn(
+            "If an account with that email exists, a password reset has been initiated. "
+            "Email delivery isn&#39;t configured in this environment.",
+            body,
+        )
         self.assertEqual(self._token_row_count(), 0)
 
     def test_forgot_password_neutral_message_for_known_email_is_identical(self):
@@ -124,12 +137,12 @@ class PasswordResetTests(unittest.TestCase):
             "/forgot-password", data={"email": "has.email@example.com"}, follow_redirects=True,
         )
         known_body = resp3.get_data(as_text=True)
-        self.assertIn(
-            "If an account with that email exists, a password reset link has been sent.", unknown_body,
+        neutral_text = (
+            "If an account with that email exists, a password reset has been initiated. "
+            "Email delivery isn&#39;t configured in this environment."
         )
-        self.assertIn(
-            "If an account with that email exists, a password reset link has been sent.", known_body,
-        )
+        self.assertIn(neutral_text, unknown_body)
+        self.assertIn(neutral_text, known_body)
 
     def test_forgot_password_email_lookup_is_case_insensitive(self):
         link = self._request_reset_and_capture_link("HAS.EMAIL@EXAMPLE.COM")
@@ -257,6 +270,74 @@ class PasswordResetTests(unittest.TestCase):
             "This reset link is invalid or has expired. Request a new one below.",
             resp.get_data(as_text=True),
         )
+
+    # -- dev-only on-page link (CLAUDE-P29) -----------------------------------
+
+    def test_dev_reset_link_shown_on_page_for_a_real_match(self):
+        with self.assertLogs("services.password_reset", level="WARNING"):
+            resp = self.client.post("/forgot-password", data={"email": "has.email@example.com"})
+        body = resp.get_data(as_text=True)
+        self.assertIn("Development mode only", body)
+        self.assertIn("/reset-password?token=", body)
+
+    def test_dev_reset_link_absent_on_page_for_no_match(self):
+        resp = self.client.post("/forgot-password", data={"email": "nobody@example.com"})
+        body = resp.get_data(as_text=True)
+        self.assertNotIn("Development mode only", body)
+        self.assertNotIn("/reset-password?token=", body)
+
+    # -- SMTP delivery outcome is reported in the server log, not the response --
+
+    def test_smtp_delivery_success_is_logged_and_message_still_neutral(self):
+        self.flask_app.config["SMTP_HOST"] = "smtp.example.com"
+        try:
+            with unittest.mock.patch("services.password_reset.send_email", return_value=True) as mock_send:
+                with self.assertLogs("services.password_reset", level="INFO") as captured:
+                    resp = self.client.post("/forgot-password", data={"email": "has.email@example.com"})
+            mock_send.assert_called_once()
+            self.assertTrue(any("delivered to user" in line for line in captured.output))
+            body = resp.get_data(as_text=True)
+            self.assertIn(
+                "If an account with that email exists, a password reset email has been sent.", body,
+            )
+            # SMTP "succeeded" -> no dev-only link needed or shown, even
+            # though this is still a testing config.
+            self.assertNotIn("Development mode only", body)
+        finally:
+            self.flask_app.config["SMTP_HOST"] = ""
+
+    def test_smtp_delivery_failure_is_logged_but_message_stays_identical(self):
+        # Same SMTP-configured environment for both requests - the only
+        # thing that differs is match+delivery-failure vs. no match at
+        # all (delivery never attempted). The HTTP response must read
+        # identically either way; only the server log may distinguish
+        # them (a real send failure reading differently than "no account
+        # matched" would let an attacker use an SMTP outage as an
+        # account-enumeration oracle).
+        self.flask_app.config["SMTP_HOST"] = "smtp.example.com"
+        try:
+            with unittest.mock.patch("services.password_reset.send_email", return_value=False):
+                with self.assertLogs("services.password_reset", level="WARNING") as captured:
+                    resp_matched_but_failed = self.client.post(
+                        "/forgot-password", data={"email": "has.email@example.com"},
+                    )
+                self.assertTrue(any("FAILED to send" in line for line in captured.output))
+
+                resp_no_match = self.client.post(
+                    "/forgot-password", data={"email": "nobody@example.com"},
+                )
+        finally:
+            self.flask_app.config["SMTP_HOST"] = ""
+
+        neutral_text = "If an account with that email exists, a password reset email has been sent."
+        self.assertIn(neutral_text, resp_matched_but_failed.get_data(as_text=True))
+        self.assertIn(neutral_text, resp_no_match.get_data(as_text=True))
+        # The dev-only fallback still covers "SMTP configured but this
+        # send genuinely failed", not just "SMTP unset" - a real send
+        # failure in dev/testing must not be a dead end either (never
+        # permanently locked out just because local SMTP is broken).
+        self.assertIn("Development mode only", resp_matched_but_failed.get_data(as_text=True))
+        self.assertNotIn("Development mode only", resp_no_match.get_data(as_text=True))
 
 
 if __name__ == "__main__":

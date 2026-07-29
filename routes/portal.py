@@ -163,23 +163,50 @@ def logout():
 def forgot_password():
     """
     CLAUDE-P28: the self-service recovery path referenced by login.html's
-    "Forgot password?" link. Always shows the identical confirmation
-    message regardless of whether the submitted email matched an
-    account - see services/password_reset.py's own docstring for why.
+    "Forgot password?" link.
+
+    The confirmation MESSAGE text is decided purely from whether SMTP is
+    configured at all (current_app.config['SMTP_HOST'], a fact identical
+    for every single request) - never from whether this particular email
+    matched an account, and never from whether this particular delivery
+    attempt actually succeeded. Conditioning the message on per-request
+    outcome would reintroduce an enumeration oracle: a real account's
+    delivery genuinely failing (SMTP down) would then read differently
+    than "no such account" (no delivery ever attempted), letting an
+    attacker distinguish the two by probing during any SMTP outage. Real
+    per-request delivery success/failure is reported in the server log
+    only (services/password_reset.py) - see CLAUDE-P29 for this
+    reasoning in full.
+
+    dev_reset_link is the one deliberate exception: on a real match, in
+    dev/testing only, with SMTP not having delivered it, the raw link is
+    rendered directly on THIS page (clearly labelled, never in
+    production) instead of only being logged - convenience, not a
+    change to the message contract above. Renders directly rather than
+    redirecting (unlike this file's other POST handlers) specifically
+    so dev_reset_link can reach the response without being stashed
+    anywhere persistent (a session/cookie) in between.
     """
     if request.method == 'GET':
         return render_template('forgot_password.html')
 
-    request_password_reset(request.form.get('email', ''), base_url=request.host_url)
+    dev_reset_link = request_password_reset(request.form.get('email', ''), base_url=request.host_url)
 
-    message = "If an account with that email exists, a password reset link has been sent."
-    if is_dev_fallback_active() and not current_app.config.get('SMTP_HOST'):
-        # Unconditional (not "only when a real account matched") so its
-        # presence/absence can't itself leak account existence - see
-        # request_password_reset's own neutrality contract.
-        message += " (Dev environment: email isn't configured here -- check the server log for the generated link.)"
+    if current_app.config.get('SMTP_HOST'):
+        message = "If an account with that email exists, a password reset email has been sent."
+    else:
+        message = (
+            "If an account with that email exists, a password reset has been initiated. "
+            "Email delivery isn't configured in this environment."
+        )
     flash(message, 'success')
-    return redirect(url_for('portal.forgot_password'))
+
+    # Checked again here (request_password_reset already gates this) so a
+    # future change to that function can't silently start leaking a real
+    # reset link into a production response just by returning one.
+    if dev_reset_link and is_dev_fallback_active():
+        return render_template('forgot_password.html', dev_reset_link=dev_reset_link)
+    return render_template('forgot_password.html')
 
 
 @portal_bp.route('/reset-password', methods=['GET', 'POST'])
