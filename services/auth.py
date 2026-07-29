@@ -25,6 +25,7 @@ response rather than the redirect-to-/login these produce.
 """
 from __future__ import annotations
 
+import logging
 from functools import wraps
 from typing import Optional
 
@@ -33,23 +34,36 @@ from werkzeug.security import check_password_hash
 
 from models import ROLE_ADMIN, User
 
+logger = logging.getLogger(__name__)
+
 
 def check_credentials(username: str, password: str) -> Optional[User]:
     """Look up `username` and verify `password` against its stored hash.
 
     Returns the matching User on success, None otherwise -- deliberately
     generic, doesn't distinguish "no such user", "wrong password", or
-    (CLAUDE-P27-B) "suspended account". A suspended user gets the exact
-    same login-page message as a wrong password, not a distinct
-    "your account is suspended" message -- consistent with this
-    module's existing refusal to reveal account state beyond
-    authenticated/not.
+    "suspended account". A suspended user gets the exact same
+    login-page message as a wrong password, not a distinct "your
+    account is suspended" message -- consistent with this module's
+    existing refusal to reveal account state beyond authenticated/not.
+
+    CLAUDE-P27-B: the HTTP-facing generic-failure contract above is about
+    the RESPONSE only -- the server log (never shown to the requester) is
+    a different audience, and distinguishing the three failure reasons
+    there has real security-monitoring value with no enumeration cost.
+    Previously this whole login path had zero logging of any kind.
     """
     user = User.query.filter_by(username=username).first()
-    if user is None or not check_password_hash(user.password_hash, password):
+    if user is None:
+        logger.warning("Login failed: no account for username %r.", username)
+        return None
+    if not check_password_hash(user.password_hash, password):
+        logger.warning("Login failed: wrong password for username %r.", username)
         return None
     if not user.is_active:
+        logger.warning("Login rejected: account %r is suspended.", username)
         return None
+    logger.info("Login succeeded for user %r (role=%r).", user.username, user.role)
     return user
 
 
@@ -68,9 +82,12 @@ def log_in(user: User) -> None:
 
 
 def log_out() -> None:
+    username = session.get("username")
     session.pop("user_id", None)
     session.pop("username", None)
     session.pop("role", None)
+    if username is not None:
+        logger.info("User %r logged out.", username)
 
 
 def login_required(view):
