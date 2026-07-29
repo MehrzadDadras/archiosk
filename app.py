@@ -11,6 +11,7 @@ import logging
 import os
 
 from flask import Flask
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from config import get_config
 
@@ -36,6 +37,16 @@ def create_app(config_name: str | None = None) -> Flask:
         static_folder="static",
         template_folder="templates",
     )
+    # CLAUDE-P27-B: deploy/nginx.conf is the one reverse proxy in front of
+    # Gunicorn (deploy/gunicorn.conf.py binds 127.0.0.1 only -- nginx is
+    # the sole path in), so trusting exactly one X-Forwarded-* hop is
+    # correct here, not a blanket "trust everything" -- without this,
+    # request.remote_addr is always nginx's own address for every
+    # request, which would silently break any future per-IP control
+    # (rate limiting, abuse blocking) rather than merely being imprecise.
+    # In local dev (no nginx in front), these headers are simply absent
+    # and remote_addr behaves exactly as it already does today.
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
     config_cls = get_config(config_name)
     app.config.from_object(config_cls)
 
