@@ -36,9 +36,11 @@ def create_app(config_name: str | None = None) -> Flask:
         static_folder="static",
         template_folder="templates",
     )
-    app.config.from_object(get_config(config_name))
+    config_cls = get_config(config_name)
+    app.config.from_object(config_cls)
 
     _configure_logging(app)
+    _validate_production_config(app, config_cls)
     _register_database(app)
     _register_blueprints(app)
     _register_error_handlers(app)
@@ -158,6 +160,51 @@ def _migrate_users_email_case_insensitive_index(app: Flask) -> None:
         if existing_sql:
             conn.execute(text("DROP INDEX ix_users_email"))
         conn.execute(text("CREATE UNIQUE INDEX ix_users_email ON users (email COLLATE NOCASE)"))
+
+
+def _validate_production_config(app: Flask, config_cls) -> None:
+    """
+    Hard-fail-fast boot check under ProductionConfig specifically
+    (CLAUDE-P27-B). config.py's own BaseConfig.validate() existed but was
+    never called anywhere -- a misconfigured "production" deploy (e.g.
+    FLASK_SECRET_KEY unset) previously booted and served traffic with
+    broken session integrity, only surfacing the problem reactively if
+    something happened to poll /health.
+
+    Deliberately narrower than validate()'s own missing-vars list:
+    FLASK_SECRET_KEY has no safe fallback and must hard-fail; a missing
+    ANTHROPIC_API_KEY is the one deliberately optional cloud dependency
+    (tools/dependency_fit.py's graceful-degradation stance; README's
+    "Without an Anthropic API key" section) and must keep degrading to
+    the rule-based classifier, not crash the app -- so it only warns.
+    """
+    from config import ProductionConfig
+
+    if config_cls is not ProductionConfig:
+        return
+
+    if not app.config.get("SECRET_KEY"):
+        raise RuntimeError(
+            "Refusing to start under ProductionConfig: FLASK_SECRET_KEY is unset. "
+            "Set it in .env before starting the production server.",
+        )
+    if app.debug or app.testing:
+        # Structurally impossible today -- ProductionConfig sets neither
+        # DEBUG nor TESTING true (config.py) -- kept as an explicit
+        # assertion so a future change to that class can't silently
+        # reopen the dev-only password-reset-link fallback
+        # (services/password_reset.py's is_dev_fallback_active(), gated
+        # on exactly these two flags) in a real production deploy.
+        raise RuntimeError(
+            "Refusing to start: ProductionConfig resolved with DEBUG or TESTING "
+            "true, which would also reopen the dev-only password-reset fallback.",
+        )
+    if not app.config.get("ANTHROPIC_API_KEY"):
+        app.logger.warning(
+            "ANTHROPIC_API_KEY is unset under ProductionConfig -- classification "
+            "will use the deterministic rule-based fallback instead of the model. "
+            "This is a supported, deliberate degradation, not a boot failure.",
+        )
 
 
 def _configure_logging(app: Flask) -> None:
