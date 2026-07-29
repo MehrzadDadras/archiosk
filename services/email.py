@@ -23,7 +23,18 @@ def send_email(to_addr: str, subject: str, body: str) -> bool:
     """Best-effort SMTP send. Returns True on success, False on any
     failure -- never raises, so a transient mail-server problem degrades
     to the caller's own fallback rather than a 500 on the request that
-    triggered it."""
+    triggered it.
+
+    CLAUDE-P27-B (SMTP finalization): two mutually exclusive transport
+    modes, matching how real providers actually offer SMTP -- implicit
+    TLS (SMTP_USE_SSL, typically port 465: the whole connection is
+    encrypted from the first byte, smtplib.SMTP_SSL) and STARTTLS
+    (SMTP_USE_TLS, typically port 587: connect in plaintext, then
+    upgrade). Previously only STARTTLS was implemented at all -- a
+    provider requiring implicit TLS on port 465 would silently fail
+    every send, never a config-time signal (see app.py's
+    _validate_production_config, which now warns if both are set at
+    once, an invalid combination)."""
     if not to_addr:
         return False
 
@@ -33,9 +44,11 @@ def send_email(to_addr: str, subject: str, body: str) -> bool:
     message["To"] = to_addr
     message.set_content(body)
 
+    use_ssl = current_app.config["SMTP_USE_SSL"]
+    smtp_cls = smtplib.SMTP_SSL if use_ssl else smtplib.SMTP
     try:
-        with smtplib.SMTP(current_app.config["SMTP_HOST"], current_app.config["SMTP_PORT"], timeout=10) as server:
-            if current_app.config["SMTP_USE_TLS"]:
+        with smtp_cls(current_app.config["SMTP_HOST"], current_app.config["SMTP_PORT"], timeout=10) as server:
+            if current_app.config["SMTP_USE_TLS"] and not use_ssl:
                 server.starttls()
             if current_app.config["SMTP_USERNAME"]:
                 server.login(current_app.config["SMTP_USERNAME"], current_app.config["SMTP_PASSWORD"])

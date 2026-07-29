@@ -62,7 +62,14 @@ class BaseConfig:
     SMTP_USERNAME = os.getenv("SMTP_USERNAME", "")
     SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
     SMTP_FROM = os.getenv("SMTP_FROM") or SMTP_USERNAME
+    # STARTTLS (typically port 587): connect in plaintext, then upgrade.
     SMTP_USE_TLS = os.getenv("SMTP_USE_TLS", "true").strip().lower() != "false"
+    # Implicit TLS (typically port 465): the whole connection is
+    # encrypted from the first byte (smtplib.SMTP_SSL) -- a different,
+    # mutually exclusive transport from STARTTLS above, not an
+    # additional layer on top of it. Off by default so existing STARTTLS
+    # setups (SMTP_USE_TLS's own default) are completely unaffected.
+    SMTP_USE_SSL = os.getenv("SMTP_USE_SSL", "false").strip().lower() == "true"
 
     # HTTPOnly/SameSite are safe in every environment; Secure requires HTTPS,
     # which only nginx terminates in production — off in dev so the login

@@ -260,6 +260,42 @@ def _validate_production_config(app: Flask, config_cls) -> None:
             "will use the deterministic rule-based fallback instead of the model. "
             "This is a supported, deliberate degradation, not a boot failure.",
         )
+    _validate_smtp_config(app)
+
+
+def _validate_smtp_config(app: Flask) -> None:
+    """
+    SMTP finalization (CLAUDE-P27-B): SMTP_HOST unset is a fully
+    supported, deliberate state (config.py's own comment) -- nothing
+    here fires unless an operator has started configuring SMTP at all.
+    Every check below only warns, never hard-fails: a misconfigured
+    SMTP setup should degrade to "password reset silently doesn't
+    deliver, visible in the log" (services/password_reset.py already
+    logs delivery success/failure per request), never take down the
+    whole app the way a missing FLASK_SECRET_KEY does -- there's no
+    equivalent "everything is broken" consequence to a bad SMTP_FROM.
+    """
+    if not app.config.get("SMTP_HOST"):
+        return
+
+    if app.config.get("SMTP_USE_SSL") and app.config.get("SMTP_USE_TLS"):
+        app.logger.warning(
+            "SMTP_USE_SSL and SMTP_USE_TLS are both true -- these are mutually "
+            "exclusive transports (implicit TLS vs. STARTTLS), not additive. "
+            "services/email.py uses SMTP_USE_SSL when both are set; if that "
+            "wasn't the intent, unset the one you don't mean.",
+        )
+    if not app.config.get("SMTP_FROM"):
+        app.logger.warning(
+            "SMTP_HOST is set but SMTP_FROM resolves empty (SMTP_FROM and "
+            "SMTP_USERNAME both unset) -- outgoing mail would have a blank "
+            "From: header and most providers will reject it outright.",
+        )
+    if app.config.get("SMTP_USERNAME") and not app.config.get("SMTP_PASSWORD"):
+        app.logger.warning(
+            "SMTP_USERNAME is set but SMTP_PASSWORD is blank -- authentication "
+            "will fail on every send attempt.",
+        )
 
 
 def _register_csrf(app: Flask) -> None:
