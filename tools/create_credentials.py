@@ -85,6 +85,14 @@ def main(argv: list[str] | None = None) -> int:
         "--role", choices=["admin", "read_only"], default="read_only",
         help="Account role -- 'admin' can use /upload, 'read_only' cannot. Default: read_only.",
     )
+    parser.add_argument(
+        "--email", default=None,
+        help=(
+            "Account email, required for this account to use the self-service "
+            "'Forgot password?' recovery flow (services/password_reset.py). "
+            "Optional -- omit to leave unset (or unchanged, on an existing account)."
+        ),
+    )
     args = parser.parse_args(argv)
 
     username = args.username or input("Username: ").strip()
@@ -116,6 +124,8 @@ def main(argv: list[str] | None = None) -> int:
             verb = "Created"
         user.password_hash = generate_password_hash(password)
         user.role = args.role
+        if args.email is not None:
+            user.email = args.email.strip().lower() or None
         db.session.commit()
 
     print(f"\n{verb} user {username!r} with role {args.role!r}.")

@@ -12,6 +12,9 @@ from services.auth import admin_required, check_credentials, is_authenticated, l
 from services.case_workspace import CaseWorkspaceStore
 from services.governance import GovernanceError
 from services.ingestion import UploadError, get_governance_log, get_registry, ingest_upload
+from services.password_reset import (
+    complete_password_reset, get_valid_reset_token, is_dev_fallback_active, request_password_reset,
+)
 
 portal_bp = Blueprint('portal', __name__)
 
@@ -154,6 +157,63 @@ def login():
 def logout():
     log_out()
     return redirect(url_for('portal.index'))
+
+
+@portal_bp.route('/forgot-password', methods=['GET', 'POST'])
+def forgot_password():
+    """
+    CLAUDE-P28: the self-service recovery path referenced by login.html's
+    "Forgot password?" link. Always shows the identical confirmation
+    message regardless of whether the submitted email matched an
+    account - see services/password_reset.py's own docstring for why.
+    """
+    if request.method == 'GET':
+        return render_template('forgot_password.html')
+
+    request_password_reset(request.form.get('email', ''), base_url=request.host_url)
+
+    message = "If an account with that email exists, a password reset link has been sent."
+    if is_dev_fallback_active() and not current_app.config.get('SMTP_HOST'):
+        # Unconditional (not "only when a real account matched") so its
+        # presence/absence can't itself leak account existence - see
+        # request_password_reset's own neutrality contract.
+        message += " (Dev environment: email isn't configured here -- check the server log for the generated link.)"
+    flash(message, 'success')
+    return redirect(url_for('portal.forgot_password'))
+
+
+@portal_bp.route('/reset-password', methods=['GET', 'POST'])
+def reset_password():
+    """
+    The link a reset email (or the dev-only log fallback) points at.
+    Deliberately one generic "invalid or expired" outcome for every
+    invalid case (missing/unknown/already-used/expired token) - never
+    distinguishing which, for the same account-existence/state reason
+    request_password_reset never distinguishes "no such account" from
+    "wrong password" elsewhere in this file.
+    """
+    token = request.args.get('token') if request.method == 'GET' else request.form.get('token')
+    token_row = get_valid_reset_token(token or '')
+
+    if token_row is None:
+        flash("This reset link is invalid or has expired. Request a new one below.", 'error')
+        return redirect(url_for('portal.forgot_password'))
+
+    if request.method == 'GET':
+        return render_template('reset_password.html', token=token)
+
+    new_password = request.form.get('new_password', '')
+    confirm_password = request.form.get('confirm_password', '')
+    if len(new_password) < 8:
+        flash("Choose a password at least 8 characters long.", 'error')
+        return render_template('reset_password.html', token=token), 400
+    if new_password != confirm_password:
+        flash("Those passwords didn't match.", 'error')
+        return render_template('reset_password.html', token=token), 400
+
+    complete_password_reset(token_row, new_password)
+    flash("Your password has been updated. Sign in with your new password.", 'success')
+    return redirect(url_for('portal.login'))
 
 
 @portal_bp.route('/gateway')

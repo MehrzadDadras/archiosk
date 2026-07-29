@@ -52,6 +52,18 @@ class BaseConfig:
     # env var. .env is the actual source of truth; bump it there.
     STATIC_VERSION = os.getenv("STATIC_VERSION", "19")
 
+    # -- Password reset email (optional; see services/email.py) ------------
+    # "Configured" means SMTP_HOST is non-blank (services/password_reset.py's
+    # only gate) -- blank is a valid, supported state (no SMTP server
+    # available), not a misconfiguration, and degrades to the dev-only
+    # fallback rather than erroring.
+    SMTP_HOST = os.getenv("SMTP_HOST", "")
+    SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
+    SMTP_USERNAME = os.getenv("SMTP_USERNAME", "")
+    SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
+    SMTP_FROM = os.getenv("SMTP_FROM") or SMTP_USERNAME
+    SMTP_USE_TLS = os.getenv("SMTP_USE_TLS", "true").strip().lower() != "false"
+
     # HTTPOnly/SameSite are safe in every environment; Secure requires HTTPS,
     # which only nginx terminates in production — off in dev so the login
     # cookie still works over plain http://127.0.0.1.
@@ -86,6 +98,10 @@ class TestingConfig(BaseConfig):
     DATABASE_URL = "sqlite:///:memory:"
     SQLALCHEMY_DATABASE_URI = "sqlite:///:memory:"
     SESSION_COOKIE_SECURE = False
+    # Hermetic tests must never attempt a real SMTP connection based on
+    # whatever the developer's local .env happens to have configured -
+    # same reasoning as app.py's ANTHROPIC_API_KEY clearing for "testing".
+    SMTP_HOST = ""
 
 
 _CONFIGS = {

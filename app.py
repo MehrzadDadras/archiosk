@@ -60,9 +60,50 @@ def _register_database(app: Flask) -> None:
     db.init_app(app)
     with app.app_context():
         # Idempotent -- safe to call on every worker boot. Fine for this
-        # app's single small table; revisit with real migration tooling
-        # if the schema ever needs a change that create_all() can't do.
+        # app's small handful of tables; revisit with real migration
+        # tooling if the schema ever needs a change create_all() can't do.
         db.create_all()
+        # create_all() only creates missing TABLES -- a `users` table
+        # that already existed on disk before CLAUDE-P28 (password reset)
+        # added User.email keeps missing that column forever otherwise,
+        # breaking every query that touches User (including login) with
+        # "no such column: users.email". Runs before any blueprint/route
+        # is reachable, so this always executes ahead of the first login
+        # query.
+        _migrate_users_email_column(app)
+
+
+def _migrate_users_email_column(app: Flask) -> None:
+    """
+    Adds `users.email` in place, without touching any existing row, if
+    it's missing -- column-presence check rather than a version table,
+    so this is safe to call on every boot: a fresh install already has
+    the column from create_all() above and this is a no-op there; an
+    existing pre-P28 database gets exactly one ALTER, once, and every
+    boot after that also no-ops. SQLite-specific (ALTER TABLE ADD COLUMN
+    / CREATE UNIQUE INDEX IF NOT EXISTS), matching the rest of this
+    project's SQLite-only stance for the `users` table -- not written to
+    be portable to a different database engine.
+    """
+    from sqlalchemy import inspect, text
+
+    from models import db
+
+    inspector = inspect(db.engine)
+    if "users" not in inspector.get_table_names():
+        return  # brand-new install -- create_all() above just made it, with email already
+    if "email" in {col["name"] for col in inspector.get_columns("users")}:
+        return
+
+    app.logger.info("Migrating 'users' table: adding missing 'email' column.")
+    with db.engine.begin() as conn:
+        conn.execute(text("ALTER TABLE users ADD COLUMN email VARCHAR(255)"))
+        # Matches the UNIQUE INDEX name/shape SQLAlchemy itself generates
+        # for `email = db.Column(..., unique=True, index=True)` on a
+        # fresh install (verified against a fresh create_all() output) --
+        # a later fresh install and a migrated old one end up with an
+        # identical schema, not two different paths to the same effect.
+        conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_users_email ON users (email)"))
 
 
 def _configure_logging(app: Flask) -> None:
