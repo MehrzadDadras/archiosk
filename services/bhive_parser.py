@@ -41,11 +41,13 @@ logger = logging.getLogger(__name__)
 # CLAUDE-P19: a real, bump-on-meaningful-change marker for the Golden
 # Laboratory regression suite's own "prompt/configuration version"
 # tracking - see requirement_investigation.py's INVESTIGATION_PROMPT_
-# VERSION for the same convention. Last touched by CLAUDE-P23's fix
-# requiring verbatim per-pair evidence and an explicit reconciliation-
-# checked field, addressing a controlled-experiment-confirmed order/
-# adjacency sensitivity in false-positive rate.
-CONSISTENCY_PROMPT_VERSION = "p23"
+# VERSION for the same convention. Last touched by CLAUDE-P25's structured
+# scope-reconciliation step (explicit per-clause obligation/scope/overlap
+# fields plus deterministic post-validation), addressing a controlled-
+# experiment-confirmed false-positive risk when a dense clause bundles a
+# numeric obligation with a temporal/operational/spatial/conditional scope
+# qualifier in the same sentence.
+CONSISTENCY_PROMPT_VERSION = "p25"
 
 # How long to wait on a single classification batch before giving up on it.
 DEFAULT_CLASSIFY_TIMEOUT_SECONDS = 30.0
@@ -109,6 +111,26 @@ class ConsistencyFlag:
     requirement_a_evidence: str = ""
     requirement_b_evidence: str = ""
     reconciliation_checked: bool = False
+    # CLAUDE-P25: CLAUDE-P23's verbatim-evidence requirement fixed order/
+    # adjacency contamination between UNRELATED pairs, but a separate
+    # limitation surfaced independently while investigating it further: a
+    # pair CAN be genuinely related and still get falsely flagged when one
+    # side's own text bundles a numeric/rating obligation together with a
+    # temporal, operational-mode, spatial, or conditional SCOPE qualifier
+    # in the same dense sentence - the model's required verbatim quote can
+    # legally cite only the numeric fragment and skip the scope-qualifying
+    # phrase entirely, self-attesting reconciliation_checked=True without
+    # ever actually engaging with it. These fields force the scope check
+    # itself to be structured data, not just a boolean self-report - see
+    # _build_consistency_prompt's own docstring for the reconciliation
+    # steps this schema exists to make explicit. Safe defaults keep this
+    # backward compatible with any older-shaped response.
+    requirement_a_obligation: str = ""
+    requirement_b_obligation: str = ""
+    requirement_a_scope: str = ""
+    requirement_b_scope: str = ""
+    scopes_overlap: bool | None = None
+    scope_reconciliation_reasoning: str = ""
 
 
 @dataclass
@@ -608,6 +630,25 @@ class BHiveParser:
             req_b = by_id.get(entry.get("b"))
             if not req_a or not req_b:
                 continue
+
+            # CLAUDE-P25: deterministic post-validation - a flag is not
+            # accepted merely because the model included it. If it never
+            # stated which scope dimensions it checked (empty reasoning),
+            # or if its OWN scopes_overlap field says the scopes do NOT
+            # overlap (a direct self-contradiction with including the
+            # flag at all - the exact failure pattern a controlled
+            # experiment found: the model's own quoted evidence omitted
+            # the scope-qualifying phrase while still flagging), the flag
+            # is dropped here, in code, not left to the model's own say-so.
+            scope_reasoning = str(entry.get("scope_reconciliation_reasoning", "")).strip()
+            scopes_overlap = entry.get("scopes_overlap")
+            if not scope_reasoning:
+                logger.warning("Consistency check dropped a flag with no scope_reconciliation_reasoning: %r", entry)
+                continue
+            if scopes_overlap is False:
+                logger.warning("Consistency check dropped a flag whose own scopes_overlap=False contradicted flagging it: %r", entry)
+                continue
+
             flags.append(
                 ConsistencyFlag(
                     id=str(uuid.uuid4()),
@@ -619,6 +660,12 @@ class BHiveParser:
                     requirement_a_evidence=entry.get("requirement_a_evidence", ""),
                     requirement_b_evidence=entry.get("requirement_b_evidence", ""),
                     reconciliation_checked=bool(entry.get("reconciliation_checked", False)),
+                    requirement_a_obligation=entry.get("requirement_a_obligation", ""),
+                    requirement_b_obligation=entry.get("requirement_b_obligation", ""),
+                    requirement_a_scope=entry.get("requirement_a_scope", ""),
+                    requirement_b_scope=entry.get("requirement_b_scope", ""),
+                    scopes_overlap=scopes_overlap if isinstance(scopes_overlap, bool) else None,
+                    scope_reconciliation_reasoning=scope_reasoning,
                 )
             )
 
@@ -728,18 +775,64 @@ class BHiveParser:
             "either quoted phrase (e.g. which party is named elsewhere, or "
             "context outside those two phrases), that is not a contradiction "
             "between these two phrases and the pair must not be included.\n\n"
+            "Before including ANY pair, ALSO work through this structured "
+            "scope check - a reconciling exception is not always a separate, "
+            "third requirement; it is often stated INSIDE the same two "
+            "requirements you are comparing, and a long requirement that "
+            "bundles a rating/numeric obligation together with a protocol, "
+            "event, or condition description in one dense sentence is where "
+            "this is most easily missed:\n"
+            "1. State each requirement's own obligation in one sentence.\n"
+            "2. Identify any explicit scope stated WITHIN each requirement's "
+            "OWN text that limits WHEN, WHERE, or UNDER WHAT CONDITION it "
+            "applies - temporal (e.g. occupied vs unoccupied hours), "
+            "operational mode (e.g. normal vs emergency/maintenance mode), "
+            "spatial (e.g. one zone/system vs a different one), conditional "
+            "(e.g. temporary vs permanent, a general rule vs a specifically-"
+            "named exception), or basis (e.g. a design/rated capability vs a "
+            "verified actual performance figure). If a requirement's own "
+            "text states no such limit, its scope is unqualified - say so "
+            "plainly rather than inventing a limit that isn't there.\n"
+            "3. Determine whether the two requirements' stated scopes "
+            "ACTUALLY OVERLAP - is there a real condition where BOTH are "
+            "simultaneously in effect? Quote the SPECIFIC scope language "
+            "from each side that drives this determination. Two scopes that "
+            "are temporally, operationally, spatially, or conditionally "
+            "DISJOINT (one applies only during occupied hours, the other "
+            "only during unoccupied hours; one to normal operation, the "
+            "other only to emergency mode; one to one zone, the other to a "
+            "different zone) do NOT overlap, even if the longer, denser "
+            "requirement also happens to mention the other's zone, mode, or "
+            "time period in passing while describing its own separate scope.\n"
+            "4. Only include the pair if the scopes genuinely OVERLAP AND "
+            "the obligations conflict within that overlap. If the scopes are "
+            "disjoint, both requirements can be true simultaneously - this "
+            "is NOT a contradiction, regardless of how different the "
+            "numbers involved look.\n\n"
             "Respond ONLY with a JSON array of objects, one per contradiction "
             'found: [{"a": "<requirement id>", "b": "<requirement id>", '
             '"requirement_a_evidence": "<verbatim conflicting phrase quoted '
             "from requirement a's own text>\", "
             '"requirement_b_evidence": "<verbatim conflicting phrase quoted '
             "from requirement b's own text>\", "
-            '"reconciliation_checked": <true only if you checked every other '
-            'given requirement for a reconciling exception and found none>, '
-            '"explanation": "<one concrete sentence>"}]. If there are no '
-            "contradictions, respond with an empty JSON array: []. No prose, "
-            "no reasoning, no markdown fences - the JSON array must be the "
-            "entire response."
+            '"requirement_a_obligation": "<one-sentence restatement of what '
+            'a actually requires>", "requirement_b_obligation": "<one-'
+            'sentence restatement of what b actually requires>", '
+            '"requirement_a_scope": "<the explicit temporal/operational/'
+            'spatial/conditional/basis scope stated in a\'s own text, or '
+            '\'none stated\' if unqualified>", "requirement_b_scope": "<same '
+            'for b>", "scopes_overlap": <true only if a real condition '
+            "exists where both requirements' stated scopes are "
+            'simultaneously in effect - false if they are temporally, '
+            'operationally, spatially, or conditionally disjoint>, '
+            '"scope_reconciliation_reasoning": "<why the scopes do or do '
+            "not overlap, quoting the specific scope language from each "
+            'side>", "reconciliation_checked": <true only if you checked '
+            'every other given requirement for a reconciling exception and '
+            'found none>, "explanation": "<one concrete sentence>"}]. If '
+            "there are no contradictions, respond with an empty JSON array: "
+            "[]. No prose, no reasoning, no markdown fences - the JSON "
+            "array must be the entire response."
         )
 
     # -- stage 5: assemble (milestones) --------------------------------------

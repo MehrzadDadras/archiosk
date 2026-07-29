@@ -1,0 +1,1016 @@
+[
+  {
+    "dimension": "temporal_occupied_unoccupied",
+    "kind": "reconciled",
+    "repetition": 1,
+    "item_ids": [
+      "TEMP-R-A",
+      "TEMP-R-B"
+    ],
+    "model": "claude-sonnet-4-6",
+    "prompt_version": "p25",
+    "raw_response_text": "[]",
+    "input_tokens": 1493,
+    "output_tokens": 4,
+    "latency_seconds": 9.218866699957289,
+    "checked": true,
+    "note": null,
+    "flags": [],
+    "correct": true,
+    "timestamp": "2026-07-28T20:45:57.219071+00:00"
+  },
+  {
+    "dimension": "temporal_occupied_unoccupied",
+    "kind": "reconciled",
+    "repetition": 2,
+    "item_ids": [
+      "TEMP-R-A",
+      "TEMP-R-B"
+    ],
+    "model": "claude-sonnet-4-6",
+    "prompt_version": "p25",
+    "raw_response_text": "[]",
+    "input_tokens": 1493,
+    "output_tokens": 4,
+    "latency_seconds": 1.121126399957575,
+    "checked": true,
+    "note": null,
+    "flags": [],
+    "correct": true,
+    "timestamp": "2026-07-28T20:45:58.951236+00:00"
+  },
+  {
+    "dimension": "temporal_occupied_unoccupied",
+    "kind": "reconciled",
+    "repetition": 3,
+    "item_ids": [
+      "TEMP-R-A",
+      "TEMP-R-B"
+    ],
+    "model": "claude-sonnet-4-6",
+    "prompt_version": "p25",
+    "raw_response_text": "[]",
+    "input_tokens": 1493,
+    "output_tokens": 4,
+    "latency_seconds": 1.178112699999474,
+    "checked": true,
+    "note": null,
+    "flags": [],
+    "correct": true,
+    "timestamp": "2026-07-28T20:46:00.596589+00:00"
+  },
+  {
+    "dimension": "temporal_occupied_unoccupied",
+    "kind": "conflict",
+    "repetition": 1,
+    "item_ids": [
+      "TEMP-C-A",
+      "TEMP-C-B"
+    ],
+    "model": "claude-sonnet-4-6",
+    "prompt_version": "p25",
+    "raw_response_text": "[{\"a\": \"TEMP-C-A\", \"b\": \"TEMP-C-B\", \"requirement_a_evidence\": \"maintained at a temperature of 68 to 72 degrees Fahrenheit during occupied hours\", \"requirement_b_evidence\": \"maintained at 55 degrees Fahrenheit at all times, including during occupied hours\", \"requirement_a_obligation\": \"Space A must be kept between 68 and 72 degrees Fahrenheit during occupied hours (7:00 AM to 6:00 PM).\", \"requirement_b_obligation\": \"Space A must be kept at exactly 55 degrees Fahrenheit at all times, including during occupied hours.\", \"requirement_a_scope\": \"occupied hours, defined as 7:00 AM to 6:00 PM\", \"requirement_b_scope\": \"at all times, including during occupied hours\", \"scopes_overlap\": true, \"scope_reconciliation_reasoning\": \"TEMP-C-A applies 'during occupied hours'; TEMP-C-B applies 'at all times, including during occupied hours' \u2014 both requirements are explicitly in effect simultaneously during occupied hours, creating a direct overlap.\", \"reconciliation_checked\": true, \"explanation\": \"During occupied hours, TEMP-C-A requires 68\u201372\u00b0F while TEMP-C-B simultaneously requires 55\u00b0F for the same Space A, and no reconciling exception exists in the provided requirements.\"}]",
+    "input_tokens": 1495,
+    "output_tokens": 324,
+    "latency_seconds": 4.922591599985026,
+    "checked": true,
+    "note": null,
+    "flags": [
+      {
+        "a": "TEMP-C-A",
+        "b": "TEMP-C-B",
+        "explanation": "During occupied hours, TEMP-C-A requires 68\u201372\u00b0F while TEMP-C-B simultaneously requires 55\u00b0F for the same Space A, and no reconciling exception exists in the provided requirements.",
+        "requirement_a_evidence": "maintained at a temperature of 68 to 72 degrees Fahrenheit during occupied hours",
+        "requirement_b_evidence": "maintained at 55 degrees Fahrenheit at all times, including during occupied hours",
+        "reconciliation_checked": true,
+        "requirement_a_scope": "occupied hours, defined as 7:00 AM to 6:00 PM",
+        "requirement_b_scope": "at all times, including during occupied hours",
+        "scopes_overlap": true,
+        "scope_reconciliation_reasoning": "TEMP-C-A applies 'during occupied hours'; TEMP-C-B applies 'at all times, including during occupied hours' \u2014 both requirements are explicitly in effect simultaneously during occupied hours, creating a direct overlap."
+      }
+    ],
+    "correct": true,
+    "timestamp": "2026-07-28T20:46:05.887726+00:00"
+  },
+  {
+    "dimension": "temporal_occupied_unoccupied",
+    "kind": "conflict",
+    "repetition": 2,
+    "item_ids": [
+      "TEMP-C-A",
+      "TEMP-C-B"
+    ],
+    "model": "claude-sonnet-4-6",
+    "prompt_version": "p25",
+    "raw_response_text": "[{\"a\": \"TEMP-C-A\", \"b\": \"TEMP-C-B\", \"requirement_a_evidence\": \"maintained at a temperature of 68 to 72 degrees Fahrenheit during occupied hours\", \"requirement_b_evidence\": \"maintained at 55 degrees Fahrenheit at all times, including during occupied hours\", \"requirement_a_obligation\": \"Space A must be kept between 68 and 72 degrees Fahrenheit during occupied hours (7:00 AM to 6:00 PM).\", \"requirement_b_obligation\": \"Space A must be kept at exactly 55 degrees Fahrenheit at all times, including during occupied hours.\", \"requirement_a_scope\": \"occupied hours, defined as 7:00 AM to 6:00 PM\", \"requirement_b_scope\": \"at all times, including during occupied hours\", \"scopes_overlap\": true, \"scope_reconciliation_reasoning\": \"TEMP-C-A applies during 'occupied hours, defined as 7:00 AM to 6:00 PM' and TEMP-C-B applies 'at all times, including during occupied hours' \u2014 TEMP-C-B's own text explicitly includes the same occupied hours window, creating direct overlap during that period.\", \"reconciliation_checked\": true, \"explanation\": \"During occupied hours, TEMP-C-A requires Space A to be 68\u201372\u00b0F while TEMP-C-B simultaneously requires it to be 55\u00b0F, and no other requirement provides a reconciling exception between these two obligations.\"}]",
+    "input_tokens": 1495,
+    "output_tokens": 354,
+    "latency_seconds": 6.7196934999665245,
+    "checked": true,
+    "note": null,
+    "flags": [
+      {
+        "a": "TEMP-C-A",
+        "b": "TEMP-C-B",
+        "explanation": "During occupied hours, TEMP-C-A requires Space A to be 68\u201372\u00b0F while TEMP-C-B simultaneously requires it to be 55\u00b0F, and no other requirement provides a reconciling exception between these two obligations.",
+        "requirement_a_evidence": "maintained at a temperature of 68 to 72 degrees Fahrenheit during occupied hours",
+        "requirement_b_evidence": "maintained at 55 degrees Fahrenheit at all times, including during occupied hours",
+        "reconciliation_checked": true,
+        "requirement_a_scope": "occupied hours, defined as 7:00 AM to 6:00 PM",
+        "requirement_b_scope": "at all times, including during occupied hours",
+        "scopes_overlap": true,
+        "scope_reconciliation_reasoning": "TEMP-C-A applies during 'occupied hours, defined as 7:00 AM to 6:00 PM' and TEMP-C-B applies 'at all times, including during occupied hours' \u2014 TEMP-C-B's own text explicitly includes the same occupied hours window, creating direct overlap during that period."
+      }
+    ],
+    "correct": true,
+    "timestamp": "2026-07-28T20:46:13.192650+00:00"
+  },
+  {
+    "dimension": "temporal_occupied_unoccupied",
+    "kind": "conflict",
+    "repetition": 3,
+    "item_ids": [
+      "TEMP-C-A",
+      "TEMP-C-B"
+    ],
+    "model": "claude-sonnet-4-6",
+    "prompt_version": "p25",
+    "raw_response_text": "[{\"a\": \"TEMP-C-A\", \"b\": \"TEMP-C-B\", \"requirement_a_evidence\": \"maintained at a temperature of 68 to 72 degrees Fahrenheit during occupied hours\", \"requirement_b_evidence\": \"maintained at 55 degrees Fahrenheit at all times, including during occupied hours\", \"requirement_a_obligation\": \"Space A must be kept between 68 and 72 degrees Fahrenheit during occupied hours (7:00 AM to 6:00 PM).\", \"requirement_b_obligation\": \"Space A must be kept at exactly 55 degrees Fahrenheit at all times, including during occupied hours.\", \"requirement_a_scope\": \"during occupied hours, defined as 7:00 AM to 6:00 PM\", \"requirement_b_scope\": \"at all times, including during occupied hours\", \"scopes_overlap\": true, \"scope_reconciliation_reasoning\": \"TEMP-C-A applies 'during occupied hours,' and TEMP-C-B explicitly extends its 55\u00b0F requirement to 'including during occupied hours,' so both requirements are simultaneously in effect during occupied hours, creating a direct conflict between 68\u201372\u00b0F and 55\u00b0F for the same space at the same time.\", \"reconciliation_checked\": true, \"explanation\": \"During occupied hours, TEMP-C-A requires Space A to be 68\u201372\u00b0F while TEMP-C-B simultaneously requires it to be 55\u00b0F, and no other requirement provides a reconciling mechanism.\"}]",
+    "input_tokens": 1495,
+    "output_tokens": 350,
+    "latency_seconds": 5.579240699997172,
+    "checked": true,
+    "note": null,
+    "flags": [
+      {
+        "a": "TEMP-C-A",
+        "b": "TEMP-C-B",
+        "explanation": "During occupied hours, TEMP-C-A requires Space A to be 68\u201372\u00b0F while TEMP-C-B simultaneously requires it to be 55\u00b0F, and no other requirement provides a reconciling mechanism.",
+        "requirement_a_evidence": "maintained at a temperature of 68 to 72 degrees Fahrenheit during occupied hours",
+        "requirement_b_evidence": "maintained at 55 degrees Fahrenheit at all times, including during occupied hours",
+        "reconciliation_checked": true,
+        "requirement_a_scope": "during occupied hours, defined as 7:00 AM to 6:00 PM",
+        "requirement_b_scope": "at all times, including during occupied hours",
+        "scopes_overlap": true,
+        "scope_reconciliation_reasoning": "TEMP-C-A applies 'during occupied hours,' and TEMP-C-B explicitly extends its 55\u00b0F requirement to 'including during occupied hours,' so both requirements are simultaneously in effect during occupied hours, creating a direct conflict between 68\u201372\u00b0F and 55\u00b0F for the same space at the same time."
+      }
+    ],
+    "correct": true,
+    "timestamp": "2026-07-28T20:46:19.259017+00:00"
+  },
+  {
+    "dimension": "operational_mode",
+    "kind": "reconciled",
+    "repetition": 1,
+    "item_ids": [
+      "MODE-R-A",
+      "MODE-R-B"
+    ],
+    "model": "claude-sonnet-4-6",
+    "prompt_version": "p25",
+    "raw_response_text": "[]",
+    "input_tokens": 1477,
+    "output_tokens": 4,
+    "latency_seconds": 1.2381423000479117,
+    "checked": true,
+    "note": null,
+    "flags": [],
+    "correct": true,
+    "timestamp": "2026-07-28T20:46:20.945272+00:00"
+  },
+  {
+    "dimension": "operational_mode",
+    "kind": "reconciled",
+    "repetition": 2,
+    "item_ids": [
+      "MODE-R-A",
+      "MODE-R-B"
+    ],
+    "model": "claude-sonnet-4-6",
+    "prompt_version": "p25",
+    "raw_response_text": "[]",
+    "input_tokens": 1477,
+    "output_tokens": 4,
+    "latency_seconds": 1.2459080000407994,
+    "checked": true,
+    "note": null,
+    "flags": [],
+    "correct": true,
+    "timestamp": "2026-07-28T20:46:22.680009+00:00"
+  },
+  {
+    "dimension": "operational_mode",
+    "kind": "reconciled",
+    "repetition": 3,
+    "item_ids": [
+      "MODE-R-A",
+      "MODE-R-B"
+    ],
+    "model": "claude-sonnet-4-6",
+    "prompt_version": "p25",
+    "raw_response_text": "[]",
+    "input_tokens": 1477,
+    "output_tokens": 4,
+    "latency_seconds": 1.277274199994281,
+    "checked": true,
+    "note": null,
+    "flags": [],
+    "correct": true,
+    "timestamp": "2026-07-28T20:46:24.483386+00:00"
+  },
+  {
+    "dimension": "operational_mode",
+    "kind": "conflict",
+    "repetition": 1,
+    "item_ids": [
+      "MODE-C-A",
+      "MODE-C-B"
+    ],
+    "model": "claude-sonnet-4-6",
+    "prompt_version": "p25",
+    "raw_response_text": "[{\"a\": \"MODE-C-A\", \"b\": \"MODE-C-B\", \"requirement_a_evidence\": \"shall remain on standby, non-running, at all times during normal utility power availability\", \"requirement_b_evidence\": \"shall run continuously, including during normal utility power availability\", \"requirement_a_obligation\": \"Generator G-1 must be kept in a non-running standby state whenever normal utility power is available.\", \"requirement_b_obligation\": \"Generator G-1 must run continuously at all times, explicitly including during normal utility power availability.\", \"requirement_a_scope\": \"during normal utility power availability\", \"requirement_b_scope\": \"including during normal utility power availability\", \"scopes_overlap\": true, \"scope_reconciliation_reasoning\": \"Both requirements explicitly name the same condition \u2014 'during normal utility power availability' \u2014 as within their scope, so they are simultaneously in effect under that condition, creating a direct overlap.\", \"reconciliation_checked\": true, \"explanation\": \"During normal utility power availability, MODE-C-A requires G-1 to be 'non-running' while MODE-C-B requires G-1 to 'run continuously,' making it physically impossible to satisfy both obligations simultaneously.\"}]",
+    "input_tokens": 1476,
+    "output_tokens": 277,
+    "latency_seconds": 4.879047899972647,
+    "checked": true,
+    "note": null,
+    "flags": [
+      {
+        "a": "MODE-C-A",
+        "b": "MODE-C-B",
+        "explanation": "During normal utility power availability, MODE-C-A requires G-1 to be 'non-running' while MODE-C-B requires G-1 to 'run continuously,' making it physically impossible to satisfy both obligations simultaneously.",
+        "requirement_a_evidence": "shall remain on standby, non-running, at all times during normal utility power availability",
+        "requirement_b_evidence": "shall run continuously, including during normal utility power availability",
+        "reconciliation_checked": true,
+        "requirement_a_scope": "during normal utility power availability",
+        "requirement_b_scope": "including during normal utility power availability",
+        "scopes_overlap": true,
+        "scope_reconciliation_reasoning": "Both requirements explicitly name the same condition \u2014 'during normal utility power availability' \u2014 as within their scope, so they are simultaneously in effect under that condition, creating a direct overlap."
+      }
+    ],
+    "correct": true,
+    "timestamp": "2026-07-28T20:46:29.798139+00:00"
+  },
+  {
+    "dimension": "operational_mode",
+    "kind": "conflict",
+    "repetition": 2,
+    "item_ids": [
+      "MODE-C-A",
+      "MODE-C-B"
+    ],
+    "model": "claude-sonnet-4-6",
+    "prompt_version": "p25",
+    "raw_response_text": "[{\"a\": \"MODE-C-A\", \"b\": \"MODE-C-B\", \"requirement_a_evidence\": \"shall remain on standby, non-running, at all times during normal utility power availability\", \"requirement_b_evidence\": \"shall run continuously, including during normal utility power availability\", \"requirement_a_obligation\": \"Generator G-1 must be kept in a non-running standby state whenever normal utility power is available.\", \"requirement_b_obligation\": \"Generator G-1 must run continuously at all times, including when normal utility power is available.\", \"requirement_a_scope\": \"during normal utility power availability\", \"requirement_b_scope\": \"including during normal utility power availability\", \"scopes_overlap\": true, \"scope_reconciliation_reasoning\": \"Both requirements explicitly name the same condition \u2014 'during normal utility power availability' \u2014 as within their scope, meaning both apply simultaneously under that condition, creating a direct operational conflict.\", \"reconciliation_checked\": true, \"explanation\": \"During normal utility power availability, MODE-C-A requires G-1 to be 'non-running' while MODE-C-B requires G-1 to 'run continuously,' making it impossible to satisfy both obligations simultaneously.\"}]",
+    "input_tokens": 1476,
+    "output_tokens": 275,
+    "latency_seconds": 5.161551300087012,
+    "checked": true,
+    "note": null,
+    "flags": [
+      {
+        "a": "MODE-C-A",
+        "b": "MODE-C-B",
+        "explanation": "During normal utility power availability, MODE-C-A requires G-1 to be 'non-running' while MODE-C-B requires G-1 to 'run continuously,' making it impossible to satisfy both obligations simultaneously.",
+        "requirement_a_evidence": "shall remain on standby, non-running, at all times during normal utility power availability",
+        "requirement_b_evidence": "shall run continuously, including during normal utility power availability",
+        "reconciliation_checked": true,
+        "requirement_a_scope": "during normal utility power availability",
+        "requirement_b_scope": "including during normal utility power availability",
+        "scopes_overlap": true,
+        "scope_reconciliation_reasoning": "Both requirements explicitly name the same condition \u2014 'during normal utility power availability' \u2014 as within their scope, meaning both apply simultaneously under that condition, creating a direct operational conflict."
+      }
+    ],
+    "correct": true,
+    "timestamp": "2026-07-28T20:46:35.563315+00:00"
+  },
+  {
+    "dimension": "operational_mode",
+    "kind": "conflict",
+    "repetition": 3,
+    "item_ids": [
+      "MODE-C-A",
+      "MODE-C-B"
+    ],
+    "model": "claude-sonnet-4-6",
+    "prompt_version": "p25",
+    "raw_response_text": "[{\"a\": \"MODE-C-A\", \"b\": \"MODE-C-B\", \"requirement_a_evidence\": \"shall remain on standby, non-running, at all times during normal utility power availability\", \"requirement_b_evidence\": \"shall run continuously, including during normal utility power availability\", \"requirement_a_obligation\": \"Generator G-1 must be kept in a non-running standby state whenever normal utility power is available.\", \"requirement_b_obligation\": \"Generator G-1 must run continuously at all times, explicitly including during normal utility power availability.\", \"requirement_a_scope\": \"during normal utility power availability\", \"requirement_b_scope\": \"including during normal utility power availability\", \"scopes_overlap\": true, \"scope_reconciliation_reasoning\": \"Both requirements explicitly name the same condition \u2014 'during normal utility power availability' \u2014 as within their scope, so there is a direct and unavoidable overlap where both are simultaneously in effect.\", \"reconciliation_checked\": true, \"explanation\": \"During normal utility power availability, MODE-C-A requires G-1 to be 'non-running' while MODE-C-B requires it to 'run continuously,' and no reconciling exception exists in any other given requirement.\"}]",
+    "input_tokens": 1476,
+    "output_tokens": 278,
+    "latency_seconds": 5.939538800041191,
+    "checked": true,
+    "note": null,
+    "flags": [
+      {
+        "a": "MODE-C-A",
+        "b": "MODE-C-B",
+        "explanation": "During normal utility power availability, MODE-C-A requires G-1 to be 'non-running' while MODE-C-B requires it to 'run continuously,' and no reconciling exception exists in any other given requirement.",
+        "requirement_a_evidence": "shall remain on standby, non-running, at all times during normal utility power availability",
+        "requirement_b_evidence": "shall run continuously, including during normal utility power availability",
+        "reconciliation_checked": true,
+        "requirement_a_scope": "during normal utility power availability",
+        "requirement_b_scope": "including during normal utility power availability",
+        "scopes_overlap": true,
+        "scope_reconciliation_reasoning": "Both requirements explicitly name the same condition \u2014 'during normal utility power availability' \u2014 as within their scope, so there is a direct and unavoidable overlap where both are simultaneously in effect."
+      }
+    ],
+    "correct": true,
+    "timestamp": "2026-07-28T20:46:42.010035+00:00"
+  },
+  {
+    "dimension": "spatial_zone",
+    "kind": "reconciled",
+    "repetition": 1,
+    "item_ids": [
+      "ZONE-R-A",
+      "ZONE-R-B"
+    ],
+    "model": "claude-sonnet-4-6",
+    "prompt_version": "p25",
+    "raw_response_text": "[]",
+    "input_tokens": 1496,
+    "output_tokens": 4,
+    "latency_seconds": 0.921719599980861,
+    "checked": true,
+    "note": null,
+    "flags": [],
+    "correct": true,
+    "timestamp": "2026-07-28T20:46:43.313116+00:00"
+  },
+  {
+    "dimension": "spatial_zone",
+    "kind": "reconciled",
+    "repetition": 2,
+    "item_ids": [
+      "ZONE-R-A",
+      "ZONE-R-B"
+    ],
+    "model": "claude-sonnet-4-6",
+    "prompt_version": "p25",
+    "raw_response_text": "[]",
+    "input_tokens": 1496,
+    "output_tokens": 4,
+    "latency_seconds": 1.8478958000196144,
+    "checked": true,
+    "note": null,
+    "flags": [],
+    "correct": true,
+    "timestamp": "2026-07-28T20:46:45.677784+00:00"
+  },
+  {
+    "dimension": "spatial_zone",
+    "kind": "reconciled",
+    "repetition": 3,
+    "item_ids": [
+      "ZONE-R-A",
+      "ZONE-R-B"
+    ],
+    "model": "claude-sonnet-4-6",
+    "prompt_version": "p25",
+    "raw_response_text": "[]",
+    "input_tokens": 1496,
+    "output_tokens": 4,
+    "latency_seconds": 1.2334755999036133,
+    "checked": true,
+    "note": null,
+    "flags": [],
+    "correct": true,
+    "timestamp": "2026-07-28T20:46:47.316749+00:00"
+  },
+  {
+    "dimension": "spatial_zone",
+    "kind": "conflict",
+    "repetition": 1,
+    "item_ids": [
+      "ZONE-C-A",
+      "ZONE-C-B"
+    ],
+    "model": "claude-sonnet-4-6",
+    "prompt_version": "p25",
+    "raw_response_text": "[{\"a\": \"ZONE-C-A\", \"b\": \"ZONE-C-B\", \"requirement_a_evidence\": \"Zone 1 (Server Room), served by AHU-1, shall be maintained at 65 to 68 degrees Fahrenheit year-round\", \"requirement_b_evidence\": \"All zones served by AHU-3, including Zone 1, shall be maintained at 72 to 76 degrees Fahrenheit\", \"requirement_a_obligation\": \"Zone 1 must be maintained at 65\u201368\u00b0F year-round.\", \"requirement_b_obligation\": \"Zone 1 must be maintained at 72\u201376\u00b0F to satisfy the building's central humidity control strategy.\", \"requirement_a_scope\": \"Zone 1 (Server Room), year-round; no other condition stated.\", \"requirement_b_scope\": \"All zones served by AHU-3, including Zone 1; no temporal or conditional limitation stated.\", \"scopes_overlap\": true, \"scope_reconciliation_reasoning\": \"ZONE-C-A applies to 'Zone 1 (Server Room)' with no temporal or conditional limit; ZONE-C-B applies to 'All zones served by AHU-3, including Zone 1' with no temporal or conditional limit. Both requirements explicitly name Zone 1 as within their scope and neither states any condition that would make them disjoint, so they are simultaneously in effect for Zone 1.\", \"reconciliation_checked\": true, \"explanation\": \"Both requirements apply to Zone 1 simultaneously with no reconciling exception, but require incompatible temperature ranges\u201465\u201368\u00b0F versus 72\u201376\u00b0F\u2014that cannot both be maintained at the same time.\"}]",
+    "input_tokens": 1501,
+    "output_tokens": 392,
+    "latency_seconds": 7.694528899970464,
+    "checked": true,
+    "note": null,
+    "flags": [
+      {
+        "a": "ZONE-C-A",
+        "b": "ZONE-C-B",
+        "explanation": "Both requirements apply to Zone 1 simultaneously with no reconciling exception, but require incompatible temperature ranges\u201465\u201368\u00b0F versus 72\u201376\u00b0F\u2014that cannot both be maintained at the same time.",
+        "requirement_a_evidence": "Zone 1 (Server Room), served by AHU-1, shall be maintained at 65 to 68 degrees Fahrenheit year-round",
+        "requirement_b_evidence": "All zones served by AHU-3, including Zone 1, shall be maintained at 72 to 76 degrees Fahrenheit",
+        "reconciliation_checked": true,
+        "requirement_a_scope": "Zone 1 (Server Room), year-round; no other condition stated.",
+        "requirement_b_scope": "All zones served by AHU-3, including Zone 1; no temporal or conditional limitation stated.",
+        "scopes_overlap": true,
+        "scope_reconciliation_reasoning": "ZONE-C-A applies to 'Zone 1 (Server Room)' with no temporal or conditional limit; ZONE-C-B applies to 'All zones served by AHU-3, including Zone 1' with no temporal or conditional limit. Both requirements explicitly name Zone 1 as within their scope and neither states any condition that would make them disjoint, so they are simultaneously in effect for Zone 1."
+      }
+    ],
+    "correct": true,
+    "timestamp": "2026-07-28T20:46:55.466995+00:00"
+  },
+  {
+    "dimension": "spatial_zone",
+    "kind": "conflict",
+    "repetition": 2,
+    "item_ids": [
+      "ZONE-C-A",
+      "ZONE-C-B"
+    ],
+    "model": "claude-sonnet-4-6",
+    "prompt_version": "p25",
+    "raw_response_text": "[{\"a\": \"ZONE-C-A\", \"b\": \"ZONE-C-B\", \"requirement_a_evidence\": \"Zone 1 (Server Room), served by AHU-1, shall be maintained at 65 to 68 degrees Fahrenheit year-round\", \"requirement_b_evidence\": \"All zones served by AHU-3, including Zone 1, shall be maintained at 72 to 76 degrees Fahrenheit\", \"requirement_a_obligation\": \"Zone 1 must be maintained at 65\u201368\u00b0F at all times throughout the year.\", \"requirement_b_obligation\": \"Zone 1 must be maintained at 72\u201376\u00b0F to satisfy the building's central humidity control strategy.\", \"requirement_a_scope\": \"Zone 1 (Server Room), year-round; no operational mode or conditional limit stated beyond that.\", \"requirement_b_scope\": \"All zones served by AHU-3, including Zone 1; no temporal or conditional limit stated.\", \"scopes_overlap\": true, \"scope_reconciliation_reasoning\": \"ZONE-C-A applies to 'Zone 1' 'year-round' with no exclusions; ZONE-C-B applies to 'All zones served by AHU-3, including Zone 1' with no exclusions \u2014 both requirements apply to Zone 1 simultaneously and continuously, creating a direct overlap.\", \"reconciliation_checked\": true, \"explanation\": \"Both requirements govern Zone 1 simultaneously with no stated exception or reconciling mechanism, yet ZONE-C-A mandates 65\u201368\u00b0F while ZONE-C-B mandates 72\u201376\u00b0F \u2014 temperature ranges that are mutually exclusive and cannot both be satisfied at the same time.\"}]",
+    "input_tokens": 1501,
+    "output_tokens": 397,
+    "latency_seconds": 8.150680700084195,
+    "checked": true,
+    "note": null,
+    "flags": [
+      {
+        "a": "ZONE-C-A",
+        "b": "ZONE-C-B",
+        "explanation": "Both requirements govern Zone 1 simultaneously with no stated exception or reconciling mechanism, yet ZONE-C-A mandates 65\u201368\u00b0F while ZONE-C-B mandates 72\u201376\u00b0F \u2014 temperature ranges that are mutually exclusive and cannot both be satisfied at the same time.",
+        "requirement_a_evidence": "Zone 1 (Server Room), served by AHU-1, shall be maintained at 65 to 68 degrees Fahrenheit year-round",
+        "requirement_b_evidence": "All zones served by AHU-3, including Zone 1, shall be maintained at 72 to 76 degrees Fahrenheit",
+        "reconciliation_checked": true,
+        "requirement_a_scope": "Zone 1 (Server Room), year-round; no operational mode or conditional limit stated beyond that.",
+        "requirement_b_scope": "All zones served by AHU-3, including Zone 1; no temporal or conditional limit stated.",
+        "scopes_overlap": true,
+        "scope_reconciliation_reasoning": "ZONE-C-A applies to 'Zone 1' 'year-round' with no exclusions; ZONE-C-B applies to 'All zones served by AHU-3, including Zone 1' with no exclusions \u2014 both requirements apply to Zone 1 simultaneously and continuously, creating a direct overlap."
+      }
+    ],
+    "correct": true,
+    "timestamp": "2026-07-28T20:47:04.117179+00:00"
+  },
+  {
+    "dimension": "spatial_zone",
+    "kind": "conflict",
+    "repetition": 3,
+    "item_ids": [
+      "ZONE-C-A",
+      "ZONE-C-B"
+    ],
+    "model": "claude-sonnet-4-6",
+    "prompt_version": "p25",
+    "raw_response_text": "[{\"a\": \"ZONE-C-A\", \"b\": \"ZONE-C-B\", \"requirement_a_evidence\": \"Zone 1 (Server Room), served by AHU-1, shall be maintained at 65 to 68 degrees Fahrenheit year-round\", \"requirement_b_evidence\": \"All zones served by AHU-3, including Zone 1, shall be maintained at 72 to 76 degrees Fahrenheit\", \"requirement_a_obligation\": \"Zone 1 must be maintained at 65\u201368\u00b0F at all times throughout the year.\", \"requirement_b_obligation\": \"Zone 1 must be maintained at 72\u201376\u00b0F as part of the building's central humidity control strategy.\", \"requirement_a_scope\": \"Zone 1 (Server Room), served by AHU-1, year-round\", \"requirement_b_scope\": \"All zones served by AHU-3, including Zone 1, with no temporal or conditional limitation stated\", \"scopes_overlap\": true, \"scope_reconciliation_reasoning\": \"Both requirements apply to Zone 1 with no temporal, operational, or conditional limitation that would make them disjoint; ZONE-C-A applies to Zone 1 'year-round' and ZONE-C-B applies to 'All zones served by AHU-3, including Zone 1' with no qualifying condition, meaning both are simultaneously in effect for Zone 1 at all times.\", \"reconciliation_checked\": true, \"explanation\": \"Both requirements govern Zone 1's temperature setpoint simultaneously and without qualification, yet ZONE-C-A mandates 65\u201368\u00b0F while ZONE-C-B mandates 72\u201376\u00b0F, ranges that do not overlap and cannot both be satisfied at the same time.\"}]",
+    "input_tokens": 1501,
+    "output_tokens": 409,
+    "latency_seconds": 8.410441200016066,
+    "checked": true,
+    "note": null,
+    "flags": [
+      {
+        "a": "ZONE-C-A",
+        "b": "ZONE-C-B",
+        "explanation": "Both requirements govern Zone 1's temperature setpoint simultaneously and without qualification, yet ZONE-C-A mandates 65\u201368\u00b0F while ZONE-C-B mandates 72\u201376\u00b0F, ranges that do not overlap and cannot both be satisfied at the same time.",
+        "requirement_a_evidence": "Zone 1 (Server Room), served by AHU-1, shall be maintained at 65 to 68 degrees Fahrenheit year-round",
+        "requirement_b_evidence": "All zones served by AHU-3, including Zone 1, shall be maintained at 72 to 76 degrees Fahrenheit",
+        "reconciliation_checked": true,
+        "requirement_a_scope": "Zone 1 (Server Room), served by AHU-1, year-round",
+        "requirement_b_scope": "All zones served by AHU-3, including Zone 1, with no temporal or conditional limitation stated",
+        "scopes_overlap": true,
+        "scope_reconciliation_reasoning": "Both requirements apply to Zone 1 with no temporal, operational, or conditional limitation that would make them disjoint; ZONE-C-A applies to Zone 1 'year-round' and ZONE-C-B applies to 'All zones served by AHU-3, including Zone 1' with no qualifying condition, meaning both are simultaneously in effect for Zone 1 at all times."
+      }
+    ],
+    "correct": true,
+    "timestamp": "2026-07-28T20:47:12.999266+00:00"
+  },
+  {
+    "dimension": "temporary_permanent",
+    "kind": "reconciled",
+    "repetition": 1,
+    "item_ids": [
+      "TEMP2-R-A",
+      "TEMP2-R-B"
+    ],
+    "model": "claude-sonnet-4-6",
+    "prompt_version": "p25",
+    "raw_response_text": "[]",
+    "input_tokens": 1480,
+    "output_tokens": 4,
+    "latency_seconds": 1.010335800005123,
+    "checked": true,
+    "note": null,
+    "flags": [],
+    "correct": true,
+    "timestamp": "2026-07-28T20:47:14.591895+00:00"
+  },
+  {
+    "dimension": "temporary_permanent",
+    "kind": "reconciled",
+    "repetition": 2,
+    "item_ids": [
+      "TEMP2-R-A",
+      "TEMP2-R-B"
+    ],
+    "model": "claude-sonnet-4-6",
+    "prompt_version": "p25",
+    "raw_response_text": "[]",
+    "input_tokens": 1480,
+    "output_tokens": 4,
+    "latency_seconds": 0.9656528999330476,
+    "checked": true,
+    "note": null,
+    "flags": [],
+    "correct": true,
+    "timestamp": "2026-07-28T20:47:16.092998+00:00"
+  },
+  {
+    "dimension": "temporary_permanent",
+    "kind": "reconciled",
+    "repetition": 3,
+    "item_ids": [
+      "TEMP2-R-A",
+      "TEMP2-R-B"
+    ],
+    "model": "claude-sonnet-4-6",
+    "prompt_version": "p25",
+    "raw_response_text": "[]",
+    "input_tokens": 1480,
+    "output_tokens": 4,
+    "latency_seconds": 1.1241721000988036,
+    "checked": true,
+    "note": null,
+    "flags": [],
+    "correct": true,
+    "timestamp": "2026-07-28T20:47:17.833786+00:00"
+  },
+  {
+    "dimension": "temporary_permanent",
+    "kind": "conflict",
+    "repetition": 1,
+    "item_ids": [
+      "TEMP2-C-A",
+      "TEMP2-C-B"
+    ],
+    "model": "claude-sonnet-4-6",
+    "prompt_version": "p25",
+    "raw_response_text": "[{\"a\": \"TEMP2-C-A\", \"b\": \"TEMP2-C-B\", \"requirement_a_evidence\": \"minimum of 200 accessible parking spaces upon Substantial Completion\", \"requirement_b_evidence\": \"not fewer than 240 accessible parking spaces\", \"requirement_a_obligation\": \"The permanent parking structure must provide at least 200 accessible parking spaces at Substantial Completion.\", \"requirement_b_obligation\": \"All parking areas, whether temporary or permanent, both before and after Substantial Completion, must provide at least 240 accessible parking spaces.\", \"requirement_a_scope\": \"permanent parking structure; at the time of Substantial Completion\", \"requirement_b_scope\": \"all parking areas, temporary or permanent; applicable both before and after Substantial Completion\", \"scopes_overlap\": true, \"scope_reconciliation_reasoning\": \"TEMP2-C-B explicitly states it applies to 'permanent' parking areas 'after Substantial Completion,' which directly overlaps with TEMP2-C-A's scope of 'the permanent parking structure' 'upon Substantial Completion.' At the moment of Substantial Completion, both requirements simultaneously govern the permanent structure, yet TEMP2-C-A requires only 200 accessible spaces while TEMP2-C-B requires at least 240.\", \"reconciliation_checked\": true, \"explanation\": \"At Substantial Completion, TEMP2-C-A requires only 200 accessible spaces in the permanent structure while TEMP2-C-B requires no fewer than 240 accessible spaces in all parking areas including permanent ones, making it impossible to satisfy both obligations simultaneously at that milestone.\"}]",
+    "input_tokens": 1481,
+    "output_tokens": 374,
+    "latency_seconds": 11.332404399989173,
+    "checked": true,
+    "note": null,
+    "flags": [
+      {
+        "a": "TEMP2-C-A",
+        "b": "TEMP2-C-B",
+        "explanation": "At Substantial Completion, TEMP2-C-A requires only 200 accessible spaces in the permanent structure while TEMP2-C-B requires no fewer than 240 accessible spaces in all parking areas including permanent ones, making it impossible to satisfy both obligations simultaneously at that milestone.",
+        "requirement_a_evidence": "minimum of 200 accessible parking spaces upon Substantial Completion",
+        "requirement_b_evidence": "not fewer than 240 accessible parking spaces",
+        "reconciliation_checked": true,
+        "requirement_a_scope": "permanent parking structure; at the time of Substantial Completion",
+        "requirement_b_scope": "all parking areas, temporary or permanent; applicable both before and after Substantial Completion",
+        "scopes_overlap": true,
+        "scope_reconciliation_reasoning": "TEMP2-C-B explicitly states it applies to 'permanent' parking areas 'after Substantial Completion,' which directly overlaps with TEMP2-C-A's scope of 'the permanent parking structure' 'upon Substantial Completion.' At the moment of Substantial Completion, both requirements simultaneously govern the permanent structure, yet TEMP2-C-A requires only 200 accessible spaces while TEMP2-C-B requires at least 240."
+      }
+    ],
+    "correct": true,
+    "timestamp": "2026-07-28T20:47:29.717053+00:00"
+  },
+  {
+    "dimension": "temporary_permanent",
+    "kind": "conflict",
+    "repetition": 2,
+    "item_ids": [
+      "TEMP2-C-A",
+      "TEMP2-C-B"
+    ],
+    "model": "claude-sonnet-4-6",
+    "prompt_version": "p25",
+    "raw_response_text": "[{\"a\": \"TEMP2-C-A\", \"b\": \"TEMP2-C-B\", \"requirement_a_evidence\": \"minimum of 200 accessible parking spaces upon Substantial Completion\", \"requirement_b_evidence\": \"not fewer than 240 accessible parking spaces\", \"requirement_a_obligation\": \"The permanent parking structure must provide at least 200 accessible parking spaces upon Substantial Completion.\", \"requirement_b_obligation\": \"All parking areas, whether temporary or permanent, applicable both before and after Substantial Completion, must provide at least 240 accessible parking spaces.\", \"requirement_a_scope\": \"permanent parking structure, upon Substantial Completion\", \"requirement_b_scope\": \"all parking areas, whether temporary or permanent, applicable both before and after Substantial Completion\", \"scopes_overlap\": true, \"scope_reconciliation_reasoning\": \"TEMP2-C-A applies to 'the permanent parking structure' 'upon Substantial Completion'; TEMP2-C-B applies to 'all parking areas, whether temporary or permanent' and explicitly covers 'after Substantial Completion', meaning the permanent parking structure at and after Substantial Completion falls within both requirements simultaneously, yet TEMP2-C-A requires only 200 while TEMP2-C-B requires 240.\", \"reconciliation_checked\": true, \"explanation\": \"At Substantial Completion, the permanent parking structure is governed by both requirements simultaneously, but TEMP2-C-A requires a minimum of 200 accessible spaces while TEMP2-C-B requires not fewer than 240, creating an irreconcilable numeric conflict.\"}]",
+    "input_tokens": 1481,
+    "output_tokens": 367,
+    "latency_seconds": 7.1421391000039876,
+    "checked": true,
+    "note": null,
+    "flags": [
+      {
+        "a": "TEMP2-C-A",
+        "b": "TEMP2-C-B",
+        "explanation": "At Substantial Completion, the permanent parking structure is governed by both requirements simultaneously, but TEMP2-C-A requires a minimum of 200 accessible spaces while TEMP2-C-B requires not fewer than 240, creating an irreconcilable numeric conflict.",
+        "requirement_a_evidence": "minimum of 200 accessible parking spaces upon Substantial Completion",
+        "requirement_b_evidence": "not fewer than 240 accessible parking spaces",
+        "reconciliation_checked": true,
+        "requirement_a_scope": "permanent parking structure, upon Substantial Completion",
+        "requirement_b_scope": "all parking areas, whether temporary or permanent, applicable both before and after Substantial Completion",
+        "scopes_overlap": true,
+        "scope_reconciliation_reasoning": "TEMP2-C-A applies to 'the permanent parking structure' 'upon Substantial Completion'; TEMP2-C-B applies to 'all parking areas, whether temporary or permanent' and explicitly covers 'after Substantial Completion', meaning the permanent parking structure at and after Substantial Completion falls within both requirements simultaneously, yet TEMP2-C-A requires only 200 while TEMP2-C-B requires 240."
+      }
+    ],
+    "correct": true,
+    "timestamp": "2026-07-28T20:47:37.397272+00:00"
+  },
+  {
+    "dimension": "temporary_permanent",
+    "kind": "conflict",
+    "repetition": 3,
+    "item_ids": [
+      "TEMP2-C-A",
+      "TEMP2-C-B"
+    ],
+    "model": "claude-sonnet-4-6",
+    "prompt_version": "p25",
+    "raw_response_text": "[{\"a\": \"TEMP2-C-A\", \"b\": \"TEMP2-C-B\", \"requirement_a_evidence\": \"a minimum of 200 accessible parking spaces upon Substantial Completion\", \"requirement_b_evidence\": \"shall provide not fewer than 240 accessible parking spaces\", \"requirement_a_obligation\": \"The permanent parking structure must provide at least 200 accessible parking spaces upon Substantial Completion.\", \"requirement_b_obligation\": \"All parking areas, whether temporary or permanent, both before and after Substantial Completion, must provide at least 240 accessible parking spaces.\", \"requirement_a_scope\": \"Permanent parking structure; upon Substantial Completion\", \"requirement_b_scope\": \"All parking areas, temporary or permanent; applicable both before and after Substantial Completion\", \"scopes_overlap\": true, \"scope_reconciliation_reasoning\": \"TEMP2-C-A applies to 'the permanent parking structure' 'upon Substantial Completion'; TEMP2-C-B applies to 'all parking areas, whether temporary or permanent' 'both before and after Substantial Completion' \u2014 the permanent parking structure at Substantial Completion falls squarely within TEMP2-C-B's scope, meaning both requirements govern the same object at the same moment, yet TEMP2-C-A requires only 200 spaces while TEMP2-C-B requires not fewer than 240.\", \"reconciliation_checked\": true, \"explanation\": \"At Substantial Completion the permanent parking structure must simultaneously satisfy a minimum of 200 accessible spaces (TEMP2-C-A) and not fewer than 240 accessible spaces (TEMP2-C-B), creating a direct numeric conflict for the same structure at the same point in time.\"}]",
+    "input_tokens": 1481,
+    "output_tokens": 396,
+    "latency_seconds": 6.225826199981384,
+    "checked": true,
+    "note": null,
+    "flags": [
+      {
+        "a": "TEMP2-C-A",
+        "b": "TEMP2-C-B",
+        "explanation": "At Substantial Completion the permanent parking structure must simultaneously satisfy a minimum of 200 accessible spaces (TEMP2-C-A) and not fewer than 240 accessible spaces (TEMP2-C-B), creating a direct numeric conflict for the same structure at the same point in time.",
+        "requirement_a_evidence": "a minimum of 200 accessible parking spaces upon Substantial Completion",
+        "requirement_b_evidence": "shall provide not fewer than 240 accessible parking spaces",
+        "reconciliation_checked": true,
+        "requirement_a_scope": "Permanent parking structure; upon Substantial Completion",
+        "requirement_b_scope": "All parking areas, temporary or permanent; applicable both before and after Substantial Completion",
+        "scopes_overlap": true,
+        "scope_reconciliation_reasoning": "TEMP2-C-A applies to 'the permanent parking structure' 'upon Substantial Completion'; TEMP2-C-B applies to 'all parking areas, whether temporary or permanent' 'both before and after Substantial Completion' \u2014 the permanent parking structure at Substantial Completion falls squarely within TEMP2-C-B's scope, meaning both requirements govern the same object at the same moment, yet TEMP2-C-A requires only 200 spaces while TEMP2-C-B requires not fewer than 240."
+      }
+    ],
+    "correct": true,
+    "timestamp": "2026-07-28T20:47:44.050481+00:00"
+  },
+  {
+    "dimension": "design_basis_verified",
+    "kind": "reconciled",
+    "repetition": 1,
+    "item_ids": [
+      "DESIGN-R-A",
+      "DESIGN-R-B"
+    ],
+    "model": "claude-sonnet-4-6",
+    "prompt_version": "p25",
+    "raw_response_text": "[]",
+    "input_tokens": 1471,
+    "output_tokens": 4,
+    "latency_seconds": 1.4845003000227734,
+    "checked": true,
+    "note": null,
+    "flags": [],
+    "correct": true,
+    "timestamp": "2026-07-28T20:47:46.141022+00:00"
+  },
+  {
+    "dimension": "design_basis_verified",
+    "kind": "reconciled",
+    "repetition": 2,
+    "item_ids": [
+      "DESIGN-R-A",
+      "DESIGN-R-B"
+    ],
+    "model": "claude-sonnet-4-6",
+    "prompt_version": "p25",
+    "raw_response_text": "[]",
+    "input_tokens": 1471,
+    "output_tokens": 4,
+    "latency_seconds": 1.17507559992373,
+    "checked": true,
+    "note": null,
+    "flags": [],
+    "correct": true,
+    "timestamp": "2026-07-28T20:47:47.840906+00:00"
+  },
+  {
+    "dimension": "design_basis_verified",
+    "kind": "reconciled",
+    "repetition": 3,
+    "item_ids": [
+      "DESIGN-R-A",
+      "DESIGN-R-B"
+    ],
+    "model": "claude-sonnet-4-6",
+    "prompt_version": "p25",
+    "raw_response_text": "[{\"a\": \"DESIGN-R-A\", \"b\": \"DESIGN-R-B\", \"requirement_a_evidence\": \"design-basis capacity rating of 2500 kVA\", \"requirement_b_evidence\": \"actual operating load does not exceed 2000 kVA under normal conditions\", \"requirement_a_obligation\": \"The transformer must be rated and designed to a capacity of 2500 kVA.\", \"requirement_b_obligation\": \"Field-verified load testing confirms the transformer's actual operating load is capped at 2000 kVA under normal conditions.\", \"requirement_a_scope\": \"none stated \u2014 the 2500 kVA design-basis capacity rating is an unqualified design obligation\", \"requirement_b_scope\": \"normal conditions \u2014 the 2000 kVA limit applies under normal operating conditions as confirmed by field-verified load testing\", \"scopes_overlap\": false, \"scope_reconciliation_reasoning\": \"DESIGN-R-A establishes a design-basis rated capacity (what the transformer is engineered to handle), while DESIGN-R-B describes a verified actual operating load under normal conditions (what the transformer is actually loaded to). These are distinct measurement bases \u2014 'design-basis capacity rating' in A versus 'actual operating load' under 'normal conditions' in B. A design-basis rating of 2500 kVA and an actual operating load not exceeding 2000 kVA can coexist without conflict: a transformer rated for 2500 kVA being operated at up to 2000 kVA is entirely consistent. The two requirements address different scopes \u2014 rated capability versus actual utilization \u2014 and are therefore not simultaneously in conflict.\", \"reconciliation_checked\": true, \"explanation\": \"Because 'design-basis capacity rating' and 'actual operating load under normal conditions' measure different things \u2014 engineered capability versus realized utilization \u2014 a 2500 kVA rating and a 2000 kVA operating load are not contradictory and can both be true simultaneously.\"}]\n\nWait \u2014 I must re-examine and correct my conclusion. The scopes_overlap field should be false and the pair should NOT be included. Let me return the correct empty array.\n\n[]",
+    "input_tokens": 1471,
+    "output_tokens": 501,
+    "latency_seconds": 10.311923799919896,
+    "checked": false,
+    "note": "Skipped: model returned invalid output.",
+    "flags": [],
+    "correct": null,
+    "timestamp": "2026-07-28T20:47:58.695905+00:00"
+  },
+  {
+    "dimension": "design_basis_verified",
+    "kind": "conflict",
+    "repetition": 1,
+    "item_ids": [
+      "DESIGN-C-A",
+      "DESIGN-C-B"
+    ],
+    "model": "claude-sonnet-4-6",
+    "prompt_version": "p25",
+    "raw_response_text": "[{\"a\": \"DESIGN-C-A\", \"b\": \"DESIGN-C-B\", \"requirement_a_evidence\": \"design-basis capacity rating of 2500 kVA\", \"requirement_b_evidence\": \"actual continuous operating requirement, including all currently planned future expansions, is 2800 kVA\", \"requirement_a_obligation\": \"The transformer must be designed and rated for a capacity of 2500 kVA.\", \"requirement_b_obligation\": \"The transformer's verified continuous operating requirement including all planned future expansions is 2800 kVA, which exceeds the design-basis rating.\", \"requirement_a_scope\": \"none stated; the design-basis capacity rating is unqualified and applies to the transformer as a whole\", \"requirement_b_scope\": \"none stated; the field-verified continuous operating requirement including all currently planned future expansions is unqualified and applies to the same transformer\", \"scopes_overlap\": true, \"scope_reconciliation_reasoning\": \"Both requirements apply to the same transformer with no temporal, operational, spatial, or conditional qualifications that would make them disjoint. DESIGN-C-A's 'design-basis capacity rating' and DESIGN-C-B's 'actual continuous operating requirement, including all currently planned future expansions' both govern the transformer's required capacity under normal, expected conditions simultaneously, creating a direct numeric conflict: 2500 kVA vs. 2800 kVA.\", \"reconciliation_checked\": true, \"explanation\": \"The transformer's design-basis capacity rating of 2500 kVA is insufficient to meet the field-verified continuous operating requirement of 2800 kVA including all planned future expansions, creating a direct numeric conflict where the design rating falls 300 kVA short of the verified load.\"}]",
+    "input_tokens": 1476,
+    "output_tokens": 407,
+    "latency_seconds": 8.15160390001256,
+    "checked": true,
+    "note": null,
+    "flags": [
+      {
+        "a": "DESIGN-C-A",
+        "b": "DESIGN-C-B",
+        "explanation": "The transformer's design-basis capacity rating of 2500 kVA is insufficient to meet the field-verified continuous operating requirement of 2800 kVA including all planned future expansions, creating a direct numeric conflict where the design rating falls 300 kVA short of the verified load.",
+        "requirement_a_evidence": "design-basis capacity rating of 2500 kVA",
+        "requirement_b_evidence": "actual continuous operating requirement, including all currently planned future expansions, is 2800 kVA",
+        "reconciliation_checked": true,
+        "requirement_a_scope": "none stated; the design-basis capacity rating is unqualified and applies to the transformer as a whole",
+        "requirement_b_scope": "none stated; the field-verified continuous operating requirement including all currently planned future expansions is unqualified and applies to the same transformer",
+        "scopes_overlap": true,
+        "scope_reconciliation_reasoning": "Both requirements apply to the same transformer with no temporal, operational, spatial, or conditional qualifications that would make them disjoint. DESIGN-C-A's 'design-basis capacity rating' and DESIGN-C-B's 'actual continuous operating requirement, including all currently planned future expansions' both govern the transformer's required capacity under normal, expected conditions simultaneously, creating a direct numeric conflict: 2500 kVA vs. 2800 kVA."
+      }
+    ],
+    "correct": true,
+    "timestamp": "2026-07-28T20:48:07.376726+00:00"
+  },
+  {
+    "dimension": "design_basis_verified",
+    "kind": "conflict",
+    "repetition": 2,
+    "item_ids": [
+      "DESIGN-C-A",
+      "DESIGN-C-B"
+    ],
+    "model": "claude-sonnet-4-6",
+    "prompt_version": "p25",
+    "raw_response_text": "[{\"a\": \"DESIGN-C-A\", \"b\": \"DESIGN-C-B\", \"requirement_a_evidence\": \"design-basis capacity rating of 2500 kVA\", \"requirement_b_evidence\": \"actual continuous operating requirement, including all currently planned future expansions, is 2800 kVA\", \"requirement_a_obligation\": \"The transformer must be rated at a design-basis capacity of 2500 kVA.\", \"requirement_b_obligation\": \"The transformer's verified continuous operating requirement including all planned future expansions is 2800 kVA, exceeding the design-basis rating.\", \"requirement_a_scope\": \"none stated \u2014 the design-basis capacity rating is unqualified\", \"requirement_b_scope\": \"none stated \u2014 the field-verified continuous operating requirement including all planned future expansions is unqualified\", \"scopes_overlap\": true, \"scope_reconciliation_reasoning\": \"Both requirements apply to the same transformer with no temporal, operational, spatial, or conditional qualifiers limiting either to a distinct condition; 'design-basis capacity rating of 2500 kVA' and 'actual continuous operating requirement...is 2800 kVA' are simultaneously in effect as governing specifications for the same equipment, creating a direct numeric conflict.\", \"reconciliation_checked\": true, \"explanation\": \"The transformer's design-basis capacity rating of 2500 kVA is insufficient to meet the field-verified continuous operating requirement of 2800 kVA, meaning the specified design rating cannot satisfy the verified actual load demand.\"}]",
+    "input_tokens": 1476,
+    "output_tokens": 352,
+    "latency_seconds": 7.848820499959402,
+    "checked": true,
+    "note": null,
+    "flags": [
+      {
+        "a": "DESIGN-C-A",
+        "b": "DESIGN-C-B",
+        "explanation": "The transformer's design-basis capacity rating of 2500 kVA is insufficient to meet the field-verified continuous operating requirement of 2800 kVA, meaning the specified design rating cannot satisfy the verified actual load demand.",
+        "requirement_a_evidence": "design-basis capacity rating of 2500 kVA",
+        "requirement_b_evidence": "actual continuous operating requirement, including all currently planned future expansions, is 2800 kVA",
+        "reconciliation_checked": true,
+        "requirement_a_scope": "none stated \u2014 the design-basis capacity rating is unqualified",
+        "requirement_b_scope": "none stated \u2014 the field-verified continuous operating requirement including all planned future expansions is unqualified",
+        "scopes_overlap": true,
+        "scope_reconciliation_reasoning": "Both requirements apply to the same transformer with no temporal, operational, spatial, or conditional qualifiers limiting either to a distinct condition; 'design-basis capacity rating of 2500 kVA' and 'actual continuous operating requirement...is 2800 kVA' are simultaneously in effect as governing specifications for the same equipment, creating a direct numeric conflict."
+      }
+    ],
+    "correct": true,
+    "timestamp": "2026-07-28T20:48:15.738401+00:00"
+  },
+  {
+    "dimension": "design_basis_verified",
+    "kind": "conflict",
+    "repetition": 3,
+    "item_ids": [
+      "DESIGN-C-A",
+      "DESIGN-C-B"
+    ],
+    "model": "claude-sonnet-4-6",
+    "prompt_version": "p25",
+    "raw_response_text": "[{\"a\": \"DESIGN-C-A\", \"b\": \"DESIGN-C-B\", \"requirement_a_evidence\": \"design-basis capacity rating of 2500 kVA\", \"requirement_b_evidence\": \"actual continuous operating requirement, including all currently planned future expansions, is 2800 kVA\", \"requirement_a_obligation\": \"The transformer must be designed and rated for a capacity of 2500 kVA.\", \"requirement_b_obligation\": \"The transformer's verified continuous operating requirement including all planned future expansions is 2800 kVA, exceeding the design-basis rating.\", \"requirement_a_scope\": \"none stated \u2014 unqualified design-basis capacity rating\", \"requirement_b_scope\": \"none stated \u2014 unqualified actual continuous operating requirement including all currently planned future expansions\", \"scopes_overlap\": true, \"scope_reconciliation_reasoning\": \"DESIGN-C-A states an unqualified 'design-basis capacity rating of 2500 kVA' with no limiting condition; DESIGN-C-B states an unqualified 'actual continuous operating requirement, including all currently planned future expansions, is 2800 kVA' with no limiting condition. Both apply to the same transformer under the same operating conditions simultaneously, and the verified continuous requirement (2800 kVA) exceeds the design-basis rating (2500 kVA), meaning the design basis is insufficient for the stated real-world need.\", \"reconciliation_checked\": true, \"explanation\": \"The transformer's design-basis capacity rating of 2500 kVA is directly contradicted by the field-verified actual continuous operating requirement of 2800 kVA, meaning the specified design basis cannot meet the confirmed operational load.\"}]",
+    "input_tokens": 1476,
+    "output_tokens": 397,
+    "latency_seconds": 7.5100418999791145,
+    "checked": true,
+    "note": null,
+    "flags": [
+      {
+        "a": "DESIGN-C-A",
+        "b": "DESIGN-C-B",
+        "explanation": "The transformer's design-basis capacity rating of 2500 kVA is directly contradicted by the field-verified actual continuous operating requirement of 2800 kVA, meaning the specified design basis cannot meet the confirmed operational load.",
+        "requirement_a_evidence": "design-basis capacity rating of 2500 kVA",
+        "requirement_b_evidence": "actual continuous operating requirement, including all currently planned future expansions, is 2800 kVA",
+        "reconciliation_checked": true,
+        "requirement_a_scope": "none stated \u2014 unqualified design-basis capacity rating",
+        "requirement_b_scope": "none stated \u2014 unqualified actual continuous operating requirement including all currently planned future expansions",
+        "scopes_overlap": true,
+        "scope_reconciliation_reasoning": "DESIGN-C-A states an unqualified 'design-basis capacity rating of 2500 kVA' with no limiting condition; DESIGN-C-B states an unqualified 'actual continuous operating requirement, including all currently planned future expansions, is 2800 kVA' with no limiting condition. Both apply to the same transformer under the same operating conditions simultaneously, and the verified continuous requirement (2800 kVA) exceeds the design-basis rating (2500 kVA), meaning the design basis is insufficient for the stated real-world need."
+      }
+    ],
+    "correct": true,
+    "timestamp": "2026-07-28T20:48:23.661711+00:00"
+  },
+  {
+    "dimension": "general_rule_named_exception",
+    "kind": "reconciled",
+    "repetition": 1,
+    "item_ids": [
+      "RULE-R-A",
+      "RULE-R-B"
+    ],
+    "model": "claude-sonnet-4-6",
+    "prompt_version": "p25",
+    "raw_response_text": "[]",
+    "input_tokens": 1478,
+    "output_tokens": 4,
+    "latency_seconds": 1.3400362000102177,
+    "checked": true,
+    "note": null,
+    "flags": [],
+    "correct": true,
+    "timestamp": "2026-07-28T20:48:25.414666+00:00"
+  },
+  {
+    "dimension": "general_rule_named_exception",
+    "kind": "reconciled",
+    "repetition": 2,
+    "item_ids": [
+      "RULE-R-A",
+      "RULE-R-B"
+    ],
+    "model": "claude-sonnet-4-6",
+    "prompt_version": "p25",
+    "raw_response_text": "[]",
+    "input_tokens": 1478,
+    "output_tokens": 4,
+    "latency_seconds": 1.431057200068608,
+    "checked": true,
+    "note": null,
+    "flags": [],
+    "correct": true,
+    "timestamp": "2026-07-28T20:48:27.411002+00:00"
+  },
+  {
+    "dimension": "general_rule_named_exception",
+    "kind": "reconciled",
+    "repetition": 3,
+    "item_ids": [
+      "RULE-R-A",
+      "RULE-R-B"
+    ],
+    "model": "claude-sonnet-4-6",
+    "prompt_version": "p25",
+    "raw_response_text": "[]",
+    "input_tokens": 1478,
+    "output_tokens": 4,
+    "latency_seconds": 1.1712731000734493,
+    "checked": true,
+    "note": null,
+    "flags": [],
+    "correct": true,
+    "timestamp": "2026-07-28T20:48:29.210397+00:00"
+  },
+  {
+    "dimension": "general_rule_named_exception",
+    "kind": "conflict",
+    "repetition": 1,
+    "item_ids": [
+      "RULE-C-A",
+      "RULE-C-B"
+    ],
+    "model": "claude-sonnet-4-6",
+    "prompt_version": "p25",
+    "raw_response_text": "[{\"a\": \"RULE-C-A\", \"b\": \"RULE-C-B\", \"requirement_a_evidence\": \"All exterior doors shall remain locked at all times\", \"requirement_b_evidence\": \"shall remain unlocked and freely operable during all facility operating hours\", \"requirement_a_obligation\": \"Every exterior door must be locked at all times without exception.\", \"requirement_b_obligation\": \"The main lobby entrance doors must remain unlocked and freely operable during all facility operating hours.\", \"requirement_a_scope\": \"none stated \u2014 'all exterior doors' and 'at all times' are unqualified\", \"requirement_b_scope\": \"spatially limited to 'main lobby entrance doors, identified in Life Safety Drawing LS-101'; temporally limited to 'during all facility operating hours'\", \"scopes_overlap\": true, \"scope_reconciliation_reasoning\": \"RULE-C-A applies to 'all exterior doors' with no spatial or temporal exceptions, which necessarily includes the main lobby entrance doors during facility operating hours; RULE-C-B requires those same doors to be unlocked during that same period. Both are simultaneously in effect for the main lobby entrance doors during operating hours, creating a direct conflict. No third requirement in the provided text supplies a reconciling exception.\", \"reconciliation_checked\": true, \"explanation\": \"RULE-C-A's unqualified mandate that 'all exterior doors shall remain locked at all times' directly conflicts with RULE-C-B's requirement that the main lobby entrance doors 'shall remain unlocked and freely operable during all facility operating hours,' because both obligations apply simultaneously to the same doors during operating hours.\"}]",
+    "input_tokens": 1472,
+    "output_tokens": 371,
+    "latency_seconds": 6.761185399955139,
+    "checked": true,
+    "note": null,
+    "flags": [
+      {
+        "a": "RULE-C-A",
+        "b": "RULE-C-B",
+        "explanation": "RULE-C-A's unqualified mandate that 'all exterior doors shall remain locked at all times' directly conflicts with RULE-C-B's requirement that the main lobby entrance doors 'shall remain unlocked and freely operable during all facility operating hours,' because both obligations apply simultaneously to the same doors during operating hours.",
+        "requirement_a_evidence": "All exterior doors shall remain locked at all times",
+        "requirement_b_evidence": "shall remain unlocked and freely operable during all facility operating hours",
+        "reconciliation_checked": true,
+        "requirement_a_scope": "none stated \u2014 'all exterior doors' and 'at all times' are unqualified",
+        "requirement_b_scope": "spatially limited to 'main lobby entrance doors, identified in Life Safety Drawing LS-101'; temporally limited to 'during all facility operating hours'",
+        "scopes_overlap": true,
+        "scope_reconciliation_reasoning": "RULE-C-A applies to 'all exterior doors' with no spatial or temporal exceptions, which necessarily includes the main lobby entrance doors during facility operating hours; RULE-C-B requires those same doors to be unlocked during that same period. Both are simultaneously in effect for the main lobby entrance doors during operating hours, creating a direct conflict. No third requirement in the provided text supplies a reconciling exception."
+      }
+    ],
+    "correct": true,
+    "timestamp": "2026-07-28T20:48:36.608217+00:00"
+  },
+  {
+    "dimension": "general_rule_named_exception",
+    "kind": "conflict",
+    "repetition": 2,
+    "item_ids": [
+      "RULE-C-A",
+      "RULE-C-B"
+    ],
+    "model": "claude-sonnet-4-6",
+    "prompt_version": "p25",
+    "raw_response_text": "[{\"a\": \"RULE-C-A\", \"b\": \"RULE-C-B\", \"requirement_a_evidence\": \"All exterior doors shall remain locked at all times\", \"requirement_b_evidence\": \"main lobby entrance doors...shall remain unlocked and freely operable during all facility operating hours\", \"requirement_a_obligation\": \"Every exterior door must be locked at all times without exception.\", \"requirement_b_obligation\": \"The main lobby entrance doors must remain unlocked and freely operable during all facility operating hours.\", \"requirement_a_scope\": \"none stated - 'all exterior doors' and 'at all times' is unqualified\", \"requirement_b_scope\": \"spatial: main lobby entrance doors identified in LS-101; temporal: during all facility operating hours\", \"scopes_overlap\": true, \"scope_reconciliation_reasoning\": \"RULE-C-A applies to 'all exterior doors' with no spatial or temporal exception, which necessarily includes the main lobby entrance doors during facility operating hours; RULE-C-B applies specifically to 'main lobby entrance doors' 'during all facility operating hours' - both are simultaneously in effect for those doors during operating hours, and no third requirement provides a reconciling exception.\", \"reconciliation_checked\": true, \"explanation\": \"RULE-C-A requires all exterior doors locked at all times with no exceptions, while RULE-C-B requires the main lobby entrance doors to remain unlocked during all facility operating hours, making it impossible to comply with both simultaneously for those doors during operating hours.\"}]",
+    "input_tokens": 1472,
+    "output_tokens": 344,
+    "latency_seconds": 6.453952900017612,
+    "checked": true,
+    "note": null,
+    "flags": [
+      {
+        "a": "RULE-C-A",
+        "b": "RULE-C-B",
+        "explanation": "RULE-C-A requires all exterior doors locked at all times with no exceptions, while RULE-C-B requires the main lobby entrance doors to remain unlocked during all facility operating hours, making it impossible to comply with both simultaneously for those doors during operating hours.",
+        "requirement_a_evidence": "All exterior doors shall remain locked at all times",
+        "requirement_b_evidence": "main lobby entrance doors...shall remain unlocked and freely operable during all facility operating hours",
+        "reconciliation_checked": true,
+        "requirement_a_scope": "none stated - 'all exterior doors' and 'at all times' is unqualified",
+        "requirement_b_scope": "spatial: main lobby entrance doors identified in LS-101; temporal: during all facility operating hours",
+        "scopes_overlap": true,
+        "scope_reconciliation_reasoning": "RULE-C-A applies to 'all exterior doors' with no spatial or temporal exception, which necessarily includes the main lobby entrance doors during facility operating hours; RULE-C-B applies specifically to 'main lobby entrance doors' 'during all facility operating hours' - both are simultaneously in effect for those doors during operating hours, and no third requirement provides a reconciling exception."
+      }
+    ],
+    "correct": true,
+    "timestamp": "2026-07-28T20:48:43.550232+00:00"
+  },
+  {
+    "dimension": "general_rule_named_exception",
+    "kind": "conflict",
+    "repetition": 3,
+    "item_ids": [
+      "RULE-C-A",
+      "RULE-C-B"
+    ],
+    "model": "claude-sonnet-4-6",
+    "prompt_version": "p25",
+    "raw_response_text": "[{\"a\": \"RULE-C-A\", \"b\": \"RULE-C-B\", \"requirement_a_evidence\": \"All exterior doors shall remain locked at all times\", \"requirement_b_evidence\": \"shall remain unlocked and freely operable during all facility operating hours\", \"requirement_a_obligation\": \"Every exterior door must be locked at all times without exception.\", \"requirement_b_obligation\": \"The main lobby entrance doors must remain unlocked and freely operable during all facility operating hours.\", \"requirement_a_scope\": \"none stated - applies to all exterior doors at all times without qualification\", \"requirement_b_scope\": \"limited to the main lobby entrance doors identified in Life Safety Drawing LS-101, during all facility operating hours\", \"scopes_overlap\": true, \"scope_reconciliation_reasoning\": \"RULE-C-A's 'All exterior doors shall remain locked at all times' is unqualified and therefore covers the main lobby entrance doors during facility operating hours; RULE-C-B requires those same doors to be unlocked during those same hours - both apply simultaneously to the same doors during operating hours, creating a direct conflict.\", \"reconciliation_checked\": true, \"explanation\": \"RULE-C-A requires all exterior doors locked at all times with no exceptions, while RULE-C-B requires the main lobby entrance doors - which are exterior doors - to remain unlocked during all facility operating hours, and no third requirement provides a reconciling exception.\"}]",
+    "input_tokens": 1472,
+    "output_tokens": 325,
+    "latency_seconds": 6.043387499987148,
+    "checked": true,
+    "note": null,
+    "flags": [
+      {
+        "a": "RULE-C-A",
+        "b": "RULE-C-B",
+        "explanation": "RULE-C-A requires all exterior doors locked at all times with no exceptions, while RULE-C-B requires the main lobby entrance doors - which are exterior doors - to remain unlocked during all facility operating hours, and no third requirement provides a reconciling exception.",
+        "requirement_a_evidence": "All exterior doors shall remain locked at all times",
+        "requirement_b_evidence": "shall remain unlocked and freely operable during all facility operating hours",
+        "reconciliation_checked": true,
+        "requirement_a_scope": "none stated - applies to all exterior doors at all times without qualification",
+        "requirement_b_scope": "limited to the main lobby entrance doors identified in Life Safety Drawing LS-101, during all facility operating hours",
+        "scopes_overlap": true,
+        "scope_reconciliation_reasoning": "RULE-C-A's 'All exterior doors shall remain locked at all times' is unqualified and therefore covers the main lobby entrance doors during facility operating hours; RULE-C-B requires those same doors to be unlocked during those same hours - both apply simultaneously to the same doors during operating hours, creating a direct conflict."
+      }
+    ],
+    "correct": true,
+    "timestamp": "2026-07-28T20:48:50.044872+00:00"
+  },
+  {
+    "dimension": "temporal_occupied_unoccupied_dense",
+    "kind": "reconciled",
+    "repetition": 1,
+    "item_ids": [
+      "DENSE-TEMP-A",
+      "DENSE-TEMP-B"
+    ],
+    "model": "claude-sonnet-4-6",
+    "prompt_version": "p25",
+    "raw_response_text": "[]",
+    "input_tokens": 1612,
+    "output_tokens": 4,
+    "latency_seconds": 3.3522747000679374,
+    "checked": true,
+    "note": null,
+    "flags": [],
+    "correct": true,
+    "timestamp": "2026-07-28T20:48:53.953876+00:00"
+  },
+  {
+    "dimension": "temporal_occupied_unoccupied_dense",
+    "kind": "reconciled",
+    "repetition": 2,
+    "item_ids": [
+      "DENSE-TEMP-A",
+      "DENSE-TEMP-B"
+    ],
+    "model": "claude-sonnet-4-6",
+    "prompt_version": "p25",
+    "raw_response_text": "[]",
+    "input_tokens": 1612,
+    "output_tokens": 4,
+    "latency_seconds": 1.0597764999838546,
+    "checked": true,
+    "note": null,
+    "flags": [],
+    "correct": true,
+    "timestamp": "2026-07-28T20:48:55.537874+00:00"
+  },
+  {
+    "dimension": "temporal_occupied_unoccupied_dense",
+    "kind": "reconciled",
+    "repetition": 3,
+    "item_ids": [
+      "DENSE-TEMP-A",
+      "DENSE-TEMP-B"
+    ],
+    "model": "claude-sonnet-4-6",
+    "prompt_version": "p25",
+    "raw_response_text": "[]",
+    "input_tokens": 1612,
+    "output_tokens": 4,
+    "latency_seconds": 1.407946199993603,
+    "checked": true,
+    "note": null,
+    "flags": [],
+    "correct": true,
+    "timestamp": "2026-07-28T20:48:57.394322+00:00"
+  }
+]

@@ -83,7 +83,9 @@ class ConsistencyCheckParsingTests(unittest.TestCase):
         ]
         payload = [{
             "a": "r1", "b": "r2", "requirement_a_evidence": "quote a", "requirement_b_evidence": "quote b",
-            "reconciliation_checked": True, "explanation": "conflict",
+            "reconciliation_checked": True,
+            "scope_reconciliation_reasoning": "no scope qualifier stated in either requirement",
+            "scopes_overlap": True, "explanation": "conflict",
         }]
         with patch("anthropic.Anthropic") as MockClient:
             MockClient.return_value.messages.create.return_value = self._mock_response(payload)
@@ -94,22 +96,24 @@ class ConsistencyCheckParsingTests(unittest.TestCase):
         self.assertEqual(flags[0].requirement_b_evidence, "quote b")
         self.assertTrue(flags[0].reconciliation_checked)
 
-    def test_older_shaped_response_without_new_fields_still_parses(self):
-        """A mocked response shaped like every pre-CLAUDE-P23 test fixture
-        (just a/b/explanation) must not break - defaults apply."""
+    def test_older_shaped_response_without_scope_reasoning_is_dropped_not_crashed(self):
+        """CLAUDE-P25: a response shaped like every pre-CLAUDE-P25 test
+        fixture (a/b/explanation/reconciliation_checked, no scope
+        reasoning) must not crash the parser - but the flag itself is now
+        deterministically dropped, since it never states which scope
+        dimensions were checked. 'no crash' and 'no longer accepted
+        without scope reasoning' are both true at once."""
         parser = BHiveParser(anthropic_api_key="fake-key")
         items = [
             RequirementItem(id="r1", text="x", category="a", confidence=0.9, source_line=0),
             RequirementItem(id="r2", text="y", category="a", confidence=0.9, source_line=0),
         ]
-        payload = [{"a": "r1", "b": "r2", "explanation": "conflict"}]
+        payload = [{"a": "r1", "b": "r2", "explanation": "conflict", "reconciliation_checked": True}]
         with patch("anthropic.Anthropic") as MockClient:
             MockClient.return_value.messages.create.return_value = self._mock_response(payload)
             flags, checked, note = parser._check_consistency(items)  # noqa: SLF001
         self.assertTrue(checked)
-        self.assertEqual(len(flags), 1)
-        self.assertEqual(flags[0].requirement_a_evidence, "")
-        self.assertFalse(flags[0].reconciliation_checked)
+        self.assertEqual(flags, [])
 
     def test_usage_sink_captures_prompt_tokens_and_latency(self):
         parser = BHiveParser(anthropic_api_key="fake-key")
