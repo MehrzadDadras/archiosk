@@ -67,6 +67,7 @@ def create_app(config_name: str | None = None) -> Flask:
 def _register_database(app: Flask) -> None:
     from pathlib import Path
 
+    from flask_migrate import Migrate
     from models import db
 
     # app.instance_path defaults to <repo_root>/instance, matching
@@ -74,6 +75,19 @@ def _register_database(app: Flask) -> None:
     # needs before it tries to open a file there.
     Path(app.instance_path).mkdir(parents=True, exist_ok=True)
     db.init_app(app)
+    # CLAUDE-P27-B: registers the `flask db ...` CLI (migrations/) for
+    # THE NEXT schema change onward -- models.py's own docstring already
+    # flagged that a third genuine schema change (this session's
+    # tenancy design package, governance/specified-unbuilt/) should be
+    # the trigger to stop hand-writing ALTER TABLE blocks. Does NOT
+    # replace or change how this already-deployed schema is created/
+    # migrated below -- create_all() and the two _migrate_users_*
+    # functions are untouched, still the mechanism that actually runs
+    # at every boot. The live database was `flask db stamp`-ed to this
+    # migration's baseline revision (see migrations/README, not
+    # re-executed) so `flask db upgrade` is ready to use starting with
+    # the next real schema change.
+    Migrate(app, db)
     with app.app_context():
         # Idempotent -- safe to call on every worker boot. Fine for this
         # app's small handful of tables; revisit with real migration
