@@ -26,6 +26,7 @@ from services.auth import is_admin, is_authenticated
 from services.bhive_parser import REQUIREMENT_CATEGORIES
 from services.governance import GovernanceError
 from services.ingestion import UploadError, get_governance_log, get_registry, ingest_upload
+from services.rate_limit import limiter
 from services.rfi_export import RFIExportError, build_rfi_docx
 
 api_bp = Blueprint('api', __name__)
@@ -49,6 +50,7 @@ def _file_too_large(_err):
 
 
 @api_bp.route('/documents/ingest', methods=['POST'])
+@limiter.limit("20 per hour")
 def ingest_document():
     try:
         document = ingest_upload(

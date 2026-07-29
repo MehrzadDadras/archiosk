@@ -53,6 +53,7 @@ def create_app(config_name: str | None = None) -> Flask:
     _configure_logging(app)
     _validate_production_config(app, config_cls)
     _register_database(app)
+    _register_rate_limiter(app)
     _register_blueprints(app)
     _register_error_handlers(app)
     _register_context_processors(app)
@@ -243,6 +244,12 @@ def _validate_production_config(app: Flask, config_cls) -> None:
             "will use the deterministic rule-based fallback instead of the model. "
             "This is a supported, deliberate degradation, not a boot failure.",
         )
+
+
+def _register_rate_limiter(app: Flask) -> None:
+    from services.rate_limit import limiter
+
+    limiter.init_app(app)
 
 
 def _configure_logging(app: Flask) -> None:

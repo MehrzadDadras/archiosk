@@ -9,6 +9,7 @@ from pathlib import Path
 from flask import Blueprint, abort, current_app, flash, jsonify, redirect, render_template, request, url_for
 
 from services.auth import admin_required, check_credentials, is_authenticated, log_in, log_out, login_required
+from services.rate_limit import limiter
 from services.case_workspace import CaseWorkspaceStore
 from services.governance import GovernanceError
 from services.ingestion import UploadError, get_governance_log, get_registry, ingest_upload
@@ -130,6 +131,7 @@ def health():
 
 
 @portal_bp.route('/login', methods=['GET', 'POST'])
+@limiter.limit("10 per minute", methods=["POST"])
 def login():
     if request.method == 'GET':
         return render_template('login.html', error=None)
@@ -160,6 +162,7 @@ def logout():
 
 
 @portal_bp.route('/forgot-password', methods=['GET', 'POST'])
+@limiter.limit("5 per hour", methods=["POST"])
 def forgot_password():
     """
     CLAUDE-P28: the self-service recovery path referenced by login.html's
@@ -210,6 +213,7 @@ def forgot_password():
 
 
 @portal_bp.route('/reset-password', methods=['GET', 'POST'])
+@limiter.limit("10 per hour", methods=["POST"])
 def reset_password():
     """
     The link a reset email (or the dev-only log fallback) points at.
@@ -393,6 +397,7 @@ def global_search():
 
 @portal_bp.route('/upload', methods=['GET', 'POST'])
 @admin_required
+@limiter.limit("20 per hour", methods=["POST"])
 def upload():
     max_upload_mb = current_app.config['MAX_CONTENT_LENGTH'] // (1024 * 1024)
 

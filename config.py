@@ -102,6 +102,14 @@ class TestingConfig(BaseConfig):
     # whatever the developer's local .env happens to have configured -
     # same reasoning as app.py's ANTHROPIC_API_KEY clearing for "testing".
     SMTP_HOST = ""
+    # CLAUDE-P27-B: Flask-Limiter's default in-memory storage is a single
+    # process-wide singleton (services/rate_limit.py) -- without this,
+    # every test method's real HTTP requests against /login,
+    # /forgot-password, etc. across the whole suite would accumulate
+    # toward one shared limit and start producing spurious 429s. Tests
+    # that specifically want to exercise rate limiting turn this back on
+    # and call limiter.reset() first (see tests/test_rate_limiting.py).
+    RATELIMIT_ENABLED = False
 
 
 _CONFIGS = {
