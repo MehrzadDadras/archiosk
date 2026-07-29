@@ -363,6 +363,70 @@ def show_workspace(project_id):
     if active_case is None:
         project_conversation_view = store.project_conversation_for(workspace)
 
+    # Snapshot read-side (CLAUDE-P27): the list itself was already wired
+    # directly off workspace.snapshots (no route needed - see the "View
+    # Snapshots" subdisclosure below), but resolve_snapshot_objects/
+    # compare_snapshots had no caller anywhere. Project Home only, same
+    # gating as project_conversation_view above - a Snapshot is a
+    # project-wide concept with no Case scope of its own. A bad/stale id
+    # in the query string (typed, or a Snapshot from before this reviewer
+    # had access) degrades to "nothing to show" rather than a 404/500,
+    # matching preview_finding_id's guard pattern below.
+    opened_snapshot_view = None
+    snapshot_compare_view = None
+    if active_case is None:
+        open_snapshot_id = request.args.get("snapshot")
+        if open_snapshot_id:
+            snapshot = store.get_snapshot(workspace, open_snapshot_id)
+            if snapshot is not None:
+                lists_view = []
+                for list_name, ids in snapshot["reference_lists"].items():
+                    if not ids:
+                        continue
+                    resolved = store.resolve_snapshot_objects(workspace, open_snapshot_id, list_name)
+                    # resolved_count can be less than frozen_count if a
+                    # referenced record no longer exists in the current
+                    # list it was frozen from - resolve_snapshot_objects
+                    # itself is silent about this (see its own docstring
+                    # on resolving to CURRENT content), so this is the
+                    # only place that count ever gets surfaced.
+                    lists_view.append({
+                        "list_name": list_name,
+                        "frozen_count": len(ids),
+                        "resolved_count": len(resolved),
+                        "unresolved_count": len(ids) - len(resolved),
+                    })
+                opened_snapshot_view = {"snapshot": snapshot, "lists": lists_view}
+
+        compare_a_id = request.args.get("compare_a")
+        compare_b_id = request.args.get("compare_b")
+        if compare_a_id and compare_b_id:
+            snapshot_a = store.get_snapshot(workspace, compare_a_id)
+            snapshot_b = store.get_snapshot(workspace, compare_b_id)
+            if snapshot_a is not None and snapshot_b is not None:
+                comparison = store.compare_snapshots(workspace, compare_a_id, compare_b_id)
+                comparison_rows = []
+                for list_name, counts in comparison.items():
+                    if counts["count_a"] == 0 and counts["count_b"] == 0:
+                        continue
+                    comparison_rows.append({
+                        "list_name": list_name,
+                        "count_a": counts["count_a"],
+                        "count_b": counts["count_b"],
+                        "added": counts["added_in_b"],
+                        "removed": counts["removed_in_b"],
+                        # compare_snapshot_reference_lists (services/
+                        # case_workspace.py) only returns added/removed -
+                        # unchanged is derived here, not a new stored
+                        # concept: count_a minus what b no longer has.
+                        "unchanged": counts["count_a"] - len(counts["removed_in_b"]),
+                    })
+                snapshot_compare_view = {
+                    "snapshot_a": snapshot_a,
+                    "snapshot_b": snapshot_b,
+                    "rows": comparison_rows,
+                }
+
     # Read before any write below touches it - this is also the boundary
     # visual pressure (below) uses to tell "settled, and already known to
     # you" apart from "settled, but news to you since your last visit" -
@@ -787,6 +851,8 @@ def show_workspace(project_id):
         project_home_summary=project_home_summary,
         since_last_visit=since_last_visit,
         project_conversation_view=project_conversation_view,
+        opened_snapshot_view=opened_snapshot_view,
+        snapshot_compare_view=snapshot_compare_view,
         case_outcome_states=case_outcome_states,
         case_origin_kinds=case_origin_kinds,
         case_origin_autonomous=CASE_ORIGIN_AUTONOMOUS,

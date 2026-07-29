@@ -1249,12 +1249,12 @@
                    those objects were later mutated in place; an honest
                    limitation the dataclass itself documents, not one
                    introduced by this view. #}
-                {% call macros.subdisclosure('View Snapshots (' ~ workspace.snapshots|length ~ ')') %}
+                {% call macros.subdisclosure('View Snapshots (' ~ workspace.snapshots|length ~ ')', html_id='view-snapshots') %}
                     {% if workspace.snapshots %}
                     <ul class="source-list">
                         {% for snapshot in workspace.snapshots|sort(attribute='frozen_at', reverse=True) %}
                         <li class="source-item">
-                            {{ snapshot.label }}
+                            <a href="{{ url_for('workspace.show_workspace', project_id=project_id) }}?snapshot={{ snapshot.id }}#view-snapshots">{{ snapshot.label }}</a>
                             <br><small class="text-muted">
                                 Frozen {{ snapshot.frozen_at }} by {{ snapshot.created_by }}
                                 {% if snapshot.note %}&middot; {{ snapshot.note }}{% endif %}
@@ -1267,6 +1267,81 @@
                     </ul>
                     {% else %}
                     <p style="font-size:0.88rem;color:var(--text-secondary);">No Snapshots recorded yet.</p>
+                    {% endif %}
+
+                    {% if opened_snapshot_view %}
+                    {% set snapshot = opened_snapshot_view.snapshot %}
+                    <div class="snapshot-detail">
+                        <p>
+                            <strong>{{ snapshot.label }}</strong> &middot; project state version {{ snapshot.project_state_version }}
+                            <br><small class="text-muted">
+                                Frozen {{ snapshot.frozen_at }} by {{ snapshot.created_by }}
+                                {% if snapshot.note %}&middot; {{ snapshot.note }}{% endif %}
+                            </small>
+                        </p>
+                        <p class="pane-note">
+                            A Snapshot freezes which object ids existed, not their content - the counts below
+                            resolve those ids against the project's CURRENT state, which can differ from what
+                            was true at freeze time if a referenced object was edited since.
+                        </p>
+                        {% if opened_snapshot_view.lists %}
+                        <ul class="source-list">
+                            {% for row in opened_snapshot_view.lists %}
+                            <li class="source-item">
+                                {{ row.list_name.replace('_', ' ') }}: {{ row.resolved_count }} of {{ row.frozen_count }} resolve to current records
+                                {% if row.unresolved_count %}&middot; <span class="pressure-quiet-text">{{ row.unresolved_count }} no longer resolvable</span>{% endif %}
+                            </li>
+                            {% endfor %}
+                        </ul>
+                        {% else %}
+                        <p style="font-size:0.88rem;color:var(--text-secondary);">This Snapshot froze no governed lists with any content.</p>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+
+                    {% if workspace.snapshots|length >= 2 %}
+                    <form class="workspace-form" method="get" action="{{ url_for('workspace.show_workspace', project_id=project_id) }}#view-snapshots">
+                        <select name="compare_a">
+                            {% for snapshot in workspace.snapshots|sort(attribute='frozen_at', reverse=True) %}
+                            <option value="{{ snapshot.id }}">Compare: {{ snapshot.label }} ({{ snapshot.frozen_at }})</option>
+                            {% endfor %}
+                        </select>
+                        <select name="compare_b">
+                            {% for snapshot in workspace.snapshots|sort(attribute='frozen_at', reverse=True) %}
+                            <option value="{{ snapshot.id }}" {% if loop.index == 2 %}selected{% endif %}>With: {{ snapshot.label }} ({{ snapshot.frozen_at }})</option>
+                            {% endfor %}
+                        </select>
+                        <button type="submit">Compare</button>
+                    </form>
+                    {% endif %}
+
+                    {% if snapshot_compare_view %}
+                    <div class="snapshot-detail">
+                        <p>
+                            <strong>{{ snapshot_compare_view.snapshot_a.label }}</strong> (state version {{ snapshot_compare_view.snapshot_a.project_state_version }}, frozen {{ snapshot_compare_view.snapshot_a.frozen_at }} by {{ snapshot_compare_view.snapshot_a.created_by }})
+                            vs.
+                            <strong>{{ snapshot_compare_view.snapshot_b.label }}</strong> (state version {{ snapshot_compare_view.snapshot_b.project_state_version }}, frozen {{ snapshot_compare_view.snapshot_b.frozen_at }} by {{ snapshot_compare_view.snapshot_b.created_by }})
+                        </p>
+                        <p class="pane-note">
+                            Structural comparison only - which ids each Snapshot froze, not whether the objects
+                            behind them later changed content. "Unchanged" means the id is in both; it does not
+                            mean the record itself is identical to what it was at either freeze time.
+                        </p>
+                        {% if snapshot_compare_view.rows %}
+                        <ul class="source-list">
+                            {% for row in snapshot_compare_view.rows %}
+                            <li class="source-item">
+                                {{ row.list_name.replace('_', ' ') }}: {{ row.count_a }} &rarr; {{ row.count_b }}
+                                &middot; {{ row.unchanged }} unchanged
+                                {% if row.added %}&middot; {{ row.added|length }} added{% endif %}
+                                {% if row.removed %}&middot; {{ row.removed|length }} removed{% endif %}
+                            </li>
+                            {% endfor %}
+                        </ul>
+                        {% else %}
+                        <p style="font-size:0.88rem;color:var(--text-secondary);">Neither Snapshot froze any governed lists with content.</p>
+                        {% endif %}
+                    </div>
                     {% endif %}
                 {% endcall %}
             {% endcall %}

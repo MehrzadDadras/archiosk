@@ -1092,6 +1092,7 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
 
 .workspace-form { display: grid; gap: 0.5rem; margin-top: 0.5rem; }
 .workspace-form input[type="text"],
+.workspace-form select,
 .workspace-form textarea {
     font-family: var(--font-body);
     font-size: 0.8rem;
@@ -1399,6 +1400,16 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
 }
 .finding-provenance span { color: var(--text-metadata); }
 .finding-provenance strong { color: var(--text-primary); font-weight: 500; }
+
+.snapshot-detail {
+    background: var(--surface-secondary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.7rem 0.9rem;
+    margin: 0.6rem 0;
+}
+.snapshot-detail p:first-child { margin-top: 0; }
+.snapshot-detail .source-list { margin-top: 0.4rem; }
 
 .finding-review-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.6rem; }
 .review-btn {
