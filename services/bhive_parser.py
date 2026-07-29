@@ -36,6 +36,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from services.consistency_response_parser import classify_response
+
 logger = logging.getLogger(__name__)
 
 # CLAUDE-P19: a real, bump-on-meaningful-change marker for the Golden
@@ -570,6 +572,33 @@ class BHiveParser:
         prompts/token usage/latency against the REAL production call path,
         without changing this method's return shape or any existing
         caller's behavior (default None = no change at all).
+
+        CLAUDE-P26: a controlled reliability investigation (tools/
+        self_test_structured_output_reliability_experiment.py) found that,
+        intermittently - not reproduced in a fresh 57-call sample, but
+        directly observed multiple times in CLAUDE-P25's own real
+        production recheck runs - the model emits a valid JSON array, then
+        harmless self-correction prose ("wait, let me reconsider"),
+        sometimes followed by a SECOND, differing JSON array. The previous
+        single strict `json.loads(cleaned)` call discarded these outright,
+        even when a perfectly usable answer was present. Forcing the call
+        through Anthropic's tool-use (schema-enforced structured output)
+        was tested as a fix and REJECTED: it measured a real, WORSE
+        accuracy regression on the one genuinely hard specimen tested
+        (3/6 wrong on a dense genuine conflict, each miss a near-empty
+        ~33-token "no conflict" tool call vs. ~700-800 tokens of actual
+        reasoning in every correct run) - forced structured output let the
+        model skip its own reasoning in some fraction of calls. The
+        adopted fix is parsing-only: classify the raw response
+        (services/consistency_response_parser.py) and accept it
+        immediately whenever the classifier can safely resolve one answer
+        (a single block; a single block plus harmless prose; multiple
+        blocks that agree; or a bounded repair of a truncated block).
+        Only when the response is genuinely unresolvable - multiple
+        blocks that materially DISAGREE, or no recoverable JSON at all -
+        does this retry the IDENTICAL request exactly once before falling
+        back to the prior graceful "Skipped" behavior. Never a second,
+        differently-framed semantic call.
         """
         if not self.api_key:
             return [], False, "Skipped: no ANTHROPIC_API_KEY configured."
@@ -585,43 +614,74 @@ class BHiveParser:
         client = anthropic.Anthropic(api_key=self.api_key, timeout=self.consistency_timeout)
         prompt = self._build_consistency_prompt(candidates)
 
-        start = time.perf_counter()
-        try:
-            response = client.messages.create(
-                model=self.model,
-                max_tokens=1500,
-                messages=[{"role": "user", "content": prompt}],
+        def call_once() -> tuple[str, Any, float] | None:
+            call_start = time.perf_counter()
+            try:
+                call_response = client.messages.create(
+                    model=self.model,
+                    max_tokens=1500,
+                    messages=[{"role": "user", "content": prompt}],
+                )
+            except anthropic.APITimeoutError:
+                logger.warning(
+                    "Consistency check timed out after %.0fs; skipping.",
+                    self.consistency_timeout,
+                )
+                return None
+            except Exception:
+                # Best-effort, like classification — never let this stage
+                # take down ingestion.
+                logger.warning("Consistency check failed; skipping.", exc_info=True)
+                return None
+            call_latency = time.perf_counter() - call_start
+            call_text = "".join(
+                block.text for block in call_response.content if getattr(block, "type", None) == "text"
             )
-        except anthropic.APITimeoutError:
-            logger.warning(
-                "Consistency check timed out after %.0fs; skipping.",
-                self.consistency_timeout,
-            )
-            return [], False, "Skipped: request timed out."
-        except Exception:
-            # Best-effort, like classification — never let this stage take
-            # down ingestion.
-            logger.warning("Consistency check failed; skipping.", exc_info=True)
-            return [], False, "Skipped: an error occurred."
-        latency_seconds = time.perf_counter() - start
+            return call_text, call_response, call_latency
 
-        text_out = "".join(
-            block.text for block in response.content if getattr(block, "type", None) == "text"
-        )
+        first = call_once()
+        if first is None:
+            return [], False, "Skipped: request timed out or an error occurred."
+        text_out, response, latency_seconds = first
+        first_raw_text = text_out
+        classified = classify_response(text_out)
+        retried = False
+        first_attempt_category = None
+
+        if classified.resolved_value is None:
+            logger.warning(
+                "Consistency check response was %s on first attempt; retrying once. notes=%s",
+                classified.category, classified.notes,
+            )
+            retried = True
+            first_attempt_category = classified.category
+            second = call_once()
+            if second is not None:
+                text_out, response, retry_latency = second
+                latency_seconds += retry_latency
+                classified = classify_response(text_out)
+
         if usage_sink is not None:
             usage_sink["prompt"] = prompt
             usage_sink["raw_response_text"] = text_out
+            usage_sink["raw_response_text_first_attempt"] = first_raw_text if retried else None
             usage_sink["latency_seconds"] = latency_seconds
             usage_sink["stop_reason"] = response.stop_reason
             usage = getattr(response, "usage", None)
             usage_sink["input_tokens"] = getattr(usage, "input_tokens", None)
             usage_sink["output_tokens"] = getattr(usage, "output_tokens", None)
-        cleaned = re.sub(r"^```(json)?|```$", "", text_out.strip(), flags=re.MULTILINE).strip()
-        try:
-            parsed = json.loads(cleaned)
-        except json.JSONDecodeError:
-            logger.warning("Consistency check returned non-JSON output; skipping.")
-            return [], False, "Skipped: model returned invalid output."
+            usage_sink["response_category"] = classified.category
+            usage_sink["retried"] = retried
+            usage_sink["retry_original_category"] = first_attempt_category
+
+        if classified.resolved_value is None:
+            logger.warning(
+                "Consistency check returned unusable output even after one retry; skipping. "
+                "category=%s notes=%s", classified.category, classified.notes,
+            )
+            return [], False, "Skipped: model returned invalid output after one retry."
+
+        parsed = classified.resolved_value
 
         by_id = {r.id: r for r in candidates}
         flags = []
