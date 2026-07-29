@@ -4,6 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block title %}Archiosk{% endblock %}</title>
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/tokens.css') }}?v={{ static_version }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v={{ static_version }}">
     <script>
@@ -249,6 +250,28 @@
                     runSearch(input.value.trim());
                 });
             }
+        })();
+    </script>
+    <script>
+        // CLAUDE-P27-B: centralized CSRF token injection -- every POST
+        // <form> on every page gets a hidden csrf_token field added here,
+        // once, rather than a per-template edit repeated at every one of
+        // the 50+ <form method="post"> occurrences across this app's
+        // templates (case_workspace.html alone has ~45). A form added
+        // later is covered automatically; nothing to remember per form.
+        (function () {
+            var meta = document.querySelector('meta[name="csrf-token"]');
+            if (!meta) return;
+            var token = meta.getAttribute('content');
+            document.querySelectorAll('form').forEach(function (form) {
+                if (form.method && form.method.toLowerCase() !== 'post') return;
+                if (form.querySelector('input[name="csrf_token"]')) return;
+                var input = document.createElement('input');
+                input.type = 'hidden';
+                input.name = 'csrf_token';
+                input.value = token;
+                form.appendChild(input);
+            });
         })();
     </script>
     {% block extra_scripts %}{% endblock %}

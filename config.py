@@ -110,6 +110,13 @@ class TestingConfig(BaseConfig):
     # that specifically want to exercise rate limiting turn this back on
     # and call limiter.reset() first (see tests/test_rate_limiting.py).
     RATELIMIT_ENABLED = False
+    # CLAUDE-P27-B: real HTTP POSTs across hundreds of existing tests
+    # never carry a csrf_token field -- CSRFProtect (app.py) would 400
+    # every one of them otherwise. Tests that specifically want to
+    # exercise CSRF enforcement turn this back on (see
+    # tests/test_csrf_protection.py), same pattern as RATELIMIT_ENABLED
+    # just above.
+    WTF_CSRF_ENABLED = False
 
 
 _CONFIGS = {

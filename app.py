@@ -11,6 +11,7 @@ import logging
 import os
 
 from flask import Flask
+from flask_wtf import CSRFProtect
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from config import get_config
@@ -55,6 +56,7 @@ def create_app(config_name: str | None = None) -> Flask:
     _register_database(app)
     _register_rate_limiter(app)
     _register_blueprints(app)
+    _register_csrf(app)
     _register_error_handlers(app)
     _register_context_processors(app)
     _register_template_filters(app)
@@ -244,6 +246,32 @@ def _validate_production_config(app: Flask, config_cls) -> None:
             "will use the deterministic rule-based fallback instead of the model. "
             "This is a supported, deliberate degradation, not a boot failure.",
         )
+
+
+def _register_csrf(app: Flask) -> None:
+    """
+    CLAUDE-P27-B: every state-changing route was previously unprotected
+    against CSRF. templates/base.html injects a hidden csrf_token field
+    into every POST <form> on every page (see that file's own comment)
+    -- CSRFProtect() here is what actually validates it on the way in,
+    and what makes the csrf_token() Jinja global those templates call
+    exist at all.
+
+    routes/api.py is exempted: it's documented (README, CLAUDE-P27-B's
+    own Step 1) as a curl/script-consumed JSON API, not a browser page a
+    third-party site could trick into submitting a form -- the classic
+    CSRF attack shape. The primary CSRF vector (a forged cross-site POST
+    silently carrying the victim's session cookie) is already blocked
+    app-wide by SESSION_COOKIE_SAMESITE="Lax" (config.py) regardless of
+    this exemption; requiring API callers to also juggle a CSRF token
+    would regress the plain curl -b cookies.txt usage Step 1 documented,
+    for a client population this protection doesn't meaningfully target.
+    """
+    from routes.api import api_bp
+
+    csrf = CSRFProtect()
+    csrf.init_app(app)
+    csrf.exempt(api_bp)
 
 
 def _register_rate_limiter(app: Flask) -> None:
