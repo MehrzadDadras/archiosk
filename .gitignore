@@ -15,6 +15,9 @@ instance/
 *.db
 *.sqlite3
 
+# Backup archives (tools/backup_data.py) -- real user/project data, never committed
+backups/
+
 # Logs
 *.log
 
