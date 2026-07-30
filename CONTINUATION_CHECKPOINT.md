@@ -1,5 +1,84 @@
 # Continuation checkpoint
 
+## 2026-07-30 — CLAUDE-P29: locked Project Operating Environment types
+
+**Commits:** `d339d1c` (domain/service layer), `02a3ed3` (route/template/UI
+wiring), `486d61f` (29 new tests + P28 test-file fixup), `d684e80`
+(governance amendment + MANIFEST.md). Full suite: 854 passed, 0 failed.
+
+**What was built.** A locked, immutable, project-creation-time
+classification — Client/Owner vs. Design-Builder/Proponent — answering
+"which side of a procurement/delivery relationship is this project's
+*workspace itself* structurally configured to serve." `services/
+environment_capabilities.py` (new): a closed two-value enum, a strict
+validator (`is_valid_operating_environment` — rejects rather than
+open-world-preserves an unrecognized value, a deliberate deviation from
+this codebase's dominant `normalize_open_world_value` pattern, since a
+closed/gated field needs the opposite shape), and one concrete capability
+mapping (`allowed_participant_roles`). `ProjectWorkspace.operating_
+environment`/`_set_by`/`_set_at` (new fields, default `None`).
+`CaseWorkspaceStore.set_operating_environment` is the single write gate
+for the field — raises the new `OperatingEnvironmentAlreadySetError` on
+any second call, so there is exactly one place immutability could fail,
+and it's tested directly at both the service and route layers (direct
+call, forged route submission, same-value resubmission).
+
+**Explicitly distinct from the existing Perspective mechanisms, not a
+reopening of CLAUDE-P28's finding.** `represented_party_by`/
+`PerspectiveAssessment` (CLAUDE-P12R/P17) is mutable, per-reviewer, and
+answers "whose eyes am I reading this Finding through today" — untouched
+by this stage, confirmed by test (`RoleAndPerspectiveIndependenceTests`)
+that neither it nor a reviewer's session role can reach `operating_
+environment`. The governed, still-**NOT AUTHORIZED** "Perspective"
+object in `governance/specified-unbuilt/perspective-and-contract-
+dna.md` remains not authorized — this stage's user-provided reasoning
+for why Operating Environment is a *different*, narrower, bounded
+concept (immutable/project-wide/creation-time vs. mutable/per-reviewer/
+default-emphasis-only) was independently evaluated and accepted as
+substantively sound, not just a rationalization, and is recorded as such
+in `governance/STATUS.md`'s new authorization row — which explicitly
+does not touch the pre-existing Perspective/Contract-DNA NOT AUTHORIZED
+row directly above it.
+
+**Creation path.** `ingest_upload()` now requires `operating_environment`
+(no default — same "no inference path" discipline as `promote_
+requirement_item`'s `source_id`), validated before any parsing begins;
+the `ProjectWorkspace` is now always created eagerly (previously only
+when `project_name` was given) so the environment locks atomically at
+project birth — no project can transiently exist unclassified.
+`templates/gateway.html` offers two creation entrances instead of one
+generic card; `templates/upload.html` requires an explicit environment
+selection (server-side allowlist is the real enforcement; the UI
+checkbox is cosmetic).
+
+**Legacy projects.** A pre-P29 workspace loads with `operating_
+environment=None` — never inferred or backfilled. `routes/workspace.py`'s
+new `classify_operating_environment` (`@admin_required`, matching the
+authority level of project creation itself) is the one-time path to
+establish it, through the identical write gate — refused the same way
+on any second attempt. `allowed_participant_roles(None)` returns `None`
+(no gating), so every pre-existing legacy project's Participant
+functionality is unchanged until explicitly classified.
+
+**Environment-dependent behavior, kept narrow.** The one implemented
+differentiation is which `Participant.role_type` values are selectable
+per locked environment (`register_participant_route`). No new AI-prompt
+content was written — `services/bhive_parser.py`'s adversarially-tuned
+prompts were deliberately left untouched, consistent with this
+project's standing caution around that module. RFI export
+(`build_rfi_docx`/`build_rfi_draft_docx`) stamps the environment label
+when available; `routes/api.py`'s own RFI export route was deliberately
+left unstamped this stage (no `CaseWorkspaceStore` access there — an
+explicit, noted scope limitation, not an oversight).
+
+**Deferred, not done this stage:** general environment-gated analysis
+content, `routes/api.py` RFI-export environment stamping, and any
+environment value beyond the two authorized here — all remain **NOT
+AUTHORIZED** pending their own fresh authorization, per the new
+`governance/STATUS.md` row.
+
+---
+
 ## 2026-07-29 — CLAUDE-P28: project operating perspective + historical/forward-ingestion review
 
 **Commit:** `295d148`. Full suite: 825 passed, 0 failed.
