@@ -48,6 +48,54 @@
         {% endif %}
         {% endif %}
 
+        {# CLAUDE-P32: project-level access control -- who may open this
+           project at all. Only the owner or an admin sees the grant/
+           revoke/reassign controls; every authenticated user who reaches
+           this page (having already passed the route-layer gate) sees
+           the read-only owner/allow-list summary. #}
+        <p class="workspace-pane-label">Access</p>
+        {% if project_owner %}
+        <p class="mono" style="margin:-0.4rem 0 0.4rem;font-size:0.85rem;">Owner: {{ project_owner }}</p>
+        {% else %}
+        <p style="color:var(--text-secondary);font-size:0.8rem;margin:-0.4rem 0 0.4rem;">
+            No owner established yet (legacy project) &mdash; admin-only until assigned.
+        </p>
+        {% endif %}
+        {% if project_access_allow_list %}
+        <p style="font-size:0.8rem;margin:0 0 0.4rem;">Also authorized: {{ project_access_allow_list|join(', ') }}</p>
+        {% endif %}
+        {% if is_admin or is_project_owner %}
+        <details class="add-source-details">
+            <summary>+ Manage access</summary>
+            {% if is_admin %}
+            <form method="post" action="{{ url_for('workspace.set_project_owner_route', project_id=project_id) }}" style="margin-bottom:0.5rem;">
+                <select name="owner" required style="width:100%;margin-bottom:0.3rem;">
+                    <option value="" disabled selected>Set owner&hellip;</option>
+                    {% for u in known_usernames %}
+                    <option value="{{ u }}" {% if u == project_owner %}selected{% endif %}>{{ u }}</option>
+                    {% endfor %}
+                </select>
+                <button type="submit" class="link-button">Set owner</button>
+            </form>
+            {% endif %}
+            <form method="post" action="{{ url_for('workspace.grant_project_access_route', project_id=project_id) }}" style="margin-bottom:0.3rem;">
+                <select name="username" required style="width:100%;margin-bottom:0.3rem;">
+                    <option value="" disabled selected>Grant access to&hellip;</option>
+                    {% for u in known_usernames %}
+                    <option value="{{ u }}">{{ u }}</option>
+                    {% endfor %}
+                </select>
+                <button type="submit" class="link-button">Grant</button>
+            </form>
+            {% for u in project_access_allow_list %}
+            <form method="post" action="{{ url_for('workspace.revoke_project_access_route', project_id=project_id) }}" style="display:inline;">
+                <input type="hidden" name="username" value="{{ u }}">
+                <button type="submit" class="link-button">Revoke {{ u }}</button>
+            </form>
+            {% endfor %}
+        </details>
+        {% endif %}
+
         <p class="workspace-pane-label">Lifecycle</p>
         <div class="lifecycle-strip">
             {% for stage in ["RFQ", "RFP", "Pursuit", "Award", "Design", "Construction", "Closeout", "Historic Record"] %}

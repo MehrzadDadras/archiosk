@@ -19,7 +19,7 @@ the API equivalent of the @login_required dashboard/gateway pages.
 """
 from __future__ import annotations
 
-from flask import Blueprint, current_app, jsonify, request, send_file
+from flask import Blueprint, abort, current_app, jsonify, request, send_file, session
 from werkzeug.exceptions import RequestEntityTooLarge
 
 from services.auth import is_admin, is_authenticated
@@ -59,6 +59,10 @@ def ingest_document():
             request.files.get('file'),
             current_app,
             operating_environment=request.form.get('operating_environment', ''),
+            # CLAUDE-P32: real session identity -- see
+            # routes/portal.py's upload() for why this is never
+            # request.form.get('actor').
+            owner=session.get('username', ''),
             actor=request.form.get('actor'),
             role=request.form.get('role'),
             project_name=request.form.get('project_name'),
@@ -71,25 +75,59 @@ def ingest_document():
     return jsonify(document.to_dict()), 201
 
 
+def _load_authorized_project_or_404(project_id: str):
+    """
+    CLAUDE-P32: the shared loader every project-scoped route in this
+    blueprint now goes through, wrapping services.project_access.
+    load_authorized_project_or_none -- the same centralized decision
+    routes/workspace.py's _load_workspace_or_404 uses, translated into
+    this blueprint's own JSON 404 shape (via plain abort(404), which
+    app.py's error handler already renders as JSON for any /api/ path)
+    rather than a second, divergent access-check implementation.
+    Deliberately returns the SAME generic 404 whether the project
+    doesn't exist or the caller isn't authorized for it -- distinguishing
+    the two would let a caller enumerate real project ids by the error
+    shape alone.
+    """
+    from services.project_access import load_authorized_project_or_none
+
+    store = CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"])
+    result = load_authorized_project_or_none(
+        store, get_registry(current_app), get_governance_log(current_app), project_id,
+        session.get("username"), is_admin(),
+    )
+    if result is None:
+        abort(404)
+    return result
+
+
 @api_bp.route('/documents', methods=['GET'])
 def list_documents():
+    # CLAUDE-P32: filtered to accessible projects only -- listing every
+    # project_id in the deployment regardless of access would leak
+    # exactly what the per-project gate below is meant to hide.
+    from services.project_access import can_access_project
+
     registry = get_registry(current_app)
-    return jsonify(project_ids=registry.list_ids())
+    store = CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"])
+    username = session.get("username")
+    admin = is_admin()
+    accessible = [
+        pid for pid in registry.list_ids()
+        if can_access_project(store.get_or_create(pid), username, admin)
+    ]
+    return jsonify(project_ids=accessible)
 
 
 @api_bp.route('/documents/<project_id>', methods=['GET'])
 def get_document(project_id):
-    document = get_registry(current_app).get(project_id)
-    if document is None:
-        return _not_found(project_id)
+    document, _workspace = _load_authorized_project_or_404(project_id)
     return jsonify(document.to_dict())
 
 
 @api_bp.route('/documents/<project_id>/requirements', methods=['GET'])
 def get_requirements(project_id):
-    document = get_registry(current_app).get(project_id)
-    if document is None:
-        return _not_found(project_id)
+    document, _workspace = _load_authorized_project_or_404(project_id)
 
     category = request.args.get('category')
     if category and category not in REQUIREMENT_CATEGORIES:
@@ -108,17 +146,13 @@ def get_requirements(project_id):
 
 @api_bp.route('/documents/<project_id>/milestones', methods=['GET'])
 def get_milestones(project_id):
-    document = get_registry(current_app).get(project_id)
-    if document is None:
-        return _not_found(project_id)
+    document, _workspace = _load_authorized_project_or_404(project_id)
     return jsonify(milestones=document.milestones)
 
 
 @api_bp.route('/documents/<project_id>/consistency', methods=['GET'])
 def get_consistency(project_id):
-    document = get_registry(current_app).get(project_id)
-    if document is None:
-        return _not_found(project_id)
+    document, _workspace = _load_authorized_project_or_404(project_id)
     return jsonify(
         checked=document.consistency_checked,
         note=document.consistency_note,
@@ -128,28 +162,15 @@ def get_consistency(project_id):
 
 @api_bp.route('/documents/<project_id>/governance', methods=['GET'])
 def get_governance(project_id):
-    document = get_registry(current_app).get(project_id)
-    if document is None:
-        return _not_found(project_id)
-
+    _document, _workspace = _load_authorized_project_or_404(project_id)
     events = get_governance_log(current_app).read(project_id)
     return jsonify(events=[e.__dict__ for e in events])
 
 
 @api_bp.route('/documents/<project_id>/rfi', methods=['GET'])
 def export_rfi(project_id):
-    document = get_registry(current_app).get(project_id)
-    if document is None:
-        return _not_found(project_id)
-
-    # CLAUDE-P30: best-effort lookup only, matching routes/workspace.py's
-    # own export_rfi -- a missing/legacy workspace must not block a
-    # download that worked before operating_environment existed. Closes
-    # the scope limitation CLAUDE-P29 explicitly noted in this route.
-    workspace = CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"]).get(project_id)
-    environment_label = (
-        OPERATING_ENVIRONMENT_LABELS.get(workspace.operating_environment) if workspace else None
-    )
+    document, workspace = _load_authorized_project_or_404(project_id)
+    environment_label = OPERATING_ENVIRONMENT_LABELS.get(workspace.operating_environment)
 
     try:
         buffer = build_rfi_docx(document, operating_environment_label=environment_label)
@@ -167,10 +188,3 @@ def export_rfi(project_id):
 @api_bp.route('/categories', methods=['GET'])
 def list_categories():
     return jsonify(categories=REQUIREMENT_CATEGORIES)
-
-
-def _not_found(project_id: str):
-    return jsonify(
-        error="not_found",
-        message=f"No document found for project_id '{project_id}'.",
-    ), 404

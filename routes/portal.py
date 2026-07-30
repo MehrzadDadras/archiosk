@@ -6,9 +6,9 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-from flask import Blueprint, abort, current_app, flash, jsonify, redirect, render_template, request, url_for
+from flask import Blueprint, abort, current_app, flash, jsonify, redirect, render_template, request, session, url_for
 
-from services.auth import admin_required, check_credentials, is_authenticated, log_in, log_out, login_required
+from services.auth import admin_required, check_credentials, is_admin, is_authenticated, log_in, log_out, login_required
 from services.rate_limit import limiter
 from services.case_workspace import CaseWorkspaceStore
 from services.environment_capabilities import OPERATING_ENVIRONMENT_LABELS
@@ -34,6 +34,56 @@ def _safe_workspace(store: CaseWorkspaceStore, project_id: str):
         return store.get(project_id)
     except TypeError:
         return None
+
+
+def _accessible_documents(registry, store):
+    """
+    CLAUDE-P32: every project-LISTING route in this file (index's
+    recent-projects, projects_list, global_search) must filter to only
+    the accessible set, not merely block direct navigation into an
+    unauthorized project -- otherwise a project's filename/metadata
+    still leaks through these pages even though opening it 404s.
+    Backfills a legacy project's owner the same way
+    routes/workspace.py's _load_workspace_or_404 does, so a project
+    doesn't sit permanently admin-only just because no one has opened
+    its workspace page yet to trigger that backfill.
+    """
+    from services.project_access import can_access_project, ensure_owner_backfilled, known_usernames
+
+    governance_log = get_governance_log(current_app)
+    usernames = known_usernames()
+    username = session.get("username")
+    admin = is_admin()
+
+    documents = [d for pid in registry.list_ids() if (d := registry.get(pid)) is not None]
+    accessible = []
+    for document in documents:
+        # A workspace file that predates the current schema must not
+        # take down every project's listing for every user -- fails
+        # CLOSED (excluded) on a load error, same reasoning as
+        # app.py's _nav_recent_projects fix for the identical risk.
+        try:
+            workspace = store.get_or_create(document.project_id)
+            ensure_owner_backfilled(store, workspace, governance_log, usernames)
+            allowed = can_access_project(workspace, username, admin)
+        except TypeError:
+            allowed = False
+        if allowed:
+            accessible.append(document)
+    return accessible
+
+
+def _require_project_access_or_404(store, project_id: str):
+    """Single-project counterpart to _accessible_documents, for the two
+    routes below that operate on one project_id directly
+    (delete_project, dashboard) rather than listing many."""
+    from services.project_access import can_access_project, ensure_owner_backfilled, known_usernames
+
+    workspace = store.get_or_create(project_id)
+    ensure_owner_backfilled(store, workspace, get_governance_log(current_app), known_usernames())
+    if not can_access_project(workspace, session.get("username"), is_admin()):
+        abort(404)
+    return workspace
 
 
 def _project_summary(document, workspace, events) -> dict:
@@ -90,7 +140,7 @@ def index():
     store = CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"])
     governance_log = get_governance_log(current_app)
 
-    documents = [d for pid in registry.list_ids() if (d := registry.get(pid)) is not None]
+    documents = _accessible_documents(registry, store)
     documents.sort(key=lambda d: d.ingested_at, reverse=True)
 
     recent_projects = [
@@ -288,7 +338,7 @@ def projects_list():
     if sort not in _PROJECT_SORT_KEYS:
         sort = 'last_updated'
 
-    documents = [d for pid in registry.list_ids() if (d := registry.get(pid)) is not None]
+    documents = _accessible_documents(registry, store)
     if query:
         needle = query.lower()
         documents = [
@@ -340,6 +390,11 @@ def delete_project(project_id):
     document = get_registry(current_app).get(project_id)
     if document is None:
         abort(404)
+    # CLAUDE-P32: this route is already @admin_required, so an admin
+    # session always passes this gate -- kept here anyway for defense in
+    # depth and consistency with every other project-scoped route, not
+    # because a non-admin could otherwise reach this route at all.
+    _require_project_access_or_404(CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"]), project_id)
 
     confirm = request.form.get('confirm')
     if confirm == 'no':
@@ -378,7 +433,8 @@ def global_search():
 
     needle = query.lower()
     registry = get_registry(current_app)
-    documents = [d for pid in registry.list_ids() if (d := registry.get(pid)) is not None]
+    store = CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"])
+    documents = _accessible_documents(registry, store)
     matches = [
         d for d in documents
         if needle in d.filename.lower() or needle in d.project_id.lower()
@@ -418,6 +474,12 @@ def upload():
             request.files.get('file'),
             current_app,
             operating_environment=request.form.get('operating_environment', ''),
+            # CLAUDE-P32: the real, already-authenticated session identity
+            # (this route is @admin_required) -- never request.form.get
+            # ('actor'), which is free text a caller could type anything
+            # into (see ingest_upload's own docstring for why the two
+            # must stay separate).
+            owner=session.get('username', ''),
             actor=request.form.get('actor'),
             role=request.form.get('role'),
             project_name=request.form.get('project_name'),
@@ -457,4 +519,8 @@ def dashboard(project_id=None):
     document = get_registry(current_app).get(project_id)
     if document is None:
         abort(404)
+    # CLAUDE-P32: checked here too (not just relying on the redirect
+    # target's own gate) so a denied request 404s directly rather than
+    # bouncing through an extra redirect first.
+    _require_project_access_or_404(CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"]), project_id)
     return redirect(url_for('workspace.show_workspace', project_id=project_id))

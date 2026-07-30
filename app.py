@@ -451,8 +451,13 @@ def _nav_recent_projects(app: Flask, limit: int = 15) -> list:
     so it's as free to sort on as ingested_at is now - not attempted
     here.
     """
+    from flask import session
+
+    from services.auth import is_admin
     from services.case_workspace import CaseWorkspaceStore
+    from services.governance import GovernanceLog
     from services.ingestion import get_registry
+    from services.project_access import can_access_project, ensure_owner_backfilled, known_usernames
 
     try:
         registry = get_registry(app)
@@ -460,11 +465,45 @@ def _nav_recent_projects(app: Flask, limit: int = 15) -> list:
     except OSError:
         return []
     documents.sort(key=lambda d: d.ingested_at, reverse=True)
-    documents = documents[:limit]
 
     store = CaseWorkspaceStore(app.config["REGISTRY_STORE_PATH"])
-    result = []
+
+    # CLAUDE-P32: this sidebar renders on every authenticated page
+    # (including error pages, since it runs inside inject_globals) --
+    # discovered as a real, unfiltered project-content leak during that
+    # stage's own bypass inventory (a denied project's own name was
+    # still visible in the nav rail on the very 404 page proving access
+    # was denied). Filtered to accessible projects BEFORE the limit cap
+    # below, not after -- capping first could under-fill the sidebar
+    # with fewer than `limit` items even when more accessible projects
+    # exist further down the list.
+    governance_log = GovernanceLog(app.config["REGISTRY_STORE_PATH"])
+    usernames = known_usernames()
+    username = session.get("username")
+    admin = is_admin()
+    accessible_documents = []
     for d in documents:
+        # A workspace file that predates the current schema must not
+        # crash the sidebar on every authenticated page (the original,
+        # pre-P32 defensive reasoning this function already had for its
+        # own display-only re-fetch below, now needed here too since
+        # this new code path also loads every project's workspace).
+        # Fails CLOSED on a load error -- excluded from the nav rather
+        # than shown, the same "can't determine access -> deny" default
+        # can_access_project itself uses for a None workspace.
+        try:
+            workspace = store.get_or_create(d.project_id)
+            ensure_owner_backfilled(store, workspace, governance_log, usernames)
+            allowed = can_access_project(workspace, username, admin)
+        except TypeError:
+            allowed = False
+        if allowed:
+            accessible_documents.append(d)
+        if len(accessible_documents) >= limit:
+            break
+
+    result = []
+    for d in accessible_documents:
         # Best-effort, display-only: a workspace file that predates the
         # current schema must not crash the sidebar on every authenticated
         # page (including error pages, since this runs in inject_globals)

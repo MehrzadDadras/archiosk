@@ -128,6 +128,17 @@ def _log() -> GovernanceLog:
 
 
 def _load_workspace_or_404(project_id: str):
+    """
+    CLAUDE-P32: the near-universal choke point every route in this file
+    reaches project data through (47 of this blueprint's 50 routes
+    already called this before this stage; export_rfi -- the one
+    exception -- was refactored to call it too, see below). Project-level
+    access is checked here immediately after the workspace is loaded/
+    backfilled, BEFORE this function returns -- 404, not 403, matching
+    _require_visible_case's own established "don't confirm existence to
+    a non-member" convention, applied one layer up from Case privacy to
+    project-level access itself.
+    """
     document = get_registry(current_app).get(project_id)
     if document is None:
         abort(404)
@@ -136,6 +147,13 @@ def _load_workspace_or_404(project_id: str):
     workspace = store.get_or_create(
         project_id, register_document_source=document_source_payload(document),
     )
+
+    from services.project_access import can_access_project, ensure_owner_backfilled, known_usernames
+
+    ensure_owner_backfilled(store, workspace, _log(), known_usernames())
+    if not can_access_project(workspace, session.get("username"), session.get("role") == "admin"):
+        abort(404)
+
     return document, store, workspace
 
 
@@ -978,6 +996,13 @@ def show_workspace(project_id):
             decision_stages_for_environment(workspace.operating_environment)
             if workspace.operating_environment else ()
         ),
+        # CLAUDE-P32: project-level access control display -- read-only
+        # info plus the owner/grant/revoke forms case_workspace.html
+        # shows only to the owner or an admin (is_admin already reaches
+        # the template via app.py's own context processor).
+        project_owner=workspace.owner,
+        project_access_allow_list=workspace.access_allow_list,
+        is_project_owner=(workspace.owner is not None and workspace.owner == _reviewer()),
     )
 
 
@@ -1064,8 +1089,10 @@ def classify_operating_environment(project_id):
     be used to change an already-classified project's environment
     either, new or legacy. Admin-only, matching the same authority
     level as original project creation (routes/portal.py's /upload is
-    also @admin_required) -- there is no project-level "owner" concept
-    anywhere in this codebase to check against instead.
+    also @admin_required). CLAUDE-P32 later added a real project-level
+    "owner" concept (see set_project_owner/classify_project_owner
+    below) -- this route's own authority choice predates that and is
+    unaffected by it; both remain admin-only for the same reason.
     """
     _, store, workspace = _load_workspace_or_404(project_id)
 
@@ -1086,6 +1113,80 @@ def classify_operating_environment(project_id):
         f"Project operating environment established: "
         f"{OPERATING_ENVIRONMENT_LABELS[operating_environment]}.", "success",
     )
+    return redirect(url_for("workspace.show_workspace", project_id=project_id))
+
+
+@workspace_bp.route("/projects/<project_id>/workspace/access/owner", methods=["POST"])
+@admin_required
+def set_project_owner_route(project_id):
+    """
+    CLAUDE-P32: (re-)establishes a project's owner -- admin-only, unlike
+    Case-level ownership which is set once at creation and never
+    reassigned. This IS reassignable (see ProjectWorkspace.owner's own
+    comment for why: a wrong backfill inference, or a departing team
+    member, must be recoverable) but only ever by an admin, never by the
+    current owner or an allow-listed user. Legacy projects reach this
+    same route via the "not yet established" panel in case_workspace.html
+    -- there is no separate "classify" route, unlike operating_environment,
+    because reassignment is intentionally allowed here.
+    """
+    _, store, workspace = _load_workspace_or_404(project_id)
+
+    new_owner = (request.form.get("owner") or "").strip()
+    if not new_owner:
+        flash("A username is required to set the project owner.", "error")
+        return redirect(url_for("workspace.show_workspace", project_id=project_id))
+    if new_owner not in {u.username for u in User.query.all()}:
+        flash(f"{new_owner!r} is not a registered account.", "error")
+        return redirect(url_for("workspace.show_workspace", project_id=project_id))
+
+    store.set_project_owner(workspace, owner=new_owner, actor=_reviewer(), governance_log=_log())
+    flash(f"Project owner set to {new_owner!r}.", "success")
+    return redirect(url_for("workspace.show_workspace", project_id=project_id))
+
+
+@workspace_bp.route("/projects/<project_id>/workspace/access/grant", methods=["POST"])
+@login_required
+def grant_project_access_route(project_id):
+    """CLAUDE-P32: owner-or-admin authority, enforced inside
+    CaseWorkspaceStore.grant_project_access itself (the same
+    owner-or-admin pattern archive_case/derive_case already
+    established) -- reachable by any authenticated user so a non-owner,
+    non-admin request produces the store's own real error message
+    rather than being silently hidden by a route-level role check that
+    would just duplicate that logic."""
+    _, store, workspace = _load_workspace_or_404(project_id)
+
+    username = (request.form.get("username") or "").strip()
+    if username and username not in {u.username for u in User.query.all()}:
+        flash(f"{username!r} is not a registered account.", "error")
+        return redirect(url_for("workspace.show_workspace", project_id=project_id))
+
+    try:
+        store.grant_project_access(
+            workspace, username=username, actor=_reviewer(), actor_role=session.get("role") or "",
+            governance_log=_log(),
+        )
+        flash(f"Access granted to {username!r}.", "success")
+    except CaseWorkspaceError as exc:
+        flash(str(exc), "error")
+    return redirect(url_for("workspace.show_workspace", project_id=project_id))
+
+
+@workspace_bp.route("/projects/<project_id>/workspace/access/revoke", methods=["POST"])
+@login_required
+def revoke_project_access_route(project_id):
+    _, store, workspace = _load_workspace_or_404(project_id)
+
+    username = (request.form.get("username") or "").strip()
+    try:
+        store.revoke_project_access(
+            workspace, username=username, actor=_reviewer(), actor_role=session.get("role") or "",
+            governance_log=_log(),
+        )
+        flash(f"Access revoked for {username!r}.", "success")
+    except CaseWorkspaceError as exc:
+        flash(str(exc), "error")
     return redirect(url_for("workspace.show_workspace", project_id=project_id))
 
 
@@ -2670,27 +2771,19 @@ def export_rfi(project_id):
     Project-scoped, not Case-scoped: the underlying RFI is built from
     the legacy consistency-check pipeline's flagged contradictions
     (ParsedDocument.consistency_flags), which has no Case/visibility
-    concept of its own - the same access rule this route's own
-    accordion (RFI Export, in case_workspace.html) already relies on:
-    any authenticated user may view/download, since there is no
-    per-project membership model in this legacy pipeline to check
-    against.
+    concept of its own. CLAUDE-P32: previously the one route in this
+    blueprint that bypassed _load_workspace_or_404 (a direct
+    get_registry/_store().get double-lookup) -- refactored to use the
+    same loader every other route already does, closing that gap; the
+    "any authenticated user may view" claim this docstring used to make
+    is no longer true and has been removed, not merely reworded.
     """
-    document = get_registry(current_app).get(project_id)
-    if document is None:
-        abort(404)
+    document, store, workspace = _load_workspace_or_404(project_id)
+    environment_label = OPERATING_ENVIRONMENT_LABELS.get(workspace.operating_environment)
 
-    # CLAUDE-P29: best-effort lookup only, to stamp the export with the
-    # environment label -- a missing/legacy workspace must not block a
-    # download that worked fine before this field existed.
-    workspace = _store().get(project_id)
-    environment_label = (
-        OPERATING_ENVIRONMENT_LABELS.get(workspace.operating_environment) if workspace else None
-    )
-    if workspace is not None:
-        export_gate = _require_export_allowed(workspace, project_id)
-        if export_gate is not None:
-            return export_gate
+    export_gate = _require_export_allowed(workspace, project_id)
+    if export_gate is not None:
+        return export_gate
 
     try:
         buffer = build_rfi_docx(document, operating_environment_label=environment_label)
