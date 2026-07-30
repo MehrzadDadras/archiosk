@@ -120,6 +120,7 @@ def ingest_upload(
     file_storage: Optional[FileStorage],
     app: Flask,
     operating_environment: str,
+    owner: str,
     actor: str | None = None,
     role: str | None = None,
     project_name: str | None = None,
@@ -146,6 +147,19 @@ def ingest_upload(
     that method for why calling it here is always safe: this function
     always generates a brand-new project_id, so the workspace it
     creates a few lines below is always genuinely new).
+
+    `owner` (CLAUDE-P32) is REQUIRED, deliberately no default and
+    deliberately a SEPARATE parameter from `actor` below -- `actor` is
+    free text (services/governance.py's own docstring: "No real
+    authentication backs actor/role"; a real caller has typed things
+    like "Mehrzad Dadras, Design Manager" into it), never safe to use as
+    a security-relevant identity. `owner` must be the caller's real,
+    already-authenticated `session['username']` (both real call sites,
+    routes/portal.py's `upload()` and routes/api.py's `ingest_document()`,
+    are `@admin_required` and so always have one) -- passed through to
+    CaseWorkspaceStore.set_project_owner immediately after workspace
+    creation, the same "locked onto the project at the moment of
+    creation" treatment `operating_environment` already gets.
     """
     from services.environment_capabilities import is_valid_operating_environment
 
@@ -154,6 +168,9 @@ def ingest_upload(
             "A valid project operating environment (Client / Owner or "
             "Design-Builder / Proponent) must be selected before a project can be created.",
         )
+
+    if not owner or not owner.strip():
+        raise UploadError("A project owner (the authenticated uploader) is required.")
 
     if file_storage is None or not file_storage.filename:
         raise UploadError("No file was provided.")
@@ -273,6 +290,16 @@ def ingest_upload(
     )
     store.set_operating_environment(
         workspace, operating_environment, actor=actor or _DEFAULT_ACTOR, governance_log=governance_log,
+    )
+    # CLAUDE-P32: locked onto the project at the moment of creation, the
+    # same treatment operating_environment gets immediately above --
+    # every new project has a real, deterministic owner from the moment
+    # it exists, closing the gap for all future projects; only projects
+    # that predate this field need the separate backfill-inference path
+    # (services.project_access.ensure_owner_backfilled).
+    store.set_project_owner(
+        workspace, owner=owner.strip(), actor=owner.strip(), source="admin_assigned",
+        governance_log=governance_log,
     )
     if project_name:
         store.set_project_details(

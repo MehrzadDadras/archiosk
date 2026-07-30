@@ -2390,6 +2390,34 @@ class ProjectWorkspace:
     security_profile: Optional[str] = None
     security_profile_set_by: Optional[str] = None
     security_profile_set_at: Optional[str] = None
+
+    # CLAUDE-P32: project-level access control -- which authenticated
+    # accounts may open this project at all. Orthogonal to, and checked
+    # BEFORE, both role (admin/read_only) and Case-level visibility
+    # (visible_cases_for) -- those answer "what can this user do inside
+    # a project they're already allowed into"; this answers "may they be
+    # in here at all." Unlike operating_environment, deliberately NOT a
+    # one-time lock: a wrong owner (e.g. from backfill inference) must be
+    # recoverable, not permanent -- but only ever re-settable by an admin
+    # (enforced at the route layer, never by this store method itself,
+    # matching set_project_security_profile's own precedent), and every
+    # change is still fully accountable via its own governance_log event.
+    # `owner is None` means "not yet established" (a legacy project
+    # before this field existed, or a brand-new one mid-creation) --
+    # never treated as "open to everyone," the opposite of every other
+    # None-means-ungated field in this module (allowed_participant_roles,
+    # capability_availability) precisely because this is the one field
+    # whose absence must fail closed, not open.
+    owner: Optional[str] = None
+    owner_set_by: Optional[str] = None
+    owner_set_at: Optional[str] = None
+    # Additional accounts (real User.username values, validated by the
+    # route layer before being passed in here -- this module still does
+    # not import models/services.auth) explicitly granted access by the
+    # owner or an admin. Never grants grant/revoke authority itself --
+    # an allow-listed user can open the project, nothing more.
+    access_allow_list: list[str] = field(default_factory=list)
+
     perspective_assessments: list[dict] = field(default_factory=list)  # CLAUDE-P12R - see PerspectiveAssessment
     # Per-reviewer "who do I represent in this Project" (username ->
     # participant_id) - same personal/display-only shape as
@@ -3302,6 +3330,89 @@ class CaseWorkspaceStore:
                 actor=actor, role="system",
                 payload={"previous_profile": previous_profile, "security_profile": security_profile},
             )
+        return workspace
+
+    def set_project_owner(
+        self, workspace: ProjectWorkspace, owner: str, actor: str,
+        source: str = "admin_assigned", governance_log: Optional[GovernanceLog] = None,
+    ) -> ProjectWorkspace:
+        """
+        CLAUDE-P32: the single method that ever writes `owner` -- not a
+        one-time lock like set_operating_environment (see the field's own
+        comment for why: a wrong backfill inference must be recoverable).
+        Authority (owner-or-admin, or admin-only for reassigning an
+        already-owned project) is enforced by the CALLER -- this store
+        module does not import services.auth/models, so it cannot check
+        a role itself, the same reason archive_case takes actor_role as a
+        plain string rather than looking it up.
+
+        `source` is provenance, not a security check: "admin_assigned"
+        (a real admin action, the normal route path) vs.
+        "inferred_from_ingestion_actor" (services.project_access's
+        deterministic, exact-match-only backfill) -- recorded on every
+        event so the audit trail never conflates an automatic inference
+        with a deliberate human decision.
+        """
+        if not owner or not owner.strip():
+            raise CaseWorkspaceError("A project owner requires a username.")
+
+        previous_owner = workspace.owner
+        workspace.owner = owner.strip()
+        workspace.owner_set_by = actor
+        workspace.owner_set_at = _now()
+        self.save(workspace)
+
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id, event_type="project_owner_set",
+                actor=actor, role="system",
+                payload={"previous_owner": previous_owner, "owner": workspace.owner, "source": source},
+            )
+        return workspace
+
+    def grant_project_access(
+        self, workspace: ProjectWorkspace, username: str, actor: str, actor_role: str,
+        governance_log: Optional[GovernanceLog] = None,
+    ) -> ProjectWorkspace:
+        """
+        CLAUDE-P32: owner-or-admin authority, the same pattern
+        archive_case/derive_case already established in this module
+        (actor_role passed through as a plain string by the caller, who
+        already knows the real session role). An allow-listed user
+        gains no further grant/revoke authority of their own -- only the
+        owner or an admin can extend or shrink this list.
+        """
+        if actor != workspace.owner and actor_role != "admin":
+            raise CaseWorkspaceError("Only the project owner or an admin may grant project access.")
+        if not username or not username.strip():
+            raise CaseWorkspaceError("A username is required to grant project access.")
+
+        username = username.strip()
+        if username not in workspace.access_allow_list:
+            workspace.access_allow_list.append(username)
+            self.save(workspace)
+            if governance_log is not None:
+                governance_log.append(
+                    project_id=workspace.project_id, event_type="project_access_granted",
+                    actor=actor, role="system", payload={"username": username},
+                )
+        return workspace
+
+    def revoke_project_access(
+        self, workspace: ProjectWorkspace, username: str, actor: str, actor_role: str,
+        governance_log: Optional[GovernanceLog] = None,
+    ) -> ProjectWorkspace:
+        if actor != workspace.owner and actor_role != "admin":
+            raise CaseWorkspaceError("Only the project owner or an admin may revoke project access.")
+
+        if username in workspace.access_allow_list:
+            workspace.access_allow_list.remove(username)
+            self.save(workspace)
+            if governance_log is not None:
+                governance_log.append(
+                    project_id=workspace.project_id, event_type="project_access_revoked",
+                    actor=actor, role="system", payload={"username": username},
+                )
         return workspace
 
     # -- lookups -------------------------------------------------------------
