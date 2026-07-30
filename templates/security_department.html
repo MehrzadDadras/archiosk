@@ -1,0 +1,263 @@
+{% extends "base.html" %}
+{% import "_macros.html" as macros %}
+
+{% block title %}Security Department &mdash; Archiosk{% endblock %}
+
+{% block content %}
+<section class="hero">
+    <h1>Security Department</h1>
+    <p class="hero-copy">
+        Organizational Security and Information Governance &mdash; written-policy ingestion,
+        governed Q&amp;A, the ratified security baseline, project security profiles, and assurance.
+        This deployment has no multi-organization tenancy yet: the baseline below is a single,
+        deployment-wide configuration, not one per customer organization.
+    </p>
+</section>
+
+{% call macros.accordion('Mandatory ARCHIOSK Security Floor', group='left', id='floor', open=True) %}
+<p class="pane-note">
+    These protections cannot be weakened by any organization baseline, project profile, or
+    exception &mdash; there is no configurable action anywhere in this system that could disable them.
+</p>
+<ul class="source-list">
+    {% for name, mechanism in mandatory_floor_protections.items() %}
+    <li class="source-item"><strong>{{ name.replace('_', ' ') }}</strong><br><small class="text-muted">{{ mechanism }}</small></li>
+    {% endfor %}
+</ul>
+{% endcall %}
+
+{% call macros.accordion('Security Claims Registry (' ~ security_claims_registry|length ~ ')', group='left', id='claims') %}
+<p class="pane-note">What this deployment can and cannot truthfully promise today.</p>
+<ul class="source-list">
+    {% for claim, status in security_claims_registry.items() %}
+    <li class="source-item">{{ claim }} <small class="text-muted">&mdash; {{ status.replace('_', ' ') }}</small></li>
+    {% endfor %}
+</ul>
+{% endcall %}
+
+{% call macros.accordion('Organization Security Baseline (' ~ baselines|length ~ ')', group='left', id='baselines', open=True) %}
+{% if active_baseline %}
+<p class="workspace-pane-label">Active: version {{ active_baseline.version_number }} (effective {{ active_baseline.effective_date }})</p>
+{% else %}
+<p style="color:var(--text-secondary);font-size:0.88rem;">No baseline is currently active &mdash; every governed action falls back to the mandatory floor default.</p>
+{% endif %}
+<ul class="source-list">
+    {% for baseline in baselines %}
+    <li class="source-item">
+        v{{ baseline.version_number }} &mdash; <strong>{{ baseline.status.replace('_', ' ') }}</strong>
+        <small class="text-muted">created {{ baseline.created_at }} by {{ baseline.created_by }}</small>
+        <ul>
+        {% for action_id, entry in baseline.control_decisions.items() %}
+            <li><small>{{ action_id }}: <strong>{{ entry.decision.replace('_', ' ') }}</strong> ({{ entry.source_type }})</small></li>
+        {% endfor %}
+        </ul>
+        {% if baseline.status in ('draft', 'under_review') %}
+        <details class="add-source-details">
+            <summary>+ Add control decision</summary>
+            <form class="workspace-form" method="post" action="{{ url_for('security.add_baseline_control', baseline_id=baseline.id) }}">
+                <select name="action_id" required>{% for a in governed_actions %}<option value="{{ a }}">{{ a }}</option>{% endfor %}</select>
+                <select name="decision" required>{% for d in known_decisions %}<option value="{{ d }}">{{ d.replace('_',' ') }}</option>{% endfor %}</select>
+                <select name="source_type" required>{% for s in known_control_sources %}<option value="{{ s }}">{{ s }}</option>{% endfor %}</select>
+                <input type="text" name="source_id" placeholder="Source id (policy statement / Q&amp;A id, if applicable)">
+                <input type="text" name="rationale" placeholder="Rationale">
+                <button type="submit">Add</button>
+            </form>
+        </details>
+        <form method="post" action="{{ url_for('security.acknowledge_baseline_impact', baseline_id=baseline.id) }}" style="display:inline;">
+            <button type="submit" class="link-button">Acknowledge capability impact</button>
+        </form>
+        {% if baseline.capability_impact_acknowledged_by %}
+        <form method="post" action="{{ url_for('security.activate_baseline', baseline_id=baseline.id) }}" style="display:inline;" onclick="return confirm('Activate this baseline? It will supersede the currently active one.');">
+            <button type="submit" class="link-button">Activate</button>
+        </form>
+        {% endif %}
+        <form method="post" action="{{ url_for('security.withdraw_baseline', baseline_id=baseline.id) }}" style="display:inline;">
+            <button type="submit" class="link-button">Withdraw</button>
+        </form>
+        {% endif %}
+    </li>
+    {% endfor %}
+</ul>
+<form method="post" action="{{ url_for('security.create_baseline') }}">
+    <button type="submit">+ Create baseline draft</button>
+</form>
+{% endcall %}
+
+{% call macros.accordion('Source Policies (' ~ source_policies|length ~ ')', group='left', id='policies') %}
+<ul class="source-list">
+    {% for policy in source_policies %}
+    <li class="source-item">
+        <strong>{{ policy.title }}</strong> &mdash; {{ policy.issuing_organization }}
+        <small class="text-muted">v{{ policy.version }}, ingested {{ policy.ingested_at }} by {{ policy.ingested_by }}</small>
+        <details class="add-source-details">
+            <summary>+ Record a policy statement</summary>
+            <form class="workspace-form" method="post" action="{{ url_for('security.record_policy_statement', policy_id=policy.id) }}">
+                <textarea name="clause_text" placeholder="Clause text" required></textarea>
+                <input type="text" name="clause_reference" placeholder="Reference (e.g. Section 4.2)">
+                <button type="submit">Record</button>
+            </form>
+        </details>
+    </li>
+    {% endfor %}
+</ul>
+{% call macros.subdisclosure('+ Ingest a source policy') %}
+<form class="workspace-form" method="post" enctype="multipart/form-data" action="{{ url_for('security.record_source_policy') }}">
+    <input type="text" name="title" placeholder="Title" required>
+    <input type="text" name="issuing_organization" placeholder="Issuing organization" required>
+    <input type="text" name="policy_owner" placeholder="Policy owner (optional)">
+    <input type="text" name="approving_authority" placeholder="Approving authority (optional)">
+    <input type="text" name="version" placeholder="Version (optional)">
+    <input type="text" name="jurisdiction" placeholder="Jurisdiction (optional)">
+    <select name="classification"><option value="">Classification (optional)</option>{% for c in classifications %}<option value="{{ c }}">{{ c }}</option>{% endfor %}</select>
+    <input type="file" name="policy_file">
+    <button type="submit">Ingest</button>
+</form>
+{% endcall %}
+{% endcall %}
+
+{% call macros.accordion('Proposed Controls (' ~ proposed_controls|length ~ ')', group='center', id='controls') %}
+<ul class="source-list">
+    {% for control in proposed_controls %}
+    <li class="source-item">{{ control.action_id }} &rarr; <strong>{{ control.proposed_decision.replace('_',' ') }}</strong> <small class="text-muted">({{ control.source_type }}, {{ control.status }})</small><br>{{ control.rationale }}</li>
+    {% endfor %}
+</ul>
+{% call macros.subdisclosure('+ Propose a control') %}
+<form class="workspace-form" method="post" action="{{ url_for('security.propose_control') }}">
+    <select name="action_id" required>{% for a in governed_actions %}<option value="{{ a }}">{{ a }}</option>{% endfor %}</select>
+    <select name="proposed_decision" required>{% for d in known_decisions %}<option value="{{ d }}">{{ d.replace('_',' ') }}</option>{% endfor %}</select>
+    <select name="source_type" required>{% for s in known_control_sources %}<option value="{{ s }}">{{ s }}</option>{% endfor %}</select>
+    <input type="text" name="source_id" placeholder="Source id">
+    <input type="text" name="rationale" placeholder="Rationale" required>
+    <input type="text" name="ambiguity_note" placeholder="Ambiguity note (optional)">
+    <button type="submit">Propose</button>
+</form>
+{% endcall %}
+{% endcall %}
+
+{% call macros.accordion('Governed Q&amp;A (' ~ qa_entries|length ~ ')', group='center', id='qa') %}
+<ul class="source-list">
+    {% for qa in qa_entries %}
+    <li class="source-item">
+        <strong>{{ qa.question }}</strong> <small class="text-muted">({{ qa.status.replace('_',' ') }})</small><br>
+        {{ qa.answer }}<br>
+        <small class="text-muted">{{ qa.responding_person }}, {{ qa.authority }} &mdash; {{ qa.recorded_at }}</small>
+        {% if qa.status == 'provisional_pending_approval' %}
+        <form method="post" action="{{ url_for('security.approve_qa_entry', qa_entry_id=qa.id) }}" style="display:inline;">
+            <button type="submit" class="link-button">Approve</button>
+        </form>
+        {% endif %}
+    </li>
+    {% endfor %}
+</ul>
+{% call macros.subdisclosure('+ Record a Q&amp;A entry') %}
+<form class="workspace-form" method="post" action="{{ url_for('security.record_qa_entry') }}">
+    <input type="text" name="question" placeholder="Question" required>
+    <textarea name="answer" placeholder="Answer"></textarea>
+    <input type="text" name="responding_person" placeholder="Responding person" required>
+    <input type="text" name="authority" placeholder="Authority / role" required>
+    <select name="status">{% for s in known_qa_statuses %}<option value="{{ s }}">{{ s.replace('_',' ') }}</option>{% endfor %}</select>
+    <input type="text" name="scope" placeholder="Scope (optional)">
+    <button type="submit">Record</button>
+</form>
+{% endcall %}
+{% endcall %}
+
+{% call macros.accordion('Exceptions (' ~ exceptions|length ~ ')', group='center', id='exceptions') %}
+<ul class="source-list">
+    {% for exc in exceptions %}
+    <li class="source-item">
+        {{ exc.action_id }} &rarr; <strong>{{ exc.decision.replace('_',' ') }}</strong> <small class="text-muted">({{ exc.status }}{% if exc.project_id %}, project {{ exc.project_id }}{% else %}, org-wide{% endif %})</small><br>
+        {{ exc.rationale }} <small class="text-muted">granted by {{ exc.granted_by }}{% if exc.expires_at %}, expires {{ exc.expires_at }}{% endif %}</small>
+        {% if exc.status == 'active' %}
+        <form method="post" action="{{ url_for('security.revoke_exception', exception_id=exc.id) }}" style="display:inline;">
+            <button type="submit" class="link-button">Revoke</button>
+        </form>
+        {% endif %}
+    </li>
+    {% endfor %}
+</ul>
+{% call macros.subdisclosure('+ Grant an exception') %}
+<form class="workspace-form" method="post" action="{{ url_for('security.grant_exception') }}">
+    <select name="action_id" required>{% for a in governed_actions %}<option value="{{ a }}">{{ a }}</option>{% endfor %}</select>
+    <select name="decision" required>{% for d in known_decisions %}<option value="{{ d }}">{{ d.replace('_',' ') }}</option>{% endfor %}</select>
+    <input type="text" name="rationale" placeholder="Rationale" required>
+    <input type="text" name="project_id" placeholder="Project id (blank = organization-wide)">
+    <input type="text" name="expires_at" placeholder="Expires at (ISO 8601, optional)">
+    <button type="submit">Grant</button>
+</form>
+{% endcall %}
+{% endcall %}
+
+{% call macros.accordion('Projects (' ~ projects|length ~ ')', group='center', id='projects') %}
+<ul class="source-list">
+    {% for p in projects %}
+    {% set ws = project_profiles.get(p.project_id) %}
+    <li class="source-item">
+        <strong>{{ p.document.filename }}</strong>
+        <small class="text-muted">environment: {{ ws.operating_environment if ws else 'legacy' }}, security profile: {{ (ws.security_profile if ws else None) or 'not set' }}</small>
+        <form method="post" action="{{ url_for('security.set_project_profile', project_id=p.project_id) }}" style="display:inline;">
+            <select name="security_profile" required>{% for c in classifications %}<option value="{{ c }}" {% if ws and ws.security_profile == c %}selected{% endif %}>{{ c }}</option>{% endfor %}</select>
+            <button type="submit" class="link-button">Set profile</button>
+        </form>
+    </li>
+    {% endfor %}
+</ul>
+{% endcall %}
+
+{% call macros.accordion('Learning Contribution Requests (' ~ learning_requests|length ~ ')', group='right', id='learning') %}
+<p class="pane-note">
+    No shared-learning pipeline exists in this deployment &mdash; approval here records governed
+    intent only; it does not move any data.
+</p>
+<ul class="source-list">
+    {% for req in learning_requests %}
+    <li class="source-item">
+        {{ req.candidate_description }}<br>
+        <small class="text-muted">{{ req.source_zone }} &rarr; {{ req.target_zone }}, stage: {{ req.current_stage.replace('_',' ') }}, requested by {{ req.requested_by }}</small>
+        {% if req.current_stage not in ('contribution_approved', 'rejected', 'withdrawn') %}
+        <details class="add-source-details">
+            <summary>+ Advance / decide</summary>
+            <form method="post" action="{{ url_for('security.advance_learning_request', request_id=req.id) }}">
+                <select name="stage">{% for s in learning_stages %}<option value="{{ s }}">{{ s.replace('_',' ') }}</option>{% endfor %}</select>
+                <button type="submit">Record stage</button>
+            </form>
+            <form method="post" action="{{ url_for('security.decide_learning_request', request_id=req.id) }}">
+                <select name="decision"><option value="contribution_approved">approve</option><option value="rejected">reject</option></select>
+                <input type="text" name="rationale" placeholder="Rationale">
+                <button type="submit">Decide</button>
+            </form>
+        </details>
+        {% endif %}
+    </li>
+    {% endfor %}
+</ul>
+{% call macros.subdisclosure('+ Request a learning contribution review') %}
+<form class="workspace-form" method="post" action="{{ url_for('security.create_learning_request') }}">
+    <input type="text" name="project_id" placeholder="Project id" required>
+    <select name="source_zone" required>{% for z in learning_zones %}<option value="{{ z }}">{{ z }}</option>{% endfor %}</select>
+    <select name="target_zone" required>{% for z in learning_zones %}<option value="{{ z }}">{{ z }}</option>{% endfor %}</select>
+    <textarea name="candidate_description" placeholder="Candidate description" required></textarea>
+    <button type="submit">Request review</button>
+</form>
+{% endcall %}
+{% endcall %}
+
+{% call macros.accordion('Assurance &mdash; Activity (' ~ activity|length ~ ')', group='right', id='assurance-activity', open=True) %}
+<p class="pane-note">Activity-level only &mdash; actor, project, action category, decision. No project content is shown here.</p>
+<ul class="source-list">
+    {% for entry in activity %}
+    <li class="source-item"><small class="text-muted">{{ entry.created_at }}</small> &mdash; {{ entry.actor }} &mdash; {{ entry.event_type }} {% if entry.decision %}&rarr; <strong>{{ entry.decision }}</strong>{% endif %} <small class="text-muted">(project {{ entry.project_id }})</small></li>
+    {% endfor %}
+</ul>
+{% endcall %}
+
+{% call macros.accordion('Assurance &mdash; Self-Check (' ~ self_check_findings|length ~ ')', group='right', id='self-check') %}
+<ul class="source-list">
+    {% for finding in self_check_findings %}
+    <li class="source-item {% if finding.severity == 'anomaly' %}consistency-flagged{% else %}consistency-clean{% endif %}">
+        <strong>{{ finding.check_name.replace('_',' ') }}</strong> ({{ finding.severity }}){% if finding.project_id %} &mdash; project {{ finding.project_id }}{% endif %}<br>{{ finding.description }}
+    </li>
+    {% endfor %}
+</ul>
+{% endcall %}
+{% endblock %}

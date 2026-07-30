@@ -106,6 +106,12 @@
             </div>
 
             <div class="side-rail-bottom">
+                {% if is_admin %}
+                <a class="side-rail-link{% if request.path.startswith('/security') %} active{% endif %}" href="{{ url_for('security.department_home') }}">
+                    <span class="side-rail-icon" aria-hidden="true">&#128274;</span>
+                    <span class="side-rail-label">Security</span>
+                </a>
+                {% endif %}
                 <a class="side-rail-link" href="{{ url_for('portal.logout') }}">
                     <span class="side-rail-icon" aria-hidden="true">&#9099;</span>
                     <span class="side-rail-label">Sign out</span>
