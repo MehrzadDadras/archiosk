@@ -21,6 +21,7 @@ import unittest
 from pathlib import Path
 
 from services.bhive_parser import BHIVE_PARSER_VERSION
+from services.environment_capabilities import CLIENT_OWNER
 from services.ingestion import UploadError, ingest_upload
 from services.requirements_registry import RequirementsRegistry
 
@@ -39,7 +40,7 @@ class ParserVersionStampingTests(unittest.TestCase):
     def test_new_ingestion_is_stamped_with_the_current_parser_version(self):
         file_storage = _fake_file(b"Contractor shall comply with applicable ASTM specifications.\n", "sample.txt")
         with self.flask_app.app_context():
-            document = ingest_upload(file_storage, self.flask_app)
+            document = ingest_upload(file_storage, self.flask_app, operating_environment=CLIENT_OWNER)
         self.assertEqual(document.parser_version, BHIVE_PARSER_VERSION)
 
     def test_legacy_document_without_parser_version_key_loads_as_none(self):
@@ -80,8 +81,8 @@ class DuplicateContentDetectionTests(unittest.TestCase):
 
         content = b"Contractor shall comply with applicable ASTM specifications.\n"
         with self.flask_app.app_context():
-            first = ingest_upload(_fake_file(content, "first.txt"), self.flask_app, project_name="First Project")
-            second = ingest_upload(_fake_file(content, "second.txt"), self.flask_app, project_name="Second Project")
+            first = ingest_upload(_fake_file(content, "first.txt"), self.flask_app, operating_environment=CLIENT_OWNER, project_name="First Project")
+            second = ingest_upload(_fake_file(content, "second.txt"), self.flask_app, operating_environment=CLIENT_OWNER, project_name="Second Project")
 
             # Not blocked -- both projects exist, this is informational only.
             self.assertNotEqual(first.project_id, second.project_id)
@@ -94,8 +95,8 @@ class DuplicateContentDetectionTests(unittest.TestCase):
         from services.ingestion import get_governance_log
 
         with self.flask_app.app_context():
-            ingest_upload(_fake_file(b"First document content.\n", "first.txt"), self.flask_app, project_name="First")
-            second = ingest_upload(_fake_file(b"Entirely different content.\n", "second.txt"), self.flask_app, project_name="Second")
+            ingest_upload(_fake_file(b"First document content.\n", "first.txt"), self.flask_app, operating_environment=CLIENT_OWNER, project_name="First")
+            second = ingest_upload(_fake_file(b"Entirely different content.\n", "second.txt"), self.flask_app, operating_environment=CLIENT_OWNER, project_name="Second")
 
             events = get_governance_log(self.flask_app).read(second.project_id)
             ingest_event = next(e for e in events if e.event_type == "document_ingested")
@@ -119,14 +120,14 @@ class ProjectNameUniquenessTests(unittest.TestCase):
 
     def test_duplicate_project_name_is_rejected(self):
         with self.flask_app.app_context():
-            ingest_upload(_fake_file(b"First content.\n", "a.txt"), self.flask_app, project_name="Same Name")
+            ingest_upload(_fake_file(b"First content.\n", "a.txt"), self.flask_app, operating_environment=CLIENT_OWNER, project_name="Same Name")
             with self.assertRaises(UploadError):
-                ingest_upload(_fake_file(b"Different content.\n", "b.txt"), self.flask_app, project_name="Same Name")
+                ingest_upload(_fake_file(b"Different content.\n", "b.txt"), self.flask_app, operating_environment=CLIENT_OWNER, project_name="Same Name")
 
     def test_distinct_project_names_both_succeed(self):
         with self.flask_app.app_context():
-            first = ingest_upload(_fake_file(b"First content.\n", "a.txt"), self.flask_app, project_name="Name One")
-            second = ingest_upload(_fake_file(b"Second content.\n", "b.txt"), self.flask_app, project_name="Name Two")
+            first = ingest_upload(_fake_file(b"First content.\n", "a.txt"), self.flask_app, operating_environment=CLIENT_OWNER, project_name="Name One")
+            second = ingest_upload(_fake_file(b"Second content.\n", "b.txt"), self.flask_app, operating_environment=CLIENT_OWNER, project_name="Name Two")
         self.assertNotEqual(first.project_id, second.project_id)
 
 
