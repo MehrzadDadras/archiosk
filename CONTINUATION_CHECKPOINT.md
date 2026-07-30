@@ -1,5 +1,39 @@
 # Continuation checkpoint
 
+## 2026-07-29 — CLAUDE-P27-D: system of record and AI collaboration route
+
+Governance/collaboration stage, not further hardening — no runtime code
+changed. Established, in `CLAUDE.md`'s new "System of record and AI
+collaboration route" section (read it there for the full model, not
+duplicated here): pushed `origin/main` is the authoritative durable
+record for everything except `.env`/secrets (never in git, by design)
+and the sibling `archiosk-explorer` repo's own governance corpus
+(cross-referenced, never duplicated); conversational AI output
+(including this session, and external tools like ChatGPT) is
+provisional until it lands in a pushed commit; `governance/constitutional-
+invariants.md`'s authority is scoped to the BEEHIVE domain-object model
+only, not infrastructure/security, where current tested code on `main`
+governs instead; direct-to-`main` commits (no feature branches/PRs/
+issues) remain the right model at this project's current scale, revisit
+if a second human contributor joins.
+
+Also fixed, as directly in-scope for "system of record integrity":
+`MANIFEST.md` had gone stale during the P27-B session (20 new files
+never catalogued) and, separately, already contained a now-materially-
+false claim predating this session (`routes/api.py` "unaffected"/"out
+of scope" for auth — false since commit `c2db13f`) — both corrected.
+`MANIFEST.md` also flags, but does not attempt to fix, a much larger
+pre-existing staleness (it predates the multi-user auth system and the
+entire Case Workspace subsystem) as separate future work.
+
+**Next stage entry point (CLAUDE-P28):** per this checkpoint's own P27-B
+section below, the tenancy design package
+(`governance/specified-unbuilt/tenancy-and-project-authorization.md`)
+is implementation-ready pending its four open product decisions — that
+remains the most natural next stage if no other priority intervenes.
+
+---
+
 ## 2026-07-29 — CLAUDE-P27/P27-A/P27-B: security review, Hardened Starter Baseline, SMTP finalization
 
 Supersedes the CaseWorkspaceStore-era section below as the current state

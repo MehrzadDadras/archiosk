@@ -66,8 +66,10 @@ contradicts it.
 
 ## Testing
 
-Full suite: `./venv/Scripts/python.exe -m pytest -q` (currently 474
-tests, ~45s). There is no CI here — this is the only gate, so run it
+Full suite: `./venv/Scripts/python.exe -m pytest -q` (currently 819
+tests, ~2min, though duration has occasionally spiked much higher for
+reasons unrelated to any specific code change — treat pass/fail as the
+signal, not wall-clock time). There is no CI here — this is the only gate, so run it
 before committing anything that touches `routes/`, `services/`, or
 `templates/`. If a CSS-only change breaks
 `test_common_ui_elements_no_longer_reference_font_mono` or
@@ -158,3 +160,115 @@ costs nothing, gives the user visibility into which part is in
 progress, and matches how this repository's own work has actually
 arrived in practice — as large, multi-phase single messages, not one
 request at a time.
+
+## System of record and AI collaboration route
+
+**Pushed `origin/main` is the authoritative durable system of record**
+for source code, tests, schemas/migrations, this repository's own
+governance corpus, continuation checkpoints, and accepted AI-assisted
+work — for everything except the two carve-outs below. Operationally
+this means: a local uncommitted change, an unpushed local commit, a
+`TaskList` entry, or anything said in a conversation (this one,
+another Claude Code session, or an external tool like ChatGPT) is
+**provisional** — real only once it lands as a pushed commit. None of
+those things are themselves citable as project truth; only what they
+caused to be committed is. Don't treat "the AI said X" or "a prior
+session concluded X" as fact — check the actual current repository
+state.
+
+Two things are legitimately authoritative but deliberately don't live
+in git: **`.env`/secrets** (git-ignored by design — git records only
+the variable *names* `.env.example` documents, never real values,
+which live solely on the deploying host and the operator's own
+credential storage), and **the sibling `archiosk-explorer` repo's own
+governance corpus** (e.g. its ADR series — a different repository's
+system of record, cross-referenced read-only via
+`governance/history-mapping.md`, never duplicated here — see "Scope
+boundary" above).
+
+**Route for substantial work** (small fixes don't need all of this —
+use judgment): intent → ground it in the actual repository (read the
+real code/tests/git state before proposing anything, not memory or
+assumption) → a plan, for anything large/irreversible enough to
+warrant one (Plan Mode for pure-investigation stages; inline for
+everything else) → self-critique the plan before implementing, not
+after → implement as staged, individually-tested, individually-
+committed increments (not one mega-commit) → run the relevant tests,
+and the full suite whenever `routes/`, `services/`, `models.py`,
+`config.py`, `app.py`, or migrations changed → inspect the actual diff
+before committing → a commit message that states the objective, the
+evidence, and what was preserved/hardened/replaced (this repository's
+existing commit history is already the right model to follow — keep
+writing them this way, don't invent a lighter or heavier convention)
+→ push → update `CONTINUATION_CHECKPOINT.md` (or a `governance/`
+document, if the conclusion is a ratified domain-model decision) at
+real stage boundaries, not after every single commit — it becomes
+noise otherwise.
+
+**Where external AI collaborators (ChatGPT or otherwise) fit:**
+freely, as a thinking surface, at the intent/investigation/plan/
+critique stages — a second independent perspective is genuinely
+useful there. Their output carries no authority on its own; it only
+becomes real once someone (human or this agent) grounds it against
+the actual repository and it lands in a commit. Don't paste
+speculative external-AI output directly into governance docs or
+commit messages as if it were already verified — verify it here
+first, the same as any other proposal.
+
+**No provenance-tagging system beyond what already exists.** Commit
+messages already carry authorship/reasoning/evidence for every
+substantial change in this repo's history — that's sufficient
+traceability at this project's current scale. Don't add prompt IDs,
+agent-name headers, or acceptance-record files; that's overhead this
+project doesn't need yet, and duplicates what the commit already says.
+
+**Branches, PRs, issues, ADRs:** this repository's entire history is
+direct commits to `main` — no feature branches, no PRs, no tags, no
+`.github/` issue/PR conventions, no dedicated ADR directory of its
+own. That's the right model at the current scale (effectively one
+human plus AI agents, no second reviewer to route a PR to) — don't
+introduce protected branches, mandatory PR review, or an issues
+tracker merely because GitHub offers them; that's process weight with
+no one on the other end of it yet. Revisit if a second human
+contributor joins. Domain-model architecture decisions already have a
+real, working ratification process — see
+`governance/governance-of-governance/amendment-and-ratification.md` —
+extend that discipline informally to infrastructure decisions too
+(state what changed and why in the commit, don't silently overwrite
+prior reasoning) rather than building a second, heavier mechanism for
+the same purpose.
+
+**Precedence when records disagree** (narrower than "governance always
+wins" — `governance/constitutional-invariants.md`'s own declared
+authority is scoped to the BEEHIVE domain-object model, not
+infrastructure): for domain-model rules, `constitutional-invariants.md`
+is highest, amendable only through its own ratification process — if
+code contradicts it, the code is the defect. For domain-model feature
+authorization, `governance/STATUS.md`'s table governs — code
+implementing something marked NOT AUTHORIZED is a defect, not evidence
+the table is outdated. For infrastructure/application/security
+behavior (auth, SMTP, CSRF, rate limiting, deployment — everything
+`constitutional-invariants.md` is silent on), current tested code on
+pushed `main` is authoritative; `CONTINUATION_CHECKPOINT.md` summarizes
+it but doesn't govern it, and if the two disagree the checkpoint is
+stale, not the code. `MANIFEST.md` governs file layout only when
+accurate — flag and fix drift when you find it (see `MANIFEST.md`'s
+own note above), don't let it silently go stale.
+
+**Deployed/external-provider state is evidence, never truth on its
+own.** A third-party integration actually working (e.g. a real SMTP
+provider accepting and delivering mail) is exactly the kind of thing
+worth verifying live and recording the result of — but the verified
+*result* belongs in a commit/checkpoint, and the live system itself
+never becomes an alternate source of record. If a deployed
+environment's behavior drifts from what's in the repository, that's
+drift to reconcile back toward the repository (or a deliberate,
+recorded exception), never something to silently treat as the new
+truth.
+
+**Exploratory/diagnostic scripts stay in the session scratchpad, not
+the repo**, until something durable is actually proven — this
+repository has never needed a "throwaway experiments" folder because
+one-off diagnostics (a connectivity probe, a schema-diff check) belong
+outside version control entirely unless they're becoming a permanent
+tool.
