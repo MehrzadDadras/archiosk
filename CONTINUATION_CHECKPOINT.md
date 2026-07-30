@@ -1,5 +1,128 @@
 # Continuation checkpoint
 
+## 2026-07-30 — CLAUDE-P31: organizational security and information governance (bounded foundation)
+
+**Commits:** `7aa1bea` (domain/service-layer security governance foundation),
+`16056dd` (external-AI + export enforcement wiring), `8114c2e` (Security
+Department routes/UI), `edacee0` (80 new tests), `d577f29` (governance
+amendment + MANIFEST). Full suite: 973 passed, 0 failed (893 from
+CLAUDE-P30 + 80 new across five new test files).
+
+**What was built.** A real, bounded, tested foundation for the eighteen
+completion-condition questions this stage posed — not enterprise theatre.
+`services/security_policy.py`'s `evaluate_action` is the single centralized
+resolver: mandatory floor → organization baseline → project security
+profile → exception, most-restrictive-wins, an exception's loosening
+structurally capped at `DECISION_ALLOW`. The floor is unweakenable
+because there is no governed action anywhere in `GOVERNED_ACTIONS` for
+disabling authentication/CSRF/rate-limiting/audit — not a runtime check
+that could be bypassed. `INFORMATION_CLASSIFICATIONS` (standard/
+confidential/restricted/highly_restricted) each resolve to an explicit
+control bundle (`CLASSIFICATION_PROFILE_DECISIONS`), never a bare label.
+
+**Honesty boundary, load-bearing for the whole stage:** this repository
+has no multi-organization/tenancy model (`specified-unbuilt/tenancy-
+and-project-authorization.md` remains unimplemented). `services/
+security_governance.py`'s `SecurityGovernanceStore` therefore manages
+**one global, deployment-wide record** — every "organization baseline"
+in this codebase today means one shared configuration, never an
+isolated per-customer one. Stated directly in the module's own
+docstring, and in `SECURITY_CLAIMS_REGISTRY` (`"multi-organization
+tenant isolation"` = `specified_but_unbuilt`, `"complete organization
+isolation"` = `prohibited_from_claiming`), not left implicit anywhere.
+
+**Policy ingestion and provenance.** `SourcePolicy` → `PolicyStatement`
+→ `ProposedControl` → governed `QAEntry` (6-state authority model) →
+`BaselineVersion` (draft → under_review → approved → active →
+superseded/withdrawn, `acknowledge_capability_impact` required before
+`activate_baseline` will accept it) preserves "Original Written Policy
+≠ Machine Interpretation ≠ Proposed Application Controls ≠ Ratified
+Executable Security Baseline" end to end — every control decision
+carries required source provenance, never disguising an ARCHIOSK
+recommendation as a customer policy requirement. Deliberately **no
+AI-assisted extraction** this stage — statements/proposals are
+human-entered only, extending this codebase's standing caution about
+`services/bhive_parser.py`'s fragile prompts to "write no new prompt at
+all" for this pipeline rather than a narrower gate.
+
+**Real enforcement, at two representative points.** `services/
+ingestion.py` evaluates `external_ai_request` before every new
+project's classification and wires the decision straight into
+`BHiveParser`'s own pre-existing, already-tested `ai_calls_disabled`
+kill switch (CLAUDE-P27-B) — zero lines changed inside
+`bhive_parser.py` itself. `routes/workspace.py` gates `export` on both
+RFI export routes, consulting the project's own `security_profile`
+alongside the active baseline, naming the controlling policy layer in
+its denial message. A `security_decision` audit event is recorded for
+every ingestion-time evaluation regardless of outcome.
+
+**Learning boundaries, honestly scoped.** `services/
+learning_governance.py`'s `LearningContributionRequest` models the
+three zones and a required five-stage review sequence before approval
+(self-approval prohibited for shared-improvement targets) — but **moves
+zero data**, because no shared-learning/training pipeline exists
+anywhere in this repository to move data into. Confirmed both
+structurally (no import edge to/from `case_workspace.py`'s quality
+machinery) and behaviorally (a "Correct" `ReviewerValidation` creates no
+contribution request).
+
+**Assurance, activity-level only.** `services/security_assurance.py`'s
+`aggregate_security_activity` is a pure read-side aggregation over every
+project's existing `GovernanceLog` — no new audit substrate. Content-
+level inspection remains impossible through this mechanism structurally
+(no field on `SecurityActivityEntry` could hold project content), not
+merely policy-forbidden. `run_security_self_check` independently
+re-verifies five invariants rather than trusting their own writers.
+Honesty maintained explicitly: `GovernanceLog`'s append-only guarantee
+is by convention, not cryptographic — `"tamper-proof logs"` is
+`prohibited_from_claiming`, stated plainly rather than omitted.
+
+**Workspace.** `routes/security.py` + `templates/security_department.html`
+— admin-only (no dedicated Security Officer role exists yet), reachable
+via a new nav link in `templates/base.html`.
+
+**Verification.** 80 new tests. One real incident during this stage: an
+early draft of `tests/test_security_enforcement.py` called
+`ingest_upload` directly (not through a parse-spy) in several tests, and
+one full-suite run took **8.5 hours** because that path made a live,
+apparently-hung Anthropic API call in this sandbox. Fixed by routing
+every ingestion call in every new P31 test file through a `BHiveParser.
+parse` spy that never invokes the real classify/consistency-check
+pipeline — confirmed fully hermetic afterward (full suite back to ~193s).
+This was a test-authoring mistake in this stage's own new files, not a
+defect in `services/ingestion.py`'s actual (correct) security-gate logic,
+which the spy-based tests verify directly.
+
+**Independent critique (required section), key findings:** "Security
+Department" was kept as the product term (matches the user's own
+prompt framing; no better repository-grounded alternative surfaced).
+Security and information governance were kept as one workspace, not
+split — the volume of real content (policy/Q&A/baseline/assurance)
+didn't yet justify two surfaces. The repository genuinely cannot support
+*organization-level* policy before tenancy — hence the single-
+deployment scoping stated everywhere above. Audit visibility was kept
+strictly activity-level specifically to avoid the employee-surveillance
+risk the prompt itself named — security administrators do **not** see
+content by default, and no route exists to change that this stage.
+Strongest-rule-wins was kept as the precedence model; a security
+administrator CAN create exceptions (the only loosening path, capped at
+`DECISION_ALLOW`); policy changes take effect only at explicit baseline
+activation (an `effective_date`), never immediately on Q&A/statement
+entry alone.
+
+**Remaining hard-stop-adjacent items, none blocking, all explicitly
+out of scope for this stage per its own instructions:** no tenancy
+migration was performed or attempted; no legal/regulatory obligation
+was invented (the model has a place — `SourcePolicy.jurisdiction`/
+`approving_authority` — for an externally-established one to be
+recorded, nothing more); no technical security property was promised
+that the current system cannot enforce (`SECURITY_CLAIMS_REGISTRY` is
+the explicit record of this); no irreversible security-policy
+transformation occurred without rollback (baseline supersession
+preserves every prior version, never deletes).
+
+---
+
 ## 2026-07-30 — CLAUDE-P30: environment capability architecture + contractual tool directionality
 
 **Commits:** `e5a494f` (domain/service layer -- capability grammar, RFI
