@@ -24,6 +24,8 @@ from werkzeug.exceptions import RequestEntityTooLarge
 
 from services.auth import is_admin, is_authenticated
 from services.bhive_parser import REQUIREMENT_CATEGORIES
+from services.case_workspace import CaseWorkspaceStore
+from services.environment_capabilities import OPERATING_ENVIRONMENT_LABELS
 from services.governance import GovernanceError
 from services.ingestion import UploadError, get_governance_log, get_registry, ingest_upload
 from services.rate_limit import limiter
@@ -140,8 +142,17 @@ def export_rfi(project_id):
     if document is None:
         return _not_found(project_id)
 
+    # CLAUDE-P30: best-effort lookup only, matching routes/workspace.py's
+    # own export_rfi -- a missing/legacy workspace must not block a
+    # download that worked before operating_environment existed. Closes
+    # the scope limitation CLAUDE-P29 explicitly noted in this route.
+    workspace = CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"]).get(project_id)
+    environment_label = (
+        OPERATING_ENVIRONMENT_LABELS.get(workspace.operating_environment) if workspace else None
+    )
+
     try:
-        buffer = build_rfi_docx(document)
+        buffer = build_rfi_docx(document, operating_environment_label=environment_label)
     except RFIExportError as exc:
         return jsonify(error="nothing_to_export", message=str(exc)), 409
 

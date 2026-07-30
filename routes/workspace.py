@@ -48,6 +48,7 @@ from services.case_workspace import (
     ANALYSIS_TRIGGER_USER_INITIATED,
     CASE_OUTCOME_STATES,
     CASE_ORIGIN_AUTONOMOUS,
+    GO_NO_GO_DECISIONS,
     KNOWN_PARTICIPANT_ROLES,
     KNOWN_PERSPECTIVE_POLARITIES,
     KNOWN_RESOLUTION_OUTCOMES,
@@ -73,6 +74,9 @@ from services.case_workspace import (
 from services.environment_capabilities import (
     OPERATING_ENVIRONMENT_LABELS,
     allowed_participant_roles,
+    capability_availability,
+    capability_denial_reason,
+    decision_stages_for_environment,
     is_valid_operating_environment,
 )
 from services.conversation_interpreter import interpret_message
@@ -202,6 +206,22 @@ def _require_visible_case(store: CaseWorkspaceStore, workspace, case_id) -> None
     visible_ids = {c["id"] for c in store.visible_cases_for(workspace, _reviewer())}
     if case_id not in visible_ids:
         abort(404)
+
+
+def _require_capability(workspace, capability_id: str, project_id: str, case_id=None):
+    """
+    CLAUDE-P30: the shared enforcement point for every environment-gated
+    capability (services.environment_capabilities.CAPABILITY_REGISTRY) --
+    mirrors _require_visible_case's own shape (a route-layer check that
+    can never be weaker than what the template already hid) rather than
+    each route writing its own if-environment branch and denial message.
+    Returns None if the caller should proceed, or a redirect (with a
+    flashed, centrally-produced denial reason) if it must not.
+    """
+    if capability_availability(capability_id, workspace.operating_environment):
+        return None
+    flash(capability_denial_reason(capability_id, workspace.operating_environment), "error")
+    return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
 
 
 # -- Approval Gate ---------------------------------------------------------------
@@ -878,6 +898,29 @@ def show_workspace(project_id):
         operating_environment=workspace.operating_environment,
         operating_environment_label=OPERATING_ENVIRONMENT_LABELS.get(workspace.operating_environment),
         operating_environments=OPERATING_ENVIRONMENT_LABELS,
+        # CLAUDE-P30: template-layer visibility only -- the routes
+        # themselves (_require_capability) are the real enforcement,
+        # never these two flags alone. See environment_capabilities.py's
+        # "rfi_originate"/"rfi_respond" registry entries.
+        can_originate_rfi=capability_availability("rfi_originate", workspace.operating_environment),
+        can_respond_rfi=capability_availability("rfi_respond", workspace.operating_environment),
+        # Unlike rfi_originate/rfi_respond/participant_registration, "go_no_go"
+        # has no sensible ungated fallback for a legacy/unclassified project --
+        # there is no vocabulary to validate against without a locked
+        # environment (see decision_stages_for_environment, which raises for
+        # None). So this flag additionally requires operating_environment to
+        # be set, deliberately narrower than capability_availability's usual
+        # "None means ungated" default.
+        go_no_go_capability_available=(
+            capability_availability("go_no_go", workspace.operating_environment)
+            and workspace.operating_environment is not None
+        ),
+        go_no_go_assessments=store.go_no_go_assessments_for_project(workspace),
+        go_no_go_decisions=GO_NO_GO_DECISIONS,
+        go_no_go_stage_options=(
+            decision_stages_for_environment(workspace.operating_environment)
+            if workspace.operating_environment else ()
+        ),
     )
 
 
@@ -2154,6 +2197,40 @@ def register_participant_route(project_id):
     return redirect(url_for("workspace.show_workspace", project_id=project_id))
 
 
+@workspace_bp.route("/projects/<project_id>/workspace/go-no-go", methods=["POST"])
+@login_required
+def record_go_no_go(project_id):
+    """
+    CLAUDE-P30: "go_no_go" in environment_capabilities.py's registry --
+    a shared decision-record shape, validated against whichever
+    decision-stage vocabulary this project's own locked environment
+    actually uses (CaseWorkspaceStore.record_go_no_go_decision itself
+    enforces this; the capability gate below only controls whether the
+    form/route is reachable at all for a legacy/unclassified project).
+    """
+    _, store, workspace = _load_workspace_or_404(project_id)
+    gate = _require_capability(workspace, "go_no_go", project_id)
+    if gate is not None:
+        return gate
+
+    decision_stage = (request.form.get("decision_stage") or "").strip()
+    decision = (request.form.get("decision") or "").strip()
+    rationale = (request.form.get("rationale") or "").strip()
+    anomalies = [line.strip() for line in (request.form.get("anomalies") or "").splitlines() if line.strip()]
+
+    try:
+        store.record_go_no_go_decision(
+            workspace, decision_stage=decision_stage, decision=decision, rationale=rationale,
+            decided_by=_reviewer(), anomalies=anomalies, governance_log=_log(),
+        )
+    except CaseWorkspaceError as exc:
+        flash(str(exc), "error")
+        return redirect(url_for("workspace.show_workspace", project_id=project_id))
+
+    flash("Go/No-Go decision recorded.", "success")
+    return redirect(url_for("workspace.show_workspace", project_id=project_id))
+
+
 @workspace_bp.route("/projects/<project_id>/workspace/represented-party", methods=["POST"])
 @login_required
 def set_represented_party_route(project_id):
@@ -2294,6 +2371,9 @@ def preview_rfi_draft(project_id, case_id):
     the draft yet."""
     _, store, workspace = _load_workspace_or_404(project_id)
     _require_visible_case(store, workspace, case_id)
+    gate = _require_capability(workspace, "rfi_originate", project_id, case_id)
+    if gate is not None:
+        return gate
     finding_id = request.form.get("finding_id")
     store.add_message(
         workspace, case_id, role="system",
@@ -2313,6 +2393,9 @@ def create_rfi_draft(project_id, case_id):
     be filled in after) or the follow-up create step after a preview."""
     _, store, workspace = _load_workspace_or_404(project_id)
     _require_visible_case(store, workspace, case_id)
+    gate = _require_capability(workspace, "rfi_originate", project_id, case_id)
+    if gate is not None:
+        return gate
     finding_id = request.form.get("finding_id")
     question_text = request.form.get("question_text") or ""
 
@@ -2354,6 +2437,9 @@ def update_rfi_question(project_id, draft_id):
     _, store, workspace = _load_workspace_or_404(project_id)
     case_id = _rfi_draft_case_id(workspace, draft_id)
     _require_visible_case(store, workspace, case_id)
+    gate = _require_capability(workspace, "rfi_originate", project_id, case_id)
+    if gate is not None:
+        return gate
 
     try:
         store.update_rfi_draft_question(
@@ -2374,6 +2460,9 @@ def issue_rfi_draft(project_id, draft_id):
     _, store, workspace = _load_workspace_or_404(project_id)
     case_id = _rfi_draft_case_id(workspace, draft_id)
     _require_visible_case(store, workspace, case_id)
+    capability_gate = _require_capability(workspace, "rfi_originate", project_id, case_id)
+    if capability_gate is not None:
+        return capability_gate
 
     draft = next((d for d in workspace.rfi_drafts if d["id"] == draft_id), None)
     if draft is None:
@@ -2404,6 +2493,36 @@ def issue_rfi_draft(project_id, draft_id):
     )
 
     flash("RFI issued.", "success")
+    return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
+
+
+@workspace_bp.route("/projects/<project_id>/workspace/rfi-drafts/<draft_id>/respond", methods=["POST"])
+@login_required
+def respond_to_rfi_draft(project_id, draft_id):
+    """
+    CLAUDE-P30: the Client/Owner-side counterpart to issue_rfi_draft --
+    "rfi_respond" in environment_capabilities.py's registry. A
+    Design-Builder/Proponent project (or an unauthorized attempt against
+    a Client/Owner project's own question via this route) is rejected by
+    _require_capability before store.respond_to_rfi_draft is ever called.
+    """
+    _, store, workspace = _load_workspace_or_404(project_id)
+    case_id = _rfi_draft_case_id(workspace, draft_id)
+    _require_visible_case(store, workspace, case_id)
+    gate = _require_capability(workspace, "rfi_respond", project_id, case_id)
+    if gate is not None:
+        return gate
+
+    try:
+        store.respond_to_rfi_draft(
+            workspace, draft_id=draft_id, response_text=request.form.get("response_text") or "",
+            responded_by=_reviewer(), governance_log=_log(),
+        )
+    except CaseWorkspaceError as exc:
+        flash(str(exc), "error")
+        return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
+
+    flash("RFI response recorded.", "success")
     return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
 
 
@@ -2440,7 +2559,7 @@ def export_rfi_draft(project_id, draft_id):
     buffer = build_rfi_draft_docx(
         draft, operating_environment_label=OPERATING_ENVIRONMENT_LABELS.get(workspace.operating_environment),
     )
-    status_label = "issued" if draft["status"] == "issued" else "draft"
+    status_label = draft["status"] if draft["status"] in ("issued", "answered") else "draft"
     return send_file(
         buffer,
         mimetype="application/vnd.openxmlformats-officedocument.wordprocessingml.document",

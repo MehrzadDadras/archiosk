@@ -303,6 +303,55 @@
             {% endcall %}
         {% endcall %}
 
+        {# CLAUDE-P30: a shared decision-record shape (GoNoGoAssessment), but the
+           decision-stage vocabulary offered below is this project's own locked
+           environment's own -- Client/Owner sees procurement-decision stages,
+           Design-Builder/Proponent sees pursuit-decision stages. Never the same
+           checklist reused for both sides. #}
+        {% call macros.accordion('Go / No-Go (' ~ go_no_go_assessments|length ~ ')', group='left', id='go-no-go') %}
+            {% if go_no_go_assessments %}
+            <ul class="source-list">
+                {% for assessment in go_no_go_assessments|reverse %}
+                <li class="source-item">
+                    <strong>{{ assessment.decision_stage.replace('_', ' ') }}</strong>
+                    &mdash; {{ assessment.decision.replace('_', ' ') }}
+                    <br><small class="text-muted">{{ assessment.decided_by }}, {{ assessment.decided_at }}</small>
+                    <br>{{ assessment.rationale }}
+                    {% if assessment.anomalies %}
+                    <br><small class="text-muted">Anomalies: {{ assessment.anomalies|join('; ') }}</small>
+                    {% endif %}
+                </li>
+                {% endfor %}
+            </ul>
+            {% else %}
+            <p style="color:var(--text-secondary);font-size:0.88rem;">No Go/No-Go decisions recorded yet.</p>
+            {% endif %}
+
+            {% if go_no_go_capability_available %}
+            {% call macros.subdisclosure('+ Record a Go/No-Go decision') %}
+                <form class="workspace-form" method="post" action="{{ url_for('workspace.record_go_no_go', project_id=project_id) }}">
+                    <select name="decision_stage" required>
+                        {% for stage in go_no_go_stage_options %}
+                        <option value="{{ stage }}">{{ stage.replace('_', ' ') }}</option>
+                        {% endfor %}
+                    </select>
+                    <select name="decision" required>
+                        {% for state in go_no_go_decisions %}
+                        <option value="{{ state }}">{{ state.replace('_', ' ') }}</option>
+                        {% endfor %}
+                    </select>
+                    <textarea name="rationale" placeholder="Rationale (required)" required></textarea>
+                    <textarea name="anomalies" placeholder="Anomalies (optional, one per line)"></textarea>
+                    <button type="submit">Record decision</button>
+                </form>
+            {% endcall %}
+            {% elif not operating_environment %}
+            <p style="color:var(--text-secondary);font-size:0.8rem;">
+                Establish this project's operating environment (above) before recording a Go/No-Go decision.
+            </p>
+            {% endif %}
+        {% endcall %}
+
         {% call macros.accordion('Accepted Knowledge (' ~ accepted_knowledge|length ~ ')', group='left', id='accepted-knowledge') %}
         <p style="color:var(--text-secondary);font-size:0.85rem;margin:-0.6rem 0 0.6rem;">
             Every Applied Finding across this Project's Cases, independent of which Case produced it —
@@ -804,7 +853,7 @@
             {% endfor %}
         </div>
 
-        {% if pending_rfi_finding_id %}
+        {% if pending_rfi_finding_id and can_originate_rfi %}
         <div class="delegation-choice">
             <p class="workspace-pane-label">How would you like to proceed?</p>
             <form method="post" action="{{ url_for('workspace.create_rfi_draft', project_id=project_id, case_id=active_case.id) }}">
@@ -819,9 +868,19 @@
                 <button type="submit" class="review-btn reject">Cancel</button>
             </form>
         </div>
+        {% elif pending_rfi_finding_id %}
+        <div class="delegation-choice">
+            <p style="color:var(--text-secondary);font-size:0.85rem;">
+                This project's {{ operating_environment_label }} environment does not originate RFIs
+                &mdash; that capability belongs to the Design-Builder / Proponent side.
+            </p>
+            <form method="post" action="{{ url_for('workspace.cancel_rfi_intent', project_id=project_id, case_id=active_case.id) }}">
+                <button type="submit" class="review-btn reject">Dismiss</button>
+            </form>
+        </div>
         {% endif %}
 
-        {% if rfi_preview %}
+        {% if rfi_preview and can_originate_rfi %}
         <div class="rfi-preview">
             <p class="workspace-pane-label">Proposed RFI reference bundle (nothing created yet)</p>
             <div class="finding-provenance">
@@ -1123,20 +1182,37 @@
                         <span>case:</span> <strong>{{ draft.reference_snapshot.case_title }}</strong><br>
                         <span>reviewer:</span> <strong>{{ draft.reference_snapshot.reviewer }}</strong>
                     </div>
-                    {% if draft.status != "issued" %}
-                    <form method="post" action="{{ url_for('workspace.update_rfi_question', project_id=project_id, draft_id=draft.id) }}">
-                        <input type="hidden" name="case_id" value="{{ active_case.id }}">
-                        <textarea name="question_text" placeholder="RFI question…" style="width:100%;font-family:var(--font-body);background:var(--surface-primary);border:1px solid var(--border);color:var(--text-primary);border-radius:3px;padding:0.5rem;">{{ draft.question_text }}</textarea>
-                        <button type="submit" class="review-btn needs_evidence">Save question</button>
-                    </form>
-                    <form method="post" action="{{ url_for('workspace.issue_rfi_draft', project_id=project_id, draft_id=draft.id) }}">
-                        <input type="hidden" name="case_id" value="{{ active_case.id }}">
-                        <button type="submit" class="apply-button">Issue RFI</button>
-                    </form>
+                    {% if draft.status == "draft" %}
+                        {% if can_originate_rfi %}
+                        <form method="post" action="{{ url_for('workspace.update_rfi_question', project_id=project_id, draft_id=draft.id) }}">
+                            <input type="hidden" name="case_id" value="{{ active_case.id }}">
+                            <textarea name="question_text" placeholder="RFI question…" style="width:100%;font-family:var(--font-body);background:var(--surface-primary);border:1px solid var(--border);color:var(--text-primary);border-radius:3px;padding:0.5rem;">{{ draft.question_text }}</textarea>
+                            <button type="submit" class="review-btn needs_evidence">Save question</button>
+                        </form>
+                        <form method="post" action="{{ url_for('workspace.issue_rfi_draft', project_id=project_id, draft_id=draft.id) }}">
+                            <input type="hidden" name="case_id" value="{{ active_case.id }}">
+                            <button type="submit" class="apply-button">Issue RFI</button>
+                        </form>
+                        {% else %}
+                        <p style="color:var(--text-secondary);font-size:0.8rem;">
+                            This project's {{ operating_environment_label }} environment does not originate RFIs.
+                        </p>
+                        {% endif %}
                     <a class="btn btn-ghost" href="{{ url_for('workspace.export_rfi_draft', project_id=project_id, draft_id=draft.id) }}">Download Draft RFI (.docx)</a>
-                    {% else %}
+                    {% elif draft.status == "issued" %}
                     <p class="consistency-clean">Issued {{ draft.issued_at }} by {{ draft.issued_by }}.</p>
+                        {% if can_respond_rfi %}
+                        <form method="post" action="{{ url_for('workspace.respond_to_rfi_draft', project_id=project_id, draft_id=draft.id) }}">
+                            <input type="hidden" name="case_id" value="{{ active_case.id }}">
+                            <textarea name="response_text" placeholder="Authoritative response…" style="width:100%;font-family:var(--font-body);background:var(--surface-primary);border:1px solid var(--border);color:var(--text-primary);border-radius:3px;padding:0.5rem;" required></textarea>
+                            <button type="submit" class="apply-button">Record Response</button>
+                        </form>
+                        {% endif %}
                     <a class="btn btn-ghost" href="{{ url_for('workspace.export_rfi_draft', project_id=project_id, draft_id=draft.id) }}">Download Issued RFI (.docx)</a>
+                    {% else %}
+                    <p class="consistency-clean">Answered {{ draft.responded_at }} by {{ draft.responded_by }}.</p>
+                    <div class="finding-provenance"><span>response:</span> {{ draft.response_text }}</div>
+                    <a class="btn btn-ghost" href="{{ url_for('workspace.export_rfi_draft', project_id=project_id, draft_id=draft.id) }}">Download Answered RFI (.docx)</a>
                     {% endif %}
                 </div>
                 {% endfor %}
