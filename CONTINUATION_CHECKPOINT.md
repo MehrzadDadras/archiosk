@@ -1,5 +1,94 @@
 # Continuation checkpoint
 
+## 2026-07-30 — CLAUDE-P30: environment capability architecture + contractual tool directionality
+
+**Commits:** `e5a494f` (domain/service layer -- capability grammar, RFI
+directionality, Go/No-Go), `e9a1e12` (route/template/UI wiring), `d1490dd`
+(39 new tests), `28b2f75` (governance + MANIFEST update). Full suite: 893
+passed, 0 failed (854 from CLAUDE-P29 + 39 new in
+`tests/test_capability_architecture.py`).
+
+**What was built.** The locked Project Operating Environment (CLAUDE-P29)
+went from "one gated field" (participant-role selection) to an actual
+capability architecture with two representative, genuinely-enforced
+environment-specific workflows.
+
+**Centralized resolution, not scattered branches.** `services/
+environment_capabilities.py` gained `CAPABILITY_REGISTRY` (a plain dict of
+small `CapabilityDefinition` entries — deliberately not a plugin framework)
+classified into a 7-value grammar (`CAPABILITY_NEUTRAL`/`_COUNTERPART`/
+`_PARALLEL`/`_CLIENT_ONLY`/`_PROPONENT_ONLY`/`_COMPARATIVE_BOUNDED`/
+`_FUTURE_NOT_AUTHORIZED`). `capability_availability`/`capability_denial_
+reason` are the single functions every route/template/export calls into —
+`routes/workspace.py`'s new `_require_capability` helper (mirrors the
+existing `_require_visible_case` shape) is the one enforcement point for
+routes. A legacy/unclassified project (`operating_environment is None`) is
+ungated for every capability except `CAPABILITY_FUTURE_NOT_AUTHORIZED`,
+matching P29's own `allowed_participant_roles` precedent — **except**
+Go/No-Go, which has no sensible fallback vocabulary and is a hard refusal
+for an unclassified project (a deliberate, tested exception, not an
+inconsistency).
+
+**RFI/clarification directionality.** `rfi_originate` (Design-Builder/
+Proponent — draft, revise, issue) and `rfi_respond` (Client/Owner — record
+the authoritative response to an issued RFI) are registered as
+`CAPABILITY_COUNTERPART`, not a bare exclusive label, because each has a
+real counterpart on the other side. `RFIDraft` gained `response_text`/
+`responded_at`/`responded_by` and a new terminal status,
+`RFI_STATUS_ANSWERED`; `CaseWorkspaceStore.respond_to_rfi_draft` requires
+`RFI_STATUS_ISSUED` first (a response follows issuance) and refuses a
+second response, the same one-way-transition shape `issue_rfi_draft`
+already used. Both RFI exporters (`build_rfi_docx`/`build_rfi_draft_docx`)
+now stamp workflow direction; `routes/api.py`'s own RFI export was
+unstamped as a CLAUDE-P29-noted scope limitation and is now stamped too.
+
+**Go/No-Go — one shared record, two genuinely different vocabularies.** New
+primitive `GoNoGoAssessment` (`workspace.go_no_go_assessments`):
+`CaseWorkspaceStore.record_go_no_go_decision` validates `decision_stage`
+against whichever of `CLIENT_OWNER_DECISION_STAGES` (procurement-oriented:
+release RFQ/RFP, shortlist, award, ...) or `DESIGN_BUILDER_PROPONENT_
+DECISION_STAGES` (pursuit-oriented: bid, accept commercial terms, submit
+final proposal, ...) applies to the project's own locked environment — a
+Client project attempting a Proponent-only stage is rejected at both the
+route and service layers (tested). `decision` itself (`go`/`no_go`/
+`conditional_go`) is closed and shared; `anomalies` is open-world free
+text, deliberately not a closed enum (the list of things that could
+justify a No-Go is large, environment-specific, and expected to grow).
+
+**Reviewer-perspective boundary confirmed, not newly built.**
+`capability_availability` takes only `operating_environment` as an
+argument — `represented_party_by`, session role, and Case visibility are
+structurally incapable of reaching it. Tested directly: representing a
+Design-Builder participant inside a Client/Owner project does not unlock
+RFI origination.
+
+**Deliberately not done this stage, and why.** No `services/bhive_parser.py`
+prompt received `operating_environment` context — documented as a
+deliberate deferral (not an oversight) in `environment_capabilities.py`'s
+own module docstring, consistent with this codebase's standing multi-
+session caution around that module's adversarially-tuned prompts. No
+`CAPABILITY_CLIENT_ONLY`/`CAPABILITY_PROPONENT_ONLY` registry entries were
+registered — every genuinely single-sided capability found on inspection
+had a real counterpart, so `CAPABILITY_COUNTERPART` was the honest
+classification instead of manufacturing a bare "exclusive" label. No third
+Operating Environment value, no multi-tenancy, no organizational security
+architecture (explicitly reserved for a separate future stage per the
+user's own instruction).
+
+**Independent critique (Part XI), recorded findings:** the current RFI
+exchange happens within a single project's own `workspace.rfi_drafts` list
+— origination and response are two capability-gated actions on the *same*
+record inside the *same* project, not a real cross-organization document
+exchange between two separate projects/tenants. This is an honest
+simplification consistent with "tenancy remains designed but unimplemented"
+(unchanged this stage) — a true two-party RFI exchange (Proponent's project
+sends, Client's separate project receives) is blocked on tenancy, not on
+anything this stage could resolve alone, and is flagged as a real
+architectural gap for whichever future stage takes up cross-project/
+cross-tenant document exchange.
+
+---
+
 ## 2026-07-30 — CLAUDE-P29: locked Project Operating Environment types
 
 **Commits:** `d339d1c` (domain/service layer), `02a3ed3` (route/template/UI
