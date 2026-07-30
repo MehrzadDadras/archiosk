@@ -51,6 +51,19 @@ logger = logging.getLogger(__name__)
 # qualifier in the same sentence.
 CONSISTENCY_PROMPT_VERSION = "p25"
 
+# CLAUDE-P28: same bump-on-meaningful-change convention as
+# CONSISTENCY_PROMPT_VERSION/INVESTIGATION_PROMPT_VERSION above, applied
+# to a surface those two don't cover -- this is stamped onto every real
+# ParsedDocument this build produces (ParsedDocument.parser_version),
+# not just used internally by the self-test lab. Bump when a change to
+# extract/segment/classify would meaningfully change what a re-parse of
+# the same source produces. A document parsed before this field existed
+# has parser_version=None on load (RequirementsRegistry.get) -- an
+# honest gap, never fabricated, matching original_file_path/
+# original_file_hash's own established precedent in this file for "this
+# field didn't exist yet when that document was created."
+BHIVE_PARSER_VERSION = "p28"
+
 # How long to wait on a single classification batch before giving up on it.
 DEFAULT_CLASSIFY_TIMEOUT_SECONDS = 30.0
 
@@ -162,6 +175,11 @@ class ParsedDocument:
     # extracted requirements, not just read the extraction's output.
     original_file_path: str | None = None
     original_file_hash: str | None = None
+    # CLAUDE-P28: which BHIVE_PARSER_VERSION produced this record -- see
+    # that constant's own comment above. None means either a pre-P28
+    # document (the field didn't exist yet) or the caller genuinely
+    # doesn't know; never fabricated to look more current than it is.
+    parser_version: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -176,6 +194,7 @@ class ParsedDocument:
             "consistency_note": self.consistency_note,
             "original_file_path": self.original_file_path,
             "original_file_hash": self.original_file_hash,
+            "parser_version": self.parser_version,
         }
 
 
@@ -315,6 +334,7 @@ class BHiveParser:
             consistency_flags=consistency_flags,
             consistency_checked=consistency_checked,
             consistency_note=consistency_note,
+            parser_version=BHIVE_PARSER_VERSION,
         )
 
     # -- stage 1: extract ---------------------------------------------------

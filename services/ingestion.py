@@ -75,6 +75,27 @@ def _reject_if_name_taken(app: Flask, entry_name: str) -> None:
         raise UploadError("Entry names must be unique.")
 
 
+def _find_duplicate_content(app: Flask, file_hash: str) -> Optional[str]:
+    """
+    CLAUDE-P28: original_file_hash (SHA-256) was already computed and
+    stored on every ingestion (below) but never actually checked against
+    anything -- this closes that gap. Returns the project_id of an
+    existing project whose original upload has the identical content, or
+    None. Deliberately informational, not a hard reject like
+    _reject_if_name_taken above: uploading the same source document into
+    a second, genuinely separate project is a legitimate real workflow
+    (e.g. a shared boilerplate/reference document), not necessarily a
+    mistake -- the caller decides what to do with this (see
+    ingest_upload's governance-log entry), it doesn't block the upload.
+    """
+    registry = get_registry(app)
+    for pid in registry.list_ids():
+        document = registry.get(pid)
+        if document is not None and document.original_file_hash == file_hash:
+            return pid
+    return None
+
+
 def document_source_payload(document: ParsedDocument) -> dict:
     """
     The register_document_source payload CaseWorkspaceStore.get_or_create
@@ -150,6 +171,10 @@ def ingest_upload(
     document.original_file_path = str(stored_path)
     document.original_file_hash = hashlib.sha256(raw_bytes).hexdigest()
 
+    # Checked before this document is saved to the registry (so it can
+    # never match itself) -- informational only, see _find_duplicate_content.
+    duplicate_of_project_id = _find_duplicate_content(app, document.original_file_hash)
+
     get_registry(app).save(document)
     governance_log = get_governance_log(app)
     governance_log.append(
@@ -161,6 +186,7 @@ def ingest_upload(
             "filename": document.filename,
             "requirement_count": len(document.requirements),
             "milestone_count": len(document.milestones),
+            "duplicate_of_project_id": duplicate_of_project_id,
         },
     )
 

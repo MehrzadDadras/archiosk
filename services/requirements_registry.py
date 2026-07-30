@@ -46,6 +46,7 @@ class RequirementsRegistry:
             consistency_note=data.get("consistency_note"),
             original_file_path=data.get("original_file_path"),
             original_file_hash=data.get("original_file_hash"),
+            parser_version=data.get("parser_version"),
         )
         return doc
 
