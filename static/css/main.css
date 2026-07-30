@@ -432,6 +432,31 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
 
 .upload-form { margin-top: 1.2rem; display: flex; flex-direction: column; align-items: flex-start; gap: 1rem; }
 .upload-form-optional { display: flex; gap: 1rem; flex-wrap: wrap; }
+/* CLAUDE-P29: Project Operating Environment selector -- deliberately
+   plain (border + spacing only, no new accent color) since this is a
+   structural/decision element, not a status or emphasis signal; see
+   this file's own header comment on when color is/isn't appropriate. */
+.operating-environment-fieldset {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: var(--space-5) var(--space-6);
+    width: 100%;
+    max-width: 480px;
+}
+.operating-environment-option {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin: var(--space-3) 0;
+    font-size: var(--text-sm);
+}
+.operating-environment-confirm {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: var(--text-sm);
+    color: var(--text-secondary);
+}
 .text-input {
     font-family: var(--font-body);
     font-size: 0.85rem;

@@ -22,6 +22,32 @@
     <aside class="workspace-pane workspace-pane-nav">
         <h2>Project</h2>
 
+        {# CLAUDE-P29: Project Operating Environment -- locked, never an
+           edit control once set. Deliberately no form/button anywhere in
+           this branch; see CaseWorkspaceStore.set_operating_environment's
+           own docstring for why there is no update path to render a
+           control for in the first place. #}
+        <p class="workspace-pane-label">Project Operating Environment</p>
+        {% if operating_environment %}
+        <p class="mono" style="margin:-0.4rem 0 0.8rem;font-size:0.85rem;">{{ operating_environment_label }}</p>
+        {% else %}
+        <p style="color:var(--text-secondary);font-size:0.8rem;margin:-0.4rem 0 0.6rem;">
+            Not established (legacy project). This is a one-time classification, not a
+            reversible setting &mdash; once selected it is locked the same as for a new project.
+        </p>
+        {% if is_admin %}
+        <form method="post" action="{{ url_for('workspace.classify_operating_environment', project_id=project_id) }}" style="margin-bottom:0.8rem;">
+            <select name="operating_environment" required style="width:100%;margin-bottom:0.4rem;">
+                <option value="" disabled selected>Select environment&hellip;</option>
+                {% for value, label in operating_environments.items() %}
+                <option value="{{ value }}">{{ label }}</option>
+                {% endfor %}
+            </select>
+            <button type="submit" class="link-button" onclick="return confirm('This is a one-time classification and cannot be changed afterward. Continue?');">Establish (one-time, cannot be changed)</button>
+        </form>
+        {% endif %}
+        {% endif %}
+
         <p class="workspace-pane-label">Lifecycle</p>
         <div class="lifecycle-strip">
             {% for stage in ["RFQ", "RFP", "Pursuit", "Award", "Design", "Construction", "Closeout", "Historic Record"] %}

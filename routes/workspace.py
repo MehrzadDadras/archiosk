@@ -43,7 +43,7 @@ from flask import (
 from PIL import Image
 from werkzeug.utils import secure_filename
 
-from services.auth import login_required
+from services.auth import admin_required, login_required
 from services.case_workspace import (
     ANALYSIS_TRIGGER_USER_INITIATED,
     CASE_OUTCOME_STATES,
@@ -67,7 +67,13 @@ from services.case_workspace import (
     CaseWorkspaceError,
     CaseWorkspaceStore,
     DISPOSITIONS,
+    OperatingEnvironmentAlreadySetError,
     REVIEWER_VALIDATION_STATES,
+)
+from services.environment_capabilities import (
+    OPERATING_ENVIRONMENT_LABELS,
+    allowed_participant_roles,
+    is_valid_operating_environment,
 )
 from services.conversation_interpreter import interpret_message
 from services.governance import GovernanceLog
@@ -860,8 +866,18 @@ def show_workspace(project_id):
         investigation_quality_view=investigation_quality_view,
         participants_view=store.participants_for_project(workspace),
         represented_party=represented_party,
-        participant_role_options=KNOWN_PARTICIPANT_ROLES,
+        # CLAUDE-P29: gated by the project's locked operating_environment
+        # once one is set -- a Client project should not be able to
+        # register a design_builder participant and reason from their
+        # position, which would defeat locking the project at all. Falls
+        # back to the full open set for a legacy project with no
+        # environment established yet (environment_capabilities.py's own
+        # documented contract), so nothing pre-existing breaks.
+        participant_role_options=allowed_participant_roles(workspace.operating_environment) or KNOWN_PARTICIPANT_ROLES,
         perspective_polarity_options=KNOWN_PERSPECTIVE_POLARITIES,
+        operating_environment=workspace.operating_environment,
+        operating_environment_label=OPERATING_ENVIRONMENT_LABELS.get(workspace.operating_environment),
+        operating_environments=OPERATING_ENVIRONMENT_LABELS,
     )
 
 
@@ -932,6 +948,44 @@ def edit_operating_instructions(project_id):
         governance_log=_log(),
     )
     flash("Project Operating Instructions updated.", "success")
+    return redirect(url_for("workspace.show_workspace", project_id=project_id))
+
+
+@workspace_bp.route("/projects/<project_id>/workspace/classify-environment", methods=["POST"])
+@admin_required
+def classify_operating_environment(project_id):
+    """
+    CLAUDE-P29: one-time establishment of Project Operating Environment
+    for a legacy project (created before this field existed) -- NOT a
+    Client<->Proponent conversion route. See CaseWorkspaceStore.
+    set_operating_environment's own docstring: this calls the exact
+    same single gate creation uses, which refuses outright if the
+    project already has a non-None environment -- so this route cannot
+    be used to change an already-classified project's environment
+    either, new or legacy. Admin-only, matching the same authority
+    level as original project creation (routes/portal.py's /upload is
+    also @admin_required) -- there is no project-level "owner" concept
+    anywhere in this codebase to check against instead.
+    """
+    _, store, workspace = _load_workspace_or_404(project_id)
+
+    operating_environment = (request.form.get("operating_environment") or "").strip()
+    if not is_valid_operating_environment(operating_environment):
+        flash("Select a valid project operating environment.", "error")
+        return redirect(url_for("workspace.show_workspace", project_id=project_id))
+
+    try:
+        store.set_operating_environment(
+            workspace, operating_environment, actor=_reviewer(), governance_log=_log(),
+        )
+    except OperatingEnvironmentAlreadySetError as exc:
+        flash(str(exc), "error")
+        return redirect(url_for("workspace.show_workspace", project_id=project_id))
+
+    flash(
+        f"Project operating environment established: "
+        f"{OPERATING_ENVIRONMENT_LABELS[operating_environment]}.", "success",
+    )
     return redirect(url_for("workspace.show_workspace", project_id=project_id))
 
 
@@ -2077,6 +2131,19 @@ def register_participant_route(project_id):
         flash("A Participant needs a name and a role.", "error")
         return redirect(url_for("workspace.show_workspace", project_id=project_id))
 
+    # CLAUDE-P29: server-side enforcement of the same gating the
+    # participant_role_options passed to the template already reflects
+    # -- a directly forged role_type outside the locked environment's
+    # allowed set must be rejected here too, not just hidden in the UI.
+    allowed_roles = allowed_participant_roles(workspace.operating_environment)
+    if allowed_roles is not None and role_type not in allowed_roles:
+        flash(
+            f"{role_type!r} is not a valid participant role in this project's "
+            f"{OPERATING_ENVIRONMENT_LABELS.get(workspace.operating_environment, 'locked')} environment.",
+            "error",
+        )
+        return redirect(url_for("workspace.show_workspace", project_id=project_id))
+
     try:
         store.record_participant(
             workspace, name=name, role_type=role_type, created_by=_reviewer(),
@@ -2370,7 +2437,9 @@ def export_rfi_draft(project_id, draft_id):
     if draft is None:
         abort(404)
 
-    buffer = build_rfi_draft_docx(draft)
+    buffer = build_rfi_draft_docx(
+        draft, operating_environment_label=OPERATING_ENVIRONMENT_LABELS.get(workspace.operating_environment),
+    )
     status_label = "issued" if draft["status"] == "issued" else "draft"
     return send_file(
         buffer,
@@ -2410,14 +2479,14 @@ def export_rfi(project_id):
     Authenticated surface for the one existing RFI exporter
     (services.rfi_export.build_rfi_docx) - reused verbatim, not
     reimplemented. routes/api.py's own /documents/<project_id>/rfi
-    already calls this same function, but that JSON API blueprint is
-    deliberately unauthenticated (see services/auth.py's own docstring:
-    "token/key-based API auth is a different concern from a session-
-    cookie login gate"), a pre-existing, documented design boundary this
-    route doesn't touch or remove. This route exists so that a link
-    surfaced from inside the (login-gated) Case Workspace never itself
-    becomes an unauthenticated download path merely because it's
-    convenient to link to the existing one.
+    already calls this same function; that JSON API blueprint now
+    requires the same session login as this route does (CLAUDE-P27-B,
+    routes/api.py's before_request hook) -- this route predates that
+    fix and its docstring describing the old unauthenticated state was
+    stale (corrected here, CLAUDE-P29). This route still exists in its
+    own right so a link surfaced from inside Case Workspace stays a
+    same-blueprint, same-URL-scheme link rather than reaching across
+    into /api/v1.
 
     Project-scoped, not Case-scoped: the underlying RFI is built from
     the legacy consistency-check pipeline's flagged contradictions
@@ -2432,8 +2501,16 @@ def export_rfi(project_id):
     if document is None:
         abort(404)
 
+    # CLAUDE-P29: best-effort lookup only, to stamp the export with the
+    # environment label -- a missing/legacy workspace must not block a
+    # download that worked fine before this field existed.
+    workspace = _store().get(project_id)
+    environment_label = (
+        OPERATING_ENVIRONMENT_LABELS.get(workspace.operating_environment) if workspace else None
+    )
+
     try:
-        buffer = build_rfi_docx(document)
+        buffer = build_rfi_docx(document, operating_environment_label=environment_label)
     except RFIExportError as exc:
         flash(str(exc), "error")
         return redirect(url_for("workspace.show_workspace", project_id=project_id))

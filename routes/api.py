@@ -56,6 +56,7 @@ def ingest_document():
         document = ingest_upload(
             request.files.get('file'),
             current_app,
+            operating_environment=request.form.get('operating_environment', ''),
             actor=request.form.get('actor'),
             role=request.form.get('role'),
             project_name=request.form.get('project_name'),

@@ -11,6 +11,7 @@ from flask import Blueprint, abort, current_app, flash, jsonify, redirect, rende
 from services.auth import admin_required, check_credentials, is_authenticated, log_in, log_out, login_required
 from services.rate_limit import limiter
 from services.case_workspace import CaseWorkspaceStore
+from services.environment_capabilities import OPERATING_ENVIRONMENT_LABELS
 from services.governance import GovernanceError
 from services.ingestion import UploadError, get_governance_log, get_registry, ingest_upload
 from services.password_reset import (
@@ -402,19 +403,30 @@ def upload():
     max_upload_mb = current_app.config['MAX_CONTENT_LENGTH'] // (1024 * 1024)
 
     if request.method == 'GET':
-        return render_template('upload.html', max_upload_mb=max_upload_mb)
+        # CLAUDE-P29: an optional ?environment= deep link from the two
+        # gateway entrance cards pre-selects the radio -- convenience
+        # only, the POST below validates independently regardless of
+        # how the form was reached or what was pre-selected.
+        return render_template(
+            'upload.html', max_upload_mb=max_upload_mb,
+            selected_environment=request.args.get('environment'),
+            operating_environments=OPERATING_ENVIRONMENT_LABELS,
+        )
 
     try:
         document = ingest_upload(
             request.files.get('file'),
             current_app,
+            operating_environment=request.form.get('operating_environment', ''),
             actor=request.form.get('actor'),
             role=request.form.get('role'),
             project_name=request.form.get('project_name'),
         )
     except (UploadError, GovernanceError) as exc:
         return render_template(
-            'upload.html', max_upload_mb=max_upload_mb, error=str(exc)
+            'upload.html', max_upload_mb=max_upload_mb, error=str(exc),
+            selected_environment=request.form.get('operating_environment'),
+            operating_environments=OPERATING_ENVIRONMENT_LABELS,
         ), 400
 
     return redirect(url_for('workspace.show_workspace', project_id=document.project_id))

@@ -14,7 +14,29 @@
 <p class="mono form-error">{{ error }}</p>
 {% endif %}
 
-<form method="post" enctype="multipart/form-data" class="upload-form">
+<form method="post" enctype="multipart/form-data" class="upload-form" id="project-creation-form">
+    {# CLAUDE-P29: Project Operating Environment -- required, locked
+       permanently once this project is created. Deliberately radio
+       buttons, not a dropdown, and placed first, above project name/
+       file -- this is the first decision in project creation, not an
+       incidental option alongside the others. #}
+    <fieldset class="operating-environment-fieldset">
+        <legend>Project Operating Environment <span class="mono">(required)</span></legend>
+        <p class="pane-note">
+            This selection configures the project's available tools and behaviour, applies
+            only to this project, and <strong>cannot be changed after creation</strong>. If you
+            choose the wrong one, you'll need to create a new project in the correct environment.
+        </p>
+        {% for value, label in operating_environments.items() %}
+        <label class="operating-environment-option">
+            <input
+                type="radio" name="operating_environment" value="{{ value }}" required
+                {% if selected_environment == value %}checked{% endif %}>
+            {{ label }}
+        </label>
+        {% endfor %}
+    </fieldset>
+
     <input
         type="text" name="project_name" class="text-input" style="max-width:480px;"
         value="{{ request.form.get('project_name', '') }}"
@@ -24,6 +46,12 @@
         <input type="text" name="actor" class="text-input" placeholder="Your name (optional, for the audit trail)">
         <input type="text" name="role" class="text-input" placeholder="Your role (optional)">
     </div>
-    <button type="submit" class="btn btn-primary">Parse document</button>
+
+    <label class="operating-environment-confirm">
+        <input type="checkbox" required>
+        I understand this selection configures the project environment and cannot be changed after creation.
+    </label>
+
+    <button type="submit" class="btn btn-primary">Create project and parse document</button>
 </form>
 {% endblock %}

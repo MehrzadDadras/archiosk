@@ -6,11 +6,22 @@
 {% block gateway_body %}
 <div class="gateway-actions">
     {% if is_admin %}
-    <a class="gateway-action gateway-action-primary" href="{{ url_for('portal.upload') }}">
+    {# CLAUDE-P29: two entrances into the same /upload route/form, not
+       two duplicated routes -- each deep-links with ?environment= to
+       pre-select the radio there, but the server-side POST validates
+       independently regardless of which entrance was used. #}
+    <a class="gateway-action gateway-action-primary" href="{{ url_for('portal.upload', environment='client_owner') }}">
         <span class="gateway-action-icon">+</span>
         <span>
-            <strong>Ingest a new document</strong>
-            <small>Upload an RFP/RFQ and run it through the Archiosk pipeline</small>
+            <strong>Create Client / Owner Project</strong>
+            <small>New project in the Client / Owner environment &mdash; locked once created</small>
+        </span>
+    </a>
+    <a class="gateway-action gateway-action-primary" href="{{ url_for('portal.upload', environment='design_builder_proponent') }}">
+        <span class="gateway-action-icon">+</span>
+        <span>
+            <strong>Create Design-Builder / Proponent Project</strong>
+            <small>New project in the Design-Builder / Proponent environment &mdash; locked once created</small>
         </span>
     </a>
     {% endif %}
