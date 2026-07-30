@@ -101,14 +101,18 @@ def build_rfi_draft_docx(draft: dict, operating_environment_label: str | None = 
     not in a document meant to be sent to another party.
     """
     snapshot = draft.get("reference_snapshot") or {}
-    is_issued = draft.get("status") == "issued"
+    status = draft.get("status") or "draft"
+    is_issued = status in ("issued", "answered")
+    is_answered = status == "answered"
     short_ref = draft["id"][:8]
 
     output = docx.Document()
     output.add_heading(f"Request for Information — RFI-{short_ref}", level=1)
 
     status_p = output.add_paragraph()
-    if is_issued:
+    if is_answered:
+        status_p.add_run(f"ANSWERED — {draft.get('responded_at')} by {draft.get('responded_by')}").bold = True
+    elif is_issued:
         status_p.add_run(f"ISSUED — {draft.get('issued_at')} by {draft.get('issued_by')}").bold = True
     else:
         status_p.add_run("DRAFT — not yet issued; for internal review only").bold = True
@@ -121,6 +125,18 @@ def build_rfi_draft_docx(draft: dict, operating_environment_label: str | None = 
     if operating_environment_label:
         meta.add_run("Project Operating Environment: ").bold = True
         meta.add_run(f"{operating_environment_label}\n")
+    # CLAUDE-P30: which contractual direction this document represents --
+    # the question was always originated by the Design-Builder/Proponent
+    # side (services.environment_capabilities's "rfi_originate"), and any
+    # response was always issued by the Client/Owner side ("rfi_respond")
+    # -- stated plainly here rather than left to be inferred from status
+    # alone.
+    meta.add_run("Workflow Direction: ").bold = True
+    meta.add_run(
+        "Question originated by Design-Builder/Proponent"
+        + (", answered by Client/Owner" if is_answered else "")
+        + "\n"
+    )
     if snapshot.get("case_title"):
         meta.add_run("Case: ").bold = True
         meta.add_run(f"{snapshot['case_title']}\n")
@@ -141,10 +157,16 @@ def build_rfi_draft_docx(draft: dict, operating_environment_label: str | None = 
     output.add_heading("Question", level=2)
     output.add_paragraph(draft.get("question_text") or "(No question text recorded yet.)")
 
+    if is_answered:
+        output.add_heading("Response", level=2)
+        output.add_paragraph(draft.get("response_text") or "(No response text recorded.)")
+
     footer = output.add_paragraph()
     footer.add_run(f"Drafted by {draft.get('created_by')} on {draft.get('created_at')}.")
     if is_issued:
         footer.add_run(f" Issued by {draft.get('issued_by')} on {draft.get('issued_at')}.")
+    if is_answered:
+        footer.add_run(f" Answered by {draft.get('responded_by')} on {draft.get('responded_at')}.")
 
     buffer = io.BytesIO()
     output.save(buffer)

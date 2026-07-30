@@ -119,6 +119,10 @@ REQUIREMENT_ADJUDICATION_STATE_NOT_YET_ASSESSED = "Not Yet Assessed"
 
 RFI_STATUS_DRAFT = "draft"
 RFI_STATUS_ISSUED = "issued"
+# CLAUDE-P30: the Client/Owner-side counterpart action to issuing -- an
+# issued RFI that has received its authoritative response. Terminal:
+# no method transitions a draft back out of "answered".
+RFI_STATUS_ANSWERED = "answered"
 
 REGION_STATUS_UNCHANGED = "unchanged"
 REGION_STATUS_CHANGED = "changed"
@@ -1203,6 +1207,15 @@ class RFIDraft:
     status: str = RFI_STATUS_DRAFT
     issued_at: Optional[str] = None
     issued_by: Optional[str] = None
+    # CLAUDE-P30: the Client/Owner-side counterpart to question_text/
+    # issued_by above -- set only by CaseWorkspaceStore.respond_to_rfi_draft,
+    # only once, only on an already-issued draft. Never written by the
+    # same actor/method that drafted or issued the question: origination
+    # and response are two separate, environment-gated capabilities
+    # (services/environment_capabilities.py's "rfi_originate"/"rfi_respond").
+    response_text: Optional[str] = None
+    responded_at: Optional[str] = None
+    responded_by: Optional[str] = None
 
 
 @dataclass
@@ -1985,6 +1998,62 @@ class PerspectiveAssessment:
     investigation_step_id: Optional[str] = None
 
 
+# -- Go/No-Go decision family (CLAUDE-P30) ---------------------------------
+#
+# Both Project Operating Environments need a Go/No-Go decision, but for
+# different reasons at different stages -- see
+# services/environment_capabilities.py's CLIENT_OWNER_DECISION_STAGES /
+# DESIGN_BUILDER_PROPONENT_DECISION_STAGES. This is the "parallel
+# capability family" shape: one shared, governed record type (this
+# class), validated against whichever stage vocabulary the project's own
+# locked environment actually uses (see
+# CaseWorkspaceStore.record_go_no_go_decision) -- never one side's
+# checklist quietly reused for the other.
+
+GO_NO_GO_DECISION_GO = "go"
+GO_NO_GO_DECISION_NO_GO = "no_go"
+GO_NO_GO_DECISION_CONDITIONAL_GO = "conditional_go"
+
+GO_NO_GO_DECISIONS = (
+    GO_NO_GO_DECISION_GO,
+    GO_NO_GO_DECISION_NO_GO,
+    GO_NO_GO_DECISION_CONDITIONAL_GO,
+)
+
+
+@dataclass
+class GoNoGoAssessment:
+    """
+    One governed decision record answering "should this project/pursuit
+    continue past this stage." `operating_environment` is denormalized
+    from the workspace's own locked field AT THE TIME OF THIS DECISION --
+    read-only here, never independently settable, so a decision record
+    always honestly reflects which vocabulary was actually in force when
+    it was made (relevant only in the theoretical case the vocabulary
+    itself changes in a future release; today it is simply a copy).
+
+    `anomalies` is open-world free text (like Relationship.relationship_
+    type) rather than a closed enum -- the conditions that could justify
+    a No-Go are numerous, genuinely environment-specific, and expected to
+    grow with real usage; a closed vocabulary here would be either
+    incomplete on day one or an ever-growing enum masquerading as one.
+    `decision` itself IS closed (GO_NO_GO_DECISIONS): the outcome
+    vocabulary is small, stable, and identical in shape across both
+    environments even though the stages and anomalies leading to it are
+    not.
+    """
+
+    id: str
+    project_id: str
+    operating_environment: str
+    decision_stage: str
+    decision: str
+    anomalies: list  # list[str], open-world
+    rationale: str
+    decided_by: str
+    decided_at: str
+
+
 @dataclass
 class CaseRecord:
     """
@@ -2307,6 +2376,7 @@ class ProjectWorkspace:
     investigation_steps: list[dict] = field(default_factory=list)  # CLAUDE-P08 - see InvestigationStep
     case_outcomes: list[dict] = field(default_factory=list)  # CLAUDE-P11 - see CaseOutcome
     participants: list[dict] = field(default_factory=list)  # CLAUDE-P12R - see Participant
+    go_no_go_assessments: list[dict] = field(default_factory=list)  # CLAUDE-P30 - see GoNoGoAssessment
     perspective_assessments: list[dict] = field(default_factory=list)  # CLAUDE-P12R - see PerspectiveAssessment
     # Per-reviewer "who do I represent in this Project" (username ->
     # participant_id) - same personal/display-only shape as
@@ -3115,6 +3185,77 @@ class CaseWorkspaceStore:
                 },
             )
         return workspace
+
+    def record_go_no_go_decision(
+        self,
+        workspace: ProjectWorkspace,
+        decision_stage: str,
+        decision: str,
+        rationale: str,
+        decided_by: str,
+        anomalies: Optional[list] = None,
+        governance_log: Optional[GovernanceLog] = None,
+    ) -> dict:
+        """
+        CLAUDE-P30: records one Go/No-Go decision -- "go_no_go" in
+        environment_capabilities.py's registry. Requires the project's
+        operating_environment to already be locked: a Go/No-Go decision
+        only makes sense once it's known which side's decision-stage
+        vocabulary applies (see decision_stages_for_environment), so a
+        legacy/unclassified project cannot record one until classified --
+        an honest limitation, not silently defaulted to either side's
+        vocabulary.
+        """
+        from services.environment_capabilities import decision_stages_for_environment
+
+        if workspace.operating_environment is None:
+            raise CaseWorkspaceError(
+                "This project's operating environment has not been established yet -- "
+                "a Go/No-Go decision requires knowing which environment's decision "
+                "stages apply."
+            )
+        if decision not in GO_NO_GO_DECISIONS:
+            raise CaseWorkspaceError(
+                f"{decision!r} is not a recognized Go/No-Go decision. Use one of: "
+                f"{', '.join(GO_NO_GO_DECISIONS)}."
+            )
+        allowed_stages = decision_stages_for_environment(workspace.operating_environment)
+        if decision_stage not in allowed_stages:
+            raise CaseWorkspaceError(
+                f"{decision_stage!r} is not a recognized decision stage for this "
+                f"project's {workspace.operating_environment!r} environment."
+            )
+        if not rationale or not rationale.strip():
+            raise CaseWorkspaceError("A Go/No-Go decision requires a recorded rationale.")
+
+        assessment = GoNoGoAssessment(
+            id=_new_id(),
+            project_id=workspace.project_id,
+            operating_environment=workspace.operating_environment,
+            decision_stage=decision_stage,
+            decision=decision,
+            anomalies=list(anomalies or []),
+            rationale=rationale.strip(),
+            decided_by=decided_by,
+            decided_at=_now(),
+        )
+        workspace.go_no_go_assessments.append(asdict(assessment))
+        self.save(workspace)
+
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id, event_type="go_no_go_decided",
+                actor=decided_by, role="human",
+                payload={
+                    "assessment_id": assessment.id,
+                    "decision_stage": decision_stage,
+                    "decision": decision,
+                },
+            )
+        return asdict(assessment)
+
+    def go_no_go_assessments_for_project(self, workspace: ProjectWorkspace) -> list[dict]:
+        return list(workspace.go_no_go_assessments)
 
     # -- lookups -------------------------------------------------------------
 
@@ -6750,6 +6891,46 @@ class CaseWorkspaceStore:
         draft["issued_at"] = _now()
         draft["issued_by"] = issued_by
         self.save(workspace)
+        return draft
+
+    def respond_to_rfi_draft(
+        self, workspace: ProjectWorkspace, draft_id: str, response_text: str, responded_by: str,
+        governance_log: Optional[GovernanceLog] = None,
+    ) -> dict:
+        """
+        CLAUDE-P30: the Client/Owner-side counterpart to issue_rfi_draft --
+        "rfi_respond" in environment_capabilities.py's registry. Requires
+        the draft to already be RFI_STATUS_ISSUED (an unissued draft has
+        nothing to respond to yet -- the same "response follows issuance"
+        rule the real-world exchange this models actually has), and
+        refuses outright if a response is already on record: exactly one
+        authoritative response per RFI, matching issue_rfi_draft's own
+        "already issued" refusal shape.
+        """
+        draft = self._find(workspace.rfi_drafts, draft_id)
+        if draft is None:
+            raise CaseWorkspaceError(f"RFI draft {draft_id} was not found.")
+        if draft["status"] != RFI_STATUS_ISSUED:
+            raise CaseWorkspaceError(
+                "This RFI cannot be responded to yet -- it has not been issued."
+            )
+        self._require_case_not_archived(workspace, draft.get("case_id"))
+
+        if not response_text or not response_text.strip():
+            raise CaseWorkspaceError("A response requires response text.")
+
+        draft["response_text"] = response_text.strip()
+        draft["responded_at"] = _now()
+        draft["responded_by"] = responded_by
+        draft["status"] = RFI_STATUS_ANSWERED
+        self.save(workspace)
+
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id, event_type="rfi_answered",
+                actor=responded_by, role="human",
+                payload={"rfi_draft_id": draft_id},
+            )
         return draft
 
     # -- Snapshot / Freeze / State Comparison (Prompt 14 O/AC, Batch G) ---------
