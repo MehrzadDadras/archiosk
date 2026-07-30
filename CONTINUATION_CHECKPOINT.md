@@ -1,5 +1,96 @@
 # Continuation checkpoint
 
+## 2026-07-29 — CLAUDE-P27/P27-A/P27-B: security review, Hardened Starter Baseline, SMTP finalization
+
+Supersedes the CaseWorkspaceStore-era section below as the current state
+summary; that section is retained unmodified as historical record, not
+because it's still current.
+
+**Current commit state:** local `HEAD` and `origin/main` both at `279dd8a`,
+in sync, working tree clean except the pre-existing untracked
+`tests/fixtures/nreocrc/_lab_instance_scratch_002/`. Full test suite: 819
+passed, 0 failed as of the last full run this session.
+
+**CLAUDE-P27** — full repository-grounded security/architecture review
+(five parallel read-only inspection forks: identity/auth, tenant/
+authorization/IDOR, storage/Snapshot, self-protection/AI, deployment/
+audit/tests). Found the repository had no project-level tenancy/
+authorization model (any authenticated user could open any project) and a
+fully unauthenticated `/api/v1/*` JSON API. **CLAUDE-P27-A** restructured
+the findings around natural continuation + a named Hardened Starter
+Baseline rather than jumping straight to beta/subscription features.
+
+**CLAUDE-P27-B** — the Hardened Starter Baseline, implemented as 10
+reviewed, tested, individually-committed blocks (`c2db13f` through
+`adccbd6`, see `git log --oneline bfa99d7..adccbd6` for the full list):
+`/api/v1` authentication, a tenancy/project-authorization **design
+package** (`governance/specified-unbuilt/tenancy-and-project-
+authorization.md` — specified, deliberately **not implemented**, four
+open product decisions block execution), `BaseConfig.validate()` boot
+enforcement, `User.is_active` + suspension, security-event logging,
+`ProxyFix`, rate limiting (Flask-Limiter), CSRF protection (Flask-WTF),
+a prompt-injection boundary + AI kill switch in `services/bhive_parser.py`,
+backup/restore tooling (a real backup + verified restore drill was run
+against live data during the session), and Flask-Migrate/Alembic
+adoption for the next schema change (the live database was `stamp`-ed to
+the new baseline revision, not migrated through it).
+
+**SMTP finalization (commit `279dd8a` for the credential-independent
+code; real delivery verified live, not via a commit):**
+- Implicit-TLS (`SMTP_USE_SSL`, `smtplib.SMTP_SSL`) support added
+  alongside the pre-existing STARTTLS path in `services/email.py` —
+  previously only STARTTLS existed at all.
+- Boot-time SMTP configuration warnings added to `app.py`'s existing
+  production validation (never hard-fails, matching the graceful-
+  degradation philosophy already established for `ANTHROPIC_API_KEY`).
+- Verified structurally that no reset token/URL is ever logged outside
+  the dev-only fallback.
+- **Real end-to-end delivery to `architect@rogers.com` via Netfirms is
+  now fully verified**: SMTP connects, authenticates, and delivers;
+  the reset link worked once and was correctly rejected on reuse; the
+  dev-only fallback did not fire; no token or secret was exposed in
+  the process (one earlier mistake mid-session — a dev-fallback-logged
+  token was briefly echoed into the conversation transcript during
+  diagnosis — was caught, the token was immediately invalidated via a
+  direct DB write, and the log file was scrubbed; no repository
+  content was affected).
+- Working production config: `SMTP_HOST=smtp.netfirms.com`,
+  `SMTP_PORT=465`, implicit SSL (`SMTP_USE_SSL=true`,
+  `SMTP_USE_TLS=false`), full mailbox address as `SMTP_USERNAME`. The
+  mailbox password required one reset on Netfirms' side before AUTH
+  would succeed — the original password authenticated fine via
+  webmail/IMAP but was rejected (clean SMTP `535`, not a connection
+  drop) specifically for SMTP AUTH; resetting it resolved this.
+- **Netfirms support case E-567913**: opened during diagnosis (the
+  earlier STARTTLS/implicit-SSL AUTH-disconnect investigation surfaced
+  a genuine, independently-confirmed TLS certificate hostname mismatch
+  for `smtp.netfirms.com`, reported to Netfirms alongside the AUTH
+  symptom). **Status: open, kept open only until Netfirms support
+  confirms or closes it.** Whoever closes it should note: the
+  practical blocking issue (SMTP AUTH rejection) was resolved by
+  resetting the mailbox password, not by a Netfirms-side change — the
+  certificate hostname-mismatch finding is a separate, still-
+  unconfirmed report to Netfirms and may still be worth their fixing
+  independent of this case's resolution.
+
+**Not started this session, explicitly deferred, no new authorization
+implied:** tenancy migration execution, `Invitation`/entitlement/
+subscription models, further `CaseWorkspaceStore` route wiring (per
+P27-A's own reasoning: wiring more routes before the tenancy work lands
+would just add more surface inheriting the same still-open isolation
+gap), dependency version-staleness remediation.
+
+**Recommended next prompt**, if none of the above is what's wanted next:
+resolve the four open product decisions in
+`governance/specified-unbuilt/tenancy-and-project-authorization.md`
+(personal-org default, project-to-org cardinality, project-name
+uniqueness scope, admin-bypass semantics) — that design package is
+otherwise implementation-ready.
+
+---
+
+## Historical: CaseWorkspaceStore backlog checkpoint (superseded above)
+
 Written on explicit request, after a read-only investigation into the
 `CaseWorkspaceStore` backlog item. **Not committed or pushed** — this file
 is currently untracked, left for the user to review/commit/discard as they
