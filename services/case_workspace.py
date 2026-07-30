@@ -700,6 +700,16 @@ class CaseWorkspaceError(Exception):
     """Raised for invalid workspace operations (unknown ids, bad states, etc)."""
 
 
+class OperatingEnvironmentAlreadySetError(CaseWorkspaceError):
+    """
+    CLAUDE-P29: raised by CaseWorkspaceStore.set_operating_environment
+    when a project's operating_environment is already non-None -- the
+    structural enforcement of "a project's environment is locked at
+    creation and can never be changed into the opposing one," not just
+    a convention callers are expected to honor.
+    """
+
+
 class ConcurrentModificationError(CaseWorkspaceError):
     """
     Raised when a governed write's expected predecessor version no longer
@@ -2346,6 +2356,33 @@ class ProjectWorkspace:
     operating_instructions: str = ""
     operating_instructions_updated_by: Optional[str] = None
     operating_instructions_updated_at: Optional[str] = None
+    # CLAUDE-P29: Project Operating Environment -- the locked, project-
+    # level classification of which side of the procurement/delivery
+    # relationship this project's workspace serves (services/
+    # environment_capabilities.py's CLIENT_OWNER /
+    # DESIGN_BUILDER_PROPONENT). None means either a legacy project
+    # (created before this field existed) or, structurally identically,
+    # a new project not yet fully created -- both are "not established",
+    # never fabricated. Once set to a real value it is permanently
+    # locked: CaseWorkspaceStore.set_operating_environment (below) is
+    # the ONLY code path that ever writes this field, and it refuses
+    # outright if the field is already non-None -- there is no update/
+    # convert path anywhere in this module, deliberately, matching
+    # CLAUDE-P29's non-negotiable rule that a project's environment can
+    # never be changed into the opposing one after creation.
+    #
+    # Explicitly NOT the same concept as represented_party_by above:
+    # that is a personal, per-reviewer, freely-changeable setting with
+    # no governance meaning: this is a locked, project-wide fact that
+    # gates which capabilities (see environment_capabilities.py) the
+    # project has at all. A reviewer changing who they represent can
+    # never change this field -- the two are enforced through entirely
+    # separate methods (set_represented_party vs.
+    # set_operating_environment), and nothing here shares mutation
+    # logic with that mechanism.
+    operating_environment: Optional[str] = None
+    operating_environment_set_by: Optional[str] = None
+    operating_environment_set_at: Optional[str] = None
 
 
 def _snapshot_reference_lists(workspace: ProjectWorkspace) -> dict:
@@ -3008,6 +3045,74 @@ class CaseWorkspaceStore:
                 project_id=workspace.project_id, event_type="operating_instructions_updated",
                 actor=actor, role="system",
                 payload={"length": len(text)},
+            )
+        return workspace
+
+    def set_operating_environment(
+        self,
+        workspace: ProjectWorkspace,
+        operating_environment: str,
+        actor: str,
+        governance_log: Optional[GovernanceLog] = None,
+    ) -> ProjectWorkspace:
+        """
+        CLAUDE-P29: the single, centralized gate for
+        ProjectWorkspace.operating_environment -- see that field's own
+        comment. This is the ONLY method anywhere that ever writes it,
+        and it enforces the lock structurally, not just by convention:
+        raises OperatingEnvironmentAlreadySetError outright if the
+        field is already non-None, with NO exception for re-setting it
+        to the same value it already holds -- "locked" here means
+        exactly one successful call to this method per project,
+        ever, full stop.
+
+        Serves two distinct real callers with the identical rule:
+        1. New-project creation (services/ingestion.py's
+           ingest_upload) -- called once, immediately after the
+           workspace is first created, before any other write.
+        2. One-time legacy classification (routes/workspace.py) -- an
+           existing project whose operating_environment is still None
+           (created before this field existed) may be classified
+           exactly once. This is NOT a Client<->Proponent conversion --
+           it is the first establishment of a previously absent value,
+           the same "honest gap, never silently converted" treatment
+           this codebase already gives every other field that predates
+           its own introduction (see ProjectWorkspace.version's own
+           comment for the established precedent).
+
+        Deliberately validates against environment_capabilities.
+        OPERATING_ENVIRONMENTS as a closed set (raises ValueError for
+        anything else, including a well-intentioned "other") rather
+        than this module's usual normalize_open_world_value pattern --
+        see environment_capabilities.py's module docstring for why an
+        unrecognized value must never be silently accepted here.
+        """
+        from services.environment_capabilities import is_valid_operating_environment
+
+        if not is_valid_operating_environment(operating_environment):
+            raise ValueError(
+                f"{operating_environment!r} is not a recognized operating environment.",
+            )
+        if workspace.operating_environment is not None:
+            raise OperatingEnvironmentAlreadySetError(
+                f"Project {workspace.project_id!r} already has its operating environment "
+                f"locked to {workspace.operating_environment!r} -- it cannot be changed.",
+            )
+
+        previous_state = workspace.operating_environment  # always None here, kept explicit for the log
+        workspace.operating_environment = operating_environment
+        workspace.operating_environment_set_by = actor
+        workspace.operating_environment_set_at = _now()
+        self.save(workspace)
+
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id, event_type="operating_environment_established",
+                actor=actor, role="system",
+                payload={
+                    "previous_state": previous_state,
+                    "operating_environment": operating_environment,
+                },
             )
         return workspace
 

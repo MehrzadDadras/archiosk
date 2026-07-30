@@ -117,6 +117,7 @@ def document_source_payload(document: ParsedDocument) -> dict:
 def ingest_upload(
     file_storage: Optional[FileStorage],
     app: Flask,
+    operating_environment: str,
     actor: str | None = None,
     role: str | None = None,
     project_name: str | None = None,
@@ -129,7 +130,29 @@ def ingest_upload(
     whichever filename happened to be uploaded - see pagescape correction
     #11. Optional and backward-compatible: omitted, the project's
     identity is exactly what it always was, the filename.
+
+    `operating_environment` (CLAUDE-P29) is REQUIRED, deliberately no
+    default -- every caller must explicitly decide, matching the
+    product rule that a project cannot exist without one. Validated
+    here, before anything is parsed or persisted, so an invalid/missing
+    value behaves exactly like a missing file or a bad extension below:
+    nothing is left behind. The workspace-creation block near the end
+    of this function is what actually locks it onto the project, via
+    CaseWorkspaceStore.set_operating_environment -- the one and only
+    call site, since this function is the one and only place a project
+    is ever created (see services/case_workspace.py's own comment on
+    that method for why calling it here is always safe: this function
+    always generates a brand-new project_id, so the workspace it
+    creates a few lines below is always genuinely new).
     """
+    from services.environment_capabilities import is_valid_operating_environment
+
+    if not is_valid_operating_environment(operating_environment):
+        raise UploadError(
+            "A valid project operating environment (Client / Owner or "
+            "Design-Builder / Proponent) must be selected before a project can be created.",
+        )
+
     if file_storage is None or not file_storage.filename:
         raise UploadError("No file was provided.")
 
@@ -190,18 +213,22 @@ def ingest_upload(
         },
     )
 
+    # CLAUDE-P29: the Case Workspace is now ALWAYS created eagerly here
+    # (previously only `if project_name:`), because operating_environment
+    # has to be locked onto the project at the moment of creation, not
+    # left until whoever happens to open Case Workspace first triggers
+    # routes/workspace.py's own lazy get_or_create -- that call site has
+    # no environment value to give it. Idempotent either way (the same
+    # get_or_create that lazy-creation path uses); finding it already
+    # exists there afterward is the normal, expected case, not a conflict.
+    store = CaseWorkspaceStore(app.config["REGISTRY_STORE_PATH"])
+    workspace = store.get_or_create(
+        document.project_id, register_document_source=document_source_payload(document),
+    )
+    store.set_operating_environment(
+        workspace, operating_environment, actor=actor or _DEFAULT_ACTOR, governance_log=governance_log,
+    )
     if project_name:
-        # Creates the Case Workspace eagerly (idempotent - the same
-        # get_or_create routes/workspace.py's _load_workspace_or_404 calls
-        # on first open; finding it already exists there is the normal,
-        # expected case, not a conflict) purely so the chosen name is set
-        # from the very first moment the project exists, not left showing
-        # the filename until someone happens to open Case Workspace and
-        # use Edit Project Details.
-        store = CaseWorkspaceStore(app.config["REGISTRY_STORE_PATH"])
-        workspace = store.get_or_create(
-            document.project_id, register_document_source=document_source_payload(document),
-        )
         store.set_project_details(
             workspace, actor=actor or _DEFAULT_ACTOR, display_title=project_name,
             governance_log=governance_log,

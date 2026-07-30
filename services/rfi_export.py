@@ -24,7 +24,15 @@ class RFIExportError(Exception):
     """Raised when there is nothing to export."""
 
 
-def build_rfi_docx(document: ParsedDocument) -> io.BytesIO:
+def build_rfi_docx(document: ParsedDocument, operating_environment_label: str | None = None) -> io.BytesIO:
+    """
+    `operating_environment_label` (CLAUDE-P29), if given, stamps which
+    Project Operating Environment this export was produced under --
+    optional and additive (existing callers that don't pass it are
+    unaffected) since ParsedDocument itself has no operating_environment
+    of its own (that lives on ProjectWorkspace, a different store) - the
+    caller is expected to look it up and pass the label through.
+    """
     if not document.consistency_flags:
         reason = (
             "No flagged contradictions to export."
@@ -42,6 +50,9 @@ def build_rfi_docx(document: ParsedDocument) -> io.BytesIO:
     meta.add_run(f"{document.project_id}\n")
     meta.add_run("Ingested: ").bold = True
     meta.add_run(f"{document.ingested_at}\n")
+    if operating_environment_label:
+        meta.add_run("Project Operating Environment: ").bold = True
+        meta.add_run(f"{operating_environment_label}\n")
     meta.add_run("Flagged items: ").bold = True
     meta.add_run(str(len(document.consistency_flags)))
 
@@ -66,10 +77,13 @@ def build_rfi_docx(document: ParsedDocument) -> io.BytesIO:
     return buffer
 
 
-def build_rfi_draft_docx(draft: dict) -> io.BytesIO:
+def build_rfi_draft_docx(draft: dict, operating_environment_label: str | None = None) -> io.BytesIO:
     """
     Exports one governed per-Finding RFIDraft (a plain dict, as stored in
     ProjectWorkspace.rfi_drafts) as a professional-facing .docx.
+
+    `operating_environment_label` (CLAUDE-P29): optional, additive, same
+    contract as build_rfi_docx's own parameter above.
 
     Every field below comes directly from the draft's own stored state
     (draft itself, or its own reference_snapshot, captured once at
@@ -104,6 +118,9 @@ def build_rfi_draft_docx(draft: dict) -> io.BytesIO:
     meta.add_run(f"RFI-{short_ref} (formal RFI numbering not yet implemented)\n")
     meta.add_run("Project ID: ").bold = True
     meta.add_run(f"{draft['project_id']}\n")
+    if operating_environment_label:
+        meta.add_run("Project Operating Environment: ").bold = True
+        meta.add_run(f"{operating_environment_label}\n")
     if snapshot.get("case_title"):
         meta.add_run("Case: ").bold = True
         meta.add_run(f"{snapshot['case_title']}\n")
