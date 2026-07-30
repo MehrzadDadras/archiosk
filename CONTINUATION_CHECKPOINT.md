@@ -1,5 +1,102 @@
 # Continuation checkpoint
 
+## 2026-07-29 — CLAUDE-P28: project operating perspective + historical/forward-ingestion review
+
+**Commit:** `295d148`. Full suite: 825 passed, 0 failed.
+
+**Part I — the premise was significantly wrong; investigated and corrected, not implemented as asked.**
+Repository-grounded investigation (not assumption) found: project
+creation and document ingestion are the same atomic operation
+(`services/ingestion.py`'s `ingest_upload()` — there is no separate
+"New Project" step anywhere in the app, so several of the placement
+options this stage was asked to evaluate don't match real architecture).
+More importantly: a real, tested, working comparative-perspective
+mechanism **already exists** — `Participant`/`PerspectiveAssessment`/
+`ProjectWorkspace.represented_party_by` (`services/case_workspace.py`,
+CLAUDE-P12R/P17), explicitly documented in its own code as *"a personal
+setting... not a governed fact"*, per-reviewer and per-project, feeding
+real perspective-aware analysis in
+`services/requirement_investigation.py`, tested in
+`tests/test_perspective_tier.py`. This already correctly separates
+"comparative analytical perspective" from anything project-governing,
+exactly the distinction this stage asked for.
+
+What's actually missing — a **project-level governing** perspective
+("whose interests this whole project is configured to serve", set
+near creation, distinct from any one reviewer's personal setting) —
+has **no code anywhere**, but also has an existing, ratified
+specification: `governance/specified-unbuilt/perspective-and-contract-
+dna.md`'s "Create-Project/Pursuit UX flow" (Perspective as step 2),
+with an explicit guardrail that Perspective *"must never be stored as
+a field on governed data... first-class only at the
+application/authorization layer."* `governance/STATUS.md`'s
+authorization table marks this whole layer **NOT AUTHORIZED — specified
+only**. Implementing the governed version this stage's prompt described
+would mean building something this repository's own governance process
+has explicitly withheld authorization for — the same situation as the
+tenancy design work in CLAUDE-P27-B, handled the same way: documented,
+not implemented, pending a deliberate ratification act this session
+doesn't have standing to perform on the user's behalf. No new UI was
+added either — the existing "not represented yet" messaging
+(`templates/case_workspace.html`) was found adequate on inspection, not
+worth adding a redundant banner alongside.
+
+**Part II — several claimed historical-data gaps do not exist; the
+premise (a body of legacy data needing an advancement pipeline) does
+not match repository reality.** `tests/fixtures/nreocrc/` is a
+synthetic QA/capability-probe lab (same category as `tests/self_test/`),
+not historical customer data. Cedar Harbour is the one real local
+project and it's already on the current schema (its `workspace.json`
+already has `represented_party_by`/`perspective_assessments` as native
+keys). Specific claimed gaps checked directly against code and lab
+records: Markdown support — **resolved**
+(`services/bhive_parser.py`, code comment cites and resolves the exact
+concern); table-aware segmentation — **implemented and current**
+("Batch H", contradicts the claim it's absent); OPR-1 Row 20 — **already
+resolved**, independently re-confirmed in the lab's own adversarial
+comparison; `expected_provider` null — **not a defect**, just an unset
+optional field in a test script. One claimed gap **is** real and still
+open, confirmed directly against the lab record: **Row 14 ↔ 5.3
+cross-reference is missed** by the generic detector's design (only
+inspects a row's Notes column when Security Level also contains "/").
+Deliberately **not fixed this session** — this is the same fragile,
+adversarially-tuned consistency-check code this whole extended session
+has treated with extreme caution (CLAUDE-P16/P22/P23/P25/P26's own
+history shows small changes here need dedicated golden-suite validation,
+not a same-session fix folded into an unrelated stage). "Restricted
+Communications Sub-Zone" — searched, present in source material, not
+flagged as a gap anywhere in the lab's own exhaustive adversarial
+review; no evidence of a missed relationship.
+
+Given no concrete body of historical data actually needs migration
+right now, a full speculative historical-advancement pipeline
+(compatibility classes, quarantine states, lifecycle machinery) was
+**not built** — this would be exactly the kind of premature complexity
+`tools/dependency_fit.py`'s stance and this repository's demonstrated
+practice (see the tenancy precedent again) argue against building
+before a real admission queue exists.
+
+**What was implemented** (`295d148`, 6 new tests, all bounded and
+directly evidence-justified): `BHIVE_PARSER_VERSION` stamped on every
+new `ParsedDocument` (a confirmed real gap — nothing was ever
+versioned), following this file's own existing
+`CONSISTENCY_PROMPT_VERSION`/`INVESTIGATION_PROMPT_VERSION` convention;
+duplicate-content detection using `original_file_hash` (already
+computed on every ingestion, never actually checked against anything
+until now) — informational only, recorded in the governance log, not a
+hard block; the first dedicated test for `_reject_if_name_taken`
+(confirmed real and enforced, previously untested).
+
+**Next stage entry point:** none of this blocks anything. The tenancy
+design package remains the natural next stage pending its four open
+product decisions (unchanged from CLAUDE-P27-D). If perspective work is
+wanted next, the actual next step is a deliberate authorization
+decision on `governance/specified-unbuilt/perspective-and-contract-
+dna.md` (the same kind of decision the four tenancy questions need),
+not further investigation — the investigation is complete.
+
+---
+
 ## 2026-07-29 — CLAUDE-P27-D: system of record and AI collaboration route
 
 Governance/collaboration stage, not further hardening — no runtime code
