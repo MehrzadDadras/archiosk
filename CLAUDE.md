@@ -66,8 +66,8 @@ contradicts it.
 
 ## Testing
 
-Full suite: `./venv/Scripts/python.exe -m pytest -q` (currently 819
-tests, ~2min, though duration has occasionally spiked much higher for
+Full suite: `./venv/Scripts/python.exe -m pytest -q` (currently 1014
+tests, ~3-4min, though duration has occasionally spiked much higher for
 reasons unrelated to any specific code change — treat pass/fail as the
 signal, not wall-clock time). There is no CI here — this is the only gate, so run it
 before committing anything that touches `routes/`, `services/`, or
@@ -77,6 +77,24 @@ before committing anything that touches `routes/`, `services/`, or
 always updating that test's own selector list, not reverting the CSS —
 both tests assert against specific selector names, not against the
 design intent.
+
+**Hermetic tests — spy on external calls, don't let them run for real.**
+Any test path that can reach `ingest_upload`/`BHiveParser.parse` (or any
+other call to the Anthropic API, SMTP, or external networking) must
+replace that boundary with a deterministic spy/stub/fake, unless the
+test is deliberately, explicitly written and named as a live external-
+integration test. A CLAUDE-P31 test that skipped this once caused a
+single background test run to take **8.5 hours** (a real, un-mocked
+`ingest_upload` call hung against a live API in the sandbox). The
+established pattern (see `tests/test_security_enforcement.py` or
+`tests/test_project_access_control.py`'s own `_ingest` helpers):
+`unittest.mock.patch.object(BHiveParser, "parse", fake_parse)` where
+`fake_parse` returns a plain `ParsedDocument` directly, never calling
+the real extract/classify/consistency-check pipeline. `config.py`'s
+`ANTHROPIC_API_KEY` class attribute is fixed at first import, before
+`app.py`'s own testing-mode env-clearing runs — do not assume
+`create_app("testing")` alone makes a test hermetic against a real key
+present in `.env`.
 
 When testing the live app through a browser, **always start from the
 sign-in page**, never mid-session — a stale session cookie can carry
