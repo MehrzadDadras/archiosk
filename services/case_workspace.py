@@ -2377,6 +2377,19 @@ class ProjectWorkspace:
     case_outcomes: list[dict] = field(default_factory=list)  # CLAUDE-P11 - see CaseOutcome
     participants: list[dict] = field(default_factory=list)  # CLAUDE-P12R - see Participant
     go_no_go_assessments: list[dict] = field(default_factory=list)  # CLAUDE-P30 - see GoNoGoAssessment
+
+    # CLAUDE-P31: this project's Security Profile (services.security_policy.
+    # INFORMATION_CLASSIFICATIONS) -- unlike operating_environment, NOT
+    # locked forever: policy legitimately changes over a project's life
+    # (Part XIV), so this is re-settable, but every change is logged via
+    # set_project_security_profile's own governance_log event (previous
+    # value never silently lost). Defaults None -- a project with no
+    # profile set is evaluated with profile_decision=None everywhere (see
+    # services.security_policy.evaluate_action), i.e. governed purely by
+    # the organization baseline/floor, never a fabricated default profile.
+    security_profile: Optional[str] = None
+    security_profile_set_by: Optional[str] = None
+    security_profile_set_at: Optional[str] = None
     perspective_assessments: list[dict] = field(default_factory=list)  # CLAUDE-P12R - see PerspectiveAssessment
     # Per-reviewer "who do I represent in this Project" (username ->
     # participant_id) - same personal/display-only shape as
@@ -3256,6 +3269,40 @@ class CaseWorkspaceStore:
 
     def go_no_go_assessments_for_project(self, workspace: ProjectWorkspace) -> list[dict]:
         return list(workspace.go_no_go_assessments)
+
+    def set_project_security_profile(
+        self, workspace: ProjectWorkspace, security_profile: str, actor: str,
+        governance_log: Optional[GovernanceLog] = None,
+    ) -> ProjectWorkspace:
+        """
+        CLAUDE-P31: unlike set_operating_environment, this is NOT a
+        one-time lock -- a project's security classification legitimately
+        changes as policy or the project's own content changes (Part
+        XIV). Every change is still fully accountable: the previous value
+        is always captured in the logged event before being overwritten,
+        never silently lost, and this remains the single method that
+        ever writes this field (same "one gate" discipline as every
+        other governed field in this store, just without the
+        already-set-forever refusal).
+        """
+        from services.security_policy import is_valid_classification
+
+        if not is_valid_classification(security_profile):
+            raise ValueError(f"{security_profile!r} is not a recognized security profile.")
+
+        previous_profile = workspace.security_profile
+        workspace.security_profile = security_profile
+        workspace.security_profile_set_by = actor
+        workspace.security_profile_set_at = _now()
+        self.save(workspace)
+
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id, event_type="security_profile_set",
+                actor=actor, role="system",
+                payload={"previous_profile": previous_profile, "security_profile": security_profile},
+            )
+        return workspace
 
     # -- lookups -------------------------------------------------------------
 
