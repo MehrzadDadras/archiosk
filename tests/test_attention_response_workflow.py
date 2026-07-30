@@ -49,6 +49,15 @@ class AttentionResponseWorkflowTests(unittest.TestCase):
             sess["username"] = "other-user"
             sess["role"] = "read_only"
 
+        # CLAUDE-P32: project-level access is a new precondition both
+        # sessions need before this class's real subject (Attention/
+        # thread Resolve-Reopen) can be exercised -- see
+        # tests/test_case_privacy.py's identical setUp comment.
+        store = self._store()
+        workspace = store.get_or_create(self.project_id)
+        store.set_project_owner(workspace, owner="owner1", actor="owner1")
+        store.grant_project_access(workspace, username="other-user", actor="owner1", actor_role="read_only")
+
     def tearDown(self):
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
 

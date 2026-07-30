@@ -248,6 +248,22 @@ class CasePrivacyRouteTests(unittest.TestCase):
         document = ParsedDocument(project_id=self.project_id, filename="rfp.md", ingested_at="2026-01-01T00:00:00+00:00")
         RequirementsRegistry(self.tmp_dir).save(document)
 
+        # CLAUDE-P32: this whole test class's subject is CASE-level
+        # privacy (owner1's Private Case vs. other-user, both already
+        # authenticated users of the same project) -- project-LEVEL
+        # access is a new, separate precondition these two sessions now
+        # both need satisfied first, or every request below would 404
+        # before ever reaching the Case-privacy logic being tested. Set
+        # directly at the store layer (not through the admin-only HTTP
+        # routes, which additionally validate against a real User row
+        # neither "owner1" nor "other-user" has here) -- exactly the
+        # access shape this test class's own name already assumes: both
+        # sessions may open the project, only Case visibility differs.
+        store = CaseWorkspaceStore(self.tmp_dir)
+        workspace = store.get_or_create(self.project_id)
+        store.set_project_owner(workspace, owner="owner1", actor="owner1")
+        store.grant_project_access(workspace, username="other-user", actor="owner1", actor_role="read_only")
+
     def tearDown(self):
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
 

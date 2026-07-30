@@ -97,7 +97,7 @@ class _BaseSecurityTestCase(unittest.TestCase):
             with self.flask_app.app_context():
                 return ingest_upload(
                     _fake_file(b"content", "a.txt"), self.flask_app,
-                    operating_environment=operating_environment, project_name=project_name,
+                    operating_environment=operating_environment, owner="sec_test_admin", project_name=project_name,
                 )
 
     def _activate_baseline_with(self, action_id: str, decision: str) -> None:
@@ -134,7 +134,7 @@ class ExternalAIGateWiringTests(_BaseSecurityTestCase):
             with self.flask_app.app_context():
                 document = ingest_upload(
                     _fake_file(b"content", "a.txt"), self.flask_app,
-                    operating_environment=CLIENT_OWNER, project_name=project_name,
+                    operating_environment=CLIENT_OWNER, owner="sec_test_admin", project_name=project_name,
                 )
         return document, captured
 

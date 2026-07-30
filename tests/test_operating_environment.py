@@ -73,7 +73,7 @@ class _BaseWorkspaceTestCase(unittest.TestCase):
         with self.flask_app.app_context():
             return ingest_upload(
                 _fake_file(content, filename), self.flask_app,
-                operating_environment=environment, project_name=project_name,
+                operating_environment=environment, owner="env_admin", project_name=project_name,
             )
 
     def _ingest_via_route(self, content: bytes, filename: str, environment: str | None, project_name: str):

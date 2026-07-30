@@ -77,7 +77,7 @@ class _BaseAssuranceTestCase(unittest.TestCase):
             with self.flask_app.app_context():
                 return ingest_upload(
                     _fake_file(b"content", "a.txt"), self.flask_app,
-                    operating_environment=CLIENT_OWNER, project_name=project_name,
+                    operating_environment=CLIENT_OWNER, owner="assurance_test_owner", project_name=project_name,
                 )
 
 

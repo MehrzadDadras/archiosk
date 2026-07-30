@@ -92,7 +92,7 @@ class _BaseWorkspaceTestCase(unittest.TestCase):
         with self.flask_app.app_context():
             return ingest_upload(
                 _fake_file(content, filename), self.flask_app,
-                operating_environment=environment, project_name=project_name,
+                operating_environment=environment, owner="cap_admin", project_name=project_name,
             )
 
     def _make_finding_with_validation(self, project_id: str, case_title: str = "Cap Test Case"):

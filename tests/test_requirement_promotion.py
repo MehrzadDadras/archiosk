@@ -241,6 +241,10 @@ class RequirementRouteWiringTests(unittest.TestCase):
                 "requirement_count": 1, "milestone_count": 0,
             },
         )
+        # CLAUDE-P32: single-session fixture -- see
+        # tests/test_case_privacy.py's setUp comment for the general
+        # reasoning (only an owner needed here, no second session).
+        store.set_project_owner(workspace, owner="tester", actor="tester")
         self.source_id = workspace.sources[0]["id"]
         # created_by must match the session these tests actually act as
         # ("tester") - an ownerless private Case is invisible to everyone

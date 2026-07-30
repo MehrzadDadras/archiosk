@@ -53,6 +53,17 @@ class RFIDraftExportTests(unittest.TestCase):
             sess["username"] = "other-user"
             sess["role"] = "read_only"
 
+        # CLAUDE-P32: see tests/test_case_privacy.py's identical setUp
+        # comment. register_document_source is required (unlike that
+        # file) because _rfq_source_id below relies on the
+        # auto-registered rfq_rfp_document Source.
+        from services.ingestion import document_source_payload
+
+        store = self._store()
+        workspace = store.get_or_create(self.project_id, register_document_source=document_source_payload(document))
+        store.set_project_owner(workspace, owner="owner1", actor="owner1")
+        store.grant_project_access(workspace, username="other-user", actor="owner1", actor_role="read_only")
+
         self.case = self._create_case(self.owner_client)
         self.finding_id = self._create_validated_finding(self.case["id"], "Beam undersized per drawing S-101.")
 

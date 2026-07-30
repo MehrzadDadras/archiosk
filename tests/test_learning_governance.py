@@ -191,7 +191,12 @@ class QualityRatingDoesNotImplyTrainingConsentTests(unittest.TestCase):
         # check above: recording a "Correct" validation must not create
         # any LearningContributionRequest anywhere.
         import io
+        import uuid
+        from datetime import datetime, timezone
+        from unittest.mock import patch
+
         import app as app_module
+        from services.bhive_parser import BHiveParser, ParsedDocument
         from services.case_workspace import AnalysisTrigger, CaseWorkspaceStore
         from services.environment_capabilities import CLIENT_OWNER
         from services.ingestion import ingest_upload
@@ -201,11 +206,23 @@ class QualityRatingDoesNotImplyTrainingConsentTests(unittest.TestCase):
         try:
             flask_app = app_module.create_app("testing")
             flask_app.config["REGISTRY_STORE_PATH"] = str(tmp_dir)
-            with flask_app.app_context():
-                document = ingest_upload(
-                    FileStorage(stream=io.BytesIO(b"content"), filename="a.txt"), flask_app,
-                    operating_environment=CLIENT_OWNER, project_name="Quality No Training",
+
+            # CLAUDE-P32: deterministic, network-independent -- see
+            # tests/test_security_enforcement.py's own spy pattern and
+            # the CLAUDE-P31 8.5-hour live-API incident this convention
+            # exists to prevent.
+            def fake_parse(self_parser, raw_bytes, filename):
+                return ParsedDocument(
+                    project_id=str(uuid.uuid4()), filename=filename,
+                    ingested_at=datetime.now(timezone.utc).isoformat(), parser_version="test",
                 )
+
+            with patch.object(BHiveParser, "parse", fake_parse):
+                with flask_app.app_context():
+                    document = ingest_upload(
+                        FileStorage(stream=io.BytesIO(b"content"), filename="a.txt"), flask_app,
+                        operating_environment=CLIENT_OWNER, owner="reviewer1", project_name="Quality No Training",
+                    )
             store = CaseWorkspaceStore(tmp_dir)
             workspace = store.get(document.project_id)
             case = store.create_case(workspace, title="Case", objective="x", created_by="reviewer1")

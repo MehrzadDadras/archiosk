@@ -34,6 +34,7 @@ from pathlib import Path
 
 from services.bhive_parser import ParsedDocument
 from services.case_workspace import AnalysisTrigger, CaseWorkspaceStore
+from services.ingestion import document_source_payload
 from services.requirements_registry import RequirementsRegistry
 
 
@@ -60,6 +61,16 @@ class RouteAuthorizationHardeningTests(unittest.TestCase):
             sess["user_id"] = 2
             sess["username"] = "other-user"
             sess["role"] = "read_only"
+
+        # CLAUDE-P32: this class's whole subject is Case-scoped route
+        # spoofing between two authenticated sessions that both need to
+        # be able to open the project at all -- see
+        # tests/test_case_privacy.py's own identical setUp comment for
+        # the full reasoning.
+        store = CaseWorkspaceStore(self.tmp_dir)
+        workspace = store.get_or_create(self.project_id, register_document_source=document_source_payload(document))
+        store.set_project_owner(workspace, owner="owner1", actor="owner1")
+        store.grant_project_access(workspace, username="other-user", actor="owner1", actor_role="read_only")
 
     def tearDown(self):
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
