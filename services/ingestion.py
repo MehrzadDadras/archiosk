@@ -20,6 +20,8 @@ from services.bhive_parser import BHiveParser, ParsedDocument, ParserError
 from services.case_workspace import CaseWorkspaceStore
 from services.governance import GovernanceLog
 from services.requirements_registry import RequirementsRegistry
+from services.security_governance import SecurityGovernanceStore
+from services.security_policy import ACTION_EXTERNAL_AI_REQUEST, DECISION_ALLOW, DECISION_ALLOW_APPROVED_ROUTE, evaluate_action
 
 # This app has no authentication system, so there's no real identity to
 # fall back on. These are honest placeholders, not a claim that anyone
@@ -172,6 +174,32 @@ def ingest_upload(
         anthropic_api_key=app.config.get("ANTHROPIC_API_KEY"),
         model=app.config.get("ANTHROPIC_MODEL"),
     )
+
+    # CLAUDE-P31: the one real enforcement point for "external_ai_request"
+    # -- no project exists yet at this moment (this function is the one
+    # and only project-creation path), so only the organization-wide
+    # baseline/exception apply here, never a project security profile.
+    # Reuses BHiveParser's own pre-existing, already-tested kill switch
+    # (self.ai_calls_disabled, CLAUDE-P27-B's AI_CALLS_DISABLED env var)
+    # rather than adding a second, parallel gate inside bhive_parser.py
+    # itself -- both classify() and _check_consistency() already degrade
+    # to their existing rule-based/skipped fallback whenever this flag is
+    # set, so denying here changes zero lines inside that module.
+    security_store = SecurityGovernanceStore(app.config["REGISTRY_STORE_PATH"])
+    security_record = security_store.get()
+    active_baseline = security_store.active_baseline(security_record)
+    ai_decision = evaluate_action(
+        ACTION_EXTERNAL_AI_REQUEST,
+        baseline_decision=(
+            active_baseline["control_decisions"].get(ACTION_EXTERNAL_AI_REQUEST, {}).get("decision")
+            if active_baseline else None
+        ),
+        baseline_version_id=active_baseline["id"] if active_baseline else None,
+        active_exception=security_store.active_exception_for(security_record, ACTION_EXTERNAL_AI_REQUEST),
+    )
+    if ai_decision.decision not in (DECISION_ALLOW, DECISION_ALLOW_APPROVED_ROUTE):
+        parser.ai_calls_disabled = True
+
     try:
         document = parser.parse(raw_bytes, filename)
     except ParserError as exc:
@@ -210,6 +238,24 @@ def ingest_upload(
             "requirement_count": len(document.requirements),
             "milestone_count": len(document.milestones),
             "duplicate_of_project_id": duplicate_of_project_id,
+        },
+    )
+    # CLAUDE-P31: an audit event for the security decision itself,
+    # regardless of outcome -- "denied actions generate audit events"
+    # (Part XVII), and equally, an ALLOW decision is recorded so a
+    # future self-check can distinguish "external AI ran with no
+    # applicable policy" from "external AI ran and nothing was ever
+    # evaluated at all."
+    governance_log.append(
+        project_id=document.project_id,
+        event_type="security_decision",
+        actor=actor or _DEFAULT_ACTOR,
+        role="system",
+        payload={
+            "action_id": ai_decision.action_id,
+            "decision": ai_decision.decision,
+            "controlling_layer": ai_decision.controlling_layer,
+            "baseline_version_id": ai_decision.baseline_version_id,
         },
     )
 

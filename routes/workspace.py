@@ -224,6 +224,63 @@ def _require_capability(workspace, capability_id: str, project_id: str, case_id=
     return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
 
 
+def _evaluate_security_action(workspace, action_id: str):
+    """
+    CLAUDE-P31: the one route-layer entry point into
+    services.security_policy.evaluate_action for this project -- looks
+    up the active organization baseline/exception plus this project's
+    own security_profile classification, then resolves them exactly the
+    same way services/ingestion.py's ingestion-time gate already does
+    (the two share the resolver, not the lookup boilerplate, but the
+    boilerplate itself is short enough that duplicating the four lookup
+    lines here was judged clearer than a shared helper needing a Flask
+    app-context parameter threaded through services/ingestion.py too).
+    """
+    from services.security_governance import SecurityGovernanceStore
+    from services.security_policy import evaluate_action, profile_decision_for
+
+    security_store = SecurityGovernanceStore(current_app.config["REGISTRY_STORE_PATH"])
+    security_record = security_store.get()
+    active_baseline = security_store.active_baseline(security_record)
+    return evaluate_action(
+        action_id,
+        classification=workspace.security_profile,
+        baseline_decision=(
+            active_baseline["control_decisions"].get(action_id, {}).get("decision")
+            if active_baseline else None
+        ),
+        baseline_version_id=active_baseline["id"] if active_baseline else None,
+        profile_decision=profile_decision_for(workspace.security_profile, action_id),
+        active_exception=security_store.active_exception_for(
+            security_record, action_id, project_id=workspace.project_id,
+        ),
+    )
+
+
+def _require_export_allowed(workspace, project_id: str):
+    """
+    Returns None if export should proceed, or a redirect (flashed
+    denial, naming the controlling policy layer per Part VIII's
+    user-facing-notice requirement) if it must not. DECISION_ALLOW and
+    DECISION_ALLOW_APPROVED_ROUTE both proceed (this stage has no
+    separate "approved route" UI step to gate behind -- an activated
+    exception already IS that approved route, see
+    services.security_governance.SecurityGovernanceStore.grant_exception);
+    everything else (REQUIRE_APPROVAL/ISOLATE/DENY/UNSUPPORTED) blocks.
+    """
+    from services.security_policy import ACTION_EXPORT, DECISION_ALLOW, DECISION_ALLOW_APPROVED_ROUTE
+
+    decision = _evaluate_security_action(workspace, ACTION_EXPORT)
+    if decision.decision in (DECISION_ALLOW, DECISION_ALLOW_APPROVED_ROUTE):
+        return None
+    flash(
+        f"Export is not available for this project under its current security policy "
+        f"({decision.reason}). Decision: {decision.decision.replace('_', ' ')}.",
+        "error",
+    )
+    return redirect(url_for("workspace.show_workspace", project_id=project_id))
+
+
 # -- Approval Gate ---------------------------------------------------------------
 
 def _is_approved_for_session(action_class: str) -> bool:
@@ -2551,6 +2608,9 @@ def export_rfi_draft(project_id, draft_id):
     _, store, workspace = _load_workspace_or_404(project_id)
     case_id = _rfi_draft_case_id(workspace, draft_id)
     _require_visible_case(store, workspace, case_id)
+    export_gate = _require_export_allowed(workspace, project_id)
+    if export_gate is not None:
+        return export_gate
 
     draft = next((d for d in workspace.rfi_drafts if d["id"] == draft_id), None)
     if draft is None:
@@ -2627,6 +2687,10 @@ def export_rfi(project_id):
     environment_label = (
         OPERATING_ENVIRONMENT_LABELS.get(workspace.operating_environment) if workspace else None
     )
+    if workspace is not None:
+        export_gate = _require_export_allowed(workspace, project_id)
+        if export_gate is not None:
+            return export_gate
 
     try:
         buffer = build_rfi_docx(document, operating_environment_label=environment_label)
