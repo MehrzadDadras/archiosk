@@ -1,5 +1,115 @@
 # Continuation checkpoint
 
+## 2026-07-30 — CLAUDE-P32: project-level access control and isolation gate
+
+**Commits:** `61b0bf5` (domain/service-layer access-control model),
+`7262c67` (route/UI wiring and bypass closures), `fdd708a` (existing
+test-fixture updates), `831fe4b` (41 new tests), `e83ac25` (governance
+amendment + CLAUDE.md hermetic-test note + MANIFEST). Full suite: 1014
+passed, 0 failed (973 from CLAUDE-P31 + 41 new in
+`tests/test_project_access_control.py`).
+
+**Preceded by a repository reassessment (accepted as the working
+scope), then a hard-stop.** Investigation confirmed CLAUDE-P27's own
+flagged gap -- any authenticated user could open any project by
+guessing its `project_id` -- was still open after P29/P30/P31 each
+built locked-environment/capability/security-governance machinery on
+top of it. Before writing code, `tests/test_case_privacy.py`'s
+`CasePrivacyRouteTests` and `tests/test_route_authorization_hardening.py`
+were found to be built on two genuinely different authenticated
+sessions both reaching the *same* project (Case-level privacy, not
+project-level access, is what each actually verifies) -- a deny-by-
+default owner/allow-list model would flip dozens of their assertions.
+Presented as a real product decision rather than resolved unilaterally;
+the user chose deny-by-default with the two ratified suites' fixtures
+(not assertions) updated to grant both sessions access first.
+
+**What was built.** `services/project_access.py`'s `can_access_project`
+is the single centralized decision (admin always passes; otherwise
+`owner == username` or `username in access_allow_list`; `owner is None`
+fails **closed**, admin-only -- the deliberate opposite of every other
+None-means-ungated field in this codebase, since no project-level
+check existed before this tranche to preserve compatibility with).
+Enforced at `routes/workspace.py`'s `_load_workspace_or_404` (AST-
+verified 47 of 50 routes already funneled through it; `export_rfi`,
+the one exception, was refactored to use it too), `routes/api.py`'s
+new `_load_authorized_project_or_404` (6 routes) plus a filtered
+`GET /documents`, and `routes/portal.py`'s `_accessible_documents`/
+`_require_project_access_or_404` (`/`, `/projects`, `/search`,
+`/dashboard/<id>`, `/projects/<id>/delete`).
+
+**A genuinely new bypass found mid-implementation, not on the original
+list.** `app.py`'s `_nav_recent_projects` -- the side-rail's project
+list, rendered on **every** authenticated page including error pages
+via the global `inject_globals` context processor -- listed every
+project's display name completely unfiltered. Confirmed live: a denied
+project's own name was still visible in the nav rail on the very 404
+page proving access to it was denied. Fixed, and filtered before its
+display cap so the sidebar isn't under-filled by capping first.
+
+**Owner/allow-list, explicitly not tenancy.** `ProjectWorkspace.owner`/
+`access_allow_list` (new fields). `owner` is deliberately re-settable
+(admin-only, unlike `operating_environment`'s hard lock -- a wrong
+backfill must be recoverable). `grant_project_access`/
+`revoke_project_access` reuse `archive_case`/`derive_case`'s own
+owner-or-admin authority pattern exactly. `services/ingestion.py`'s
+`ingest_upload` gained a required `owner` parameter, deliberately
+separate from the pre-existing free-text `actor` field -- confirmed by
+real repository evidence (`actor` values like `"Mehrzad Dadras, Design
+Manager"`, never validated against any account) that reusing `actor`
+would have been a real spoofing vector. `owner` is sourced from
+`session['username']` at both real call sites, never user-suppliable
+form data -- verified through the real `/upload` route with a
+deliberately mismatched `actor` field to prove the two stay separate.
+
+**Legacy-project backfill, deterministic only.** A pre-P32 project's
+own first `document_ingested` event's `actor` is checked for an EXACT
+match against a real `models.User.username`. Checked against this
+repository's own real local `instance/registry/` data: 3 of 6 existing
+projects were ingested by the real `workspacetester` account
+(backfillable); the other 3 have free-text actors (`"agent1"`,
+`"agent2"`, a human display name) with no matching account and stay
+unowned/admin-only rather than guessed.
+
+**A real, pre-existing, unrelated defect surfaced, not introduced, by
+this stage's own verification.** At least one project in this
+repository's actual local `instance/registry/` has an on-disk workspace
+JSON with a `'reviews'` key `ProjectWorkspace(**data)` no longer
+accepts -- invisible before this stage because nothing previously
+iterated every project's workspace on every page load. `app.py` and
+`routes/portal.py`'s new listing-filter code now fail closed (exclude,
+don't crash) on this, restoring `_nav_recent_projects`'s own pre-
+existing defensive-degradation guarantee, which a first pass at the
+filtering fix had briefly dropped before the full suite caught it.
+
+**Manual two-user, two-project isolation check: passed.** Reproduced
+live (not only via the automated suite): two real sessions, two real
+projects, direct HTTP requests -- owner opens their own project (200),
+a second unauthorized user is denied (404) on the workspace page, the
+API, and export; the same denial applies to a directly guessed real
+`project_id`; grant/revoke toggles access live; admin opens both
+regardless of ownership.
+
+**Deliberately not built this stage:** separate read/write project-
+level permissions (the existing `admin`/`read_only` role axis is
+unchanged and still governs in-project actions -- exceeding this would
+have gone beyond the bounded objective); any `services/case_workspace.py`
+decomposition (P32's own additions were kept as small, clearly-tagged
+insertions specifically so a future decomposition isn't made harder);
+an ownership-transfer UI beyond the existing admin reassignment route;
+anything resembling `Organization`/`OrganizationMembership` (still
+unimplemented, still a distinct future stage).
+
+**Security claims boundary.** Now supportable: "authenticated project
+access is restricted to explicitly authorized users within this
+deployment." Still not claimed: multi-organization tenant isolation,
+complete organization isolation -- unchanged from CLAUDE-P31's
+`SECURITY_CLAIMS_REGISTRY`, this stage added no new claim rows, only
+made the existing "project authorization vs. tenancy" distinction
+concretely true in code rather than aspirational.
+
+---
+
 ## 2026-07-30 — CLAUDE-P31: organizational security and information governance (bounded foundation)
 
 **Commits:** `7aa1bea` (domain/service-layer security governance foundation),
