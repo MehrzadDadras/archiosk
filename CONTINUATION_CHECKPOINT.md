@@ -1,5 +1,57 @@
 # Continuation checkpoint
 
+## 2026-07-31 — CLAUDE-P40-D2: the view-persistence boundary
+
+**Commit:** `4c7a452`. Full suite: 1242 passed (was 1231).
+
+The unfinished part of P40-D: `show_workspace`'s `last_viewed_by`
+tracking called `store.save(workspace)` on every ordinary Project Home
+GET, and `save()`'s `json.dumps(asdict(workspace))` serializes the
+COMPLETE in-memory dataclass - so viewing a legacy record silently
+persisted P40-C's backfilled Case visibility, P40-D's `reviews` ->
+`legacy_reviews` rename, AND every other dataclass field's default
+value that was never in the original file, purely as a byproduct of a
+read. An isolated route-level reproduction (real Flask test client
+against isolated copies) proved it: a single GET on a legacy record
+changed 21-60 fields, not the one `last_viewed_by` entry it was
+supposed to record.
+
+**Fix:** `CaseWorkspaceStore.record_last_viewed(workspace, reviewer)`
+replaces that `save()` call - patches only `last_viewed_by` directly
+into the raw on-disk JSON, never through
+`ProjectWorkspace(**data)`/`asdict(workspace)`, and deliberately never
+reads/bumps `version` (view metadata has no governance meaning and was
+never a structural write). Re-verified on fresh isolated copies of
+both previously-affected records plus all 19 real persisted projects
+(copied into an isolated corpus): after the fix, exactly one field
+changes per GET, stable across repeated views, across the whole corpus.
+
+**Real-world finding, disclosed honestly:** fingerprinting the real
+`eece5c88...` (the ownerless Reviews-era project) at the start of this
+stage found it no longer matched its P40-D preservation copy - between
+P40-D's own handoff and this stage starting, someone (almost certainly
+the product owner, following P40-D's own instruction to open it as
+administrator) opened it for real, hitting the still-unfixed bug this
+stage closes. Its `reviews` key was renamed to `legacy_reviews` (both
+review entries - decision/reviewer/note/timestamps - fully preserved,
+byte-for-byte, just under the renamed key) and its owner was set to
+`workspacetester` via the pre-existing, legitimate, already-governed
+`ensure_owner_backfilled` mechanism (a real `project_owner_set`
+governance event, deterministic exact-match against the original
+ingestion actor - unrelated to and not weakened by this stage). Per
+this stage's own explicit instruction for `probe_rfq.txt`'s prior
+one-time normalization, this was NOT reverted - reverting would itself
+be the "manually correct a real project record" action this whole
+CLAUDE-P40 series has consistently refused to do. Recorded here as a
+second, now-closed one-time normalization: no further view of this or
+any other project will do this again.
+
+See this stage's own final report (delivered in-conversation) for the
+full before/after field classification, the isolated 19-project route
+sweep result, and the live-server fingerprint sequence.
+
+---
+
 ## 2026-07-31 — CLAUDE-P40-D1: authentication-surface isolation
 
 **Commit:** `4190ee0`. Full suite: 1231 passed (was 1214).
