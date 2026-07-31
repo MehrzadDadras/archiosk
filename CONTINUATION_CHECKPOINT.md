@@ -1,5 +1,104 @@
 # Continuation checkpoint
 
+## 2026-07-31 — CLAUDE-P40-C: legacy record compatibility, P40-B regression audit, safe failure containment, debugger elimination
+
+**Commits:** `87869e8` (legacy Case-visibility compatibility fix),
+`208601e` (safe failure containment + debugger elimination). Full
+suite: 1200 passed (was 1177).
+
+A real incident: opening a legacy project (Cases predating commit
+`04fc14a`, "Implement Case visibility") crashed with `KeyError:
+'visibility'`, and because `python app.py` unconditionally passed
+`debug=True` to Flask, the resulting traceback page exposed Werkzeug's
+interactive debugger and a PIN prompt - a real security defect, not
+just a compatibility bug.
+
+**Forensic causation, established from repository evidence, not
+inference:** reproduced the identical crash via an isolated worktree
+at the exact P40-B baseline (`4f97a6b`) and at final `448fe2d`,
+replaying the same preserved copy of the affected record at both
+points - byte-identical failure. `git diff` across the full P40-B
+range confirms `visible_cases_for`, `show_workspace`'s early lines,
+and every sidebar-listing file (`routes/portal.py`, `app.py`,
+`templates/base.html`) were untouched by any P40-B commit.
+**Classification: pre-existing and independently discovered, not
+caused or exposed by P40-B.** `visible_cases_for`'s docstring itself
+identifies it as a "ratified governance baseline," present since Case
+visibility was first introduced - the crash has been latent for any
+project with Cases older than that commit for as long as it has
+existed.
+
+**Compatibility fix:** `CaseWorkspaceStore.get()` (the single,
+centralized `ProjectWorkspace(**data)` construction site in this
+codebase) now hydrates a missing `visibility` key to
+`CASE_VISIBILITY_SHARED` - deliberately not `PRIVATE` (would
+retroactively impose a restriction the data was never subject to when
+created - not "failing closed," inventing a new restriction) and not
+`COLLABORATIVE` (falsely asserts genuine collaboration occurred,
+Constitutional Invariant 12). One centralized fix, not fourteen
+scattered patches - verified directly that it also resolves the
+identical unguarded `case["visibility"]` access in `share_case`,
+`retract`, `archive`, and `derive`. Project-level authorization
+(`can_access_project`, P32's deny-by-default owner/allow-list/admin
+gate) is completely unaffected - this only ever runs on
+`workspace.cases`, reachable only after project access is already
+granted.
+
+**Security fix:** `app.py`'s `python app.py` entrypoint no longer
+passes `debug=True` unconditionally - that literal overrode
+`app.config['DEBUG']` entirely regardless of `.env`/`FLASK_ENV`, and
+also explains why the incident bypassed the already-built, already-safe
+`@app.errorhandler(500)` page (Flask only routes to registered error
+handlers when `app.debug` is `False`). The reloader (a genuinely used
+dev convenience) stays on; the interactive debugger is now off by
+default, requiring both a narrow exact-match opt-in
+(`ARCHIOSK_ENABLE_DEBUGGER == "1"`) and an explicit development
+environment (`FLASK_ENV == "development"`) together - extracted into
+`_interactive_debugger_enabled()` specifically so this is directly
+testable, not just readable as source. `wsgi.py` (Gunicorn's real
+production entrypoint) now hard-codes `create_app("production")`
+rather than resolving via `FLASK_ENV` - found during this stage's own
+audit that this repo's own `.env` sets `FLASK_ENV=development`, which
+would otherwise leave the production entrypoint's config resolution
+dependent on whatever a deployed `.env` happens to contain.
+
+**Verified:** an unhandled exception induced via test instrumentation,
+in a genuinely production-like configuration (`DEBUG=False`,
+`TESTING=False` - not the hermetic unit-test config, which itself sets
+`TESTING=True`), now returns the existing safe generic error page for
+HTML routes and a clean JSON envelope for `/api/v1/` routes, with the
+full traceback logged server-side only. Live-server validation (real
+HTTP requests against the actual running `python app.py` process, the
+same entrypoint the incident used): the authorized owner/admin opens
+the exact affected route successfully; an authenticated-but-
+unauthorized user is denied (404); the record's `.json`
+(extraction) and `.governance.jsonl` (audit log) files remain
+byte-identical before and after. The `.workspace.json` file's content
+does change after live authorized access - honestly disclosed, not
+hidden: `show_workspace` already calls `store.save(workspace)`
+unconditionally on every Project Home view, to record
+`last_viewed_by` - a real, pre-existing mechanism, unrelated to and
+unchanged by this fix, that already wrote on every view before this
+fix existed; the hydrated `visibility` field is naturally captured by
+that already-happening write, adding exactly one key and changing no
+id, text, or other field.
+
+**Bounded audit, not broadened:** reviewed the complete P40-B-touched
+surface for the same class of legacy-record assumption - found none
+(every P40-B-introduced field is additive/Optional with safe
+defaults). A read-only smoke pass across all 19 persisted projects
+found exactly one other, structurally different legacy defect
+(`TypeError: ProjectWorkspace.__init__() got an unexpected keyword
+argument 'reviews'` on a different project, from an obsolete field
+name rather than a missing one) - explicitly deferred as a different
+root cause outside this incident's scope, not fixed here.
+
+See this stage's own final report (delivered in-conversation) for the
+full commit-level audit table, the before/after fingerprint proof, and
+the ranked deferred items.
+
+---
+
 ## 2026-07-31 — CLAUDE-P40-B: product-owner browser defect closure and first-use trust repair
 
 **Commits:** `27a2a03` (Batch A: truthful controls/copy), `045fc27`
