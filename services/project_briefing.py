@@ -145,31 +145,57 @@ def deterministic_sections(candidate_requirements: list[dict], milestones: list[
     generate_project_briefing's real synthesis above: a caller with no
     AI access at all still gets this much, honestly.
 
-    `reading_path` orders categories into the practical sequence a
-    reviewer would want (objectives/scope -> technical -> financial ->
-    dates -> evaluation -> other), each entry carrying enough of the
-    real item to be useful and, where the item has a source_line, a
-    citation - never a synthetic "location" this module can't back up
-    (no in-browser line-anchored source viewer exists yet; callers link
-    to the Source's own file instead).
+    `reading_path` is deliberately curated, not a dump of every raw
+    category with its count (CLAUDE-P38-C: the browser retest found
+    "Other extracted items (917)" and "Compliance and legal (210)"
+    presented as the primary reading route - a category total is not a
+    document section, and 'other'/'compliance_legal' specifically carry
+    no real navigational meaning). Only categories with real, human-
+    meaningful reading value are included, in a practical order,
+    capped at 8-10 entries; 'other' and 'compliance_legal' are never
+    part of this route (their items still exist and are still
+    reachable through the full Requirements register - this only
+    changes what's offered as a SUGGESTED route).
+
+    Technical/Financial/Key Dates are each additionally filtered
+    through a bounded exclusion/inclusion pass (_qualifies_as_technical/
+    _qualifies_as_financial/_qualifies_as_key_date, below) - the same
+    "narrow, high-precision pattern, not a classifier rewrite"
+    discipline CLAUDE-P38 OBS-09's cover-page-metadata filter already
+    established. An item the filter is unsure about is left OUT of the
+    curated/preview lists (never included on a guess) but never
+    deleted - `technical_submission_items`/`financial_submission_items`
+    /`key_dates` are the FILTERED lists; the raw, unfiltered candidate
+    set remains fully visible in the ordinary Requirements section this
+    module doesn't touch.
     """
     by_category: dict[str, list[dict]] = {}
     for item in candidate_requirements:
         by_category.setdefault(item.get("category", "other"), []).append(item)
 
+    technical_items = [
+        item for item in (by_category.get("technical_specification", []) + by_category.get("submission_instruction", []))
+        if _qualifies_as_technical(item.get("text", ""))
+    ]
+    financial_items = [
+        item for item in by_category.get("budget_commercial", [])
+        if _qualifies_as_financial(item.get("text", ""))
+    ]
+    key_dates = [
+        item for item in milestones
+        if _qualifies_as_key_date(item.get("label", ""))
+    ]
+
     reading_order = [
-        ("scope_of_work", "Project purpose, objectives, and scope"),
-        ("technical_specification", "Technical Submission"),
-        ("submission_instruction", "Submission instructions"),
-        ("budget_commercial", "Financial Submission"),
-        ("schedule_milestone", "Dates and milestones"),
-        ("evaluation_criteria", "Evaluation and demonstrations"),
-        ("compliance_legal", "Compliance and legal"),
-        ("other", "Other extracted items"),
+        ("scope_of_work", "Project purpose, objectives, and scope", by_category.get("scope_of_work", [])),
+        ("submission_instruction", "Submission Requirements", by_category.get("submission_instruction", [])),
+        ("technical_specification", "Technical Submission", technical_items),
+        ("budget_commercial", "Financial Submission", financial_items),
+        ("schedule_milestone", "Key Dates and Milestones", key_dates),
+        ("evaluation_criteria", "Evaluation Criteria", by_category.get("evaluation_criteria", [])),
     ]
     reading_path = []
-    for category, label in reading_order:
-        items = by_category.get(category, [])
+    for category, label, items in reading_order:
         if not items:
             continue
         reading_path.append({
@@ -181,14 +207,114 @@ def deterministic_sections(candidate_requirements: list[dict], milestones: list[
 
     return {
         "scope_items": by_category.get("scope_of_work", []),
-        "technical_submission_items": (
-            by_category.get("technical_specification", []) + by_category.get("submission_instruction", [])
-        ),
-        "financial_submission_items": by_category.get("budget_commercial", []),
+        "technical_submission_items": technical_items,
+        "financial_submission_items": financial_items,
         "evaluation_items": by_category.get("evaluation_criteria", []),
-        "key_dates": list(milestones),
-        "reading_path": reading_path,
+        "key_dates": key_dates,
+        "reading_path": reading_path[:10],
     }
+
+
+# CLAUDE-P38-C: exclusion patterns first (checked before any inclusion
+# signal) - a clause matching one of these is a real risk of misleading
+# inclusion regardless of what else it says, so exclusion always wins.
+# Every pattern here was chosen to match one of this stage's own
+# concrete reported false positives.
+
+# CLAUDE-P38-C: found during this stage's own live verification (not
+# just from the prompt's examples) - a bare section heading like
+# "Section 3 - Financial Submission" was being swept into the Financial
+# preview because it literally contains the phrase "financial
+# submission", satisfying the inclusion signal below despite being a
+# title, not an obligation. Applied to both Technical and Financial
+# (Key Dates already excludes bare headings structurally, by requiring
+# an actual temporal marker - see _KEY_DATE_INCLUSION_SIGNALS).
+_BARE_HEADING_PATTERN = re.compile(
+    r"^\s*(section|schedule|appendix|part|article)\s+[\d.]+\s*[-:.]?\s*[A-Za-z ,/]*\s*$",
+    re.IGNORECASE,
+)
+
+
+def _looks_like_bare_heading(text: str) -> bool:
+    return bool(_BARE_HEADING_PATTERN.match(text.strip()))
+
+
+_TECHNICAL_EXCLUSION_PATTERNS = re.compile(
+    r"material\s+deviat|materially\s+deviat"
+    r"|privacy\s+legislation|held\s+in\s+confidence|in\s+confidence\s+and\s+subject"
+    r"|the\s+sponsor\s+(reserves|may|shall)\b"
+    r"|^\s*(definitions?|means\b|shall\s+mean)\b",
+    re.IGNORECASE,
+)
+_TECHNICAL_INCLUSION_SIGNALS = re.compile(
+    r"submit|provide|design|drawing|specification|methodology|narrative|deliverable"
+    r"|demonstrat|compliance\s+matrix|architecture|validation|implementation\s+approach"
+    r"|comply\s+with|conform\s+to|technical\s+(proposal|schedule|requirement)"
+    r"|shall\s+(be|include|meet)",
+    re.IGNORECASE,
+)
+
+
+def _qualifies_as_technical(text: str) -> bool:
+    if _looks_like_bare_heading(text):
+        return False
+    if _TECHNICAL_EXCLUSION_PATTERNS.search(text):
+        return False
+    return bool(_TECHNICAL_INCLUSION_SIGNALS.search(text))
+
+
+_FINANCIAL_EXCLUSION_PATTERNS = re.compile(
+    r"cost(s)?\s+of\s+prepar|prepar(ing|ation)\s+(and\s+submitting\s+)?(its|their|the)\s+proposal"
+    r"|bear\s+(all\s+)?costs?|at\s+its\s+own\s+(cost|expense)"
+    r"|travel|attend(ing|ance)\s+at\s+(any\s+)?meetings?|due\s+diligence",
+    re.IGNORECASE,
+)
+_FINANCIAL_INCLUSION_SIGNALS = re.compile(
+    r"price|pricing|\bfee\b|estimate|bond|financial\s+security|\btax(es)?\b|escalation"
+    r"|allowance|contingency|\brate(s)?\b|\$|budget|financial\s+submission|commercial\s+(proposal|submission)",
+    re.IGNORECASE,
+)
+
+
+def _qualifies_as_financial(text: str) -> bool:
+    if _looks_like_bare_heading(text):
+        return False
+    if _FINANCIAL_EXCLUSION_PATTERNS.search(text):
+        return False
+    return bool(_FINANCIAL_INCLUSION_SIGNALS.search(text))
+
+
+_KEY_DATE_EXCLUSION_PATTERNS = re.compile(
+    r"reserves?\s+the\s+right\s+to\s+(amend|change|revise)\s+(this\s+|the\s+)?(timetable|schedule)"
+    r"|^\s*schedule\s+of\s+events\s*$",
+    re.IGNORECASE,
+)
+# A genuine temporal marker: a number+unit ("18 months", "80 Business
+# Days"), a relative-anchor phrase ("after", "prior to", "no later
+# than", "within"), or a month name / explicit date shape - required so
+# a bare stage NAME with no timing content (e.g. a "Schedule of Events"
+# heading standing alone) doesn't qualify merely because it was
+# classified schedule_milestone. Deliberately does NOT include a bare
+# "following" - found during this stage's own live verification to
+# false-positive on ordinary prose ("the following stages shall
+# apply..."), unlike "after", which reads as temporal far more
+# reliably. The digit+unit pattern alone already covers the governing
+# example ("80 Business Days after Commercial Close" matches via "80
+# Business Days" regardless of "after").
+_KEY_DATE_INCLUSION_SIGNALS = re.compile(
+    r"\d+\s*(business\s+)?(day|week|month|year)s?\b"
+    r"|no\s+later\s+than|within\s+\d+|\bafter\s+\w|prior\s+to"
+    r"|deadline|due\s+(date|by)|\bby\s+\d|validity\s+period|submission\s+window"
+    r"|january|february|march|april|may|june|july|august|september|october|november|december"
+    r"|\d{4}-\d{2}-\d{2}",
+    re.IGNORECASE,
+)
+
+
+def _qualifies_as_key_date(label: str) -> bool:
+    if _KEY_DATE_EXCLUSION_PATTERNS.search(label):
+        return False
+    return bool(_KEY_DATE_INCLUSION_SIGNALS.search(label))
 
 
 def _build_prompt(
