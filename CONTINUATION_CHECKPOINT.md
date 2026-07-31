@@ -1,5 +1,67 @@
 # Continuation checkpoint
 
+## 2026-07-30 — CLAUDE-P34: market-critical golden-path MVP validation
+
+**Commit:** `d533fbc` (composed golden-path test, Layer A). Full suite:
+1017 passed, 0 failed (1014 from CLAUDE-P32 + 3 new). Layer B (human
+walkthrough) prepared and handed off, not yet performed by the product
+owner — see the walkthrough package in this stage's own final report.
+
+**Governing context:** CLAUDE-P33-GATE (architecture reassessment) and
+CLAUDE-P33-CORRECTION (market-critical-path rule, medical/second-domain
+direction ruled No-Go/Defer) both preceded this stage. P34 is validation
+work under that correction — no new capability was authorized, so no
+`governance/STATUS.md` row was added this stage.
+
+**What was proven.** One continuous project, walked through real routes
+end to end: ingest → operating-environment lock → project ownership/
+access (grant, revoke, unauthorized denial) → Go/No-Go → Case creation
+→ requirement promotion → adjudication → Finding/ReviewerValidation/
+Disposition/Apply → RFI directionality (draft/issue) → per-Finding and
+project-wide RFI export → close-and-reopen persistence (a fresh
+`CaseWorkspaceStore` instance, not the same in-memory object) →
+unauthorized-user isolation still holding afterward. A second test
+proves the CLAUDE-P31 security-export gate and the CLAUDE-P32
+project-access gate compose independently (a DENY baseline blocks even
+the project's own owner). A third is regression coverage for the real
+`instance/registry/` `'reviews'`-key incompatibility.
+
+**The single most important product finding.** `services/
+conversation_interpreter.py`'s `_handle_analyze` — the only user-facing
+"Analyze this..." trigger — accepts only a drawing/image Source. There
+is currently **no UI path from a text-ingested RFP/RFQ (this product's
+primary document type, per every existing test fixture) to a Finding.**
+`CaseWorkspaceStore.record_analysis` is itself source-kind-agnostic, so
+the Finding/Disposition/Apply/RFI-directionality chain is proven to
+compose correctly — but only reachable for a text document via a direct
+service-layer call standing in for a UI trigger that does not exist.
+Classified MVP-significant in this stage's own final report; not fixed
+this stage (would expand scope beyond validation).
+
+**Pre-existing `reviews`-key incompatibility (`instance/registry/
+eece5c88-7288-4373-843a-0fde061c8fe0`):** identified, dated
+(2026-07-24, `workspacetester`, `sample_rfp.txt`, no `version` field —
+predates that field's introduction), confirmed disposable dev/test
+scratch data referenced by no automated test. Chosen treatment:
+**excluded from the golden-path specimen, left untouched on disk**
+(already covered by CLAUDE-P32's fail-closed handling, now with its
+own regression test). No migration, no deletion, no modification.
+
+**Layer B not yet performed.** The walkthrough package (startup
+commands, URL, test account, approved document, numbered steps,
+expected results, failure/recovery guidance, evidence to return) was
+produced and handed to the product owner in this stage's final report.
+Completion requires the product owner's own usability judgment — not
+claimed here.
+
+See this stage's own final report (delivered in-conversation) for the
+full market-critical product map, defect classification, three separate
+compartmentalization verdicts (semantic/development/operational — all
+No-Go/Defer or Limited-Concession, none Go-Now, for lack of a
+demonstrated current bottleneck), and market-readiness assessment.
+
+---
+
 ## 2026-07-30 — CLAUDE-P32: project-level access control and isolation gate
 
 **Commits:** `61b0bf5` (domain/service-layer access-control model),
