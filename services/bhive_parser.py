@@ -139,6 +139,17 @@ class RequirementItem:
     category: str
     confidence: float
     source_line: int
+    # CLAUDE-P40: the last physical source line folded into `text` by
+    # _segment's reflow pass (below) - equal to source_line for an
+    # ordinary single-line item (the overwhelming majority: headings,
+    # short clauses, table rows). Only diverges when a visually-wrapped
+    # sentence was rejoined across consecutive lines - lets a reader
+    # still open the original document at the right range even though
+    # `text` is now the reflowed, multi-line-derived string, not a
+    # verbatim single line. Optional/defaulted so old saved
+    # RequirementItem JSON (pre-P40) deserializes unchanged via
+    # RequirementItem(**item) - never backfilled or guessed.
+    source_line_end: int | None = None
 
 
 @dataclass
@@ -240,6 +251,107 @@ class ParsedDocument:
 
 _MD_HEADING_RE = re.compile(r"^#{1,6}\s")
 _TABLE_SEPARATOR_CELL_RE = re.compile(r"^:?-+:?$")
+
+# CLAUDE-P40: source-line reflow - repairs visual line wrapping (the
+# dominant real defect for PDF/hard-wrapped-TXT source documents: pypdf's
+# extract_text() and a plain-text upload both reproduce the document's own
+# VISUAL line breaks, which fall mid-sentence far more often than not, so
+# _segment's old naive per-physical-line split shredded one real clause
+# into 2-4 separate RequirementItems - sometimes independently classified
+# into DIFFERENT, contradictory categories for fragments of the SAME
+# sentence. Confirmed live: a real ingested document's "Extracted, not
+# yet governed" list showed "The Design-Builder shall provide all labor,
+# materials, and equipment required to" / "complete the Riverside
+# Community Library renovation, including structural" / "upgrades,
+# mechanical replacement, and accessibility improvements." as three
+# separate, independently confidence-scored "requirements" for one
+# sentence - the first substantive screen a reviewer sees after the
+# Project Briefing, and it reads as broken.
+#
+# A genuine mid-word hyphen break ("...struc-" / "ture...") gets a
+# dedicated, SAFE rejoin: a hyphen directly attached to a letter at the
+# very end of a line (no preceding space) is an unambiguous structural
+# signal that the word continues on the next line, regardless of what
+# English word results and regardless of the next line's letter case -
+# unlike guessing from spelling/a dictionary, this needs no external
+# knowledge. This also correctly reconstructs this document corpus's own
+# most common compound term when IT wraps the same way ("Design-" /
+# "Builder" -> "Design-Builder", not "DesignBuilder" and not left
+# split) - the hyphen itself is never stripped, only the words either
+# side of it are joined with no inserted space, so the meaningful
+# hyphen the source actually contains survives exactly as authored. A
+# hyphen NOT directly attached to a letter (e.g. "as follows -", a
+# dash used as punctuation, which conventionally has a space before
+# it) never matches this and is left to the ordinary sentence-
+# continuation rule below instead.
+#
+# A clause boundary NEVER gets crossed: a numbered/lettered clause
+# marker ("2.1", "(a)", "iv)") or a bullet marker always starts a new
+# item regardless of what precedes it, and an ordinary (non-hyphen)
+# line is only ever folded INTO the item above it when that item's text
+# doesn't already look sentence-complete (no trailing . : ; ! ?) AND the
+# new line reads as a continuation (starts lowercase, not a fresh
+# capitalized/marked clause) - the same "narrow, high-precision pattern,
+# not a classifier rewrite" discipline this module's own semantic
+# filters already use elsewhere.
+_BULLET_MARKER_RE = re.compile(r"^[-*•]\s")
+_LEADING_BULLET_RE = re.compile(r"^[-*•]\s*")
+_CLAUSE_MARKER_RE = re.compile(
+    r"^\(?\d+(\.\d+)*[.)]?\s"       # "2.1 ", "3) ", "12. "
+    r"|^\([a-z]\)\s"                # "(a) "
+    r"|^[a-z]\)\s"                  # "a) "
+    r"|^[ivxlcdm]+[.)]\s",          # "i. ", "iv) "
+    re.IGNORECASE,
+)
+_SENTENCE_END_RE = re.compile(r"[.:;!?][)\"'”’]*$")
+_WORD_BREAK_HYPHEN_RE = re.compile(r"[A-Za-z]-$")
+_MAX_REFLOW_LINES = 12  # safety cap against a pathological run-on merge
+
+
+def _ends_sentence(text: str) -> bool:
+    return bool(_SENTENCE_END_RE.search(text.rstrip()))
+
+
+def _ends_with_word_break_hyphen(text: str) -> bool:
+    return bool(_WORD_BREAK_HYPHEN_RE.search(text.rstrip()))
+
+
+def _looks_like_continuation(stripped_line: str, cleaned_line: str) -> bool:
+    if not cleaned_line:
+        return False
+    return cleaned_line[0].islower()
+
+
+def _reflow_wrapped_lines(raw_lines: list[tuple[int, str, str]]) -> list[tuple[int, int, str]]:
+    """
+    raw_lines: (line_no, stripped_line, cleaned_line) for every
+    non-heading, non-table candidate line, in source order. Returns
+    (start_line, end_line, text) groups - a plain single-line item has
+    start_line == end_line, unchanged from _segment's pre-P40 output in
+    every other respect (same text, same starting line number).
+    """
+    groups: list[dict] = []
+    for line_no, stripped, cleaned in raw_lines:
+        top = groups[-1] if groups else None
+        may_extend = (
+            top is not None
+            and line_no == top["end_line"] + 1
+            and top["line_count"] < _MAX_REFLOW_LINES
+            and not _BULLET_MARKER_RE.match(stripped)
+            and not _CLAUSE_MARKER_RE.match(stripped)
+            and cleaned
+        )
+        if may_extend and _ends_with_word_break_hyphen(top["text"]):
+            top["text"] += cleaned
+            top["end_line"] = line_no
+            top["line_count"] += 1
+        elif may_extend and not _ends_sentence(top["text"]) and _looks_like_continuation(stripped, cleaned):
+            top["text"] += " " + cleaned
+            top["end_line"] = line_no
+            top["line_count"] += 1
+        else:
+            groups.append({"start_line": line_no, "end_line": line_no, "text": cleaned, "line_count": 1})
+    return [(g["start_line"], g["end_line"], g["text"]) for g in groups]
 
 
 def _is_table_row_line(line: str) -> bool:
@@ -349,13 +461,19 @@ class BHiveParser:
         if not text.strip():
             raise ParserError(f"No extractable text found in '{filename}'.")
 
-        chunks, tables = self._segment(text)
+        chunks, tables, end_line_map = self._segment(text)
         # CLAUDE-P38 (OBS-09): drop cover-page/header metadata lines
         # before they ever reach classification - see
         # _is_document_metadata_line's own comment for why this is a
         # narrow pre-filter, not a change to either classifier.
         chunks = [c for c in chunks if not _is_document_metadata_line(c[1])]
         requirements = self._classify(chunks)
+        # CLAUDE-P40: applied AFTER classification, keyed by each item's
+        # own source_line - _classify/_classify_with_model/
+        # _classify_with_rules/_parse_model_output never see this map or
+        # know reflow happened at all.
+        for item in requirements:
+            item.source_line_end = end_line_map.get(item.source_line, item.source_line)
         milestones = self._derive_milestones(requirements)
         consistency_flags, consistency_checked, consistency_note = (
             self._check_consistency(requirements)
@@ -424,7 +542,7 @@ class BHiveParser:
         return "\n".join((page.extract_text() or "") for page in reader.pages)
 
     # -- stage 2: segment ----------------------------------------------------
-    def _segment(self, text: str) -> tuple[list[tuple[int, str]], list[dict]]:
+    def _segment(self, text: str) -> tuple[list[tuple[int, str]], list[dict], dict[int, int]]:
         """
         Split into non-trivial lines/clauses, keeping 1-indexed line
         numbers, plus (Batch H) any GFM tables found in the text.
@@ -442,6 +560,17 @@ class BHiveParser:
         the same reasoning _extract_docx already applies to Heading/Title
         paragraphs: a heading's short, keyword-heavy text can otherwise
         get misclassified as a real requirement.
+
+        CLAUDE-P40: the plain per-line pass below is first reflowed
+        (_reflow_wrapped_lines) to rejoin a sentence visually wrapped
+        across consecutive lines into one chunk, before classification
+        ever sees it - see that function's own module-level comment for
+        why. The returned end_line_map (start_line -> last physical line
+        folded into it) is applied to the finished RequirementItems in
+        parse(), never threaded through _classify/_classify_with_model/
+        _classify_with_rules/_parse_model_output - those keep consuming
+        plain (line_no, text) pairs completely unchanged, so this repair
+        touches nothing about how classification itself works.
         """
         tables = extract_markdown_tables(text)
         table_line_numbers: set[int] = set()
@@ -449,15 +578,30 @@ class BHiveParser:
             table_line_numbers.update(range(table["start_line"], table["end_line"] + 1))
 
         lines = text.splitlines()
-        chunks: list[tuple[int, str]] = []
+        raw_lines: list[tuple[int, str, str]] = []
         for i, line in enumerate(lines, start=1):
             if i in table_line_numbers:
                 continue
-            if _MD_HEADING_RE.match(line.strip()):
+            stripped = line.strip()
+            if _MD_HEADING_RE.match(stripped):
                 continue
-            cleaned = line.strip(" \t-*•")
+            # CLAUDE-P40: was line.strip(" \t-*•") - str.strip(chars)
+            # strips from BOTH ends, so a line legitimately ending in a
+            # hyphen (a word wrapped mid-word, "...struc-") silently lost
+            # it here even before reflow existed. Only ever intended to
+            # remove a LEADING bullet marker ("- Item" -> "Item") - fixed
+            # to strip one from the left only, so a real trailing hyphen
+            # survives into the text reflow can now see and (correctly)
+            # never tries to resolve on its own (see _reflow_wrapped_
+            # lines' own module comment on why dehyphenation isn't
+            # attempted).
+            cleaned = _LEADING_BULLET_RE.sub("", stripped)
             if len(cleaned) >= 8:
-                chunks.append((i, cleaned))
+                raw_lines.append((i, stripped, cleaned))
+
+        reflowed = _reflow_wrapped_lines(raw_lines)
+        chunks: list[tuple[int, str]] = [(start, text_) for start, _end, text_ in reflowed]
+        end_line_map: dict[int, int] = {start: end for start, end, _text in reflowed}
 
         for table in tables:
             headers = table["headers"]
@@ -467,10 +611,12 @@ class BHiveParser:
                     f"{header}: {cell}" for header, cell in zip(headers, row) if header
                 )
                 if labeled:
-                    chunks.append((data_row_start_line + row_index, labeled))
+                    row_line = data_row_start_line + row_index
+                    chunks.append((row_line, labeled))
+                    end_line_map[row_line] = row_line
 
         chunks.sort(key=lambda c: c[0])
-        return chunks, tables
+        return chunks, tables, end_line_map
 
     # -- stage 3: classify ----------------------------------------------------
     def _classify(self, chunks: list[tuple[int, str]]) -> list[RequirementItem]:

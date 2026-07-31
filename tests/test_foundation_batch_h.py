@@ -95,7 +95,7 @@ class SegmentTableAwarenessTests(unittest.TestCase):
             "|---|---|---|\n"
             "| Public / Community | Public Lobby & Reception | 120 |\n"
         )
-        chunks, tables = self.parser._segment(text)
+        chunks, tables, _ = self.parser._segment(text)
         self.assertEqual(len(tables), 1)
         chunk_texts = [c[1] for c in chunks]
         # The raw pipe-delimited row must never appear verbatim.
@@ -108,7 +108,7 @@ class SegmentTableAwarenessTests(unittest.TestCase):
     # I
     def test_i_atx_heading_excluded(self):
         text = "## 12.1 Standby Power and Backup Systems\n\nContractor shall comply with this section.\n"
-        chunks, _ = self.parser._segment(text)
+        chunks, _, _ = self.parser._segment(text)
         chunk_texts = [c[1] for c in chunks]
         self.assertFalse(any("Standby Power" in t for t in chunk_texts))
         self.assertTrue(any("Contractor shall comply" in t for t in chunk_texts))
@@ -116,7 +116,7 @@ class SegmentTableAwarenessTests(unittest.TestCase):
     # J
     def test_j_row_chunk_line_numbers_match_source(self):
         text = "| A | B |\n|---|---|\n| row1a | row1b |\n| row2a | row2b |\n"
-        chunks, _ = self.parser._segment(text)
+        chunks, _, _ = self.parser._segment(text)
         by_line = dict(chunks)
         self.assertIn("A: row1a | B: row1b", by_line[3])
         self.assertIn("A: row2a | B: row2b", by_line[4])
@@ -127,14 +127,14 @@ class SegmentTableAwarenessTests(unittest.TestCase):
             b"Contractor shall provide licensed and insured labor for all work.\n"
             b"Work shall include demolition and site preparation.\n"
         ).decode("utf-8")
-        chunks, tables = self.parser._segment(text)
+        chunks, tables, _ = self.parser._segment(text)
         self.assertEqual(tables, [])
         self.assertEqual(len(chunks), 2)
 
     # L
     def test_l_empty_header_column_skipped_in_label_not_whole_row(self):
         text = "|  | B |\n|---|---|\n| x | y |\n"
-        chunks, _ = self.parser._segment(text)
+        chunks, _, _ = self.parser._segment(text)
         self.assertEqual(chunks[0][1], "B: y")
 
 
@@ -189,7 +189,7 @@ class MarkdownEndToEndTests(unittest.TestCase):
     def test_p_real_nreocrc_functional_program_rows_are_readable_chunks(self):
         raw_bytes = NREOCRC_PATH.read_bytes()
         text = raw_bytes.decode("utf-8")
-        chunks, _ = self.parser._segment(text)
+        chunks, _, _ = self.parser._segment(text)
         chunk_texts = [c[1] for c in chunks]
         self.assertTrue(any("Room / Space: Public Lobby & Reception" in t for t in chunk_texts))
         self.assertFalse(any(t.strip().startswith("| 1 | Public / Community |") for t in chunk_texts))
