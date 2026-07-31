@@ -1,5 +1,78 @@
 # Continuation checkpoint
 
+## 2026-07-31 — CLAUDE-P40-D: persisted-project compatibility closure, mutation-free corpus validation, Add Addendum requirement capture
+
+**Commits:** (see repository log for the staged P40-D commits). Full
+suite: 1214 passed (was 1200).
+
+Closes the second legacy-record defect P40-C's own bounded audit found
+and deliberately deferred: `TypeError: ProjectWorkspace.__init__() got
+an unexpected keyword argument 'reviews'`. Root cause traced to commit
+`d1ac48e` ("Extend Case Workspace with three-part review model...")
+which replaced the single original `Review` concept (commit `0e86380`,
+`decision` one of `accept`/`reject`/`needs_evidence`/`correction`) with
+two deliberately different concepts (`reviewer_validations` -
+epistemic accuracy; `dispositions` - workflow decision, "what Apply
+actually checks"). No honest one-to-one mapping exists (`"accept"`
+plausibly meant both at once under the old single-concept model), so
+nothing is converted or guessed: `CaseWorkspaceStore._hydrate_legacy_
+reviews` preserves the raw legacy list verbatim under a new
+`ProjectWorkspace.legacy_reviews` field, distinct in name from both
+current concepts, applied at the same centralized `get()` boundary as
+P40-C's `_hydrate_legacy_cases`.
+
+**Important nuance, established by code inspection before writing any
+fix:** unlike P40-C's `visibility` `KeyError` (which reached no
+guard anywhere and was a real traceback-exposure incident), this
+`reviews` `TypeError` was already caught at every real call site
+(`routes/workspace.py`, `routes/portal.py`, `app.py`, `routes/
+security.py`, `services/ingestion.py`, `services/project_access.py`,
+`services/security_assurance.py` - all pre-existing CLAUDE-P37
+hardening) and already failed closed to a 404/skip, never a raw 500.
+So this was a product-availability defect (the affected project was
+silently unopenable by its own owner, indistinguishable from
+nonexistent), not a security defect - the fix restores real access, it
+does not change the security posture. Confirmed via an isolated
+worktree at the current baseline that the pre-fix `TypeError` is
+byte-identical to what every one of those existing `except TypeError`
+blocks already caught.
+
+**Mutation-free corpus sweep:** all 19 currently persisted projects
+load successfully through `CaseWorkspaceStore.get()`/`visible_cases_
+for`/`RequirementsRegistry.get()`/`project_conversation_for` against an
+isolated copy, with zero source-file mutation (fingerprint-verified
+before/after). Four needed the P40-C visibility adapter, one (the
+`reviews` project) needed both adapters together - no other
+compatibility gap found across the whole corpus.
+
+**Regression note:** fixed three pre-existing tests
+(`test_project_access_control.py::CorruptedLegacyWorkspaceRouteTests`,
+`test_security_assurance.py::SelfCheckTests::test_self_check_reports_
+a_corrupted_legacy_workspace_as_an_anomaly_not_a_crash`, plus a stale
+fixture in `test_market_critical_golden_path.py`) that had used a
+literal `"reviews": []` key as their stand-in for "a generically
+unrecognized/corrupted workspace field" - now that `reviews` is a
+handled compatibility case rather than a crash, those fixtures were
+updated to a still-genuinely-unrecognized field name so the underlying
+fail-closed invariant they test remains exercised.
+
+**Add Addendum requirement captured, not implemented:** recorded at
+`governance/specified-unbuilt/add-addendum-facility.md`, following the
+same "Specified But Unbuilt" convention as `tenancy-and-project-
+authorization.md` - the product owner's exact requirement (child
+record under an existing project, never a new project; source
+choices; "reference first, archive once"; one immutable snapshot per
+issued addendum; the full record-field list; amendment interpretation
+deferred to a later governed workflow) preserved verbatim, with open
+design decisions explicitly left open for whichever future stage is
+separately authorized to design and build it.
+
+See this stage's own final report (delivered in-conversation) for the
+full per-project sweep table, the field-level P40-C-workspace-record
+diff, and the live-server validation evidence.
+
+---
+
 ## 2026-07-31 — CLAUDE-P40-C: legacy record compatibility, P40-B regression audit, safe failure containment, debugger elimination
 
 **Commits:** `87869e8` (legacy Case-visibility compatibility fix),
