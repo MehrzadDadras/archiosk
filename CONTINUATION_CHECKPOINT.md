@@ -1,5 +1,84 @@
 # Continuation checkpoint
 
+## 2026-07-30 — CLAUDE-P35: complete the first marketable investigation loop
+
+**Commit:** `cf3865c` (golden-path test correction). Full suite: 1017
+passed, 0 failed (unchanged count — this stage corrected an existing
+test's mechanism, added no new test method).
+
+**Governing context:** accepts CLAUDE-P34 as a successful automated
+validation stage, with one central qualification the product owner
+raised — the human walkthrough it prepared validated ingestion,
+promotion, adjudication, Go/No-Go, access, and persistence, but never
+the investigative path from a document to a Finding, Disposition, RFI,
+and export. P35's mandate was to close that gap in the actual
+application before asking the product owner to attempt the real-
+document walkthrough.
+
+**The central finding: P34's own "no UI path exists" claim was based
+on incomplete investigation, not a real product gap.** P34 checked
+only `_handle_analyze` (the "Analyze this..." trigger, genuinely
+drawing-only) and concluded no text-to-Finding path existed at all.
+Full investigation of `conversation_interpreter.py`'s dispatch tree
+found a second, separate, real, Anthropic-API-backed path was already
+fully wired: **"Discuss this Requirement"** (an aperture rendered next
+to every governed Requirement, `templates/_macros.html`) posts a
+project-level message; an investigation-shaped question is honestly
+declined with a `needs_case` offer (no Case open yet, and a Finding
+needs one to live in); accepting that offer via the **"Start an
+Investigation from this"** button opens a real Case and re-runs the
+same question, this time reaching `_handle_investigate_requirement` →
+`services/requirement_investigation.py`'s real `investigate_requirement`
+→ a genuine provisional Finding via the same `record_analysis` every
+other Finding path uses. Verified end-to-end through real HTTP routes
+(not just service-layer calls) before any file was changed.
+
+Separately, `services/drawing_analysis.py`'s `analyze_drawing` (the
+engine behind `_handle_analyze`) was confirmed to be an explicit
+mock/prototype (`ENGINE_NAME = "beehive-mock-vision"`, a hardcoded
+4-item finding library) — not real AI. So the ONE real reasoning path
+in this product today is the text/Requirement one, not the drawing
+one — the opposite of what P34's framing implied.
+
+**Part 4 (bounded correction) resolved to no source change.** Since
+the real mechanism already existed, worked, and was already reachable
+through ordinary UI navigation, the smallest safe correction was to
+`tests/test_market_critical_golden_path.py` itself: its docstring's
+false claim was removed, and its Finding-creation step was rewritten
+from a direct `store.record_analysis` stand-in to the real two-step
+HTTP flow (`discuss_object` → `start_investigation_from_aperture`),
+mocking only the one Anthropic API boundary
+(`services.conversation_interpreter.investigate_requirement`), so the
+composed test now proves the SAME route a real reviewer uses, not a
+substitute for it.
+
+**One real gap surfaced, not acted on (belongs to a later stage):**
+`services/security_policy.py` already models `ACTION_EXTERNAL_AI_REQUEST`
+as a governable action, but neither `discuss_object` nor
+`start_investigation_from_aperture` calls `evaluate_action` before the
+real Anthropic call runs — a DENY baseline on that action would not
+currently block it. Flagged as evidence for CLAUDE-P40 (Security and
+Confidentiality Release Gate); out of P35's bounded scope to fix.
+
+**Scanned/image-only PDF:** confirmed no OCR anywhere in this codebase
+— `pypdf`'s `extract_text()` returns `""` per image-only page, so
+ingestion succeeds but yields zero/near-zero `RequirementItem`s,
+silently starving the rest of the chain of anything to promote. Not a
+crash; a real capability gap worth surfacing to the product owner
+before they attempt a real-document walkthrough with a scanned file.
+
+**Layer B still not performed.** The corrected, single-numbered-
+sequence walkthrough (now describing the real Discuss→Start-
+Investigation flow) was handed to the product owner in this stage's
+final report. Completion requires the product owner's own attempt —
+not claimed here.
+
+See this stage's own final report (delivered in-conversation) for the
+full source-type map, product decision, forensic/poetic integrity
+checkpoint, and market-readiness assessment.
+
+---
+
 ## 2026-07-30 — CLAUDE-P34: market-critical golden-path MVP validation
 
 **Commit:** `d533fbc` (composed golden-path test, Layer A). Full suite:
