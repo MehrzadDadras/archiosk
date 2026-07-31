@@ -825,6 +825,24 @@ def show_workspace(project_id):
     # governed TemporalObligation automatically.
     source_milestones_view = list(document.milestones)
 
+    # CLAUDE-P38-B: deterministic sections cost nothing to recompute on
+    # every render (no AI call - see deterministic_sections' own
+    # docstring), unlike the real synthesis cached on
+    # workspace.project_briefing below. Only ever shown on Project Home
+    # (no active_case) - the opening briefing is a project-wide concept,
+    # same gating as project_conversation_view/Snapshot above.
+    briefing_deterministic = None
+    briefing_stale = False
+    if active_case is None:
+        from services.project_briefing import deterministic_sections
+
+        briefing_deterministic = deterministic_sections(
+            [{"text": r.text, "category": r.category} for r in document.requirements],
+            list(document.milestones),
+        )
+        if workspace.project_briefing is not None:
+            briefing_stale = workspace.project_briefing_source_signature != store.source_signature_for(workspace)
+
     # CLAUDE-P38 (OBS-08): RFI drafts were only ever visible per-Finding,
     # inside whichever Case happened to be open (row.rfi_drafts, the
     # Findings accordion) - there was no project-wide place to see every
@@ -1013,6 +1031,8 @@ def show_workspace(project_id):
         history_total_count=history_total_count,
         temporal_obligations_view=temporal_obligations_view,
         source_milestones_view=source_milestones_view,
+        briefing_deterministic=briefing_deterministic,
+        briefing_stale=briefing_stale,
         rfi_drafts_view=rfi_drafts_view,
         recent_focus_view=recent_focus_view,
         threads_view=threads_view,
@@ -1108,6 +1128,55 @@ def toggle_star(project_id):
     governance meaning, no GovernanceLog event (Prompt 3 #3)."""
     _, store, workspace = _load_workspace_or_404(project_id)
     store.set_starred(workspace, not workspace.starred)
+    return redirect(url_for("workspace.show_workspace", project_id=project_id))
+
+
+@workspace_bp.route("/projects/<project_id>/workspace/briefing/generate", methods=["POST"])
+@login_required
+def generate_project_briefing_route(project_id):
+    """
+    CLAUDE-P38-B: on-demand (never automatic on every page render - a
+    real Anthropic call every time would be slow and costly) generation
+    or regeneration of the project's opening narrative briefing. Policy-
+    gated through the same ACTION_EXTERNAL_AI_REQUEST resolver every
+    other real external-AI call site in this app uses
+    (_evaluate_security_action, already defined in this file for the
+    export gate) - this is the third real transmission-capable call
+    site, and it must not bypass the same governed action.
+    """
+    document, store, workspace = _load_workspace_or_404(project_id)
+
+    from services.security_policy import ACTION_EXTERNAL_AI_REQUEST, DECISION_ALLOW, DECISION_ALLOW_APPROVED_ROUTE
+
+    decision = _evaluate_security_action(workspace, ACTION_EXTERNAL_AI_REQUEST)
+    if decision.decision not in (DECISION_ALLOW, DECISION_ALLOW_APPROVED_ROUTE):
+        flash(
+            f"A project briefing cannot be generated: external AI is not permitted by "
+            f"this project's security policy (controlling layer: {decision.controlling_layer}).",
+            "error",
+        )
+        return redirect(url_for("workspace.show_workspace", project_id=project_id))
+
+    from services.project_briefing import generate_project_briefing
+
+    result = generate_project_briefing(
+        document_filename=document.filename,
+        candidate_requirements=[{"text": r.text, "category": r.category} for r in document.requirements],
+        governed_requirements=list(workspace.requirements),
+        milestones=list(document.milestones),
+    )
+    if not result.ran:
+        flash(f"Project briefing could not be generated: {result.skipped_reason}", "error")
+        return redirect(url_for("workspace.show_workspace", project_id=project_id))
+
+    from dataclasses import asdict
+
+    workspace = store.get(project_id)  # re-fetch: version may have advanced since load
+    store.set_project_briefing(
+        workspace, briefing=asdict(result), source_signature=store.source_signature_for(workspace),
+        actor=_reviewer(), governance_log=_log(),
+    )
+    flash("Project briefing generated.", "success")
     return redirect(url_for("workspace.show_workspace", project_id=project_id))
 
 

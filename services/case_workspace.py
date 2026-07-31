@@ -2477,6 +2477,21 @@ class ProjectWorkspace:
     # implicit. Optional/defaulted so existing serialized records
     # (pre-dating this field) round-trip unchanged.
     operating_instructions_updated_by_role: Optional[str] = None
+    # CLAUDE-P38-B: cached output of services.project_briefing.
+    # generate_project_briefing - a plain dict (asdict of
+    # ProjectBriefingResult), never regenerated silently on every page
+    # view (a real Anthropic call every time would be slow and costly).
+    # `project_briefing_source_signature` records which Sources it was
+    # generated from (a sorted tuple of Source ids as a string) so the
+    # workspace route can detect "the active source set changed" and
+    # offer regeneration, per this stage's own honesty requirement,
+    # without guessing at what changed. Deterministic-only sections
+    # (deterministic_sections, same module) are NOT cached here - they
+    # cost nothing to recompute on every render, unlike the real call.
+    project_briefing: Optional[dict] = None
+    project_briefing_generated_at: Optional[str] = None
+    project_briefing_generated_by: Optional[str] = None
+    project_briefing_source_signature: Optional[str] = None
     # CLAUDE-P29: Project Operating Environment -- the locked, project-
     # level classification of which side of the procurement/delivery
     # relationship this project's workspace serves (services/
@@ -3168,6 +3183,49 @@ class CaseWorkspaceStore:
                 project_id=workspace.project_id, event_type="operating_instructions_updated",
                 actor=actor, role="system",
                 payload={"length": len(text)},
+            )
+        return workspace
+
+    @staticmethod
+    def source_signature_for(workspace: "ProjectWorkspace") -> str:
+        """A stable, order-independent fingerprint of the current
+        Source set - used to decide whether a cached project_briefing
+        is still current, or was generated from a set of Sources that
+        has since changed. Deliberately just ids, not content hashes -
+        a Source's own file content is immutable once ingested
+        (revisions create a NEW Source, see supersedes_source_id), so
+        the id set alone is a sufficient, honest signal."""
+        return ",".join(sorted(s["id"] for s in workspace.sources))
+
+    def set_project_briefing(
+        self,
+        workspace: ProjectWorkspace,
+        briefing: dict,
+        source_signature: str,
+        actor: str,
+        governance_log: Optional[GovernanceLog] = None,
+    ) -> ProjectWorkspace:
+        """
+        Caches services.project_briefing.generate_project_briefing's
+        output (a plain dict, asdict(ProjectBriefingResult)) - never
+        called automatically on every page render (a real Anthropic
+        call every time would be slow and costly); only when a reviewer
+        explicitly generates or regenerates it. `source_signature`
+        (source_signature_for, above) lets the route honestly detect
+        "the active source set changed since this was generated"
+        without guessing at what changed.
+        """
+        workspace.project_briefing = briefing
+        workspace.project_briefing_generated_at = _now()
+        workspace.project_briefing_generated_by = actor
+        workspace.project_briefing_source_signature = source_signature
+        self.save(workspace)
+
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id, event_type="project_briefing_generated",
+                actor=actor, role="system",
+                payload={"source_signature": source_signature},
             )
         return workspace
 
