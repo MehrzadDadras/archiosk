@@ -521,8 +521,31 @@
             {% endif %}
             <br><a href="#governed-requirements">View Requirements &darr;</a>
         </p>
+        {% if unpromoted_requirement_items %}
+        <p class="pane-note" style="margin-top:0.4rem;">
+            {{ unpromoted_requirement_items|length }} more candidate item(s) extracted, not yet reviewed.
+            <br><a href="#requirements">Review candidate requirements &darr;</a>
+        </p>
+        {% endif %}
         {% else %}
-        <p class="pane-note">No Requirements have been promoted to governed state yet.</p>
+        {# CLAUDE-P38 (OBS-07/OBS-10): a governed-requirement count of
+           zero next to Sources' own extracted-item count, with no
+           explanation, was a real, reported gap - the candidate ->
+           governed transition (below, in Requirements) exists and
+           works, it just wasn't visible from here. unpromoted_
+           requirement_items is the same list the Requirements
+           accordion already renders - no new computation, just no
+           longer hidden from the one place a reviewer would naturally
+           look first. #}
+        {% if unpromoted_requirement_items %}
+        <p class="pane-note">
+            No Requirements confirmed as governed yet — {{ unpromoted_requirement_items|length }}
+            candidate item(s) extracted from the source document are awaiting review.
+            <br><a href="#requirements">Review candidate requirements &darr;</a>
+        </p>
+        {% else %}
+        <p class="pane-note">No Requirements have been confirmed as governed yet, and no candidate items have been extracted from this Project's source document.</p>
+        {% endif %}
         {% endif %}
         {% endcall %}
 

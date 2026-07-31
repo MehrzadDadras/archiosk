@@ -84,6 +84,38 @@ DEFAULT_CONSISTENCY_TIMEOUT_SECONDS = 25.0
 # guard, not something operators need to tune.
 DEFAULT_CONSISTENCY_MAX_ITEMS = 150
 
+# CLAUDE-P38 (OBS-09): document cover-page/header metadata (an RFP
+# number, version, issue date, issuing organization, document status)
+# was being handed to classification exactly like any other line -
+# every REQUIREMENT_CATEGORIES entry below is a real requirement
+# category, with no "not a requirement at all" option in the schema
+# either the AI or rule-based classifier is given, so a cover-page line
+# always ended up force-fit into one of them. This is a narrow,
+# high-precision pre-filter on the LABEL: VALUE shape cover pages
+# actually use - it runs before classification (either path), not a
+# change to the classifiers or their prompts themselves, and only ever
+# removes a line that starts with one of these exact label patterns.
+# Deliberately does not attempt broader "is this prose vs. a
+# requirement" judgment - that would risk excluding a real requirement,
+# which is a materially worse failure than leaving a rarer, differently
+# -shaped metadata line uncaught.
+_DOCUMENT_METADATA_LABEL_PATTERN = re.compile(
+    r"^(rfp|rfq|solicitation|bid|tender|contract)\s*(no\.?|number|#)\s*:"
+    r"|^(document\s*)?version\s*:"
+    r"|^revision\s*(no\.?|number|#)?\s*:"
+    r"|^(issue|issued|date\s+issued|release(d)?)\s*(date)?\s*:"
+    r"|^(document\s*)?status\s*:"
+    r"|^issu(ing|ed\s+by)\s*(organi[sz]ation|agency|authority)?\s*:"
+    r"|^prepared\s+(for|by)\s*:"
+    r"|^page\s+\d+\s+of\s+\d+$",
+    re.IGNORECASE,
+)
+
+
+def _is_document_metadata_line(text: str) -> bool:
+    return bool(_DOCUMENT_METADATA_LABEL_PATTERN.match(text.strip()))
+
+
 REQUIREMENT_CATEGORIES = [
     "scope_of_work",
     "technical_specification",
@@ -318,6 +350,11 @@ class BHiveParser:
             raise ParserError(f"No extractable text found in '{filename}'.")
 
         chunks, tables = self._segment(text)
+        # CLAUDE-P38 (OBS-09): drop cover-page/header metadata lines
+        # before they ever reach classification - see
+        # _is_document_metadata_line's own comment for why this is a
+        # narrow pre-filter, not a change to either classifier.
+        chunks = [c for c in chunks if not _is_document_metadata_line(c[1])]
         requirements = self._classify(chunks)
         milestones = self._derive_milestones(requirements)
         consistency_flags, consistency_checked, consistency_note = (
