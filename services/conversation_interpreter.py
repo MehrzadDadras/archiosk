@@ -43,6 +43,7 @@ from services.case_workspace import (
     ProjectWorkspace,
 )
 from services.drawing_analysis import analyze_drawing, make_comparison_artifact
+from services.project_qa import answer_project_question
 from services.requirement_investigation import investigate_requirement
 from services.security_policy import DECISION_ALLOW, DECISION_ALLOW_APPROVED_ROUTE
 
@@ -187,14 +188,28 @@ def interpret_message(
             reply_text=_describe_anchor_acknowledgment(anchor),
         )
 
+    # CLAUDE-P38 (OBS-01): an ordinary, unanchored, read-only question
+    # ("What are the objectives of this RFP?", "Summarize this project")
+    # attempted here, before falling through to "I didn't recognize an
+    # action" - the "Talk to this Project..." composer's own placeholder
+    # promises ordinary project Q&A, but every branch above it only ever
+    # recognized a narrow, Case-shaped command grammar. Bounded to
+    # messages that actually look like a question (see
+    # _looks_like_project_question) so an unrelated stray message still
+    # gets the honest "unrecognized" reply rather than a real,
+    # billed model call for something that was never a question at all.
+    if _looks_like_project_question(lowered):
+        return _handle_project_question(text, workspace, store, reviewer, triggering_message_id)
+
     return InterpretationResult(
         action_taken="unrecognized",
         reply_text=(
             "I didn't recognize an action in that message. Try \"Analyze this "
             "drawing for ...\", \"Show me the evidence supporting Finding N\", "
             "\"Compare ... with ...\", \"Draft an RFI from this accepted issue\", "
-            "or, with a Finding focused, a direct correction (e.g. \"This is not "
-            "a datum, it is a civil reference\")."
+            "a direct question about this project (e.g. \"What are the "
+            "objectives of this RFP?\"), or, with a Finding focused, a direct "
+            "correction (e.g. \"This is not a datum, it is a civil reference\")."
         ),
     )
 
@@ -378,6 +393,25 @@ _INVESTIGATION_PHRASES = (
 
 def _looks_like_investigation_request(lowered: str) -> bool:
     return any(phrase in lowered for phrase in _INVESTIGATION_PHRASES)
+
+
+# CLAUDE-P38 (OBS-01): a deliberately simple, honest heuristic - a
+# question mark, or one of these leading words/phrases - not an attempt
+# at real language understanding (this module stays deterministic
+# keyword matching throughout, per its own docstring). Bounding this
+# rather than treating every unmatched message as a question keeps a
+# genuinely unrelated stray message from triggering a real, billed
+# model call for something that was never a question at all.
+_PROJECT_QUESTION_STARTERS = (
+    "what", "who", "when", "where", "why", "how", "which",
+    "summarize", "summarise", "list", "walk me through", "walk through",
+    "describe", "explain", "tell me", "give me", "overview", "outline",
+)
+
+
+def _looks_like_project_question(lowered: str) -> bool:
+    stripped = lowered.strip()
+    return stripped.endswith("?") or stripped.startswith(_PROJECT_QUESTION_STARTERS)
 
 
 def _handle_investigate_requirement(
@@ -738,4 +772,81 @@ def _handle_draft_rfi_intent(focused_finding_id: Optional[str]) -> Interpretatio
             "how you'd like to proceed."
         ),
         focused_finding_id=focused_finding_id,
+    )
+
+
+def _handle_project_question(
+    text: str,
+    workspace: ProjectWorkspace,
+    store: CaseWorkspaceStore,
+    reviewer: str,
+    triggering_message_id: Optional[str],
+) -> InterpretationResult:
+    """
+    CLAUDE-P38 (OBS-01): a real, grounded read-only answer via
+    services/project_qa.py's Anthropic call - never a Finding, never an
+    Artifact, no governed record beyond the ConversationMessage the
+    caller already persists either way. Requires no open Case (unlike
+    _handle_investigate_requirement): there is nothing here that needs
+    one to hold it.
+
+    Policy-gated exactly like _handle_investigate_requirement
+    (services.security_policy.evaluate_action, resolved via the same
+    _evaluate_external_ai_policy this module already defines for that
+    call site) - this is the second real external-AI transmission this
+    file can trigger, and it must not bypass the same governed action.
+    """
+    policy_decision = _evaluate_external_ai_policy(store, workspace)
+    if policy_decision.decision not in (DECISION_ALLOW, DECISION_ALLOW_APPROVED_ROUTE):
+        denial_reason = (
+            f"Answering questions about this project using external AI is not "
+            f"permitted by this project's security policy (controlling layer: "
+            f"{policy_decision.controlling_layer}). {policy_decision.reason} "
+            f"Nothing was transmitted."
+        )
+        return InterpretationResult(
+            action_taken=f"project_qa_policy_denied:{policy_decision.controlling_layer}",
+            reply_text=denial_reason,
+        )
+
+    from services.requirements_registry import RequirementsRegistry
+
+    document = RequirementsRegistry(store.store_path).get(workspace.project_id)
+    candidate_requirements = (
+        [{"text": r.text, "category": r.category} for r in document.requirements] if document else []
+    )
+    milestones = list(document.milestones) if document else []
+    document_filename = document.filename if document else "(unknown source document)"
+
+    result = answer_project_question(
+        question=text,
+        document_filename=document_filename,
+        candidate_requirements=candidate_requirements,
+        governed_requirements=list(workspace.requirements),
+        milestones=milestones,
+    )
+
+    if not result.ran:
+        return InterpretationResult(
+            action_taken="project_qa_unavailable",
+            reply_text=(
+                f"I can't answer that from this project's evidence right now: "
+                f"{result.skipped_reason} Nothing was fabricated."
+            ),
+        )
+
+    reply_parts = [result.answer]
+    if result.grounded_in:
+        reply_parts.append("Grounded in: " + "; ".join(result.grounded_in))
+    if result.not_covered:
+        reply_parts.append("Not covered by this project's extracted evidence: " + result.not_covered)
+    if result.needs_clarification:
+        reply_parts.append(
+            "This evidence alone isn't enough to answer fully - treat this as a "
+            "starting point, not a complete answer."
+        )
+
+    return InterpretationResult(
+        action_taken="project_qa_answered",
+        reply_text=" ".join(reply_parts),
     )
