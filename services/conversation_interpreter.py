@@ -26,7 +26,6 @@ an additional control surface, not a bypass of Analyze -> Review -> Apply.
 """
 from __future__ import annotations
 
-import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -45,6 +44,7 @@ from services.case_workspace import (
 )
 from services.drawing_analysis import analyze_drawing, make_comparison_artifact
 from services.requirement_investigation import investigate_requirement
+from services.security_policy import DECISION_ALLOW, DECISION_ALLOW_APPROVED_ROUTE
 
 
 @dataclass
@@ -55,6 +55,42 @@ class InterpretationResult:
 
 
 _FINDING_NUMBER_PATTERN = re.compile(r"finding\s*#?\s*(\d+)", re.IGNORECASE)
+
+
+def _evaluate_external_ai_policy(store: CaseWorkspaceStore, workspace: ProjectWorkspace):
+    """
+    CLAUDE-P36: the one call site in this file that can trigger a real
+    external AI request (_handle_investigate_requirement, below) resolves
+    ACTION_EXTERNAL_AI_REQUEST through this project's full effective
+    security policy - mandatory floor, active organization baseline, this
+    project's own security_profile classification, and any active
+    exception - before that request is ever built. Mirrors routes/
+    workspace.py's _evaluate_security_action and services/ingestion.py's
+    ingestion-time gate exactly (same resolver, same four-input lookup);
+    duplicated rather than shared, matching those two call sites' own
+    existing precedent (each already duplicates this short lookup instead
+    of sharing a helper, since each has a different way of reaching the
+    registry store path - see _evaluate_security_action's own docstring).
+    """
+    from services.security_governance import SecurityGovernanceStore
+    from services.security_policy import ACTION_EXTERNAL_AI_REQUEST, evaluate_action, profile_decision_for
+
+    security_store = SecurityGovernanceStore(store.store_path)
+    security_record = security_store.get()
+    active_baseline = security_store.active_baseline(security_record)
+    return evaluate_action(
+        ACTION_EXTERNAL_AI_REQUEST,
+        classification=workspace.security_profile,
+        baseline_decision=(
+            active_baseline["control_decisions"].get(ACTION_EXTERNAL_AI_REQUEST, {}).get("decision")
+            if active_baseline else None
+        ),
+        baseline_version_id=active_baseline["id"] if active_baseline else None,
+        profile_decision=profile_decision_for(workspace.security_profile, ACTION_EXTERNAL_AI_REQUEST),
+        active_exception=security_store.active_exception_for(
+            security_record, ACTION_EXTERNAL_AI_REQUEST, project_id=workspace.project_id,
+        ),
+    )
 
 
 def interpret_message(
@@ -369,6 +405,45 @@ def _handle_investigate_requirement(
             reply_text="That Requirement no longer exists in this Project.",
         )
 
+    # CLAUDE-P36: this is the one real external-AI transmission this file
+    # can trigger (see module docstring) - resolved through the SAME
+    # security_policy.evaluate_action resolver services/ingestion.py and
+    # routes/workspace.py's _evaluate_security_action already use for this
+    # exact governed action, not a second permission system. Checked
+    # BEFORE any evidence is gathered or a prompt is built, and before
+    # investigate_requirement (the function that would actually transmit
+    # anything) is ever called - a denial here means nothing about this
+    # Requirement leaves the process. store.store_path is the same
+    # REGISTRY_STORE_PATH every SecurityGovernanceStore in this app is
+    # constructed from (CaseWorkspaceStore.__init__ keeps it verbatim).
+    policy_decision = _evaluate_external_ai_policy(store, workspace)
+    if policy_decision.decision not in (DECISION_ALLOW, DECISION_ALLOW_APPROVED_ROUTE):
+        denial_reason = (
+            f"External AI analysis for this investigation is not permitted by this "
+            f"project's security policy (controlling layer: {policy_decision.controlling_layer}). "
+            f"{policy_decision.reason} Nothing was transmitted."
+        )
+        store.record_investigation_step(
+            workspace,
+            case_id=case["id"],
+            step_kind=INVESTIGATION_STEP_KIND_REQUIREMENT_INVESTIGATION,
+            anchor=anchor,
+            question=text,
+            triggered_by_actor=reviewer,
+            evidence_requested=[],
+            evidence_examined_ids={},
+            ran=False,
+            skipped_reason=denial_reason,
+        )
+        return InterpretationResult(
+            action_taken=f"investigation_policy_denied:{policy_decision.controlling_layer}",
+            reply_text=(
+                f"{denial_reason} Nothing was fabricated - the evidence already shown "
+                "for this Requirement is what there is; the judgment call is yours to "
+                "make from it, or ask again once policy permits this."
+            ),
+        )
+
     evidence = store.requirement_evidence(workspace, requirement["id"])
     adjudication_history = store.requirement_adjudications_for(workspace, requirement["id"])
 
@@ -495,13 +570,18 @@ def _handle_investigate_requirement(
         trigger_reference_id=triggering_message_id,
         triggered_by_actor=reviewer,
     )
+    # CLAUDE-P36: engine_name/engine_version come from the provider
+    # boundary's OWN record of what it called (result.provider/
+    # result.model), not a second, independently-read env var here - the
+    # two could otherwise silently disagree if investigate_requirement
+    # were ever called with an explicit model= override.
     analysis = store.record_analysis(
         workspace,
         case_id=case["id"],
         source_ids=[requirement["source_id"]],
         objective=text,
-        engine_name="anthropic-requirement-investigation",
-        engine_version=os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-6"),
+        engine_name=f"{result.provider}-requirement-investigation",
+        engine_version=result.model,
         findings=[{"statement": result.assessment, "machine_confidence": result.confidence}],
         trigger=trigger,
     )

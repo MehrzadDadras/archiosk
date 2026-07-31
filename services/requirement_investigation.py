@@ -83,11 +83,20 @@ import logging
 import os
 import re
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from typing import Optional
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_TIMEOUT_SECONDS = 30.0
+
+# CLAUDE-P36: the provider boundary's own name for what it called - the
+# ONE place a future second provider would add a second value, not a
+# generalized registry (see this module's own docstring on staying a
+# single request/response round trip; P36's scope explicitly excludes
+# a provider marketplace). Callers persist this instead of assuming
+# "anthropic" themselves.
+PROVIDER_NAME = "anthropic"
 
 # CLAUDE-P19: a real, bump-on-meaningful-change marker for the Golden
 # Laboratory regression suite's own "prompt/configuration version"
@@ -116,6 +125,17 @@ class RequirementInvestigationResult:
     open_questions: list[str] = field(default_factory=list)
     needs_human_judgment: bool = True
     skipped_reason: Optional[str] = None
+    # CLAUDE-P36: the provider boundary's own record of what actually ran
+    # - only ever set when ran=True. Callers (conversation_interpreter.py)
+    # read these back to label the AnalysisRun/Artifact they persist,
+    # rather than re-deriving a provider/model string of their own from
+    # an env var - the one place that could silently drift from what this
+    # function actually called. requested_at is when the provider request
+    # was made, distinct from whatever timestamp the caller later stamps
+    # on the governed record it creates from this result.
+    provider: Optional[str] = None
+    model: Optional[str] = None
+    requested_at: Optional[str] = None
     # CLAUDE-P12R - only ever set when a represented_party was given.
     risk_polarity: Optional[str] = None
     risk_confidence: Optional[float] = None
@@ -160,6 +180,7 @@ def investigate_requirement(
     timeout = timeout if timeout is not None else float(
         os.getenv("ANTHROPIC_TIMEOUT_SECONDS", DEFAULT_TIMEOUT_SECONDS)
     )
+    requested_at = datetime.now(timezone.utc).isoformat()
 
     import anthropic  # imported lazily so the dep is optional in dev
 
@@ -216,6 +237,9 @@ def investigate_requirement(
         supporting_points=[str(p) for p in parsed.get("supporting_points", [])],
         open_questions=[str(q) for q in parsed.get("open_questions", [])],
         needs_human_judgment=bool(parsed.get("needs_human_judgment", True)),
+        provider=PROVIDER_NAME,
+        model=model,
+        requested_at=requested_at,
     )
     if represented_party is not None and parsed.get("risk_polarity"):
         result.risk_polarity = str(parsed["risk_polarity"]).strip()
