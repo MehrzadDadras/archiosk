@@ -2492,6 +2492,32 @@ class ProjectWorkspace:
     project_briefing_generated_at: Optional[str] = None
     project_briefing_generated_by: Optional[str] = None
     project_briefing_source_signature: Optional[str] = None
+    # CLAUDE-P38-D2: duplicate-call/idempotency guard for automatic
+    # generation - set immediately before the real Anthropic call
+    # begins, cleared immediately after (success or failure). A
+    # concurrent request sees this set and does not start a second
+    # call; treated as abandoned (safe to retry) once older than
+    # GENERATION_IN_PROGRESS_TIMEOUT_SECONDS, so a killed worker process
+    # can never leave this stuck forever - see
+    # generation_in_progress_for/start_project_briefing_generation.
+    project_briefing_generation_started_at: Optional[str] = None
+    # CLAUDE-P38-D2: the auto-generation lifecycle's own "do not
+    # regenerate when a previous generation failed repeatedly without
+    # user intervention" rule needs a real record of the last failure -
+    # without this, a failed attempt looks identical to "never tried",
+    # and automatic (re)generation would otherwise retry forever against
+    # e.g. a permanently misconfigured provider. Cleared on any
+    # successful generation (set_project_briefing).
+    project_briefing_last_failure_reason: Optional[str] = None
+    project_briefing_last_failure_at: Optional[str] = None
+    # CLAUDE-P38-D2: exactly one prior version, not a full history log
+    # (this stage's own "do not build a large document-versioning
+    # subsystem" instruction) - set by set_project_briefing whenever it
+    # overwrites an EXISTING briefing, so a regeneration is never a
+    # silent, unrecoverable overwrite.
+    project_briefing_previous: Optional[dict] = None
+    project_briefing_previous_generated_at: Optional[str] = None
+    project_briefing_previous_source_signature: Optional[str] = None
     # CLAUDE-P29: Project Operating Environment -- the locked, project-
     # level classification of which side of the procurement/delivery
     # relationship this project's workspace serves (services/
@@ -3197,6 +3223,60 @@ class CaseWorkspaceStore:
         the id set alone is a sufficient, honest signal."""
         return ",".join(sorted(s["id"] for s in workspace.sources))
 
+    # CLAUDE-P38-D2: must be >= services.project_briefing's own
+    # DEFAULT_TIMEOUT_SECONDS (45s) with margin, so a genuinely in-flight
+    # call is never treated as abandoned before it could honestly have
+    # finished or timed out on its own.
+    PROJECT_BRIEFING_GENERATION_TIMEOUT_SECONDS = 90
+
+    def start_project_briefing_generation(
+        self, workspace: ProjectWorkspace, actor: str,
+    ) -> ProjectWorkspace:
+        """
+        CLAUDE-P38-D2: set immediately before the real Anthropic call
+        begins - the duplicate-call/idempotency guard automatic
+        generation needs (a page refresh or a second reviewer opening
+        the same project while generation is already in flight must not
+        start a second real, billed call). Paired with
+        clear_project_briefing_generation and generation_in_progress_for.
+        """
+        workspace.project_briefing_generation_started_at = _now()
+        self.save(workspace)
+        return workspace
+
+    def clear_project_briefing_generation(self, workspace: ProjectWorkspace) -> ProjectWorkspace:
+        workspace.project_briefing_generation_started_at = None
+        self.save(workspace)
+        return workspace
+
+    def record_project_briefing_failure(self, workspace: ProjectWorkspace, reason: str) -> ProjectWorkspace:
+        """CLAUDE-P38-D2: honestly distinguishes "generation failed" from
+        "never attempted" - see the field's own comment on why this
+        exists (the automatic-regeneration rule that must not retry
+        forever against a repeatedly-failing provider)."""
+        workspace.project_briefing_generation_started_at = None
+        workspace.project_briefing_last_failure_reason = reason
+        workspace.project_briefing_last_failure_at = _now()
+        self.save(workspace)
+        return workspace
+
+    @classmethod
+    def generation_in_progress_for(cls, workspace: ProjectWorkspace) -> bool:
+        """True only while a generation start is both recorded AND
+        still within the timeout window - a start timestamp older than
+        that is treated as abandoned (e.g. the worker process that set
+        it was killed/recycled mid-call), never a permanently stuck
+        flag with no way to retry."""
+        started_at = workspace.project_briefing_generation_started_at
+        if not started_at:
+            return False
+        try:
+            started = datetime.fromisoformat(started_at)
+        except ValueError:
+            return False
+        elapsed = (datetime.now(timezone.utc) - started).total_seconds()
+        return elapsed < cls.PROJECT_BRIEFING_GENERATION_TIMEOUT_SECONDS
+
     def set_project_briefing(
         self,
         workspace: ProjectWorkspace,
@@ -3207,18 +3287,33 @@ class CaseWorkspaceStore:
     ) -> ProjectWorkspace:
         """
         Caches services.project_briefing.generate_project_briefing's
-        output (a plain dict, asdict(ProjectBriefingResult)) - never
-        called automatically on every page render (a real Anthropic
-        call every time would be slow and costly); only when a reviewer
-        explicitly generates or regenerates it. `source_signature`
-        (source_signature_for, above) lets the route honestly detect
-        "the active source set changed since this was generated"
+        output (a plain dict, asdict(ProjectBriefingResult)). Called
+        automatically once, right after ingestion, when the project's
+        security policy allows it without approval (CLAUDE-P38-D2) - or
+        explicitly, on approval/regeneration, otherwise. `source_
+        signature` (source_signature_for, above) lets the route honestly
+        detect "the active source set changed since this was generated"
         without guessing at what changed.
+
+        CLAUDE-P38-D2: if a briefing already exists, it is preserved as
+        project_briefing_previous (exactly one prior version, not a
+        history log) before being overwritten - a regeneration is never
+        a silent, unrecoverable loss of the last one. Also clears the
+        in-progress flag unconditionally, since a completed generation
+        (successful or not) is, by definition, no longer in progress.
         """
+        if workspace.project_briefing is not None:
+            workspace.project_briefing_previous = workspace.project_briefing
+            workspace.project_briefing_previous_generated_at = workspace.project_briefing_generated_at
+            workspace.project_briefing_previous_source_signature = workspace.project_briefing_source_signature
+
         workspace.project_briefing = briefing
         workspace.project_briefing_generated_at = _now()
         workspace.project_briefing_generated_by = actor
         workspace.project_briefing_source_signature = source_signature
+        workspace.project_briefing_generation_started_at = None
+        workspace.project_briefing_last_failure_reason = None
+        workspace.project_briefing_last_failure_at = None
         self.save(workspace)
 
         if governance_log is not None:
