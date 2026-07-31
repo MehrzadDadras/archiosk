@@ -25,7 +25,7 @@ import io
 import mimetypes
 import uuid
 from dataclasses import asdict
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 
 from flask import (
@@ -557,8 +557,13 @@ def show_workspace(project_id):
                 1 for e in _log().read(project_id) if e.created_at > previous_visit_at
             )
             since_last_visit = {"previous_visit_at": previous_visit_at, "new_event_count": new_event_count}
-        workspace.last_viewed_by[_reviewer()] = datetime.now(timezone.utc).isoformat()
-        store.save(workspace)
+        # CLAUDE-P40-D2: was workspace.last_viewed_by[...] = ...; store.save
+        # (workspace) - save()'s asdict(workspace) serializes the COMPLETE
+        # in-memory object, silently persisting legacy compatibility
+        # hydration (and every other dataclass default) as a byproduct of
+        # a plain view. record_last_viewed patches only last_viewed_by
+        # into the raw on-disk JSON - see its own docstring.
+        store.record_last_viewed(workspace, _reviewer())
 
     focused_finding_id = session.get(f"focused_finding:{project_id}")
 

@@ -3164,21 +3164,30 @@ class CaseWorkspaceStore:
         This method itself never calls save() and is never invoked
         outside get() - reading a legacy record, on its own, never
         writes anything (confirmed: an isolated read-only replay of the
-        affected record never changed its file on disk). The hydrated
-        value CAN still end up persisted, honestly stated rather than
-        implied otherwise: routes/workspace.py's show_workspace already
-        calls store.save(workspace) on every ordinary Project Home view,
-        unconditionally, to record last_viewed_by - a real, pre-existing
-        mechanism, unrelated to and unchanged by this method, that
-        already wrote on every view before this method existed. Once a
-        legacy record is opened through the normal application flow,
-        that already-happening write naturally captures whatever is
-        currently in memory, hydrated visibility included. This is safe
-        specifically because the hydration is idempotent (recomputing it
-        always yields the same value) and non-destructive (adds exactly
-        one key, changes no id, no text, no other field) - not because
-        this method promises the file can never change as a result of
-        normal use.
+        affected record never changed its file on disk).
+
+        CLAUDE-P40-D2 CORRECTION to this docstring's own prior claim:
+        P40-C's version of this comment asserted the hydrated value
+        "safely" ending up persisted via show_workspace's pre-existing
+        last_viewed_by write was fine because that write "adds exactly
+        one key, changes no id, no text, no other field." That claim
+        was never actually verified against real save() behavior and
+        was wrong - save()'s json.dumps(asdict(workspace)) serializes
+        every dataclass field, so that same "just recording a view"
+        write was actually materializing ~50 previously-absent fields
+        at their dataclass defaults (access_allow_list, owner, starred,
+        every list field, `version`, etc.) onto disk, plus this
+        method's own hydrated visibility and _hydrate_legacy_reviews'
+        renamed legacy_reviews key - a real, undisclosed structural
+        rewrite, confirmed via an isolated route-level reproduction
+        that found 21-60 changed fields from a single GET. Fixed at the
+        call site: routes/workspace.py's show_workspace no longer
+        calls store.save(workspace) to record a view at all - it calls
+        CaseWorkspaceStore.record_last_viewed(workspace, reviewer),
+        which patches only last_viewed_by directly into the raw
+        on-disk JSON (see that method's own docstring) and never
+        touches this method's hydrated in-memory value or any other
+        field on disk.
         """
         for case in workspace.cases:
             if "visibility" not in case:
@@ -3230,6 +3239,72 @@ class CaseWorkspaceStore:
             tmp_path.replace(path)
 
         return workspace
+
+    def record_last_viewed(self, workspace: ProjectWorkspace, reviewer: str) -> str:
+        """
+        CLAUDE-P40-D2: the ONLY implicit, GET-triggered write in this
+        module - routes/workspace.py's show_workspace calls this on
+        every ordinary Project Home view to record `last_viewed_by`
+        (personal/display-only "what's new since I last looked" state,
+        no governance meaning - see ProjectWorkspace's own "Project
+        Home presentation state" section). Deliberately does NOT call
+        save(): save()'s json.dumps(asdict(workspace)) serializes the
+        COMPLETE in-memory dataclass, which for a legacy record means
+        writing out every field CaseWorkspaceStore.get()'s own
+        compatibility hydration added or renamed purely in memory
+        (_hydrate_legacy_cases' backfilled Case visibility,
+        _hydrate_legacy_reviews' reviews -> legacy_reviews rename) PLUS
+        every other dataclass field's default value that was never in
+        the original file at all - a real, undisclosed structural
+        rewrite the first time any legacy record was merely viewed
+        (confirmed via an isolated route-level reproduction: a single
+        GET on a legacy record changed 21-60 fields, not the one
+        last_viewed_by entry it was supposed to). Viewing a project
+        must never itself perform a structural rewrite - "legacy
+        compatibility values may be hydrated in memory, but viewing a
+        project must not persist structural schema changes."
+
+        Instead: patches ONLY `last_viewed_by[reviewer]` directly into
+        the RAW on-disk JSON, read fresh from disk and written back
+        with that one key changed - never through
+        ProjectWorkspace(**data)/asdict(workspace) at all, so every
+        other persisted key (a legacy record's still-original "reviews"
+        key, a still-missing Case "visibility" key, or simply a field
+        this dataclass has that the original file never mentioned)
+        stays byte-for-byte as it was. Also updates
+        workspace.last_viewed_by in memory so the rest of THIS
+        request's own rendering sees the new value (matching what
+        save() would have done for that one field) - the in-memory
+        hydration this request is already using is completely
+        unaffected either way.
+
+        Deliberately does not read, check, or bump `version`: that
+        counter exists for save()'s optimistic-concurrency check on
+        GOVERNED structural writes (Cases, Findings, Requirements,
+        etc.) - view metadata is explicitly "no governance meaning"
+        (ProjectWorkspace's own docstring) and was never a structural
+        write to begin with, so it does not participate in that
+        counter at all, rather than inventing a reason it should.
+        Shares save()'s own `_save_lock` so a concurrent governed
+        save() and a concurrent view-metadata patch can't interleave
+        into a corrupted file within one process - the same same-
+        process-only guarantee `_save_lock`'s own docstring already
+        states, no wider claim made here either.
+        """
+        timestamp = datetime.now(timezone.utc).isoformat()
+        workspace.last_viewed_by[reviewer] = timestamp
+
+        path = self._path_for(workspace.project_id)
+        with self._save_lock:
+            if not path.exists():
+                return timestamp
+            raw = json.loads(path.read_text(encoding="utf-8"))
+            raw.setdefault("last_viewed_by", {})[reviewer] = timestamp
+            tmp_path = path.with_name(path.name + f".tmp-{uuid.uuid4().hex}")
+            tmp_path.write_text(json.dumps(raw, indent=2), encoding="utf-8")
+            tmp_path.replace(path)
+
+        return timestamp
 
     def get_or_create(
         self,
