@@ -1,5 +1,117 @@
 # Continuation checkpoint
 
+## 2026-07-31 — CLAUDE-P38: browser-walkthrough defect closure and workspace usability repair
+
+**Commits:** `413c545` (project Q&A), `f3f004d` (requirement over-
+extraction + pipeline visibility), `585407d` (Key Dates + RFI
+register), `d97b65a` (participant/instructions/Go-No-Go/lifecycle
+authority), `02e5e8c` (Accepted Knowledge/Sources/History UX + two
+regression-test fixes). Full suite: 1070 passed, 0 failed.
+
+Fourteen browser-observed defects (OBS-01 through OBS-14) from the
+product owner's own hands-on walkthrough of the Case Workspace, closed
+in priority order. **No P37-A scope (pharmaceutical/ETCO/bidder-
+scoring/spreadsheet-ingestion domain) was implemented** — that prompt
+referenced files and terminology that don't exist in this repository
+and was explicitly disregarded per the product owner's own
+instruction; P38 stayed bounded to the real, existing construction
+Design-Build RFQ/RFP workflow throughout.
+
+**Priority 1 — core usability:**
+- **OBS-01:** "Talk to this Project…" rejected ordinary questions
+  ("What are the objectives of this RFP?") because `discuss_object`
+  always posts with no anchor, so the message could never reach the
+  Requirement-investigation path. New `services/project_qa.py` (mirrors
+  `requirement_investigation.py`'s Anthropic pattern exactly) answers
+  ordinary project questions grounded only in already-extracted
+  evidence — never the model's world knowledge — with the same
+  honest-degrade discipline, gated through the identical
+  `ACTION_EXTERNAL_AI_REQUEST` policy check CLAUDE-P36 established.
+  Bounded to messages that look like questions, so a stray message
+  never triggers a real model call.
+- **OBS-09:** cover-page/header metadata (RFP number, version, issue
+  date, issuing organization, document status) was classified as a
+  requirement candidate exactly like real text — neither classifier's
+  schema has a "not a requirement" option. Fixed with a narrow
+  pre-filter (`_is_document_metadata_line`) on the label:value shape
+  cover pages use, applied before classification, not a change to
+  either classifier's prompt.
+- **OBS-07/OBS-10:** Requirement Compliance showed only "No
+  Requirements... yet" with no indication candidates existed elsewhere
+  (Sources reported 1,404, this section showed nothing). Now surfaces
+  the already-computed candidate count with a direct link.
+- **OBS-11:** Key Dates only showed manually-created dates, ignoring
+  `document.milestones` (already extracted by `BHiveParser.
+  _derive_milestones`, never surfaced anywhere). Now shown as a
+  clearly separate, unconfirmed "From the source document" list.
+- **OBS-08:** "RFI Export" implied RFIs only originate from flagged
+  contradictions and that export was the whole feature. Renamed "RFIs"
+  and rebuilt as a genuine project-wide register
+  (`rfi_drafts_view`, filtered to `visible_cases` — same Case-privacy
+  discipline the Findings section already applies).
+
+**Priority 2 — governance and authority:**
+- **OBS-04:** `record_go_no_go` was `@login_required` only — any
+  authenticated participant, including `read_only`, could record the
+  real decision. Now admin-only, enforced server-side in the route
+  body. `GoNoGoAssessment` gained optional `decided_by_role`.
+- **OBS-05:** same gap for Project Instructions — added
+  `operating_instructions_updated_by_role`; the permanent governance
+  explanation is now behind a collapsed disclosure.
+- **OBS-03:** "Register a Participant" read like creating a login for
+  someone else. Traced the actual mechanism and confirmed no
+  impersonation exists — every governed write already records the real
+  authenticated actor (added a test asserting this explicitly).
+  Renamed to "Add a Project Party" with copy stating plainly it's a
+  directory entry, not a login.
+- **OBS-14:** the Lifecycle strip was fully static — "current" was
+  hardcoded to RFP regardless of any real project state (no
+  lifecycle-phase field exists anywhere in the domain model). Removed
+  the false claim and "Historic Record" from the phase list rather
+  than inventing a governed phase-transition mechanism with no
+  evidence to design correctly; labeled "reference only — not tracked
+  by this project."
+
+**Priority 3 — workspace clarity:**
+- **OBS-02:** Accepted Knowledge's permanent explanation paragraph is
+  now behind a disclosure; the empty state shows real Finding counts
+  (awaiting/applied) instead.
+- **OBS-06:** source cards now show upload date. The exact quoted
+  defect ("...already extracted by the Extract/Segment/Classify/
+  Assemble pipeline") wasn't found verbatim anywhere in the current
+  templates — likely already addressed by OBS-07/09/10's fixes, or was
+  a summarized impression; not fixed as a literal string that doesn't
+  exist.
+- **OBS-12:** History defaulted to an always-expanded full list. Now a
+  compact summary by default; "Show full history" persists via
+  localStorage, same pattern as the existing Layers risk toggle. The
+  complete audit record is unaffected either way.
+- **OBS-13:** Layers renamed "Display Layers"; the checkbox label
+  reframed as "viewing as X" rather than looking like the control
+  belongs to that person.
+
+**Deferred, explicitly not attempted this stage** (each judged to
+require inventing real new architecture the walkthrough evidence
+doesn't yet justify — recorded here so they aren't silently lost):
+a full separate Go/No-Go "Recommendation" object distinct from the
+decision itself (OBS-04's fuller vision); typed Project Instruction
+categories/scope/expiry/history (OBS-05's fuller vision); RFI lifecycle
+states beyond the existing draft/issued/answered (Candidate/Ready-for-
+Review/Approved-for-Issue/Withdrawn, OBS-08's fuller vision); a real
+governed project lifecycle-phase field and transition mechanism
+(OBS-14's fuller vision); History's per-category filters (Human/
+System/Access/Instructions/etc., OBS-12's fuller vision); fixed vs.
+relative vs. conditional date-type classification for extracted
+milestones (OBS-11's fuller vision, since no date-parsing exists at
+all yet). None of these block the core workflow; all are legitimate
+future work, not silently abandoned.
+
+See this stage's own final report (delivered in-conversation) for the
+full per-observation findings, browser re-test checklist, and seal
+statement.
+
+---
+
 ## 2026-07-30 — CLAUDE-P37: first marketable product slice and browser-walkthrough package
 
 **Commit:** `c2f85dc` (hardened the two real market-critical choke
