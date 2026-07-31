@@ -192,6 +192,79 @@ class TextOnlyCaseMediumNeutralCopyTests(unittest.TestCase):
         self.assertIn("No Findings yet. Ask the conversation to analyze a drawing Source to generate some.", body)
 
 
+class ProjectRenameUniquenessTests(unittest.TestCase):
+    """3.1 - a real gap found during this stage's own investigation:
+    renaming a Project via Edit Project Details never checked
+    uniqueness, even though upload-time naming does."""
+
+    def setUp(self):
+        import app as app_module
+        from models import User, db
+
+        self.tmp_dir = Path(tempfile.mkdtemp(prefix="beehive_test_p40b_rename_"))
+        self.flask_app = app_module.create_app("testing")
+        self.flask_app.config["REGISTRY_STORE_PATH"] = str(self.tmp_dir)
+        self.project_a = "test-project-a"
+        self.project_b = "test-project-b"
+
+        with self.flask_app.app_context():
+            db.session.add(User(username="owner1", password_hash=generate_password_hash("x"), role="admin"))
+            db.session.commit()
+
+        registry = RequirementsRegistry(self.tmp_dir)
+        registry.save(ParsedDocument(project_id=self.project_a, filename="a.txt", ingested_at="2026-01-01T00:00:00+00:00"))
+        registry.save(ParsedDocument(project_id=self.project_b, filename="b.txt", ingested_at="2026-01-01T00:00:00+00:00"))
+
+        self.client = self.flask_app.test_client()
+        with self.client.session_transaction() as sess:
+            sess["user_id"] = 1
+            sess["username"] = "owner1"
+            sess["role"] = "admin"
+        self.store = CaseWorkspaceStore(self.tmp_dir)
+        self.client.get(f"/projects/{self.project_a}/workspace")
+        self.client.get(f"/projects/{self.project_b}/workspace")
+        self.store.set_project_owner(self.store.get(self.project_a), owner="owner1", actor="owner1")
+        self.store.set_project_owner(self.store.get(self.project_b), owner="owner1", actor="owner1")
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp_dir, ignore_errors=True)
+
+    def test_renaming_to_an_existing_projects_name_is_rejected(self):
+        self.store.set_project_details(self.store.get(self.project_b), actor="owner1", display_title="Riverside Renovation")
+
+        resp = self.client.post(
+            f"/projects/{self.project_a}/workspace/details",
+            data={"display_title": "Riverside Renovation"}, follow_redirects=True,
+        )
+        self.assertIn("Entry names must be unique.", resp.get_data(as_text=True))
+        self.assertIsNone(self.store.get(self.project_a).display_title)
+
+    def test_renaming_to_an_existing_projects_filename_is_rejected(self):
+        # project_b never got a custom display_title - its effective
+        # name is still its raw filename ("b.txt").
+        resp = self.client.post(
+            f"/projects/{self.project_a}/workspace/details",
+            data={"display_title": "b.txt"}, follow_redirects=True,
+        )
+        self.assertIn("Entry names must be unique.", resp.get_data(as_text=True))
+
+    def test_renaming_to_a_genuinely_new_unique_name_succeeds(self):
+        resp = self.client.post(
+            f"/projects/{self.project_a}/workspace/details",
+            data={"display_title": "A Genuinely New Name"}, follow_redirects=True,
+        )
+        self.assertIn("Project details updated.", resp.get_data(as_text=True))
+        self.assertEqual(self.store.get(self.project_a).display_title, "A Genuinely New Name")
+
+    def test_renaming_a_project_to_its_own_current_name_is_allowed(self):
+        self.store.set_project_details(self.store.get(self.project_a), actor="owner1", display_title="My Project")
+        resp = self.client.post(
+            f"/projects/{self.project_a}/workspace/details",
+            data={"display_title": "My Project"}, follow_redirects=True,
+        )
+        self.assertIn("Project details updated.", resp.get_data(as_text=True))
+
+
 def _mock_qa_response(text_out: str):
     fake_block = MagicMock()
     fake_block.type = "text"

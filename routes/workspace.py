@@ -81,7 +81,7 @@ from services.environment_capabilities import (
 )
 from services.conversation_interpreter import _looks_like_project_question, interpret_message
 from services.governance import GovernanceLog
-from services.ingestion import document_source_payload, get_registry
+from services.ingestion import UploadError, document_source_payload, get_registry, reject_if_display_name_taken
 from services.project_clock import open_project
 from services.rfi_export import RFIExportError, build_rfi_docx, build_rfi_draft_docx
 from models import User
@@ -1299,12 +1299,32 @@ def preparing_project_briefing(project_id):
 @login_required
 def edit_project_details(project_id):
     """Overflow menu -> Edit Project Details (Prompt 3 #3) - presentation
-    only, see CaseWorkspaceStore.set_project_details."""
-    _, store, workspace = _load_workspace_or_404(project_id)
+    only, see CaseWorkspaceStore.set_project_details.
+
+    CLAUDE-P40-B (3.1): a real gap found during this stage's own
+    investigation - renaming here never checked uniqueness at all, even
+    though the identical name is rejected outright at upload time
+    (services.ingestion._reject_if_name_taken). A rename could silently
+    make two Projects collide on the same effective display name.
+    Checked against the EFFECTIVE name the rename would produce (a
+    blank display_title falls back to the filename, same as
+    services.ingestion._display_name_of already does), not the raw
+    form value.
+    """
+    document, store, workspace = _load_workspace_or_404(project_id)
+    new_display_title = (request.form.get("display_title") or "").strip()
+    effective_name = new_display_title or document.filename
+
+    try:
+        reject_if_display_name_taken(current_app, effective_name, exclude_project_id=project_id)
+    except UploadError as exc:
+        flash(str(exc), "error")
+        return redirect(url_for("workspace.show_workspace", project_id=project_id))
+
     store.set_project_details(
         workspace,
         actor=_reviewer(),
-        display_title=(request.form.get("display_title") or "").strip(),
+        display_title=new_display_title,
         display_description=(request.form.get("display_description") or "").strip(),
         governance_log=_log(),
     )

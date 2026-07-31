@@ -77,6 +77,30 @@ def _reject_if_name_taken(app: Flask, entry_name: str) -> None:
         raise UploadError("Entry names must be unique.")
 
 
+def reject_if_display_name_taken(app: Flask, entry_name: str, exclude_project_id: str) -> None:
+    """
+    CLAUDE-P40-B (3.1): the same uniqueness rule _reject_if_name_taken
+    enforces at upload time, reused for post-ingestion renaming
+    (routes/workspace.py's edit_project_details) - a real gap found
+    during this stage's own investigation: renaming an existing Project
+    via "Edit Project Details" never checked uniqueness at all, even
+    though the identical name is rejected at upload time. Excludes the
+    Project being renamed itself (renaming to its own current name, or
+    leaving it unchanged, is never a collision). Public (no leading
+    underscore) since it's now called from routes/workspace.py, unlike
+    _reject_if_name_taken above which stays ingestion-internal.
+    """
+    registry = get_registry(app)
+    store = CaseWorkspaceStore(app.config["REGISTRY_STORE_PATH"])
+    existing_names = {
+        _display_name_of(document, store)
+        for pid in registry.list_ids()
+        if pid != exclude_project_id and (document := registry.get(pid)) is not None
+    }
+    if entry_name in existing_names:
+        raise UploadError("Entry names must be unique.")
+
+
 def _find_duplicate_content(app: Flask, file_hash: str) -> Optional[str]:
     """
     CLAUDE-P28: original_file_hash (SHA-256) was already computed and
