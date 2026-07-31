@@ -1,5 +1,52 @@
 # Continuation checkpoint
 
+## 2026-07-30 — CLAUDE-P37: first marketable product slice and browser-walkthrough package
+
+**Commit:** `c2f85dc` (hardened the two real market-critical choke
+points). Full suite: 1030 passed (1028 + 2 new).
+
+**Product slice defined** (full detail in this stage's own final
+report, delivered in-conversation): first user = Design-Build proposal/
+preconstruction reviewer; job = review an RFP/RFQ, adjudicate governed
+Requirements, investigate ambiguity with governed AI assistance, and
+issue traceable RFIs back to the client. Refines the originally-proposed
+market proposition by making explicit that "AI-assisted investigation"
+means the real, Anthropic-backed Requirement-investigation path only --
+never the drawing-analysis path, which remains an explicit mock/
+prototype and must not be presented as production capability in the
+first release.
+
+**Legacy-compatibility inspection (Part 6) found the real, previously-
+unaddressed risk.** The unsafe `ProjectWorkspace(**data)` construction
+is centralized in exactly one place (`CaseWorkspaceStore.get()`), but
+defenses against it were duplicated ad hoc and incompletely applied.
+CLAUDE-P36 had fixed two peripheral pages; this stage found the two
+routines that actually matter most -- `routes/workspace.py`'s
+`_load_workspace_or_404` (47+ routes: Case Workspace, Findings, RFI --
+the entire market-critical surface) and `services/project_access.py`'s
+`load_authorized_project_or_none` (every `routes/api.py` JSON route) --
+were still unguarded, meaning the real, already-known corrupted legacy
+project would 500 instead of 404 for anyone (authorized or not) who
+reached its URL directly. Fixed both (same three-line pattern, sixth
+occurrence of this defect class), with two new regression tests.
+
+**Browser walkthrough package prepared, not yet performed.** A new
+synthetic test document (`p37_walkthrough_document.txt`, session
+scratchpad -- 5 clauses covering one clear investigable requirement,
+one deliberately ambiguous one, a schedule pair a reviewer should
+notice looks inconsistent, and a missing-referenced-document RFI-worthy
+gap) and a single continuous numbered procedure were handed to the
+product owner in this stage's final report. This is the first genuine
+ask for the product owner's OWN hands-on browser session -- distinct
+from, and not satisfied by, CLAUDE-P36's live-but-HTTP-driven
+verification.
+
+See this stage's own final report for the full product-slice boundary
+(included/optional/excluded), claims register, and legacy-compatibility
+Go-Now verdict.
+
+---
+
 ## 2026-07-30 — CLAUDE-P36 Case 1/Case 2 walkthrough: performed live, by Claude, against the running app
 
 **Commit:** `6dd1695`. Full suite: 1028 passed (1026 + 2 new).
