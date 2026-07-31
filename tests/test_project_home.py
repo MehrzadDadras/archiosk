@@ -59,11 +59,15 @@ class ProjectHomeTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn("What are we working on?", body)
-        self.assertIn(
-            "You are working inside the current governed project state. "
-            "New work inherits its sources, provenance, decisions, and constraints.",
-            body,
-        )
+        # CLAUDE-P38-C: this explanation moved behind a collapsed
+        # "What is Project State?" disclosure - still present in the
+        # rendered HTML (a <details> element's content is always in the
+        # DOM, just visually collapsed), only reformatted onto several
+        # source lines, so checked as separate fragments rather than one
+        # exact-whitespace string.
+        self.assertIn("What is Project State?", body)
+        self.assertIn("You are working inside the current governed project state.", body)
+        self.assertIn("New work inherits its sources,", body)
         self.assertNotIn("Case Workspace</h1>", body)
 
     def test_explicit_case_param_still_reaches_deep_case_view(self):

@@ -96,6 +96,15 @@
         </details>
         {% endif %}
 
+        {# CLAUDE-P38-C: Lifecycle and Display Layers previously rendered
+           fully, permanently visible at the very top of the aside,
+           competing with the Project Briefing for opening-viewport
+           space (the browser retest's own reported problem). Neither
+           is Case/Requirement-review-critical - both now sit inside
+           one collapsed "Project Management & Settings" group,
+           reusing the existing subdisclosure control rather than a new
+           layer of UI. #}
+        {% call macros.subdisclosure('Project Management & Settings') %}
         {# CLAUDE-P38 (OBS-14): this strip was fully static - "current"
            was hardcoded to RFP regardless of any real project state (no
            lifecycle-phase field exists anywhere in the domain model),
@@ -132,6 +141,7 @@
             Set who you represent (Participants &amp; Perspective, below) to see anything on this layer.
         </p>
         {% endif %}
+        {% endcall %}
 
         {# Cases is the one accordion the app itself already marks as
            primary (open=True, the only one) - it belongs first, not
@@ -1495,6 +1505,14 @@
            matters requiring attention) only appears once explicitly
            generated - never silently, never fabricated when the
            evidence is thin (each field is only rendered if non-empty). #}
+        {# CLAUDE-P38-C: page-hierarchy correction. The Generate action
+           now comes immediately after the short intro, ahead of every
+           deterministic list (previously buried below them) - the
+           browser retest found the button required scrolling past
+           raw extraction dumps to reach. Each deterministic section is
+           now a capped 5-item preview with a real "N of M" count and
+           an explicit open-full-list action, not the full candidate
+           list rendered inline. #}
         <div class="workspace-pane" id="project-briefing">
             <h2>Project Briefing</h2>
             <p class="pane-note">
@@ -1508,10 +1526,14 @@
             </p>
             {% endif %}
 
+            <form class="workspace-form" method="post" action="{{ url_for('workspace.generate_project_briefing_route', project_id=project_id) }}" id="briefing-generate">
+                <button type="submit" class="apply-button">{{ 'Regenerate Project Briefing' if workspace.project_briefing else 'Generate Project Briefing' }}</button>
+            </form>
+
             {% if workspace.project_briefing %}
             {% set briefing = workspace.project_briefing %}
             {% if briefing.executive_summary %}
-            <p class="workspace-pane-label">Executive Summary</p>
+            <p class="workspace-pane-label" style="margin-top:0.6rem;">Executive Summary</p>
             <p style="font-size:0.88rem;">{{ briefing.executive_summary }}</p>
             {% endif %}
             {% if briefing.objectives %}
@@ -1519,43 +1541,58 @@
             <ul class="source-list">{% for o in briefing.objectives %}<li class="source-item">{{ o }}</li>{% endfor %}</ul>
             {% endif %}
             {% if briefing.project_brief %}
-            <p class="workspace-pane-label">Project Brief (Basis of Understanding)</p>
-            <p style="font-size:0.88rem;">{{ briefing.project_brief }}</p>
-            <p style="font-size:0.78rem;color:var(--text-secondary);">A machine-assisted draft derived from the source document(s) &mdash; not an approved Project Charter.</p>
+            {% call macros.subdisclosure('Project Brief (Basis of Understanding)') %}
+                <p style="font-size:0.88rem;">{{ briefing.project_brief }}</p>
+                <p style="font-size:0.78rem;color:var(--text-secondary);">A machine-assisted draft derived from the source document(s) &mdash; not an approved Project Charter.</p>
+            {% endcall %}
             {% endif %}
             {% if briefing.procurement_route %}
-            <p class="workspace-pane-label">Procurement Route</p>
-            <p style="font-size:0.88rem;">{{ briefing.procurement_route }}</p>
+            {% call macros.subdisclosure('Procurement Route') %}
+                <p style="font-size:0.88rem;">{{ briefing.procurement_route }}</p>
+            {% endcall %}
             {% endif %}
             {% if briefing.matters_requiring_attention %}
-            <p class="workspace-pane-label">Matters Requiring Early Attention</p>
-            <ul class="source-list">{% for m in briefing.matters_requiring_attention %}<li class="source-item">{{ m }}</li>{% endfor %}</ul>
-            <p style="font-size:0.78rem;color:var(--text-secondary);">Machine-assisted observations &mdash; not confirmed until governed through Findings and Adjudication.</p>
+            {% call macros.subdisclosure('Matters Requiring Early Attention (' ~ briefing.matters_requiring_attention|length ~ ')') %}
+                <ul class="source-list">{% for m in briefing.matters_requiring_attention %}<li class="source-item">{{ m }}</li>{% endfor %}</ul>
+                <p style="font-size:0.78rem;color:var(--text-secondary);">Machine-assisted observations &mdash; not confirmed until governed through Findings and Adjudication.</p>
+            {% endcall %}
             {% endif %}
-            <p style="font-size:0.78rem;color:var(--text-secondary);">Generated by {{ workspace.project_briefing_generated_by }}, {{ workspace.project_briefing_generated_at }}.</p>
+            <p style="font-size:0.75rem;color:var(--text-secondary);">Generated by {{ workspace.project_briefing_generated_by }}, {{ workspace.project_briefing_generated_at }}.</p>
             {% else %}
-            <p style="font-size:0.88rem;color:var(--text-secondary);">No narrative briefing generated yet &mdash; the sections below (Technical/Financial Submission, Key Dates, Suggested Reading Path) are already available from the extracted source document without one.</p>
+            <p style="font-size:0.85rem;color:var(--text-secondary);">No narrative briefing generated yet &mdash; the sections below are already available from the extracted source document without one.</p>
             {% endif %}
 
             {% if briefing_deterministic %}
-            <p class="workspace-pane-label" style="margin-top:0.8rem;">Technical Submission</p>
+            {# CLAUDE-P38-C: compact preview pattern reused for all three
+               deterministic sections - max 5 items, a real qualifying
+               count (post-filter, per _qualifies_as_technical/financial/
+               key_date in services/project_briefing.py), and an explicit
+               link to the full register rather than rendering it here. #}
+            <p class="workspace-pane-label" style="margin-top:0.6rem;">Technical Submission</p>
             {% if briefing_deterministic.technical_submission_items %}
-            <ul class="source-list">{% for item in briefing_deterministic.technical_submission_items[:8] %}<li class="source-item">{{ item.text }}</li>{% endfor %}</ul>
+            <p style="font-size:0.78rem;color:var(--text-secondary);margin:-0.3rem 0 0.3rem;">{{ briefing_deterministic.technical_submission_items[:5]|length }} of {{ briefing_deterministic.technical_submission_items|length }} likely technical deliverables shown</p>
+            <ul class="source-list">{% for item in briefing_deterministic.technical_submission_items[:5] %}<li class="source-item">{{ item.text }}</li>{% endfor %}</ul>
+            <p style="font-size:0.78rem;"><a href="#requirements">Open Technical Submission &darr;</a></p>
             {% else %}
             <p style="font-size:0.85rem;color:var(--text-secondary);">No Technical Submission requirements were found in the extracted evidence.</p>
             {% endif %}
 
             <p class="workspace-pane-label">Financial Submission</p>
             {% if briefing_deterministic.financial_submission_items %}
-            <ul class="source-list">{% for item in briefing_deterministic.financial_submission_items[:8] %}<li class="source-item">{{ item.text }}</li>{% endfor %}</ul>
+            <p style="font-size:0.78rem;color:var(--text-secondary);margin:-0.3rem 0 0.3rem;">{{ briefing_deterministic.financial_submission_items[:5]|length }} of {{ briefing_deterministic.financial_submission_items|length }} likely financial deliverables shown</p>
+            <ul class="source-list">{% for item in briefing_deterministic.financial_submission_items[:5] %}<li class="source-item">{{ item.text }}</li>{% endfor %}</ul>
+            <p style="font-size:0.78rem;"><a href="#requirements">Open Financial Submission &darr;</a></p>
             {% else %}
             <p style="font-size:0.85rem;color:var(--text-secondary);">No Financial Submission requirements were found in the extracted evidence &mdash; nothing is assumed here.</p>
             {% endif %}
 
-            {% if briefing_deterministic.key_dates %}
             <p class="workspace-pane-label">Key Dates and Milestones</p>
-            <ul class="source-list">{% for d in briefing_deterministic.key_dates[:8] %}<li class="source-item">{{ d.label }}</li>{% endfor %}</ul>
-            <p style="font-size:0.78rem;"><a href="#temporal-obligations">View all Key Dates &darr;</a></p>
+            {% if briefing_deterministic.key_dates %}
+            <p style="font-size:0.78rem;color:var(--text-secondary);margin:-0.3rem 0 0.3rem;">{{ briefing_deterministic.key_dates[:5]|length }} of {{ briefing_deterministic.key_dates|length }} dated items shown</p>
+            <ul class="source-list">{% for d in briefing_deterministic.key_dates[:5] %}<li class="source-item">{{ d.label }}</li>{% endfor %}</ul>
+            <p style="font-size:0.78rem;"><a href="#temporal-obligations">Open Key Dates &darr;</a></p>
+            {% else %}
+            <p style="font-size:0.85rem;color:var(--text-secondary);">No dated items were found in the extracted evidence.</p>
             {% endif %}
 
             {% if briefing_deterministic.reading_path %}
@@ -1571,17 +1608,17 @@
             {% endif %}
             {% endif %}
 
-            <form class="workspace-form" method="post" action="{{ url_for('workspace.generate_project_briefing_route', project_id=project_id) }}" id="briefing-generate">
-                <button type="submit">{{ 'Regenerate Project Briefing' if workspace.project_briefing else 'Generate Project Briefing' }}</button>
-            </form>
-
-            <form class="conversation-input-form" method="post" action="{{ url_for('workspace.discuss_object', project_id=project_id) }}" style="margin-top:0.6rem;">
-                <input type="text" name="text" placeholder="Ask a question about this project&hellip;" autocomplete="off" required>
+            <p class="workspace-pane-label" style="margin-top:0.6rem;">Ask about the project documents</p>
+            <p style="font-size:0.78rem;color:var(--text-secondary);margin:-0.3rem 0 0.3rem;">Read-only, grounded source Q&amp;A &mdash; does not start or change anything.</p>
+            <form class="conversation-input-form" method="post" action="{{ url_for('workspace.discuss_object', project_id=project_id) }}">
+                <input type="text" name="text" placeholder="e.g. What are the objectives of this RFP?" autocomplete="off" required>
                 <button type="submit">Ask</button>
             </form>
         </div>
 
         <div class="project-home-composer">
+            <p class="workspace-pane-label" style="margin-bottom:0.2rem;">Start or continue project work</p>
+            <p style="font-size:0.78rem;color:var(--text-secondary);margin:0 0 0.3rem;">Findings, comparisons, corrections, investigations, and RFIs &mdash; opens a new Investigation.</p>
             <form class="conversation-input-form" method="post" action="{{ url_for('workspace.quick_start', project_id=project_id) }}">
                 <input type="text" name="text" placeholder="What are we working on?" autocomplete="off" required>
                 <button type="submit">Send</button>
@@ -1607,16 +1644,20 @@
         </p>
         {% endif %}
 
-        <p class="project-home-state-message">
-            You are working inside the current governed project state. New work inherits its sources, provenance, decisions, and constraints.
-        </p>
-
+        {# CLAUDE-P38-C: two permanent-prose paragraphs (provenance
+           inheritance, "where things live") removed from always-on
+           display, per this stage's "remove persistent internal prose"
+           requirement - the governance itself is unchanged, only its
+           permanent on-screen restatement here. #}
         <div class="workspace-pane">
             <h2>Project State</h2>
-            <p class="pane-note">
-                Project Instructions and Project Sources are on the left &mdash; the same governed state whether
-                you're here or inside an Investigation.
-            </p>
+            {% call macros.subdisclosure('What is Project State?') %}
+                <p class="pane-note">
+                    You are working inside the current governed project state. New work inherits its sources,
+                    provenance, decisions, and constraints. Project Instructions and Project Sources are on the
+                    left &mdash; the same governed state whether you're here or inside an Investigation.
+                </p>
+            {% endcall %}
 
             {% call macros.accordion('Active Work', group='project-home', id='active-work', open=True) %}
                 <p style="font-size:0.85rem;margin:-0.6rem 0 0.8rem;">
