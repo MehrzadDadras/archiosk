@@ -1,5 +1,42 @@
 # Continuation checkpoint
 
+## 2026-07-31 — CLAUDE-P40-D2-CLOSE: product-owner browser acceptance seal
+
+**No code change - verification only.** The product owner completed
+the browser validation P40-D2 handed off: `probe_rfq.txt` loaded
+normally, the ownerless Reviews-era project loaded normally, neither
+showed an error page, traceback, debugger control, console link, or
+PIN prompt.
+
+Post-browser fingerprints, recomputed read-only (route not reopened by
+this agent):
+
+| File | Pre-browser | Post-browser |
+|---|---|---|
+| `cdf185e5....json` | `90df028b18...` | `90df028b18...` (unchanged) |
+| `cdf185e5....workspace.json` | `b6832930...` | `b6832930...` (unchanged) |
+| `cdf185e5....governance.jsonl` | `e9ad35c780...` | `e9ad35c780...` (unchanged) |
+| `eece5c88....json` | `6ac1f25aab...` | `6ac1f25aab...` (unchanged) |
+| `eece5c88....workspace.json` | `a9e38d3b3a...` | `a9e38d3b3a...` (unchanged) |
+| `eece5c88....governance.jsonl` | `7302cf0ab6...` | `7302cf0ab6...` (unchanged) |
+
+**All six files byte-identical** - stronger than the permitted result
+required (which only allowed `last_viewed_by` to differ). Most likely
+explanation, grounded in the code: `show_workspace`'s `last_viewed_by`
+write sits inside `if active_case is None:` (the Project-Home-only
+branch) - a view that landed on a specific Case via `?case=` skips it
+entirely, a real and unremarkable path, not a defect. Nothing
+forbidden changed either way: no visibility field newly persisted, no
+`reviews`/`legacy_reviews` rename, no dataclass default added, no
+ownership/access/Case/Finding/Artifact/Analysis/Apply/conversation/
+evidence/governance content changed.
+
+**P40 acceptance seal:** P40-B, P40-C, P40-D, P40-D1, and P40-D2 are
+all product-owner-accepted as of this verification. Full suite as of
+commit `9b88e83`: 1242 passed.
+
+---
+
 ## 2026-07-31 — CLAUDE-P40-D2: the view-persistence boundary
 
 **Commit:** `4c7a452`. Full suite: 1242 passed (was 1231).
