@@ -3069,7 +3069,70 @@ class CaseWorkspaceStore:
         if not path.exists():
             return None
         data = json.loads(path.read_text(encoding="utf-8"))
-        return ProjectWorkspace(**data)
+        workspace = ProjectWorkspace(**data)
+        self._hydrate_legacy_cases(workspace)
+        return workspace
+
+    @staticmethod
+    def _hydrate_legacy_cases(workspace: ProjectWorkspace) -> None:
+        """
+        CLAUDE-P40-C: a Case record serialized before Case-level
+        visibility existed (commit 04fc14a, "Implement Case visibility:
+        PRIVATE -> explicit Share -> SHARED") has no "visibility" key at
+        all - CaseRecord's own dataclass default (CASE_VISIBILITY_
+        PRIVATE) only ever applies to a NEW construction, never
+        retroactively to already-persisted JSON. Every bracket-access
+        read of case["visibility"] (visible_cases_for and every Case-
+        collaboration-state-changing method) crashed with KeyError for
+        any such legacy Case - confirmed via isolated replay to be
+        reachable, unmodified, at both the CLAUDE-P40-B baseline and
+        final commit; this predates and is unrelated to P40-B itself.
+
+        Backfilled to CASE_VISIBILITY_SHARED, deliberately NOT
+        CASE_VISIBILITY_PRIVATE: before the visibility concept existed,
+        every Case was visible to anyone who already had project
+        access - no per-case privacy concept existed yet to restrict
+        it. Defaulting to PRIVATE would retroactively impose a
+        restriction this data was never subject to when it was
+        created - that is inventing a new restriction, not "failing
+        closed" for this specific record. SHARED (never COLLABORATIVE)
+        is deliberately the more conservative of the two non-private
+        states: COLLABORATIVE additionally asserts "another party has
+        genuinely contributed" (Constitutional Invariant 12 - see
+        CASE_VISIBILITY_COLLABORATIVE's own comment), a claim this
+        hydration step has no evidence for and must never fabricate.
+
+        Project-level authorization (services.project_access.
+        can_access_project, CLAUDE-P32's owner/allow-list gate) is
+        completely unaffected and unreached by this method - this only
+        ever runs on workspace.cases, which is only ever inspected
+        after project-level access has already been granted elsewhere.
+        This can therefore never grant, widen, or substitute for
+        project access - it only restores the pre-visibility-concept
+        Case-level behavior for users who already passed that gate.
+
+        This method itself never calls save() and is never invoked
+        outside get() - reading a legacy record, on its own, never
+        writes anything (confirmed: an isolated read-only replay of the
+        affected record never changed its file on disk). The hydrated
+        value CAN still end up persisted, honestly stated rather than
+        implied otherwise: routes/workspace.py's show_workspace already
+        calls store.save(workspace) on every ordinary Project Home view,
+        unconditionally, to record last_viewed_by - a real, pre-existing
+        mechanism, unrelated to and unchanged by this method, that
+        already wrote on every view before this method existed. Once a
+        legacy record is opened through the normal application flow,
+        that already-happening write naturally captures whatever is
+        currently in memory, hydrated visibility included. This is safe
+        specifically because the hydration is idempotent (recomputing it
+        always yields the same value) and non-destructive (adds exactly
+        one key, changes no id, no text, no other field) - not because
+        this method promises the file can never change as a result of
+        normal use.
+        """
+        for case in workspace.cases:
+            if "visibility" not in case:
+                case["visibility"] = CASE_VISIBILITY_SHARED
 
     def save(self, workspace: ProjectWorkspace, expected_version: Optional[int] = None) -> ProjectWorkspace:
         """
