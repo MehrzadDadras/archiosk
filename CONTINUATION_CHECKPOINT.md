@@ -1,5 +1,80 @@
 # Continuation checkpoint
 
+## 2026-07-31 — CLAUDE-P39: commercial convergence — closed the Requirement-to-Investigation dead end
+
+**Commit:** `14a107a`. Full suite: 1130 passed (was 1127).
+
+First business-convergence stage (governing objective: one continuous,
+trustworthy, Zero-Founder-usable golden path — Upload → Briefing →
+Requirements → Question → Investigation → Decision → RFI → Export →
+History — over further architecture/domain expansion). Audited the
+full route/template surface for the mid-to-end half of that path
+(Requirements onward — the Briefing half was already known from
+P38-D2) via a forked mechanical route-mapping pass plus direct live
+HTTP verification against the real running dev server.
+
+**Two real candidates found; one selected.** (1) `services/
+bhive_parser.py`'s `_segment` does a naive per-physical-line split with
+no paragraph reflow — confirmed live on the real P38-D2 verification
+project that every PDF/hard-wrapped-TXT sentence spanning more than one
+visual line gets shredded into separate `RequirementItem`s, sometimes
+with **different, contradictory categories for fragments of the same
+sentence** (e.g. "...as indicated on the" / "structural drawings. Any
+material deviation..." split across `technical_specification` and
+`compliance_legal`). Real, high-value, but doesn't block the workflow
+— extraction is degraded, not broken. (2) The "Discuss this
+Requirement" aperture (`templates/_macros.html`'s `aperture` macro,
+already correctly wired with anchor fields) and its backend
+(`_handle_investigate_requirement` in `services/
+conversation_interpreter.py`) both work correctly and — verified live
+with a REAL Anthropic call — produce a genuinely well-reasoned,
+evidence-grounded Finding. But the escalation offer that gets a
+reviewer from "described a concern" to "start an Investigation" only
+fired for six hardcoded phrases ("investigate this", "check this",
+etc) — a live test confirmed a natural concern ("I'm not sure this
+covers electrical systems as well") got a silent, unguided dead end
+instead. Selected (2): it's a total, not merely degraded, block on the
+Zero-Founder Test's explicit "convert a concern into an Investigation"
+requirement, and improves four ranks (Trust Core's workflow-continuity
+half, Functional Workflow Completeness, Market-Ready Product, UI
+Information Architecture) against (1)'s two (Trust Core's accuracy
+half, Extraction). (1) is deferred, not abandoned — see this stage's
+own final report's ranked gap list.
+
+**Fix, deliberately narrow** (matching this module's own
+"deterministic keyword matching, not reasoning" discipline):
+`_INVESTIGATION_PHRASES` gained natural concern-expressing phrasings
+found live during this stage's testing ("not sure this covers",
+"doesn't mention", "seems to conflict", "unclear whether", "concerned
+about", ...) — additive only, every one of the three existing tests
+covering the original narrow behavior still passes unchanged.
+`_describe_anchor_acknowledgment` now names working phrasing
+("Investigate this", "Something is wrong here") for the residual case
+no phrase list will ever fully cover, so a miss is no longer silent.
+No change to what's automatically analyzed or committed — opening an
+Investigation still requires an explicit human click, and the real AI
+call inside `_handle_investigate_requirement` still only fires after
+that click on an explicit trigger-phrase match when a Case is already
+open (that narrower, cost-conscious gate was deliberately left
+untouched; only the costless "offer to escalate" branch was widened).
+
+**Other findings, explicitly deferred** (ranked in this stage's own
+final report): the extraction line-fragmentation defect above;
+"BEEHIVE" (an internal/legacy name never introduced to users anywhere
+else) leaking into the RFI-preview flash message; raw UUIDs
+(`artifact.id`/`analysis_id`/`engine_name`) rendered inline, not
+behind a disclosure, on Finding cards; the `findings-empty` state's
+"analyze a drawing Source" copy being the wrong medium for a text-RFP
+product; two unrelated mechanisms ("governed per-Finding RFI draft"
+vs. the legacy project-wide consistency-flag export) both called "RFI
+export" with no UI distinction.
+
+See this stage's own final report (delivered in-conversation) for the
+full transition map, Rank 1–5 evidence table, and three-stage
+commercial convergence plan.
+
+---
+
 ## 2026-07-31 — CLAUDE-P38-D2: restore AI-first automation and repair the opening briefing pipeline
 
 **Commits:** `c8856c1` (provenance/lifecycle fields), `14e0d7e`
