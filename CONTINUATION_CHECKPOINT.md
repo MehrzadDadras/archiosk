@@ -1,5 +1,80 @@
 # Continuation checkpoint
 
+## 2026-07-31 — CLAUDE-P40: critical co-architect review — repaired visual line-wrap fragmentation
+
+**Commit:** `5cd337c`. Full suite: 1151 passed (was 1130).
+
+Explicit critical-review stage: required re-deriving the P40 bottleneck
+from scratch (live re-audit + a 6-candidate comparison) rather than
+reflexively continuing P39's own closing recommendation. Walked the
+full golden path live against the real running dev server, screen by
+screen, sign-in through History. Most of it held up well under direct
+inspection (Briefing, grounded Q&A, the P39 Investigation-escalation
+fix, the Apply/Issue Approval Gate confirm screens, RFI export,
+History) - genuinely clear, professional copy, not the source of the
+worst friction. The one sharp, immediately visible break: the
+Requirements screen's "Extracted, not yet governed" list showed one
+real sentence ("The Design-Builder shall provide all labor,
+materials, and equipment required to complete the Riverside Community
+Library renovation, including structural upgrades, mechanical
+replacement, and accessibility improvements.") split into **three**
+separate, independently confidence-scored "requirements," with a real
+instance of the SAME sentence's fragments landing in two
+**contradictory categories** (technical_specification vs.
+compliance_legal). This is the first substantive data screen a
+reviewer sees after the Project Briefing - confirmed as the strongest
+candidate across customer harm, frequency (near-universal for real
+PDF/wrapped-text RFPs), severity, and downstream contamination against
+five other named candidates (Zero-Founder screen comprehension broadly,
+rigid conversational routing, the three-vocabulary requirement-
+adjudication flow, operational readiness, RFI mechanism ambiguity).
+
+**Root cause:** `services/bhive_parser.py`'s `_segment` did a naive
+per-physical-line split with no reflow - `pypdf.extract_text()` and a
+plain-text upload both reproduce the source document's own visual line
+wraps, which fall mid-sentence far more often than not.
+
+**Fix**, scoped to exactly this: `_reflow_wrapped_lines` rejoins
+consecutive lines into one logical clause when the accumulated text
+doesn't already look sentence-complete and the next line reads as a
+genuine continuation (starts lowercase) - never crossing a numbered/
+lettered clause marker or a bullet marker, which always start a fresh
+item. A line ending in a hyphen directly attached to a letter (no
+preceding space - an unambiguous word-break signal, unlike guessing
+from spelling) gets a dedicated no-space rejoin, which also correctly
+reconstructs this corpus's own most common compound term when it wraps
+the same way ("Design-" / "Builder" -> "Design-Builder", never
+"DesignBuilder"). `RequirementItem` gained one additive `Optional`
+`source_line_end` field for traceability - `_classify`/
+`_classify_with_model`/`_classify_with_rules`/`_parse_model_output`
+are completely untouched; the end-line map is applied to finished
+`RequirementItem`s in `parse()`, after classification.
+
+**Architecture freeze discipline, explicit:** rejected full fragment-
+array/join-reason/uncertainty-score provenance tracking as more than
+the "no traceability lost" hard-stop actually requires; rejected
+touching `services/case_workspace.py`'s governed `Requirement` schema
+(the defect lives entirely in the pre-promotion candidate list); no
+new parser dependency added (the deterministic heuristic proved
+sufficient against every required test shape). Only `services/
+bhive_parser.py`'s own segmentation stage changed.
+
+**Existing projects: never touched.** Reflow only runs during a NEW
+document's segmentation inside `BHiveParser.parse()` - no migration,
+no re-processing, no governed Requirement ID regenerated, no
+Investigation/Finding/Disposition/RFI/History record altered.
+
+**Verified live, before/after, against the real running dev server:**
+the same real document that showed 36 fragmented "requirements" (with
+the exact 3-way-split sentence above) now shows 18, with that sentence
+appearing whole under a single confidence score.
+
+See this stage's own final report (delivered in-conversation) for the
+full 6-candidate comparison table, the transition map, and the ranked
+remaining-blockers list.
+
+---
+
 ## 2026-07-31 — CLAUDE-P39: commercial convergence — closed the Requirement-to-Investigation dead end
 
 **Commit:** `14a107a`. Full suite: 1130 passed (was 1127).
