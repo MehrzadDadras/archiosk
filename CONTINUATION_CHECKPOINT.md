@@ -1,5 +1,59 @@
 # Continuation checkpoint
 
+## 2026-07-31 — CLAUDE-P38-C: Project Briefing semantic repair and controlled workspace simplification
+
+**Commits:** `5817977` (semantic classification + compact previews),
+`0786fb5` (page hierarchy, composer clarity, management-control
+grouping). Full suite: 1104 passed (1086 + 18 new).
+
+Browser retest of CLAUDE-P38-B found three real defects: (1) Technical/
+Financial/Key Dates previews included unrelated clauses (privacy
+prose, material-deviation language, proposal-preparation costs, bare
+stage-title headings) because `RequirementItem.category` is a coarse
+bucket never designed for this precision; (2) raw extraction lists
+rendered directly on the landing page, burying the Generate button;
+(3) two unlabeled composers and a fully-expanded Lifecycle/Layers block
+competed with the opening briefing for viewport space.
+
+**Fixed via a bounded exclusion/inclusion filter** layered on top of
+the existing categories (`_qualifies_as_technical`/`_qualifies_as_
+financial`/`_qualifies_as_key_date` in `services/project_briefing.py`)
+— same discipline as CLAUDE-P38 OBS-09's cover-page-metadata filter,
+not a classifier rewrite. Exclusion always wins; an uncertain item is
+left out of the preview, never guessed in, but never deleted from the
+full register. **Two additional false positives found live** (not in
+the original prompt) during this stage's own verification against a
+real running instance — a bare "Section 3 - Financial Submission"
+heading satisfied its own inclusion signal, and a bare "following"
+matched ordinary prose as if it were relative-milestone timing — both
+fixed and regression-tested before sealing.
+
+**Page hierarchy:** Generate/Regenerate now appears before any
+deterministic list; each preview capped at 5 items with a real
+qualifying count and an explicit "Open X" link; the two composers kept
+as explicitly labeled, distinct controls (acceptable-fallback option —
+unifying them would mean teaching `quick_start`'s unconditional
+always-creates-a-Case behavior to route conditionally, a real
+behavioral change to an existing tested route, not a labeling fix);
+Lifecycle/Display Layers moved inside one collapsed "Project
+Management & Settings" disclosure; two permanent prose paragraphs
+moved behind a collapsed "What is Project State?" disclosure.
+
+**Visual verification:** no browser/screenshot tool is available in
+this environment. Verified instead via real HTTP requests against the
+actual running dev server (same pattern as CLAUDE-P36) — uploaded a
+purpose-built synthetic document exercising every prompt-given
+inclusion/exclusion example, inspected the real rendered HTML structure
+and content before/after each fix. This confirms content, order, and
+absence/presence with certainty; it does **not** confirm pixel-level
+responsive layout at wide/medium/narrow viewports — that gap is stated
+plainly in this stage's own final report, not glossed over.
+
+See this stage's own final report (delivered in-conversation) for the
+full classification rule tables and browser retest checklist.
+
+---
+
 ## 2026-07-31 — CLAUDE-P38-B: narrative-first project opening
 
 **Commit:** `c5ecf52`. Full suite: 1086 passed (1070 + 16 new).
