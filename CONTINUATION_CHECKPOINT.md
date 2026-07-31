@@ -1,5 +1,60 @@
 # Continuation checkpoint
 
+## 2026-07-30 — CLAUDE-P36 Case 1/Case 2 walkthrough: performed live, by Claude, against the running app
+
+**Commit:** `6dd1695`. Full suite: 1028 passed (1026 + 2 new).
+
+**What actually happened.** The product owner asked Claude to perform
+the Case 1 (denied) / Case 2 (permitted) walkthrough directly, rather
+than waiting for a human browser session. No browser-automation tool is
+available in this environment, so it was performed the closest honest
+substitute: real HTTP requests (Python stdlib `urllib` + a real session
+cookie, CSRF token extracted from each page like a browser's JS would)
+against the actual running dev server (`restart-app`-cleaned, one
+process), using a synthetic test document and a dedicated, suspended-
+after-use test account (`p36_walkthrough`) — never the pytest test
+client, never a mocked Anthropic call. **This is real live-app
+verification, not a substitute for the product owner's own hands-on
+browser session** — that distinction stays open regardless.
+
+**Both cases passed.** Case 1 (project security profile set to
+`restricted`): Discuss-this-Requirement → Start-an-Investigation
+correctly refused with *"not permitted by this project's security
+policy (controlling layer: profile)"*, zero Findings created, zero
+provider calls. Case 2 (profile reset to `standard`): the same flow
+made one real, ~14s Anthropic API call and produced a genuine,
+appropriately-hedged provisional Finding (confidence 30%, correctly
+flagged insufficient evidence rather than guessing) — carried through
+ReviewerValidation → Confirmed Disposition → Apply → RFI draft → issue
+→ `.docx` export, all verified with real content. Logged out and back
+in: Applied badge, Finding, and issued RFI status all persisted.
+
+**Two real defects found live, not by any prior test:** `GET /security/`
+(the Security Department page, needed to set a project's profile for
+Case 1) 500'd the instant a real project existed alongside the already-
+known corrupted legacy workspace file — a third and fourth occurrence
+of the CLAUDE-P32-documented `reviews`-key incompatibility, in
+`routes/security.py::department_home` and `services/security_
+assurance.py::run_security_self_check`, neither previously covered by
+any test (this route had zero HTTP-level test coverage before this).
+Both fixed (fail-closed to exclude for the former, matching existing
+precedent; reported as an anomaly finding for the latter, since that
+function's whole purpose is surfacing anomalies) — this is exactly the
+kind of gap a real walkthrough is supposed to catch that a mocked test
+suite cannot, even a thorough one.
+
+**Cleanup performed:** the synthetic test project was deleted via the
+real `/projects/<id>/delete` route; the `p36_walkthrough` test account
+was suspended (not deleted) via `tools/create_credentials.py --suspend`.
+
+**Standing caveats, unchanged:** this was a synthetic document, not a
+real confidential one — success here does not prove confidential-client
+deployment readiness (per the product owner's own explicit instruction).
+The pre-ingestion external-AI selection/disclosure requirement remains
+a deferred release-stage item, not implemented, per instruction.
+
+---
+
 ## 2026-07-30 — CLAUDE-P36: external-AI governance, confidentiality, and provider-portability gate
 
 **Commits:** `2fd949e` (enforcement + provider-portability fields),
