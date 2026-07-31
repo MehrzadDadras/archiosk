@@ -195,6 +195,44 @@ class RequirementInvestigationInterpreterTests(unittest.TestCase):
         resp = self.client.get(f"/projects/{self.project_id}/workspace")
         self.assertIn("Start an Investigation from this", resp.get_data(as_text=True))
 
+    def test_natural_concern_phrasing_also_offers_escalation(self):
+        # CLAUDE-P39: found live during this stage's own audit - a real
+        # reviewer concern, phrased naturally (not using any of the
+        # original six trigger phrases), used to produce a silent
+        # anchor_acknowledged dead end with no path to an Investigation.
+        requirement = self._register_requirement()
+        self.client.post(
+            f"/projects/{self.project_id}/workspace/discuss",
+            data={
+                "text": "I'm not sure this covers electrical systems as well, only mechanical.",
+                "anchor_type": "requirement",
+                "anchor_id": requirement["id"],
+                "anchor_description": "Section 3.1",
+            },
+        )
+        resp = self.client.get(f"/projects/{self.project_id}/workspace")
+        self.assertIn("Start an Investigation from this", resp.get_data(as_text=True))
+
+    def test_unmatched_requirement_concern_still_hints_at_working_phrasing(self):
+        # A message that matches none of the recognized phrases must not
+        # be a silent dead end either - the acknowledgment itself now
+        # names phrasing that would have worked.
+        requirement = self._register_requirement()
+        self.client.post(
+            f"/projects/{self.project_id}/workspace/discuss",
+            data={
+                "text": "thanks, noted",
+                "anchor_type": "requirement",
+                "anchor_id": requirement["id"],
+                "anchor_description": "Section 3.1",
+            },
+        )
+        workspace = self.store.get(self.project_id)
+        system_reply = workspace.project_conversation[-1]
+        self.assertEqual(system_reply["action_taken"], "anchor_acknowledged")
+        self.assertIn("Investigate this", system_reply["text"])
+        self.assertIn("Something is wrong here", system_reply["text"])
+
     def test_investigation_question_inside_a_case_declines_honestly_with_no_api_key(self):
         requirement = self._register_requirement()
         case = self._create_case()
@@ -250,6 +288,19 @@ class RequirementInvestigationInterpreterTests(unittest.TestCase):
         # Not a Case-shaped decline, not a real investigation - a Source
         # anchor is out of this feature's proving-ground scope.
         self.assertEqual(result.action_taken, "anchor_acknowledged")
+
+    def test_additional_natural_phrasings_are_recognized_as_investigation_worthy(self):
+        from services.conversation_interpreter import _looks_like_investigation_request
+
+        for phrase in (
+            "I'm not sure this covers electrical systems as well",
+            "this doesn't mention the acceptance criteria at all",
+            "the schedule seems to conflict with the milestone above",
+            "it's unclear whether this includes commissioning",
+            "concerned about the lack of a specified tolerance",
+        ):
+            with self.subTest(phrase=phrase):
+                self.assertTrue(_looks_like_investigation_request(phrase.lower()))
 
     def test_real_investigation_creates_a_provisional_finding_with_a_mocked_model(self):
         requirement = self._register_requirement()

@@ -220,15 +220,31 @@ def _describe_anchor_acknowledgment(anchor: dict) -> str:
     arrived, without claiming the message itself was understood -
     this interpreter is still deterministic keyword matching (see this
     module's own docstring), not reasoning about what was said.
+
+    CLAUDE-P39: for a Requirement anchor specifically, this is also the
+    one place a reviewer whose concern didn't happen to match
+    _INVESTIGATION_PHRASES finds out - the fallback used to be a true
+    dead end (no path forward, no hint at what phrasing would have
+    worked); now it names a couple of phrasings that would. Still
+    doesn't claim the message was understood, and still doesn't offer
+    (or trigger) an Investigation on its own - the reviewer has to
+    actually say so, same as before this stage.
     """
     kind = (anchor.get("anchor_type") or "item").replace("_", " ")
     label = anchor.get("description") or anchor.get("anchor_id", "")
-    return (
+    text = (
         f"Noted, in the context of this {kind}"
         f"{' (' + label + ')' if label else ''} - I didn't recognize a specific "
         "action in that message, but what you were looking at is on record "
         "against it."
     )
+    if anchor.get("anchor_type") == "requirement":
+        text += (
+            " If this is a concern worth investigating, say so directly - e.g. "
+            "\"Investigate this\" or \"Something is wrong here\" - and this can "
+            "become the start of an Investigation."
+        )
+    return text
 
 
 def _handle_analyze(
@@ -388,6 +404,19 @@ _INVESTIGATION_PHRASES = (
     "check this", "something is wrong", "something's wrong", "something wrong here",
     "where did this come from", "where does this come from",
     "investigate this", "look into this",
+    # CLAUDE-P39: additional natural ways a reviewer states a concern
+    # about a Requirement without using any of the phrases above - found
+    # live during this stage's own audit ("I'm not sure this covers
+    # electrical systems as well, only mechanical" produced a silent
+    # anchor_acknowledged dead end, with no path to an Investigation, for
+    # exactly the kind of substantive concern this feature exists to
+    # catch). Still a bounded phrase list, not a rewrite of this
+    # module's deterministic-keyword-matching design.
+    "not sure this covers", "not sure if this covers", "doesn't cover", "does not cover",
+    "doesn't mention", "does not mention", "no mention of",
+    "seems to conflict", "conflicts with", "not specified", "not stated",
+    "unclear whether", "unclear if", "not clear whether", "not clear if",
+    "concerned about", "concerned that", "this is missing", "appears to be missing",
 )
 
 
