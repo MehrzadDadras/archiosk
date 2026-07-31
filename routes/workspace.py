@@ -144,9 +144,24 @@ def _load_workspace_or_404(project_id: str):
         abort(404)
 
     store = _store()
-    workspace = store.get_or_create(
-        project_id, register_document_source=document_source_payload(document),
-    )
+    # CLAUDE-P37: a corrupted legacy workspace file (missing a field
+    # ProjectWorkspace's current dataclass shape requires) must 404 here,
+    # not 500 -- the exact same "don't confirm existence to a non-member"
+    # convention this function already applies to an unauthorized caller,
+    # now also applied to a request this deployment itself can't honestly
+    # serve. Found live during CLAUDE-P36's real-app walkthrough that this
+    # near-universal choke point (47+ of this blueprint's own routes) had
+    # never been given the same fail-closed handling already applied
+    # elsewhere (app.py's _nav_recent_projects, routes/portal.py's
+    # _accessible_documents, routes/security.py's department_home,
+    # services/security_assurance.py's self-check) for this identical,
+    # already-diagnosed defect class.
+    try:
+        workspace = store.get_or_create(
+            project_id, register_document_source=document_source_payload(document),
+        )
+    except TypeError:
+        abort(404)
 
     from services.project_access import can_access_project, ensure_owner_backfilled, known_usernames
 

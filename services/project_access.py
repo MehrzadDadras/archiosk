@@ -119,7 +119,20 @@ def load_authorized_project_or_none(store, registry, governance_log, project_id:
     if document is None:
         return None
 
-    workspace = store.get_or_create(project_id)
+    # CLAUDE-P37: a corrupted legacy workspace file must read as "not
+    # accessible" (None), the same as a genuinely nonexistent or
+    # unauthorized project -- not an uncaught TypeError. This is the
+    # shared routine routes/api.py's whole blueprint calls through
+    # _load_authorized_project_or_404, so leaving this unguarded exposed
+    # every JSON API route to the same already-diagnosed defect class
+    # routes/workspace.py's own loader, app.py's nav sidebar, routes/
+    # portal.py's document listing, routes/security.py's department
+    # home, and services/security_assurance.py's self-check were all
+    # separately hardened against.
+    try:
+        workspace = store.get_or_create(project_id)
+    except TypeError:
+        return None
     ensure_owner_backfilled(store, workspace, governance_log, known_usernames())
     if not can_access_project(workspace, username, is_admin):
         return None

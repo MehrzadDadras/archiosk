@@ -413,6 +413,45 @@ class LegacyProjectBackfillTests(_BaseAccessControlTestCase):
         self.assertEqual(self.carol_client.get("/projects/legacy-manual-assign/workspace").status_code, 200)
 
 
+class CorruptedLegacyWorkspaceRouteTests(_BaseAccessControlTestCase):
+    """
+    CLAUDE-P37: found live during CLAUDE-P36's real-app walkthrough that
+    the actual choke points behind almost every project-scoped route --
+    routes/workspace.py's _load_workspace_or_404 (47+ routes: Case
+    Workspace, Findings, RFI, everything) and services/project_access.py's
+    load_authorized_project_or_none (every routes/api.py JSON route) --
+    had never been given the same fail-closed handling already applied
+    to peripheral pages (app.py's nav sidebar, routes/portal.py's
+    document listing, routes/security.py's department home,
+    services/security_assurance.py's self-check) for a corrupted legacy
+    workspace file (one missing a field ProjectWorkspace's current
+    dataclass shape requires -- the real, documented instance/registry/
+    'reviews'-key incompatibility). Confirms both choke points now 404
+    (matching _load_workspace_or_404's own "don't confirm existence"
+    convention) instead of a raw 500, for BOTH an authorized admin and
+    an unauthorized reader -- neither should ever see a stack trace.
+    """
+
+    def _seed_corrupted_project(self, project_id: str):
+        registry = RequirementsRegistry(self.tmp_dir)
+        registry.save(ParsedDocument(project_id=project_id, filename="old.txt", ingested_at="2020-01-01T00:00:00+00:00"))
+        (self.tmp_dir / f"{project_id}.workspace.json").write_text(
+            '{"project_id": "' + project_id + '", "reviews": []}', encoding="utf-8",
+        )
+
+    def test_workspace_route_404s_instead_of_500_for_a_corrupted_workspace(self):
+        self._seed_corrupted_project("corrupted-workspace-route")
+        self.assertEqual(self.alice_client.get("/projects/corrupted-workspace-route/workspace").status_code, 404)
+        self.assertEqual(self.bob_client.get("/projects/corrupted-workspace-route/workspace").status_code, 404)
+
+    def test_api_route_404s_instead_of_500_for_a_corrupted_workspace(self):
+        self._seed_corrupted_project("corrupted-workspace-api")
+        self.assertEqual(self.alice_client.get("/api/v1/documents/corrupted-workspace-api").status_code, 404)
+        self.assertEqual(
+            self.alice_client.get("/api/v1/documents/corrupted-workspace-api/requirements").status_code, 404,
+        )
+
+
 class NewProjectRequiresOwnerTests(_BaseAccessControlTestCase):
     def test_new_project_owner_matches_real_authenticated_uploader(self):
         doc = self._ingest(owner="bob", project_name="New Project Owner Check")
