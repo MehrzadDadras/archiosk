@@ -1,5 +1,129 @@
 # Continuation checkpoint
 
+## 2026-07-31 — CLAUDE-P40-B: product-owner browser defect closure and first-use trust repair
+
+**Commits:** `27a2a03` (Batch A: truthful controls/copy), `045fc27`
+(Batch B: Q&A continuity/precision), `449c65a` (Batch C: rename
+uniqueness), `4124221` (Batch D: Briefing timeout root cause +
+truthful activity state). Full suite: 1177 passed (was 1151).
+
+A real product owner's own browser session (Test 2 / Riverside
+projects) surfaced eight defect areas; all eight were repository-
+confirmed via direct code inspection/execution before any fix, per
+this stage's own explicit "reproduce or mechanically trace each issue"
+requirement (P40-B, superseding the earlier same-day P40-R corrective
+review that flagged an authorization mismatch and an evidence-
+overstatement problem in the prior P40 stage - this stage's own
+verification evidence is explicitly labeled by class throughout, never
+presented as browser-observed when it was HTTP-driven).
+
+**3.3 (View-all controls dead)** and part of **3.5 (Q&A destination
+unclear)** shared one root cause: `templates/_macros.html`'s
+`accordion()` macro only ever writes `data-accordion-id`, never a real
+HTML `id`, unless `html_id` is also passed - the "Requirements", "Key
+Dates", and "Project Conversation" accordions never got one, so
+same-page anchor links had nothing to scroll to and an *already-built*
+auto-open-on-anchor script (`static/js/case_workspace.js`) had nothing
+to find. Fixed by adding the three missing `html_id`s - no new JS.
+
+**3.4 (silent mid-word truncation)**: `services/bhive_parser.py`'s
+`_derive_milestones` did `req.text[:120]` with no ellipsis and no
+justifying comment - a pre-P40 leftover that P40's own reflow fix made
+bite far more often (real sentences are now whole, and therefore often
+longer than 120 characters). Truncation removed; milestone labels now
+match every other candidate list on the page, which never truncated.
+The two "questionable classification" examples in the prompt (annual
+financial statements / backup restoration / security events under
+Technical; a lowest-price waiver under Financial) could not be
+reproduced or investigated - they come from the product owner's own
+real document, never provided to this repository - and were
+explicitly deferred rather than guessed at.
+
+**3.7 (drawing-only language leaking into text-RFP Cases)**: six leak
+points (four in `templates/case_workspace.html`, two in `services/
+conversation_interpreter.py`'s fallback replies) all fixed by reusing
+the SAME `drawing_sources` check the existing "+ Add drawing Source"
+control already computes - conditional, not a blanket swap: a Case
+that genuinely has a drawing Source still sees the original,
+drawing-specific copy verbatim.
+
+**3.8 (dead-looking header controls)**: the minus (Collapse All) and
+star controls were both already fully functional on inspection (real
+routes, real persistence, real active-state CSS) - the star was just
+missing a hover tooltip its sibling button already had. The three-dot
+overflow menu was also functional but its bare glyph, containing
+exactly one action, read as confusing ceremony - relabeled to a plain
+"Edit" affordance, which also directly serves **3.1**'s "provide a
+visible way to rename after ingestion."
+
+**3.1 (Project identity)**: a real, repository-confirmed gap found
+during investigation, not merely asserted - renaming a Project via
+Edit Project Details never checked name uniqueness at all, even though
+upload-time naming does (`services/ingestion.py`'s
+`_reject_if_name_taken`). Extracted the same rule into a new public
+`reject_if_display_name_taken`, excluding the Project being renamed
+itself, wired into `edit_project_details`. No detected-source-title
+comparison engine was built - no reliable "detected title" field
+exists anywhere in the current schema, and this stage's own governing
+prompt explicitly permitted deferring that in favor of edit
+discoverability now.
+
+**3.5 (quick_start silently creating a Case for a plain question)**:
+already a named, open concern in `ConversationMessage`'s own docstring
+before this stage ("forcing one into existence just to hold a message
+is exactly the surprise quick_start currently causes"). Fixed by
+reusing the existing `_looks_like_project_question` heuristic (already
+trusted by `discuss_object`'s own reply routing) as a soft guard - a
+plain question now routes through the same `case_id=None` project-level
+conversation `discuss_object` uses; anything that doesn't read as a
+plain question still creates a Case exactly as before. The governed
+Investigation path itself was not touched.
+
+**3.6 (document-identity answer imprecise)**: `services/project_qa.py`'s
+prompt only ever said `"Source document: <filename>"`, with no access
+to the Project's own `display_title` and no instruction distinguishing
+filename from a formal title/RFP number/version if one exists in the
+evidence; separately, `services/conversation_interpreter.py` flattened
+the answer and its citations into one string. Fixed: the prompt now
+names every identity concept explicitly and asks for a concise direct
+answer; `grounded_in` now travels as its own additive field on
+`ConversationMessage`/`InterpretationResult` (old saved messages
+simply lack the key) and renders as a collapsed "Source grounding"
+subdisclosure - reusing the exact pattern Project Briefing's own
+source grounding already established.
+
+**3.2 (Briefing timeout)**: traced to the exact boundary, not merely
+widened. `.env`'s `ANTHROPIC_TIMEOUT_SECONDS=30` is an APPLICATION
+timeout (the Anthropic SDK's own `timeout=`), confirmed comfortably
+under `deploy/gunicorn.conf.py`'s worker timeout (150s) and `deploy/
+nginx.conf`'s `proxy_read_timeout` (150s) - extending it carries no
+risk of trading one failure for a worse one. Fixed with
+`_scale_timeout_for_prompt_size`: the operator's configured value is
+respected as a floor, only extended upward for a genuinely larger
+rendered prompt, capped at 90s. Also fixed: "A generation request is
+already in progress" (conflict-style wording for what is, in this
+fully-synchronous, no-background-job architecture, an entirely
+ordinary case - a second page load while the reviewer's own first
+request is still in flight) reworded to name what's actually
+happening; a genuine failure was being shown twice on the same page
+(a flash banner duplicating the persistent inline "Generation failed -
+Retry" state) - the flash was removed, the inline state alone remains.
+No new queue/worker/background-job infrastructure was introduced or
+found necessary.
+
+**Verification, by evidence class** (see this stage's own final report
+for the full breakdown): unit/integration (1177 passed, +26 new,
+covering every fix above); automated HTTP route exercise against the
+real running dev server, before/after, including one real (non-mocked)
+Anthropic Q&A call - all 18 checks passed; no real browser or
+unfamiliar-user verification was performed or claimed.
+
+See this stage's own final report (delivered in-conversation) for the
+full root-cause map, the P40-R corrective context this stage continues
+from, and the remaining commercial blockers.
+
+---
+
 ## 2026-07-31 — CLAUDE-P40: critical co-architect review — repaired visual line-wrap fragmentation
 
 **Commit:** `5cd337c`. Full suite: 1151 passed (was 1130).
