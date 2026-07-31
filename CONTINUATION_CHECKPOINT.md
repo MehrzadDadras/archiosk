@@ -1,5 +1,62 @@
 # Continuation checkpoint
 
+## 2026-07-31 — CLAUDE-P40-D1: authentication-surface isolation
+
+**Commit:** `4190ee0`. Full suite: 1231 passed (was 1214).
+
+A real product-owner screenshot showed `/login` rendered inside the
+authenticated application shell - full left navigation, real project
+names visible. A non-disclosure/authentication-boundary defect, not
+styling. Root cause: `login()`'s GET handler rendered `login.html`
+unconditionally regardless of session state, and `login.html`/
+`forgot_password.html`/`reset_password.html` all extended
+`gateway_base.html` -> `base.html`, whose side-rail nav (which queries
+the live project-listing store) renders whenever `authenticated` is
+true - true for an already-signed-in session hitting `/login` directly
+(a stale bookmark, a second tab).
+
+**Fix, four parts:** `templates/auth_shell.html` - a genuinely
+standalone shell for `/login`/`/forgot-password`/`/reset-password`
+that never extends `base.html` at all, so the nav markup structurally
+does not exist to leak (CSS-hiding was never going to be sufficient,
+per this stage's own explicit instruction). `app.py`'s
+`inject_globals()` now guards `nav_recent_projects`/`authenticated`/
+`is_admin` for exactly these three routes, so the project-listing
+store query itself never runs for them - not just its rendering.
+`routes/portal.py`'s `login()` now redirects an already-authenticated
+request to the landing route instead of ever rendering the form
+(honoring `?next=` when same-site, matching the existing post-login
+redirect convention). `logout()` now returns to the isolated `/login`
+page instead of the general `/` landing page.
+
+`gateway.html` (the legitimate post-login project gateway) is
+unaffected - still extends the original `gateway_base.html`/uses
+`.gateway-page`/`.gateway-card` inside the real authenticated shell,
+exactly as before. `STATIC_VERSION` bumped in `.env` for the
+`main.css` change (new `.auth-shell-page`/`.auth-shell-footer` rules
+only - no existing gateway rule was touched).
+
+**Tests:** 17 new (`tests/test_p40d1_auth_shell_isolation.py`) proving
+anonymous and already-authenticated requests to all three routes carry
+no project name/ID/nav markup and never call the project-listing
+store; sign-out returns the isolated shell and actually clears the
+session; an unauthenticated/expired-equivalent request to a protected
+route redirects to the isolated shell without leakage; the real
+authenticated app shell (`/gateway`, `/`) is unaffected; P32 project
+authorization (owner access, non-owner 404) is unaffected. Fixed
+nothing pre-existing - `tests/test_csrf_protection.py`'s "every page
+exposes the csrf-token meta tag" invariant was preserved by keeping
+that inert meta tag in the new shell alongside each form's own
+explicit hidden `csrf_token` input (this shell doesn't include
+`base.html`'s JS auto-injection script at all).
+
+Live-server HTTP check (not browser-rendered - labeled honestly, per
+this stage's own explicit instruction): a fresh `python app.py`
+restart confirmed serving `main.css?v=18`, and the anonymous `/login`
+response contains zero `app-shell`/`side-rail`/`nav-toggle` markers.
+
+---
+
 ## 2026-07-31 — CLAUDE-P40-D: persisted-project compatibility closure, mutation-free corpus validation, Add Addendum requirement capture
 
 **Commits:** (see repository log for the staged P40-D commits). Full
