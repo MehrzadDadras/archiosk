@@ -2366,6 +2366,15 @@ class ProjectWorkspace:
     findings: list[dict] = field(default_factory=list)
     reviewer_validations: list[dict] = field(default_factory=list)
     dispositions: list[dict] = field(default_factory=list)
+    # CLAUDE-P40-D: verbatim preservation for records serialized before
+    # commit d1ac48e ("Extend Case Workspace with three-part review
+    # model...") split the original single Review concept (decision one
+    # of REVIEW_DECISIONS: accept/reject/needs_evidence/correction) into
+    # reviewer_validations + dispositions above. Never written to by any
+    # current code path - see CaseWorkspaceStore._hydrate_legacy_reviews
+    # for why no honest 1:1 mapping onto either successor exists and
+    # nothing is invented here.
+    legacy_reviews: list[dict] = field(default_factory=list)
     analyses: list[dict] = field(default_factory=list)
     applies: list[dict] = field(default_factory=list)
     rfi_drafts: list[dict] = field(default_factory=list)
@@ -3069,9 +3078,50 @@ class CaseWorkspaceStore:
         if not path.exists():
             return None
         data = json.loads(path.read_text(encoding="utf-8"))
+        self._hydrate_legacy_reviews(data)
         workspace = ProjectWorkspace(**data)
         self._hydrate_legacy_cases(workspace)
         return workspace
+
+    @staticmethod
+    def _hydrate_legacy_reviews(data: dict) -> None:
+        """
+        CLAUDE-P40-D: a workspace record serialized before commit
+        d1ac48e ("Extend Case Workspace with three-part review model...")
+        has a top-level "reviews" key - the original single Review
+        concept (id, finding_id, decision, reviewer, reviewed_at, note;
+        decision one of REVIEW_DECISIONS: accept/reject/needs_evidence/
+        correction, introduced in commit 0e86380). "reviews" is not a
+        ProjectWorkspace field at all anymore, so
+        ProjectWorkspace(**data) raised TypeError: unexpected keyword
+        argument 'reviews' for any such record.
+
+        d1ac48e replaced the single Review with two deliberately
+        DIFFERENT concepts: ReviewerValidation (epistemic accuracy:
+        REVIEWER_VALIDATION_STATES = Correct/Incorrect/Partial/Needs
+        Evidence/Not Applicable) and Disposition (workflow decision:
+        DISPOSITIONS = Confirmed/Rejected/Deferred/... - "this, not
+        ReviewerValidation, is what Apply actually checks", per
+        Disposition's own docstring). Real persisted legacy `decision`
+        values ("accept", "correction") are not members of either
+        vocabulary - "accept" plausibly meant BOTH "epistemically
+        Correct" and "workflow Confirmed" at once under the old
+        single-concept model, and choosing one now would be inventing a
+        decision this hydration step has no authority to make (Section
+        C of the CLAUDE-P40-D prompt: no assumed one-to-one mapping).
+
+        So nothing is converted. The raw legacy list is preserved
+        verbatim under `legacy_reviews` - a real ProjectWorkspace field
+        distinct in name from both current review concepts so nothing
+        downstream mistakes it for a current-schema ReviewerValidation
+        or Disposition record. Every id, finding_id, decision, reviewer,
+        reviewed_at, and note survives unchanged; nothing is dropped or
+        fabricated. Like _hydrate_legacy_cases below, this alone never
+        calls save() and never mutates the source file - it only
+        reshapes the in-memory dict handed to ProjectWorkspace(**data).
+        """
+        if "reviews" in data:
+            data["legacy_reviews"] = data.pop("reviews")
 
     @staticmethod
     def _hydrate_legacy_cases(workspace: ProjectWorkspace) -> None:
