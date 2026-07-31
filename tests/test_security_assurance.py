@@ -262,14 +262,20 @@ class SelfCheckTests(_BaseAssuranceTestCase):
         """
         good_document = self._ingest("Self Check Corrupted Sibling")
 
-        corrupted_project_id = "legacy-corrupted-reviews-key"
+        corrupted_project_id = "legacy-corrupted-unrecognized-field"
         from services.requirements_registry import RequirementsRegistry
 
         registry = RequirementsRegistry(self.flask_app.config["REGISTRY_STORE_PATH"])
         registry.save(ParsedDocument(project_id=corrupted_project_id, filename="old.txt", ingested_at="2020-01-01T00:00:00+00:00"))
         corrupted_path = self.tmp_dir / f"{corrupted_project_id}.workspace.json"
         corrupted_path.write_text(
-            '{"project_id": "' + corrupted_project_id + '", "reviews": []}', encoding="utf-8",
+            # CLAUDE-P40-D: was a real "reviews" key (the original
+            # reproduction) - CaseWorkspaceStore._hydrate_legacy_reviews
+            # now gives that key a real compatibility adapter, so it no
+            # longer TypeErrors and can't stand in for "unrecognized
+            # field" here anymore. A still-genuinely-unrecognized key is
+            # used instead to keep exercising the same invariant.
+            '{"project_id": "' + corrupted_project_id + '", "totally_unrecognized_field_xyz": []}', encoding="utf-8",
         )
 
         store = SecurityGovernanceStore(self.flask_app.config["REGISTRY_STORE_PATH"])
@@ -316,14 +322,20 @@ class SecurityDepartmentRouteTests(_BaseAssuranceTestCase):
     def test_department_home_does_not_crash_with_a_corrupted_legacy_workspace_present(self):
         good_document = self._ingest("Security Department Corrupted Sibling")
 
-        corrupted_project_id = "legacy-corrupted-reviews-key"
+        corrupted_project_id = "legacy-corrupted-unrecognized-field"
         from services.requirements_registry import RequirementsRegistry
 
         registry = RequirementsRegistry(self.flask_app.config["REGISTRY_STORE_PATH"])
         registry.save(ParsedDocument(project_id=corrupted_project_id, filename="old.txt", ingested_at="2020-01-01T00:00:00+00:00"))
         corrupted_path = self.tmp_dir / f"{corrupted_project_id}.workspace.json"
         corrupted_path.write_text(
-            '{"project_id": "' + corrupted_project_id + '", "reviews": []}', encoding="utf-8",
+            # CLAUDE-P40-D: was a real "reviews" key (the original
+            # reproduction) - CaseWorkspaceStore._hydrate_legacy_reviews
+            # now gives that key a real compatibility adapter, so it no
+            # longer TypeErrors and can't stand in for "unrecognized
+            # field" here anymore. A still-genuinely-unrecognized key is
+            # used instead to keep exercising the same invariant.
+            '{"project_id": "' + corrupted_project_id + '", "totally_unrecognized_field_xyz": []}', encoding="utf-8",
         )
 
         resp = self.client.get("/security/")

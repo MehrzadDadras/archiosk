@@ -309,7 +309,7 @@ class DebuggerConfigurationTests(unittest.TestCase):
 
     def setUp(self):
         self._saved_env = {
-            k: os.environ.get(k) for k in ("ARCHIOSK_ENABLE_DEBUGGER", "FLASK_ENV")
+            k: os.environ.get(k) for k in ("ARCHIOSK_ENABLE_DEBUGGER", "FLASK_ENV", "FLASK_DEBUG")
         }
 
     def tearDown(self):
@@ -354,6 +354,19 @@ class DebuggerConfigurationTests(unittest.TestCase):
                 app_module._interactive_debugger_enabled(),
                 f"loose value {loose_value!r} must not enable the debugger",
             )
+
+    def test_legacy_flask_debug_env_var_alone_is_not_enough(self):
+        # CLAUDE-P40-D: _interactive_debugger_enabled() never reads
+        # FLASK_DEBUG at all (only ARCHIOSK_ENABLE_DEBUGGER + FLASK_ENV
+        # gate it) - a stray legacy FLASK_DEBUG=1 (e.g. copied from a
+        # generic Flask tutorial/template) must not enable the debugger
+        # on its own, without both authorized conditions also present.
+        os.environ.pop("ARCHIOSK_ENABLE_DEBUGGER", None)
+        os.environ["FLASK_ENV"] = "production"
+        os.environ["FLASK_DEBUG"] = "1"
+        import app as app_module
+        self.assertFalse(app_module._interactive_debugger_enabled())
+        os.environ.pop("FLASK_DEBUG", None)
 
     def test_both_explicit_conditions_together_enable_it(self):
         os.environ["ARCHIOSK_ENABLE_DEBUGGER"] = "1"

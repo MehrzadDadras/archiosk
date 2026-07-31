@@ -361,19 +361,23 @@ class MarketCriticalGoldenPathTests(unittest.TestCase):
         self.assertIn(b"security policy", response.data)
 
     def test_corrupted_legacy_workspace_does_not_break_listings_or_nav(self):
-        """CLAUDE-P34, Part 5: regression coverage for the real
-        instance/registry/ 'reviews'-key incompatibility found during
-        P32/P34 -- proves today's code fails closed (excludes) rather
-        than crashing every authenticated page when a corrupted legacy
-        workspace file exists alongside real projects."""
+        """CLAUDE-P34, Part 5: regression coverage for a corrupted
+        legacy workspace file (an unrecognized field ProjectWorkspace's
+        dataclass shape rejects) -- proves today's code fails closed
+        (excludes) rather than crashing every authenticated page when
+        one exists alongside real projects. Originally reproduced with
+        a real 'reviews' key; CLAUDE-P40-D gave that key a real
+        compatibility adapter (CaseWorkspaceStore._hydrate_legacy_
+        reviews), so a still-genuinely-unrecognized key is used here
+        instead."""
         good_document = self._ingest(owner="alice", project_name="Healthy Project")
 
-        corrupted_project_id = "legacy-corrupted-reviews-key"
+        corrupted_project_id = "legacy-corrupted-unrecognized-field"
         registry = RequirementsRegistry(self.tmp_dir)
         registry.save(ParsedDocument(project_id=corrupted_project_id, filename="old.txt", ingested_at="2020-01-01T00:00:00+00:00"))
         corrupted_path = self.tmp_dir / f"{corrupted_project_id}.workspace.json"
         corrupted_path.write_text(
-            '{"project_id": "' + corrupted_project_id + '", "reviews": []}', encoding="utf-8",
+            '{"project_id": "' + corrupted_project_id + '", "totally_unrecognized_field_xyz": []}', encoding="utf-8",
         )
 
         # The nav sidebar and /projects listing must not crash for ANY

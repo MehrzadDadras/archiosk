@@ -424,9 +424,14 @@ class CorruptedLegacyWorkspaceRouteTests(_BaseAccessControlTestCase):
     to peripheral pages (app.py's nav sidebar, routes/portal.py's
     document listing, routes/security.py's department home,
     services/security_assurance.py's self-check) for a corrupted legacy
-    workspace file (one missing a field ProjectWorkspace's current
-    dataclass shape requires -- the real, documented instance/registry/
-    'reviews'-key incompatibility). Confirms both choke points now 404
+    workspace file (one with a field ProjectWorkspace's current
+    dataclass shape does not recognize at all). Originally reproduced
+    with a real 'reviews' key -- CLAUDE-P40-D gave that specific key a
+    real compatibility adapter (CaseWorkspaceStore._hydrate_legacy_
+    reviews), so it no longer TypeErrors and is no longer a usable
+    stand-in for "unrecognized field" here; a still-genuinely-
+    unrecognized key is used instead to keep exercising the same
+    fail-closed invariant. Confirms both choke points still 404
     (matching _load_workspace_or_404's own "don't confirm existence"
     convention) instead of a raw 500, for BOTH an authorized admin and
     an unauthorized reader -- neither should ever see a stack trace.
@@ -436,7 +441,7 @@ class CorruptedLegacyWorkspaceRouteTests(_BaseAccessControlTestCase):
         registry = RequirementsRegistry(self.tmp_dir)
         registry.save(ParsedDocument(project_id=project_id, filename="old.txt", ingested_at="2020-01-01T00:00:00+00:00"))
         (self.tmp_dir / f"{project_id}.workspace.json").write_text(
-            '{"project_id": "' + project_id + '", "reviews": []}', encoding="utf-8",
+            '{"project_id": "' + project_id + '", "totally_unrecognized_field_xyz": []}', encoding="utf-8",
         )
 
     def test_workspace_route_404s_instead_of_500_for_a_corrupted_workspace(self):
