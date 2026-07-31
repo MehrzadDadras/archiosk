@@ -789,8 +789,12 @@ class ProjectBriefingPageHierarchyTests(unittest.TestCase):
         # "open" attribute - collapsed by default is structural here,
         # not a runtime toggle. Confirms Lifecycle/Layers were actually
         # moved inside it, not just labeled.
+        # CLAUDE-P40-E: this subdisclosure gained an html_id (so the
+        # unified left nav can link straight into it) - matched without
+        # the id attribute now, since that's an unrelated navigation
+        # concern, not what this test is actually verifying.
         self.assertIn(
-            '<details class="add-source-details">\n    <summary>Project Management &amp; Settings</summary>',
+            '<summary>Project Management &amp; Settings</summary>',
             body,
         )
         management_pos = body.find("Project Management &amp; Settings")

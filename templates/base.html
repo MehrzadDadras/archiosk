@@ -103,6 +103,67 @@
                         {% endif %}
                     </div>
                 </details>
+
+                {# CLAUDE-P40-E: the second, permanently-visible project-
+                   context column that used to live inside case_workspace.
+                   html (.workspace-pane-nav) is gone - its useful entries
+                   now live here, beneath the active project's own row,
+                   in the SAME unified nav rail (not a separate panel).
+                   Only ever rendered on a workspace page (project_id/
+                   workspace/document are real render-context variables
+                   show_workspace already passes to case_workspace.html -
+                   never re-derived here) - every other page's nav is
+                   unaffected. Detailed content (the actual forms/lists
+                   these entries summarize) stays exactly where it was
+                   moved to: the main Workspace pane's own default/empty-
+                   state content, at the same html_id anchors these links
+                   target - nothing here duplicates that content, this is
+                   navigation only. #}
+                {% if project_id is defined and workspace is defined %}
+                {% set needs_attention_count = needs_attention_view|map(attribute='findings')|map('length')|sum %}
+                <div class="side-rail-project-nav">
+                    <p class="side-rail-project-heading">{{ workspace.display_title or document.filename }}</p>
+                    <p class="side-rail-project-id mono">{{ project_id }}</p>
+
+                    <details class="side-rail-project-group accordion-section" data-accordion-group="side-rail-project" data-accordion-id="side-rail-project-overview">
+                        <summary class="side-rail-project-group-summary">Project</summary>
+                        <div class="side-rail-project-group-items">
+                            <a class="side-rail-project-link" href="{{ url_for('workspace.show_workspace', project_id=project_id) }}#project-overview">Project Overview</a>
+                            <a class="side-rail-project-link" href="{{ url_for('workspace.show_workspace', project_id=project_id) }}#instructions">Project Instructions</a>
+                            <a class="side-rail-project-link" href="{{ url_for('workspace.show_workspace', project_id=project_id) }}#project-management-settings">Project Controls</a>
+                        </div>
+                    </details>
+
+                    <details class="side-rail-project-group accordion-section" data-accordion-group="side-rail-project" data-accordion-id="side-rail-project-documents">
+                        <summary class="side-rail-project-group-summary">Documents <span class="side-rail-project-count">{{ workspace.sources|length }}</span></summary>
+                        <div class="side-rail-project-group-items">
+                            <a class="side-rail-project-link" href="{{ url_for('workspace.show_workspace', project_id=project_id) }}#project-sources">Documents &amp; Drawings</a>
+                            {# Section K: Add Addendum's future home, no dead/misleading control -
+                               see governance/specified-unbuilt/add-addendum-facility.md. #}
+                            <span class="side-rail-project-link side-rail-project-link-disabled" title="Specified, not yet built - see governance/specified-unbuilt/add-addendum-facility.md">Addenda (not yet available)</span>
+                        </div>
+                    </details>
+
+                    <details class="side-rail-project-group accordion-section" data-accordion-group="side-rail-project" data-accordion-id="side-rail-project-work" open>
+                        <summary class="side-rail-project-group-summary">Work</summary>
+                        <div class="side-rail-project-group-items">
+                            <a class="side-rail-project-link" href="{{ url_for('workspace.show_workspace', project_id=project_id) }}#cases">Investigations <span class="side-rail-project-count">{{ visible_cases|length }}</span></a>
+                            <a class="side-rail-project-link" href="{{ url_for('workspace.show_workspace', project_id=project_id) }}#needs-attention">Needs Attention <span class="side-rail-project-count">{{ needs_attention_count }}</span></a>
+                            <a class="side-rail-project-link" href="{{ url_for('workspace.show_workspace', project_id=project_id) }}#recent-focus">Recent Focus</a>
+                        </div>
+                    </details>
+
+                    <details class="side-rail-project-group accordion-section" data-accordion-group="side-rail-project" data-accordion-id="side-rail-project-governance">
+                        <summary class="side-rail-project-group-summary">Decisions &amp; Governance</summary>
+                        <div class="side-rail-project-group-items">
+                            <a class="side-rail-project-link" href="{{ url_for('workspace.show_workspace', project_id=project_id) }}#investigation-quality">Investigation Quality</a>
+                            <a class="side-rail-project-link" href="{{ url_for('workspace.show_workspace', project_id=project_id) }}#participants">Participants &amp; Perspective</a>
+                            <a class="side-rail-project-link" href="{{ url_for('workspace.show_workspace', project_id=project_id) }}#go-no-go">Go / No-Go</a>
+                            <a class="side-rail-project-link" href="{{ url_for('workspace.show_workspace', project_id=project_id) }}#accepted-knowledge">Accepted Knowledge <span class="side-rail-project-count">{{ accepted_knowledge|length }}</span></a>
+                        </div>
+                    </details>
+                </div>
+                {% endif %}
             </div>
 
             <div class="side-rail-bottom">

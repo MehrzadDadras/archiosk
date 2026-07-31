@@ -1,11 +1,11 @@
 {% extends "base.html" %}
 {% import "_macros.html" as macros %}
 
-{% block title %}Case Workspace &mdash; {{ document.filename }}{% endblock %}
+{% block title %}Workspace &mdash; {{ document.filename }}{% endblock %}
 
 {% block content %}
 {% if active_case %}
-{% call macros.page_header('Case Workspace', eyebrow=project_id) %}
+{% call macros.page_header('Workspace', eyebrow=project_id) %}
     <div class="dash-head-actions">
         <button type="button" id="collapse-all-btn" class="collapse-all-btn">Collapse All</button>
         <a class="btn btn-ghost" href="{{ url_for('workspace.show_workspace', project_id=project_id) }}">&larr; Back to Project</a>
@@ -13,15 +13,27 @@
 {% endcall %}
 {% endif %}
 
-<div class="case-workspace" data-project-id="{{ project_id }}">
-    {# ---------------- Left: Project Navigation (always visible - project-scoped, not Case-scoped) ----------------
-       Stays first in DOM (Project Home, below, needs it here) even
-       though main.css visually reorders it after conversation/findings
-       at narrower widths - open tab-order concern, see the OPEN
-       ACCESSIBILITY CONCERN comment on .case-workspace in main.css. #}
+<div class="case-workspace{% if not active_case %} case-workspace-single-column{% endif %}" data-project-id="{{ project_id }}">
+    <div class="workspace-column">
+    {# ---------------- Project reference material -----------------------
+       CLAUDE-P40-E: this used to be a permanently-visible third grid
+       COLUMN (.workspace-pane-nav), running alongside the active Case
+       pane at all times - the "circled project-context column" the
+       product-owner review flagged. It still renders unconditionally
+       here (Requirements/Sources/RFIs/Accepted Knowledge/History are
+       genuinely project-wide reference material a reviewer legitimately
+       needs while working inside a Case too - confirmed by a real,
+       already-passing test asserting a Requirement's adjudication text
+       is visible on a ?case=... render) - what changed is WHERE it
+       renders: inside the same "workspace" grid-area/column as the
+       active Case pane (stacked above it via .workspace-column, plain
+       block flow - see main.css), never a separate competing column of
+       its own. The unified left nav (templates/base.html) now links
+       directly into these same sections via their html_id anchors,
+       instead of duplicating this content in a second navigation panel. #}
     <aside class="workspace-pane workspace-pane-nav">
         <h2>Project</h2>
-
+        <div id="project-overview">
         {# CLAUDE-P29: Project Operating Environment -- locked, never an
            edit control once set. Deliberately no form/button anywhere in
            this branch; see CaseWorkspaceStore.set_operating_environment's
@@ -95,6 +107,7 @@
             {% endfor %}
         </details>
         {% endif %}
+        </div>
 
         {# CLAUDE-P38-C: Lifecycle and Display Layers previously rendered
            fully, permanently visible at the very top of the aside,
@@ -104,7 +117,7 @@
            one collapsed "Project Management & Settings" group,
            reusing the existing subdisclosure control rather than a new
            layer of UI. #}
-        {% call macros.subdisclosure('Project Management & Settings') %}
+        {% call macros.subdisclosure('Project Management & Settings', html_id='project-management-settings') %}
         {# CLAUDE-P38 (OBS-14): this strip was fully static - "current"
            was hardcoded to RFP regardless of any real project state (no
            lifecycle-phase field exists anywhere in the domain model),
@@ -150,7 +163,7 @@
            for. Everything else below keeps its prior relative order;
            this is a targeted fix for a signal (open=True) contradicting
            its own position, not a full re-ranking of the pane. #}
-        {% call macros.accordion('Cases (' ~ visible_cases|length ~ ')', group='left', id='cases', open=True) %}
+        {% call macros.accordion('Cases (' ~ visible_cases|length ~ ')', group='left', id='cases', html_id='cases', open=True) %}
         <ul class="case-list">
             {% for case in visible_cases %}
             <li>
@@ -222,7 +235,7 @@
         {% endcall %}
 
         {% set needs_attention_count = needs_attention_view|map(attribute='findings')|map('length')|sum %}
-        {% call macros.accordion('Needs Attention (' ~ needs_attention_count ~ ')', group='left', id='needs-attention', open=(needs_attention_count > 0)) %}
+        {% call macros.accordion('Needs Attention (' ~ needs_attention_count ~ ')', group='left', id='needs-attention', html_id='needs-attention', open=(needs_attention_count > 0)) %}
             <p class="pane-note">
                 Every unresolved Finding across every Investigation you can see in this
                 Project, not just whichever one is open right now - grouped by
@@ -254,7 +267,7 @@
            just a list of links back, not a rearranged workspace - see
            store.recent_anchors_for's own docstring on why this is derived from
            existing records rather than a new memory store. #}
-        {% call macros.accordion('Recent Focus (' ~ recent_focus_view|length ~ ')', group='left', id='recent-focus') %}
+        {% call macros.accordion('Recent Focus (' ~ recent_focus_view|length ~ ')', group='left', id='recent-focus', html_id='recent-focus') %}
             <p class="pane-note">
                 Where you last left off, most recent first &mdash; one entry per object,
                 regardless of which Investigation or Requirement you're looking at right now.
@@ -285,7 +298,7 @@
            nothing here feeds back into how the interpreter recognizes a
            question or how requirement_investigation.py reasons - "BEEHIVE may
            learn how to investigate without learning what to believe." #}
-        {% call macros.accordion('Investigation Quality', group='left', id='investigation-quality') %}
+        {% call macros.accordion('Investigation Quality', group='left', id='investigation-quality', html_id='investigation-quality') %}
             <p class="pane-note">
                 Machine-suggested Investigations, by outcome. &ldquo;Unresolved&rdquo; means no
                 verdict has been recorded yet - not that nothing happened. Record an outcome from
@@ -335,7 +348,7 @@
            is set here does is select WHOSE risk/opportunity position a new machine
            investigation reasons from, and whose mark renders on each Requirement's
            own Perspective disclosure below. #}
-        {% call macros.accordion('Participants & Perspective (' ~ participants_view|length ~ ')', group='left', id='participants') %}
+        {% call macros.accordion('Participants & Perspective (' ~ participants_view|length ~ ')', group='left', id='participants', html_id='participants') %}
             <p class="pane-note">
                 The governed project record is the same for everyone. Setting who you represent
                 only changes whose risk/opportunity position a new machine investigation reasons
@@ -395,7 +408,7 @@
            environment's own -- Client/Owner sees procurement-decision stages,
            Design-Builder/Proponent sees pursuit-decision stages. Never the same
            checklist reused for both sides. #}
-        {% call macros.accordion('Go / No-Go (' ~ go_no_go_assessments|length ~ ')', group='left', id='go-no-go') %}
+        {% call macros.accordion('Go / No-Go (' ~ go_no_go_assessments|length ~ ')', group='left', id='go-no-go', html_id='go-no-go') %}
             {% if go_no_go_assessments %}
             <ul class="source-list">
                 {% for assessment in go_no_go_assessments|reverse %}
@@ -456,7 +469,7 @@
            used to fill this panel even at zero count. Now a compact,
            useful empty state (counts + a direct next action) with the
            explanation moved behind help. #}
-        {% call macros.accordion('Accepted Knowledge (' ~ accepted_knowledge|length ~ ')', group='left', id='accepted-knowledge') %}
+        {% call macros.accordion('Accepted Knowledge (' ~ accepted_knowledge|length ~ ')', group='left', id='accepted-knowledge', html_id='accepted-knowledge') %}
         {% call macros.subdisclosure('How Accepted Knowledge works') %}
             <p class="pane-note">
                 Every Applied Finding across this Project's Cases, independent of which Case produced it —
@@ -506,7 +519,7 @@
            real content (what a reviewer is actually here to read) is
            primary. The issuer's role is now captured and shown
            alongside their name, not just a bare username. #}
-        {% call macros.accordion('Project Instructions', status='+', group='left', id='instructions') %}
+        {% call macros.accordion('Project Instructions', status='+', group='left', id='instructions', html_id='instructions') %}
             {% call macros.subdisclosure('What are Project Instructions?') %}
                 <p class="pane-note">
                     Project / Case Operating Instructions guide terminology, conventions, and known assumptions
@@ -549,7 +562,11 @@
             <li class="source-item">
                 <span class="source-kind-badge">{{ source.kind.replace('_', ' ') }}</span>
                 {% if source.file_path %}
-                <a href="{{ url_for('workspace.source_file', project_id=project_id, source_id=source.id) }}" target="_blank" rel="noopener">{{ source.name }}</a>
+                {# CLAUDE-P40-E, Section D/G: opens inside the Workspace
+                   pane (?source=) rather than a raw new-tab file link -
+                   "display it inside the Workspace," not a departure
+                   from the app. #}
+                <a href="{{ url_for('workspace.show_workspace', project_id=project_id, source=source.id) }}">{{ source.name }}</a>
                 {% else %}
                 {{ source.name }}
                 {% endif %}
@@ -1016,8 +1033,46 @@
         {% endcall %}
     </aside>
 
-{% if active_case %}
-    {# ---------------- Center: Conversation ---------------- #}
+{% if selected_source %}
+    {# ---------------- Workspace: a selected document/drawing -------------
+       CLAUDE-P40-E, Section D/G: opens directly inside the Workspace
+       pane rather than a separate download/new-tab destination.
+       Resolved only against this already-authorized project's own
+       Sources (see show_workspace) - never an unverified id. Page/
+       clause-level navigation within the document is honestly not
+       available for any current format (no per-page index exists for
+       an arbitrary .txt/.pdf/.docx source, or for a drawing image) -
+       specified, not simulated; see governance/specified-unbuilt/. #}
+    <section class="workspace-pane workspace-pane-document">
+        <h2>{{ selected_source.name }}</h2>
+        <p class="workspace-pane-label">
+            {{ selected_source.kind.replace('_', ' ') }}
+            {% if selected_source.superseded_by_source_id %}&middot; superseded by a later revision{% endif %}
+        </p>
+        {% if selected_source.file_path %}
+        {% if selected_source.kind == 'drawing' %}
+        <img class="document-viewer-image"
+             src="{{ url_for('workspace.source_file', project_id=project_id, source_id=selected_source.id) }}"
+             alt="{{ selected_source.name }}">
+        {% else %}
+        <iframe class="document-viewer-frame"
+                src="{{ url_for('workspace.source_file', project_id=project_id, source_id=selected_source.id) }}"
+                title="{{ selected_source.name }}"></iframe>
+        {% endif %}
+        {% else %}
+        <p style="color:var(--text-secondary);font-size:0.85rem;">
+            No stored file for this Source (true for a legacy-ingested document from
+            before original uploads were preserved) - nothing to display here.
+        </p>
+        {% endif %}
+        <p class="pane-note">
+            Jumping to a specific page, clause, or evidence location inside this
+            document isn't available yet for this format - specified, not simulated.
+        </p>
+        <a class="btn btn-ghost workspace-link" href="{{ url_for('workspace.show_workspace', project_id=project_id) }}">&larr; Back to Project Overview</a>
+    </section>
+{% elif active_case %}
+    {# ---------------- Workspace: active Case ---------------- #}
     <section class="workspace-pane workspace-pane-conversation">
         <h2>{{ active_case.title }}</h2>
         {% if active_case.objective %}<p style="color:var(--text-secondary);font-size:0.85rem;margin-top:-0.6rem;">{{ active_case.objective }}</p>{% endif %}
@@ -1295,8 +1350,9 @@
         {% endif %}
         {% endcall %}
     </section>
+    </div>
 
-    {# ---------------- Right: Artifact Workspace ---------------- #}
+    {# ---------------- Contextual Findings/Artifact area ---------------- #}
     <section class="workspace-pane workspace-pane-findings">
         <h2>Artifact Workspace</h2>
 
@@ -2008,6 +2064,7 @@
                 </form>
             {% endcall %}
         </div>
+    </div>
     </div>
 {% endif %}
 </div>

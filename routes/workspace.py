@@ -361,6 +361,20 @@ def _require_approval(action_class: str, description: str, project_id: str, case
 def show_workspace(project_id):
     document, store, workspace = _load_workspace_or_404(project_id)
 
+    # CLAUDE-P40-E: ?source=<id> opens a document/drawing directly inside
+    # the Workspace pane (Section D) - resolved only against THIS
+    # already-authorized project's own workspace.sources (never a raw
+    # id trusted from the query string on its own), so project
+    # authorization is enforced the same way every other object on this
+    # page already is. None (not 404) for an unknown/foreign id - same
+    # "degrade to nothing selected" convention preview_finding_id and
+    # the Snapshot query params below already use, not a hard error for
+    # a stale/guessed link.
+    selected_source_id = request.args.get("source")
+    selected_source = next(
+        (s for s in workspace.sources if s["id"] == selected_source_id), None,
+    ) if selected_source_id else None
+
     # Prompt 8/9: Project Open -> temporal reconciliation, now called
     # through the explicitly named open_project() operation rather than
     # inlining reconcile_project() here (Prompt 9 #4) - this route is
@@ -1021,6 +1035,7 @@ def show_workspace(project_id):
         workspace=workspace,
         visible_cases=visible_cases,
         active_case=active_case,
+        selected_source=selected_source,
         needs_attention_view=needs_attention_view,
         findings_view=findings_view,
         focused_finding_id=focused_finding_id,

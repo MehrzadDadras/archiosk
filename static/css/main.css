@@ -141,8 +141,16 @@ a:focus-visible, button:focus-visible, input:focus-visible {
     flex-shrink: 0;
     display: flex;
     flex-direction: column;
+    /* CLAUDE-P40-E: was background: var(--surface-secondary) (Limestone,
+       the same tinted "nav surfaces" fill grouped controls use elsewhere)
+       - a large permanently-visible coloured block competing with the
+       document work this app exists to show. The unified nav now uses
+       the same neutral surface family as every other Workspace panel
+       (.workspace-pane already uses --surface-primary) plus this
+       existing 1px border - hierarchy comes from spacing/indentation/
+       typography below, not a colour block. */
     border-right: 1px solid var(--border);
-    background: var(--surface-secondary);
+    background: var(--surface-primary);
     transition: width 0.15s ease;
     overflow-x: hidden;
     position: sticky;
@@ -296,6 +304,78 @@ html.nav-expanded .side-rail-tree-items { display: flex; }
     padding: 0.6rem 0.5rem 1rem;
     border-top: 1px solid var(--border);
     flex-shrink: 0;
+}
+
+/* CLAUDE-P40-E: the compact project sub-navigation beneath the active
+   project's own row in the unified rail (templates/base.html) - real
+   navigation links/counts only, never the detailed forms/lists those
+   sections summarize (those stay in the Workspace pane itself, see
+   #project-overview and friends in case_workspace.html). Same reveal
+   discipline as the rest of the collapsed/expanded rail: hidden
+   entirely while collapsed, matching .side-rail-tree-items. */
+.side-rail-project-nav {
+    display: none;
+    flex-direction: column;
+    padding: 0.4rem 0.7rem 0.6rem;
+    border-top: 1px solid var(--border);
+    gap: 0.1rem;
+}
+html.nav-expanded .side-rail-project-nav { display: flex; }
+.side-rail-project-heading {
+    font-family: var(--font-body);
+    font-weight: 600;
+    font-size: 0.85rem;
+    color: var(--text-primary);
+    margin: 0.3rem 0 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+/* Project UUID is secondary metadata, not the heading - quiet, small,
+   monospace (this codebase's existing convention for identifiers). */
+.side-rail-project-id {
+    font-size: 0.7rem;
+    color: var(--text-metadata);
+    margin: 0 0 0.5rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.side-rail-project-group { margin: 0; }
+.side-rail-project-group-summary {
+    cursor: pointer;
+    list-style: none;
+    font-family: var(--font-body);
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-metadata);
+    padding: 0.35rem 0.1rem;
+}
+.side-rail-project-group-summary::-webkit-details-marker { display: none; }
+.side-rail-project-group-items {
+    display: flex;
+    flex-direction: column;
+    padding: 0.1rem 0 0.4rem;
+}
+.side-rail-project-link {
+    display: block;
+    padding: 0.3rem 0.4rem 0.3rem 0.6rem;
+    border-radius: 4px;
+    color: var(--text-secondary);
+    font-family: var(--font-body);
+    font-size: 0.82rem;
+}
+.side-rail-project-link:hover { background: var(--surface-hover); color: var(--text-primary); text-decoration: none; }
+.side-rail-project-link-disabled {
+    color: var(--text-metadata);
+    cursor: default;
+    opacity: 0.7;
+}
+.side-rail-project-count {
+    color: var(--text-metadata);
+    font-size: 0.76rem;
+    margin-left: 0.2rem;
 }
 
 .app-main {
@@ -974,70 +1054,77 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
 .workspace-link { margin-top: 0.8rem; font-size: 0.88rem; padding: 0.5rem 1rem; }
 
 /* ============================================================
-   Case Workspace — Project Navigation | Conversation | Artifacts
+   Workspace — document-first work area | contextual Findings
    ============================================================ */
-/* Named areas (not source order) decide position, so the reference/
-   navigation pane can move without touching markup order. Project Home
-   (.project-home, below) isn't part of this named layout - it only ever
-   shares this grid with .workspace-pane-nav, placed via its own
-   grid-column span, which coexists fine with named areas used
-   elsewhere in the same grid.
-
-   OPEN ACCESSIBILITY CONCERN, not yet resolved: .workspace-pane-nav is
-   still first in the actual DOM (see case_workspace.html - it has to
-   stay there for Project Home's own layout), so at the two breakpoints
-   below, keyboard/screen-reader tab order still reaches it before
-   conversation/findings even though it now renders visually last. The
-   visual reorder here fixes the bigger, more universal problem (every
-   user on a narrow viewport landing on reference material instead of
-   their active work); it does not fix tab order for keyboard-only
-   users at these widths. A real fix needs the nav markup itself moved
-   later in the template, reconciled with Project Home's use of the
-   same pane - deliberately not attempted in the same pass as the CSS
-   fix. Don't close this out by only touching CSS again.
-
-   ALSO NOT YET DONE: the three reflow states below (wide/medium/narrow)
-   are reasoned from CSS Grid's specified behavior, not confirmed against
-   a real rendered browser at each width - no browser/screenshot access
-   was available when this was written. Treat this geometry as reasoned,
-   not proven, until someone actually resizes a real window through all
-   three states. */
+/* CLAUDE-P40-E: was a permanent 3rd "nav" column (.workspace-pane-nav,
+   grid-area of its own) running alongside whichever of
+   .workspace-pane-conversation (Case open) / .project-home (nothing
+   open) was active - the "circled project-context column" the
+   product-owner review flagged, and also the OPEN ACCESSIBILITY
+   CONCERN this comment used to document (nav staying first in
+   keyboard/screen-reader tab order even after being visually reordered
+   last at narrow widths). Both are resolved together: .workspace-pane-
+   nav still renders unconditionally (Requirements/Sources/etc. are
+   genuine project-wide reference material needed even while a Case is
+   open - confirmed by a real test asserting Requirement text is
+   visible on a ?case=... render), but now stacks in normal block flow
+   with whichever of the other two is active, inside one shared
+   wrapper (.workspace-column, below) that occupies this grid's
+   "workspace" area - never a second column of its own, and never a
+   separate tab-order region either, since it's simply earlier content
+   within the same single column. Two real states share this grid
+   shape:
+     - a Case (or, in future, a document) is open: two columns,
+       "workspace" (nav-pane + active work, stacked) | "findings"
+       (contextual, only ever present alongside real content - never
+       reserved empty width, see .case-workspace-single-column below).
+     - nothing is open: .case-workspace-single-column removes the
+       findings column entirely (Section D: "do not allow it to
+       consume unnecessary width when empty") and the workspace column
+       spans the full width.
+   Geometry reasoned from CSS Grid's specified behavior, not confirmed
+   against a real rendered browser - no browser/screenshot tool exists
+   in this environment. Treat as reasoned, not proven, until someone
+   resizes a real window through each state. */
 .case-workspace {
     display: grid;
-    grid-template-columns: 240px minmax(0, 1fr) minmax(0, 1.15fr);
-    grid-template-areas: "nav conversation findings";
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+    grid-template-areas: "workspace findings";
     gap: 1rem;
     padding: 1rem 0 2rem;
     align-items: start;
 }
-.workspace-pane-nav { grid-area: nav; }
-.workspace-pane-conversation { grid-area: conversation; }
+.case-workspace-single-column {
+    grid-template-columns: 1fr;
+    grid-template-areas: "workspace";
+}
+/* CLAUDE-P40-E: .workspace-pane-nav (project reference material) and
+   either .workspace-pane-conversation (active Case) or .project-home
+   (nothing selected) now render TOGETHER, stacked, inside this one
+   wrapper - previously each had its own grid-area, which only worked
+   because they never rendered simultaneously; nav-pane now always
+   renders alongside whichever of the other two is active, so they
+   need real block-level stacking, not overlapping grid placement. */
+.workspace-column {
+    grid-area: workspace;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    min-width: 0;
+}
 .workspace-pane-findings { grid-area: findings; }
 
-/* Medium: Project reference/navigation is secondary to the active work -
-   it drops to its own full-width row below instead of competing with
-   conversation+findings for the first screenful, while the two panes
-   that make up the actual task keep a side-by-side row as long as
-   there's room for it. */
+/* Medium and narrow: Workspace (the active work) always stays first in
+   both visual order and DOM order - no reordering trick needed, since
+   it already IS first in the markup (case_workspace.html). Findings
+   collapses to its own full-width row below rather than competing for
+   the first screenful. */
 @media (max-width: 1080px) {
-    .case-workspace {
-        grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
-        grid-template-areas:
-            "conversation findings"
-            "nav nav";
-    }
-}
-
-/* Narrow: even conversation+findings can't stay side by side legibly -
-   full single-column stack. Nav still stays last - the priority order
-   doesn't change just because the screen got narrower still. */
-@media (max-width: 720px) {
     .case-workspace {
         grid-template-columns: 1fr;
         grid-template-areas:
-            "conversation"
-            "findings"
-            "nav";
+            "workspace"
+            "findings";
     }
 }
 
@@ -1060,6 +1147,26 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
     font-size: var(--text-xs);
     color: var(--text-metadata);
     margin: 0 0 var(--space-2);
+}
+
+/* CLAUDE-P40-E: an opened document/drawing (?source=), inside the
+   Workspace pane rather than a new tab. A generic best-effort embed
+   (browser-native PDF/text rendering via iframe, or a plain image) -
+   no per-format viewer of this project's own; see the pane-note this
+   section itself already renders about page/clause navigation not
+   being available. */
+.document-viewer-frame {
+    width: 100%;
+    height: 70vh;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--surface-secondary);
+}
+.document-viewer-image {
+    max-width: 100%;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    display: block;
 }
 
 /* -- shared text utilities ------------------------------------------------
@@ -1315,14 +1422,13 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
 .collapse-all-btn:hover { color: var(--text-primary); border-color: var(--border-strong); }
 
 /* -- Project Home (calm, single-purpose project entry - Prompt 3) --------- */
-.project-home { grid-column: 2 / -1; max-width: 760px; padding: 0.25rem 0 1.5rem; }
-/* Project Home doesn't participate in the conversation/findings named
-   areas above (it's a different render branch, never on screen at the
-   same time) - it needs its own explicit placement once .case-workspace
-   stops being a simple 3-track row at <=1080px, so it stays full-width
-   and, like the case-open view, ahead of the nav pane rather than
-   pushed below it. */
-@media (max-width: 1080px) { .project-home { grid-column: 1 / -1; grid-row: 1; } }
+/* CLAUDE-P40-E: rendered inside .workspace-column now (grid-area:
+   workspace assigned to that wrapper, not to this element directly -
+   see the .case-workspace comment above) - no separate grid-column
+   override needed at any width now that .case-workspace-single-column
+   removes the findings column entirely instead of Project Home
+   needing to explicitly span past it. */
+.project-home { max-width: 760px; padding: 0.25rem 0 1.5rem; }
 .project-home-back { font-size: 0.88rem; color: var(--text-secondary); margin: 0 0 0.6rem; }
 .project-home-back a { color: var(--text-secondary); }
 .project-home-back a:hover { color: var(--text-primary); }
