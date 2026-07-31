@@ -119,7 +119,25 @@ def run_security_self_check(registry, case_workspace_store_factory, security_sto
     # structurally prevents an invalid write).
     # Check 2: every project's security_profile, if set, is currently valid.
     for project_id in registry.list_ids():
-        workspace = store.get(project_id)
+        # CLAUDE-P36: a corrupted legacy workspace file (missing a field
+        # ProjectWorkspace's current dataclass shape requires -- the
+        # pre-existing real instance/registry/ 'reviews'-key
+        # incompatibility documented since CLAUDE-P32/P34) must not crash
+        # the ENTIRE self-check merely because one such project exists on
+        # disk. Unlike app.py's _nav_recent_projects/routes/portal.py's
+        # _accessible_documents (which silently exclude), this function's
+        # whole purpose is surfacing anomalies -- so an unreadable
+        # workspace is itself reported as one, not swallowed.
+        try:
+            workspace = store.get(project_id)
+        except TypeError:
+            findings.append(SelfCheckFinding(
+                "workspace_readable", "anomaly",
+                "This project's workspace file could not be loaded (incompatible with the "
+                "current governed schema) -- excluded from every other check below.",
+                project_id=project_id,
+            ))
+            continue
         if workspace is None:
             continue
         if workspace.operating_environment is not None and not is_valid_operating_environment(workspace.operating_environment):

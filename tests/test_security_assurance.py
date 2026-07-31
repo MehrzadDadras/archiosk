@@ -246,6 +246,96 @@ class SelfCheckTests(_BaseAssuranceTestCase):
         )
         self.assertTrue(any(f.check_name == "exception_not_stale" for f in findings))
 
+    def test_self_check_reports_a_corrupted_legacy_workspace_as_an_anomaly_not_a_crash(self):
+        """
+        CLAUDE-P36: found live, not in a test first -- performing the
+        Case 1/Case 2 walkthrough against a real running deployment hit
+        a real 500 here (TypeError: ProjectWorkspace.__init__() got an
+        unexpected keyword argument 'reviews'), the same pre-existing
+        real instance/registry/ incompatibility CLAUDE-P32/P34 already
+        found and fail-closed elsewhere (app.py's _nav_recent_projects,
+        routes/portal.py's _accessible_documents) -- this self-check's
+        own per-project loop was a third, previously-missed occurrence.
+        Unlike those two (which silently exclude), this function's whole
+        purpose is surfacing anomalies, so the fix reports it as one
+        instead of swallowing it.
+        """
+        good_document = self._ingest("Self Check Corrupted Sibling")
+
+        corrupted_project_id = "legacy-corrupted-reviews-key"
+        from services.requirements_registry import RequirementsRegistry
+
+        registry = RequirementsRegistry(self.flask_app.config["REGISTRY_STORE_PATH"])
+        registry.save(ParsedDocument(project_id=corrupted_project_id, filename="old.txt", ingested_at="2020-01-01T00:00:00+00:00"))
+        corrupted_path = self.tmp_dir / f"{corrupted_project_id}.workspace.json"
+        corrupted_path.write_text(
+            '{"project_id": "' + corrupted_project_id + '", "reviews": []}', encoding="utf-8",
+        )
+
+        store = SecurityGovernanceStore(self.flask_app.config["REGISTRY_STORE_PATH"])
+        record = store.get()
+        findings = run_security_self_check(
+            registry, lambda: CaseWorkspaceStore(self.flask_app.config["REGISTRY_STORE_PATH"]), store, record,
+        )
+        anomaly = next(f for f in findings if f.check_name == "workspace_readable")
+        self.assertEqual(anomaly.project_id, corrupted_project_id)
+        self.assertEqual(anomaly.severity, "anomaly")
+        # The healthy sibling project must still be checked normally --
+        # one corrupted record must not silently swallow every other
+        # project's own checks too.
+        self.assertFalse(any(
+            f.project_id == good_document.project_id and f.severity == "anomaly" for f in findings
+        ))
+
+
+class SecurityDepartmentRouteTests(_BaseAssuranceTestCase):
+    """
+    CLAUDE-P36: the /security/ route itself (routes/security.py's
+    department_home) had never been exercised through the HTTP layer by
+    any prior test -- only run_security_self_check's own unit was
+    covered. That gap is exactly why a real 500 (a second, separate
+    crash site for the same corrupted-legacy-workspace class of bug,
+    this time in department_home's own project_profiles dict
+    comprehension) was found live rather than by the existing suite.
+    """
+
+    def setUp(self):
+        super().setUp()
+        from models import User, db
+        from werkzeug.security import generate_password_hash
+
+        with self.flask_app.app_context():
+            db.session.add(User(username="sec_admin", password_hash=generate_password_hash("x"), role="admin"))
+            db.session.commit()
+        self.client = self.flask_app.test_client()
+        with self.client.session_transaction() as sess:
+            sess["user_id"] = 1
+            sess["username"] = "sec_admin"
+            sess["role"] = "admin"
+
+    def test_department_home_does_not_crash_with_a_corrupted_legacy_workspace_present(self):
+        good_document = self._ingest("Security Department Corrupted Sibling")
+
+        corrupted_project_id = "legacy-corrupted-reviews-key"
+        from services.requirements_registry import RequirementsRegistry
+
+        registry = RequirementsRegistry(self.flask_app.config["REGISTRY_STORE_PATH"])
+        registry.save(ParsedDocument(project_id=corrupted_project_id, filename="old.txt", ingested_at="2020-01-01T00:00:00+00:00"))
+        corrupted_path = self.tmp_dir / f"{corrupted_project_id}.workspace.json"
+        corrupted_path.write_text(
+            '{"project_id": "' + corrupted_project_id + '", "reviews": []}', encoding="utf-8",
+        )
+
+        resp = self.client.get("/security/")
+        self.assertEqual(resp.status_code, 200)
+        body = resp.get_data(as_text=True)
+        self.assertIn("Security Department Corrupted Sibling", body)
+        # The corrupted project still appears in the list (degraded, not
+        # excluded -- an admin should still be able to see and act on it),
+        # with its profile control showing "legacy"/"not set" rather than
+        # crashing the whole page.
+        self.assertIn(corrupted_project_id, body)
+
 
 class NoUnsupportedOrganizationIsolationClaimTests(unittest.TestCase):
     def test_multi_organization_isolation_is_not_claimed_implemented(self):

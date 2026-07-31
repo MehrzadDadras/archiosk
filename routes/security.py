@@ -81,9 +81,22 @@ def department_home():
         if (doc := registry.get(pid)) is not None
     ]
     case_store = CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"])
-    project_profiles = {
-        p["project_id"]: case_store.get(p["project_id"]) for p in projects
-    }
+    # CLAUDE-P36: same fail-closed handling as app.py's _nav_recent_
+    # projects and routes/portal.py's _accessible_documents (CLAUDE-P32) --
+    # a corrupted legacy workspace file (missing fields ProjectWorkspace's
+    # current dataclass shape requires, e.g. the pre-existing real
+    # instance/registry/ 'reviews'-key incompatibility) must not crash
+    # this page for every admin merely because one such project exists
+    # on disk. The template already renders "legacy"/"not set" for a
+    # None entry (security_department.html's own ws=project_profiles.get(...)
+    # guard), so excluding just this one lookup is enough -- the project
+    # still appears in the list, only its profile controls degrade.
+    project_profiles = {}
+    for p in projects:
+        try:
+            project_profiles[p["project_id"]] = case_store.get(p["project_id"])
+        except TypeError:
+            project_profiles[p["project_id"]] = None
 
     return render_template(
         "security_department.html",
