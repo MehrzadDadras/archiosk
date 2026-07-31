@@ -442,12 +442,29 @@
             {% endif %}
         {% endcall %}
 
+        {# CLAUDE-P38 (OBS-02): a permanent, verbose governance paragraph
+           used to fill this panel even at zero count. Now a compact,
+           useful empty state (counts + a direct next action) with the
+           explanation moved behind help. #}
         {% call macros.accordion('Accepted Knowledge (' ~ accepted_knowledge|length ~ ')', group='left', id='accepted-knowledge') %}
-        <p style="color:var(--text-secondary);font-size:0.85rem;margin:-0.6rem 0 0.6rem;">
-            Every Applied Finding across this Project's Cases, independent of which Case produced it —
-            the Project's accumulated intelligence, not a per-Case log. This is the visible result of
-            &ldquo;Apply Confirmed Findings&rdquo; below — the concrete effect an investigation had on governed project state.
+        {% call macros.subdisclosure('How Accepted Knowledge works') %}
+            <p class="pane-note">
+                Every Applied Finding across this Project's Cases, independent of which Case produced it —
+                the Project's accumulated intelligence, not a per-Case log. This is the visible result of
+                &ldquo;Apply Confirmed Findings&rdquo; below — the concrete effect an investigation had on governed project state.
+            </p>
+        {% endcall %}
+        {% if not accepted_knowledge %}
+        <p class="pane-note" style="margin-top:0.4rem;">
+            No accepted project knowledge yet.
+            {% if project_findings_awaiting_count or project_findings_applied_count %}
+            <br>{{ project_findings_awaiting_count }} awaiting review or disposition &middot; {{ project_findings_applied_count }} applied.
+            <br><a href="#findings">Open Findings &darr;</a>
+            {% else %}
+            Confirmed Findings become accepted knowledge once applied.
+            {% endif %}
         </p>
+        {% endif %}
         {% if accepted_knowledge %}
         {% call macros.subdisclosure('View accepted knowledge') %}
             <ul class="source-list">
@@ -533,6 +550,14 @@
                 <br><small style="color:var(--machine-blue);">Revision of a prior Source.</small>
                 {% endif %}
                 {% if source.note %}<br><small class="text-muted">{{ source.note }}</small>{% endif %}
+                {# CLAUDE-P38 (OBS-06): added upload date - the one field
+                   from this observation's "keep the source card focused
+                   on" list that was cheaply available (Source.added_at)
+                   without inventing a new per-Source uploader field this
+                   dataclass doesn't have today. Derived analysis (extracted
+                   requirement/milestone counts) already lives in its own
+                   Requirements/Requirement Compliance sections, not here. #}
+                <br><small class="text-muted">added {{ source.added_at }}</small>
                 {% if not source.file_path and source.kind == 'rfq_rfp_document' %}
                 <br><small style="color:var(--text-disabled);font-style:italic;">Original file not stored (ingested before file retention was added).</small>
                 {% endif %}
@@ -941,17 +966,40 @@
             {% endif %}
         {% endcall %}
 
-        {% call macros.accordion('History (' ~ recent_governance_events|length ~ ')', group='left', id='history') %}
+        {# CLAUDE-P38 (OBS-12): a full always-expanded event list
+           permanently occupied sidebar space. Default state is now a
+           compact summary (count + latest event); "Show full history"
+           persists via localStorage (static/js/case_workspace.js),
+           same client-side-only pattern the Layers risk toggle already
+           uses - the complete audit record is unchanged either way,
+           only what's rendered by default changes. #}
+        {% call macros.accordion('History (' ~ history_total_count ~ ')', group='left', id='history') %}
             {% if recent_governance_events %}
-            <ul class="source-list">
-                {% for event in recent_governance_events %}
-                <li class="source-item" style="font-size:0.85rem;">
-                    <span class="source-kind-badge">{{ event.event_type.replace('_', ' ') }}</span>
-                    {{ event.actor }} ({{ event.role }})
-                    <br><small class="text-muted">{{ event.created_at }}</small>
-                </li>
-                {% endfor %}
-            </ul>
+            <label style="display:flex;align-items:center;gap:0.4rem;font-size:0.82rem;margin-bottom:0.5rem;">
+                <input type="checkbox" id="history-full-toggle">
+                Show full history
+            </label>
+            <div class="history-summary">
+                <p class="pane-note">
+                    {{ history_total_count }} event(s) recorded &middot; latest:
+                    {{ recent_governance_events[0].event_type.replace('_', ' ') }} by {{ recent_governance_events[0].actor }},
+                    {{ recent_governance_events[0].created_at }}
+                </p>
+            </div>
+            <div class="history-full">
+                <ul class="source-list">
+                    {% for event in recent_governance_events %}
+                    <li class="source-item" style="font-size:0.85rem;">
+                        <span class="source-kind-badge">{{ event.event_type.replace('_', ' ') }}</span>
+                        {{ event.actor }} ({{ event.role }})
+                        <br><small class="text-muted">{{ event.created_at }}</small>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% if history_total_count > recent_governance_events|length %}
+                <p style="font-size:0.8rem;color:var(--text-secondary);">Showing the {{ recent_governance_events|length }} most recent of {{ history_total_count }}.</p>
+                {% endif %}
+            </div>
             {% else %}
             <p style="color:var(--text-secondary);font-size:0.88rem;">No governed events recorded yet.</p>
             {% endif %}

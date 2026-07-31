@@ -187,8 +187,14 @@ class InterpretMessageWithoutACaseTests(unittest.TestCase):
         self.assertIn("Investigation", result.reply_text)
 
     def test_unrecognized_text_with_no_anchor_and_no_case_is_the_original_generic_reply(self):
+        # CLAUDE-P38 (OBS-01): text that looks like a question (starts
+        # with "what"/"why"/etc., or ends in "?") is no longer generic-
+        # unrecognized - it's attempted as a real, grounded project
+        # question first (see test_project_qa.py). This message
+        # deliberately doesn't look like a question at all, to keep
+        # testing the true final fallback.
         result = interpret_message(
-            text="what a nice day",
+            text="just leaving a note here, nothing to action",
             workspace=self.workspace,
             case=None,
             store=self.store,

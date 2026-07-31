@@ -1566,6 +1566,15 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
 [data-layer] { display: none; }
 .layer-risk-active [data-layer="risk"] { display: inline; }
 
+/* CLAUDE-P38 (OBS-12): History defaults to a compact summary; "Show
+   full history" flips one class on <html>, same client-side-only
+   pattern as the risk layer toggle above - the complete audit record
+   (services/governance.py's GovernanceLog) is unaffected either way,
+   only what's rendered by default changes. */
+.history-full { display: none; }
+.history-full-active .history-full { display: block; }
+.history-full-active .history-summary { display: none; }
+
 /* Requirement-evidence explainability (Connect Accepted Knowledge to
    Requirement Impact tranche) - maps the existing Relationship.
    relationship_type vocabulary onto the same semantic language already

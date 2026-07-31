@@ -91,4 +91,21 @@ document.addEventListener('DOMContentLoaded', () => {
             window.localStorage.setItem(layerKey, riskLayerToggle.checked ? 'on' : 'off');
         });
     }
+
+    // CLAUDE-P38 (OBS-12): History summary/full toggle - identical
+    // shape to the risk layer toggle above, own separate localStorage
+    // key and CSS class so the two are independent.
+    const historyFullToggle = document.getElementById('history-full-toggle');
+    if (historyFullToggle) {
+        const historyKey = 'beehive:history:full';
+        const stored = window.localStorage.getItem(historyKey);
+        if (stored === 'on') {
+            document.documentElement.classList.add('history-full-active');
+            historyFullToggle.checked = true;
+        }
+        historyFullToggle.addEventListener('change', () => {
+            document.documentElement.classList.toggle('history-full-active', historyFullToggle.checked);
+            window.localStorage.setItem(historyKey, historyFullToggle.checked ? 'on' : 'off');
+        });
+    }
 });

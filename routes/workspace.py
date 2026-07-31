@@ -784,7 +784,12 @@ def show_workspace(project_id):
     # than only on the separate legacy dashboard - most-recent-first,
     # capped so the sidebar stays scannable rather than becoming its own
     # unbounded log viewer.
-    recent_governance_events = list(reversed(_log().read(project_id)))[:25]
+    _all_governance_events = list(reversed(_log().read(project_id)))
+    recent_governance_events = _all_governance_events[:25]
+    # CLAUDE-P38 (OBS-12): total count (unbounded by the display cap
+    # above) so a compact summary state can honestly say "N events,
+    # latest ..." without implying only 25 ever happened.
+    history_total_count = len(_all_governance_events)
 
     # TemporalObligation (services/case_workspace.py) was fully built
     # (create/revise/list/evaluate_temporal_condition) but never wired to
@@ -968,6 +973,15 @@ def show_workspace(project_id):
             "linked_requirements": store.requirements_evidenced_by_finding(workspace, item.get("source_finding_id")),
         })
 
+    # CLAUDE-P38 (OBS-02): a compact, project-wide rollup for the
+    # Accepted Knowledge empty state - "0 accepted, but why" - reusing
+    # claim_status (already on every raw Finding dict, no Case-scoped
+    # join needed) rather than the heavier per-Case findings_view
+    # resolution below, which exists to support review actions, not a
+    # project-wide summary count.
+    project_findings_applied_count = sum(1 for f in workspace.findings if f["claim_status"] == "applied")
+    project_findings_awaiting_count = len(workspace.findings) - project_findings_applied_count
+
     return render_template(
         "case_workspace.html",
         document=document,
@@ -987,6 +1001,8 @@ def show_workspace(project_id):
         preview_finding_id=preview_finding_id,
         revision_notices=revision_notices,
         accepted_knowledge=accepted_knowledge_view,
+        project_findings_applied_count=project_findings_applied_count,
+        project_findings_awaiting_count=project_findings_awaiting_count,
         activities=store.activities_for_case(workspace, active_case["id"]) if active_case else [],
         unpromoted_requirement_items=unpromoted_requirement_items,
         requirements_view=requirements_view,
@@ -994,6 +1010,7 @@ def show_workspace(project_id):
         revisited_requirements_count=revisited_requirements_count,
         adjudication_outcomes=REQUIREMENT_ADJUDICATION_OUTCOMES,
         recent_governance_events=recent_governance_events,
+        history_total_count=history_total_count,
         temporal_obligations_view=temporal_obligations_view,
         source_milestones_view=source_milestones_view,
         rfi_drafts_view=rfi_drafts_view,

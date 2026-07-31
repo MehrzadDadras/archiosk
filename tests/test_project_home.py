@@ -81,14 +81,15 @@ class ProjectHomeTests(unittest.TestCase):
         self.assertNotIn("What are we working on?", body)
 
     def test_left_aside_always_visible_regardless_of_case_selection(self):
-        # Sources/Requirements/RFI Export/History are project-scoped, not
+        # Sources/Requirements/RFIs/History are project-scoped, not
         # Case-scoped - they must stay reachable even with zero Cases.
+        # ("RFI Export" renamed to "RFIs" - CLAUDE-P38 OBS-08.)
         response = self.client.get(f"/projects/{self.project_id}/workspace")
         body = response.get_data(as_text=True)
 
         self.assertIn("Sources (1)", body)
         self.assertIn("Project Instructions", body)
-        self.assertIn("RFI Export", body)
+        self.assertIn(">RFIs<", body)
         self.assertIn("History (", body)
 
     # -- star ----------------------------------------------------------------
