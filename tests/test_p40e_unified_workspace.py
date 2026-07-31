@@ -1,0 +1,337 @@
+"""
+CLAUDE-P40-E - Unified Document Workspace, Compact Conversation Dock,
+and Reviewer-Governed Pattern Suggestions.
+
+Covers what was actually built:
+  - the second, permanently-visible navigation column
+    (.workspace-pane-nav as its own grid track) is gone - its content
+    now stacks with the active work inside one shared "workspace"
+    grid-area, and a compact, counted summary of it lives in the
+    unified left rail (templates/base.html), only for an authorized
+    project;
+  - the visible heading is "Workspace", not "Case Workspace";
+  - ?source=<id> opens a document/drawing inside the Workspace pane,
+    resolved only against this project's own already-authorized
+    Sources;
+  - the conversation dock (one composer, real draft/scroll-position
+    data attributes for the client-side preservation script);
+  - services.case_workspace.resolve_conversation_hotlinks and the
+    `hotlinks` Jinja filter - exact, governed-identity-only matches,
+    safely escaped;
+  - the authentication shell (P40-D1) and legacy-record persistence
+    boundary (P40-D2) remain intact;
+  - Sections F/H (conversation thread lifecycle, saved patterns) were
+    deliberately left specified-but-unbuilt - these tests confirm the
+    honest boundary holds (no fake controls, no auto-generated
+    suggestion content), not operations that don't exist yet.
+
+Every ingestion call spies on BHiveParser.parse rather than letting it
+run for real (existing repo-wide convention).
+
+Run via:
+
+    python -m unittest discover -s tests -v
+"""
+from __future__ import annotations
+
+import io
+import json
+import shutil
+import tempfile
+import unittest
+import uuid
+from datetime import datetime, timezone
+from pathlib import Path
+from unittest.mock import patch
+
+from werkzeug.datastructures import FileStorage
+from werkzeug.security import generate_password_hash
+
+from services.bhive_parser import BHiveParser, ParsedDocument
+from services.case_workspace import CaseWorkspaceStore, resolve_conversation_hotlinks
+from services.environment_capabilities import CLIENT_OWNER
+from services.ingestion import ingest_upload
+
+_DRAWING_NAME = "sample_drawing.png"
+
+
+def _fake_file(content: bytes, filename: str) -> FileStorage:
+    return FileStorage(stream=io.BytesIO(content), filename=filename)
+
+
+class _BaseWorkspaceTestCase(unittest.TestCase):
+    def setUp(self):
+        import app as app_module
+        from models import User, db
+
+        self.tmp_dir = Path(tempfile.mkdtemp(prefix="beehive_test_p40e_"))
+        self.flask_app = app_module.create_app("testing")
+        self.flask_app.config["REGISTRY_STORE_PATH"] = str(self.tmp_dir)
+
+        with self.flask_app.app_context():
+            db.session.add(User(username="p40e_owner", password_hash=generate_password_hash("x"), role="admin"))
+            db.session.add(User(username="p40e_outsider", password_hash=generate_password_hash("x"), role="read_only"))
+            db.session.commit()
+
+        self.doc = self._ingest(owner="p40e_owner", project_name="Riverside P40E Workspace")
+        self.project_id = self.doc.project_id
+        self._add_drawing_source()
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp_dir, ignore_errors=True)
+
+    def _ingest(self, owner: str, project_name: str, filename: str = "rfp.txt"):
+        def fake_parse(self_parser, raw_bytes, filename_):
+            return ParsedDocument(
+                project_id=str(uuid.uuid4()), filename=filename_,
+                ingested_at=datetime.now(timezone.utc).isoformat(), parser_version="test",
+            )
+
+        with patch.object(BHiveParser, "parse", fake_parse):
+            with self.flask_app.app_context():
+                return ingest_upload(
+                    _fake_file(b"content", filename), self.flask_app,
+                    operating_environment=CLIENT_OWNER, owner=owner, project_name=project_name,
+                )
+
+    def _store(self) -> CaseWorkspaceStore:
+        return CaseWorkspaceStore(self.tmp_dir)
+
+    def _add_drawing_source(self):
+        drawing_path = self.tmp_dir / _DRAWING_NAME
+        drawing_path.write_bytes(b"not a real png, just test bytes")
+
+        store = self._store()
+        workspace = store.get(self.project_id)
+        workspace.sources.append({
+            "id": "drawing-source-1", "project_id": self.project_id, "kind": "drawing",
+            "name": _DRAWING_NAME, "added_at": "2026-01-01T00:00:00+00:00",
+            "file_path": str(drawing_path),
+        })
+        store.save(workspace)
+
+    def _client_as(self, username, user_id, role="admin"):
+        client = self.flask_app.test_client()
+        with client.session_transaction() as sess:
+            sess["user_id"] = user_id
+            sess["username"] = username
+            sess["role"] = role
+        return client
+
+
+class SecondNavigationColumnRemovedTests(_BaseWorkspaceTestCase):
+    def test_grid_no_longer_has_a_separate_nav_column(self):
+        client = self._client_as("p40e_owner", 1)
+        resp = client.get(f"/projects/{self.project_id}/workspace")
+        body = resp.get_data(as_text=True)
+        self.assertNotIn('grid-template-areas: "nav conversation findings"', body)
+
+    def test_project_navigation_appears_in_unified_left_rail(self):
+        client = self._client_as("p40e_owner", 1)
+        resp = client.get(f"/projects/{self.project_id}/workspace")
+        body = resp.get_data(as_text=True)
+        self.assertIn("side-rail-project-nav", body)
+        self.assertIn(self.project_id, body)
+        self.assertIn(">Documents", body)
+        self.assertIn(">Work<", body)
+        self.assertIn("Decisions &amp; Governance", body)
+
+    def test_unified_nav_absent_for_unauthorized_project(self):
+        # p40e_outsider is authenticated but neither owner, allow-
+        # listed, nor admin - the whole page 404s (P32 deny-by-default),
+        # so the project nav never renders for them at all.
+        client = self._client_as("p40e_outsider", 2, role="read_only")
+        resp = client.get(f"/projects/{self.project_id}/workspace")
+        self.assertEqual(resp.status_code, 404)
+
+    def test_unified_nav_absent_on_non_workspace_pages(self):
+        client = self._client_as("p40e_owner", 1)
+        resp = client.get("/")
+        body = resp.get_data(as_text=True)
+        self.assertNotIn("side-rail-project-nav", body)
+
+
+class WorkspaceHeadingRenameTests(_BaseWorkspaceTestCase):
+    def test_case_open_heading_is_workspace_not_case_workspace(self):
+        client = self._client_as("p40e_owner", 1)
+        client.post(f"/projects/{self.project_id}/workspace/cases", data={"title": "Drawing Review", "objective": ""})
+        case_id = self._store().get(self.project_id).cases[0]["id"]
+
+        resp = client.get(f"/projects/{self.project_id}/workspace?case={case_id}")
+        body = resp.get_data(as_text=True)
+        self.assertIn("<h1>Workspace</h1>", body)
+        self.assertNotIn("Case Workspace", body)
+
+
+class DocumentViewerTests(_BaseWorkspaceTestCase):
+    def test_selecting_a_drawing_source_opens_it_in_the_workspace(self):
+        client = self._client_as("p40e_owner", 1)
+        resp = client.get(f"/projects/{self.project_id}/workspace?source=drawing-source-1")
+        body = resp.get_data(as_text=True)
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("workspace-pane-document", body)
+        self.assertIn(_DRAWING_NAME, body)
+
+    def test_unknown_source_id_degrades_to_the_empty_state_not_an_error(self):
+        client = self._client_as("p40e_owner", 1)
+        resp = client.get(f"/projects/{self.project_id}/workspace?source=does-not-exist")
+        self.assertEqual(resp.status_code, 200)
+        self.assertNotIn("workspace-pane-document", resp.get_data(as_text=True))
+
+    def test_source_from_a_different_project_does_not_resolve(self):
+        other_doc = self._ingest(owner="p40e_owner", project_name="A Different Project")
+        client = self._client_as("p40e_owner", 1)
+        resp = client.get(f"/projects/{self.project_id}/workspace?source={other_doc.project_id}")
+        self.assertNotIn("workspace-pane-document", resp.get_data(as_text=True))
+
+    def test_document_link_in_sources_list_points_at_workspace_not_a_raw_file(self):
+        client = self._client_as("p40e_owner", 1)
+        resp = client.get(f"/projects/{self.project_id}/workspace")
+        body = resp.get_data(as_text=True)
+        self.assertIn(f"?source=drawing-source-1", body)
+
+
+class ConversationDockTests(_BaseWorkspaceTestCase):
+    def test_dock_has_exactly_one_composer_when_no_case_is_open(self):
+        client = self._client_as("p40e_owner", 1)
+        resp = client.get(f"/projects/{self.project_id}/workspace")
+        body = resp.get_data(as_text=True)
+        self.assertEqual(body.count("conversation-dock-composer"), 1)
+
+    def test_dock_has_exactly_one_composer_with_a_case_open(self):
+        client = self._client_as("p40e_owner", 1)
+        client.post(f"/projects/{self.project_id}/workspace/cases", data={"title": "Drawing Review", "objective": ""})
+        case_id = self._store().get(self.project_id).cases[0]["id"]
+
+        resp = client.get(f"/projects/{self.project_id}/workspace?case={case_id}")
+        body = resp.get_data(as_text=True)
+        self.assertEqual(body.count("conversation-dock-composer"), 1)
+
+    def test_draft_preservation_key_is_stable_across_document_and_case_navigation(self):
+        # Section G/F#1: the client-side draft-preservation script keys
+        # sessionStorage by project_id (data-conversation-draft) - this
+        # server-side contract must stay the same project_id whether the
+        # dock is showing project-level or Case-level conversation, so a
+        # draft started in one context is still found after navigating
+        # to the other.
+        client = self._client_as("p40e_owner", 1)
+        client.post(f"/projects/{self.project_id}/workspace/cases", data={"title": "Drawing Review", "objective": ""})
+        case_id = self._store().get(self.project_id).cases[0]["id"]
+
+        home_body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
+        case_body = client.get(f"/projects/{self.project_id}/workspace?case={case_id}").get_data(as_text=True)
+
+        self.assertIn(f'data-conversation-draft="{self.project_id}"', home_body)
+        self.assertIn(f'data-conversation-draft="{self.project_id}"', case_body)
+
+    def test_no_fake_conversation_lifecycle_controls_only_honest_disclosure(self):
+        # Sections F/H were left specified-but-unbuilt - confirms no
+        # dead/misleading "Start New Conversation"/"Archive"/"Save
+        # Pattern" control exists, only the honest note.
+        client = self._client_as("p40e_owner", 1)
+        body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
+        self.assertIn("planned, not available yet", body)
+        for control in ("Start New Conversation", "Archive Conversation", "Save Pattern"):
+            self.assertNotIn(control, body)
+
+
+class HotlinkTests(_BaseWorkspaceTestCase):
+    def test_exact_source_filename_becomes_a_link(self):
+        client = self._client_as("p40e_owner", 1)
+        client.post(f"/projects/{self.project_id}/workspace/cases", data={"title": "Drawing Review", "objective": ""})
+        case_id = self._store().get(self.project_id).cases[0]["id"]
+
+        client.post(
+            f"/projects/{self.project_id}/workspace/cases/{case_id}/messages",
+            data={"text": f"Please check {_DRAWING_NAME} for consistency."},
+        )
+        body = client.get(f"/projects/{self.project_id}/workspace?case={case_id}").get_data(as_text=True)
+        self.assertIn(f'href="/projects/{self.project_id}/workspace?source=drawing-source-1"', body)
+        self.assertIn(f">{_DRAWING_NAME}<", body)
+
+    def test_text_resembling_a_filename_but_not_a_real_source_is_not_linked(self):
+        segments = self._store().get(self.project_id)
+        result = resolve_conversation_hotlinks("See totally_made_up_file.pdf for details.", segments)
+        self.assertEqual(result, [{"text": "See totally_made_up_file.pdf for details.", "source_id": None}])
+
+    def test_hotlink_resolution_is_xss_safe(self):
+        workspace = self._store().get(self.project_id)
+        workspace.sources.append({
+            "id": "xss-source", "project_id": self.project_id, "kind": "rfq_rfp_document",
+            "name": "<script>alert(1)</script>.txt", "added_at": "2026-01-01T00:00:00+00:00", "file_path": None,
+        })
+        self._store().save(workspace)
+
+        client = self._client_as("p40e_owner", 1)
+        client.post(f"/projects/{self.project_id}/workspace/cases", data={"title": "XSS Check", "objective": ""})
+        case_id = self._store().get(self.project_id).cases[0]["id"]
+        client.post(
+            f"/projects/{self.project_id}/workspace/cases/{case_id}/messages",
+            data={"text": "Refer to <script>alert(1)</script>.txt please."},
+        )
+        body = client.get(f"/projects/{self.project_id}/workspace?case={case_id}").get_data(as_text=True)
+        self.assertNotIn("<script>alert(1)</script>", body)
+        self.assertIn("&lt;script&gt;alert(1)&lt;/script&gt;", body)
+
+
+class ResponsiveDomOrderTests(_BaseWorkspaceTestCase):
+    def test_workspace_content_precedes_findings_in_dom_order(self):
+        client = self._client_as("p40e_owner", 1)
+        client.post(f"/projects/{self.project_id}/workspace/cases", data={"title": "Drawing Review", "objective": ""})
+        case_id = self._store().get(self.project_id).cases[0]["id"]
+
+        body = client.get(f"/projects/{self.project_id}/workspace?case={case_id}").get_data(as_text=True)
+        workspace_pos = body.find('class="workspace-column"')
+        findings_pos = body.find("workspace-pane-findings")
+        self.assertGreater(workspace_pos, -1)
+        self.assertGreater(findings_pos, -1)
+        self.assertLess(workspace_pos, findings_pos)
+
+
+class LegacyProjectPersistenceBoundaryStillIntactTests(_BaseWorkspaceTestCase):
+    """P40-D2's own invariant, re-verified: a GET against this stage's
+    changed route/template must still never persist a structural
+    rewrite - only view metadata (last_viewed_by)."""
+
+    def test_get_on_a_legacy_case_missing_visibility_does_not_rewrite_the_record(self):
+        from services.case_workspace import CASE_VISIBILITY_SHARED
+
+        workspace = self._store().get(self.project_id)
+        legacy_case = {
+            "id": "legacy-case-no-visibility", "project_id": self.project_id, "title": "Legacy",
+            "objective": "", "created_at": "2020-01-01T00:00:00+00:00", "status": "open",
+            "source_ids": [], "finding_ids": [], "analysis_ids": [], "artifact_ids": [], "activity_ids": [],
+            "conversation": [],
+        }
+        workspace.cases.append(legacy_case)
+        self._store().save(workspace)
+
+        before_raw = json.loads((self.tmp_dir / f"{self.project_id}.workspace.json").read_text(encoding="utf-8"))
+
+        client = self._client_as("p40e_owner", 1)
+        resp = client.get(f"/projects/{self.project_id}/workspace?case=legacy-case-no-visibility")
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn(CASE_VISIBILITY_SHARED, resp.get_data(as_text=True))
+
+        after_raw = json.loads((self.tmp_dir / f"{self.project_id}.workspace.json").read_text(encoding="utf-8"))
+        changed_keys = {k for k in set(before_raw) | set(after_raw) if before_raw.get(k) != after_raw.get(k)}
+        # A ?case=... view doesn't touch last_viewed_by at all (that
+        # write is Project-Home-only, gated on active_case is None,
+        # pre-existing and unrelated to this stage) - the real invariant
+        # is that nothing beyond that one permitted key ever changes.
+        self.assertTrue(changed_keys.issubset({"last_viewed_by"}), changed_keys)
+
+
+class AuthShellStillIsolatedTests(_BaseWorkspaceTestCase):
+    """P40-D1's own invariant, re-verified after this stage's base.html
+    changes."""
+
+    def test_login_still_has_no_project_nav(self):
+        resp = self.flask_app.test_client().get("/login")
+        body = resp.get_data(as_text=True)
+        self.assertNotIn("side-rail-project-nav", body)
+        self.assertNotIn("side-rail", body)
+
+
+if __name__ == "__main__":
+    unittest.main()

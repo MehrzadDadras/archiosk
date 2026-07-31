@@ -1149,6 +1149,15 @@
             <input type="checkbox" id="conversation-expand-toggle">
             Show full conversation history
         </label>
+        {# Sections F/H: named conversation threads (Start New/Archive/
+           History/Restore/Delete) and reviewer-saved investigation
+           patterns are specified, not built yet - see governance/
+           specified-unbuilt/conversation-thread-lifecycle.md and
+           reviewer-governed-pattern-suggestions.md. Named honestly here
+           rather than as a control that does nothing. #}
+        <p class="pane-note" style="margin:-0.3rem 0 0.5rem;font-size:0.78rem;">
+            Named conversation history and saved investigation patterns are planned, not available yet.
+        </p>
         <div class="conversation-thread" data-conversation-scope="case-{{ active_case.id }}">
             {% for message in active_case.conversation %}
             <div class="conversation-message {{ message.role }}">
@@ -2055,6 +2064,9 @@
                     <input type="checkbox" id="conversation-expand-toggle">
                     Show full conversation history
                 </label>
+                <p class="pane-note" style="margin:-0.3rem 0 0.5rem;font-size:0.78rem;">
+                    Named conversation history and saved investigation patterns are planned, not available yet.
+                </p>
                 <div class="conversation-thread" data-conversation-scope="project">
                     {% for message in project_conversation_view %}
                     <div class="conversation-message {{ message.role }}">
