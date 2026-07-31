@@ -1,33 +1,41 @@
 """
-CLAUDE-P34 -- Market-Critical Golden-Path MVP Validation, Layer A
+CLAUDE-P34/P35 -- Market-Critical Golden-Path MVP Validation, Layer A
 (composed automated integration validation).
 
 Proves the P29-P32 mechanisms operate TOGETHER for one project, not
 only in isolation -- environment lock, project ownership/access,
 capability gating (RFI directionality), Go/No-Go, requirement
-promotion/adjudication, Finding/ReviewerValidation/Disposition/Apply,
-per-Finding RFI export, project-wide RFI export, close-and-reopen
-persistence, and cross-user isolation, all in one continuous sequence
-against one project.
+promotion/adjudication, a REAL text-document investigation producing a
+provisional Finding, ReviewerValidation/Disposition/Apply, per-Finding
+RFI export, project-wide RFI export, close-and-reopen persistence, and
+cross-user isolation, all in one continuous sequence against one project.
 
-Honest limitation, documented rather than papered over (see this
-stage's own required "identify missing/inaccessible transitions"
-instruction): the conversational "Analyze this..." trigger
-(services/conversation_interpreter.py's _handle_analyze) only accepts a
-DRAWING (image) Source -- it explicitly refuses a text/RFP document
-Source with "There's no drawing Source attached to this Case yet."
-This means there is currently NO user-facing UI path from a
-text-ingested RFP/RFQ (this product's primary document type, per every
-existing test fixture) to a Finding -- Findings are only conversationally
-reachable via an uploaded drawing image. CaseWorkspaceStore.
-record_analysis itself is source-kind-agnostic (used against a
-text-document Source below, exactly as this entire test suite already
-does), so the Finding/ReviewerValidation/Disposition/Apply/RFI-draft-
-directionality chain IS structurally real and composes correctly -- but
-reaching it for a text document requires a direct service-layer call
-standing in for a UI trigger that does not exist yet. This gap is
-recorded as a market-critical product finding in the P34 final report,
-not silently worked around.
+CLAUDE-P35 CORRECTION to this file's own original CLAUDE-P34 docstring:
+that earlier version claimed no UI path exists from a text-ingested
+RFP/RFQ to a Finding, based on inspecting only the "Analyze this..."
+keyword trigger (services/conversation_interpreter.py's _handle_analyze,
+which genuinely IS drawing-only). Further investigation found a SEPARATE,
+real, working, non-mock path this test now exercises directly:
+1. "Discuss this Requirement" (templates/_macros.html's aperture macro,
+   rendered next to every governed Requirement) posts to
+   routes/workspace.py's discuss_object with anchor_type=requirement -
+   at the PROJECT level (no Case open yet), so an investigation-shaped
+   question ("Why is this like this?") is honestly declined with a
+   "needs_case" offer, never silently run without a Case to hold the
+   resulting Finding.
+2. Accepting that offer (POST .../apertures/<message_id>/start-
+   investigation) creates a real Case and re-runs the SAME original
+   text with the SAME anchor now attached to it - THIS is what reaches
+   services/conversation_interpreter.py's _handle_investigate_requirement,
+   which calls services/requirement_investigation.py's real Anthropic-
+   backed investigate_requirement (mocked below, per this repo's
+   hermetic-test convention - see CLAUDE.md) and records a genuine
+   provisional Finding via the same record_analysis every other Finding
+   path uses.
+This is a real, discoverable, two-step UI flow (no hidden URL/repository
+knowledge required) - not dead code, not a mock, not a gap. The prior
+P34 report's "no UI path exists" finding was corrected in the P35 final
+report, not silently dropped.
 
 Every ingestion call spies on BHiveParser.parse -- see CLAUDE.md's
 hermetic-test convention (the CLAUDE-P31 8.5-hour live-API incident).
@@ -52,7 +60,7 @@ from werkzeug.datastructures import FileStorage
 from werkzeug.security import generate_password_hash
 
 from services.bhive_parser import BHiveParser, ParsedDocument
-from services.case_workspace import AnalysisTrigger, CaseWorkspaceStore
+from services.case_workspace import CaseWorkspaceStore
 from services.environment_capabilities import DESIGN_BUILDER_PROPONENT
 from services.governance import GovernanceLog
 from services.ingestion import ingest_upload
@@ -205,18 +213,61 @@ class MarketCriticalGoldenPathTests(unittest.TestCase):
         self.assertEqual(store.requirement_adjudication_state(workspace, governed_requirement["id"]), "Satisfied")
 
         # -- 7. Finding/Disposition/Apply/RFI-draft-directionality track --
-        # record_analysis is source-kind-agnostic at the store layer (see
-        # module docstring for why this stands in for a UI trigger that
-        # does not exist for text documents today).
-        trigger = AnalysisTrigger(trigger_type="user_initiated", triggered_by_actor="alice")
-        analysis = store.record_analysis(
-            workspace, case_id=case["id"], source_ids=[source_id], objective="Check schedule clause for ambiguity.",
-            engine_name="test", engine_version="1.0",
-            findings=[{"statement": "18-month substantial performance clause has no defined start trigger.", "machine_confidence": 0.7, "source_id": source_id}],
-            trigger=trigger,
+        # This is the REAL, UI-reachable, two-step text-document
+        # investigation path (see module docstring): "Discuss this
+        # Requirement" (discuss_object, project-level, no Case open yet)
+        # is honestly declined with a needs_case offer, then accepting
+        # that offer (start_investigation_from_aperture) opens a real
+        # Case and re-runs the same anchored question, this time
+        # reaching _handle_investigate_requirement for real.
+        # services.requirement_investigation.investigate_requirement is
+        # the one Anthropic-API call in this whole path - mocked here
+        # per CLAUDE.md's hermetic-test convention, exactly as every
+        # other network boundary in this test file already is.
+        from services.requirement_investigation import RequirementInvestigationResult
+
+        discuss_response = self.alice.post(
+            f"/projects/{document.project_id}/workspace/discuss",
+            data={
+                "text": "Why is this requirement satisfied - check this against the spec.",
+                "anchor_type": "requirement",
+                "anchor_id": governed_requirement["id"],
+                "anchor_description": governed_requirement["original_requirement_identifier"],
+            },
         )
-        finding_id = analysis["finding_ids"][0]
+        self.assertIn(discuss_response.status_code, (302, 303))
         workspace = store.get(document.project_id)
+        aperture_message = next(
+            m for m in workspace.project_conversation
+            if m["role"] == "human" and (m.get("anchor") or {}).get("anchor_id") == governed_requirement["id"]
+        )
+
+        mocked_result = RequirementInvestigationResult(
+            ran=True,
+            assessment="The steel grade matches the referenced standard exactly.",
+            confidence=0.81,
+            supporting_points=["CSA G40.21 350W is explicitly named in Section 4."],
+            needs_human_judgment=True,
+        )
+        with patch("services.conversation_interpreter.investigate_requirement", return_value=mocked_result):
+            start_investigation_response = self.alice.post(
+                f"/projects/{document.project_id}/workspace/apertures/{aperture_message['id']}/start-investigation",
+                follow_redirects=True,
+            )
+        self.assertEqual(start_investigation_response.status_code, 200)
+
+        workspace = store.get(document.project_id)
+        investigation_case = next(
+            c for c in workspace.cases
+            if c["id"] != case["id"] and c["title"].startswith(governed_requirement["original_requirement_identifier"])
+        )
+        finding = next(
+            f for f in workspace.findings if f["statement"] == mocked_result.assessment
+        )
+        finding_id = finding["id"]
+        self.assertEqual(finding["claim_status"], "provisional")
+        self.assertEqual(finding["case_id"], investigation_case["id"])
+        case = investigation_case
         store.record_reviewer_validation(workspace, finding_id=finding_id, validation="Correct", reviewer="alice")
         store.record_disposition(workspace, finding_id=finding_id, disposition="Confirmed", reviewer="alice")
 
