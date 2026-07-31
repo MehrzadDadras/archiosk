@@ -157,8 +157,8 @@ def interpret_message(
         return InterpretationResult(
             action_taken=action_taken,
             reply_text=(
-                "That needs an open Investigation (drawings and Findings live "
-                "inside one) - start one from this below, or open one and ask again."
+                "That needs an open Investigation (Findings live inside one) - "
+                "start one from this below, or open one and ask again."
             ),
         )
 
@@ -201,15 +201,32 @@ def interpret_message(
     if _looks_like_project_question(lowered):
         return _handle_project_question(text, workspace, store, reviewer, triggering_message_id)
 
+    # CLAUDE-P40-B (3.7): "Analyze this drawing for..." was suggested
+    # unconditionally, regardless of whether this Case has any drawing
+    # Source - confirmed misleading for a text-document (DOCX/PDF RFP)
+    # Case. Reuses the same drawing-Source check _handle_analyze already
+    # makes, not a new medium-detection mechanism.
+    has_drawing_source = bool(
+        case is not None
+        and any(s["id"] in case["source_ids"] and s["kind"] == "drawing" for s in workspace.sources)
+    )
+    analyze_example = (
+        "\"Analyze this drawing for ...\", " if has_drawing_source
+        else "\"Investigate this Source for ...\", "
+    )
+    correction_example = (
+        "\"This is not a datum, it is a civil reference\")." if has_drawing_source
+        else "\"This is not a scope item, it is background context\")."
+    )
     return InterpretationResult(
         action_taken="unrecognized",
         reply_text=(
-            "I didn't recognize an action in that message. Try \"Analyze this "
-            "drawing for ...\", \"Show me the evidence supporting Finding N\", "
+            f"I didn't recognize an action in that message. Try {analyze_example}"
+            "\"Show me the evidence supporting Finding N\", "
             "\"Compare ... with ...\", \"Draft an RFI from this accepted issue\", "
             "a direct question about this project (e.g. \"What are the "
             "objectives of this RFP?\"), or, with a Finding focused, a direct "
-            "correction (e.g. \"This is not a datum, it is a civil reference\")."
+            f"correction (e.g. {correction_example}"
         ),
     )
 

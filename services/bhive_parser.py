@@ -1133,13 +1133,27 @@ class BHiveParser:
     # -- stage 5: assemble (milestones) --------------------------------------
     @staticmethod
     def _derive_milestones(requirements: list[RequirementItem]) -> list[dict[str, Any]]:
+        # CLAUDE-P40-B (3.4): was req.text[:120] - a silent, arbitrary
+        # mid-word character cut with no ellipsis and no way to see the
+        # rest ("...Proposal Submissi", "Addendum. An amendme", confirmed
+        # via the product owner's own browser walkthrough). No comment
+        # ever justified 120 specifically - a pre-P40 leftover from when
+        # every candidate was already a short line fragment, rarely long
+        # enough to visibly hit the cut. P40's reflow fix (see
+        # _reflow_wrapped_lines) reassembles wrapped sentences into their
+        # real, often-longer full length, which made this bite far more
+        # often. Every other candidate list on this page (Technical/
+        # Financial Submission previews, the Requirements register)
+        # already shows full text with no truncation - milestone labels
+        # now match that, rather than inventing a new "show full text"
+        # affordance nothing else here uses.
         milestones = []
         for req in requirements:
             if req.category == "schedule_milestone":
                 milestones.append(
                     {
                         "id": str(uuid.uuid4()),
-                        "label": req.text[:120],
+                        "label": req.text,
                         "status": "pending",
                         "source_line": req.source_line,
                     }

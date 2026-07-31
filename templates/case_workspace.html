@@ -214,7 +214,7 @@
 
         {% call macros.subdisclosure('+ New Case') %}
             <form class="workspace-form" method="post" action="{{ url_for('workspace.create_case', project_id=project_id) }}">
-                <input type="text" name="title" placeholder="Case title (e.g. Drawing Review — Sheet A101)" required>
+                <input type="text" name="title" placeholder="Case title (e.g. Schedule Conflict Review)" required>
                 <input type="text" name="objective" placeholder="Objective (optional)">
                 <button type="submit">Create Case</button>
             </form>
@@ -701,7 +701,7 @@
         {% endcall %}
         {% endcall %}
 
-        {% call macros.accordion('Requirements (' ~ requirements_view|length ~ ')', group='left', id='requirements') %}
+        {% call macros.accordion('Requirements (' ~ requirements_view|length ~ ')', group='left', id='requirements', html_id='requirements') %}
         {% if unpromoted_requirement_items %}
         {% call macros.subdisclosure('Extracted, not yet governed (' ~ unpromoted_requirement_items|length ~ ')') %}
             {% for item in unpromoted_requirement_items %}
@@ -917,7 +917,7 @@
         {% endif %}
         {% endcall %}
 
-        {% call macros.accordion('Key Dates (' ~ temporal_obligations_view|length ~ ')', group='left', id='temporal-obligations') %}
+        {% call macros.accordion('Key Dates (' ~ temporal_obligations_view|length ~ ')', group='left', id='temporal-obligations', html_id='temporal-obligations') %}
             {% call macros.subdisclosure('How Key Dates work') %}
                 <p class="pane-note">
                     Project-wide due dates - RFI responses, submittal review periods, design
@@ -1080,8 +1080,19 @@
                 {{ message.text }}
             </div>
             {% else %}
+            {# CLAUDE-P40-B (3.7): this example previously always
+               suggested drawing analysis, regardless of whether this
+               Case's Sources include a drawing - confirmed misleading
+               for a text-document Case (a DOCX/PDF RFP has no "datum"
+               to analyze). drawing_sources is already computed above
+               (for the "+ Add drawing Source" control) - reused here,
+               not a new medium-detection mechanism. #}
             <p class="conversation-empty">
+                {% if drawing_sources %}
                 No conversation yet. Try: &ldquo;Analyze this drawing for datum inconsistencies.&rdquo;
+                {% else %}
+                No conversation yet. Ask a question or investigate this Source.
+                {% endif %}
             </p>
             {% endfor %}
         </div>
@@ -1134,7 +1145,7 @@
 
         <form class="conversation-input-form" method="post"
               action="{{ url_for('workspace.post_message', project_id=project_id, case_id=active_case.id) }}">
-            <input type="text" name="text" placeholder="Analyze this drawing for datum inconsistencies…" autocomplete="off" required>
+            <input type="text" name="text" placeholder="{{ 'Analyze this drawing for datum inconsistencies…' if drawing_sources else 'Ask a question or investigate this Source…' }}" autocomplete="off" required>
             <button type="submit">Send</button>
         </form>
         {% endcall %}
@@ -1452,7 +1463,11 @@
             </article>
             {% else %}
             <p class="findings-empty">
+                {% if drawing_sources %}
                 No Findings yet. Ask the conversation to analyze a drawing Source to generate some.
+                {% else %}
+                No Findings yet. Investigate a Source to generate or record Findings.
+                {% endif %}
             </p>
             {% endfor %}
         </div>
@@ -1478,11 +1493,31 @@
         {% call macros.page_header(workspace.display_title or document.filename, subtitle=workspace.display_description, subtitle_class="project-home-subtitle") %}
             <div class="project-home-controls">
                 <button type="button" id="collapse-all-btn" class="project-home-icon-btn" title="Collapse All" aria-label="Collapse all sections">&#8722;</button>
+                {# CLAUDE-P40-B (3.8): star toggling was already fully
+                   functional (workspace.toggle_star route,
+                   CaseWorkspaceStore.set_starred persists it,
+                   .project-home-icon-btn.active already has a real,
+                   visible style) - just missing a hover title to match
+                   its sibling collapse-all button, so the state change
+                   (glyph + background) was easy to miss as "did that do
+                   anything?" without hovering first. #}
                 <form method="post" action="{{ url_for('workspace.toggle_star', project_id=project_id) }}">
-                    <button type="submit" class="project-home-icon-btn{% if workspace.starred %} active{% endif %}" aria-label="{{ 'Unstar project' if workspace.starred else 'Star project' }}">{{ '&#9733;'|safe if workspace.starred else '&#9734;'|safe }}</button>
+                    <button type="submit" class="project-home-icon-btn{% if workspace.starred %} active{% endif %}" title="{{ 'Unstar project' if workspace.starred else 'Star project' }}" aria-label="{{ 'Unstar project' if workspace.starred else 'Star project' }}">{{ '&#9733;'|safe if workspace.starred else '&#9734;'|safe }}</button>
                 </form>
+                {# CLAUDE-P40-B (3.1, 3.8): was an unlabeled "&#8942;"
+                   (bare three-dot glyph, aria-label "Project
+                   administration") opening a menu with exactly one
+                   action - confirmed confusing on its own terms (a menu
+                   for one item is unnecessary ceremony) and doubly so
+                   next to the unrelated "Project Management & Settings"
+                   disclosure elsewhere on this page, which a reviewer
+                   could reasonably expect to be the same thing. Relabeled
+                   as a plain, explicit "Edit" affordance - same
+                   <details>/<summary> mechanism, same route, same form -
+                   only the label changed, so this is also the "visible
+                   way to rename after ingestion" 3.1 asks for. #}
                 <details class="project-home-overflow">
-                    <summary class="project-home-icon-btn" aria-label="Project administration">&#8942;</summary>
+                    <summary class="project-home-icon-btn" title="Edit project name and description" aria-label="Edit project name and description">Edit</summary>
                     <div class="project-home-overflow-panel">
                         <p class="workspace-pane-label">Edit Project Details</p>
                         <form class="workspace-form" method="post" action="{{ url_for('workspace.edit_project_details', project_id=project_id) }}">
@@ -1664,7 +1699,20 @@
             {% if briefing_deterministic.technical_submission_items %}
             <p style="font-size:0.78rem;color:var(--text-secondary);margin:-0.3rem 0 0.3rem;">Candidate Technical Submission Items: {{ briefing_deterministic.technical_submission_items[:5]|length }} of {{ briefing_deterministic.technical_submission_items|length }} shown</p>
             <ul class="source-list">{% for item in briefing_deterministic.technical_submission_items[:5] %}<li class="source-item">{{ item.text }}</li>{% endfor %}</ul>
-            <p style="font-size:0.78rem;"><a href="#requirements">Open Technical Submission &darr;</a></p>
+            {# CLAUDE-P40-B (3.3): these links previously targeted an
+               accordion with no real `id` attribute (macros.accordion
+               only ever wrote data-accordion-id, never a plain `id`,
+               unless html_id was also passed) - the browser had nothing
+               to scroll to and the existing auto-open-on-anchor script
+               (static/js/case_workspace.js) had nothing to find, so the
+               link produced no visible effect at all. Now that both
+               target accordions have a real html_id, the same already-
+               built script opens the full (previously collapsed)
+               section and the browser scrolls to it - no new JS, no new
+               navigation destination, just a link that actually points
+               at something. Labels also made truthful about what they
+               do (jump to the full list, not "open" a separate view). #}
+            <p style="font-size:0.78rem;"><a href="#requirements">View all {{ briefing_deterministic.technical_submission_items|length }} technical submission items &darr;</a></p>
             {% else %}
             <p style="font-size:0.85rem;color:var(--text-secondary);">No Technical Submission requirements were found in the extracted evidence.</p>
             {% endif %}
@@ -1673,7 +1721,7 @@
             {% if briefing_deterministic.financial_submission_items %}
             <p style="font-size:0.78rem;color:var(--text-secondary);margin:-0.3rem 0 0.3rem;">Candidate Financial Submission Items: {{ briefing_deterministic.financial_submission_items[:5]|length }} of {{ briefing_deterministic.financial_submission_items|length }} shown</p>
             <ul class="source-list">{% for item in briefing_deterministic.financial_submission_items[:5] %}<li class="source-item">{{ item.text }}</li>{% endfor %}</ul>
-            <p style="font-size:0.78rem;"><a href="#requirements">Open Financial Submission &darr;</a></p>
+            <p style="font-size:0.78rem;"><a href="#requirements">View all {{ briefing_deterministic.financial_submission_items|length }} financial submission items &darr;</a></p>
             {% else %}
             <p style="font-size:0.85rem;color:var(--text-secondary);">No Financial Submission requirements were found in the extracted evidence &mdash; nothing is assumed here.</p>
             {% endif %}
@@ -1682,7 +1730,7 @@
             {% if briefing_deterministic.key_dates %}
             <p style="font-size:0.78rem;color:var(--text-secondary);margin:-0.3rem 0 0.3rem;">Candidate Key Dates: {{ briefing_deterministic.key_dates[:5]|length }} of {{ briefing_deterministic.key_dates|length }} shown</p>
             <ul class="source-list">{% for d in briefing_deterministic.key_dates[:5] %}<li class="source-item">{{ d.label }}</li>{% endfor %}</ul>
-            <p style="font-size:0.78rem;"><a href="#temporal-obligations">Open Key Dates &darr;</a></p>
+            <p style="font-size:0.78rem;"><a href="#temporal-obligations">View all {{ briefing_deterministic.key_dates|length }} key dates &darr;</a></p>
             {% else %}
             <p style="font-size:0.85rem;color:var(--text-secondary);">No dated items were found in the extracted evidence.</p>
             {% endif %}
@@ -1777,7 +1825,7 @@
 
                 {% call macros.subdisclosure('+ Start Investigation', html_id='active-work-new-case') %}
                     <form class="workspace-form" method="post" action="{{ url_for('workspace.create_case', project_id=project_id) }}">
-                        <input type="text" name="title" placeholder="Investigation title (e.g. Drawing Review &mdash; Sheet A101)" required>
+                        <input type="text" name="title" placeholder="Investigation title (e.g. Schedule Conflict Review)" required>
                         <input type="text" name="objective" placeholder="Objective (optional)">
                         <button type="submit">Create Investigation</button>
                     </form>
@@ -1900,7 +1948,7 @@
                 {% endcall %}
             {% endcall %}
 
-            {% call macros.accordion('Project Conversation (' ~ project_conversation_view|length ~ ')', group='project-home', id='project-conversation') %}
+            {% call macros.accordion('Project Conversation (' ~ project_conversation_view|length ~ ')', group='project-home', id='project-conversation', html_id='project-conversation') %}
                 <p class="pane-note">
                     Talk to the Project itself &mdash; general notes, or anything opened from a
                     &ldquo;Discuss this&hellip;&rdquo; link elsewhere on this page (each message below

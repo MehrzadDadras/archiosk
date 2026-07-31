@@ -729,7 +729,10 @@ class ProjectBriefingPageHierarchyTests(unittest.TestCase):
         # CLAUDE-P38-D2 (6.4): "likely" implied a confidence score that
         # doesn't exist - relabeled "Candidate Technical Submission Items".
         self.assertIn("Candidate Technical Submission Items: 5 of 8 shown", body)
-        self.assertIn("Open Technical Submission", body)
+        # CLAUDE-P40-B (3.3): "Open X" (a link that previously pointed at
+        # an accordion with no real id attribute, so it did nothing) is
+        # now "View all N ..." and actually resolves.
+        self.assertIn("View all 8 technical submission items", body)
 
     def test_generate_button_appears_before_the_deterministic_lists(self):
         body = self._page()
