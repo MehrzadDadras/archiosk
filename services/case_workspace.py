@@ -2919,6 +2919,66 @@ def _parse_reference_tail(tail: str) -> tuple[list[str], str]:
     return [tail], "single"
 
 
+def resolve_conversation_hotlinks(text: str, workspace: "ProjectWorkspace") -> list[dict]:
+    """
+    CLAUDE-P40-E, Section G: safe internal document hot-links inside
+    conversation text. Turns an EXACT, case-sensitive, whole-string
+    match against a real, currently-known Source filename in THIS
+    project into a linkable segment - never a regex guess at "things
+    that look like a filename" (Section G: "do not convert unverified
+    text that merely resembles a filename into a trusted link. Resolve
+    links through governed document identity"). Resolved fresh against
+    `workspace.sources` every call, never a stale name/id baked into
+    the message when it was originally posted - a Source later renamed
+    or removed simply stops matching, it is never a dangling/broken
+    link that still LOOKS clickable.
+
+    Returns plain segments ({"text": str, "source_id": Optional[str]}),
+    never HTML - this module stays framework/template-agnostic (it does
+    not import Flask), matching its own existing precedent elsewhere
+    (see the module docstring's "no import cycle" reasoning). The
+    caller (app.py's `hotlinks` Jinja filter) is what actually builds
+    the safe `<a href="...">` markup, with url_for and markupsafe
+    escaping - both real Flask/template concerns this module
+    deliberately stays out of.
+
+    Deliberately narrow - Source filenames only, not Findings/clauses/
+    Case titles: those would need either an id embedded in the message
+    text (this module never fabricates one after the fact) or a
+    separate governed-identity resolution path this stage doesn't
+    build. A real, honest boundary, not a simulated one - see the
+    document viewer's own pane-note on page/clause navigation for the
+    same discipline applied to a different part of this stage.
+    """
+    if not text:
+        return [{"text": text, "source_id": None}]
+
+    name_to_id: dict[str, str] = {}
+    for source in workspace.sources:
+        name = source.get("name")
+        if name and name not in name_to_id:
+            name_to_id[name] = source["id"]
+
+    if not name_to_id:
+        return [{"text": text, "source_id": None}]
+
+    # Longest name first, so "sample_drawing.png" doesn't get partially
+    # shadowed by a shorter name that happens to be a substring of it.
+    pattern = re.compile("|".join(re.escape(n) for n in sorted(name_to_id, key=len, reverse=True)))
+
+    segments: list[dict] = []
+    last_end = 0
+    for match in pattern.finditer(text):
+        if match.start() > last_end:
+            segments.append({"text": text[last_end:match.start()], "source_id": None})
+        matched_name = match.group(0)
+        segments.append({"text": matched_name, "source_id": name_to_id[matched_name]})
+        last_end = match.end()
+    if last_end < len(text):
+        segments.append({"text": text[last_end:], "source_id": None})
+    return segments or [{"text": text, "source_id": None}]
+
+
 def parse_source_reference_text(text: str) -> list[dict]:
     """
     Prompt 18 #14/#16/#17: finds every explicit reference mention in

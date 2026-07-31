@@ -108,4 +108,61 @@ document.addEventListener('DOMContentLoaded', () => {
             window.localStorage.setItem(historyKey, historyFullToggle.checked ? 'on' : 'off');
         });
     }
+
+    // CLAUDE-P40-E: conversation dock "show full history" toggle -
+    // identical shape to the two toggles above. #conversation and
+    // #project-conversation are mutually exclusive render branches
+    // (never both present), so a single element id is safe here.
+    const conversationExpandToggle = document.getElementById('conversation-expand-toggle');
+    if (conversationExpandToggle) {
+        const conversationKey = 'beehive:conversation:expanded';
+        const stored = window.localStorage.getItem(conversationKey);
+        if (stored === 'on') {
+            document.documentElement.classList.add('conversation-expanded');
+            conversationExpandToggle.checked = true;
+        }
+        conversationExpandToggle.addEventListener('change', () => {
+            document.documentElement.classList.toggle('conversation-expanded', conversationExpandToggle.checked);
+            window.localStorage.setItem(conversationKey, conversationExpandToggle.checked ? 'on' : 'off');
+        });
+    }
+
+    // CLAUDE-P40-E, Section E: preserve an unfinished conversation-dock
+    // draft (and the message list's own scroll position) across a
+    // document/Case navigation - this app is server-rendered, not an
+    // SPA, so every navigation is a full page load and nothing survives
+    // it without deliberately saving/restoring client-side state.
+    // sessionStorage (not localStorage) - a draft belongs to the
+    // current browsing session, not forever, and clears itself once
+    // the tab closes. Keyed by project_id (data-conversation-draft),
+    // not by which of the two mutually exclusive composers is on
+    // screen, so a draft started while a Case was open is still there
+    // after navigating back to Project Home, and vice versa - "does not
+    // change or close the document currently displayed" (Section F #1)
+    // and "preserve chat draft and position" (Section G) both hinge on
+    // this same continuity.
+    const draftInput = document.querySelector('[data-conversation-draft]');
+    if (draftInput) {
+        const draftKey = `beehive:conversation:draft:${draftInput.dataset.conversationDraft}`;
+        const savedDraft = window.sessionStorage.getItem(draftKey);
+        if (savedDraft) draftInput.value = savedDraft;
+        draftInput.addEventListener('input', () => {
+            if (draftInput.value) window.sessionStorage.setItem(draftKey, draftInput.value);
+            else window.sessionStorage.removeItem(draftKey);
+        });
+        draftInput.closest('form').addEventListener('submit', () => {
+            window.sessionStorage.removeItem(draftKey);
+        });
+    }
+
+    const conversationThread = document.querySelector('.conversation-thread[data-conversation-scope]');
+    if (conversationThread) {
+        const scrollKey = `beehive:conversation:scroll:${conversationThread.dataset.conversationScope}`;
+        const savedScroll = window.sessionStorage.getItem(scrollKey);
+        if (savedScroll) conversationThread.scrollTop = parseInt(savedScroll, 10) || 0;
+        else conversationThread.scrollTop = conversationThread.scrollHeight;
+        conversationThread.addEventListener('scroll', () => {
+            window.sessionStorage.setItem(scrollKey, String(conversationThread.scrollTop));
+        });
+    }
 });

@@ -436,6 +436,34 @@ def _register_template_filters(app: Flask) -> None:
 
     app.jinja_env.filters["humanize"] = humanize_timestamp
 
+    @app.template_filter("hotlinks")
+    def render_conversation_hotlinks(text, workspace, project_id):
+        """
+        CLAUDE-P40-E, Section G: the template-facing half of
+        services.case_workspace.resolve_conversation_hotlinks - that
+        function only ever returns plain {"text", "source_id"} segments
+        (it deliberately doesn't import Flask), so the actual safe
+        `<a href="...">` markup (url_for + markupsafe escaping) is
+        built here, where both are natural, ordinary template-layer
+        concerns. Every plain-text segment is still escaped exactly
+        like {{ message.text }} always was - only a real, resolved
+        Source match ever becomes a link.
+        """
+        from flask import url_for
+        from markupsafe import Markup, escape
+
+        from services.case_workspace import resolve_conversation_hotlinks
+
+        segments = resolve_conversation_hotlinks(text, workspace)
+        rendered = []
+        for segment in segments:
+            if segment["source_id"]:
+                url = url_for("workspace.show_workspace", project_id=project_id, source=segment["source_id"])
+                rendered.append(Markup('<a href="{}">{}</a>').format(url, segment["text"]))
+            else:
+                rendered.append(escape(segment["text"]))
+        return Markup("").join(rendered)
+
 
 def _nav_recent_projects(app: Flask, limit: int = 15) -> list:
     """

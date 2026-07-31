@@ -1127,12 +1127,33 @@
         {% endcall %}
         {% endif %}
 
-        {% call macros.accordion('Conversation (' ~ active_case.conversation|length ~ ')', group='center', id='conversation', open=True) %}
-        <div class="conversation-thread">
+        {# CLAUDE-P40-E, Section E: the compact bottom conversation dock.
+           Deliberately NOT relocated out of its existing position in the
+           document/Jinja source - the RFI delegation-choice/preview UI
+           immediately below is tightly coupled to what the last
+           conversation exchange produced, and Discussion (Review
+           threads, a distinct governed concept) shares this same
+           accordion group right after it; physically moving just the
+           message list would either duplicate that coupling or risk
+           breaking it. Instead, this accordion is DOCKED in place via
+           CSS (.conversation-dock, sticky to the bottom of the
+           viewport, internal scroll on the message list, composer
+           always reachable) - the single active conversation dock this
+           Case's Workspace has, exactly as specified, without a risky
+           markup relocation. Project Conversation (no Case open, at the
+           bottom of this file) gets the identical treatment - the two
+           are mutually exclusive branches, never on screen together,
+           so there is still only ever one dock. #}
+        {% call macros.accordion('Conversation (' ~ active_case.conversation|length ~ ')', group='center', id='conversation', html_id='conversation', open=True) %}
+        <label class="conversation-dock-expand-toggle">
+            <input type="checkbox" id="conversation-expand-toggle">
+            Show full conversation history
+        </label>
+        <div class="conversation-thread" data-conversation-scope="case-{{ active_case.id }}">
             {% for message in active_case.conversation %}
             <div class="conversation-message {{ message.role }}">
                 <span class="role-label">{{ "You" if message.role == "human" else "Archiosk" }}</span>
-                {{ message.text }}
+                {{ message.text|hotlinks(workspace, project_id) }}
                 {% if message.grounded_in %}
                 {% call macros.subdisclosure('Source grounding') %}
                     <ul class="source-list">{% for g in message.grounded_in %}<li class="source-item">{{ g }}</li>{% endfor %}</ul>
@@ -1203,9 +1224,10 @@
         </div>
         {% endif %}
 
-        <form class="conversation-input-form" method="post"
+        <form class="conversation-input-form conversation-dock-composer" method="post"
               action="{{ url_for('workspace.post_message', project_id=project_id, case_id=active_case.id) }}">
-            <input type="text" name="text" placeholder="{{ 'Analyze this drawing for datum inconsistencies…' if drawing_sources else 'Ask a question or investigate this Source…' }}" autocomplete="off" required>
+            <input type="text" name="text" data-conversation-draft="{{ project_id }}"
+                   placeholder="{{ 'Analyze this drawing for datum inconsistencies…' if drawing_sources else 'Ask a question or investigate this Source…' }}" autocomplete="off" required>
             <button type="submit">Send</button>
         </form>
         {% endcall %}
@@ -2029,14 +2051,18 @@
                     shows what it was about, if anything). Separate from an Investigation's own
                     Conversation, which stays with that Investigation.
                 </p>
-                <div class="conversation-thread">
+                <label class="conversation-dock-expand-toggle">
+                    <input type="checkbox" id="conversation-expand-toggle">
+                    Show full conversation history
+                </label>
+                <div class="conversation-thread" data-conversation-scope="project">
                     {% for message in project_conversation_view %}
                     <div class="conversation-message {{ message.role }}">
                         <span class="role-label">{{ "You" if message.role == "human" else "Archiosk" }}</span>
                         {% if message.anchor %}
                         <br><small class="text-muted">Re: {{ message.anchor.anchor_type.replace('_', ' ') }}{% if message.anchor.description %} &mdash; {{ message.anchor.description }}{% endif %}</small>
                         {% endif %}
-                        {{ message.text }}
+                        {{ message.text|hotlinks(workspace, project_id) }}
                         {% if message.grounded_in %}
                         {% call macros.subdisclosure('Source grounding') %}
                             <ul class="source-list">{% for g in message.grounded_in %}<li class="source-item">{{ g }}</li>{% endfor %}</ul>
@@ -2058,8 +2084,8 @@
                     <p class="conversation-empty">No Project Conversation yet.</p>
                     {% endfor %}
                 </div>
-                <form class="conversation-input-form" method="post" action="{{ url_for('workspace.discuss_object', project_id=project_id) }}">
-                    <input type="text" name="text" placeholder="Talk to this Project&hellip;" autocomplete="off" required>
+                <form class="conversation-input-form conversation-dock-composer" method="post" action="{{ url_for('workspace.discuss_object', project_id=project_id) }}">
+                    <input type="text" name="text" data-conversation-draft="{{ project_id }}" placeholder="Talk to this Project&hellip;" autocomplete="off" required>
                     <button type="submit">Send</button>
                 </form>
             {% endcall %}

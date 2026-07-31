@@ -1270,15 +1270,47 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
 }
 .workspace-form button:hover { background: var(--surface-hover); }
 
+/* -- compact bottom conversation dock (CLAUDE-P40-E, Section E) -----------
+   One active dock per Workspace: #conversation (a Case is open) and
+   #project-conversation (nothing is open) are mutually exclusive
+   render branches (see case_workspace.html) sharing this identical
+   treatment - never both on screen, so this is still genuinely one
+   dock, not two. Sticky to the bottom of the viewport as the page
+   scrolls (no nested scroll container exists in this app's layout, so
+   the ordinary page scroll is what "sticky" pins against) - compact by
+   default (recent messages only, internal scroll), with an explicit
+   expand toggle for full history, same shape as the existing
+   layer-risk-toggle/history-full-toggle checkbox-hack pattern
+   (static/js/case_workspace.js) rather than a new mechanism. */
+#conversation, #project-conversation {
+    position: sticky;
+    bottom: 0;
+    z-index: 10;
+    background: var(--surface-primary);
+    box-shadow: 0 -8px 20px rgba(42, 36, 30, 0.08);
+}
+.conversation-dock-expand-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.78rem;
+    color: var(--text-metadata);
+    margin: -0.3rem 0 0.5rem;
+    cursor: pointer;
+    width: fit-content;
+}
+
 /* -- center: conversation ----------------------------------------------------- */
 .conversation-thread {
     display: grid;
     gap: 0.7rem;
-    max-height: 480px;
+    max-height: 190px;
     overflow-y: auto;
     margin-bottom: 1rem;
     padding-right: 0.3rem;
+    scroll-behavior: smooth;
 }
+html.conversation-expanded .conversation-thread { max-height: 60vh; }
 .conversation-message {
     padding: 0.7rem 0.9rem;
     border-radius: 6px;
