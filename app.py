@@ -519,12 +519,62 @@ def _nav_recent_projects(app: Flask, limit: int = 15) -> list:
     return result
 
 
+def _interactive_debugger_enabled() -> bool:
+    """
+    CLAUDE-P40-C: whether Werkzeug's interactive debugger/console may be
+    enabled for the local `python app.py` entrypoint below. Extracted
+    into its own function (rather than inlined in the `__main__` block)
+    specifically so this decision can be exercised directly by a test
+    against constructed environment state, not just read as source.
+    Requires BOTH a narrowly-named, exact-match opt-in
+    (ARCHIOSK_ENABLE_DEBUGGER == "1", never a loose truthy parse of an
+    arbitrary variable) AND an explicit development environment
+    (FLASK_ENV == "development") - neither alone is sufficient, so a
+    single generic setting (e.g. some other tool setting DEBUG=1, or a
+    deployment accidentally leaving FLASK_ENV=development set) can never
+    activate it by itself.
+    """
+    return (
+        os.getenv("ARCHIOSK_ENABLE_DEBUGGER") == "1"
+        and os.getenv("FLASK_ENV", "production") == "development"
+    )
+
+
 # Local dev entrypoint: `python app.py`
-# debug=True's reloader can leave orphaned parent/child chains behind
-# across repeated restarts in some environments; a stale process in that
-# chain keeps serving a stale .env snapshot. Use the `restart-app` skill
-# (.claude/skills/restart-app/) for a clean restart instead of trusting
-# that killing the PID on the port is enough.
+#
+# CLAUDE-P40-C: this used to pass debug=True unconditionally to
+# Werkzeug's dev server - not merely a log-verbosity setting. debug=True
+# activates Werkzeug's INTERACTIVE DEBUGGER: any unhandled exception (a
+# legacy-record KeyError, or anything else) rendered a raw traceback
+# page with a clickable console icon opening an unauthenticated-except-
+# for-a-PIN Python REPL with full process access - reachable by anyone
+# who could reach the port, and confirmed to have been the actual path
+# a real incident followed (see this stage's own final report). A
+# literal debug=True passed here OVERRIDES app.config['DEBUG'] entirely
+# (Flask's run() sets self.debug from this argument before deriving
+# use_reloader/use_debugger from it), so config.py's otherwise-correct
+# environment-based DEBUG defaults never had any effect on this
+# specific code path regardless of FLASK_ENV or .env.
+#
+# The reloader (auto-restart on file change, and the specific orphaned-
+# parent/child-chain behavior the restart-app skill exists to handle)
+# is a genuinely used dev convenience, independent of the interactive
+# debugger - kept on unconditionally. The interactive debugger/console
+# itself is OFF by default and requires BOTH a narrowly-named, exact-
+# match opt-in (never a loose truthy parse of some generic variable)
+# AND an explicit development environment - never activated by a
+# single generic setting, and never reachable at all outside this
+# `__main__` block (wsgi.py, Gunicorn's real entrypoint, never calls
+# .run() and never executes this branch). host stays loopback-only
+# (127.0.0.1) unconditionally either way.
 if __name__ == "__main__":
     application = create_app()
-    application.run(host="127.0.0.1", port=int(os.getenv("PORT", "5000")), debug=True)
+    _enable_debugger = _interactive_debugger_enabled()
+    application.run(
+        host="127.0.0.1",
+        port=int(os.getenv("PORT", "5000")),
+        debug=False,
+        use_reloader=True,
+        use_debugger=_enable_debugger,
+        use_evalex=_enable_debugger,
+    )
