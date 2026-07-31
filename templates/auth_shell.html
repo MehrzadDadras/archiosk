@@ -1,0 +1,58 @@
+{# CLAUDE-P40-D1: standalone authentication shell for /login,
+   /forgot-password, /reset-password. Deliberately does NOT extend
+   base.html/gateway_base.html at all - those pull in the app shell
+   (side-rail nav, project tree, Security/New Project links, search)
+   gated only on `authenticated`, which is exactly wrong for these
+   three routes: an already-authenticated session (e.g. hitting
+   /login directly with a live cookie) would otherwise render the
+   full nav with real project names around the sign-in card. Hiding
+   that with CSS would still leave the markup/data in the response;
+   this template structurally never has it to hide. See app.py's
+   inject_globals() for the matching context-processor guard that
+   also stops the nav-listing store query itself for these routes,
+   not just its rendering. #}
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}Archiosk{% endblock %}</title>
+    {# Present on every page, including here, per base.html's own
+       established invariant - kept for consistency even though this
+       shell's forms carry their own explicit hidden csrf_token input
+       (see login.html/forgot_password.html/reset_password.html)
+       rather than base.html's JS auto-injection script, which this
+       standalone shell deliberately does not include at all. #}
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/tokens.css') }}?v={{ static_version }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v={{ static_version }}">
+</head>
+<body>
+    <div class="blueprint-grid"></div>
+    <div class="auth-shell-page">
+        <div class="gateway-card{% block gateway_card_modifier %}{% endblock %}">
+            <div class="gateway-brand">
+                <div class="gateway-logo">A</div>
+                <div>
+                    <h1>Archiosk</h1>
+                    {% block gateway_subtitle %}{% endblock %}
+                </div>
+            </div>
+            <div class="gateway-divider"></div>
+            <section class="gateway-section">
+                {% block gateway_body %}{% endblock %}
+            </section>
+        </div>
+        <footer class="auth-shell-footer">&copy; {{ current_year }} Archiosk</footer>
+    </div>
+    {% with flashed = get_flashed_messages(with_categories=true) %}
+    {% if flashed %}
+    <div class="flash-stack">
+        {% for category, message in flashed %}
+        <div class="flash-message flash-{{ category }}">{{ message }}</div>
+        {% endfor %}
+    </div>
+    {% endif %}
+    {% endwith %}
+</body>
+</html>

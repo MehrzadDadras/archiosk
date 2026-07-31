@@ -181,9 +181,29 @@ def health():
     ), status_code
 
 
+def _resolve_next_url() -> str:
+    """?next= target after a successful/already-satisfied login - the
+    project gateway (pick ingest vs. dashboard) when none was given.
+    Only follows same-site relative paths -- ?next=https://evil.example
+    would otherwise redirect an authenticated session off-site."""
+    next_url = request.args.get('next') or url_for('portal.gateway')
+    if not next_url.startswith('/') or next_url.startswith('//'):
+        next_url = url_for('portal.gateway')
+    return next_url
+
+
 @portal_bp.route('/login', methods=['GET', 'POST'])
 @limiter.limit("10 per minute", methods=["POST"])
 def login():
+    # CLAUDE-P40-D1: an already-authenticated session must never be
+    # shown the sign-in form at all - it previously rendered login.html
+    # with the real authenticated app shell (nav, real project names)
+    # wrapped around it, since nothing here checked session state
+    # before rendering. Checked before either branch below, so it also
+    # covers a stray POST from an already-authenticated session.
+    if is_authenticated():
+        return redirect(_resolve_next_url())
+
     if request.method == 'GET':
         return render_template('login.html', error=None)
 
@@ -192,14 +212,7 @@ def login():
     user = check_credentials(username, password)
     if user is not None:
         log_in(user)
-        # No specific ?next= target -> land on the project gateway (pick
-        # ingest vs. dashboard) rather than jumping straight into one.
-        next_url = request.args.get('next') or url_for('portal.gateway')
-        # Only follow same-site relative paths -- ?next=https://evil.example
-        # would otherwise redirect an authenticated session off-site.
-        if not next_url.startswith('/') or next_url.startswith('//'):
-            next_url = url_for('portal.gateway')
-        return redirect(next_url)
+        return redirect(_resolve_next_url())
 
     # Deliberately generic -- doesn't distinguish "no such user" from
     # "wrong password" (there's only one shared username anyway).
@@ -209,7 +222,10 @@ def login():
 @portal_bp.route('/logout')
 def logout():
     log_out()
-    return redirect(url_for('portal.index'))
+    # CLAUDE-P40-D1: was portal.index (the marketing/zero-state page) -
+    # sign-out shall return to the isolated sign-in page itself, not a
+    # page that merely also happens to be safe for an anonymous visitor.
+    return redirect(url_for('portal.login'))
 
 
 @portal_bp.route('/forgot-password', methods=['GET', 'POST'])

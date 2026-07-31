@@ -925,6 +925,29 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
     letter-spacing: 0.02em;
 }
 
+/* CLAUDE-P40-D1: the standalone authentication shell (auth_shell.html
+   - /login, /forgot-password, /reset-password). Reuses .gateway-card
+   and its children as-is for visual consistency with the post-login
+   .gateway-page (gateway.html) - only the OUTER container differs,
+   since this one is never inside .app-shell/.app-main (no sidebar
+   column exists to center against, so it centers in the full
+   viewport itself instead of relying on a flex sibling for height). */
+.auth-shell-page {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    padding: 1.75rem 1rem;
+}
+.auth-shell-footer {
+    color: var(--text-metadata);
+    font-family: var(--font-body);
+    font-size: 0.78rem;
+    letter-spacing: 0.02em;
+}
+
 @media (max-width: 560px) {
     /* .gateway-actions no longer needs an override here - auto-fit with
        a minmax floor already collapses to one column once 240px no

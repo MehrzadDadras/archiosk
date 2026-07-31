@@ -395,19 +395,39 @@ def _register_error_handlers(app: Flask) -> None:
         return request.path.startswith("/api/")
 
 
+_STANDALONE_AUTH_ENDPOINTS = {"portal.login", "portal.forgot_password", "portal.reset_password"}
+
+
 def _register_context_processors(app: Flask) -> None:
     @app.context_processor
     def inject_globals():
         from datetime import datetime, timezone
 
+        from flask import request
+
         from services.auth import is_admin, is_authenticated
+
+        # CLAUDE-P40-D1: /login, /forgot-password, /reset-password render
+        # templates/auth_shell.html, a standalone shell that never
+        # references authenticated/is_admin/nav_recent_projects at all -
+        # but this context processor runs for EVERY render_template call
+        # regardless of which template is actually used. Without this
+        # guard, an already-authenticated session hitting one of these
+        # routes would still silently run the real nav_recent_projects
+        # store query (a real information-boundary problem even before
+        # any markup renders it) and this response's own template
+        # context would still say authenticated=True. Hiding leaked
+        # markup with CSS was never the actual defect - the query and
+        # the context data being present at all was.
+        on_standalone_auth_page = request.endpoint in _STANDALONE_AUTH_ENDPOINTS
+        authenticated = is_authenticated() and not on_standalone_auth_page
 
         return {
             "current_year": datetime.now(timezone.utc).year,
             "static_version": app.config["STATIC_VERSION"],
-            "authenticated": is_authenticated(),
-            "is_admin": is_admin(),
-            "nav_recent_projects": _nav_recent_projects(app) if is_authenticated() else [],
+            "authenticated": authenticated,
+            "is_admin": is_admin() and not on_standalone_auth_page,
+            "nav_recent_projects": _nav_recent_projects(app) if authenticated else [],
         }
 
 
