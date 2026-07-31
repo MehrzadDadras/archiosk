@@ -1,5 +1,50 @@
 # Continuation checkpoint
 
+## 2026-07-31 — CLAUDE-P38-B: narrative-first project opening
+
+**Commit:** `c5ecf52`. Full suite: 1086 passed (1070 + 16 new).
+
+Adds a Project Briefing as the first substantial content on Project
+Home, ahead of the quick-start composer and every downstream register,
+per the explicit governing objective: verify sources → read Executive
+Summary/Project Brief → understand objectives/scope/Technical &
+Financial submission routes → follow reading guidance → ask grounded
+questions → begin detailed review.
+
+**Two deliberately separate layers.** (1) `services/project_briefing.
+py`'s `deterministic_sections` — Technical Submission, Financial
+Submission, Key Dates, Suggested Reading Path, all grouped from
+already-extracted `RequirementItem.category` values and `document.
+milestones` (CLAUDE-P38 OBS-11). No AI call, always available, never
+says more than the extraction already says — an empty Financial
+Submission section states plainly nothing was found, never fabricates
+one. (2) `generate_project_briefing` — a real, grounded narrative
+synthesis (Executive Summary, Objectives, Project Brief/"Basis of
+Understanding" — explicitly labelled a machine-assisted draft, never
+an approved Project Charter, Procurement Route, Matters Requiring
+Early Attention), mirroring `project_qa.py`/`requirement_
+investigation.py`'s established pattern exactly, gated through the
+same `ACTION_EXTERNAL_AI_REQUEST` policy check (third real external-AI
+site in this app). Never generated automatically on page load — only
+on explicit action, cached on `ProjectWorkspace.project_briefing` with
+a source-set signature (`source_signature_for`/`set_project_briefing`)
+so a stale briefing is honestly flagged, not silently served.
+
+**Explicitly not implemented, per this stage's own scope:** the
+accordion-launched closable-working-tab architecture (remains a
+separate future evaluation — no work began on it); a full three-tier
+reorganization of every existing sidebar section into Primary/
+Secondary/Management groups (the briefing is inserted first; P38's
+already-tested section order elsewhere is unchanged, avoiding
+unnecessary layout regression risk); estimating/ETCO/spreadsheet/
+bidder-scoring functionality; date arithmetic (fixed/relative wording
+shown verbatim, never calculated into an actual date).
+
+See this stage's own final report (delivered in-conversation) for the
+full capability assessment and browser retest steps.
+
+---
+
 ## 2026-07-31 — CLAUDE-P38: browser-walkthrough defect closure and workspace usability repair
 
 **Commits:** `413c545` (project Q&A), `f3f004d` (requirement over-
