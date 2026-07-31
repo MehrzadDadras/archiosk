@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+
+{% block title %}Preparing Project Briefing &mdash; {{ document.filename }}{% endblock %}
+
+{% block content %}
+{# CLAUDE-P38-D2: a real, visible, rendered page - not a background
+   job with a hidden trigger. Auto-submits once to the real generation
+   route and lets that route's own synchronous call + redirect do the
+   rest; a plain HTML form works with JavaScript disabled too (the
+   "Continue" button below), just without the automatic submit. #}
+<div class="project-home" style="max-width:32rem;margin:4rem auto;text-align:center;">
+    <h1>Preparing your Project Briefing&hellip;</h1>
+    <p class="pane-note">
+        Generating a source-grounded opening summary for <strong>{{ document.filename }}</strong>.
+        This takes a few moments and happens automatically once, right after upload.
+    </p>
+    <form method="post" action="{{ url_for('workspace.generate_project_briefing_route', project_id=project_id) }}" id="briefing-prepare-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="apply-button">Continue</button>
+    </form>
+    <script>
+        document.getElementById('briefing-prepare-form').submit();
+    </script>
+</div>
+{% endblock %}

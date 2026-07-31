@@ -833,6 +833,10 @@ def show_workspace(project_id):
     # same gating as project_conversation_view/Snapshot above.
     briefing_deterministic = None
     briefing_stale = False
+    briefing_ai_status = None
+    briefing_ai_decision = None
+    briefing_generation_in_progress = False
+    briefing_has_evidence = False
     if active_case is None:
         from services.project_briefing import deterministic_sections
 
@@ -842,6 +846,12 @@ def show_workspace(project_id):
         )
         if workspace.project_briefing is not None:
             briefing_stale = workspace.project_briefing_source_signature != store.source_signature_for(workspace)
+        briefing_ai_status, briefing_ai_decision = _project_briefing_ai_status(workspace)
+        briefing_generation_in_progress = store.generation_in_progress_for(workspace)
+        # Same "evidence presence, not workspace.sources alone" rule as
+        # preparing_project_briefing below - the originally-ingested
+        # document never gets its own Source record.
+        briefing_has_evidence = bool(document.requirements or document.milestones or workspace.sources)
 
     # CLAUDE-P38 (OBS-08): RFI drafts were only ever visible per-Finding,
     # inside whichever Case happened to be open (row.rfi_drafts, the
@@ -1033,6 +1043,10 @@ def show_workspace(project_id):
         source_milestones_view=source_milestones_view,
         briefing_deterministic=briefing_deterministic,
         briefing_stale=briefing_stale,
+        briefing_ai_status=briefing_ai_status,
+        briefing_ai_decision=briefing_ai_decision,
+        briefing_generation_in_progress=briefing_generation_in_progress,
+        briefing_has_evidence=briefing_has_evidence,
         rfi_drafts_view=rfi_drafts_view,
         recent_focus_view=recent_focus_view,
         threads_view=threads_view,
@@ -1131,31 +1145,77 @@ def toggle_star(project_id):
     return redirect(url_for("workspace.show_workspace", project_id=project_id))
 
 
+def _project_briefing_ai_status(workspace) -> tuple[str, object]:
+    """
+    CLAUDE-P38-D2: the one place that turns a raw SecurityDecision into
+    the three states this feature actually treats differently -
+    "allow" (ALLOW/ALLOW_APPROVED_ROUTE - proceed automatically),
+    "require_approval" (a real, distinct action: proceed only once a
+    human explicitly confirms THIS request), and "denied" (ISOLATE/DENY
+    - no action this feature can offer either way; both mean "cannot
+    proceed", so they share a state, but the resolved decision/
+    controlling_layer are still returned for an honest message, never
+    collapsed into identical copy regardless of which one it was).
+    Read-only - safe to call from a GET handler.
+    """
+    from services.security_policy import (
+        ACTION_EXTERNAL_AI_REQUEST, DECISION_ALLOW, DECISION_ALLOW_APPROVED_ROUTE, DECISION_REQUIRE_APPROVAL,
+    )
+
+    decision = _evaluate_security_action(workspace, ACTION_EXTERNAL_AI_REQUEST)
+    if decision.decision in (DECISION_ALLOW, DECISION_ALLOW_APPROVED_ROUTE):
+        return "allow", decision
+    if decision.decision == DECISION_REQUIRE_APPROVAL:
+        return "require_approval", decision
+    return "denied", decision
+
+
 @workspace_bp.route("/projects/<project_id>/workspace/briefing/generate", methods=["POST"])
 @login_required
 def generate_project_briefing_route(project_id):
     """
-    CLAUDE-P38-B: on-demand (never automatic on every page render - a
-    real Anthropic call every time would be slow and costly) generation
-    or regeneration of the project's opening narrative briefing. Policy-
-    gated through the same ACTION_EXTERNAL_AI_REQUEST resolver every
-    other real external-AI call site in this app uses
-    (_evaluate_security_action, already defined in this file for the
-    export gate) - this is the third real transmission-capable call
-    site, and it must not bypass the same governed action.
+    CLAUDE-P38-D2: called automatically (via the auto-submitting
+    "Preparing your Project Briefing..." interstitial - see
+    show_workspace/preparing_project_briefing below) when policy allows
+    without approval, and explicitly otherwise (an approval click when
+    REQUIRE_APPROVAL, or a manual Regenerate). Policy-gated through the
+    same ACTION_EXTERNAL_AI_REQUEST resolver every other real external-
+    AI call site in this app uses - this governed action is never
+    bypassed, only the UX around when this route gets called changed.
+
+    `confirm=once` is this feature's own version of the Approval Gate
+    vocabulary CLAUDE.md documents for other consequential actions
+    (Apply, Issue RFI) - required only when the resolved decision is
+    REQUIRE_APPROVAL, so a human explicitly authorizes THIS specific
+    request rather than the route silently proceeding merely because
+    the org-wide policy doesn't outright deny it.
     """
     document, store, workspace = _load_workspace_or_404(project_id)
 
-    from services.security_policy import ACTION_EXTERNAL_AI_REQUEST, DECISION_ALLOW, DECISION_ALLOW_APPROVED_ROUTE
-
-    decision = _evaluate_security_action(workspace, ACTION_EXTERNAL_AI_REQUEST)
-    if decision.decision not in (DECISION_ALLOW, DECISION_ALLOW_APPROVED_ROUTE):
+    status, decision = _project_briefing_ai_status(workspace)
+    if status == "denied":
         flash(
             f"A project briefing cannot be generated: external AI is not permitted by "
             f"this project's security policy (controlling layer: {decision.controlling_layer}).",
             "error",
         )
         return redirect(url_for("workspace.show_workspace", project_id=project_id))
+    if status == "require_approval" and (request.form.get("confirm") or "").strip() != "once":
+        flash(
+            f"AI Project Briefing awaits approval (controlling layer: {decision.controlling_layer}) "
+            f"- {decision.reason} Use the approval action to proceed.",
+            "error",
+        )
+        return redirect(url_for("workspace.show_workspace", project_id=project_id))
+
+    # CLAUDE-P38-D2: duplicate-call/idempotency guard - a refresh, a
+    # second reviewer, or the interstitial's own auto-submit firing
+    # twice must never start a second real, billed call while one is
+    # already in flight.
+    if store.generation_in_progress_for(workspace):
+        return redirect(url_for("workspace.show_workspace", project_id=project_id))
+
+    store.start_project_briefing_generation(workspace, actor=_reviewer())
 
     from services.project_briefing import generate_project_briefing
 
@@ -1167,6 +1227,8 @@ def generate_project_briefing_route(project_id):
     )
     if not result.ran:
         flash(f"Project briefing could not be generated: {result.skipped_reason}", "error")
+        workspace = store.get(project_id)
+        store.record_project_briefing_failure(workspace, reason=result.skipped_reason or "Unknown failure.")
         return redirect(url_for("workspace.show_workspace", project_id=project_id))
 
     from dataclasses import asdict
@@ -1178,6 +1240,59 @@ def generate_project_briefing_route(project_id):
     )
     flash("Project briefing generated.", "success")
     return redirect(url_for("workspace.show_workspace", project_id=project_id))
+
+
+@workspace_bp.route("/projects/<project_id>/workspace/briefing/preparing")
+@login_required
+def preparing_project_briefing(project_id):
+    """
+    CLAUDE-P38-D2: the "Preparing your Project Briefing..." interstitial
+    - a real, rendered, visible page (per this stage's own "a page that
+    opens empty and waits for a hidden user action is not acceptable"
+    instruction), not a background job. Reached right after ingestion
+    (services/ingestion.py redirects here instead of straight to the
+    workspace, only when there's real work for it to do) and auto-
+    submits a POST to generate_project_briefing_route via a small
+    inline script - synchronous generation, a visible waiting state
+    instead of a blocking upload request. This is the ONLY safe
+    lightweight option evaluated (see this stage's own final report,
+    Section B): background-worker infrastructure fails tools/
+    dependency_fit.py's own established constraint outright (no queue/
+    worker infra anywhere in this deployment's process model), and this
+    app has no async runtime either - a real Gunicorn worker recycling
+    mid-thread would leave an unsupervised, unrecoverable job with no
+    process left to finish or clean it up.
+    """
+    document, store, workspace = _load_workspace_or_404(project_id)
+    status, _decision = _project_briefing_ai_status(workspace)
+
+    # "Is there anything to brief from" is evidence-presence, not
+    # workspace.sources specifically - the originally-ingested document
+    # itself never gets a Source record (only later manually-added
+    # material does; see Source/add_source), so gating on
+    # workspace.sources alone would make this interstitial skip straight
+    # past automatic generation on literally every fresh upload, the
+    # opposite of what this stage requires. document.requirements/
+    # milestones is what deterministic_sections and the AI prompt itself
+    # actually consume - that's the real signal.
+    has_evidence = bool(document.requirements or document.milestones or workspace.sources)
+
+    # Nothing to prepare - go straight to the workspace rather than
+    # showing an interstitial for a state it can't do anything about.
+    # A prior failure also skips the interstitial - the workspace's own
+    # "Generation failed - Retry" state is the honest next step, not a
+    # second silent automatic attempt (this stage's own "do not
+    # regenerate when a previous generation failed... without user
+    # intervention" rule).
+    if (
+        workspace.project_briefing is not None
+        or status != "allow"
+        or not has_evidence
+        or workspace.project_briefing_last_failure_reason is not None
+    ):
+        return redirect(url_for("workspace.show_workspace", project_id=project_id))
+
+    return render_template("preparing_project_briefing.html", project_id=project_id, document=document)
 
 
 @workspace_bp.route("/projects/<project_id>/workspace/details", methods=["POST"])

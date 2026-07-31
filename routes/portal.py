@@ -491,7 +491,12 @@ def upload():
             operating_environments=OPERATING_ENVIRONMENT_LABELS,
         ), 400
 
-    return redirect(url_for('workspace.show_workspace', project_id=document.project_id))
+    # CLAUDE-P38-D2: routes through the "Preparing your Project
+    # Briefing..." interstitial rather than straight to the workspace -
+    # that route itself redirects straight through when there's nothing
+    # to prepare (AI not allowed/already approval-gated/no Sources), so
+    # this is always safe to do unconditionally here.
+    return redirect(url_for('workspace.preparing_project_briefing', project_id=document.project_id))
 
 
 @portal_bp.route('/dashboard')
