@@ -1,5 +1,98 @@
 # Continuation checkpoint
 
+## 2026-07-31 — CLAUDE-P38-D2: restore AI-first automation and repair the opening briefing pipeline
+
+**Commits:** `c8856c1` (provenance/lifecycle fields), `14e0d7e`
+(analytical-vs-consequential policy distinction + automatic lifecycle
+routing), `b160897` (template UX states), `73c0b03` (semantic repairs +
+source grounding), `ebd451d` (realistic fixtures + tests). Full suite:
+1127 passed (was 1104 before this stage's own new tests + P38-D2's
+9-test lifecycle class + the em-dash/background-prose classifier
+tests).
+
+CLAUDE-P38-C/P38-D1 had left a manual-only Generate button and no way
+to tell an approval-required policy state from an outright denial.
+This stage restores the original governing intent ("automatic
+analytical AI where policy permits; human authorization required only
+for consequential actions") without adding a new governed action or
+weakening the mandatory floor: `_project_briefing_ai_status()`
+(`routes/workspace.py`) turns the existing `evaluate_action()` result
+into three states the route now actually branches on
+(allow/require_approval/denied) instead of collapsing everything
+non-ALLOW into one generic path.
+
+**Automatic lifecycle:** `/upload` now redirects through a real,
+visible "Preparing your Project Briefing…" interstitial
+(`preparing_project_briefing` route + template) that auto-submits the
+real generation request — not a hidden background job.
+`tools/dependency_fit.py --requires-background-worker` confirmed this
+deployment has no queue/worker infra and no async runtime, which is
+what ruled out every alternative except synchronous generation behind
+a visible waiting page. A duplicate-call guard
+(`generation_in_progress_for`, keyed off a timestamp that treats
+anything older than 90s as abandoned) prevents a second real, billed
+call while one is in flight.
+
+**Bug found and fixed during this stage's own build:** the
+interstitial's original "is there a Source to brief from" gate checked
+`workspace.sources`, but the originally-ingested document never gets
+its own `Source` record (only later manually-added material does) —
+that gate would have skipped automatic generation on every real
+upload. Now checks `document.requirements`/`milestones`/
+`workspace.sources` together.
+
+**Semantic repairs** (`services/project_briefing.py`):
+`_looks_like_bare_heading` rewritten to a two-step prefix+verb check so
+em-dash/en-dash/colon/semicolon/no-punctuation schedule headings are
+excluded regardless of punctuation, not just a plain ASCII hyphen; a
+new `_BACKGROUND_PROSE_PATTERNS` excludes descriptive present/perfect-
+tense prose that shares topic vocabulary with a real requirement but
+isn't one; `_TECHNICAL_INCLUSION_SIGNALS` tightened to require an
+actual obligation-shaped phrase, not a bare topic noun.
+
+**Trust record:** `ProjectBriefingResult.grounded_in` — a small set of
+verbatim-quoted excerpts from the same extracted evidence, never
+invented. `set_project_briefing` now preserves exactly one prior
+version (`project_briefing_previous`) instead of overwriting it, shown
+via a compact history disclosure. Provider/model/generated-by/source-
+signature are now all displayed.
+
+**UX states** (`templates/case_workspace.html`): distinct copy and a
+`data-briefing-state` attribute for preparing / ready / stale-
+regenerable / stale-approval-required / stale-denied / approval-
+required / denied / failed-with-retry / no-source — never one generic
+flash regardless of what's actually happening.
+
+**Verification, reported by category (see this stage's own final
+report for the full breakdown):** unit/integration (1127 passed, incl.
+57 in `tests/test_project_briefing.py`); mocked-AI (the 9-test
+`ProjectBriefingLifecycleTests` class, real Flask route/template stack
+with only the Anthropic SDK call mocked); real-provider (multiple real,
+non-mocked Anthropic calls against the actual running dev server —
+automatic ALLOW-path generation, an explicit `confirm=once` approval-
+gated generation, ~20s each — via a throwaway `*.invalid` admin account
+created and suspended again in-process, never touching the real user's
+credentials); live policy-state verification (DENY and
+REQUIRE_APPROVAL both exercised against the real running server by
+temporarily changing the deployment-wide `SecurityGovernanceStore`
+baseline, then explicitly restored to `allow`/baseline afterward —
+confirmed via the app's own resolver post-restore). No pixel-level
+responsive/viewport verification was done (no screenshot tool in this
+environment, same stated gap as CLAUDE-P38-C).
+
+**Explicitly not built:** a debounce mechanism for "excessive repeated
+calls during multi-file ingestion" — the app only ever ingests one file
+per upload request (`request.files.get('file')`, singular) and a stale
+briefing requires an explicit click to regenerate (never automatic), so
+the scenario the debounce would guard against doesn't exist in this
+codebase's current architecture. No P39 work began.
+
+See this stage's own final report (delivered in-conversation) for the
+full policy-state/failure-state matrices and exact browser-retest
+steps.
+
+---
+
 ## 2026-07-31 — CLAUDE-P38-C: Project Briefing semantic repair and controlled workspace simplification
 
 **Commits:** `5817977` (semantic classification + compact previews),
