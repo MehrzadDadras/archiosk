@@ -1,5 +1,72 @@
 # Continuation checkpoint
 
+## 2026-07-30 — CLAUDE-P36: external-AI governance, confidentiality, and provider-portability gate
+
+**Commits:** `2fd949e` (enforcement + provider-portability fields),
+`74a1735` (18-item focused test suite). Full suite: 1026 passed, 0
+failed (1017 from CLAUDE-P35 + 9 new in
+`tests/test_external_ai_governance.py`).
+
+**What this closes.** P35 surfaced that `services/security_policy.py`'s
+`ACTION_EXTERNAL_AI_REQUEST` governed action existed but was never
+evaluated before the real requirement-investigation Anthropic call
+(`_handle_investigate_requirement` -> `requirement_investigation.
+investigate_requirement`) — a DENY baseline already blocked the export
+route and the ingestion-time classify/consistency calls, but this one
+real-time call site was unguarded. `_handle_investigate_requirement`
+now resolves that action through the SAME resolver (`evaluate_action`)
+already used by `routes/workspace.py`'s `_evaluate_security_action`
+(export gate) and `services/ingestion.py`'s ingestion-time gate —
+mandatory floor -> active organization baseline -> this project's own
+`security_profile` classification -> any active exception — before any
+evidence is gathered or a prompt is built. A denial stops the call
+entirely, records an honest `InvestigationStep` (`ran=False`, a
+policy-specific `skipped_reason`), and replies naming the controlling
+policy layer, distinct from the pre-existing "no API key" / "provider
+failed" messages.
+
+**Provider portability (Limited Concession).** `RequirementInvestigationResult`
+now carries `provider`/`model`/`requested_at` (set only when `ran=True`);
+the caller persists `engine_name`/`engine_version` from what the
+provider boundary actually used, instead of independently re-reading
+`ANTHROPIC_MODEL` from the environment. No second provider was
+implemented — this only removes one small, real Anthropic-specific
+assumption from the caller, per P36's own explicit scope restraint.
+
+**Call-site inventory (complete, 3 total):** `bhive_parser.py`'s
+`_classify_with_model` and `_check_consistency` were already gated —
+both keyed off `parser.ai_calls_disabled`, itself set by
+`ingestion.py`'s own pre-existing `evaluate_action` call at ingestion
+time (org-wide baseline/exception only; no project exists yet at that
+point, an honest, already-documented limitation). `requirement_
+investigation.py`'s `investigate_requirement` was the sole real
+bypass, now closed. `services/drawing_analysis.py` makes no external
+call at all (confirmed mock engine, CLAUDE-P35's own finding) — nothing
+to gate there.
+
+**Data minimization (reviewed, no code change).** The investigation
+prompt sends: this Requirement's own text/classification/status, its
+full adjudication history (including adjudicator usernames), linked
+Findings/Relationships/AcceptedKnowledge, supersession/relationship
+neighbors, and (opt-in only) the reviewer's represented-party name. It
+does NOT send the source document's full text, unrelated Requirements,
+project/client metadata, or pricing/contact information. One item
+flagged for a future stage, not acted on here: adjudicator usernames
+appear verbatim in the prompt — acceptable today (this deployment's
+usernames aren't confirmed to be real-name-bearing), but worth revisiting
+if a future deployment's usernames do carry real identity.
+
+**Confidential real-document walkthrough gate:** now clear to proceed,
+subject to the product owner performing the two-case (denied/permitted)
+walkthrough in this stage's own final report before any actual
+confidential document is used.
+
+See this stage's own final report (delivered in-conversation) for the
+full call-site inventory (Part A), root-cause explanation (Part B), and
+the updated two-case walkthrough (Part I).
+
+---
+
 ## 2026-07-30 — CLAUDE-P35: complete the first marketable investigation loop
 
 **Commit:** `cf3865c` (golden-path test correction). Full suite: 1017
