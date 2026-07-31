@@ -1,5 +1,82 @@
 # Continuation checkpoint
 
+## 2026-07-31 — CLAUDE-P40-E: unified document Workspace, conversation dock, hot-links
+
+**Commits:** `328a778` (unified nav + Workspace layout), `e8ca197`
+(conversation dock + hot-links), `58ef3d9` (specified-unbuilt docs +
+tests). Full suite: 1261 passed (was 1242).
+
+Transformed the Case Workspace's layout per product-design direction,
+with an independent repository-grounded assessment first (per the
+stage's own explicit instruction to challenge, not simulate).
+
+**Eliminated the second, permanently-visible navigation column**
+(`.workspace-pane-nav`, its own grid track running alongside the
+active Case pane) - its useful entries now live as compact, counted
+links in the unified left rail (`templates/base.html`), grouped
+Project / Documents / Work / Decisions & Governance beneath the active
+project's own row, only ever rendered for an authorized project. The
+detailed content itself (Requirements/Sources/RFIs/Accepted Knowledge/
+History) still renders unconditionally, confirmed necessary by an
+already-existing test (`test_left_aside_always_visible_regardless_of_
+case_selection`) - genuinely project-wide reference material a
+reviewer needs while inside a Case, not dead weight. What changed is
+placement: it now stacks in normal block flow (`.workspace-column`)
+inside the same grid-area as the active Case pane or Project Home,
+never a second column - which also retired the long-standing OPEN
+ACCESSIBILITY CONCERN in `main.css` (no more out-of-order tab-order
+region at narrow widths).
+
+Side-rail restyled neutral (the Limestone/beige `--surface-secondary`
+fill is gone, replaced with the same `--surface-primary` every
+Workspace panel uses). Heading renamed "Case Workspace" -> "Workspace"
+(display only - internal module names unchanged, matching the existing
+Case->"Investigation" display-relabeling precedent). Added a real
+`?source=<id>` document/drawing viewer inside the Workspace pane.
+
+**Conversation dock:** the existing Case-level and Project-level
+conversation accordions are now docked to the bottom of the viewport
+via CSS sticky positioning - deliberately NOT physically relocated out
+of their template position (the RFI delegation-choice/preview UI is
+tightly coupled to the conversation, and Discussion/Review-threads
+shares the same accordion group right after it; moving just the
+message list risked breaking either). Compact by default with an
+explicit expand toggle, and a real sessionStorage-backed draft/scroll-
+position preservation script (this app is server-rendered, nothing
+survives a navigation without deliberately saving it client-side).
+
+**Hot-links:** `services.case_workspace.resolve_conversation_hotlinks`
+turns an exact, currently-known Source filename mentioned in
+conversation text into a safe `?source=` link - never a regex guess,
+resolved fresh every render. Framework-agnostic (plain segments, no
+Flask import); `app.py`'s new `hotlinks` Jinja filter builds the
+actual escaped markup.
+
+**Sections F (multi-thread conversation lifecycle) and H (reviewer-
+governed pattern suggestions) are captured as specified-but-unbuilt**
+(`governance/specified-unbuilt/conversation-thread-lifecycle.md`,
+`reviewer-governed-pattern-suggestions.md`), not rushed: F needs a new
+persisted object and a genuinely honest provenance guard before
+permanent deletion could ever be allowed - no current field traces
+"this message caused Finding X," and guessing at that check felt
+irresponsible to squeeze in alongside everything else this stage
+already covered. H's own instruction ("Archiosk may learn how the
+reviewer investigates without learning what the reviewer must
+conclude") is a near-verbatim restatement of this repository's own
+ratified Experience Corpus principle, and `governance/STATUS.md` marks
+"the Experience Corpus (all forms)" **NOT AUTHORIZED** - the new
+document argues the personal/project-scoped version actually requested
+is a genuinely different, narrower, never-promoted thing, but that
+argument needs its own explicit review before being built, not a
+unilateral decision made mid-stage. Both get an honest "planned, not
+available yet" note in the dock instead of a dead/misleading control.
+
+See this stage's own final report (delivered in-conversation) for the
+full repository-grounded assessment, the responsive/accessibility
+review, and the product-owner browser checklist.
+
+---
+
 ## 2026-07-31 — CLAUDE-P40-D2-CLOSE: product-owner browser acceptance seal
 
 **No code change - verification only.** The product owner completed
