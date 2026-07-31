@@ -96,10 +96,20 @@
         </details>
         {% endif %}
 
-        <p class="workspace-pane-label">Lifecycle</p>
+        {# CLAUDE-P38 (OBS-14): this strip was fully static - "current"
+           was hardcoded to RFP regardless of any real project state (no
+           lifecycle-phase field exists anywhere in the domain model),
+           and "Historic Record" was presented as an ordinary phase
+           alongside real ones. Rather than invent a phase-tracking
+           field/governed transition this stage doesn't have evidence to
+           design correctly, this is now honestly labeled as a reference
+           list with no claimed "current" position - a real governed
+           phase/transition is future, deliberately-deferred work (see
+           this project's own STATUS.md), not something to fake here. #}
+        <p class="workspace-pane-label">Lifecycle (reference only — not tracked by this project)</p>
         <div class="lifecycle-strip">
-            {% for stage in ["RFQ", "RFP", "Pursuit", "Award", "Design", "Construction", "Closeout", "Historic Record"] %}
-            <span class="lifecycle-stage{% if stage in ['RFP'] %} current{% endif %}">{{ stage }}</span>
+            {% for stage in ["RFQ", "RFP", "Pursuit", "Award", "Design", "Construction", "Closeout"] %}
+            <span class="lifecycle-stage">{{ stage }}</span>
             {% endfor %}
         </div>
 
@@ -107,11 +117,15 @@
            the governed Requirements below, not a rewrite of them ("map over
            terrain"). Off by default; badges only ever appear for a Requirement
            that already has a real PerspectiveAssessment - nothing is guessed
-           to fill in the layer. #}
-        <p class="workspace-pane-label">Layers</p>
+           to fill in the layer.
+           CLAUDE-P38 (OBS-13): renamed "Layers" -> "Display Layers" and the
+           checkbox label reframed as "viewing as X" - the name shown is
+           THIS reviewer's own represented party (whose lens they're
+           looking through), never the layer's "author". #}
+        <p class="workspace-pane-label">Display Layers</p>
         <label style="display:flex;align-items:center;gap:0.4rem;font-size:0.85rem;margin-bottom:0.6rem;">
             <input type="checkbox" id="layer-risk-toggle">
-            Risk / Opportunity{% if represented_party %} &mdash; {{ represented_party.name }}{% endif %}
+            Show Risk / Opportunity badges{% if represented_party %} (viewing as {{ represented_party.name }}){% endif %}
         </label>
         {% if not represented_party %}
         <p style="color:var(--text-secondary);font-size:0.8rem;margin:-0.4rem 0 0.6rem;">
@@ -337,7 +351,22 @@
                 {% endfor %}
             </ul>
             {% endif %}
-            {% call macros.subdisclosure('+ Register a Participant') %}
+            {# CLAUDE-P38 (OBS-03): renamed from "Register a Participant" -
+               that name reads like creating a login for someone else. A
+               Participant is a directory entry for a PROJECT PARTY or
+               ORGANIZATION (e.g. "Cedar Harbour Design-Build JV"), used
+               only for perspective-taking (above) and reference -
+               nothing recorded afterward is ever attributed to a
+               Participant instead of the real authenticated reviewer
+               who did it (every governed write in this app records the
+               actual signed-in actor, never a represented party). #}
+            {% call macros.subdisclosure('+ Add a Project Party') %}
+                <p class="pane-note">
+                    A directory entry for an organization or role on this project (e.g. an
+                    owner, a Design-Build JV) - not a login, and never something you act as.
+                    Whatever you do in this workspace stays attributed to your own
+                    signed-in identity regardless of which party you represent above.
+                </p>
                 <form class="workspace-form" method="post" action="{{ url_for('workspace.register_participant_route', project_id=project_id) }}">
                     <input type="text" name="name" placeholder="Name (e.g. Cedar Harbour Design-Build JV)" required>
                     <select name="role_type" required>
@@ -346,7 +375,7 @@
                         {% endfor %}
                     </select>
                     <input type="text" name="note" placeholder="Note (optional)">
-                    <button type="submit">Register Participant</button>
+                    <button type="submit">Add Project Party</button>
                 </form>
             {% endcall %}
         {% endcall %}
@@ -363,7 +392,10 @@
                 <li class="source-item">
                     <strong>{{ assessment.decision_stage.replace('_', ' ') }}</strong>
                     &mdash; {{ assessment.decision.replace('_', ' ') }}
-                    <br><small class="text-muted">{{ assessment.decided_by }}, {{ assessment.decided_at }}</small>
+                    <br><small class="text-muted">
+                        {{ assessment.decided_by }}{% if assessment.decided_by_role %} ({{ assessment.decided_by_role.replace('_', ' ') }}){% endif %},
+                        {{ assessment.decided_at }}
+                    </small>
                     <br>{{ assessment.rationale }}
                     {% if assessment.anomalies %}
                     <br><small class="text-muted">Anomalies: {{ assessment.anomalies|join('; ') }}</small>
@@ -375,7 +407,7 @@
             <p style="color:var(--text-secondary);font-size:0.88rem;">No Go/No-Go decisions recorded yet.</p>
             {% endif %}
 
-            {% if go_no_go_capability_available %}
+            {% if go_no_go_capability_available and session.get('role') == 'admin' %}
             {% call macros.subdisclosure('+ Record a Go/No-Go decision') %}
                 <form class="workspace-form" method="post" action="{{ url_for('workspace.record_go_no_go', project_id=project_id) }}">
                     <select name="decision_stage" required>
@@ -393,6 +425,16 @@
                     <button type="submit">Record decision</button>
                 </form>
             {% endcall %}
+            {% elif go_no_go_capability_available %}
+            {# CLAUDE-P38 (OBS-04): a management decision, not an ordinary
+               participant action - a non-admin can still contribute input
+               through the existing Project Conversation (now capable of a
+               real, grounded reply as of OBS-01) rather than a new
+               parallel "recommendation" object this stage doesn't build. #}
+            <p style="color:var(--text-secondary);font-size:0.8rem;">
+                Only an admin can record a Go/No-Go decision. Use this project's
+                Conversation to share your input so it's on record.
+            </p>
             {% elif not operating_environment %}
             <p style="color:var(--text-secondary);font-size:0.8rem;">
                 Establish this project's operating environment (above) before recording a Go/No-Go decision.
@@ -431,16 +473,27 @@
         {% endif %}
         {% endcall %}
 
+        {# CLAUDE-P38 (OBS-05): the governance-explanation paragraph
+           permanently dominated this panel ahead of the actual
+           instruction text - moved behind a collapsed disclosure so the
+           real content (what a reviewer is actually here to read) is
+           primary. The issuer's role is now captured and shown
+           alongside their name, not just a bare username. #}
         {% call macros.accordion('Project Instructions', status='+', group='left', id='instructions') %}
-            <p class="pane-note">
-                Project / Case Operating Instructions guide terminology, conventions, and known assumptions
-                for this Project. Always subordinate to Archiosk governance &mdash; Stone Wall, source
-                authority, provenance, and approval boundaries take precedence and can never be overridden
-                here.
-            </p>
+            {% call macros.subdisclosure('What are Project Instructions?') %}
+                <p class="pane-note">
+                    Project / Case Operating Instructions guide terminology, conventions, and known assumptions
+                    for this Project. Always subordinate to Archiosk governance &mdash; Stone Wall, source
+                    authority, provenance, and approval boundaries take precedence and can never be overridden
+                    here.
+                </p>
+            {% endcall %}
             {% if workspace.operating_instructions %}
             <p style="font-size:0.8rem;white-space:pre-wrap;">{{ workspace.operating_instructions }}</p>
-            <p style="font-size:0.8rem;color:var(--text-secondary);">Last updated by {{ workspace.operating_instructions_updated_by }} &middot; {{ workspace.operating_instructions_updated_at }}</p>
+            <p style="font-size:0.8rem;color:var(--text-secondary);">
+                Last updated by {{ workspace.operating_instructions_updated_by }}{% if workspace.operating_instructions_updated_by_role %} ({{ workspace.operating_instructions_updated_by_role.replace('_', ' ') }}){% endif %}
+                &middot; {{ workspace.operating_instructions_updated_at }}
+            </p>
             {% else %}
             <p style="font-size:0.88rem;color:var(--text-secondary);">No Project Instructions set yet.</p>
             {% endif %}

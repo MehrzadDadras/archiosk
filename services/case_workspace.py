@@ -2052,6 +2052,11 @@ class GoNoGoAssessment:
     rationale: str
     decided_by: str
     decided_at: str
+    # CLAUDE-P38 (OBS-04): the decider's role at decision time - a bare
+    # username alone left "who has the authority to make this call"
+    # implicit. Optional/defaulted so existing serialized records
+    # (pre-dating this field) round-trip unchanged.
+    decided_by_role: Optional[str] = None
 
 
 @dataclass
@@ -2467,6 +2472,11 @@ class ProjectWorkspace:
     operating_instructions: str = ""
     operating_instructions_updated_by: Optional[str] = None
     operating_instructions_updated_at: Optional[str] = None
+    # CLAUDE-P38 (OBS-05): the issuer's role at the time they last set
+    # this - "Last updated by admin" alone left the issuer's authority
+    # implicit. Optional/defaulted so existing serialized records
+    # (pre-dating this field) round-trip unchanged.
+    operating_instructions_updated_by_role: Optional[str] = None
     # CLAUDE-P29: Project Operating Environment -- the locked, project-
     # level classification of which side of the procurement/delivery
     # relationship this project's workspace serves (services/
@@ -3138,6 +3148,7 @@ class CaseWorkspaceStore:
         text: str,
         actor: str,
         governance_log: Optional[GovernanceLog] = None,
+        actor_role: Optional[str] = None,
     ) -> ProjectWorkspace:
         """
         Records human-authored Project / Case Operating Instructions - see
@@ -3149,6 +3160,7 @@ class CaseWorkspaceStore:
         workspace.operating_instructions = text
         workspace.operating_instructions_updated_by = actor
         workspace.operating_instructions_updated_at = _now()
+        workspace.operating_instructions_updated_by_role = actor_role
         self.save(workspace)
 
         if governance_log is not None:
@@ -3236,6 +3248,7 @@ class CaseWorkspaceStore:
         decided_by: str,
         anomalies: Optional[list] = None,
         governance_log: Optional[GovernanceLog] = None,
+        decided_by_role: Optional[str] = None,
     ) -> dict:
         """
         CLAUDE-P30: records one Go/No-Go decision -- "go_no_go" in
@@ -3279,6 +3292,7 @@ class CaseWorkspaceStore:
             rationale=rationale.strip(),
             decided_by=decided_by,
             decided_at=_now(),
+            decided_by_role=decided_by_role,
         )
         workspace.go_no_go_assessments.append(asdict(assessment))
         self.save(workspace)

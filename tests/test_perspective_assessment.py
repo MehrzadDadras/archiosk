@@ -262,6 +262,38 @@ class PerspectiveRouteAndRenderTests(unittest.TestCase):
         self.assertIn("This falls on us if conditions differ.", body)
         self.assertIn(PERSPECTIVE_POLARITY_RISK, body)
 
+    def test_add_project_party_control_clarifies_it_is_not_a_login(self):
+        # CLAUDE-P38 (OBS-03): "Register a Participant" read like creating
+        # a login for someone else - this project party directory entry
+        # must clearly state it is not one, and never changes who a
+        # governed action is attributed to.
+        page = self.client.get(f"/projects/{self.project_id}/workspace")
+        body = page.get_data(as_text=True)
+        self.assertIn("Add a Project Party", body)
+        self.assertIn("not a login", body)
+
+    def test_registering_a_project_party_never_changes_who_recorded_the_action(self):
+        requirement = self._register_requirement()
+        self.client.post(
+            f"/projects/{self.project_id}/workspace/participants",
+            data={"name": "Cedar Harbour DB JV", "role_type": PARTICIPANT_ROLE_DESIGN_BUILDER},
+        )
+        participant = self.store.get(self.project_id).participants[0]
+        self.client.post(
+            f"/projects/{self.project_id}/workspace/represented-party",
+            data={"participant_id": participant["id"]},
+        )
+        self.client.post(
+            f"/projects/{self.project_id}/workspace/requirements/{requirement['id']}/perspective",
+            data={"polarity": PERSPECTIVE_POLARITY_RISK, "reasoning": "This falls on us."},
+        )
+        workspace = self.store.get(self.project_id)
+        assessment = next(a for a in workspace.perspective_assessments if a["reasoning"] == "This falls on us.")
+        # Attributed to the real signed-in actor, never to the
+        # represented party's own name.
+        self.assertEqual(assessment["recorded_by"], "owner1")
+        self.assertNotEqual(assessment["recorded_by"], "Cedar Harbour DB JV")
+
     def test_machine_investigation_records_a_perspective_assessment_when_represented_party_set(self):
         requirement = self._register_requirement()
         self.client.post(

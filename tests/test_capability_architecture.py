@@ -281,6 +281,69 @@ class GoNoGoRouteTests(_BaseWorkspaceTestCase):
         self.assertIn(b'value="release_rfp"', page.data)
         self.assertNotIn(b'value="bid_rfp"', page.data)
 
+    def test_decision_records_the_deciders_role(self):
+        document = self._ingest(b"content", "a.txt", CLIENT_OWNER, "GNG Role Recorded")
+        self.client.post(
+            f"/projects/{document.project_id}/workspace/go-no-go",
+            data={"decision_stage": "release_rfp", "decision": "go", "rationale": "Budget confirmed."},
+        )
+        workspace = self._store().get(document.project_id)
+        self.assertEqual(workspace.go_no_go_assessments[0]["decided_by_role"], "admin")
+
+    # -- CLAUDE-P38 (OBS-04): decision authority is admin-only ---------------
+
+    def _read_only_client(self, project_id: str, owner_username: str):
+        from models import User, db
+
+        with self.flask_app.app_context():
+            db.session.add(User(username="gng_reader", password_hash=generate_password_hash("x"), role="read_only"))
+            db.session.commit()
+        store = self._store()
+        workspace = store.get(project_id)
+        store.grant_project_access(workspace, username="gng_reader", actor=owner_username, actor_role="admin")
+        reader_client = self.flask_app.test_client()
+        with reader_client.session_transaction() as sess:
+            sess["user_id"] = 2
+            sess["username"] = "gng_reader"
+            sess["role"] = "read_only"
+        return reader_client
+
+    def test_read_only_user_cannot_record_a_decision(self):
+        document = self._ingest(b"content", "a.txt", CLIENT_OWNER, "GNG RO Denied")
+        reader_client = self._read_only_client(document.project_id, "cap_admin")
+
+        response = reader_client.post(
+            f"/projects/{document.project_id}/workspace/go-no-go",
+            data={"decision_stage": "release_rfp", "decision": "go", "rationale": "Trying to decide anyway."},
+        )
+        self.assertIn(response.status_code, (302, 303))
+        workspace = self._store().get(document.project_id)
+        self.assertEqual(len(workspace.go_no_go_assessments), 0)
+
+    def test_read_only_user_does_not_see_the_decision_form(self):
+        document = self._ingest(b"content", "a.txt", CLIENT_OWNER, "GNG RO Form Hidden")
+        reader_client = self._read_only_client(document.project_id, "cap_admin")
+
+        page = reader_client.get(f"/projects/{document.project_id}/workspace")
+        self.assertNotIn(b"Record a Go/No-Go decision", page.data)
+        self.assertIn(b"Only an admin can record a Go", page.data)
+
+    def test_admin_can_still_record_after_a_read_only_denial(self):
+        document = self._ingest(b"content", "a.txt", CLIENT_OWNER, "GNG Admin Still Works")
+        reader_client = self._read_only_client(document.project_id, "cap_admin")
+        reader_client.post(
+            f"/projects/{document.project_id}/workspace/go-no-go",
+            data={"decision_stage": "release_rfp", "decision": "go", "rationale": "Denied attempt."},
+        )
+        response = self.client.post(
+            f"/projects/{document.project_id}/workspace/go-no-go",
+            data={"decision_stage": "release_rfp", "decision": "go", "rationale": "Real admin decision."},
+        )
+        self.assertIn(response.status_code, (302, 303))
+        workspace = self._store().get(document.project_id)
+        self.assertEqual(len(workspace.go_no_go_assessments), 1)
+        self.assertEqual(workspace.go_no_go_assessments[0]["rationale"], "Real admin decision.")
+
 
 class RfiDirectionalityRouteTests(_BaseWorkspaceTestCase):
     """"Client cannot originate Proponent RFI workflow" / "Proponent

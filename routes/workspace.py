@@ -1123,6 +1123,7 @@ def edit_operating_instructions(project_id):
         text=(request.form.get("instructions") or "").strip(),
         actor=_reviewer(),
         governance_log=_log(),
+        actor_role=session.get("role"),
     )
     flash("Project Operating Instructions updated.", "success")
     return redirect(url_for("workspace.show_workspace", project_id=project_id))
@@ -2417,11 +2418,30 @@ def record_go_no_go(project_id):
     actually uses (CaseWorkspaceStore.record_go_no_go_decision itself
     enforces this; the capability gate below only controls whether the
     form/route is reachable at all for a legacy/unclassified project).
+
+    CLAUDE-P38 (OBS-04): until this stage, ANY authenticated participant
+    (including read_only) could record the actual decision - a
+    management action presented as an ordinary participant one. Real
+    decision authority is now admin-only, server-side enforced here
+    (not merely hidden in the template), matching the same admin-only
+    precedent already established for every other consequential,
+    one-way project action in this app (Security Department, operating-
+    environment classification). A non-admin gets a clear flash, not a
+    bare 403 - go_no_go stays reachable to read via the same page,
+    unlike admin_required's harder redirect/403 split.
     """
     _, store, workspace = _load_workspace_or_404(project_id)
     gate = _require_capability(workspace, "go_no_go", project_id)
     if gate is not None:
         return gate
+
+    if session.get("role") != "admin":
+        flash(
+            "Only an admin can record a Go/No-Go decision. Share your input through "
+            "this project's Conversation so it's on record for whoever does.",
+            "error",
+        )
+        return redirect(url_for("workspace.show_workspace", project_id=project_id))
 
     decision_stage = (request.form.get("decision_stage") or "").strip()
     decision = (request.form.get("decision") or "").strip()
@@ -2432,6 +2452,7 @@ def record_go_no_go(project_id):
         store.record_go_no_go_decision(
             workspace, decision_stage=decision_stage, decision=decision, rationale=rationale,
             decided_by=_reviewer(), anomalies=anomalies, governance_log=_log(),
+            decided_by_role=session.get("role"),
         )
     except CaseWorkspaceError as exc:
         flash(str(exc), "error")
