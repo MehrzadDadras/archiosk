@@ -51,6 +51,21 @@ PROJECT_BRIEFING_PROMPT_VERSION = "p38b"
 
 _MAX_ITEMS_PER_CATEGORY_IN_PROMPT = 30
 
+# CLAUDE-P40-B (3.2): see generate_project_briefing's own comment at the
+# call site for the full investigation. A compact document's prompt
+# comfortably fits under _BASE_CHARS_BEFORE_SCALING - the timeout only
+# ever grows past base_timeout once the prompt is genuinely larger than
+# that, and never past _MAX_TIMEOUT_SECONDS regardless of size.
+_BASE_CHARS_BEFORE_SCALING = 4000
+_TIMEOUT_SECONDS_PER_EXTRA_1000_CHARS = 3.0
+_MAX_TIMEOUT_SECONDS = 90.0
+
+
+def _scale_timeout_for_prompt_size(base_timeout: float, prompt: str) -> float:
+    extra_chars = max(0, len(prompt) - _BASE_CHARS_BEFORE_SCALING)
+    scaled = base_timeout + (extra_chars / 1000.0) * _TIMEOUT_SECONDS_PER_EXTRA_1000_CHARS
+    return min(scaled, _MAX_TIMEOUT_SECONDS)
+
 
 @dataclass
 class ProjectBriefingResult:
@@ -97,15 +112,30 @@ def generate_project_briefing(
         )
 
     model = model or os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-6")
-    timeout = timeout if timeout is not None else float(
+    base_timeout = timeout if timeout is not None else float(
         os.getenv("ANTHROPIC_TIMEOUT_SECONDS", DEFAULT_TIMEOUT_SECONDS)
     )
     requested_at = datetime.now(timezone.utc).isoformat()
 
     import anthropic  # imported lazily so the dep is optional in dev
 
-    client = anthropic.Anthropic(api_key=api_key, timeout=timeout)
     prompt = _build_prompt(document_filename, candidate_requirements, governed_requirements, milestones)
+    # CLAUDE-P40-B (3.2): confirmed live via a real product-owner
+    # walkthrough - a larger Project's Briefing generation failed with
+    # "Request timed out after 30s" while a smaller one succeeded. Root
+    # cause traced precisely: base_timeout above is an APPLICATION
+    # timeout (the Anthropic SDK's own timeout=, sourced from .env's
+    # ANTHROPIC_TIMEOUT_SECONDS), not an HTTP/provider/job-state one -
+    # 30s is comfortably enough for a small prompt but not for a larger,
+    # category-diverse document's proportionally larger one. The
+    # operator's own configured value is respected as a FLOOR, never
+    # reduced - this only extends it upward for a larger prompt, capped
+    # well under this deployment's own Gunicorn worker timeout (150s,
+    # deploy/gunicorn.conf.py) and nginx proxy_read_timeout (150s,
+    # deploy/nginx.conf), so a genuinely slow generation still degrades
+    # to this module's own honest timeout message, never a raw 502/504.
+    timeout = _scale_timeout_for_prompt_size(base_timeout, prompt)
+    client = anthropic.Anthropic(api_key=api_key, timeout=timeout)
 
     try:
         response = client.messages.create(

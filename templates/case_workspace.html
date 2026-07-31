@@ -1568,10 +1568,23 @@
                the ordinary fallback for a state the interstitial should
                normally have already handled). #}
             {% if briefing_generation_in_progress %}
+            {# CLAUDE-P40-B (3.2): was "A generation request is already
+               in progress" - technically accurate but reads as a
+               conflict/blocker ("you can't do this, someone else is
+               already doing it"), not "this is happening for you right
+               now, please wait" - confirmed live: a product-owner
+               refresh mid-generation landed on exactly this wording
+               while their own original request was still genuinely in
+               flight (this architecture is fully synchronous - no
+               background job, no polling - so a second page load while
+               the first blocking request hasn't returned yet is a real,
+               ordinary case, not a rare edge case). Reworded to name
+               what's actually happening and why it can take a while for
+               a larger document, without implying anyone did anything
+               wrong. #}
             <p class="project-home-state-message" data-briefing-state="preparing">
-                <strong>Preparing Project Briefing&hellip;</strong> A generation request is already in progress
-                (started by {{ workspace.project_briefing_generated_by or 'another session' }}). Refresh in a
-                moment.
+                <strong>Still preparing your Project Briefing&hellip;</strong> This can take up to a minute or
+                more for a larger document. This page doesn't update on its own yet - refresh to check again.
             </p>
 
             {% elif not workspace.project_briefing and workspace.project_briefing_last_failure_reason %}

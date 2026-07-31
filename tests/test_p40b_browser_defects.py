@@ -22,7 +22,23 @@ from werkzeug.security import generate_password_hash
 
 from services.bhive_parser import BHiveParser, ParsedDocument, RequirementItem
 from services.case_workspace import REQUIREMENT_REGISTRATION_HUMAN_REGISTERED, CaseWorkspaceStore, Source
+from services.project_briefing import generate_project_briefing
 from services.requirements_registry import RequirementsRegistry
+
+_SUCCESSFUL_BRIEFING_OUTPUT = (
+    '{"executive_summary": "Test summary.", "objectives": [], "project_brief": "", '
+    '"procurement_route": "", "matters_requiring_attention": []}'
+)
+
+
+def _mock_response(text_out: str):
+    fake_block = MagicMock()
+    fake_block.type = "text"
+    fake_block.text = text_out
+    fake_response = MagicMock()
+    fake_response.content = [fake_block]
+    fake_response.stop_reason = "end_turn"
+    return fake_response
 
 _LONG_MILESTONE_TEXT = (
     "Proponents shall submit all required forms as part of the formal Proposal "
@@ -47,6 +63,47 @@ class MilestoneTruncationTests(unittest.TestCase):
         # Confirms the exact previously-reported symptom is gone - the
         # text ends on a real word boundary, not a silent mid-word cut.
         self.assertTrue(milestones[0]["label"].endswith("Sponsor."))
+
+
+class BriefingTimeoutScalingTests(unittest.TestCase):
+    """3.2 - the exact 30s boundary was confirmed to be an application
+    timeout (services/project_briefing.py, sourced from .env's
+    ANTHROPIC_TIMEOUT_SECONDS), not HTTP/provider/job-state. A larger
+    document's prompt needs proportionally more generation time."""
+
+    def test_short_prompt_stays_at_the_base_timeout(self):
+        from services.project_briefing import _scale_timeout_for_prompt_size
+
+        short_prompt = "x" * 500
+        self.assertEqual(_scale_timeout_for_prompt_size(30.0, short_prompt), 30.0)
+
+    def test_long_prompt_scales_up_but_stays_capped(self):
+        from services.project_briefing import _MAX_TIMEOUT_SECONDS, _scale_timeout_for_prompt_size
+
+        long_prompt = "x" * 50000
+        scaled = _scale_timeout_for_prompt_size(30.0, long_prompt)
+        self.assertGreater(scaled, 30.0)
+        self.assertLessEqual(scaled, _MAX_TIMEOUT_SECONDS)
+
+    def test_scaled_timeout_never_drops_below_the_operator_configured_floor(self):
+        from services.project_briefing import _scale_timeout_for_prompt_size
+
+        self.assertGreaterEqual(_scale_timeout_for_prompt_size(30.0, ""), 30.0)
+
+    def test_real_call_uses_a_timeout_scaled_from_the_actual_prompt(self):
+        with patch("anthropic.Anthropic") as MockClient, \
+             patch.dict("os.environ", {"ANTHROPIC_TIMEOUT_SECONDS": "30"}):
+            MockClient.return_value.messages.create.return_value = _mock_response(_SUCCESSFUL_BRIEFING_OUTPUT)
+            large_items = [
+                {"text": f"The Design-Builder shall comply with technical requirement {i} in full.", "category": "technical_specification"}
+                for i in range(30)
+            ] * 4  # well past a single small-document prompt
+            generate_project_briefing(
+                document_filename="large.txt", candidate_requirements=large_items,
+                governed_requirements=[], milestones=[], api_key="fake-key-for-test",
+            )
+            call_kwargs = MockClient.call_args.kwargs
+        self.assertGreater(call_kwargs["timeout"], 30.0)
 
 
 class ProjectHomeBrowserDefectTests(unittest.TestCase):

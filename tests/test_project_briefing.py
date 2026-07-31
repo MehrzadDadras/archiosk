@@ -563,6 +563,34 @@ class ProjectBriefingLifecycleTests(unittest.TestCase):
         self.assertIsNone(workspace.project_briefing)
         self.assertIsNotNone(workspace.project_briefing_last_failure_reason)
 
+    def test_generation_failure_is_not_reported_twice_on_the_page(self):
+        # CLAUDE-P40-B (3.2): a real product-owner walkthrough found the
+        # same timeout failure shown twice - a flash banner AND the
+        # persistent inline "Generation failed" state, near-identical
+        # text, on the same page load. The flash was removed; only the
+        # inline state remains.
+        with patch("anthropic.Anthropic") as MockClient, \
+             patch.dict("os.environ", {"ANTHROPIC_API_KEY": "fake-key-for-test"}):
+            MockClient.return_value.messages.create.side_effect = RuntimeError("provider exploded")
+            resp = self.client.post(
+                f"/projects/{self.project_id}/workspace/briefing/generate", follow_redirects=True,
+            )
+        body = resp.get_data(as_text=True)
+        self.assertEqual(body.count("error occurred"), 1)
+        self.assertNotIn("Project briefing could not be generated", body)
+
+    def test_in_progress_state_uses_truthful_non_conflict_wording(self):
+        # CLAUDE-P40-B (3.2): "A generation request is already in
+        # progress" read as a conflict/blocker, not a truthful
+        # "this is happening for you right now" status - confirmed via a
+        # real product-owner walkthrough where a mid-generation refresh
+        # landed on exactly this wording for their own original request.
+        workspace = self.store.get(self.project_id)
+        self.store.start_project_briefing_generation(workspace, actor="owner1")
+        body = self._page()
+        self.assertIn("Still preparing your Project Briefing", body)
+        self.assertNotIn("already in progress", body)
+
     def test_retry_after_failure_succeeds_and_clears_the_failure_state(self):
         with patch("anthropic.Anthropic") as MockClient, \
              patch.dict("os.environ", {"ANTHROPIC_API_KEY": "fake-key-for-test"}):

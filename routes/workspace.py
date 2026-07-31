@@ -1226,7 +1226,16 @@ def generate_project_briefing_route(project_id):
         milestones=list(document.milestones),
     )
     if not result.ran:
-        flash(f"Project briefing could not be generated: {result.skipped_reason}", "error")
+        # CLAUDE-P40-B (3.2): no flash here anymore - the persistent
+        # inline "Generation failed - Retry" state (case_workspace.html,
+        # driven by workspace.project_briefing_last_failure_reason,
+        # set two lines below) already tells the reviewer the same
+        # thing with a clear recovery action. A flash of the identical
+        # message on top of that, confirmed via a real product-owner
+        # walkthrough, read as the same failure reported twice
+        # ("Project briefing could not be generated: Request timed out
+        # after 30s." immediately above "Generation failed. Request
+        # timed out after 30s.") for no added information.
         workspace = store.get(project_id)
         store.record_project_briefing_failure(workspace, reason=result.skipped_reason or "Unknown failure.")
         return redirect(url_for("workspace.show_workspace", project_id=project_id))
