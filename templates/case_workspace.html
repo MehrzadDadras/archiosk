@@ -1520,17 +1520,62 @@
                 document(s) &mdash; not an approved Project Charter.
             </p>
 
-            {% if briefing_stale %}
-            <p class="project-home-state-message">
-                This briefing was generated before the active Source set last changed &mdash; consider regenerating.
+            {# CLAUDE-P38-D2 (Section 9): explicit, distinct states - never
+               one generic flash regardless of what's actually going on.
+               Priority order: in-progress > failed > has-a-briefing
+               (ready/stale, each split by AI status) > no-briefing-yet
+               (split by why: no source, approval required, denied, or
+               the ordinary fallback for a state the interstitial should
+               normally have already handled). #}
+            {% if briefing_generation_in_progress %}
+            <p class="project-home-state-message" data-briefing-state="preparing">
+                <strong>Preparing Project Briefing&hellip;</strong> A generation request is already in progress
+                (started by {{ workspace.project_briefing_generated_by or 'another session' }}). Refresh in a
+                moment.
             </p>
-            {% endif %}
 
-            <form class="workspace-form" method="post" action="{{ url_for('workspace.generate_project_briefing_route', project_id=project_id) }}" id="briefing-generate">
-                <button type="submit" class="apply-button">{{ 'Regenerate Project Briefing' if workspace.project_briefing else 'Generate Project Briefing' }}</button>
+            {% elif not workspace.project_briefing and workspace.project_briefing_last_failure_reason %}
+            <p class="project-home-state-message" data-briefing-state="failed">
+                <strong>Generation failed.</strong> {{ workspace.project_briefing_last_failure_reason }}
+            </p>
+            <form class="workspace-form" method="post" action="{{ url_for('workspace.generate_project_briefing_route', project_id=project_id) }}">
+                <button type="submit" class="apply-button">Retry</button>
             </form>
 
-            {% if workspace.project_briefing %}
+            {% elif workspace.project_briefing %}
+            {% if briefing_stale and briefing_ai_status == 'require_approval' %}
+            <p class="project-home-state-message" data-briefing-state="stale-approval-required">
+                <strong>Briefing out of date &mdash; approval required.</strong> The active Source set has changed
+                since this was generated, and refreshing it needs explicit approval
+                (controlling layer: {{ briefing_ai_decision.controlling_layer }}).
+            </p>
+            <form class="workspace-form" method="post" action="{{ url_for('workspace.generate_project_briefing_route', project_id=project_id) }}">
+                <input type="hidden" name="confirm" value="once">
+                <button type="submit" class="apply-button">Approve and Regenerate</button>
+            </form>
+            {% elif briefing_stale and briefing_ai_status == 'denied' %}
+            <p class="project-home-state-message" data-briefing-state="stale-denied">
+                <strong>Briefing out of date.</strong> The active Source set has changed since this was
+                generated, but external AI is not permitted by this project's security policy
+                (controlling layer: {{ briefing_ai_decision.controlling_layer }}) &mdash; the version below can't
+                be refreshed while that holds.
+            </p>
+            {% elif briefing_stale %}
+            <p class="project-home-state-message" data-briefing-state="stale">
+                <strong>Briefing out of date.</strong> The active Source set has changed since this was generated.
+            </p>
+            <form class="workspace-form" method="post" action="{{ url_for('workspace.generate_project_briefing_route', project_id=project_id) }}">
+                <button type="submit" class="apply-button">Regenerate Project Briefing</button>
+            </form>
+            {% else %}
+            <p class="project-home-state-message" data-briefing-state="ready">
+                <strong>Project Briefing ready.</strong>
+            </p>
+            <form class="workspace-form" method="post" action="{{ url_for('workspace.generate_project_briefing_route', project_id=project_id) }}">
+                <button type="submit">Regenerate</button>
+            </form>
+            {% endif %}
+
             {% set briefing = workspace.project_briefing %}
             {% if briefing.executive_summary %}
             <p class="workspace-pane-label" style="margin-top:0.6rem;">Executive Summary</p>
@@ -1557,9 +1602,50 @@
                 <p style="font-size:0.78rem;color:var(--text-secondary);">Machine-assisted observations &mdash; not confirmed until governed through Findings and Adjudication.</p>
             {% endcall %}
             {% endif %}
-            <p style="font-size:0.75rem;color:var(--text-secondary);">Generated by {{ workspace.project_briefing_generated_by }}, {{ workspace.project_briefing_generated_at }}.</p>
+            {% if briefing.grounded_in %}
+            {% call macros.subdisclosure('Source grounding') %}
+                <ul class="source-list">{% for g in briefing.grounded_in %}<li class="source-item">{{ g }}</li>{% endfor %}</ul>
+            {% endcall %}
+            {% endif %}
+            <p style="font-size:0.75rem;color:var(--text-secondary);">
+                Generated by {{ workspace.project_briefing_generated_by }}, {{ workspace.project_briefing_generated_at }}
+                {% if briefing.provider %} &middot; {{ briefing.provider }} {{ briefing.model }}{% endif %}
+                {% if workspace.project_briefing_source_signature %} &middot; source signature on record{% endif %}
+            </p>
+            {% if workspace.project_briefing_previous %}
+            {% call macros.subdisclosure('Previous version (' ~ workspace.project_briefing_previous_generated_at ~ ')') %}
+                {% set prior = workspace.project_briefing_previous %}
+                {% if prior.executive_summary %}<p style="font-size:0.85rem;">{{ prior.executive_summary }}</p>{% endif %}
+                <p style="font-size:0.75rem;color:var(--text-secondary);">Replaced when the briefing was last regenerated - kept for comparison, not restorable in place.</p>
+            {% endcall %}
+            {% endif %}
+
             {% else %}
-            <p style="font-size:0.85rem;color:var(--text-secondary);">No narrative briefing generated yet &mdash; the sections below are already available from the extracted source document without one.</p>
+            {% if not briefing_has_evidence %}
+            <p style="font-size:0.85rem;color:var(--text-secondary);" data-briefing-state="no-source">
+                <strong>No source available.</strong> Add a document before a briefing can be prepared.
+            </p>
+            {% elif briefing_ai_status == 'require_approval' %}
+            <p class="project-home-state-message" data-briefing-state="approval-required">
+                <strong>AI Project Briefing awaits approval.</strong> {{ briefing_ai_decision.reason }}
+                (controlling layer: {{ briefing_ai_decision.controlling_layer }}).
+            </p>
+            <form class="workspace-form" method="post" action="{{ url_for('workspace.generate_project_briefing_route', project_id=project_id) }}">
+                <input type="hidden" name="confirm" value="once">
+                <button type="submit" class="apply-button">Approve and Generate</button>
+            </form>
+            {% elif briefing_ai_status == 'denied' %}
+            <p style="font-size:0.85rem;color:var(--text-secondary);" data-briefing-state="denied">
+                <strong>AI synthesis is unavailable under this project's security policy</strong>
+                (controlling layer: {{ briefing_ai_decision.controlling_layer }}). The sections below are
+                still available from the extracted source document without it.
+            </p>
+            {% else %}
+            <p style="font-size:0.85rem;color:var(--text-secondary);" data-briefing-state="fallback">No narrative briefing generated yet.</p>
+            <form class="workspace-form" method="post" action="{{ url_for('workspace.generate_project_briefing_route', project_id=project_id) }}">
+                <button type="submit" class="apply-button">Generate Project Briefing</button>
+            </form>
+            {% endif %}
             {% endif %}
 
             {% if briefing_deterministic %}
@@ -1568,9 +1654,15 @@
                count (post-filter, per _qualifies_as_technical/financial/
                key_date in services/project_briefing.py), and an explicit
                link to the full register rather than rendering it here. #}
+            {# CLAUDE-P38-D2 (6.4): "likely" implied a calibrated confidence
+               score that doesn't exist - these counts are post-filter
+               pattern-match results, not a probability. Relabeled to
+               "Candidate ... Items", matching this product's own
+               established candidate/governed vocabulary (CLAUDE-P38
+               OBS-07). #}
             <p class="workspace-pane-label" style="margin-top:0.6rem;">Technical Submission</p>
             {% if briefing_deterministic.technical_submission_items %}
-            <p style="font-size:0.78rem;color:var(--text-secondary);margin:-0.3rem 0 0.3rem;">{{ briefing_deterministic.technical_submission_items[:5]|length }} of {{ briefing_deterministic.technical_submission_items|length }} likely technical deliverables shown</p>
+            <p style="font-size:0.78rem;color:var(--text-secondary);margin:-0.3rem 0 0.3rem;">Candidate Technical Submission Items: {{ briefing_deterministic.technical_submission_items[:5]|length }} of {{ briefing_deterministic.technical_submission_items|length }} shown</p>
             <ul class="source-list">{% for item in briefing_deterministic.technical_submission_items[:5] %}<li class="source-item">{{ item.text }}</li>{% endfor %}</ul>
             <p style="font-size:0.78rem;"><a href="#requirements">Open Technical Submission &darr;</a></p>
             {% else %}
@@ -1579,7 +1671,7 @@
 
             <p class="workspace-pane-label">Financial Submission</p>
             {% if briefing_deterministic.financial_submission_items %}
-            <p style="font-size:0.78rem;color:var(--text-secondary);margin:-0.3rem 0 0.3rem;">{{ briefing_deterministic.financial_submission_items[:5]|length }} of {{ briefing_deterministic.financial_submission_items|length }} likely financial deliverables shown</p>
+            <p style="font-size:0.78rem;color:var(--text-secondary);margin:-0.3rem 0 0.3rem;">Candidate Financial Submission Items: {{ briefing_deterministic.financial_submission_items[:5]|length }} of {{ briefing_deterministic.financial_submission_items|length }} shown</p>
             <ul class="source-list">{% for item in briefing_deterministic.financial_submission_items[:5] %}<li class="source-item">{{ item.text }}</li>{% endfor %}</ul>
             <p style="font-size:0.78rem;"><a href="#requirements">Open Financial Submission &darr;</a></p>
             {% else %}
@@ -1588,7 +1680,7 @@
 
             <p class="workspace-pane-label">Key Dates and Milestones</p>
             {% if briefing_deterministic.key_dates %}
-            <p style="font-size:0.78rem;color:var(--text-secondary);margin:-0.3rem 0 0.3rem;">{{ briefing_deterministic.key_dates[:5]|length }} of {{ briefing_deterministic.key_dates|length }} dated items shown</p>
+            <p style="font-size:0.78rem;color:var(--text-secondary);margin:-0.3rem 0 0.3rem;">Candidate Key Dates: {{ briefing_deterministic.key_dates[:5]|length }} of {{ briefing_deterministic.key_dates|length }} shown</p>
             <ul class="source-list">{% for d in briefing_deterministic.key_dates[:5] %}<li class="source-item">{{ d.label }}</li>{% endfor %}</ul>
             <p style="font-size:0.78rem;"><a href="#temporal-obligations">Open Key Dates &darr;</a></p>
             {% else %}
