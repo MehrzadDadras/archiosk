@@ -1078,6 +1078,11 @@
             <div class="conversation-message {{ message.role }}">
                 <span class="role-label">{{ "You" if message.role == "human" else "Archiosk" }}</span>
                 {{ message.text }}
+                {% if message.grounded_in %}
+                {% call macros.subdisclosure('Source grounding') %}
+                    <ul class="source-list">{% for g in message.grounded_in %}<li class="source-item">{{ g }}</li>{% endfor %}</ul>
+                {% endcall %}
+                {% endif %}
             </div>
             {% else %}
             {# CLAUDE-P40-B (3.7): this example previously always
@@ -1963,6 +1968,11 @@
                         <br><small class="text-muted">Re: {{ message.anchor.anchor_type.replace('_', ' ') }}{% if message.anchor.description %} &mdash; {{ message.anchor.description }}{% endif %}</small>
                         {% endif %}
                         {{ message.text }}
+                        {% if message.grounded_in %}
+                        {% call macros.subdisclosure('Source grounding') %}
+                            <ul class="source-list">{% for g in message.grounded_in %}<li class="source-item">{{ g }}</li>{% endfor %}</ul>
+                        {% endcall %}
+                        {% endif %}
                         {# The "conversation -> Investigation" escalation offer: only for the
                            MOST RECENT message, and only when interpret_message actually
                            recognized a Case-shaped action (needs_case) - never for an ordinary

@@ -892,6 +892,15 @@ class ConversationMessage:
     actor: Optional[str] = None  # who sent it, when role == "human" - see recent_anchors_for
     action_taken: Optional[str] = None
     anchor: Optional[dict] = None  # asdict(Anchor) - what was in view when this was sent
+    # CLAUDE-P40-B (3.6): grounded Project Q&A's supporting citations,
+    # kept SEPARATE from `text` rather than concatenated into it - a
+    # real product-owner walkthrough found a long "Grounded in: ..."
+    # tail appended to `text` made a short, direct answer read as if it
+    # "began by" repeating unrelated provenance text. Only ever set for
+    # a project_qa_answered reply; every other reply leaves this empty.
+    # Optional/defaulted so old saved ConversationMessage JSON (pre-
+    # P40-B) deserializes unchanged.
+    grounded_in: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -4583,7 +4592,7 @@ class CaseWorkspaceStore:
     def add_message(
         self, workspace: ProjectWorkspace, case_id: Optional[str], role: str, text: str,
         action_taken: Optional[str] = None, anchor: Optional[dict] = None,
-        actor: Optional[str] = None,
+        actor: Optional[str] = None, grounded_in: Optional[list[str]] = None,
     ) -> dict:
         """
         case_id=None posts into ProjectWorkspace.project_conversation
@@ -4596,6 +4605,7 @@ class CaseWorkspaceStore:
             message = ConversationMessage(
                 id=_new_id(), role=role, text=text, created_at=_now(),
                 actor=actor, action_taken=action_taken, anchor=anchor,
+                grounded_in=grounded_in or [],
             )
             workspace.project_conversation.append(asdict(message))
             self.save(workspace)
@@ -4614,6 +4624,7 @@ class CaseWorkspaceStore:
             actor=actor,
             action_taken=action_taken,
             anchor=anchor,
+            grounded_in=grounded_in or [],
         )
         case["conversation"].append(asdict(message))
         self.save(workspace)

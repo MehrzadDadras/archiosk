@@ -192,5 +192,138 @@ class TextOnlyCaseMediumNeutralCopyTests(unittest.TestCase):
         self.assertIn("No Findings yet. Ask the conversation to analyze a drawing Source to generate some.", body)
 
 
+def _mock_qa_response(text_out: str):
+    fake_block = MagicMock()
+    fake_block.type = "text"
+    fake_block.text = text_out
+    fake_response = MagicMock()
+    fake_response.content = [fake_block]
+    fake_response.stop_reason = "end_turn"
+    return fake_response
+
+
+class ProjectQAContinuityTests(unittest.TestCase):
+    """3.5, 3.6 - Q&A destination, Ask-vs-Start-Work boundary, and
+    document-identity answer precision, exercised through the real
+    route stack."""
+
+    def setUp(self):
+        import app as app_module
+        from models import User, db
+
+        self.tmp_dir = Path(tempfile.mkdtemp(prefix="beehive_test_p40b_qa_"))
+        self.flask_app = app_module.create_app("testing")
+        self.flask_app.config["REGISTRY_STORE_PATH"] = str(self.tmp_dir)
+        self.project_id = "test-project-p40b-qa"
+
+        with self.flask_app.app_context():
+            db.session.add(User(username="owner1", password_hash=generate_password_hash("x"), role="admin"))
+            db.session.commit()
+
+        RequirementsRegistry(self.tmp_dir).save(ParsedDocument(
+            project_id=self.project_id, filename="RFP-2026-PROD-099_Project_Dossier.docx", ingested_at="2026-01-01T00:00:00+00:00",
+            requirements=[
+                RequirementItem(id="i1", text="Master Request for Proposals Package, Project Dossier-Sync, RFP No. RFP-2026-PROD-099.", category="other", confidence=0.6, source_line=1),
+            ],
+        ))
+        self.client = self.flask_app.test_client()
+        with self.client.session_transaction() as sess:
+            sess["user_id"] = 1
+            sess["username"] = "owner1"
+            sess["role"] = "admin"
+        self.store = CaseWorkspaceStore(self.tmp_dir)
+        self.client.get(f"/projects/{self.project_id}/workspace")
+        self.store.set_project_owner(self.store.get(self.project_id), owner="owner1", actor="owner1")
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp_dir, ignore_errors=True)
+
+    # -- 3.5: destination --------------------------------------------------
+
+    def test_discuss_object_redirects_to_the_project_conversation_fragment(self):
+        with patch("anthropic.Anthropic") as MockClient, \
+             patch.dict("os.environ", {"ANTHROPIC_API_KEY": "fake-key-for-test"}):
+            MockClient.return_value.messages.create.return_value = _mock_qa_response(
+                '{"answer": "Test answer.", "grounded_in": [], "not_covered": "", "needs_clarification": false}'
+            )
+            resp = self.client.post(
+                f"/projects/{self.project_id}/workspace/discuss",
+                data={"text": "What is the name of the RFP?"},
+            )
+        self.assertEqual(resp.status_code, 302)
+        self.assertTrue(resp.headers["Location"].endswith("#project-conversation"))
+
+    # -- 3.5: a plain question does not silently create a Case -------------
+
+    def test_quick_start_with_a_plain_question_does_not_create_a_case(self):
+        with patch("anthropic.Anthropic") as MockClient, \
+             patch.dict("os.environ", {"ANTHROPIC_API_KEY": "fake-key-for-test"}):
+            MockClient.return_value.messages.create.return_value = _mock_qa_response(
+                '{"answer": "Test answer.", "grounded_in": [], "not_covered": "", "needs_clarification": false}'
+            )
+            resp = self.client.post(
+                f"/projects/{self.project_id}/workspace/quick-start",
+                data={"text": "What is the name of this document?"},
+            )
+        self.assertEqual(resp.status_code, 302)
+        self.assertTrue(resp.headers["Location"].endswith("#project-conversation"))
+        workspace = self.store.get(self.project_id)
+        self.assertEqual(workspace.cases, [])
+        self.assertEqual(len(workspace.project_conversation), 2)  # human + system
+
+    def test_quick_start_with_a_real_work_request_still_creates_a_case(self):
+        resp = self.client.post(
+            f"/projects/{self.project_id}/workspace/quick-start",
+            data={"text": "Investigate the schedule conflict between Section 4 and Section 9."},
+        )
+        self.assertEqual(resp.status_code, 302)
+        workspace = self.store.get(self.project_id)
+        self.assertEqual(len(workspace.cases), 1)
+
+    # -- 3.6: grounded_in is separate from the answer, not flattened in ----
+
+    def test_grounded_in_is_stored_separately_and_rendered_as_a_disclosure(self):
+        with patch("anthropic.Anthropic") as MockClient, \
+             patch.dict("os.environ", {"ANTHROPIC_API_KEY": "fake-key-for-test"}):
+            MockClient.return_value.messages.create.return_value = _mock_qa_response(
+                '{"answer": "This is Master Request for Proposals Package, Project Dossier-Sync (RFP No. RFP-2026-PROD-099).", '
+                '"grounded_in": ["Master Request for Proposals Package, Project Dossier-Sync, RFP No. RFP-2026-PROD-099."], '
+                '"not_covered": "", "needs_clarification": false}'
+            )
+            self.client.post(
+                f"/projects/{self.project_id}/workspace/discuss",
+                data={"text": "What is the name of this document?"},
+            )
+        workspace = self.store.get(self.project_id)
+        system_reply = workspace.project_conversation[-1]
+        self.assertEqual(system_reply["role"], "system")
+        self.assertNotIn("Grounded in:", system_reply["text"])
+        self.assertEqual(
+            system_reply["grounded_in"],
+            ["Master Request for Proposals Package, Project Dossier-Sync, RFP No. RFP-2026-PROD-099."],
+        )
+
+        body = self.client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
+        self.assertIn("Source grounding", body)
+        self.assertIn("RFP No. RFP-2026-PROD-099", body)
+
+    def test_display_title_is_passed_into_the_qa_prompt_when_set(self):
+        self.store.set_project_details(
+            self.store.get(self.project_id), actor="owner1", display_title="Riverside Library Renovation",
+        )
+        with patch("anthropic.Anthropic") as MockClient, \
+             patch.dict("os.environ", {"ANTHROPIC_API_KEY": "fake-key-for-test"}):
+            MockClient.return_value.messages.create.return_value = _mock_qa_response(
+                '{"answer": "Riverside Library Renovation.", "grounded_in": [], "not_covered": "", "needs_clarification": false}'
+            )
+            self.client.post(
+                f"/projects/{self.project_id}/workspace/discuss",
+                data={"text": "What is the name of the project?"},
+            )
+            sent_prompt = MockClient.return_value.messages.create.call_args.kwargs["messages"][0]["content"]
+        self.assertIn("Riverside Library Renovation", sent_prompt)
+        self.assertIn("display name", sent_prompt)
+
+
 if __name__ == "__main__":
     unittest.main()

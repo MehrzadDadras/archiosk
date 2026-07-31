@@ -77,6 +77,7 @@ def answer_project_question(
     api_key: Optional[str] = None,
     model: Optional[str] = None,
     timeout: Optional[float] = None,
+    display_title: Optional[str] = None,
 ) -> ProjectQAResult:
     api_key = api_key or os.getenv("ANTHROPIC_API_KEY", "")
     if not api_key:
@@ -94,7 +95,7 @@ def answer_project_question(
     import anthropic  # imported lazily so the dep is optional in dev
 
     client = anthropic.Anthropic(api_key=api_key, timeout=timeout)
-    prompt = _build_prompt(question, document_filename, candidate_requirements, governed_requirements, milestones)
+    prompt = _build_prompt(question, document_filename, candidate_requirements, governed_requirements, milestones, display_title)
 
     try:
         response = client.messages.create(
@@ -134,6 +135,7 @@ def answer_project_question(
 def _build_prompt(
     question: str, document_filename: str, candidate_requirements: list[dict],
     governed_requirements: list[dict], milestones: list[dict],
+    display_title: Optional[str] = None,
 ) -> str:
     lines = [
         "You are assisting a construction/design professional with a read-only "
@@ -141,10 +143,36 @@ def _build_prompt(
         "below - never invent facts, dates, names, sections, or content not "
         "present in it. This is NOT the full source document text, only what "
         "has already been extracted from it - if the question needs more than "
-        "this evidence provides, say so rather than guessing.",
+        "this evidence provides, say so rather than guessing. Keep \"answer\" "
+        "direct and concise (a sentence or two for a factual lookup) - put "
+        "supporting detail, excerpts, and provenance in \"grounded_in\" instead "
+        "of folding it into the answer itself.",
         "",
-        f"Source document: {document_filename}",
+        # CLAUDE-P40-B (3.6): a real product-owner walkthrough asked "what "
+        # is the name of this document?" and the answer treated the raw
+        # uploaded filename as if it were the document's own formal
+        # title, then buried the reply under revision/provenance text.
+        # This module has no dedicated "detected title" extraction (see
+        # this stage's own report on why that's deliberately deferred,
+        # not built here) - the fix is prompt discipline: name every
+        # identity concept this evidence CAN distinguish, and tell the
+        # model which one actually answers an identity question.
+        "Identity note: several different things could be called this "
+        "project's \"name\", and they are NOT the same:",
+        f"- Uploaded filename (mechanical, not authored content): {document_filename}",
     ]
+    if display_title:
+        lines.append(f"- This Project's own display name, set by a reviewer: {display_title}")
+    lines.append(
+        "- A formal document title, RFP/document number, issuer, and version MAY "
+        "also appear as extracted text below (e.g. in a scope_of_work or "
+        "\"other\" candidate item) - if so, that is almost always the better "
+        "answer to \"what is the name of this document/RFP\" than the raw "
+        "filename. If no such formal title is present in the evidence, say so "
+        "and offer the filename as a fallback, clearly labeled as a filename, "
+        "not asserted as the document's own title."
+    )
+    lines.append(f"\nSource document: {document_filename}")
 
     if candidate_requirements:
         lines.append(

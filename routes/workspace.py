@@ -79,7 +79,7 @@ from services.environment_capabilities import (
     decision_stages_for_environment,
     is_valid_operating_environment,
 )
-from services.conversation_interpreter import interpret_message
+from services.conversation_interpreter import _looks_like_project_question, interpret_message
 from services.governance import GovernanceLog
 from services.ingestion import document_source_payload, get_registry
 from services.project_clock import open_project
@@ -2133,9 +2133,11 @@ def _run_conversation_turn(
     services.conversation_interpreter.interpret_message), and posts the
     resulting system reply. The shared turn logic behind an existing
     Case's composer (post_message), Project Home's central composer
-    (quick_start, which still always creates a Case first - unchanged),
-    and a project-level aperture with no Case at all (discuss_object) -
-    the same conversational entry point, reached from three places.
+    (quick_start - creates a Case first for anything that isn't a plain
+    question, per CLAUDE-P40-B 3.5; still called with case=None for a
+    plain question, same as discuss_object), and a project-level
+    aperture with no Case at all (discuss_object) - the same
+    conversational entry point, reached from three places.
 
     `anchor` (Anchor shape - anchor_type/anchor_id/source_id/location/
     description) records what the sender was actually looking at,
@@ -2171,6 +2173,7 @@ def _run_conversation_turn(
         role="system",
         text=result.reply_text,
         action_taken=result.action_taken,
+        grounded_in=result.grounded_in,
     )
 
     if result.focused_finding_id is not None:
@@ -2230,6 +2233,21 @@ def quick_start(project_id):
     conversation turn as an existing Case's composer
     (_run_conversation_turn) so the user's actual request becomes the new
     Case's first message rather than being discarded.
+
+    CLAUDE-P40-B (3.5): EXCEPT when the text is a plain factual question
+    (_looks_like_project_question - the same heuristic
+    workspace.discuss_object's own reply-routing already trusts) - a
+    real product-owner walkthrough found a simple lookup ("What is the
+    name of this document?") typed into this composer silently created
+    a whole new formal Investigation to hold it. This was already a
+    named, open concern in ConversationMessage's own docstring ("forcing
+    one into existence just to hold a message is exactly the surprise
+    quick_start currently causes"). A question routes through the same
+    case=None project-level conversation workspace.discuss_object uses
+    instead - no Case, same real grounded-Q&A answer. Anything that
+    doesn't read as a plain question (a real "start work" request, an
+    "Analyze...", "Compare...", etc.) is completely unaffected - still
+    creates a Case exactly as before.
     """
     _, store, workspace = _load_workspace_or_404(project_id)
 
@@ -2237,6 +2255,10 @@ def quick_start(project_id):
     if not text:
         flash("Describe what you want to work on to start.", "error")
         return redirect(url_for("workspace.show_workspace", project_id=project_id))
+
+    if _looks_like_project_question(text.lower()):
+        _run_conversation_turn(project_id, store, workspace, None, text)
+        return redirect(url_for("workspace.show_workspace", project_id=project_id) + "#project-conversation")
 
     title = text if len(text) <= 80 else text[:77] + "..."
     case = store.create_case(workspace, title=title, objective="", created_by=_reviewer())
@@ -2285,7 +2307,15 @@ def discuss_object(project_id):
 
     _run_conversation_turn(project_id, store, workspace, None, text, anchor=anchor)
 
-    return redirect(url_for("workspace.show_workspace", project_id=project_id))
+    # CLAUDE-P40-B (3.5): without a fragment, a plain redirect lands the
+    # reviewer at the top of Project Home with no indication a reply
+    # exists or where to find it - Project Conversation is collapsed by
+    # default. The #project-conversation fragment (real html_id, added
+    # in Batch A) makes the browser scroll there AND triggers the
+    # already-built auto-open-on-anchor script, the same mechanism
+    # Batch A's "View all" links now rely on - not a new destination-
+    # tracking system, the same one used twice.
+    return redirect(url_for("workspace.show_workspace", project_id=project_id) + "#project-conversation")
 
 
 @workspace_bp.route("/projects/<project_id>/workspace/apertures/<message_id>/start-investigation", methods=["POST"])

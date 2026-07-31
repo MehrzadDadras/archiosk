@@ -27,7 +27,7 @@ an additional control surface, not a bypass of Analyze -> Review -> Apply.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
@@ -53,6 +53,10 @@ class InterpretationResult:
     action_taken: str
     reply_text: str
     focused_finding_id: Optional[str] = None
+    # CLAUDE-P40-B (3.6): grounded Project Q&A's supporting citations,
+    # kept separate from reply_text - see ConversationMessage.grounded_in's
+    # own comment for why. Only ever set by _handle_project_question.
+    grounded_in: list[str] = field(default_factory=list)
 
 
 _FINDING_NUMBER_PATTERN = re.compile(r"finding\s*#?\s*(\d+)", re.IGNORECASE)
@@ -870,6 +874,12 @@ def _handle_project_question(
         candidate_requirements=candidate_requirements,
         governed_requirements=list(workspace.requirements),
         milestones=milestones,
+        # CLAUDE-P40-B (3.6): the Project's own human-assigned display
+        # name (services.case_workspace.set_project_details) was never
+        # passed here before - the model had no way to distinguish "the
+        # Project's name" from "the raw uploaded filename" because
+        # nothing else was ever offered to it.
+        display_title=workspace.display_title,
     )
 
     if not result.ran:
@@ -881,9 +891,16 @@ def _handle_project_question(
             ),
         )
 
+    # CLAUDE-P40-B (3.6): reply_text is now the direct answer plus only
+    # the short honesty notes (not_covered/needs_clarification) - never
+    # the grounding citations, which used to be concatenated straight
+    # into the same string and could visually swallow a short, direct
+    # answer under a long provenance/citation tail (confirmed via a real
+    # product-owner walkthrough: "began by treating the uploaded
+    # filename as the document name... then repeated substantial
+    # revision and provenance text"). grounded_in now travels on its own
+    # field, rendered behind a collapsed disclosure by the template.
     reply_parts = [result.answer]
-    if result.grounded_in:
-        reply_parts.append("Grounded in: " + "; ".join(result.grounded_in))
     if result.not_covered:
         reply_parts.append("Not covered by this project's extracted evidence: " + result.not_covered)
     if result.needs_clarification:
@@ -895,4 +912,5 @@ def _handle_project_question(
     return InterpretationResult(
         action_taken="project_qa_answered",
         reply_text=" ".join(reply_parts),
+        grounded_in=result.grounded_in,
     )
