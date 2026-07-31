@@ -66,6 +66,14 @@ class ProjectBriefingResult:
     project_brief: Optional[str] = None
     procurement_route: Optional[str] = None
     matters_requiring_attention: list[str] = field(default_factory=list)
+    # CLAUDE-P38-D2 (Section 7): a small, honest set of short excerpts
+    # pulled from the SAME extracted evidence given to the model, cited
+    # back so a reader can see what grounded the synthesis - not a full
+    # per-sentence citation system (out of scope per this stage's own
+    # "compact, not a large subsystem" instruction), and never fabricated:
+    # the model is asked to quote existing extracted text verbatim, not
+    # generate new supporting text.
+    grounded_in: list[str] = field(default_factory=list)
     skipped_reason: Optional[str] = None
     provider: Optional[str] = None
     model: Optional[str] = None
@@ -130,6 +138,7 @@ def generate_project_briefing(
         project_brief=(str(parsed.get("project_brief", "")).strip() or None),
         procurement_route=(str(parsed.get("procurement_route", "")).strip() or None),
         matters_requiring_attention=[str(m) for m in parsed.get("matters_requiring_attention", [])],
+        grounded_in=[str(g) for g in parsed.get("grounded_in", [])],
         provider=PROVIDER_NAME, model=model, requested_at=requested_at,
     )
 
@@ -221,23 +230,61 @@ def deterministic_sections(candidate_requirements: list[dict], milestones: list[
 # Every pattern here was chosen to match one of this stage's own
 # concrete reported false positives.
 
-# CLAUDE-P38-C: found during this stage's own live verification (not
-# just from the prompt's examples) - a bare section heading like
-# "Section 3 - Financial Submission" was being swept into the Financial
-# preview because it literally contains the phrase "financial
-# submission", satisfying the inclusion signal below despite being a
-# title, not an obligation. Applied to both Technical and Financial
-# (Key Dates already excludes bare headings structurally, by requiring
-# an actual temporal marker - see _KEY_DATE_INCLUSION_SIGNALS).
-_BARE_HEADING_PATTERN = re.compile(
-    r"^\s*(section|schedule|appendix|part|article)\s+[\d.]+\s*[-:.]?\s*[A-Za-z ,/]*\s*$",
+# CLAUDE-P38-D2: found live during P38-C's own verification - a bare
+# section heading like "Section 3 - Financial Submission" was swept
+# into the Financial preview because it literally contains the phrase
+# "financial submission". P38-C's first fix only recognized an ASCII
+# hyphen; P38-D1's diagnosis confirmed real headings use en/em dashes,
+# colons, semicolons, or no punctuation at all before a plain title
+# ("Schedule 7 — Mandatory Demonstration Protocol" was NOT caught).
+# Redesigned as two steps rather than one enumerated-punctuation regex:
+# (1) recognize a heading-word + number PREFIX, tolerant of whatever
+# punctuation (or none) follows it; (2) treat everything after that
+# prefix as a bare title UNLESS it contains a real verb/modal - "Section
+# 2.2 - Proponents shall submit..." still classifies normally (the
+# remainder has "shall"), while "Schedule 15 - Output Specifications"
+# does not (the remainder is a noun phrase with no verb at all).
+_HEADING_PREFIX_PATTERN = re.compile(
+    r"^\s*(section|schedule|appendix|part|article|clause)\s+\d+(\.\d+)*\s*[-–—:;.]*\s*",
+    re.IGNORECASE,
+)
+_SENTENCE_VERB_PATTERN = re.compile(
+    r"\b(shall|must|will|shall\s+not|is|are|does|do|has|have|includes?|requires?|means|"
+    r"submit|provide|demonstrat|comply|conform)\b",
     re.IGNORECASE,
 )
 
 
 def _looks_like_bare_heading(text: str) -> bool:
-    return bool(_BARE_HEADING_PATTERN.match(text.strip()))
+    stripped = text.strip()
+    match = _HEADING_PREFIX_PATTERN.match(stripped)
+    if not match:
+        return False
+    remainder = stripped[match.end():].strip()
+    if not remainder:
+        return True
+    return not _SENTENCE_VERB_PATTERN.search(remainder)
 
+
+# CLAUDE-P38-D2: descriptive, present/perfect-tense background prose
+# ("3.2 CMC information is presently distributed among multiple
+# document classes...") describes the CURRENT information environment,
+# not a proponent submission obligation - P38-D1 confirmed the
+# then-current filter had no way to tell these apart from a real
+# requirement that happens to share topic vocabulary. This is a bounded
+# heuristic on common descriptive-tense phrasing, not real sentence-role
+# classification (see this module's own module docstring on that
+# honesty boundary) - an item using none of these phrasings but that is
+# still just background prose can still slip through; this narrows the
+# risk, it does not eliminate it.
+_BACKGROUND_PROSE_PATTERNS = re.compile(
+    r"is\s+presently|are\s+presently|is\s+currently|are\s+currently"
+    r"|has\s+historically|have\s+historically"
+    r"|information\s+is\s+distributed|is\s+distributed\s+among"
+    r"|the\s+current\s+(environment|state|system)|existing\s+systems?"
+    r"|(sponsors?|owners?|proponents?)\s+currently\s+use",
+    re.IGNORECASE,
+)
 
 _TECHNICAL_EXCLUSION_PATTERNS = re.compile(
     r"material\s+deviat|materially\s+deviat"
@@ -246,11 +293,20 @@ _TECHNICAL_EXCLUSION_PATTERNS = re.compile(
     r"|^\s*(definitions?|means\b|shall\s+mean)\b",
     re.IGNORECASE,
 )
+# CLAUDE-P38-D2: tightened from "any of these bare topic words" to
+# requiring an actual obligation-shaped phrase - P38-D1 found that
+# standalone nouns like "specification"/"validation"/"demonstrat" (no
+# verb) were the exact words that let bare headings slip through
+# classification even after the heading-prefix check; requiring them to
+# appear WITH an obligation verb removes that path without excluding
+# genuine short requirements like "All structural steel shall conform
+# to CSA G40.21 350W" (still matches via "shall conform").
 _TECHNICAL_INCLUSION_SIGNALS = re.compile(
-    r"submit|provide|design|drawing|specification|methodology|narrative|deliverable"
-    r"|demonstrat|compliance\s+matrix|architecture|validation|implementation\s+approach"
-    r"|comply\s+with|conform\s+to|technical\s+(proposal|schedule|requirement)"
-    r"|shall\s+(be|include|meet)",
+    r"shall\s+(be|include|meet|comply|conform|submit|provide|demonstrat|complete|design)"
+    r"|must\s+(be|include|submit|provide|demonstrat|comply|conform)"
+    r"|(shall|will|must)\s+\w+\s+(submit|provide|design|demonstrat)"
+    r"|submit(ted|ting)?\s+(a|the|an)\s+\w*\s*(design|technical|drawing|methodology|narrative|proposal)"
+    r"|comply\s+with|conform\s+to",
     re.IGNORECASE,
 )
 
@@ -259,6 +315,8 @@ def _qualifies_as_technical(text: str) -> bool:
     if _looks_like_bare_heading(text):
         return False
     if _TECHNICAL_EXCLUSION_PATTERNS.search(text):
+        return False
+    if _BACKGROUND_PROSE_PATTERNS.search(text):
         return False
     return bool(_TECHNICAL_INCLUSION_SIGNALS.search(text))
 
@@ -269,6 +327,13 @@ _FINANCIAL_EXCLUSION_PATTERNS = re.compile(
     r"|travel|attend(ing|ance)\s+at\s+(any\s+)?meetings?|due\s+diligence",
     re.IGNORECASE,
 )
+# CLAUDE-P38-D2: P38-D1's diagnosis found the browser-reported Financial
+# false positives were all bare headings (fixed above via
+# _looks_like_bare_heading), not content-level over-inclusion - these
+# nouns are already reasonably precise financial-submission vocabulary
+# (fee/bond/tax/escalation/pricing form), unlike Technical's broader
+# terms, so left as a noun-based signal rather than forcing the same
+# obligation-phrase restructuring onto evidence that didn't call for it.
 _FINANCIAL_INCLUSION_SIGNALS = re.compile(
     r"price|pricing|\bfee\b|estimate|bond|financial\s+security|\btax(es)?\b|escalation"
     r"|allowance|contingency|\brate(s)?\b|\$|budget|financial\s+submission|commercial\s+(proposal|submission)",
@@ -280,6 +345,8 @@ def _qualifies_as_financial(text: str) -> bool:
     if _looks_like_bare_heading(text):
         return False
     if _FINANCIAL_EXCLUSION_PATTERNS.search(text):
+        return False
+    if _BACKGROUND_PROSE_PATTERNS.search(text):
         return False
     return bool(_FINANCIAL_INCLUSION_SIGNALS.search(text))
 
@@ -386,8 +453,12 @@ def _build_prompt(
         'if it does not>", "matters_requiring_attention": ["<a concrete, '
         "evidence-grounded observation - unclear scope, missing acceptance "
         "criteria, conflicting source language, unresolved responsibility, "
-        'incomplete dates - never a fabricated concern>", ...]}. Every field may '
-        "be empty (string \"\" or empty array) - an honest gap is always better "
-        "than a plausible-sounding invention."
+        'incomplete dates - never a fabricated concern>", ...], "grounded_in": '
+        '["<a short excerpt (under ~25 words) COPIED VERBATIM from one of the '
+        "extracted items above that materially supports the executive_summary "
+        "or project_brief - never paraphrased, never invented; pick at most "
+        '5-8, the ones that most directly ground your synthesis>", ...]}. '
+        "Every field may be empty (string \"\" or empty array) - an honest gap "
+        "is always better than a plausible-sounding invention."
     )
     return "\n".join(lines)
