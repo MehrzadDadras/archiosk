@@ -160,6 +160,46 @@ class RFIDraftExportTests(unittest.TestCase):
         self.assertIn("Please confirm beam size per S-101.", full_text)
         self.assertIn(draft["id"][:8], full_text)
 
+    # -- project-wide RFI register (CLAUDE-P38 OBS-08) --------------------
+
+    def test_no_rfi_state_does_not_imply_only_contradictions_produce_one(self):
+        response = self.owner_client.get(f"/projects/{self.project_id}/workspace")
+        body = response.get_data(as_text=True)
+        self.assertIn("No RFIs yet", body)
+        self.assertIn("not only a flagged contradiction", body)
+
+    def test_rfi_appears_in_the_project_wide_register_regardless_of_which_case_is_open(self):
+        draft = self._create_draft(self.owner_client, self.case["id"], self.finding_id, question_text="Please confirm beam size.")
+        # Fetched from Project Home (no ?case=) - the register must be
+        # visible project-wide, not only from inside the drafting Case.
+        response = self.owner_client.get(f"/projects/{self.project_id}/workspace")
+        body = response.get_data(as_text=True)
+        self.assertIn("Please confirm beam size.", body)
+        self.assertIn(self.case["title"], body)
+        self.assertIn(">draft<", body)
+
+    def test_register_shows_issued_status_after_issuance(self):
+        draft = self._create_draft(self.owner_client, self.case["id"], self.finding_id)
+        self.owner_client.post(
+            f"/projects/{self.project_id}/workspace/rfi-drafts/{draft['id']}/issue",
+            data={"confirm": "once"},
+        )
+        response = self.owner_client.get(f"/projects/{self.project_id}/workspace")
+        self.assertIn(">issued<", response.get_data(as_text=True))
+
+    def test_rfi_from_a_case_the_viewer_cannot_see_is_not_leaked_in_the_register(self):
+        # A fresh Case defaults to Private (case_workspace.py's own
+        # visibility default) - other-user has project access but never
+        # joined this Case, so its title and RFI must not leak here,
+        # matching the exact discipline the Findings section already
+        # applies to Case titles.
+        self._create_draft(self.owner_client, self.case["id"], self.finding_id, question_text="Private-case RFI text.")
+        response = self.other_client.get(f"/projects/{self.project_id}/workspace")
+        self.assertEqual(response.status_code, 200)
+        body = response.get_data(as_text=True)
+        self.assertNotIn("Private-case RFI text.", body)
+        self.assertIn("No RFIs yet", body)
+
     def test_another_draft_cannot_be_substituted(self):
         second_finding_id = self._create_validated_finding(self.case["id"], "Column reinforcement unclear on S-102.")
         draft_a = self._create_draft(self.owner_client, self.case["id"], self.finding_id, question_text="Question about beam.")

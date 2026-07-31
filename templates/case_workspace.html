@@ -549,7 +549,37 @@
         {% endif %}
         {% endcall %}
 
-        {% call macros.accordion('RFI Export', status=(document.consistency_flags|length ~ ' flagged' if document.consistency_flags else None), group='left', id='rfi-export') %}
+        {# CLAUDE-P38 (OBS-08): renamed from "RFI Export" - that name and
+           the copy below it implied RFIs only ever originate from a
+           flagged contradiction and that export was the whole feature.
+           An RFI can originate from ambiguity, missing information, or
+           a reviewer's own judgment during an Investigation just as
+           validly (create_rfi_draft, already real and working, reached
+           from a focused Finding inside any Case) - this section is now
+           a genuine project-wide register of every RFI regardless of
+           which Case drafted it, with the consistency-flag-driven
+           project export kept as one entry point among others, not the
+           section's whole identity. #}
+        {% call macros.accordion('RFIs', status=(rfi_drafts_view|length ~ ' total' if rfi_drafts_view else None), group='left', id='rfi-export') %}
+        {% if rfi_drafts_view %}
+        <ul class="source-list">
+            {% for row in rfi_drafts_view %}
+            {% set draft = row.draft %}
+            <li class="source-item">
+                <span class="review-state-badge">{{ draft.status }}</span>
+                {{ draft.question_text[:90] }}{% if draft.question_text|length > 90 %}&hellip;{% endif %}
+                <br><small class="text-muted">
+                    {{ row.case_title }} &middot; drafted by {{ draft.created_by }}
+                    {% if draft.issued_by %} &middot; issued by {{ draft.issued_by }}{% endif %}
+                </small>
+            </li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <p class="pane-note">No RFIs yet. An RFI can be drafted from any Finding once it's confirmed — from ambiguity, missing evidence, or a reviewer's own judgment, not only a flagged contradiction.</p>
+        {% endif %}
+
+        {% call macros.subdisclosure('Project-wide contradiction export') %}
         {% if document.consistency_flags %}
         <p class="pane-note">
             {{ document.consistency_flags|length }} flagged cross-requirement contradiction(s) detected by this
@@ -576,10 +606,11 @@
             </div>
         {% endcall %}
         {% elif document.consistency_checked %}
-        <p class="pane-note">Consistency check ran — no contradictions were flagged, so there is nothing to export.</p>
+        <p class="pane-note">Consistency check ran — no contradictions were flagged this way.</p>
         {% else %}
-        <p class="pane-note">The consistency check hasn't run for this Project yet — RFI export needs flagged contradictions to build from.</p>
+        <p class="pane-note">The consistency check hasn't run for this Project yet.</p>
         {% endif %}
+        {% endcall %}
         {% endcall %}
 
         {% call macros.accordion('Requirements (' ~ requirements_view|length ~ ')', group='left', id='requirements') %}
@@ -799,11 +830,13 @@
         {% endcall %}
 
         {% call macros.accordion('Key Dates (' ~ temporal_obligations_view|length ~ ')', group='left', id='temporal-obligations') %}
-            <p class="pane-note">
-                Project-wide due dates - RFI responses, submittal review periods, design
-                deliverables, and the like - sorted by what needs attention first, not by
-                when they were added.
-            </p>
+            {% call macros.subdisclosure('How Key Dates work') %}
+                <p class="pane-note">
+                    Project-wide due dates - RFI responses, submittal review periods, design
+                    deliverables, and the like - sorted by what needs attention first, not by
+                    when they were added.
+                </p>
+            {% endcall %}
             {% if temporal_obligations_view %}
             <ul class="source-list">
                 {% for row in temporal_obligations_view %}
@@ -820,6 +853,24 @@
             </ul>
             {% else %}
             <p style="color:var(--text-secondary);font-size:0.88rem;">No key dates recorded yet.</p>
+            {% endif %}
+
+            {# CLAUDE-P38 (OBS-11): schedule-related lines the parser already
+               found in the source document - unconfirmed candidates, kept
+               visually distinct from the confirmed obligations above, never
+               auto-promoted into one. No date-parsing exists yet (fixed vs.
+               relative vs. conditional), so this is honestly just the
+               extracted label, not a governed date. #}
+            {% if source_milestones_view %}
+            <p class="workspace-pane-label" style="margin-top:0.8rem;">From the source document ({{ source_milestones_view|length }}, unconfirmed)</p>
+            <ul class="source-list">
+                {% for milestone in source_milestones_view %}
+                <li class="source-item">
+                    <span class="review-state-badge">candidate</span>
+                    {{ milestone.label }}
+                </li>
+                {% endfor %}
+            </ul>
             {% endif %}
 
             {% if active_case %}

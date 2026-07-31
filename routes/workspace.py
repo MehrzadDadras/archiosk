@@ -808,6 +808,41 @@ def show_workspace(project_id):
         key=lambda row: _CONDITION_PRIORITY.get(row["condition"], 3),
     )
 
+    # CLAUDE-P38 (OBS-11): Key Dates only ever showed manually-created
+    # TemporalObligations, even though the parser already extracts
+    # schedule-related lines from the source document itself
+    # (document.milestones, via BHiveParser._derive_milestones) -- that
+    # data existed but was never surfaced anywhere in the workspace.
+    # Deliberately kept separate from temporal_obligations_view, not
+    # merged into it: these are unconfirmed extracted candidates (no
+    # date-parsing/fixed-vs-relative classification exists yet - see
+    # _derive_milestones' own narrow shape), never promoted into a real
+    # governed TemporalObligation automatically.
+    source_milestones_view = list(document.milestones)
+
+    # CLAUDE-P38 (OBS-08): RFI drafts were only ever visible per-Finding,
+    # inside whichever Case happened to be open (row.rfi_drafts, the
+    # Findings accordion) - there was no project-wide place to see every
+    # RFI regardless of which Case produced it, or its lifecycle state.
+    # No new domain concept: workspace.rfi_drafts already carries every
+    # field needed (status/question_text/created_by/issued_by/...) -
+    # this is purely a project-wide read-side view, case title resolved
+    # once here rather than repeated per-row logic in the template.
+    # Filtered to visible_cases only - same Case-privacy discipline the
+    # Findings section already applies (a Finding's Case title is only
+    # ever rendered if that Case is in THIS requester's own
+    # visible_cases); an RFI belonging to a Case this reviewer can't see
+    # must not leak that Case's existence or title here either.
+    _visible_case_titles_by_id = {c["id"]: c["title"] for c in visible_cases}
+    rfi_drafts_view = sorted(
+        (
+            {"draft": d, "case_title": _visible_case_titles_by_id[d["case_id"]]}
+            for d in workspace.rfi_drafts
+            if d["case_id"] in visible_case_ids
+        ),
+        key=lambda row: row["draft"]["created_at"], reverse=True,
+    )
+
     # "Where did I leave off?" - the contextual-companion continuity
     # trail: this reviewer's own recent anchored conversation (from
     # store.recent_anchors_for, itself derived purely from existing
@@ -960,6 +995,8 @@ def show_workspace(project_id):
         adjudication_outcomes=REQUIREMENT_ADJUDICATION_OUTCOMES,
         recent_governance_events=recent_governance_events,
         temporal_obligations_view=temporal_obligations_view,
+        source_milestones_view=source_milestones_view,
+        rfi_drafts_view=rfi_drafts_view,
         recent_focus_view=recent_focus_view,
         threads_view=threads_view,
         known_usernames=known_usernames,
