@@ -214,6 +214,64 @@ class DeterministicSectionsTests(unittest.TestCase):
         self.assertEqual(sections["financial_submission_items"], [])
         self.assertEqual(sections["technical_submission_items"], [])
 
+    # -- CLAUDE-P38-D2: realistic punctuation the P38-C synthetic corpus
+    #    never exercised (P38-D1's own confirmed diagnosis) ------------------
+
+    def test_em_dash_heading_is_excluded(self):
+        items = [{"text": "Schedule 7 — Mandatory Demonstration Protocol", "category": "technical_specification"}]
+        sections = deterministic_sections(items, [])
+        self.assertEqual(sections["technical_submission_items"], [])
+
+    def test_en_dash_heading_is_excluded(self):
+        items = [{"text": "Schedule 14 – Validation, Assurance and Deliverable Requirements", "category": "technical_specification"}]
+        sections = deterministic_sections(items, [])
+        self.assertEqual(sections["technical_submission_items"], [])
+
+    def test_colon_heading_is_excluded(self):
+        items = [{"text": "Schedule 15: Output Specifications", "category": "technical_specification"}]
+        sections = deterministic_sections(items, [])
+        self.assertEqual(sections["technical_submission_items"], [])
+
+    def test_semicolon_terminated_heading_is_excluded(self):
+        items = [{"text": "Section 2.1 Technical Specification;", "category": "technical_specification"}]
+        sections = deterministic_sections(items, [])
+        self.assertEqual(sections["technical_submission_items"], [])
+
+    def test_no_punctuation_heading_is_excluded(self):
+        items = [{"text": "Schedule 15 Output Specifications", "category": "technical_specification"}]
+        sections = deterministic_sections(items, [])
+        self.assertEqual(sections["technical_submission_items"], [])
+
+    def test_numbered_heading_with_a_real_obligation_still_qualifies(self):
+        # The heading-prefix detector must not swallow a genuine
+        # requirement merely because it starts with a section number.
+        items = [{"text": "Section 2.2 — Proponents shall submit a design narrative describing the proposed methodology.", "category": "technical_specification"}]
+        sections = deterministic_sections(items, [])
+        self.assertEqual(len(sections["technical_submission_items"]), 1)
+
+    def test_background_prose_variants_are_excluded(self):
+        variants = [
+            "3.2 CMC information is presently distributed among multiple document classes and systems.",
+            "Design records are currently maintained across several legacy systems.",
+            "The organization has historically relied on manual document tracking.",
+            "The existing systems do not currently interoperate.",
+        ]
+        items = [{"text": t, "category": "technical_specification"} for t in variants]
+        sections = deterministic_sections(items, [])
+        self.assertEqual(sections["technical_submission_items"], [])
+
+    def test_bare_topic_noun_alone_no_longer_qualifies(self):
+        # Tightened positive signal (P38-D2 6.3): a bare topic word with
+        # no obligation verb must not be sufficient on its own.
+        items = [{"text": "Technical specification and design narrative are important considerations.", "category": "technical_specification"}]
+        sections = deterministic_sections(items, [])
+        self.assertEqual(sections["technical_submission_items"], [])
+
+    def test_actor_plus_obligation_still_qualifies(self):
+        items = [{"text": "The technical proposal must include a compliance matrix demonstrating conformance to Schedule 15.", "category": "technical_specification"}]
+        sections = deterministic_sections(items, [])
+        self.assertEqual(len(sections["technical_submission_items"]), 1)
+
 
 class ProjectBriefingRouteTests(unittest.TestCase):
     def setUp(self):
@@ -319,7 +377,7 @@ class ProjectBriefingRouteTests(unittest.TestCase):
             self.client.post(f"/projects/{self.project_id}/workspace/briefing/generate")
 
         body = self._page()
-        self.assertNotIn("consider regenerating", body)
+        self.assertNotIn("Briefing out of date", body)
 
         # Add a new Source -- the active set changes.
         self.client.post(
@@ -327,7 +385,7 @@ class ProjectBriefingRouteTests(unittest.TestCase):
             data={"title": "Addendum 1", "content": "Clarification text."},
         )
         body = self._page()
-        self.assertIn("consider regenerating", body)
+        self.assertIn("Briefing out of date", body)
 
     def test_extracted_candidates_are_not_described_as_confirmed(self):
         body = self._page()
@@ -352,6 +410,272 @@ class ProjectBriefingRouteTests(unittest.TestCase):
             resp = stranger.post(f"/projects/{self.project_id}/workspace/briefing/generate")
             self.assertEqual(resp.status_code, 404)
             self.assertEqual(MockClient.return_value.messages.create.call_count, 0)
+
+
+class ProjectBriefingLifecycleTests(unittest.TestCase):
+    """CLAUDE-P38-D2 -- the automatic lifecycle itself: policy states
+    beyond plain ALLOW/DENY (REQUIRE_APPROVAL), the idempotency guard,
+    failure-then-retry, previous-version preservation, provenance
+    display, source-grounding citations, and the "Preparing your
+    Project Briefing..." interstitial route. Mirrors
+    ProjectBriefingRouteTests' own fixture shape."""
+
+    def setUp(self):
+        import app as app_module
+        from models import User, db
+
+        self.tmp_dir = Path(tempfile.mkdtemp(prefix="beehive_test_project_briefing_lifecycle_"))
+        self.flask_app = app_module.create_app("testing")
+        self.flask_app.config["REGISTRY_STORE_PATH"] = str(self.tmp_dir)
+        self.project_id = "test-project-briefing-lifecycle"
+
+        with self.flask_app.app_context():
+            db.session.add(User(username="owner1", password_hash=generate_password_hash("x"), role="admin"))
+            db.session.commit()
+
+        RequirementsRegistry(self.tmp_dir).save(ParsedDocument(
+            project_id=self.project_id, filename="rfp.txt", ingested_at="2026-01-01T00:00:00+00:00",
+            requirements=[
+                RequirementItem(id="i1", text=_CANDIDATE_ITEMS[0]["text"], category="scope_of_work", confidence=0.9, source_line=1),
+                RequirementItem(id="i2", text=_CANDIDATE_ITEMS[1]["text"], category="technical_specification", confidence=0.9, source_line=5),
+            ],
+            milestones=_MILESTONES,
+        ))
+        self.client = self.flask_app.test_client()
+        with self.client.session_transaction() as sess:
+            sess["user_id"] = 1
+            sess["username"] = "owner1"
+            sess["role"] = "admin"
+        self.store = CaseWorkspaceStore(self.tmp_dir)
+        self.client.get(f"/projects/{self.project_id}/workspace")
+        self.store.set_project_owner(self.store.get(self.project_id), owner="owner1", actor="owner1")
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp_dir, ignore_errors=True)
+
+    def _page(self):
+        return self.client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
+
+    def _activate_baseline(self, decision):
+        from services.security_governance import CONTROL_SOURCE_ARCHIOSK_DEFAULT, SecurityGovernanceStore
+        from services.security_policy import ACTION_EXTERNAL_AI_REQUEST
+
+        security_store = SecurityGovernanceStore(self.tmp_dir)
+        record = security_store.get()
+        baseline = security_store.create_baseline_draft(record, created_by="owner1")
+        security_store.add_control_decision(
+            record, baseline_id=baseline["id"], action_id=ACTION_EXTERNAL_AI_REQUEST, decision=decision,
+            source_type=CONTROL_SOURCE_ARCHIOSK_DEFAULT, actor="owner1",
+        )
+        security_store.acknowledge_capability_impact(record, baseline["id"], actor="owner1")
+        security_store.activate_baseline(record, baseline["id"], actor="owner1")
+
+    # -- REQUIRE_APPROVAL: a real, distinct state, not folded into ALLOW or DENY --
+
+    def test_require_approval_blocks_generation_without_confirm_and_shows_the_awaiting_state(self):
+        from services.security_policy import DECISION_REQUIRE_APPROVAL
+
+        self._activate_baseline(DECISION_REQUIRE_APPROVAL)
+        with patch("anthropic.Anthropic") as MockClient, \
+             patch.dict("os.environ", {"ANTHROPIC_API_KEY": "fake-key-for-test"}):
+            resp = self.client.post(
+                f"/projects/{self.project_id}/workspace/briefing/generate", follow_redirects=True,
+            )
+            self.assertEqual(MockClient.return_value.messages.create.call_count, 0)
+        self.assertIn("awaits approval", resp.get_data(as_text=True))
+        self.assertIsNone(self.store.get(self.project_id).project_briefing)
+
+        # The Project Home page itself must show the distinct
+        # approval-required state, not the plain "no briefing yet"
+        # fallback and not the DENY wording.
+        body = self._page()
+        self.assertIn("AI Project Briefing awaits approval", body)
+        self.assertNotIn("AI synthesis is unavailable", body)
+
+    def test_require_approval_with_confirm_once_generates(self):
+        from services.security_policy import DECISION_REQUIRE_APPROVAL
+
+        self._activate_baseline(DECISION_REQUIRE_APPROVAL)
+        with patch("anthropic.Anthropic") as MockClient, \
+             patch.dict("os.environ", {"ANTHROPIC_API_KEY": "fake-key-for-test"}):
+            MockClient.return_value.messages.create.return_value = _mock_response(_SUCCESSFUL_BRIEFING_OUTPUT)
+            resp = self.client.post(
+                f"/projects/{self.project_id}/workspace/briefing/generate",
+                data={"confirm": "once"}, follow_redirects=True,
+            )
+            self.assertEqual(MockClient.return_value.messages.create.call_count, 1)
+        self.assertIn("Riverside renovation", resp.get_data(as_text=True))
+        self.assertIsNotNone(self.store.get(self.project_id).project_briefing)
+
+    def test_denied_state_offers_no_generate_action_and_still_shows_deterministic_sections(self):
+        from services.security_policy import DECISION_DENY
+
+        self._activate_baseline(DECISION_DENY)
+        body = self._page()
+        self.assertIn("AI synthesis is unavailable under this project's security policy", body)
+        self.assertNotIn("AI Project Briefing awaits approval", body)
+        # The no-AI-mode fallback content (deterministic sections) is
+        # still there - denial degrades the narrative, not the whole pane.
+        self.assertIn(_CANDIDATE_ITEMS[0]["text"], body)
+
+    # -- Idempotency / duplicate-call guard --
+
+    def test_generation_already_in_progress_makes_no_second_call(self):
+        workspace = self.store.get(self.project_id)
+        self.store.start_project_briefing_generation(workspace, actor="owner1")
+
+        with patch("anthropic.Anthropic") as MockClient, \
+             patch.dict("os.environ", {"ANTHROPIC_API_KEY": "fake-key-for-test"}):
+            MockClient.return_value.messages.create.return_value = _mock_response(_SUCCESSFUL_BRIEFING_OUTPUT)
+            self.client.post(f"/projects/{self.project_id}/workspace/briefing/generate")
+            self.assertEqual(MockClient.return_value.messages.create.call_count, 0)
+        self.assertIsNone(self.store.get(self.project_id).project_briefing)
+
+    def test_a_stale_in_progress_flag_is_treated_as_abandoned_and_retried(self):
+        from datetime import datetime, timedelta, timezone
+
+        workspace = self.store.get(self.project_id)
+        workspace.project_briefing_generation_started_at = (
+            datetime.now(timezone.utc) - timedelta(seconds=CaseWorkspaceStore.PROJECT_BRIEFING_GENERATION_TIMEOUT_SECONDS + 30)
+        ).isoformat()
+        self.store.save(workspace)
+
+        with patch("anthropic.Anthropic") as MockClient, \
+             patch.dict("os.environ", {"ANTHROPIC_API_KEY": "fake-key-for-test"}):
+            MockClient.return_value.messages.create.return_value = _mock_response(_SUCCESSFUL_BRIEFING_OUTPUT)
+            self.client.post(f"/projects/{self.project_id}/workspace/briefing/generate")
+            self.assertEqual(MockClient.return_value.messages.create.call_count, 1)
+        self.assertIsNotNone(self.store.get(self.project_id).project_briefing)
+
+    # -- Failure / retry --
+
+    def test_generation_failure_shows_a_retry_state_with_the_real_reason(self):
+        with patch("anthropic.Anthropic") as MockClient, \
+             patch.dict("os.environ", {"ANTHROPIC_API_KEY": "fake-key-for-test"}):
+            MockClient.return_value.messages.create.side_effect = RuntimeError("provider exploded")
+            self.client.post(f"/projects/{self.project_id}/workspace/briefing/generate")
+
+        body = self._page()
+        self.assertIn("Generation failed", body)
+        self.assertIn("error occurred", body.lower())
+        self.assertIn(">Retry<", body)
+        workspace = self.store.get(self.project_id)
+        self.assertIsNone(workspace.project_briefing)
+        self.assertIsNotNone(workspace.project_briefing_last_failure_reason)
+
+    def test_retry_after_failure_succeeds_and_clears_the_failure_state(self):
+        with patch("anthropic.Anthropic") as MockClient, \
+             patch.dict("os.environ", {"ANTHROPIC_API_KEY": "fake-key-for-test"}):
+            MockClient.return_value.messages.create.side_effect = RuntimeError("provider exploded")
+            self.client.post(f"/projects/{self.project_id}/workspace/briefing/generate")
+
+        with patch("anthropic.Anthropic") as MockClient, \
+             patch.dict("os.environ", {"ANTHROPIC_API_KEY": "fake-key-for-test"}):
+            MockClient.return_value.messages.create.return_value = _mock_response(_SUCCESSFUL_BRIEFING_OUTPUT)
+            self.client.post(f"/projects/{self.project_id}/workspace/briefing/generate")
+
+        body = self._page()
+        self.assertNotIn("Generation failed", body)
+        self.assertIn("Riverside renovation", body)
+        workspace = self.store.get(self.project_id)
+        self.assertIsNone(workspace.project_briefing_last_failure_reason)
+
+    # -- Provenance / trust record --
+
+    def test_provenance_fields_are_displayed(self):
+        with patch("anthropic.Anthropic") as MockClient, \
+             patch.dict("os.environ", {"ANTHROPIC_API_KEY": "fake-key-for-test"}):
+            MockClient.return_value.messages.create.return_value = _mock_response(_SUCCESSFUL_BRIEFING_OUTPUT)
+            self.client.post(f"/projects/{self.project_id}/workspace/briefing/generate")
+
+        body = self._page()
+        self.assertIn("anthropic", body)
+        self.assertIn("source signature on record", body)
+        self.assertIn("Generated by owner1", body)
+
+    def test_grounded_in_citations_are_displayed_when_present(self):
+        output_with_grounding = (
+            '{"executive_summary": "This RFP seeks a Design-Builder for the Riverside renovation.", '
+            '"objectives": [], "project_brief": "", "procurement_route": "", '
+            '"matters_requiring_attention": [], '
+            '"grounded_in": ["The Design-Builder shall provide all labor and materials."]}'
+        )
+        with patch("anthropic.Anthropic") as MockClient, \
+             patch.dict("os.environ", {"ANTHROPIC_API_KEY": "fake-key-for-test"}):
+            MockClient.return_value.messages.create.return_value = _mock_response(output_with_grounding)
+            self.client.post(f"/projects/{self.project_id}/workspace/briefing/generate")
+
+        body = self._page()
+        self.assertIn("Source grounding", body)
+        self.assertIn("The Design-Builder shall provide all labor and materials.", body)
+
+    # -- Previous-version preservation --
+
+    def test_previous_version_is_preserved_not_silently_overwritten(self):
+        first_output = _SUCCESSFUL_BRIEFING_OUTPUT
+        second_output = (
+            '{"executive_summary": "Revised: this RFP now covers a phased renovation.", '
+            '"objectives": [], "project_brief": "", "procurement_route": "", "matters_requiring_attention": []}'
+        )
+        with patch("anthropic.Anthropic") as MockClient, \
+             patch.dict("os.environ", {"ANTHROPIC_API_KEY": "fake-key-for-test"}):
+            MockClient.return_value.messages.create.return_value = _mock_response(first_output)
+            self.client.post(f"/projects/{self.project_id}/workspace/briefing/generate")
+
+        with patch("anthropic.Anthropic") as MockClient, \
+             patch.dict("os.environ", {"ANTHROPIC_API_KEY": "fake-key-for-test"}):
+            MockClient.return_value.messages.create.return_value = _mock_response(second_output)
+            self.client.post(f"/projects/{self.project_id}/workspace/briefing/generate")
+
+        workspace = self.store.get(self.project_id)
+        self.assertIn("Revised", workspace.project_briefing["executive_summary"])
+        self.assertIsNotNone(workspace.project_briefing_previous)
+        self.assertIn("Riverside renovation", workspace.project_briefing_previous["executive_summary"])
+
+        body = self._page()
+        self.assertIn("Previous version", body)
+
+    # -- The "Preparing your Project Briefing..." interstitial --
+
+    def test_preparing_interstitial_renders_and_auto_submits_for_a_fresh_allowed_project(self):
+        resp = self.client.get(f"/projects/{self.project_id}/workspace/briefing/preparing")
+        self.assertEqual(resp.status_code, 200)
+        body = resp.get_data(as_text=True)
+        self.assertIn("Preparing your Project Briefing", body)
+        self.assertIn(f'/projects/{self.project_id}/workspace/briefing/generate', body)
+
+    def test_preparing_interstitial_skips_to_workspace_once_a_briefing_exists(self):
+        with patch("anthropic.Anthropic") as MockClient, \
+             patch.dict("os.environ", {"ANTHROPIC_API_KEY": "fake-key-for-test"}):
+            MockClient.return_value.messages.create.return_value = _mock_response(_SUCCESSFUL_BRIEFING_OUTPUT)
+            self.client.post(f"/projects/{self.project_id}/workspace/briefing/generate")
+
+        resp = self.client.get(
+            f"/projects/{self.project_id}/workspace/briefing/preparing", follow_redirects=False,
+        )
+        self.assertEqual(resp.status_code, 302)
+        self.assertIn("/workspace", resp.headers["Location"])
+        self.assertNotIn("briefing/preparing", resp.headers["Location"])
+
+    def test_preparing_interstitial_skips_when_policy_denies(self):
+        from services.security_policy import DECISION_DENY
+
+        self._activate_baseline(DECISION_DENY)
+        resp = self.client.get(
+            f"/projects/{self.project_id}/workspace/briefing/preparing", follow_redirects=False,
+        )
+        self.assertEqual(resp.status_code, 302)
+
+    def test_preparing_interstitial_skips_after_a_prior_failure(self):
+        with patch("anthropic.Anthropic") as MockClient, \
+             patch.dict("os.environ", {"ANTHROPIC_API_KEY": "fake-key-for-test"}):
+            MockClient.return_value.messages.create.side_effect = RuntimeError("provider exploded")
+            self.client.post(f"/projects/{self.project_id}/workspace/briefing/generate")
+
+        resp = self.client.get(
+            f"/projects/{self.project_id}/workspace/briefing/preparing", follow_redirects=False,
+        )
+        self.assertEqual(resp.status_code, 302)
 
 
 class ProjectBriefingPageHierarchyTests(unittest.TestCase):
@@ -402,7 +726,9 @@ class ProjectBriefingPageHierarchyTests(unittest.TestCase):
 
     def test_technical_preview_is_capped_at_five_with_a_total_count(self):
         body = self._page()
-        self.assertIn("5 of 8 likely technical deliverables shown", body)
+        # CLAUDE-P38-D2 (6.4): "likely" implied a confidence score that
+        # doesn't exist - relabeled "Candidate Technical Submission Items".
+        self.assertIn("Candidate Technical Submission Items: 5 of 8 shown", body)
         self.assertIn("Open Technical Submission", body)
 
     def test_generate_button_appears_before_the_deterministic_lists(self):
