@@ -1,5 +1,92 @@
 # Continuation checkpoint
 
+## 2026-08-01 — CLAUDE-P40-E2A: removed-state route containment, reset-snapshot restoration
+
+**Commit:** `c754bb5`. Full suite: 1364 passed (was 1339). Not yet
+product-owner accepted - P40-E2 itself was explicitly held back from
+acceptance pending this stage.
+
+P40-E2's own review found two real acceptance gaps, both closed here:
+
+**Gap 1 - removal only changed listing visibility.** An authorized
+user (owner/admin, or anyone P32-accessible) could still reach a
+removed Project's or Document's ordinary ACTIVE routes directly -
+authorization and lifecycle are different checks, and P40-E2 only ever
+checked the former. Fixed at `routes/workspace.py`'s
+`_load_workspace_or_404`, the near-universal choke point every route
+in that blueprint already passes through: a new `allow_removed=False`
+default means an authorized caller reaching ANY route for a removed
+Project is redirected to `show_workspace`, which now renders a
+restrained "Project removed" tombstone (`templates/project_removed.html`
+- display name, removed-at/-by, one Restore action) instead of the
+active Workspace. Every child Document/Investigation route inherits
+this automatically - chat, Investigation creation, document add,
+findings review, all of it - with no per-route change; the only two
+`allow_removed=True` exceptions are `show_workspace` itself and
+`restore_project_route`. Unauthorized callers are unaffected (still the
+pre-existing fail-closed 404, checked first). For a removed Document
+specifically: the `?source=` viewer shows a "Document removed"
+tombstone instead of embedding the file, `source_file` refuses to
+serve it, `revise_source` refuses a new revision, and
+`register_requirement`/`promote_requirement_item` refuse to target NEW
+work at it - while an EXISTING Requirement/Finding that already cites
+it keeps resolving the reference honestly (unchanged, by design).
+`conversation_interpreter.py`'s drawing-Source detection now uses
+`active_sources()`, so "Analyze this drawing" ignores a removed one.
+
+**Gap 2 - Reset Project Data proved snapshot creation, never
+restoration.** Every snapshot now carries a manifest
+(`_snapshot_manifest.snapshot`, deliberately not `.json` - see that
+constant's own comment on why) recording actor/time/kind/inventory and
+a sha256 checksum of every file. New admin-only routes:
+`/admin/reset-project-data/snapshots` (list, newest first) and
+`.../snapshots/<id>/restore` (GET re-verifies integrity live and
+previews current-vs-restored inventory; POST re-verifies again, takes
+its own `pre_restore_safety` snapshot of whatever is CURRENTLY live
+first, then swaps a staged rebuild into place via two `os.rename`
+calls). `security_governance/` always comes from the CURRENT live
+store during a restore, never the snapshot - accounts/security state
+is never reverted to an old copy. Both this and Reset Project Data
+share one `os.O_EXCL` lock file, so they can never race each other; a
+stale lock shows its age rather than blocking silently forever.
+
+**Atomicity, stated honestly, not oversold:** a flat-JSON-file
+directory tree has no built-in multi-file transaction the way a
+database does. The staged-build-then-two-atomic-renames pattern is
+"safely recoverable" - each individual rename is atomic on the same
+volume, and a failure while COPYING never touches the live store at
+all - but a crash landing in the near-zero window between the two
+renames would leave the live store path briefly missing. This residual
+risk is not eliminated, only mitigated: the pre-restore safety snapshot
+means the live state is never lost regardless; the lock file makes an
+interrupted operation visibly "in progress" rather than silently
+appearing to succeed; manual recovery from either snapshot is always a
+plain filesystem copy. `_restore_snapshot`'s own docstring states this
+exact limitation - this was judged sufficient to build rather than a
+hard-stop, since it genuinely is "safely recoverable" in the sense
+asked for, just not full ACID.
+
+25 new tests (`tests/test_p40e2a_containment_and_restoration.py`)
+against real tempfile-isolated filesystem stores - real
+CaseWorkspaceStore/RequirementsRegistry reads/writes, real
+`shutil.copytree`/`os.rename` during reset/restore, only
+`BHiveParser.parse` stubbed (existing repo-wide convention) - covering
+tombstone rendering/route-blocking for both removed Projects and
+Documents, byte-identical restore, removed content absent from
+search/AI-context, checksummed snapshot creation, corrupted-snapshot
+restoration refusal, duplicate-submission lock sharing, no partial
+registry left behind on a refused restore, and accounts/security-
+governance survival through both reset and restore.
+
+Explicitly NOT done, per this stage's own instruction: no removal or
+reset/restore was ever run against the real `instance/registry/` data
+in this session - every test above runs against a disposable
+`tempfile.mkdtemp()` store. The product owner should not test Reset
+Project Data against real records until this stage's restoration path
+has been exercised and accepted first.
+
+---
+
 ## 2026-07-31 — CLAUDE-P40-E2: contextual Toolbox, recoverable Document/Project removal, Reset Project Data
 
 **Commit:** `7bcd250`. Full suite: 1339 passed (was 1311).
