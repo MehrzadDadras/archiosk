@@ -1,5 +1,68 @@
 # Continuation checkpoint
 
+## 2026-08-01 — CLAUDE-P40-E2A1: live isolated-process validation of Global Reset - found and fixed a real bug
+
+**Commit:** `a3e6d3e`. Full suite: 1365 passed (was 1364). Still not
+product-owner accepted - this stage exists specifically because P40-E2A
+was held back pending exactly this kind of proof.
+
+Per explicit instruction, Global Reset/Restore Snapshot was never
+exercised against the real `instance/registry` - a completely separate
+Flask process (own OS process, own port 5057, `REGISTRY_STORE_PATH`/
+`DATABASE_URL` env vars pointed at a temporary isolated directory/SQLite
+file, set before any project import) was launched instead, seeded with
+one real Project/Investigation/Requirement via the real persistence
+layer (`BHiveParser.parse` stubbed - the existing hermetic-test
+convention, no live Anthropic API call), then driven entirely over real
+HTTP with curl - real login, real CSRF tokens, real cookies.
+
+**That live run immediately found a real bug the pytest suite's own
+`tempfile.mkdtemp()` paths had never happened to trigger:**
+`shutil.copytree` raised `[WinError 3] The system cannot find the path
+specified` the instant a snapshot's own extra directory level
+(`registry_snapshots/<stamp>/`) pushed an already-long
+`workspace_sources/<project_id>/<hash>_<filename>` path past Windows'
+classic 260-character MAX_PATH. Confirmed not an artifact of the
+isolated environment's own path length - the same file's original,
+un-nested path (one level shallower) had already copied and read back
+fine at seed time; only the extra nesting a snapshot always adds
+crossed the limit.
+
+**Fixed** with a new `_win_long_path` helper in `routes/portal.py` -
+the Windows-sanctioned `\\?\` extended-length prefix (no OS-level
+`LongPathsEnabled` configuration required), applied at every
+shutil/os call site in the snapshot-create/reset-wipe/restore-swap
+path. A no-op on any other platform.
+
+**Re-verified live, end-to-end, against the same isolated process
+after the fix:** Reset succeeded (302), `/projects` showed a clean "No
+projects yet." state, the snapshot listing showed correct kind/actor/
+inventory, the restore preview showed "Verified" integrity with correct
+current(0)/target(1) inventory, Restore succeeded (302), the restored
+`.json`/`.workspace.json` files are **byte-identical** to the pre-reset
+originals (`diff` produced no output), a `pre_restore_safety` snapshot
+was taken automatically before the restore, the admin session/login
+still worked post-restore, and `security_governance/reset_audit.jsonl`
+shows one continuous audit trail across both events. The real
+`instance/registry` (19 pre-existing projects, checked before and after
+every step of this stage) and `instance/bhive.db` were never touched -
+confirmed via direct filesystem inspection, not just inferred.
+
+1 new deterministic regression test
+(`test_reset_and_restore_succeed_past_windows_max_path` in
+`tests/test_p40e2a_containment_and_restoration.py`) reproduces the same
+>260-char condition inside the hermetic pytest suite itself, with
+bounds computed from the test's own actual temp-directory length so it
+stays meaningful regardless of where the OS places its temp folder -
+this doesn't silently regress.
+
+The isolated Flask process, its temporary registry/DB, and its scratch
+directory were all torn down after verification - nothing from this
+stage's live testing persists anywhere outside this checkpoint entry
+and the commit itself.
+
+---
+
 ## 2026-08-01 — CLAUDE-P40-E2A: removed-state route containment, reset-snapshot restoration
 
 **Commit:** `c754bb5`. Full suite: 1364 passed (was 1339). Not yet
