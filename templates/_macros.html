@@ -85,24 +85,33 @@
    sessionStorage keys (static/js/case_workspace.js) - deliberately
    different per context ("project" vs "case-<id>"), per Section A's
    own explicit requirement that each conversation keeps its own
-   separate draft and scroll position, not a shared one. #}
+   separate draft and scroll position, not a shared one.
+
+   CLAUDE-P40-E2B, Section C: no longer a <details>/accordion - Chat is
+   now always visible (never collapsed via a disclosure triangle),
+   varying only in HEIGHT (a resize handle, dragged or keyboard-
+   operated; Compact/Expanded preset buttons as the discrete
+   alternative - static/js/case_workspace.js). The old checkbox-based
+   "Show full conversation history" binary toggle is gone; continuous
+   resize replaces it. A plain <div role="region"> with the same
+   accordion-section visual treatment (top border, spacing) the
+   previous <details> already had, not a new decorative container. #}
 {% macro conversation_dock(heading, message_count, post_url, scope_key, placeholder, include_anchor_fields=False) %}
-{# Jinja's caller() only resolves against the NEAREST enclosing {% call %}
-   - captured into a variable here, before entering the nested
-   {% call accordion(...) %} below, so the reference used inside that
-   block resolves to THIS macro's own caller (the message-list markup
-   from case_workspace.html), not an undefined caller for accordion
-   itself. #}
-{% set dock_body %}{{ caller() }}{% endset %}
-{% call accordion(heading ~ ' (' ~ message_count ~ ')', group='conversation-dock', id='conversation-dock', html_id='conversation-dock', open=True) %}
-    <label class="conversation-dock-expand-toggle">
-        <input type="checkbox" id="conversation-expand-toggle">
-        Show full conversation history
-    </label>
-    <p class="pane-note" style="margin:-0.3rem 0 0.5rem;font-size:0.78rem;">
+<div class="accordion-section conversation-dock-panel" id="conversation-dock" role="region" aria-label="{{ heading }} conversation">
+    <div class="conversation-dock-resize-handle" id="conversation-dock-resize-handle"
+         role="separator" aria-orientation="horizontal" aria-label="Resize conversation panel"
+         tabindex="0" aria-valuemin="120" aria-valuemax="640"></div>
+    <div class="conversation-dock-header">
+        <span class="accordion-summary-text">{{ heading }} ({{ message_count }})</span>
+        <div class="conversation-dock-presets" role="group" aria-label="Conversation panel size">
+            <button type="button" class="conversation-preset-btn" data-conversation-preset="compact">Compact</button>
+            <button type="button" class="conversation-preset-btn" data-conversation-preset="expanded">Expanded</button>
+        </div>
+    </div>
+    <p class="pane-note" style="margin:-0.3rem 0 0.5rem;font-size:0.78rem;flex-shrink:0;">
         Named conversation history and saved investigation patterns are planned, not available yet.
     </p>
-    {{ dock_body }}
+    {{ caller() }}
     <form class="conversation-input-form conversation-dock-composer" method="post" action="{{ post_url }}">
         {% if include_anchor_fields %}
         <input type="hidden" name="anchor_type" id="dock-composer-anchor-type" value="">
@@ -113,7 +122,7 @@
         <input type="text" name="text" id="dock-composer-input" data-conversation-draft="{{ scope_key }}" placeholder="{{ placeholder }}" autocomplete="off" required>
         <button type="submit">Send</button>
     </form>
-{% endcall %}
+</div>
 {% endmacro %}
 
 {# -- aperture ---------------------------------------------------------

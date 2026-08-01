@@ -22,6 +22,7 @@ implementationally separate (Prompt 4 #10):
 from __future__ import annotations
 
 import io
+import json
 import mimetypes
 import uuid
 from dataclasses import asdict
@@ -117,6 +118,22 @@ _RELATIONSHIP_COLOR_CLASS = {
 
 def _store() -> CaseWorkspaceStore:
     return CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"])
+
+
+def _json_script_safe(value) -> str:
+    """CLAUDE-P40-E2B, Section D: for embedding inside a
+    <script type="application/json"> data island (the Display-division
+    picker's own source list) - a Source name is user-controlled (an
+    uploaded filename, or a text-record title), so a plain json.dumps
+    is not enough on its own; escaping "<"/">"/"&" as \\uXXXX prevents
+    a name containing "</script>" from ever breaking out of the tag,
+    the standard mitigation for JSON embedded in HTML."""
+    return (
+        json.dumps(value)
+        .replace("<", "\\u003c")
+        .replace(">", "\\u003e")
+        .replace("&", "\\u0026")
+    )
 
 
 def _reviewer() -> str:
@@ -1175,6 +1192,19 @@ def show_workspace(project_id):
         active_sources=CaseWorkspaceStore.active_sources(workspace),
         removed_sources=CaseWorkspaceStore.removed_sources(workspace),
         is_project_removed=bool(workspace.removed_at),
+        # CLAUDE-P40-E2B, Section D: the Display-division picker's own
+        # client-side data source - see _json_script_safe's own
+        # docstring. file_url is already resolved through the SAME
+        # authorized source_file route every ?source= view uses.
+        active_sources_json=_json_script_safe([
+            {
+                "id": s["id"],
+                "name": s["name"],
+                "kind": s["kind"],
+                "file_url": url_for("workspace.source_file", project_id=project_id, source_id=s["id"]),
+            }
+            for s in CaseWorkspaceStore.active_sources(workspace)
+        ]),
     )
 
 

@@ -238,7 +238,8 @@ class InvestigationListingTests(_BaseDockTestCase):
         self.assertIn("Draft 1", body)
         # Became the active Investigation - its own content pane, not
         # just a nav entry, opened in the main Display panel.
-        self.assertIn("<h1>Workspace</h1>", body)
+        self.assertIn('class="workspace-pane workspace-pane-conversation"', body)
+        self.assertIn("<h2>Draft 1</h2>", body)
         self.assertIn('side-rail-project-sublink active"', body)
 
 

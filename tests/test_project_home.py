@@ -72,12 +72,14 @@ class ProjectHomeTests(unittest.TestCase):
         self.assertIn("What is Project State?", body)
         self.assertIn("You are working inside the current governed project state.", body)
         self.assertIn("New work inherits its sources,", body)
-        # CLAUDE-P40-E: the Case-specific page header was renamed from
-        # "Case Workspace" to "Workspace" - checked against the new text
-        # so this still verifies the real invariant (no Case-specific
-        # header leaks into the Project Home render), not a string that
-        # no longer appears anywhere.
-        self.assertNotIn("Workspace</h1>", body)
+        # CLAUDE-P40-E2B: the page_header <h1> (was renamed from "Case
+        # Workspace" to "Workspace" under P40-E) is gone entirely,
+        # replaced by the top bar's own breadcrumb - the real invariant
+        # (no active-Investigation context leaks into a Project Home
+        # render) is now checked against that breadcrumb's own
+        # separator, which only ever renders when an Investigation or
+        # Document is active.
+        self.assertNotIn("workspace-topbar-sep", body)
 
     def test_explicit_case_param_still_reaches_deep_case_view(self):
         self.client.post(
@@ -89,7 +91,7 @@ class ProjectHomeTests(unittest.TestCase):
         response = self.client.get(f"/projects/{self.project_id}/workspace?case={case['id']}")
         body = response.get_data(as_text=True)
 
-        self.assertIn("Workspace</h1>", body)
+        self.assertIn("workspace-topbar-sep", body)
         self.assertIn("Structural Drawing Review", body)
         self.assertNotIn("Ask a question, or describe what you want to work on", body)
 
@@ -203,7 +205,7 @@ class ProjectHomeTests(unittest.TestCase):
         )
         body = response.get_data(as_text=True)
 
-        self.assertIn("Workspace</h1>", body)
+        self.assertIn("workspace-topbar-sep", body)
         self.assertIn("Analyze this drawing for datum inconsistencies", body)
         workspace = self._store().get(self.project_id)
         self.assertEqual(len(workspace.cases), 1)

@@ -159,7 +159,10 @@ class WorkspaceHeadingRenameTests(_BaseWorkspaceTestCase):
 
         resp = client.get(f"/projects/{self.project_id}/workspace?case={case_id}")
         body = resp.get_data(as_text=True)
-        self.assertIn("<h1>Workspace</h1>", body)
+        # CLAUDE-P40-E2B: the page_header <h1> was replaced by the new
+        # top bar's own Project/Investigation breadcrumb - the identity
+        # renamed here is now carried by that, not a heading tag.
+        self.assertIn("workspace-topbar-context", body)
         self.assertNotIn("Case Workspace", body)
 
 
@@ -281,7 +284,11 @@ class ResponsiveDomOrderTests(_BaseWorkspaceTestCase):
         case_id = self._store().get(self.project_id).cases[0]["id"]
 
         body = client.get(f"/projects/{self.project_id}/workspace?case={case_id}").get_data(as_text=True)
-        workspace_pos = body.find('class="workspace-column"')
+        # CLAUDE-P40-E2B: .workspace-column (Lists+Display stacked
+        # together) was split into standalone .workspace-pane-lists and
+        # .workspace-pane-display columns - DOM order (Lists, then
+        # Display, then Toolbox) is what this test now checks.
+        workspace_pos = body.find('id="workspace-display-panel"')
         toolbox_pos = body.find("workspace-pane-toolbox")
         self.assertGreater(workspace_pos, -1)
         self.assertGreater(toolbox_pos, -1)

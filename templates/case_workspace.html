@@ -3,15 +3,80 @@
 
 {% block title %}Workspace &mdash; {{ document.filename }}{% endblock %}
 
+{# CLAUDE-P40-E2B, Section B: the Lists/Toolbox hide/show preference is
+   applied to <html> here, before .case-workspace exists in the DOM and
+   before first paint - the identical "avoid a flash of the wrong
+   layout" pattern base.html's own nav-expanded script already uses,
+   for the identical reason (a class can't be set on an element that
+   doesn't exist yet at <head>-parse time). Reviewer-specific
+   (localStorage, keyed by project_id) - never a ProjectWorkspace
+   write; ordinary viewing/layout preference, not a governed action. #}
+{% block extra_head %}
+<script>
+    try {
+        if (window.localStorage.getItem('beehive:panel:lists:{{ project_id }}') === 'hidden') {
+            document.documentElement.classList.add('lists-hidden');
+        }
+        if (window.localStorage.getItem('beehive:panel:toolbox:{{ project_id }}') === 'hidden') {
+            document.documentElement.classList.add('toolbox-hidden');
+        }
+    } catch (e) { /* localStorage unavailable - default to both shown */ }
+</script>
+{% endblock %}
+
 {% block content %}
-{% if active_case %}
-{% call macros.page_header('Workspace', eyebrow=project_id) %}
-    <div class="dash-head-actions">
-        <button type="button" id="collapse-all-btn" class="collapse-all-btn">Collapse All</button>
-        <a class="btn btn-ghost" href="{{ url_for('workspace.show_workspace', project_id=project_id) }}">&larr; Back to Project</a>
+{# ---------------- Full-width top bar (CLAUDE-P40-E2B, Section A) -----------
+   Deliberately does NOT duplicate anything the side-rail (templates/
+   base.html) already provides - no Home link, no search magnifier, no
+   Open Project/Project Gateway entrance, no second brand card. This
+   bar is Workspace-page-specific: identity + current Project/Document
+   context (a compact breadcrumb, not a repeated nav), the Lists/
+   Toolbox show/hide controls, the Display Layout menu (Section D), a
+   contextual Document badge when one is selected, and a small overflow
+   menu for what used to be the page_header's own action row (Collapse
+   All / Back to Project) this bar replaces. #}
+<div class="workspace-topbar">
+    <div class="workspace-topbar-identity">
+        <span class="workspace-topbar-brand" aria-hidden="true">Archiosk</span>
+        <span class="workspace-topbar-context">
+            <span class="workspace-topbar-project">{{ workspace.display_title or document.filename }}</span>
+            {% if active_case %}
+            <span class="workspace-topbar-sep" aria-hidden="true">/</span>
+            <span class="workspace-topbar-doc">{{ active_case.title }}</span>
+            {% elif selected_source %}
+            <span class="workspace-topbar-sep" aria-hidden="true">/</span>
+            <span class="workspace-topbar-doc">{{ selected_source.name }}</span>
+            {% if selected_source.removed_at %}<span class="workspace-topbar-badge">removed</span>{% endif %}
+            {% endif %}
+        </span>
     </div>
-{% endcall %}
-{% endif %}
+    <div class="workspace-topbar-controls">
+        <button type="button" id="lists-toggle-btn" class="workspace-topbar-btn" aria-expanded="true">Lists</button>
+
+        <details class="workspace-layout-menu" id="workspace-layout-menu">
+            <summary class="workspace-topbar-btn workspace-layout-summary">Display Layout</summary>
+            <div class="workspace-layout-options" role="group" aria-label="Display Layout">
+                <button type="button" class="workspace-layout-option" data-display-layout="single">Single</button>
+                <button type="button" class="workspace-layout-option" data-display-layout="side-by-side">Side by side</button>
+                <button type="button" class="workspace-layout-option" data-display-layout="stacked">Stacked</button>
+                <button type="button" class="workspace-layout-option" data-display-layout="grid">Four-panel grid</button>
+            </div>
+        </details>
+
+        <button type="button" id="toolbox-toggle-btn" class="workspace-topbar-btn" aria-expanded="true">Toolbox</button>
+
+        <details class="workspace-topbar-overflow" id="workspace-overflow-menu">
+            <summary class="workspace-topbar-btn workspace-overflow-summary" aria-label="More Workspace actions">&hellip;</summary>
+            <div class="workspace-overflow-options">
+                <button type="button" id="collapse-all-btn" class="workspace-overflow-item">Collapse All</button>
+                {% if active_case %}
+                <a class="workspace-overflow-item" href="{{ url_for('workspace.show_workspace', project_id=project_id) }}">&larr; Back to Project</a>
+                {% endif %}
+                <a class="workspace-overflow-item" href="{{ url_for('portal.removed_projects') }}">Removed Projects</a>
+            </div>
+        </details>
+    </div>
+</div>
 
 {# CLAUDE-P40-E2, Section A: the right column is now a persistent,
    contextual Toolbox (see .workspace-pane-toolbox below) - Findings is
@@ -22,24 +87,22 @@
    applies; the class stays defined in CSS only for the narrow-width
    collapse. #}
 <div class="case-workspace" data-project-id="{{ project_id }}">
-    <div class="workspace-column">
-    {# ---------------- Project reference material -----------------------
-       CLAUDE-P40-E: this used to be a permanently-visible third grid
-       COLUMN (.workspace-pane-nav), running alongside the active Case
-       pane at all times - the "circled project-context column" the
-       product-owner review flagged. It still renders unconditionally
-       here (Requirements/Sources/RFIs/Accepted Knowledge/History are
-       genuinely project-wide reference material a reviewer legitimately
-       needs while working inside a Case too - confirmed by a real,
-       already-passing test asserting a Requirement's adjudication text
-       is visible on a ?case=... render) - what changed is WHERE it
-       renders: inside the same "workspace" grid-area/column as the
-       active Case pane (stacked above it via .workspace-column, plain
-       block flow - see main.css), never a separate competing column of
-       its own. The unified left nav (templates/base.html) now links
-       directly into these same sections via their html_id anchors,
-       instead of duplicating this content in a second navigation panel. #}
-    <aside class="workspace-pane workspace-pane-nav">
+    {# ---------------- LISTS: project reference material -----------------
+       CLAUDE-P40-E2B, Section A/B: an independently-collapsible column
+       again (see .case-workspace in main.css) - P40-E had folded this
+       into the same flowing column as the active content specifically
+       because it was PERMANENTLY visible; now that it hides/shows on
+       its own (id="workspace-lists-panel", toggled by
+       static/js/case_workspace.js's lists-toggle-btn), the original
+       complaint no longer applies to bringing the column back.
+       Requirements/Sources/RFIs/Accepted Knowledge/History are genuine
+       project-wide reference material a reviewer needs even while an
+       Investigation is open - confirmed by a real, already-passing
+       test asserting a Requirement's adjudication text is visible on a
+       ?case=... render. The unified left nav (templates/base.html)
+       still links directly into these same sections via their html_id
+       anchors. #}
+    <aside class="workspace-pane-lists" id="workspace-lists-panel">
         <h2>Project</h2>
         <div id="project-overview">
         {# CLAUDE-P29: Project Operating Environment -- locked, never an
@@ -1041,6 +1104,36 @@
         {% endcall %}
     </aside>
 
+    {# ---------------- DISPLAY: active Investigation / selected Document /
+       Project Home (CLAUDE-P40-E2B, Section A) - was .workspace-column,
+       now its own standalone grid column instead of being stacked
+       beneath Lists.
+
+       CLAUDE-P40-E2B, Section D: multi-display. Division 0 is always
+       whatever the server rendered above (an open Investigation, a
+       selected Document, or Project Home) - it is never "closed" and
+       is the one division Toolbox stays bound to via the ordinary
+       ?source=/?case= query string this page already uses (never a
+       second, client-side Toolbox binding mechanism). Divisions 1-3
+       are client-side-only "also open alongside it" slots
+       (static/js/case_workspace.js) - each fetches its content from
+       the SAME authorized workspace.source_file route a normal
+       ?source= view uses, so a division can never render a Document
+       this Project/reviewer isn't already authorized for. Clicking a
+       populated division 1-3 promotes it to division 0 via a normal
+       navigation (?source=<id>) - the only way Toolbox can honestly
+       follow "the active division" in a server-rendered app with one
+       shared Toolbox, not a client-side approximation of it. Opening
+       several Documents side by side is simultaneous VIEWING only -
+       nothing here performs or claims cross-document analysis. #}
+    <div class="workspace-pane-display" id="workspace-display-panel">
+    <div class="display-divisions" id="display-divisions" data-layout="single">
+    <div class="display-division display-division-primary active" data-division="0" id="display-division-0">
+        <div class="display-division-header">
+            <span class="display-division-header-name">
+                {% if active_case %}{{ active_case.title }}{% elif selected_source %}{{ selected_source.name }}{% else %}Project Home{% endif %}
+            </span>
+        </div>
 {% if active_case %}
     {# ---------------- Workspace: active Case ---------------- #}
     <section class="workspace-pane workspace-pane-conversation">
@@ -1245,7 +1338,6 @@
         {% endif %}
         {% endcall %}
     </section>
-    </div>
 
 {% else %}
     {% if selected_source %}
@@ -1798,8 +1890,45 @@
                macros.conversation_dock and its call site. #}
         </div>
     </div>
-    </div>
 {% endif %}
+    </div>
+
+    {# ---------------- Additional Display divisions (Section D) --------------
+       Empty by default - static/js/case_workspace.js populates them
+       (a picker choosing an active_sources entry, or a Document link/
+       hotlink/Toolbox "open alongside" action elsewhere on the page)
+       and toggles .display-division-populated once one has content.
+       Only ever offers active_sources - a removed Document, or one
+       from another Project, is never an option here, the same
+       authorization boundary the Sources list itself already enforces. #}
+    {% for division_index in [1, 2, 3] %}
+    <div class="display-division" data-division="{{ division_index }}" id="display-division-{{ division_index }}">
+        <div class="display-division-empty">
+            <p class="pane-note">Nothing open in this division.</p>
+            <select class="display-division-picker" data-division-picker="{{ division_index }}">
+                <option value="" selected>Open a Document here&hellip;</option>
+                {% for s in active_sources %}
+                <option value="{{ s.id }}">{{ s.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="display-division-content" hidden></div>
+    </div>
+    {% endfor %}
+    </div>
+    </div>
+
+    {# CLAUDE-P40-E2B, Section D: the one data source
+       static/js/case_workspace.js reads to populate a division -
+       file_url is already resolved through the SAME authorized
+       workspace.source_file route every ?source= view uses (never a
+       raw/guessed URL built client-side), and the list is already
+       active_sources (never a removed or foreign-Project Source). Not
+       secret data - the Sources list already renders every one of
+       these names/ids/kinds in plain HTML on this same page. #}
+    <script type="application/json" id="workspace-active-sources-data">
+        {{ active_sources_json | safe }}
+    </script>
 
 {# ---------------- Contextual Toolbox ---------------------------------------
    CLAUDE-P40-E2, Section A: one right-side Toolbox, replacing the old
@@ -1819,7 +1948,7 @@
    tools: additional <section class="workspace-pane"> blocks inside the
    relevant branch below - not built this stage, see
    governance/specified-unbuilt/. #}
-<aside class="workspace-pane-toolbox">
+<aside class="workspace-pane-toolbox" id="workspace-toolbox-panel">
     <h2>Toolbox</h2>
 
     {% if active_case %}

@@ -101,19 +101,25 @@ class InvestigationAndSourceListingDeboxedTests(unittest.TestCase):
 
 class ConversationDockDeboxedTests(unittest.TestCase):
     """"remove the enclosing Project/Investigation Conversation card"
-    - #conversation-dock previously had a drop-shadow "lift" effect."""
+    - the conversation dock previously had a drop-shadow "lift" effect.
+    CLAUDE-P40-E2B: the CSS selector is now .conversation-dock-panel
+    (grid-area: chat, beneath Display only) rather than a bare
+    #conversation-dock rule - the id stays on the HTML element for
+    JS/anchor purposes, but styling moved to the class."""
 
     def setUp(self):
         self.css = _CSS_PATH.read_text(encoding="utf-8")
-        self.body = _rule_body(self.css, "#conversation-dock")
+        self.body = _rule_body(self.css, ".conversation-dock-panel")
 
     def test_no_box_shadow_card_lift(self):
         self.assertNotIn("box-shadow", self.body)
 
-    def test_background_is_retained_for_sticky_scroll_legibility(self):
-        # Not decorative here - functional: without an opaque
-        # background, content scrolling underneath the sticky dock
-        # would show through its own text.
+    def test_background_is_retained_for_panel_legibility(self):
+        # Not decorative here - functional: Chat sits beside Toolbox
+        # and beneath Display in the grid; an opaque background keeps
+        # its own scrolling conversation thread legible against
+        # whatever is visually adjacent, the same reasoning that
+        # applied when it was sticky-positioned over Display content.
         self.assertIn("background:", self.body)
 
 
