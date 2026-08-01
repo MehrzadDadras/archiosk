@@ -1,5 +1,42 @@
 # Continuation checkpoint
 
+## 2026-07-31 — CLAUDE-P40-E1: exactly one conversation composer
+
+**Commit:** `2fef98e`. Full suite: 1275 passed (was 1261).
+
+P40-E's dock still left three composers competing on Project Home
+("Ask about the project documents"/discuss_object, "Start or continue
+project work"/quick_start, "Talk to this Project" inside the dock/also
+discuss_object) - `_run_conversation_turn`'s own pre-existing docstring
+already called all three "the same conversational entry point, reached
+from three places," so collapsing them lost no capability. Removed the
+first two composer forms entirely; the one remaining (in the dock)
+posts to `quick_start`, which already classified a plain question from
+a real "start work" request before this change. The Tools quick-links
+(Add Document/Start Investigation/Open Source/Create Snapshot) stay as
+the explicit-action alternative. Removed the "Separate from an
+Investigation's own Conversation" explanatory line.
+
+`macros.aperture` ("Discuss this Requirement") no longer renders its
+own second, collapsed composer - now a button that attaches its anchor
+to the one dock composer's hidden fields via a small JS handler and
+focuses it; `quick_start` now accepts that optional anchor and always
+routes to project-level conversation with it attached when present -
+matching what `discuss_object` already did, so an anchored "Discuss
+this" never accidentally spawns a new Investigation.
+
+**Real gap found and fixed by this stage's own stricter tests:**
+selecting a document (`?source=`) previously replaced the dock
+entirely instead of coexisting with it - no composer at all in that
+state. The document viewer now renders alongside Project Home (which
+owns the dock), not instead of it.
+
+14 new tests (`tests/test_p40e1_single_composer.py`). RFI delegation/
+preview and Case-level conversation untouched - neither was ever a
+duplicate composer.
+
+---
+
 ## 2026-07-31 — CLAUDE-P40-E: unified document Workspace, conversation dock, hot-links
 
 **Commits:** `328a778` (unified nav + Workspace layout), `e8ca197`
