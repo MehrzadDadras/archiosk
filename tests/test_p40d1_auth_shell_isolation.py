@@ -222,12 +222,15 @@ class AuthenticatedShellStillRendersNormallyTests(_BaseAuthShellTestCase):
     real authenticated app shell for ordinary pages."""
 
     def test_authenticated_gateway_page_still_shows_the_app_shell(self):
+        # CLAUDE-P40-E2B1: the old side-rail is retired in favor of the
+        # one launcher panel (base.html) - still real chrome, just a
+        # different class name.
         client = self._client_as("shelluser", 1)
         resp = client.get("/gateway")
         self.assertEqual(resp.status_code, 200)
         body = resp.get_data(as_text=True)
         self.assertIn("app-shell", body)
-        self.assertIn("side-rail", body)
+        self.assertIn("launcher-panel", body)
 
     def test_authenticated_home_page_lists_the_real_project(self):
         client = self._client_as("shelluser", 1)

@@ -127,14 +127,20 @@ class SecondNavigationColumnRemovedTests(_BaseWorkspaceTestCase):
         self.assertNotIn('grid-template-areas: "nav conversation findings"', body)
 
     def test_project_navigation_appears_in_unified_left_rail(self):
+        # CLAUDE-P40-E2B1: the old side-rail-project-nav accordion group
+        # (Project/Documents/Work/Governance, each with its own detailed
+        # sub-link list) is superseded by the one launcher panel's
+        # restrained direct launchers (Section B) - no grouping headings,
+        # just Documents/Investigations/Chats under the active Project's
+        # own name.
         client = self._client_as("p40e_owner", 1)
         resp = client.get(f"/projects/{self.project_id}/workspace")
         body = resp.get_data(as_text=True)
-        self.assertIn("side-rail-project-nav", body)
+        self.assertIn("launcher-project-context", body)
         self.assertIn(self.project_id, body)
         self.assertIn(">Documents", body)
-        self.assertIn(">Work<", body)
-        self.assertIn("Decisions &amp; Governance", body)
+        self.assertIn(">Investigations", body)
+        self.assertIn(">Chats<", body)
 
     def test_unified_nav_absent_for_unauthorized_project(self):
         # p40e_outsider is authenticated but neither owner, allow-
@@ -148,7 +154,7 @@ class SecondNavigationColumnRemovedTests(_BaseWorkspaceTestCase):
         client = self._client_as("p40e_owner", 1)
         resp = client.get("/")
         body = resp.get_data(as_text=True)
-        self.assertNotIn("side-rail-project-nav", body)
+        self.assertNotIn("launcher-project-context", body)
 
 
 class WorkspaceHeadingRenameTests(_BaseWorkspaceTestCase):
@@ -188,8 +194,10 @@ class DocumentViewerTests(_BaseWorkspaceTestCase):
         self.assertNotIn("workspace-pane-document", resp.get_data(as_text=True))
 
     def test_document_link_in_sources_list_points_at_workspace_not_a_raw_file(self):
+        # CLAUDE-P40-E2B1: the Sources list lives in the Documents
+        # directory (?view=documents), not bare Project Home.
         client = self._client_as("p40e_owner", 1)
-        resp = client.get(f"/projects/{self.project_id}/workspace")
+        resp = client.get(f"/projects/{self.project_id}/workspace?view=documents")
         body = resp.get_data(as_text=True)
         self.assertIn(f"?source=drawing-source-1", body)
 

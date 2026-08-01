@@ -170,8 +170,11 @@ class FunctionalBoundariesRetainedTests(unittest.TestCase):
         focus_body = _rule_body(self.css, ":focus-visible")
         self.assertIn("outline", focus_body)
 
-    def test_side_rail_active_row_still_has_a_selected_background(self):
-        body = _rule_body(self.css, ".side-rail-link.active")
+    def test_launcher_active_row_still_has_a_selected_background(self):
+        # CLAUDE-P40-E2B1: the old side-rail is retired in favor of the
+        # one launcher panel (base.html) - same active-row treatment,
+        # different class name.
+        body = _rule_body(self.css, ".launcher-link.active")
         self.assertIn("background", body)
 
     def test_flash_error_warning_still_bordered(self):

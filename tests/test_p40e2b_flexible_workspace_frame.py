@@ -110,38 +110,41 @@ class _BaseTestCase(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# 1-4: Lists/Toolbox independent collapse
+# 1-4: Launcher/Toolbox independent collapse
 # ---------------------------------------------------------------------------
+# CLAUDE-P40-E2B1: the Lists panel this stage's own tests originally
+# covered is eliminated (Section E) - its show/hide control is now the
+# application-wide launcher panel's own toggle (base.html), not a
+# Workspace-local grid column. Toolbox is unaffected and stays covered
+# exactly as before.
 
 class IndependentPanelCollapseTests(_BaseTestCase):
-    def test_lists_and_toolbox_have_independent_toggle_controls(self):
+    def test_launcher_and_toolbox_have_independent_toggle_controls(self):
         client = self._client_as("p40e2b_owner", 1)
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
-        self.assertIn('id="lists-toggle-btn"', body)
+        self.assertIn('id="launcher-toggle-btn"', body)
         self.assertIn('id="toolbox-toggle-btn"', body)
-        self.assertIn('id="workspace-lists-panel"', body)
+        self.assertIn('id="launcher-panel"', body)
         self.assertIn('id="workspace-toolbox-panel"', body)
 
-    def test_before_paint_preferences_are_scoped_per_project_independently(self):
+    def test_launcher_preference_is_reviewer_wide_toolbox_preference_is_per_project(self):
+        # CLAUDE-P40-E2B1: a deliberate scope change from the old Lists
+        # panel this replaces - the launcher panel is now present on
+        # every authenticated page (not just this one Project's own
+        # Workspace), so its own preference is reviewer-wide
+        # (beehive:panel:launcher, no project_id). Toolbox stays
+        # Workspace-local, so it keeps its per-project key.
         client = self._client_as("p40e2b_owner", 1)
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
-        # Two SEPARATE localStorage keys, each naming this exact
-        # project - independence is provable here: hiding Lists can
-        # never also be recorded as hiding Toolbox, they are different
-        # keys entirely.
-        self.assertIn(f"beehive:panel:lists:{self.project_id}", body)
+        self.assertIn("beehive:panel:launcher", body)
         self.assertIn(f"beehive:panel:toolbox:{self.project_id}", body)
+        self.assertNotIn(f"beehive:panel:launcher:{self.project_id}", body)
         self.assertNotIn("beehive:panel:lists:{{", body)  # never an unrendered Jinja artifact
 
-    def test_hiding_lists_releases_its_grid_column_to_display(self):
+    def test_hiding_launcher_panel_is_a_plain_class_toggle(self):
         css = _CSS_PATH.read_text(encoding="utf-8")
-        base = _rule_body(css, ".case-workspace")
-        lists_hidden = _rule_body(css, "html.lists-hidden .case-workspace")
-        base_columns = re.search(r"grid-template-columns:\s*([^;]+);", base).group(1)
-        hidden_columns = re.search(r"grid-template-columns:\s*([^;]+);", lists_hidden).group(1)
-        self.assertNotEqual(base_columns, hidden_columns)
-        # one fewer column track than the base three-column layout
-        self.assertEqual(base_columns.count("minmax") - 1, hidden_columns.count("minmax"))
+        body = _rule_body(css, "html.launcher-hidden .launcher-panel")
+        self.assertIn("display: none", body)
 
     def test_hiding_toolbox_releases_its_grid_column_to_display(self):
         css = _CSS_PATH.read_text(encoding="utf-8")
@@ -156,22 +159,30 @@ class IndependentPanelCollapseTests(_BaseTestCase):
         # display:none is what makes a hidden panel's own contents fall
         # OUT of the tab order entirely - opacity:0/visibility:hidden
         # would not (Section B: "must not remain keyboard-focusable
-        # off-screen").
+        # off-screen"). Checked separately now that Launcher (base.html)
+        # and Toolbox (case_workspace.html) are two independent rules,
+        # not one combined selector.
         css = _CSS_PATH.read_text(encoding="utf-8")
-        body = _rule_body(css, "html.lists-hidden .workspace-pane-lists,\nhtml.toolbox-hidden .workspace-pane-toolbox")
-        self.assertIn("display: none", body)
+        self.assertIn("display: none", _rule_body(css, "html.launcher-hidden .launcher-panel"))
+        self.assertIn("display: none", _rule_body(css, "html.toolbox-hidden .workspace-pane-toolbox"))
 
     def test_preferences_are_localstorage_reviewer_specific_not_a_project_write(self):
         # Toggling panels is pure client-side viewing state - the route
         # itself performs no write; GETting the page twice never
         # touches workspace.json (see the dedicated no-mutation test
-        # below), and the JS source only ever calls
+        # below). Both toggle scripts only ever call
         # window.localStorage, never fetch()/a form submit, to persist
         # panel state.
         js = _JS_PATH.read_text(encoding="utf-8")
         panel_toggle_section = js[js.index("setUpPanelToggles"):js.index("setUpPanelToggles") + 2500]
         self.assertIn("window.localStorage", panel_toggle_section)
         self.assertNotIn("fetch(", panel_toggle_section)
+
+        base_html = (Path(__file__).resolve().parent.parent / "templates" / "base.html").read_text(encoding="utf-8")
+        anchor = "getElementById('launcher-toggle-btn')"
+        launcher_toggle_section = base_html[base_html.index(anchor):base_html.index(anchor) + 1500]
+        self.assertIn("window.localStorage", launcher_toggle_section)
+        self.assertNotIn("fetch(", launcher_toggle_section)
 
 
 # ---------------------------------------------------------------------------
@@ -248,8 +259,12 @@ class ChatResizeTests(_BaseTestCase):
     def test_chat_grid_row_never_shares_the_toolbox_column(self):
         css = _CSS_PATH.read_text(encoding="utf-8")
         grid = _rule_body(css, ".case-workspace")
-        self.assertIn('"lists display toolbox"', grid)
-        self.assertIn('"lists chat    toolbox"', grid)
+        # CLAUDE-P40-E2B1: the Lists column is eliminated (Section E) -
+        # the grid is now two columns, Display/Toolbox with Chat beneath
+        # Display only, same "chat never shares the toolbox column"
+        # invariant this test's own name asserts.
+        self.assertIn('"display toolbox"', grid)
+        self.assertIn('"chat    toolbox"', grid)
         # "chat" never appears standalone spanning the full row (the
         # old grid-column: 1/-1 full-row dock is gone).
         panel = _rule_body(css, ".conversation-dock-panel")
@@ -407,14 +422,24 @@ class NarrowScreenFallbackTests(unittest.TestCase):
     def setUp(self):
         self.css = _CSS_PATH.read_text(encoding="utf-8")
 
-    def test_lists_and_toolbox_become_fixed_overlay_drawers_at_narrow_width(self):
-        # NOTE: "@media (max-width: 640px)" is not unique in this
-        # stylesheet (an unrelated, pre-existing Projects-page rule
-        # also uses it) - _rule_body targets the specific selector
-        # this stage added instead of trying to bound an entire media
-        # block by regex.
-        body = _rule_body(self.css, ".workspace-pane-lists,\n    .workspace-pane-toolbox")
-        self.assertIn("position: fixed", body)
+    def test_launcher_and_toolbox_become_fixed_overlay_drawers_at_narrow_width(self):
+        # CLAUDE-P40-E2B1: the Launcher panel's own narrow-screen drawer
+        # rule now lives in main.css alongside the panel's other rules
+        # (app-shell-level), separate from Toolbox's (Workspace-local) -
+        # two independent rules, not one combined selector, since the
+        # panels are no longer siblings in the same grid. Both
+        # ".launcher-panel {" and ".workspace-pane-toolbox {" are each
+        # declared TWICE in this stylesheet (a base rule, then a narrow-
+        # width override) so _rule_body's "first match" helper can't
+        # target the override specifically - matched directly instead.
+        self.assertIn(
+            "@media (max-width: 640px) {\n    .launcher-panel {\n        position: fixed",
+            self.css,
+        )
+        self.assertIn(
+            "@media (max-width: 640px) {\n    .workspace-pane-toolbox {\n        position: fixed",
+            self.css,
+        )
 
     def test_multi_division_layouts_collapse_to_one_column_at_medium_width(self):
         match = re.search(r"@media \(max-width: 1080px\) \{(.+?)\n\}\n\n", self.css, re.DOTALL)

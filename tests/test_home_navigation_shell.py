@@ -86,17 +86,21 @@ class HomeNavigationShellTests(unittest.TestCase):
         # the sidebar's Projects tree, not a second time in page content.
         self.assertEqual(body.count("rfp.md"), 1)
 
-    def test_nav_rail_present_with_collapsed_default_and_toggle(self):
+    def test_nav_rail_present_with_toggle(self):
+        # CLAUDE-P40-E2B1: the old two-state (icon-only/labeled) side-rail
+        # and its own hamburger toggle are retired - the one launcher
+        # panel now hides/shows in full via the top bar's "Lists" toggle
+        # (a reviewer-wide, not per-project, localStorage preference).
         client = self.flask_app.test_client()
         self._login(client)
 
         response = client.get("/")
         body = response.get_data(as_text=True)
 
-        self.assertIn('id="nav-toggle"', body)
-        self.assertIn("side-rail", body)
-        self.assertIn("beehive:nav:expanded", body)
-        self.assertIn("nav-expanded", body)
+        self.assertIn('id="launcher-toggle-btn"', body)
+        self.assertIn('id="launcher-panel"', body)
+        self.assertIn("beehive:panel:launcher", body)
+        self.assertNotIn('id="nav-toggle"', body)
 
     def test_nav_rail_only_links_to_real_destinations(self):
         client = self.flask_app.test_client()
@@ -105,9 +109,8 @@ class HomeNavigationShellTests(unittest.TestCase):
         response = client.get("/")
         body = response.get_data(as_text=True)
 
-        self.assertIn(">Home<", body)
         self.assertIn(">Projects<", body)
-        self.assertIn(">New Project<", body)
+        self.assertIn(">+ New Project<", body)
         # No global nav links were fabricated for destinations that only
         # exist nested inside a specific project's Case Workspace.
         self.assertNotIn(">Sources<", body)
@@ -126,8 +129,14 @@ class HomeNavigationShellTests(unittest.TestCase):
         response = client.get(f"/projects/{project_id}/workspace")
         body = response.get_data(as_text=True)
 
-        self.assertIn("Current Project", body)
+        # CLAUDE-P40-E2B1: current-Project context now shows in the
+        # application-wide top bar's breadcrumb (workspace-topbar-project)
+        # and in the launcher panel's own active-project highlighting -
+        # there is no literal "Current Project" label anywhere, but the
+        # project's own identity is genuinely present in both places.
+        self.assertIn("rfp.md", body)
         self.assertIn(project_id, body)
+        self.assertIn("launcher-project-item active", body)
 
     def test_non_admin_does_not_see_new_project_link(self):
         client = self.flask_app.test_client()

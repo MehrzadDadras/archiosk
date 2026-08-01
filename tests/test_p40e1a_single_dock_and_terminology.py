@@ -216,31 +216,27 @@ class DraftAndScrollPerThreadTests(_BaseDockTestCase):
 
 class InvestigationListingTests(_BaseDockTestCase):
     def test_every_authorized_investigation_title_is_listed_under_work(self):
-        # CLAUDE-P40-E2B-QA-CLOSE: the side-rail's own per-Investigation
-        # name links (side-rail-project-sublink) were removed - P40-E2B
-        # brought back a real Lists column (case_workspace.html's own
-        # #cases accordion) that already renders the full, canonical
-        # name/status/detail list, and keeping both meant two
-        # "Investigation list" surfaces showing the same names at once.
-        # The side-rail's "Work" group now links to that ONE canonical
-        # list (with a count) instead of duplicating it - "every
-        # authorized Investigation's title is reachable from the nav"
-        # still holds, just through Lists' own accordion rather than a
-        # second copy in the side-rail.
+        # CLAUDE-P40-E2B1: the old Workspace-local Lists column
+        # (case_workspace.html's #cases accordion, permanently visible
+        # alongside everything else) is eliminated - the launcher panel's
+        # "Investigations" link now opens this same canonical listing as
+        # its own launcher-projected Display directory (?view=
+        # investigations), rather than a second, permanently-visible nav
+        # column duplicating it.
         client = self._client_as("p40e1a_owner", 1)
         self._create_investigation(client, title="Draft 1")
         client2 = self._client_as("p40e1a_owner", 1)
         client2.post(f"/projects/{self.project_id}/workspace/cases", data={"title": "Schedule Conflict Review", "objective": ""})
 
-        body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
-        self.assertIn("Draft 1", body)
-        self.assertIn("Schedule Conflict Review", body)
-        self.assertIn('class="case-item', body)
-        self.assertIn('href="{}#cases">Investigations <span class="side-rail-project-count">2</span></a>'.format(
+        home_body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
+        self.assertIn('href="{}?view=investigations">Investigations <span class="launcher-count">2</span></a>'.format(
             f"/projects/{self.project_id}/workspace"
-        ), body)
-        # never duplicated as a second, side-rail-only name link
-        self.assertNotIn("side-rail-project-sublink", body)
+        ), home_body)
+
+        dir_body = client.get(f"/projects/{self.project_id}/workspace?view=investigations").get_data(as_text=True)
+        self.assertIn("Draft 1", dir_body)
+        self.assertIn("Schedule Conflict Review", dir_body)
+        self.assertIn('class="case-item', dir_body)
 
     def test_newly_created_investigation_appears_immediately_and_becomes_active(self):
         client = self._client_as("p40e1a_owner", 1)
@@ -256,10 +252,15 @@ class InvestigationListingTests(_BaseDockTestCase):
         # just a nav entry, opened in the main Display panel.
         self.assertIn('class="workspace-pane workspace-pane-conversation"', body)
         self.assertIn("<h2>Draft 1</h2>", body)
-        # CLAUDE-P40-E2B-QA-CLOSE: active-Investigation highlighting now
-        # lives only in Lists' own #cases list (case-item active) - the
-        # side-rail no longer renders a second, per-name active marker.
-        self.assertIn('class="case-item active"', body)
+        # CLAUDE-P40-E2B1, Section D: "highlight the originating
+        # launcher" - the launcher panel's own "Investigations" link
+        # stays highlighted while any Investigation is open, even though
+        # the directory listing itself isn't rendered alongside it
+        # anymore (no second navigation column - Section E).
+        import re
+        match = re.search(r'<a class="launcher-link( active)?"\s+href="[^"]*view=investigations">Investigations', body)
+        self.assertIsNotNone(match)
+        self.assertEqual(match.group(1), " active")
 
 
 class UnauthorizedInvestigationsHiddenTests(_BaseDockTestCase):
@@ -297,8 +298,11 @@ class UnauthorizedInvestigationsHiddenTests(_BaseDockTestCase):
 
 class NoCaseTerminologyTests(_BaseDockTestCase):
     def test_creation_form_says_investigation_not_case(self):
+        # CLAUDE-P40-E2B1, Section C: "New Investigation creation occurs
+        # in this Display view" - the Investigations directory
+        # (?view=investigations), not Project Home.
         client = self._client_as("p40e1a_owner", 1)
-        body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
+        body = client.get(f"/projects/{self.project_id}/workspace?view=investigations").get_data(as_text=True)
         self.assertIn("New Investigation", body)
         self.assertIn("Investigation title", body)
         self.assertIn("Create Investigation", body)

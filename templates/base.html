@@ -8,202 +8,145 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/tokens.css') }}?v={{ static_version }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v={{ static_version }}">
     <script>
-        // Applied before first paint (inline, in <head>) so expanded/collapsed
-        // navigation never flashes the wrong state on a fresh page load - this
-        // is a full server-rendered page reload per navigation, not an SPA.
+        // Applied before first paint (inline, in <head>) so the launcher
+        // panel's own show/hide preference never flashes the wrong state on
+        // a fresh page load - a full server-rendered page reload per
+        // navigation, not an SPA. CLAUDE-P40-E2B1: this preference is now
+        // reviewer-wide (one launcher panel, shared across every
+        // authenticated page), not project-scoped like the old per-Workspace
+        // Lists toggle it replaces - see main.css's own note at
+        // html.launcher-hidden.
         try {
-            if (window.localStorage.getItem('beehive:nav:expanded') === 'true') {
-                document.documentElement.classList.add('nav-expanded');
+            if (window.localStorage.getItem('beehive:panel:launcher') === 'hidden') {
+                document.documentElement.classList.add('launcher-hidden');
             }
-        } catch (e) { /* localStorage unavailable - default to collapsed */ }
+        } catch (e) { /* localStorage unavailable - default to shown */ }
     </script>
     {% block extra_head %}{% endblock %}
 </head>
 <body>
     <div class="blueprint-grid"></div>
 
-    {% if authenticated %}
-    <div class="search-overlay" id="search-overlay" hidden>
-        <div class="search-overlay-backdrop" data-search-close></div>
-        <div class="search-panel" role="dialog" aria-modal="true" aria-label="Search">
-            <form class="search-panel-form" id="search-form">
-                <span class="search-panel-icon" aria-hidden="true">
-                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
-                        <circle cx="8.5" cy="8.5" r="6"></circle>
-                        <line x1="13.2" y1="13.2" x2="18" y2="18"></line>
-                    </svg>
-                </span>
-                <input type="search" id="search-input" name="q" placeholder="Search projects&hellip;" autocomplete="off" aria-label="Search">
-                <button type="button" class="search-panel-close" id="search-close" aria-label="Close search">
-                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
-                        <line x1="4" y1="4" x2="16" y2="16"></line>
-                        <line x1="16" y1="4" x2="4" y2="16"></line>
-                    </svg>
-                </button>
-            </form>
-            <div class="search-panel-results" id="search-results">
-                <p class="search-panel-hint">Search across your projects. More object types are coming.</p>
-            </div>
-        </div>
-    </div>
-    {% endif %}
-
     <div class="app-shell">
+        {# ---------------- Application-wide top bar (CLAUDE-P40-E2B1, Section F) ----
+           Moved here from case_workspace.html (was Workspace-page-local) so
+           it genuinely spans the full authenticated shell - Launcher Lists,
+           Display, Toolbox - on every authenticated page, not just the
+           Workspace. Never rendered for the standalone auth shell (login/
+           forgot-password/reset-password use templates/auth_shell.html,
+           which does not extend this file at all - see that template's own
+           isolation note). Display Layout / Toolbox toggle / document
+           context only mean anything inside an open Project's Workspace
+           (project_id/workspace are real render-context variables
+           show_workspace passes to case_workspace.html, never re-derived
+           here), so they're gated on that the same way the old side-rail's
+           per-project section already was. #}
         {% if authenticated %}
-        <nav class="side-rail" aria-label="Primary">
-            <div class="side-rail-top">
-                <a class="side-rail-brand" href="{{ url_for('portal.index') }}">
-                    <span class="side-rail-brand-label">Archiosk</span>
-                </a>
-                <div class="side-rail-top-controls">
-                    <button type="button" id="search-toggle" class="nav-toggle" aria-label="Search" aria-haspopup="dialog" aria-expanded="false">
-                        <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
-                            <circle cx="8.5" cy="8.5" r="6"></circle>
-                            <line x1="13.2" y1="13.2" x2="18" y2="18"></line>
-                        </svg>
-                    </button>
-                    <button type="button" id="nav-toggle" class="nav-toggle" aria-label="Expand navigation" aria-expanded="false">
-                        <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
-                            <line x1="2.5" y1="5.5" x2="17.5" y2="5.5"></line>
-                            <line x1="2.5" y1="10" x2="17.5" y2="10"></line>
-                            <line x1="2.5" y1="14.5" x2="17.5" y2="14.5"></line>
-                        </svg>
-                    </button>
-                </div>
+        <div class="workspace-topbar">
+            <div class="workspace-topbar-identity">
+                <a class="workspace-topbar-brand" href="{{ url_for('portal.index') }}">Archiosk</a>
+                {% if project_id is defined and workspace is defined %}
+                <span class="workspace-topbar-context">
+                    <span class="workspace-topbar-project">{{ workspace.display_title or document.filename }}</span>
+                    {% if active_case %}
+                    <span class="workspace-topbar-sep" aria-hidden="true">/</span>
+                    <span class="workspace-topbar-doc">{{ active_case.title }}</span>
+                    {% elif selected_source %}
+                    <span class="workspace-topbar-sep" aria-hidden="true">/</span>
+                    <span class="workspace-topbar-doc">{{ selected_source.name }}</span>
+                    {% if selected_source.removed_at %}<span class="workspace-topbar-badge">removed</span>{% endif %}
+                    {% elif directory_view %}
+                    <span class="workspace-topbar-sep" aria-hidden="true">/</span>
+                    <span class="workspace-topbar-doc">{{ directory_view|capitalize }}</span>
+                    {% endif %}
+                </span>
+                {% endif %}
             </div>
+            <div class="workspace-topbar-controls">
+                <button type="button" id="launcher-toggle-btn" class="workspace-topbar-btn" aria-expanded="true" aria-controls="launcher-panel">Lists</button>
 
-            <div class="side-rail-links">
-                <a class="side-rail-link{% if request.path == url_for('portal.index') %} active{% endif %}" href="{{ url_for('portal.index') }}">
-                    <span class="side-rail-icon" aria-hidden="true">&#8962;</span>
-                    <span class="side-rail-label">Home</span>
-                </a>
-                <!-- Category node: expand/collapse only, never navigates. Object
-                     nodes (individual projects) below it are the only things
-                     that activate a project - this is now the one canonical
-                     project selector; the old separate "Current Project" /
-                     "Recent Projects" blocks are gone, and the active project
-                     is shown by highlighting its own row here instead. -->
-                <details class="side-rail-tree" open>
-                    <summary class="side-rail-link side-rail-tree-summary">
-                        <span class="side-rail-icon" aria-hidden="true">&#9638;</span>
-                        <span class="side-rail-label">Projects</span>
-                    </summary>
-                    <div class="side-rail-tree-items">
-                        {% for p in nav_recent_projects %}
-                        <a class="side-rail-link side-rail-tree-item{% if project_id == p.project_id %} active{% endif %}"
-                           href="{{ url_for('workspace.show_workspace', project_id=p.project_id) }}">
-                            <span class="side-rail-label">{{ p.display_name }}</span>
-                        </a>
-                        {% endfor %}
-                        {% if is_admin %}
-                        <a class="side-rail-link side-rail-tree-item" href="{{ url_for('portal.upload') }}">
-                            <span class="side-rail-icon" aria-hidden="true">+</span>
-                            <span class="side-rail-label">New Project</span>
-                        </a>
-                        {% endif %}
+                {% if project_id is defined and workspace is defined %}
+                <details class="workspace-layout-menu" id="workspace-layout-menu">
+                    <summary class="workspace-topbar-btn workspace-layout-summary">Display Layout</summary>
+                    <div class="workspace-layout-options" role="group" aria-label="Display Layout">
+                        <button type="button" class="workspace-layout-option" data-display-layout="single">Single</button>
+                        <button type="button" class="workspace-layout-option" data-display-layout="side-by-side">Side by side</button>
+                        <button type="button" class="workspace-layout-option" data-display-layout="stacked">Stacked</button>
+                        <button type="button" class="workspace-layout-option" data-display-layout="grid">Four-panel grid</button>
                     </div>
                 </details>
 
-                {# CLAUDE-P40-E: the second, permanently-visible project-
-                   context column that used to live inside case_workspace.
-                   html (.workspace-pane-nav) is gone - its useful entries
-                   now live here, beneath the active project's own row,
-                   in the SAME unified nav rail (not a separate panel).
-                   Only ever rendered on a workspace page (project_id/
-                   workspace/document are real render-context variables
-                   show_workspace already passes to case_workspace.html -
-                   never re-derived here) - every other page's nav is
-                   unaffected. Detailed content (the actual forms/lists
-                   these entries summarize) stays exactly where it was
-                   moved to: the main Workspace pane's own default/empty-
-                   state content, at the same html_id anchors these links
-                   target - nothing here duplicates that content, this is
-                   navigation only. #}
+                <button type="button" id="toolbox-toggle-btn" class="workspace-topbar-btn" aria-expanded="true" aria-controls="workspace-toolbox-panel">Toolbox</button>
+                {% endif %}
+
+                <details class="workspace-topbar-overflow" id="workspace-overflow-menu">
+                    <summary class="workspace-topbar-btn workspace-overflow-summary" aria-label="More actions">&hellip;</summary>
+                    <div class="workspace-overflow-options">
+                        {% if project_id is defined and workspace is defined %}
+                        <button type="button" id="collapse-all-btn" class="workspace-overflow-item">Collapse All</button>
+                        {% if active_case or selected_source or directory_view %}
+                        <a class="workspace-overflow-item" href="{{ url_for('workspace.show_workspace', project_id=project_id) }}">&larr; Back to Project</a>
+                        {% endif %}
+                        {% endif %}
+                        <a class="workspace-overflow-item" href="{{ url_for('portal.removed_projects') }}">Removed Projects</a>
+                    </div>
+                </details>
+            </div>
+        </div>
+        {% endif %}
+
+        <div class="app-shell-body">
+        {% if authenticated %}
+        {# ---------------- The one left launcher panel (CLAUDE-P40-E2B1) -----------
+           Restrained orientation + direct launchers only - never a full
+           listing of Documents/Investigations/Requirements/History/
+           Governance (those are Display views or Toolbox tools now, see
+           case_workspace.html). This is the single physical left panel for
+           the whole authenticated application; the old per-Workspace
+           .workspace-pane-lists column is gone (Section E). #}
+        <nav class="launcher-panel" id="launcher-panel" aria-label="Primary">
+            <div class="launcher-panel-body">
+                <div class="launcher-section">
+                    <a class="launcher-heading{% if request.path == url_for('portal.projects_list') %} active{% endif %}" href="{{ url_for('portal.projects_list') }}">Projects</a>
+                    <div class="launcher-items">
+                        {% for p in nav_recent_projects %}
+                        <a class="launcher-link launcher-project-item{% if project_id is defined and project_id == p.project_id %} active{% endif %}"
+                           href="{{ url_for('workspace.show_workspace', project_id=p.project_id) }}">{{ p.display_name }}</a>
+                        {% endfor %}
+                    </div>
+                    {% if is_admin %}
+                    <a class="launcher-link launcher-new-project" href="{{ url_for('portal.upload') }}">+ New Project</a>
+                    {% endif %}
+                </div>
+
+                {# Only ever rendered on an open Project's Workspace page -
+                   these are direct launchers into that Project's own
+                   directories (Section C), never the listings themselves. #}
                 {% if project_id is defined and workspace is defined %}
-                {% set needs_attention_count = needs_attention_view|map(attribute='findings')|map('length')|sum %}
-                <div class="side-rail-project-nav">
-                    <p class="side-rail-project-heading">{{ workspace.display_title or document.filename }}</p>
-                    <p class="side-rail-project-id mono">{{ project_id }}</p>
-
-                    <details class="side-rail-project-group accordion-section" data-accordion-group="side-rail-project" data-accordion-id="side-rail-project-overview">
-                        <summary class="side-rail-project-group-summary">Project</summary>
-                        <div class="side-rail-project-group-items">
-                            <a class="side-rail-project-link" href="{{ url_for('workspace.show_workspace', project_id=project_id) }}#project-overview">Project Overview</a>
-                            <a class="side-rail-project-link" href="{{ url_for('workspace.show_workspace', project_id=project_id) }}#instructions">Project Instructions</a>
-                            <a class="side-rail-project-link" href="{{ url_for('workspace.show_workspace', project_id=project_id) }}#project-management-settings">Project Controls</a>
-                        </div>
-                    </details>
-
-                    <details class="side-rail-project-group accordion-section" data-accordion-group="side-rail-project" data-accordion-id="side-rail-project-documents">
-                        <summary class="side-rail-project-group-summary">Documents <span class="side-rail-project-count">{{ workspace.sources|length }}</span></summary>
-                        <div class="side-rail-project-group-items">
-                            <a class="side-rail-project-link" href="{{ url_for('workspace.show_workspace', project_id=project_id) }}#project-sources">Documents &amp; Drawings</a>
-                            {# Section K: Add Addendum's future home, no dead/misleading control -
-                               see governance/specified-unbuilt/add-addendum-facility.md. #}
-                            <span class="side-rail-project-link side-rail-project-link-disabled" title="Specified, not yet built - see governance/specified-unbuilt/add-addendum-facility.md">Addenda (not yet available)</span>
-                        </div>
-                    </details>
-
-                    <details class="side-rail-project-group accordion-section" data-accordion-group="side-rail-project" data-accordion-id="side-rail-project-work" open>
-                        <summary class="side-rail-project-group-summary">Work</summary>
-                        <div class="side-rail-project-group-items">
-                            {# CLAUDE-P40-E2B-QA-CLOSE: CLAUDE-P40-E1A, Section
-                               B originally listed every authorized
-                               Investigation's own name directly here - "a
-                               bare count alone left no way to see... any
-                               specific one... from the nav." That reasoning
-                               no longer holds: P40-E2B brought back a real,
-                               always-reachable Lists column
-                               (case_workspace.html's own #cases accordion,
-                               the SAME visible_cases list) with the full
-                               name/status/visibility/outcome detail this
-                               side-rail entry could only ever show a bare
-                               name for - keeping both meant two "Investigation
-                               list" surfaces rendering the same names
-                               simultaneously, right next to each other, on
-                               the one page where both are ever shown. This
-                               is now a single link (count only, no per-name
-                               enumeration) into Lists' own canonical list -
-                               "unified navigation" (this side-rail's own
-                               purpose) means a reviewer can still always get
-                               there from here, not that the names have to
-                               be duplicated to do it. #}
-                            <a class="side-rail-project-link" href="{{ url_for('workspace.show_workspace', project_id=project_id) }}#cases">Investigations <span class="side-rail-project-count">{{ visible_cases|length }}</span></a>
-                            <a class="side-rail-project-link" href="{{ url_for('workspace.show_workspace', project_id=project_id) }}#needs-attention">Needs Attention <span class="side-rail-project-count">{{ needs_attention_count }}</span></a>
-                            <a class="side-rail-project-link" href="{{ url_for('workspace.show_workspace', project_id=project_id) }}#recent-focus">Recent Focus</a>
-                        </div>
-                    </details>
-
-                    <details class="side-rail-project-group accordion-section" data-accordion-group="side-rail-project" data-accordion-id="side-rail-project-governance">
-                        <summary class="side-rail-project-group-summary">Decisions &amp; Governance</summary>
-                        <div class="side-rail-project-group-items">
-                            <a class="side-rail-project-link" href="{{ url_for('workspace.show_workspace', project_id=project_id) }}#investigation-quality">Investigation Quality</a>
-                            <a class="side-rail-project-link" href="{{ url_for('workspace.show_workspace', project_id=project_id) }}#participants">Participants &amp; Perspective</a>
-                            <a class="side-rail-project-link" href="{{ url_for('workspace.show_workspace', project_id=project_id) }}#go-no-go">Go / No-Go</a>
-                            <a class="side-rail-project-link" href="{{ url_for('workspace.show_workspace', project_id=project_id) }}#accepted-knowledge">Accepted Knowledge <span class="side-rail-project-count">{{ accepted_knowledge|length }}</span></a>
-                        </div>
-                    </details>
+                <div class="launcher-section launcher-project-context">
+                    <p class="launcher-project-heading">{{ workspace.display_title or document.filename }}</p>
+                    <a class="launcher-link{% if directory_view == 'documents' or selected_source %} active{% endif %}"
+                       href="{{ url_for('workspace.show_workspace', project_id=project_id, view='documents') }}">Documents <span class="launcher-count">{{ active_sources|length }}</span></a>
+                    <a class="launcher-link{% if directory_view == 'investigations' or active_case %} active{% endif %}"
+                       href="{{ url_for('workspace.show_workspace', project_id=project_id, view='investigations') }}">Investigations <span class="launcher-count">{{ visible_cases|length }}</span></a>
+                    <a class="launcher-link{% if directory_view == 'chats' %} active{% endif %}"
+                       href="{{ url_for('workspace.show_workspace', project_id=project_id, view='chats') }}">Chats</a>
                 </div>
                 {% endif %}
             </div>
 
-            <div class="side-rail-bottom">
+            <div class="launcher-identity">
+                {% if current_username %}<p class="launcher-identity-name">{{ current_username }}</p>{% endif %}
                 {% if is_admin %}
-                <a class="side-rail-link{% if request.path.startswith('/security') %} active{% endif %}" href="{{ url_for('security.department_home') }}">
-                    <span class="side-rail-icon" aria-hidden="true">&#128274;</span>
-                    <span class="side-rail-label">Security</span>
-                </a>
+                <a class="launcher-link" href="{{ url_for('security.department_home') }}">Security</a>
                 {% endif %}
-                <a class="side-rail-link" href="{{ url_for('portal.logout') }}">
-                    <span class="side-rail-icon" aria-hidden="true">&#9099;</span>
-                    <span class="side-rail-label">Sign out</span>
-                </a>
+                <a class="launcher-link" href="{{ url_for('portal.logout') }}">Sign out</a>
             </div>
         </nav>
         {% else %}
         <!-- True zero state (State 0 - Unauthenticated): the authenticated
-             shell (nav rail, search, project/workspace controls) is not
-             rendered at all pre-auth, not merely hidden/blurred - see
+             shell (launcher panel, top bar, project/workspace controls) is
+             not rendered at all pre-auth, not merely hidden/blurred - see
              memory note project-entry-state-invariant. Only a minimal
              identity mark carries brand presence here. -->
         <div class="entry-shell-brand">
@@ -225,119 +168,37 @@
                 {% block content %}{% endblock %}
             </main>
         </div>
+        </div>
     </div>
 
     <script>
         (function () {
-            var toggle = document.getElementById('nav-toggle');
+            var toggle = document.getElementById('launcher-toggle-btn');
+            var html = document.documentElement;
             if (!toggle) return;
+            function applyState(hidden) {
+                toggle.setAttribute('aria-expanded', hidden ? 'false' : 'true');
+                toggle.setAttribute('aria-label', hidden ? 'Show Lists' : 'Hide Lists');
+            }
+            function setHidden(hidden) {
+                html.classList.toggle('launcher-hidden', hidden);
+                applyState(hidden);
+                try { window.localStorage.setItem('beehive:panel:launcher', hidden ? 'hidden' : 'shown'); } catch (e) { /* ignore */ }
+            }
+            applyState(html.classList.contains('launcher-hidden'));
             toggle.addEventListener('click', function () {
-                var expanded = document.documentElement.classList.toggle('nav-expanded');
-                toggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
-                try { window.localStorage.setItem('beehive:nav:expanded', expanded ? 'true' : 'false'); } catch (e) { /* ignore */ }
+                setHidden(!html.classList.contains('launcher-hidden'));
             });
-            toggle.setAttribute('aria-expanded', document.documentElement.classList.contains('nav-expanded') ? 'true' : 'false');
-        })();
-    </script>
-
-    <script>
-        (function () {
-            var overlay = document.getElementById('search-overlay');
-            var openBtn = document.getElementById('search-toggle');
-            if (!overlay || !openBtn) return;
-
-            var closeBtn = document.getElementById('search-close');
-            var backdrop = overlay.querySelector('[data-search-close]');
-            var input = document.getElementById('search-input');
-            var form = document.getElementById('search-form');
-            var results = document.getElementById('search-results');
-
-            function openSearch() {
-                overlay.hidden = false;
-                openBtn.setAttribute('aria-expanded', 'true');
-                if (input) input.focus();
-            }
-
-            function closeSearch() {
-                overlay.hidden = true;
-                openBtn.setAttribute('aria-expanded', 'false');
-                openBtn.focus();
-            }
-
-            openBtn.addEventListener('click', openSearch);
-            if (closeBtn) closeBtn.addEventListener('click', closeSearch);
-            if (backdrop) backdrop.addEventListener('click', closeSearch);
+            // CLAUDE-P40-E2B1, Section G: on narrow screens the launcher
+            // panel renders as an overlay drawer (main.css's own
+            // max-width: 640px rules) - Escape closes it, the same
+            // keyboard affordance the Toolbox drawer (static/js/
+            // case_workspace.js) already supports.
             document.addEventListener('keydown', function (e) {
-                if (e.key === 'Escape' && !overlay.hidden) closeSearch();
+                if (e.key !== 'Escape') return;
+                if (window.matchMedia('(min-width: 641px)').matches) return;
+                if (!html.classList.contains('launcher-hidden')) setHidden(true);
             });
-
-            function renderHint(text) {
-                results.textContent = '';
-                var p = document.createElement('p');
-                p.className = 'search-panel-hint';
-                p.textContent = text;
-                results.appendChild(p);
-            }
-
-            function renderResults(list) {
-                results.textContent = '';
-                if (!list.length) {
-                    var empty = document.createElement('p');
-                    empty.className = 'search-panel-empty';
-                    empty.textContent = 'No matches.';
-                    results.appendChild(empty);
-                    return;
-                }
-                list.forEach(function (r) {
-                    var a = document.createElement('a');
-                    a.className = 'search-result';
-                    a.href = r.url;
-
-                    var kind = document.createElement('span');
-                    kind.className = 'search-result-kind';
-                    kind.textContent = r.kind;
-
-                    var title = document.createElement('span');
-                    title.className = 'search-result-title';
-                    title.textContent = r.title;
-
-                    var subtitle = document.createElement('span');
-                    subtitle.className = 'search-result-subtitle';
-                    subtitle.textContent = r.subtitle;
-
-                    a.appendChild(kind);
-                    a.appendChild(title);
-                    a.appendChild(subtitle);
-                    results.appendChild(a);
-                });
-            }
-
-            var debounceTimer = null;
-            function runSearch(query) {
-                if (!query) {
-                    renderHint('Search across your projects. More object types are coming.');
-                    return;
-                }
-                fetch('/search?q=' + encodeURIComponent(query))
-                    .then(function (r) { return r.json(); })
-                    .then(function (data) { renderResults(data.results || []); })
-                    .catch(function () { renderHint('Search is unavailable right now.'); });
-            }
-
-            if (input) {
-                input.addEventListener('input', function () {
-                    clearTimeout(debounceTimer);
-                    var query = input.value.trim();
-                    debounceTimer = setTimeout(function () { runSearch(query); }, 200);
-                });
-            }
-            if (form) {
-                form.addEventListener('submit', function (e) {
-                    e.preventDefault();
-                    clearTimeout(debounceTimer);
-                    runSearch(input.value.trim());
-                });
-            }
         })();
     </script>
     <script>

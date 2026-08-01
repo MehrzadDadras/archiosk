@@ -3,80 +3,24 @@
 
 {% block title %}Workspace &mdash; {{ document.filename }}{% endblock %}
 
-{# CLAUDE-P40-E2B, Section B: the Lists/Toolbox hide/show preference is
-   applied to <html> here, before .case-workspace exists in the DOM and
-   before first paint - the identical "avoid a flash of the wrong
-   layout" pattern base.html's own nav-expanded script already uses,
-   for the identical reason (a class can't be set on an element that
-   doesn't exist yet at <head>-parse time). Reviewer-specific
-   (localStorage, keyed by project_id) - never a ProjectWorkspace
-   write; ordinary viewing/layout preference, not a governed action. #}
+{# CLAUDE-P40-E2B1: the Launcher panel's show/hide preference is now
+   handled globally, in base.html's own extra_head script (reviewer-wide,
+   not per-project - see that template's own note). Toolbox remains the
+   one per-Workspace, project-keyed collapse preference here. #}
 {% block extra_head %}
 <script>
     try {
-        if (window.localStorage.getItem('beehive:panel:lists:{{ project_id }}') === 'hidden') {
-            document.documentElement.classList.add('lists-hidden');
-        }
         if (window.localStorage.getItem('beehive:panel:toolbox:{{ project_id }}') === 'hidden') {
             document.documentElement.classList.add('toolbox-hidden');
         }
-    } catch (e) { /* localStorage unavailable - default to both shown */ }
+    } catch (e) { /* localStorage unavailable - default to shown */ }
 </script>
 {% endblock %}
 
 {% block content %}
-{# ---------------- Full-width top bar (CLAUDE-P40-E2B, Section A) -----------
-   Deliberately does NOT duplicate anything the side-rail (templates/
-   base.html) already provides - no Home link, no search magnifier, no
-   Open Project/Project Gateway entrance, no second brand card. This
-   bar is Workspace-page-specific: identity + current Project/Document
-   context (a compact breadcrumb, not a repeated nav), the Lists/
-   Toolbox show/hide controls, the Display Layout menu (Section D), a
-   contextual Document badge when one is selected, and a small overflow
-   menu for what used to be the page_header's own action row (Collapse
-   All / Back to Project) this bar replaces. #}
-<div class="workspace-topbar">
-    <div class="workspace-topbar-identity">
-        <span class="workspace-topbar-brand" aria-hidden="true">Archiosk</span>
-        <span class="workspace-topbar-context">
-            <span class="workspace-topbar-project">{{ workspace.display_title or document.filename }}</span>
-            {% if active_case %}
-            <span class="workspace-topbar-sep" aria-hidden="true">/</span>
-            <span class="workspace-topbar-doc">{{ active_case.title }}</span>
-            {% elif selected_source %}
-            <span class="workspace-topbar-sep" aria-hidden="true">/</span>
-            <span class="workspace-topbar-doc">{{ selected_source.name }}</span>
-            {% if selected_source.removed_at %}<span class="workspace-topbar-badge">removed</span>{% endif %}
-            {% endif %}
-        </span>
-    </div>
-    <div class="workspace-topbar-controls">
-        <button type="button" id="lists-toggle-btn" class="workspace-topbar-btn" aria-expanded="true">Lists</button>
-
-        <details class="workspace-layout-menu" id="workspace-layout-menu">
-            <summary class="workspace-topbar-btn workspace-layout-summary">Display Layout</summary>
-            <div class="workspace-layout-options" role="group" aria-label="Display Layout">
-                <button type="button" class="workspace-layout-option" data-display-layout="single">Single</button>
-                <button type="button" class="workspace-layout-option" data-display-layout="side-by-side">Side by side</button>
-                <button type="button" class="workspace-layout-option" data-display-layout="stacked">Stacked</button>
-                <button type="button" class="workspace-layout-option" data-display-layout="grid">Four-panel grid</button>
-            </div>
-        </details>
-
-        <button type="button" id="toolbox-toggle-btn" class="workspace-topbar-btn" aria-expanded="true">Toolbox</button>
-
-        <details class="workspace-topbar-overflow" id="workspace-overflow-menu">
-            <summary class="workspace-topbar-btn workspace-overflow-summary" aria-label="More Workspace actions">&hellip;</summary>
-            <div class="workspace-overflow-options">
-                <button type="button" id="collapse-all-btn" class="workspace-overflow-item">Collapse All</button>
-                {% if active_case %}
-                <a class="workspace-overflow-item" href="{{ url_for('workspace.show_workspace', project_id=project_id) }}">&larr; Back to Project</a>
-                {% endif %}
-                <a class="workspace-overflow-item" href="{{ url_for('portal.removed_projects') }}">Removed Projects</a>
-            </div>
-        </details>
-    </div>
-</div>
+{# CLAUDE-P40-E2B1, Section F: the full-width top bar now lives in
+   base.html (application-shell level, spanning Launcher Lists/Display/
+   Toolbox) - not here. See base.html's own note at .workspace-topbar. #}
 
 {# CLAUDE-P40-E2, Section A: the right column is now a persistent,
    contextual Toolbox (see .workspace-pane-toolbox below) - Findings is
@@ -87,23 +31,44 @@
    applies; the class stays defined in CSS only for the narrow-width
    collapse. #}
 <div class="case-workspace" data-project-id="{{ project_id }}">
-    {# ---------------- LISTS: project reference material -----------------
-       CLAUDE-P40-E2B, Section A/B: an independently-collapsible column
-       again (see .case-workspace in main.css) - P40-E had folded this
-       into the same flowing column as the active content specifically
-       because it was PERMANENTLY visible; now that it hides/shows on
-       its own (id="workspace-lists-panel", toggled by
-       static/js/case_workspace.js's lists-toggle-btn), the original
-       complaint no longer applies to bringing the column back.
-       Requirements/Sources/RFIs/Accepted Knowledge/History are genuine
+    {# ---------------- DISPLAY: active Investigation / launcher-projected
+       directory / selected Document / Project Home (CLAUDE-P40-E2B1,
+       Section A/C) - the one left launcher panel (base.html) now opens
+       everything here rather than into a second Lists column, which is
+       eliminated (Section E). #}
+    <div class="workspace-pane-display" id="workspace-display-panel">
+    <div class="display-divisions" id="display-divisions" data-layout="single">
+    <div class="display-division display-division-primary active" data-division="0" id="display-division-0">
+        <div class="display-division-header">
+            <span class="display-division-header-name">
+                {% if active_case %}{{ active_case.title }}{% elif directory_view == 'documents' %}Documents{% elif directory_view == 'investigations' %}Investigations{% elif directory_view == 'chats' %}Chats{% elif selected_source %}{{ selected_source.name }}{% else %}Project Home{% endif %}
+            </span>
+        </div>
+
+    {# ---------------- Project reference material (CLAUDE-P40-E2B1, Section C/E) --
+       Previously the standalone Lists panel (.workspace-pane-lists,
+       "LISTS" grid area, always visible beside Display regardless of
+       active_case) - that second left column is eliminated (Section E)
+       and this project-wide reference material now lives inside
+       Display itself instead, stacked above whatever else Display is
+       showing. Deliberately gated on `not directory_view` ONLY, not
+       `not active_case` too: P40-E2B's own established invariant -
+       "Requirements/Sources/RFIs/Accepted Knowledge/History are genuine
        project-wide reference material a reviewer needs even while an
-       Investigation is open - confirmed by a real, already-passing
+       Investigation is open" (confirmed by a real, already-accepted
        test asserting a Requirement's adjudication text is visible on a
-       ?case=... render. The unified left nav (templates/base.html)
-       still links directly into these same sections via their html_id
-       anchors. #}
-    <aside class="workspace-pane-lists" id="workspace-lists-panel">
-        <h2>Project</h2>
+       ?case=... render, tests/test_workflow_integration.py) - still
+       holds; it would be a silent regression to make this vanish just
+       because an Investigation is open. Documents and Investigations
+       are pulled out into their own launcher-projected directory views
+       below (Section C) rather than staying folded in here - everything
+       else (Operating Environment/Access/Settings/Needs Attention/
+       Recent Focus/Investigation Quality/Participants/Go-No-Go/Accepted
+       Knowledge/Instructions/Requirement Compliance/RFIs/Requirements/
+       Key Dates/History) stays exactly as it was, just re-homed. Only
+       excluded from the three NEW, deliberately-focused directory views
+       themselves (documents/investigations/chats). #}
+    {% if not directory_view %}
         <div id="project-overview">
         {# CLAUDE-P29: Project Operating Environment -- locked, never an
            edit control once set. Deliberately no form/button anywhere in
@@ -226,7 +191,18 @@
         </p>
         {% endif %}
         {% endcall %}
+    {% endif %}
 
+    {# ---------------- Investigations directory (CLAUDE-P40-E2B1, Section C) --
+       Launcher-projected: the left panel's "Investigations" launcher
+       opens this directory in Display (?view=investigations). Every
+       authorized Investigation appears here, including one just
+       created (the redirect after creating one still opens it directly
+       - see routes/workspace.py's create_case - but revisiting this
+       directory shows it immediately either way, since visible_cases is
+       recomputed fresh on every GET). New Investigation creation happens
+       here, not in a second navigation column. #}
+    {% if directory_view == 'investigations' %}
         {# Cases is the one accordion the app itself already marks as
            primary (open=True, the only one) - it belongs first, not
            after three closed reference accordions a user would have to
@@ -304,7 +280,9 @@
             </form>
         {% endcall %}
         {% endcall %}
+    {% endif %}
 
+    {% if not directory_view %}
         {% set needs_attention_count = needs_attention_view|map(attribute='findings')|map('length')|sum %}
         {% call macros.accordion('Needs Attention (' ~ needs_attention_count ~ ')', group='left', id='needs-attention', html_id='needs-attention', open=(needs_attention_count > 0)) %}
             <p class="pane-note">
@@ -615,7 +593,20 @@
                 </form>
             {% endcall %}
         {% endcall %}
+    {% endif %}
 
+    {# ---------------- Documents directory (CLAUDE-P40-E2B1, Section C) -------
+       Launcher-projected: the left panel's "Documents" launcher opens
+       this directory in Display (?view=documents). Selecting a Document
+       opens it in the active Display division (?source=<id>, unchanged
+       existing behaviour); adding one uses the existing authorized
+       controls below, which now redirect back into this same directory
+       (see routes/workspace.py's add_document_source/
+       add_text_record_source) instead of Project Home. Removed Documents
+       (honest removed state) are listed further down, alongside the
+       Toolbox's own Restore control - this directory does not duplicate
+       that list, it links a reviewer to it. #}
+    {% if directory_view == 'documents' %}
         {# OPEN, NOT YET JUSTIFIED TO FIX: workspace.sources renders in
            storage order, and a superseded Source (source.superseded_by_source_id
            set) is never moved after its replacement - superseded revisions
@@ -685,6 +676,65 @@
         {% endcall %}
         {% endcall %}
 
+        {% if removed_sources %}
+        {% call macros.subdisclosure('Removed Documents (' ~ removed_sources|length ~ ')', html_id='project-sources-removed') %}
+            <ul class="source-list">
+                {% for source in removed_sources %}
+                <li class="source-item">
+                    {{ source.name }}
+                    <br><small class="text-muted">Removed {{ source.removed_at }}{% if source.removed_by %} by {{ source.removed_by }}{% endif %}</small>
+                    <form method="post" action="{{ url_for('workspace.restore_document_route', project_id=project_id, source_id=source.id) }}">
+                        <button type="submit" class="link-button">Restore Document</button>
+                    </form>
+                </li>
+                {% endfor %}
+            </ul>
+        {% endcall %}
+        {% endif %}
+    {% endif %}
+
+    {# ---------------- Chats directory (CLAUDE-P40-E2B1, Section C) -----------
+       Launcher-projected: the left panel's "Chats" launcher opens this
+       directory in Display (?view=chats), listing real, already-
+       implemented conversation records for this Project only - Project
+       Conversation plus every visible Investigation that has any
+       messages. No cross-project index exists (CaseWorkspaceStore is one
+       flat-JSON file per Project - see the Assumption Audit delivered
+       with this stage), so this is not a global inbox. Selecting an
+       entry opens that Project/Investigation context and activates the
+       one shared conversation dock (?case=<id>, or plain Project
+       Conversation when nothing is selected) - never a second composer.
+       No archive/delete/named-thread lifecycle here, matching Section C's
+       own restraint. #}
+    {% if directory_view == 'chats' %}
+        {% call macros.accordion('Project Conversation (' ~ (project_conversation_view|length if project_conversation_view else 0) ~ ')', group='left', id='chats-project', html_id='chats-project', open=True) %}
+        {% if project_conversation_view %}
+        <p class="pane-note">{{ project_conversation_view|length }} message(s) recorded.</p>
+        <a class="btn btn-ghost workspace-link" href="{{ url_for('workspace.show_workspace', project_id=project_id) }}">Open Project Conversation</a>
+        {% else %}
+        <p class="pane-note">No Project Conversation yet.</p>
+        {% endif %}
+        {% endcall %}
+
+        {% call macros.accordion('Investigation Conversations', group='left', id='chats-cases', html_id='chats-cases', open=True) %}
+        {% set case_conversations = visible_cases|selectattr('conversation')|list %}
+        {% if case_conversations %}
+        <ul class="case-list">
+            {% for case in case_conversations %}
+            <li>
+                <a class="case-item" href="{{ url_for('workspace.show_workspace', project_id=project_id, case=case.id) }}">
+                    {{ case.title }} ({{ case.conversation|length }})
+                </a>
+            </li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <p class="pane-note">No Investigation conversations yet.</p>
+        {% endif %}
+        {% endcall %}
+    {% endif %}
+
+    {% if not directory_view %}
         {% call macros.accordion('Requirement Compliance', status=(requirements_view|length ~ ' governed' if requirements_view else None), group='left', id='requirement-compliance') %}
         {% if requirements_view %}
         <p class="pane-note">
@@ -1102,38 +1152,8 @@
             <p style="color:var(--text-secondary);font-size:0.88rem;">No governed events recorded yet.</p>
             {% endif %}
         {% endcall %}
-    </aside>
+    {% endif %}
 
-    {# ---------------- DISPLAY: active Investigation / selected Document /
-       Project Home (CLAUDE-P40-E2B, Section A) - was .workspace-column,
-       now its own standalone grid column instead of being stacked
-       beneath Lists.
-
-       CLAUDE-P40-E2B, Section D: multi-display. Division 0 is always
-       whatever the server rendered above (an open Investigation, a
-       selected Document, or Project Home) - it is never "closed" and
-       is the one division Toolbox stays bound to via the ordinary
-       ?source=/?case= query string this page already uses (never a
-       second, client-side Toolbox binding mechanism). Divisions 1-3
-       are client-side-only "also open alongside it" slots
-       (static/js/case_workspace.js) - each fetches its content from
-       the SAME authorized workspace.source_file route a normal
-       ?source= view uses, so a division can never render a Document
-       this Project/reviewer isn't already authorized for. Clicking a
-       populated division 1-3 promotes it to division 0 via a normal
-       navigation (?source=<id>) - the only way Toolbox can honestly
-       follow "the active division" in a server-rendered app with one
-       shared Toolbox, not a client-side approximation of it. Opening
-       several Documents side by side is simultaneous VIEWING only -
-       nothing here performs or claims cross-document analysis. #}
-    <div class="workspace-pane-display" id="workspace-display-panel">
-    <div class="display-divisions" id="display-divisions" data-layout="single">
-    <div class="display-division display-division-primary active" data-division="0" id="display-division-0">
-        <div class="display-division-header">
-            <span class="display-division-header-name">
-                {% if active_case %}{{ active_case.title }}{% elif selected_source %}{{ selected_source.name }}{% else %}Project Home{% endif %}
-            </span>
-        </div>
 {% if active_case %}
     {# ---------------- Workspace: active Case ---------------- #}
     <section class="workspace-pane workspace-pane-conversation">
@@ -1339,7 +1359,7 @@
         {% endcall %}
     </section>
 
-{% else %}
+{% elif not directory_view %}
     {% if selected_source %}
     {# ---------------- A selected document/drawing -------------------
        CLAUDE-P40-E, Section D/G: opens directly inside the Workspace

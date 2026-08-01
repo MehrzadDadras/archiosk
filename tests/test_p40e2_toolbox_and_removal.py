@@ -175,7 +175,9 @@ class DocumentRemovalTests(_BaseP40E2TestCase):
         source_id = self._first_source_id()
         client.post(f"/projects/{self.project_id}/workspace/sources/{source_id}/remove", data={"confirm": "yes"})
 
-        body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
+        # CLAUDE-P40-E2B1: Sources/Documents moved out of Project Home
+        # into their own launcher-projected Documents directory.
+        body = client.get(f"/projects/{self.project_id}/workspace?view=documents").get_data(as_text=True)
         self.assertIn("Sources (0)", body)
 
     def test_restore_reactivates_same_id_no_reingestion(self):

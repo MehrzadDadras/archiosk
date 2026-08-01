@@ -75,7 +75,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // CLAUDE-P13: navigation-membrane layer toggle - purely a client-side
-    // class flip, same shape as nav-expanded in base.html. The badges
+    // class flip, same shape as launcher-hidden in base.html. The badges
     // themselves are already server-rendered (or absent, when there's
     // nothing to show); this only ever shows/hides what's already there.
     const riskLayerToggle = document.getElementById('layer-risk-toggle');
@@ -196,23 +196,23 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     })();
 
-    // CLAUDE-P40-E2B, Section B: Lists and Toolbox each hide/show
-    // independently via a plain class toggle on .case-workspace - never
-    // DOM removal, so every form/draft/scroll position inside a hidden
-    // panel survives untouched, and reopening needs no re-fetch. State
-    // is a reviewer-specific localStorage preference (never a
+    // CLAUDE-P40-E2B1: Toolbox hides/shows independently via a plain
+    // class toggle on .case-workspace - never DOM removal, so every
+    // form/draft/scroll position inside a hidden panel survives
+    // untouched, and reopening needs no re-fetch. State is a
+    // reviewer-specific, per-Project localStorage preference (never a
     // ProjectWorkspace write - collapsing a panel is pure viewing, not
     // a governed action), applied before first paint via the inline
-    // script in case_workspace.html's own extra_head block (same
-    // pattern base.html already uses for nav-expanded) so there is no
-    // flash of the wrong layout on load.
+    // script in case_workspace.html's own extra_head block. The
+    // Launcher panel's own equivalent toggle now lives in base.html
+    // (application-shell level, reviewer-wide not per-project) since
+    // the panel itself moved there - see that template's own script.
     (function setUpPanelToggles() {
         const grid = document.querySelector('.case-workspace');
         if (!grid) return;
         const html = document.documentElement;
 
         [
-            { key: 'lists', btnId: 'lists-toggle-btn', panelId: 'workspace-lists-panel', hiddenClass: 'lists-hidden', labelShow: 'Show Lists', labelHide: 'Hide Lists' },
             { key: 'toolbox', btnId: 'toolbox-toggle-btn', panelId: 'workspace-toolbox-panel', hiddenClass: 'toolbox-hidden', labelShow: 'Show Toolbox', labelHide: 'Hide Toolbox' },
         ].forEach((cfg) => {
             const btn = document.getElementById(cfg.btnId);
@@ -242,17 +242,14 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         });
 
-        // CLAUDE-P40-E2B, Section G: on narrow screens Lists/Toolbox
-        // render as overlay drawers (main.css's own max-width: 640px
-        // rules) - Escape closes whichever is currently open, the same
-        // keyboard affordance every other overlay in this app (the
-        // search panel, base.html) already supports.
+        // CLAUDE-P40-E2B1, Section G: on narrow screens Toolbox renders
+        // as an overlay drawer (main.css's own max-width: 640px rules) -
+        // Escape closes it if open. The Launcher panel's own equivalent
+        // drawer/Escape handling now lives in base.html (it moved there
+        // along with the panel itself).
         document.addEventListener('keydown', (e) => {
             if (e.key !== 'Escape') return;
             if (window.matchMedia('(min-width: 641px)').matches) return;
-            if (!html.classList.contains('lists-hidden')) {
-                document.getElementById('lists-toggle-btn') && document.getElementById('lists-toggle-btn').click();
-            }
             if (!html.classList.contains('toolbox-hidden')) {
                 document.getElementById('toolbox-toggle-btn') && document.getElementById('toolbox-toggle-btn').click();
             }

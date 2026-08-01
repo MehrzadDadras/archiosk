@@ -455,7 +455,7 @@ def _register_context_processors(app: Flask) -> None:
     def inject_globals():
         from datetime import datetime, timezone
 
-        from flask import request
+        from flask import request, session
 
         from services.auth import is_admin, is_authenticated
 
@@ -480,6 +480,11 @@ def _register_context_processors(app: Flask) -> None:
             "authenticated": authenticated,
             "is_admin": is_admin() and not on_standalone_auth_page,
             "nav_recent_projects": _nav_recent_projects(app) if authenticated else [],
+            # CLAUDE-P40-E2B1, Section B: the single launcher panel's
+            # identity/menu anchored at the bottom needs the reviewer's
+            # own username - session["username"] already exists (set at
+            # login, services/auth.py), just not previously exposed here.
+            "current_username": session.get("username") if authenticated else None,
         }
 
 

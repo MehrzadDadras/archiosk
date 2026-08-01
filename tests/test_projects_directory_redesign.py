@@ -74,7 +74,7 @@ class ProjectsDirectoryRedesignTests(unittest.TestCase):
         body = response.get_data(as_text=True)
 
         self.assertNotIn("Ingest a new document", body)
-        self.assertIn(">New Project<", body)
+        self.assertIn(">+ New Project<", body)
 
     def test_dates_rendered_human_readable_not_raw_iso(self):
         response = self.client.get("/projects")
@@ -153,15 +153,15 @@ class ProjectsDirectoryRedesignTests(unittest.TestCase):
         finally:
             shutil.rmtree(empty_dir, ignore_errors=True)
 
-    def test_projects_tree_node_present_in_nav_rail(self):
-        # 5-minute tree-prototype pass: there is no more standalone
-        # "Projects" page-link to highlight as .active - it's a category
-        # node (expand/collapse only) in the sidebar's Projects tree.
+    def test_projects_heading_present_and_highlighted_in_launcher_panel(self):
+        # CLAUDE-P40-E2B1: the old expand/collapse-only "Projects" tree
+        # node is superseded - the launcher panel's "Projects" heading is
+        # now a real, navigating link (Section C), highlighted as active
+        # while viewing the directory it opens.
         response = self.client.get("/projects")
         body = response.get_data(as_text=True)
 
-        self.assertIn("side-rail-tree-summary", body)
-        self.assertIn('id="nav-toggle"', body)
+        self.assertIn('<a class="launcher-heading active" href="/projects">Projects</a>', body)
 
 
 if __name__ == "__main__":

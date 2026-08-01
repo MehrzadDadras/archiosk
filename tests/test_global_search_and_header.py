@@ -127,42 +127,56 @@ class HeaderAndBrandTests(unittest.TestCase):
         self.assertNotIn("Beehive", body)
 
     def test_brand_lockup_reads_archiosk_only(self):
+        # CLAUDE-P40-E2B1: the brand mark moved from the old side-rail
+        # (.side-rail-brand-label) to the application-wide top bar
+        # (.workspace-topbar-brand, base.html) - see that template's own
+        # note on why identity now lives there instead of the launcher
+        # panel.
         body = self.client.get("/").get_data(as_text=True)
-        self.assertIn('side-rail-brand-label">Archiosk<', body)
+        self.assertIn('workspace-topbar-brand" href="/">Archiosk<', body)
 
-    def test_search_toggle_and_nav_toggle_both_present(self):
+    def test_search_toggle_and_nav_toggle_are_gone(self):
+        # CLAUDE-P40-E2B1, Section F: "Remove superseded Home, search,
+        # Open Project and old side-rail hamburger controls" - the old
+        # side-rail's search magnifier and expand/collapse hamburger are
+        # both retired outright, not merely hidden, now that the single
+        # launcher panel replaces the side-rail they lived in.
         body = self.client.get("/").get_data(as_text=True)
-        self.assertIn('id="search-toggle"', body)
-        self.assertIn('id="nav-toggle"', body)
+        self.assertNotIn('id="search-toggle"', body)
+        self.assertNotIn('id="nav-toggle"', body)
 
-    def test_search_overlay_markup_present_and_hidden_by_default(self):
+    def test_search_overlay_markup_is_gone(self):
+        # Superseded along with the search-toggle control that was its
+        # only entry point (Section F) - the markup is removed outright,
+        # not left as inert hidden chrome (Section E's "no hidden
+        # duplicate markup" principle, applied by extension).
         body = self.client.get("/").get_data(as_text=True)
-        self.assertIn('id="search-overlay"', body)
-        self.assertIn('id="search-input"', body)
-        self.assertIn('id="search-close"', body)
-        # The overlay ships hidden - it must not be visible on page load.
-        self.assertIn('id="search-overlay" hidden', body)
+        self.assertNotIn('id="search-overlay"', body)
+        self.assertNotIn('id="search-input"', body)
+        self.assertNotIn('id="search-close"', body)
 
-    def test_sidebar_toggle_reveal_uses_animatable_properties_not_display_none(self):
-        # Regression guard for the earlier single-click shake fix: the
-        # label/context reveal must stay on max-width/max-height/opacity,
-        # never regress back to display:none<->block/inline (which
-        # cannot be transitioned and caused the original bug).
+    def test_launcher_panel_toggle_hides_in_full_not_via_partial_reveal(self):
+        # CLAUDE-P40-E2B1: the old icon-only/labeled width-toggle rail
+        # (.side-rail-label's animatable max-width/opacity reveal) is
+        # retired along with the side-rail itself - the one launcher
+        # panel now hides/shows in full via a plain class toggle
+        # (html.launcher-hidden), the same idiom the Workspace's own
+        # Toolbox toggle already established.
         css_path = Path("static/css/main.css")
         css = css_path.read_text(encoding="utf-8")
-        self.assertIn(".side-rail-label {", css)
-        self.assertIn("max-width: 0;", css)
-        self.assertNotIn(".side-rail-label { display: none; }", css)
-        self.assertNotIn(".side-rail-context { display: none;", css)
+        self.assertIn("html.launcher-hidden .launcher-panel { display: none; }", css)
+        self.assertNotIn(".side-rail-label {", css)
 
 
 class ProjectsTreeTests(unittest.TestCase):
     """
-    5-minute cleanup pass: Projects becomes an expandable tree node in
-    the sidebar (category node - expand/collapse only, never navigates)
-    with individual projects as object nodes (activate on click). The
-    old separate "Current Project" / "Recent Projects" sidebar blocks
-    and the RFQ/RFP explanatory paragraph are gone.
+    CLAUDE-P40-E2B1: the old side-rail's expand/collapse-only "Projects"
+    tree node is retired along with the side-rail itself - the one
+    launcher panel's "Projects" heading is now a real, navigating link
+    into the authorized Project directory (portal.projects_list), with
+    Project names only listed beneath it (Section B/C). The old separate
+    "Current Project" / "Recent Projects" sidebar blocks and the RFQ/RFP
+    explanatory paragraph remain gone.
     """
 
     def setUp(self):
@@ -187,14 +201,15 @@ class ProjectsTreeTests(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
 
-    def test_projects_summary_is_not_a_link_to_the_projects_page(self):
-        # The category node itself must never navigate - only expand or
-        # collapse. Its <summary> carries no href to /projects.
+    def test_projects_heading_is_a_real_link_to_the_projects_directory(self):
+        # CLAUDE-P40-E2B1, Section C: "Projects heading opens the
+        # authorized Project directory in Display" - unlike the old
+        # expand-only tree summary, this heading must navigate.
         body = self.client.get("/").get_data(as_text=True)
         import re
-        match = re.search(r'<summary class="side-rail-link side-rail-tree-summary">.*?</summary>', body, re.S)
+        match = re.search(r'<a class="launcher-heading[^"]*" href="([^"]+)">Projects</a>', body)
         self.assertIsNotNone(match)
-        self.assertNotIn("href=", match.group(0))
+        self.assertEqual(match.group(1), "/projects")
 
     def test_individual_projects_are_real_links_into_their_workspace(self):
         body = self.client.get("/").get_data(as_text=True)
@@ -203,12 +218,12 @@ class ProjectsTreeTests(unittest.TestCase):
         self.assertIn("Alpha.pdf", body)
         self.assertIn("Beta.pdf", body)
 
-    def test_active_project_highlighted_in_tree_not_via_separate_block(self):
+    def test_active_project_highlighted_in_launcher_not_via_separate_block(self):
         body = self.client.get("/projects/alpha/workspace").get_data(as_text=True)
-        self.assertIn("side-rail-tree-item active", body)
+        self.assertIn("launcher-project-item active", body)
         # The old standalone "Current Project" orientation block is gone -
-        # the tree's own highlighting is the only signal now. Checked as
-        # the rendered label pattern, not a bare substring, since this
+        # the launcher's own highlighting is the only signal now. Checked
+        # as the rendered label pattern, not a bare substring, since this
         # file's own explanatory comments legitimately mention the old
         # block by name.
         self.assertNotIn('side-rail-context-label">Current Project<', body)
@@ -218,9 +233,9 @@ class ProjectsTreeTests(unittest.TestCase):
         self.assertNotIn("side-rail-context", body)
         self.assertNotIn("side-rail-recent", body)
 
-    def test_new_project_appears_exactly_once_in_sidebar_tree(self):
+    def test_new_project_appears_exactly_once_in_launcher_panel(self):
         body = self.client.get("/").get_data(as_text=True)
-        self.assertEqual(body.count(">New Project<"), 1)
+        self.assertEqual(body.count(">+ New Project<"), 1)
 
     def test_projects_directory_header_no_longer_has_its_own_new_project_button(self):
         body = self.client.get("/projects").get_data(as_text=True)
@@ -267,7 +282,9 @@ class TypographyCorrectionTests(unittest.TestCase):
         # labels, footer, table headers.
         no_longer_mono = [
             ".btn {", ".text-input {", ".workspace-form button {",
-            ".side-rail-link {", ".workspace-pane-label {",
+            # CLAUDE-P40-E2B1: .side-rail-link is retired along with the
+            # side-rail itself - .launcher-link is its successor.
+            ".launcher-link {", ".workspace-pane-label {",
             ".review-btn {", ".review-decision-badge {", ".applied-badge {",
             ".registry-table th {", ".eyebrow {",
             ".project-card-meta {",

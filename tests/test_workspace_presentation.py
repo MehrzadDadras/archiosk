@@ -79,7 +79,9 @@ class WorkspacePresentationTests(unittest.TestCase):
     # -- OBS-06: Sources card shows upload date -------------------------------
 
     def test_source_card_shows_added_date(self):
-        body = self._page()
+        # CLAUDE-P40-E2B1: the Sources list lives in the Documents
+        # directory (?view=documents), not bare Project Home.
+        body = self.client.get(f"/projects/{self.project_id}/workspace?view=documents").get_data(as_text=True)
         workspace = self.store.get(self.project_id)
         source = next(s for s in workspace.sources if s["kind"] == "rfq_rfp_document")
         self.assertIn(f"added {source['added_at']}", body)

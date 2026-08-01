@@ -96,16 +96,20 @@ class ProjectHomeTests(unittest.TestCase):
         self.assertNotIn("Ask a question, or describe what you want to work on", body)
 
     def test_left_aside_always_visible_regardless_of_case_selection(self):
-        # Sources/Requirements/RFIs/History are project-scoped, not
-        # Case-scoped - they must stay reachable even with zero Cases.
-        # ("RFI Export" renamed to "RFIs" - CLAUDE-P38 OBS-08.)
+        # Requirements/RFIs/History are project-scoped, not Case-scoped -
+        # they must stay reachable even with zero Cases. ("RFI Export"
+        # renamed to "RFIs" - CLAUDE-P38 OBS-08.) CLAUDE-P40-E2B1:
+        # Sources/Documents moved out into their own launcher-projected
+        # Documents directory (?view=documents), checked separately.
         response = self.client.get(f"/projects/{self.project_id}/workspace")
         body = response.get_data(as_text=True)
 
-        self.assertIn("Sources (1)", body)
         self.assertIn("Project Instructions", body)
         self.assertIn(">RFIs<", body)
         self.assertIn("History (", body)
+
+        documents_body = self.client.get(f"/projects/{self.project_id}/workspace?view=documents").get_data(as_text=True)
+        self.assertIn("Sources (1)", documents_body)
 
     # -- star ----------------------------------------------------------------
 
@@ -190,7 +194,11 @@ class ProjectHomeTests(unittest.TestCase):
         self.assertIn("Sources (2)", response.get_data(as_text=True))
 
     def test_external_source_shown_as_disabled_placeholder(self):
-        response = self.client.get(f"/projects/{self.project_id}/workspace")
+        # CLAUDE-P40-E2B1: Sources/Documents moved out of Project Home
+        # entirely into their own launcher-projected Documents directory
+        # (?view=documents) - no longer reachable from the bare
+        # Project Home URL.
+        response = self.client.get(f"/projects/{self.project_id}/workspace?view=documents")
         body = response.get_data(as_text=True)
         self.assertIn("Add External Source", body)
         self.assertIn("Not yet available", body)

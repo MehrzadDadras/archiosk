@@ -430,6 +430,21 @@ def show_workspace(project_id):
         (s for s in workspace.sources if s["id"] == selected_source_id), None,
     ) if selected_source_id else None
 
+    # CLAUDE-P40-E2B1, Section C: launcher-projected directory views
+    # (Documents / Investigations / Chats) reuse this same GET route and
+    # query-string vocabulary rather than adding new routes or any
+    # client-side routing - the identical "no client build step" pattern
+    # ?source=/?case= already establish. A real ?case=/?source= selection
+    # always wins over a bare directory view (selecting something from a
+    # directory is itself just a normal navigation to ?case=<id> or
+    # ?source=<id>, so by the time content is actually open, "view" is no
+    # longer the relevant query param). Unknown values degrade to no
+    # directory (Project Home), the same "stale/guessed link" convention
+    # selected_source/active_case already use.
+    directory_view = request.args.get("view")
+    if directory_view not in ("documents", "investigations", "chats"):
+        directory_view = None
+
     # Prompt 8/9: Project Open -> temporal reconciliation, now called
     # through the explicitly named open_project() operation rather than
     # inlining reconcile_project() here (Prompt 9 #4) - this route is
@@ -468,6 +483,11 @@ def show_workspace(project_id):
     # the default landing state, not a new rendering path of its own.
     active_case_id = request.args.get("case")
     active_case = next((c for c in visible_cases if c["id"] == active_case_id), None)
+
+    # A real ?case=/?source= selection always takes priority over a bare
+    # directory view - see the ?view= comment above.
+    if active_case is not None or selected_source is not None:
+        directory_view = None
 
     # Project-wide "Needs Attention": every unresolved Finding (not yet
     # "applied") across every non-archived visible Case, not just
@@ -1091,6 +1111,7 @@ def show_workspace(project_id):
         visible_cases=visible_cases,
         active_case=active_case,
         selected_source=selected_source,
+        directory_view=directory_view,
         needs_attention_view=needs_attention_view,
         findings_view=findings_view,
         focused_finding_id=focused_finding_id,
@@ -1685,12 +1706,12 @@ def add_document_source(project_id):
     file_storage = request.files.get("document")
     if file_storage is None or not file_storage.filename:
         flash("Choose a document to add as a Project Source.", "error")
-        return redirect(url_for("workspace.show_workspace", project_id=project_id))
+        return redirect(url_for("workspace.show_workspace", project_id=project_id, view="documents"))
 
     ext = Path(file_storage.filename).suffix.lower()
     if ext not in ALLOWED_DOCUMENT_EXTENSIONS:
         flash(f"Unsupported document format '{ext}'.", "error")
-        return redirect(url_for("workspace.show_workspace", project_id=project_id))
+        return redirect(url_for("workspace.show_workspace", project_id=project_id, view="documents"))
 
     sources_dir = Path(current_app.config["REGISTRY_STORE_PATH"]) / "workspace_sources" / project_id
     sources_dir.mkdir(parents=True, exist_ok=True)
@@ -1707,7 +1728,7 @@ def add_document_source(project_id):
         governance_log=_log(),
     )
     flash("Document added as a Project Source.", "success")
-    return redirect(url_for("workspace.show_workspace", project_id=project_id))
+    return redirect(url_for("workspace.show_workspace", project_id=project_id, view="documents"))
 
 
 @workspace_bp.route("/projects/<project_id>/workspace/sources/text-record", methods=["POST"])
@@ -1725,7 +1746,7 @@ def add_text_record_source(project_id):
     content = (request.form.get("content") or "").strip()
     if not title or not content:
         flash("A Text Record needs both a title and content.", "error")
-        return redirect(url_for("workspace.show_workspace", project_id=project_id))
+        return redirect(url_for("workspace.show_workspace", project_id=project_id, view="documents"))
 
     sources_dir = Path(current_app.config["REGISTRY_STORE_PATH"]) / "workspace_sources" / project_id
     sources_dir.mkdir(parents=True, exist_ok=True)
@@ -1742,7 +1763,7 @@ def add_text_record_source(project_id):
         governance_log=_log(),
     )
     flash("Text Record added as a Project Source.", "success")
-    return redirect(url_for("workspace.show_workspace", project_id=project_id))
+    return redirect(url_for("workspace.show_workspace", project_id=project_id, view="documents"))
 
 
 @workspace_bp.route("/projects/<project_id>/workspace/snapshots", methods=["POST"])

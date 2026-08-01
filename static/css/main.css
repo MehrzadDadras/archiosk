@@ -122,278 +122,117 @@ a:focus-visible, button:focus-visible, input:focus-visible {
     opacity: 0.3;
 }
 
-/* -- app shell: expandable left navigation rail -------------------------
-   Two states, toggled by adding/removing .nav-expanded on <html> (see
-   base.html's inline pre-paint script + nav.js-equivalent inline script -
-   avoids a flash of the wrong state on every full-page navigation, since
-   this is a classic server-rendered app, not an SPA). Collapsed = a
-   narrow icon-only rail that maximizes work-area width; expanded = a
-   wider labeled panel that also reveals compact orientation context
-   (current project, recent projects). Toggling never navigates or
-   reloads anything - purely a CSS width/visibility change. */
+/* -- app shell: application-wide top bar + one left launcher panel -------
+   CLAUDE-P40-E2B1: replaces the old expandable icon-only/labeled
+   .side-rail (a width toggle between a narrow icon rail and a wider
+   labeled panel) with a single restrained launcher panel, shown or
+   hidden in full (no intermediate width state) via the top bar's own
+   "Lists" toggle - see html.launcher-hidden below. .app-shell is a
+   column: the top bar (full width, spans Launcher/Display/Toolbox) then
+   .app-shell-body (the launcher panel beside the main content area,
+   the exact same flex-row arrangement .side-rail/.app-main used before,
+   just renamed and simplified). */
 .app-shell {
     display: flex;
-    align-items: stretch;
+    flex-direction: column;
     min-height: 100vh;
 }
-.side-rail {
-    width: 68px;
+.app-shell-body {
+    display: flex;
+    align-items: stretch;
+    flex: 1;
+    min-height: 0;
+}
+.launcher-panel {
+    width: 240px;
     flex-shrink: 0;
     display: flex;
     flex-direction: column;
-    /* CLAUDE-P40-E: was background: var(--surface-secondary) (Limestone,
-       the same tinted "nav surfaces" fill grouped controls use elsewhere)
-       - a large permanently-visible coloured block competing with the
-       document work this app exists to show. The unified nav now uses
-       the same neutral surface family as every other Workspace panel
-       (.workspace-pane already uses --surface-primary) plus this
-       existing 1px border - hierarchy comes from spacing/indentation/
-       typography below, not a colour block. */
+    justify-content: space-between;
     border-right: 1px solid var(--border);
     background: var(--surface-primary);
-    transition: width 0.15s ease;
-    overflow-x: hidden;
+    overflow-y: auto;
     position: sticky;
     top: 0;
     height: 100vh;
 }
-html.nav-expanded .side-rail { width: 240px; }
-
-/* Brand (left) and utility controls (right, stacked) - deliberately a
-   COLUMN layout for the controls rather than side-by-side, and identical
-   in both collapsed and expanded states: at 68px collapsed there isn't
-   room for two 32px buttons side by side without cramming, and a layout
-   that only reflows between states risks reintroducing the same kind of
-   instability the toggle-shake fix just resolved (a discrete arrangement
-   change landing in the same frame as the width transition). Keeping
-   these controls in one fixed arrangement means neither Search nor the
-   sidebar toggle ever moves because of collapse/expand - only the brand
-   label's reveal (see .side-rail-brand-label) and the rail's own width
-   are actually animated. */
-.side-rail-top {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 0.5rem;
-    padding: 1rem 0.7rem;
-    border-bottom: 1px solid var(--border);
-    flex-shrink: 0;
-}
-.side-rail-top-controls {
+/* CLAUDE-P40-E2B1, Section B: one show/hide control (the top bar's
+   "Lists" button), a reviewer-wide localStorage preference (not
+   per-Project like the old per-Workspace Lists toggle it replaces -
+   this panel is now present on every authenticated page, not just the
+   Workspace) - applied before first paint via base.html's own
+   extra_head script, the same "avoid a flash of the wrong layout"
+   pattern .toolbox-hidden below already established. display:none also
+   satisfies "not keyboard-focusable when hidden" for free. */
+html.launcher-hidden .launcher-panel { display: none; }
+.launcher-panel-body {
     display: flex;
     flex-direction: column;
-    gap: 0.35rem;
-    flex-shrink: 0;
+    padding: 0.8rem 0.7rem;
+    gap: 1.1rem;
 }
-.nav-toggle {
-    background: transparent;
-    border: 1px solid var(--border);
+.launcher-section { display: flex; flex-direction: column; gap: 0.1rem; }
+.launcher-heading {
+    font-family: var(--font-body);
+    font-weight: 600;
+    font-size: 0.82rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
     color: var(--text-metadata);
-    border-radius: 4px;
-    width: 32px;
-    height: 32px;
-    flex-shrink: 0;
-    cursor: pointer;
-    font-size: 1rem;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    padding: 0.35rem 0.55rem;
+    border-radius: 5px;
 }
-.nav-toggle:hover { color: var(--text-primary); border-color: var(--border-strong); }
-.nav-toggle svg { flex-shrink: 0; }
-
-/* The Archiosk wordmark is the deliberate exception to the UI-wide
-   Arial Nova Cond rule below - restored to its original family/weight,
-   never Arial Nova/Arial Narrow. .entry-shell-brand (the zero-state
-   pre-auth identity mark) shares this exact rule rather than
-   redeclaring it - the same wordmark shown a second time, in the one
-   other place brand identity legitimately appears, not an independent
-   second usage of that typeface. */
-.side-rail-brand, .entry-shell-brand {
-    display: flex;
-    align-items: baseline;
-    gap: 0.4rem;
-    font-family: "Space Grotesk", sans-serif;
-    font-weight: 700;
-    font-size: 1.1rem;
-    color: var(--text-primary);
-    white-space: nowrap;
-    overflow: hidden;
-    min-width: 0;
-}
-/* Reveal via max-width/opacity, not display:none<->inline - display cannot
-   be transitioned, so toggling it in the same frame the .side-rail width
-   transition starts forced an instant text reflow inside the
-   still-narrow rail (the reported single-click "shake"). This keeps the
-   label's reveal a continuous, animatable part of the same 0.15s motion
-   instead of a discrete pop fighting it. */
-.side-rail-brand-label {
-    display: inline-block;
-    max-width: 0;
-    opacity: 0;
-    overflow: hidden;
-    white-space: nowrap;
-    transition: max-width 0.15s ease, opacity 0.15s ease;
-}
-html.nav-expanded .side-rail-brand-label { max-width: 160px; opacity: 1; }
-
-.side-rail-links {
-    display: flex;
-    flex-direction: column;
-    padding: 0.8rem 0.5rem;
-    gap: 0.15rem;
-}
-.side-rail-link {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    padding: 0.55rem 0.55rem;
+.launcher-heading:hover, .launcher-heading.active { background: var(--surface-hover); color: var(--text-primary); text-decoration: none; }
+.launcher-items { display: flex; flex-direction: column; gap: 0.05rem; }
+.launcher-link {
+    display: block;
+    padding: 0.45rem 0.55rem;
     border-radius: 5px;
     color: var(--text-secondary);
     font-family: var(--font-body);
     font-size: 0.82rem;
-    white-space: nowrap;
     overflow: hidden;
-}
-.side-rail-link:hover { background: var(--surface-hover); color: var(--text-primary); text-decoration: none; }
-.side-rail-link.active { background: var(--surface-selected); color: var(--text-primary); }
-.side-rail-icon { flex-shrink: 0; width: 1.2rem; text-align: center; font-size: 1rem; }
-/* Same reasoning as .side-rail-brand-label above - animatable reveal, not
-   a discrete display toggle competing with the width transition. */
-.side-rail-label {
-    display: inline-block;
-    max-width: 0;
-    opacity: 0;
-    overflow: hidden;
+    text-overflow: ellipsis;
     white-space: nowrap;
-    transition: max-width 0.15s ease, opacity 0.15s ease;
 }
-html.nav-expanded .side-rail-label { max-width: 160px; opacity: 1; }
-
-/* Category node: expand/collapse only, via native <details> - no JS, same
-   mechanism already used for every accordion section elsewhere. Object
-   nodes (individual projects) inside are indented to read as children.
-   The whole item list hides while the rail is collapsed rather than
-   showing empty rows with nothing legible in them - same reveal
-   discipline as every other sidebar label. */
-.side-rail-tree-summary { cursor: pointer; list-style: none; }
-.side-rail-tree-summary::-webkit-details-marker { display: none; }
-.side-rail-tree-summary::after {
-    content: "\25B8";
-    display: none;
-    margin-left: auto;
-    color: var(--text-metadata);
-    font-size: 0.72rem;
-    flex-shrink: 0;
-    transition: transform 0.12s ease;
-}
-html.nav-expanded .side-rail-tree-summary::after { display: inline-block; }
-.side-rail-tree[open] > .side-rail-tree-summary::after { transform: rotate(90deg); }
-
-.side-rail-tree-items {
-    display: none;
-    flex-direction: column;
-    gap: 0.1rem;
-    padding: 0.15rem 0 0.3rem;
-}
-html.nav-expanded .side-rail-tree-items { display: flex; }
-.side-rail-tree-item { padding-left: 2.1rem; }
-
-.side-rail-bottom {
-    margin-top: auto;
-    padding: 0.6rem 0.5rem 1rem;
+.launcher-link:hover { background: var(--surface-hover); color: var(--text-primary); text-decoration: none; }
+.launcher-link.active { background: var(--surface-selected); color: var(--text-primary); }
+.launcher-count { color: var(--text-metadata); font-size: 0.76rem; margin-left: 0.2rem; }
+.launcher-new-project { color: var(--machine-blue); }
+.launcher-project-context {
+    padding-top: 0.7rem;
     border-top: 1px solid var(--border);
-    flex-shrink: 0;
+    gap: 0.15rem;
 }
-
-/* CLAUDE-P40-E: the compact project sub-navigation beneath the active
-   project's own row in the unified rail (templates/base.html) - real
-   navigation links/counts only, never the detailed forms/lists those
-   sections summarize (those stay in the Workspace pane itself, see
-   #project-overview and friends in case_workspace.html). Same reveal
-   discipline as the rest of the collapsed/expanded rail: hidden
-   entirely while collapsed, matching .side-rail-tree-items. */
-.side-rail-project-nav {
-    display: none;
-    flex-direction: column;
-    padding: 0.4rem 0.7rem 0.6rem;
-    border-top: 1px solid var(--border);
-    gap: 0.1rem;
-}
-html.nav-expanded .side-rail-project-nav { display: flex; }
-.side-rail-project-heading {
+.launcher-project-heading {
     font-family: var(--font-body);
     font-weight: 600;
-    font-size: 0.85rem;
+    font-size: 0.82rem;
     color: var(--text-primary);
-    margin: 0.3rem 0 0;
+    margin: 0 0 0.3rem;
+    padding: 0 0.55rem;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
-/* Project UUID is secondary metadata, not the heading - quiet, small,
-   monospace (this codebase's existing convention for identifiers). */
-.side-rail-project-id {
-    font-size: 0.7rem;
-    color: var(--text-metadata);
-    margin: 0 0 0.5rem;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-.side-rail-project-group { margin: 0; }
-.side-rail-project-group-summary {
-    cursor: pointer;
-    list-style: none;
-    font-family: var(--font-body);
-    font-size: 0.78rem;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: var(--text-metadata);
-    padding: 0.35rem 0.1rem;
-}
-.side-rail-project-group-summary::-webkit-details-marker { display: none; }
-.side-rail-project-group-items {
+.launcher-identity {
+    padding: 0.6rem 0.7rem 1rem;
+    border-top: 1px solid var(--border);
+    flex-shrink: 0;
     display: flex;
     flex-direction: column;
-    padding: 0.1rem 0 0.4rem;
+    gap: 0.1rem;
 }
-.side-rail-project-link {
-    display: block;
-    padding: 0.3rem 0.4rem 0.3rem 0.6rem;
-    border-radius: 4px;
-    color: var(--text-secondary);
+.launcher-identity-name {
     font-family: var(--font-body);
-    font-size: 0.82rem;
-}
-.side-rail-project-link:hover { background: var(--surface-hover); color: var(--text-primary); text-decoration: none; }
-.side-rail-project-link-disabled {
-    color: var(--text-metadata);
-    cursor: default;
-    opacity: 0.7;
-}
-.side-rail-project-count {
-    color: var(--text-metadata);
-    font-size: 0.76rem;
-    margin-left: 0.2rem;
-}
-/* CLAUDE-P40-E1A, Section B: the per-Investigation name list under
-   Work - a non-link label row (count only, not itself a target) plus
-   one indented, truncated link per Investigation, same subtle active-
-   state treatment as .side-rail-link.active elsewhere in this rail. */
-.side-rail-project-sublabel {
-    font-family: var(--font-body);
-    font-size: 0.78rem;
-    color: var(--text-metadata);
-    margin: 0.2rem 0 0.1rem 0.6rem;
-}
-.side-rail-project-sublink {
-    padding-left: 1.2rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0 0 0.3rem 0.55rem;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
-.side-rail-project-sublink.active { background: var(--surface-selected); color: var(--text-primary); }
 
 .app-main {
     flex: 1;
@@ -403,108 +242,48 @@ html.nav-expanded .side-rail-project-nav { display: flex; }
 }
 
 @media (max-width: 720px) {
-    html.nav-expanded .side-rail { width: 200px; }
     main { padding: 0 1.2rem; }
 }
 
 main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
 
 /* -- true zero-state entry shell (pre-authentication) ---------------------
-   Deliberately minimal - no nav rail, no search, no workspace controls
-   exist pre-auth (see templates/base.html) - this is the entire identity
-   footprint of that state, not a scaled-down copy of the app shell.
-   Typography for the mark itself is the shared .side-rail-brand rule
-   above, not redeclared here. */
-.entry-shell-brand { padding: 1.2rem 1.5rem; flex-shrink: 0; }
+   Deliberately minimal - no launcher panel, no top bar, no workspace
+   controls exist pre-auth (see templates/base.html) - this is the entire
+   identity footprint of that state, not a scaled-down copy of the app
+   shell. The Archiosk wordmark is the deliberate exception to the
+   UI-wide Arial Nova Cond rule below - restored to its original
+   family/weight, never Arial Nova/Arial Narrow. */
+.entry-shell-brand {
+    padding: 1.2rem 1.5rem;
+    flex-shrink: 0;
+    display: flex;
+    align-items: baseline;
+    gap: 0.4rem;
+    font-family: "Space Grotesk", sans-serif;
+    font-weight: 700;
+    font-size: 1.1rem;
+    color: var(--text-primary);
+}
 
-/* -- global search overlay -------------------------------------------------
-   Opens over the current page (never a separate Search page) so the user
-   keeps their place. Compact and restrained, not a full-screen takeover. */
-.search-overlay {
-    position: fixed;
-    inset: 0;
-    z-index: 2000;
-    display: flex;
-    justify-content: center;
-    padding: 12vh 1.2rem 0;
+/* CLAUDE-P40-E2B1, Section G: on narrow screens the Launcher panel
+   becomes a real overlay drawer rather than a permanent column -
+   exactly the same idiom the Workspace-local Toolbox drawer uses (see
+   main.css's own .workspace-pane-toolbox narrow-screen rule), just
+   app-wide since the panel itself is now app-wide. The same
+   launcher-toggle-btn/html.launcher-hidden mechanism drives this - a
+   drawer is just what "shown" looks like at this width. */
+@media (max-width: 640px) {
+    .launcher-panel {
+        position: fixed;
+        top: 0;
+        left: 0;
+        bottom: 0;
+        width: min(85vw, 320px);
+        z-index: 30;
+        border-right: 1px solid var(--border);
+    }
 }
-.search-overlay[hidden] { display: none; }
-.search-overlay-backdrop {
-    position: absolute;
-    inset: 0;
-    background: rgba(34, 29, 23, 0.4);
-}
-.search-panel {
-    position: relative;
-    width: min(560px, 100%);
-    max-height: 70vh;
-    display: flex;
-    flex-direction: column;
-    background: var(--surface-primary);
-    border: 1px solid var(--border-strong);
-    border-radius: 8px;
-    box-shadow: 0 24px 60px rgba(34, 29, 23, 0.22);
-    overflow: hidden;
-}
-.search-panel-form {
-    display: flex;
-    align-items: center;
-    gap: 0.6rem;
-    padding: 0.9rem 1rem;
-    border-bottom: 1px solid var(--border);
-    flex-shrink: 0;
-}
-.search-panel-icon { color: var(--text-metadata); flex-shrink: 0; display: flex; }
-.search-panel-form input {
-    flex: 1;
-    min-width: 0;
-    border: none;
-    background: transparent;
-    font-family: var(--font-body);
-    font-size: 1rem;
-    color: var(--text-primary);
-    outline: none;
-}
-.search-panel-form input::placeholder { color: var(--text-metadata); }
-.search-panel-close {
-    flex-shrink: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 28px;
-    height: 28px;
-    border-radius: 4px;
-    border: 1px solid var(--border);
-    background: transparent;
-    color: var(--text-metadata);
-    cursor: pointer;
-}
-.search-panel-close:hover { color: var(--text-primary); border-color: var(--border-strong); }
-.search-panel-results { overflow-y: auto; padding: 0.5rem; }
-.search-panel-hint, .search-panel-empty {
-    color: var(--text-secondary);
-    font-size: 0.88rem;
-    padding: 0.8rem 0.6rem;
-}
-.search-result {
-    display: flex;
-    flex-direction: column;
-    gap: 0.15rem;
-    padding: 0.65rem 0.7rem;
-    border-radius: 5px;
-    color: var(--text-primary);
-}
-.search-result:hover { background: var(--surface-hover); text-decoration: none; }
-.search-result-kind {
-    font-family: var(--font-body);
-    font-size: 0.8rem;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: var(--text-metadata);
-    font-weight: 600;
-}
-.search-result-title { font-size: 0.95rem; }
-.search-result-subtitle { font-family: var(--font-body); font-size: 0.8rem; color: var(--text-metadata); }
 
 /* -- hero ---------------------------------------------------------------- */
 .hero { padding: 2rem 0 1.5rem; max-width: 780px; }
@@ -1101,7 +880,9 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
     font-weight: 600;
     color: var(--text-metadata);
     flex-shrink: 0;
+    text-decoration: none;
 }
+.workspace-topbar-brand:hover { color: var(--text-primary); text-decoration: none; }
 .workspace-topbar-context {
     font-size: 0.88rem;
     color: var(--text-primary);
@@ -1195,30 +976,24 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
 }
 
 /* ============================================================
-   Workspace — Lists | Display | Toolbox, Chat beneath Display only
+   Workspace — Display | Toolbox, Chat beneath Display only
    ============================================================ */
-/* CLAUDE-P40-E2B: reprises a real, independently-collapsible LISTS
-   column (P40-E had folded Requirements/Sources/etc. into the same
-   flowing column as the active content, specifically to remove a
-   permanently-visible third column the product-owner review had
-   flagged) - the original complaint was "permanently visible", not
-   "a separate column" per se, and collapsibility (this stage's own
-   Section B) resolves that directly, so the separate column returns
-   with a real hide/show control this time, rather than staying folded
-   forever. LISTS = project-wide reference material (Requirements/
-   Sources/RFIs/Accepted Knowledge/History - what used to be
-   .workspace-pane-nav). DISPLAY = the active work (an open
-   Investigation, a selected Document, or Project Home). CHAT
-   (#conversation-dock) sits beneath DISPLAY only, in its own row -
-   never beneath Lists or Toolbox. TOOLBOX spans both rows, staying
-   beside Display AND Chat the whole time (a named grid area occupying
-   the same column across two consecutive template-areas rows forms
-   one continuous grid item spanning both, per the CSS Grid spec - no
-   extra markup needed for this).
+/* CLAUDE-P40-E2B1: the Lists column is eliminated (Section E) - the
+   application-wide launcher panel (base.html) is now the one left
+   panel, and project-wide reference material previously here lives
+   inside Display's own Project Home view instead (case_workspace.html).
+   This grid is now two columns: DISPLAY = the active work (an open
+   Investigation, a launcher-projected directory, a selected Document,
+   or Project Home). CHAT (#conversation-dock) sits beneath DISPLAY
+   only, in its own row - never beneath Toolbox. TOOLBOX spans both
+   rows, staying beside Display AND Chat the whole time (a named grid
+   area occupying the same column across two consecutive
+   template-areas rows forms one continuous grid item spanning both,
+   per the CSS Grid spec - no extra markup needed for this).
 
    grid-template-rows: the first row is "auto" (Display's own natural
-   content height - Lists/Toolbox simply end up exactly that tall too,
-   since they span into it); the second is --chat-height, a CSS custom
+   content height - Toolbox simply ends up exactly that tall too, since
+   it spans into it); the second is --chat-height, a CSS custom
    property static/js/case_workspace.js sets inline (Section C's
    resizable Chat - drag handle or Compact/Expanded presets), clamped
    in JS to a sensible min/max before it's ever written.
@@ -1229,63 +1004,33 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
    resizes a real window through each state. */
 .case-workspace {
     display: grid;
-    grid-template-columns: minmax(220px, 280px) minmax(0, 1fr) minmax(260px, 340px);
+    grid-template-columns: minmax(0, 1fr) minmax(260px, 340px);
     grid-template-rows: auto var(--chat-height, 260px);
     grid-template-areas:
-        "lists display toolbox"
-        "lists chat    toolbox";
+        "display toolbox"
+        "chat    toolbox";
     gap: 1rem;
     padding: 1rem 0 2rem;
     align-items: start;
 }
-/* CLAUDE-P40-E2B, Section B: each panel hides via a plain class toggle
-   - never DOM removal, which preserves every form/draft/scroll-
-   position inside it for free - and the four grid-template-areas
-   combinations below (both panels shown, either one hidden, both
-   hidden) are the ONLY layout states possible, so a plain CSS selector
-   combination covers all of them with no JS-written inline grid-
-   template needed. The state class lives on <html> (documentElement),
-   not .case-workspace itself, applied by a before-first-paint inline
-   script in case_workspace.html's own extra_head block - the exact
-   same "avoid a flash of the wrong layout on load" pattern base.html's
-   nav-expanded already uses, and necessary for the same reason: the
-   preference has to be read from localStorage and applied before
-   .case-workspace even exists in the DOM for a class to be set on it
-   directly. display:none on the panel itself also satisfies "not
+/* CLAUDE-P40-E2B1, Section G: Toolbox still hides/shows via a plain
+   class toggle - never DOM removal, which preserves every form/draft/
+   scroll-position inside it for free. The state class lives on <html>
+   (documentElement), not .case-workspace itself, applied by a
+   before-first-paint inline script in case_workspace.html's own
+   extra_head block - the same "avoid a flash of the wrong layout on
+   load" pattern base.html's own launcher-hidden script uses.
+   display:none on the panel itself also satisfies "not
    keyboard-focusable when hidden" for free - nothing inside a
    display:none subtree is ever in the tab order. */
-html.lists-hidden .case-workspace {
-    grid-template-columns: minmax(0, 1fr) minmax(260px, 340px);
-    grid-template-areas:
-        "display toolbox"
-        "chat    toolbox";
-}
 html.toolbox-hidden .case-workspace {
-    grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
-    grid-template-areas:
-        "lists display"
-        "lists chat";
-}
-html.lists-hidden.toolbox-hidden .case-workspace {
     grid-template-columns: minmax(0, 1fr);
     grid-template-areas:
         "display"
         "chat";
 }
-html.lists-hidden .workspace-pane-lists,
 html.toolbox-hidden .workspace-pane-toolbox {
     display: none;
-}
-/* CLAUDE-P40-E2B: LISTS - the renamed, now-standalone
-   .workspace-pane-nav (was folded into .workspace-column, stacked
-   above the active content - see the historical CLAUDE-P40-E comment
-   this replaces). */
-.workspace-pane-lists {
-    grid-area: lists;
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-    min-width: 0;
 }
 /* CLAUDE-P40-E2B: DISPLAY - wraps exactly what .workspace-column used
    to wrap alongside Lists (the active-Investigation/selected-Document/
@@ -1437,8 +1182,9 @@ html.toolbox-hidden .workspace-pane-toolbox {
    via the same show/hide control the wide layout uses - no separate
    mechanism needed) but Display stays primary; Lists and Toolbox
    collapse to full-width rows rather than competing for the first
-   screenful when shown. Narrow: Lists/Toolbox become drawers (see the
-   .workspace-drawer rules below) - Display remains the one thing
+   screenful when shown. Narrow: Toolbox (and, app-wide, the Launcher
+   panel - see base.html's own media query) becomes a drawer (see the
+   .workspace-pane-toolbox rule below) - Display remains the one thing
    always on screen. */
 @media (max-width: 1080px) {
     .case-workspace {
@@ -1446,7 +1192,6 @@ html.toolbox-hidden .workspace-pane-toolbox {
         grid-template-areas:
             "display"
             "chat"
-            "lists"
             "toolbox";
     }
     .display-divisions[data-layout="side-by-side"],
@@ -1463,22 +1208,24 @@ html.toolbox-hidden .workspace-pane-toolbox {
     }
 }
 
-/* Narrow: Lists and Toolbox become real overlay drawers rather than
-   full-width in-flow rows - Display is the one thing always on screen
-   without having to scroll past either. The same lists-toggle-btn/
-   toolbox-toggle-btn and html.lists-hidden/toolbox-hidden classes
-   drive this (Section B) - a drawer is just what "shown" looks like at
-   this width, not a second mechanism. Closing is via the same toggle
-   button (already reachable, already keyboard-operable) or Escape
-   (static/js/case_workspace.js) - deliberately no separate click-
-   outside-to-close backdrop element, which would need its own focus-
-   trap/hit-testing machinery this pass doesn't otherwise need. */
+/* Narrow: Toolbox becomes a real overlay drawer rather than a
+   full-width in-flow row - Display is the one thing always on screen
+   without having to scroll past it. The same toolbox-toggle-btn and
+   html.toolbox-hidden class drives this (Section G) - a drawer is just
+   what "shown" looks like at this width, not a second mechanism.
+   Closing is via the same toggle button (already reachable, already
+   keyboard-operable) or Escape (static/js/case_workspace.js) -
+   deliberately no separate click-outside-to-close backdrop element,
+   which would need its own focus-trap/hit-testing machinery this pass
+   doesn't otherwise need. The Launcher panel's own equivalent narrow-
+   screen drawer now lives in base.html's own media query, alongside
+   the panel itself. */
 @media (max-width: 640px) {
-    .workspace-pane-lists,
     .workspace-pane-toolbox {
         position: fixed;
         top: 0;
         bottom: 0;
+        right: 0;
         width: min(85vw, 320px);
         overflow-y: auto;
         background: var(--surface-primary);
@@ -1486,8 +1233,6 @@ html.toolbox-hidden .workspace-pane-toolbox {
         padding: 1rem;
         border: 1px solid var(--border);
     }
-    .workspace-pane-lists { left: 0; }
-    .workspace-pane-toolbox { right: 0; }
 }
 
 /* CLAUDE-P40-E1A-VISUAL: was a filled/bordered/rounded "card"
@@ -1508,7 +1253,6 @@ html.toolbox-hidden .workspace-pane-toolbox {
     margin-bottom: 1.5rem;
     border-bottom: 1px solid var(--border);
 }
-.workspace-pane-lists > .workspace-pane:last-child,
 .workspace-pane-display > .workspace-pane:last-child,
 .workspace-pane-toolbox > .workspace-pane:last-child {
     border-bottom: none;
@@ -1516,8 +1260,7 @@ html.toolbox-hidden .workspace-pane-toolbox {
     padding-bottom: 0;
 }
 .workspace-pane h2,
-.workspace-pane h3,
-.workspace-pane-lists > h2 {
+.workspace-pane h3 {
     font-family: var(--font-display);
     font-size: 0.95rem;
     margin: 0 0 0.6rem;
@@ -1861,12 +1604,10 @@ html.toolbox-hidden .workspace-pane-toolbox {
 
 /* -- disclosure grammar (application-wide) ---------------------------------
    ONE mechanism for every collapse/expand control, whatever <details> it
-   decorates - a bare "+"-prefixed nested affordance (.add-source-details),
-   a labeled section header (.accordion-summary), or the sidebar's Projects
-   tree (.side-rail-tree-summary, styled separately above since it lives in
-   a fixed-icon flex row, but sharing this exact glyph/rotation/timing).
-   Never a native OS-drawn triangle, never a mix of unrelated arrow glyphs -
-   the shape and motion always mean "this expands," full stop. */
+   decorates - a bare "+"-prefixed nested affordance (.add-source-details)
+   or a labeled section header (.accordion-summary). Never a native
+   OS-drawn triangle, never a mix of unrelated arrow glyphs - the shape
+   and motion always mean "this expands," full stop. */
 .add-source-details { margin-top: 0.6rem; }
 .add-source-details summary {
     display: flex;
@@ -2209,7 +1950,7 @@ html.toolbox-hidden .workspace-pane-toolbox {
 /* CLAUDE-P13: navigation-membrane layer toggle. Layer annotations
    (currently just the risk/opportunity badge below) render into the
    page unconditionally - cheap, they're small badges - and are shown or
-   hidden by one class on <html>, exactly like nav-expanded above. No
+   hidden by one class on <html>, exactly like launcher-hidden above. No
    server round-trip to toggle; nothing changes until a reviewer
    explicitly turns a layer on, and the governed content underneath
    (the Requirement's own text, its Perspective disclosure) is completely
