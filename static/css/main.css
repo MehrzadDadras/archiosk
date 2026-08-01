@@ -1145,11 +1145,29 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
     }
 }
 
+/* CLAUDE-P40-E1A-VISUAL: was a filled/bordered/rounded "card"
+   (background + border + border-radius + padding) around every major
+   section - Project information, an Investigation's own content, the
+   Findings area, an opened document, Project Briefing, Project State.
+   Visual de-boxing addendum: decorative containers removed: sections
+   now separate from each other with a restrained bottom divider and
+   spacing only - hierarchy comes from headings/.workspace-pane-label
+   typography and whitespace, not a filled box. Functional boundaries
+   (the composer, real controls, focus states, selected nav rows,
+   warnings, confirmations - .delegation-choice/.rfi-preview/
+   .revision-notice/.finding-card, all still fully bordered/filled)
+   are deliberately untouched - this rule only ever provided decorative
+   framing, never a functional one. */
 .workspace-pane {
-    background: var(--surface-primary);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 0.9rem 1rem;
+    padding-bottom: 1.5rem;
+    margin-bottom: 1.5rem;
+    border-bottom: 1px solid var(--border);
+}
+.workspace-column > .workspace-pane:last-child,
+.case-workspace > .workspace-pane:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+    padding-bottom: 0;
 }
 .workspace-pane h2 {
     font-family: var(--font-display);
@@ -1239,19 +1257,27 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
     font-weight: 600;
 }
 
-.source-list, .case-list { list-style: none; margin: 0 0 0.7rem; padding: 0; display: grid; gap: 0.4rem; }
+/* CLAUDE-P40-E1A-VISUAL: was a filled beige (--surface-secondary,
+   Limestone) card per row, bordered and rounded - a "box around
+   Investigation/Source listings" the de-boxing addendum specifically
+   names. Now a plain row, separated by a restrained divider
+   (border-bottom, last row excepted) instead of a filled card -
+   selection/hover are still real, visible state changes (addendum:
+   "retain boundaries for... selected navigation rows"), just via a
+   background tint on that one row rather than every row getting a
+   permanent box. */
+.source-list, .case-list { list-style: none; margin: 0 0 0.7rem; padding: 0; display: grid; }
 .source-item, .case-item {
     display: block;
     font-size: 0.82rem;
-    padding: 0.45rem 0.6rem;
-    border: 1px solid var(--border);
-    border-radius: 4px;
+    padding: 0.45rem 0.1rem;
     color: var(--text-primary);
+    border-bottom: 1px solid var(--border);
 }
-.source-item { background: var(--surface-secondary); }
-.case-item { background: var(--surface-secondary); text-decoration: none; }
-.case-item:hover { border-color: var(--border-strong); text-decoration: none; }
-.case-item.active { background: var(--surface-selected); border-color: var(--border-strong); }
+.source-list li:last-child .source-item,
+.case-list li:last-child .case-item { border-bottom: none; }
+.case-item:hover { color: var(--machine-blue); text-decoration: none; }
+.case-item.active { background: var(--surface-selected); border-radius: 4px; padding-left: 0.5rem; }
 .source-kind-badge, .case-status-badge {
     font-family: var(--font-body);
     font-size: 0.8rem;
@@ -1304,13 +1330,22 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
    explicit expand toggle for full history, same shape as the existing
    layer-risk-toggle/history-full-toggle checkbox-hack pattern
    (static/js/case_workspace.js) rather than a new mechanism. */
+/* CLAUDE-P40-E1A-VISUAL: was a drop-shadow "lift" (box-shadow) reading
+   as an enclosing card floating over the page - the de-boxing addendum
+   names this directly ("remove the enclosing Project/Investigation
+   Conversation card"). Removed - the .accordion-section top border
+   this element already has (same rule every other section divider on
+   this page uses) is the only edge it needs. The solid background is
+   kept - not decorative here, but functional: this element is sticky
+   over scrolling content behind it, and without an opaque background
+   that content would show through underneath the dock's own text, a
+   real legibility problem, not a style choice. */
 #conversation-dock {
     grid-column: 1 / -1;
     position: sticky;
     bottom: 0;
     z-index: 10;
     background: var(--surface-primary);
-    box-shadow: 0 -8px 20px rgba(42, 36, 30, 0.08);
 }
 .conversation-dock-expand-toggle {
     display: flex;
@@ -1334,26 +1369,21 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
     scroll-behavior: smooth;
 }
 html.conversation-expanded .conversation-thread { max-height: 60vh; }
+/* CLAUDE-P40-E1A-VISUAL: was a filled beige bubble (human) and a
+   bordered card (system) per message - the de-boxing addendum names
+   this directly ("remove borders and filled cards around ordinary
+   user and Archiosk messages"). Distinguished now by indentation and
+   the existing .role-label alone (already uppercase/letter-spaced/
+   colored differently per role) - whitespace and typography carry the
+   distinction a colored box used to. */
 .conversation-message {
-    padding: 0.7rem 0.9rem;
-    border-radius: 6px;
+    padding: 0.3rem 0;
     font-size: 0.88rem;
     line-height: 1.45;
-}
-.conversation-message.human {
-    background: var(--surface-secondary);
     color: var(--text-primary);
-    margin-left: 1.5rem;
 }
-/* Neutral surface even for the machine/system reply - avoids a large
-   saturated colored surface; the role-label alone carries the "this is
-   BEEHIVE speaking" signal. */
-.conversation-message.system {
-    background: var(--surface-primary);
-    border: 1px solid var(--border);
-    color: var(--text-primary);
-    margin-right: 1.5rem;
-}
+.conversation-message.human { margin-left: 1.5rem; }
+.conversation-message.system { margin-right: 1.5rem; }
 .conversation-message .role-label {
     display: block;
     font-family: var(--font-body);
