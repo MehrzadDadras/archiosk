@@ -1,5 +1,14 @@
 # Continuation checkpoint
 
+## 2026-07-31 — CLAUDE-P40-E1A: product-owner acceptance seal
+
+**No code change - verification only.** P40-E1A (one physical
+conversation dock, Investigation listing, no Case terminology, and the
+subsequent visual de-boxing pass) is product-owner accepted as of
+commit `7d2a4f5`, 1,311 tests passing.
+
+---
+
 ## 2026-07-31 — CLAUDE-P40-E1A-VISUAL-CLOSE: de-box decorative containers
 
 **Commit:** `9e8fd66`. Full suite: 1311 passed (was 1291).
