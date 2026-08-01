@@ -1,5 +1,53 @@
 # Continuation checkpoint
 
+## 2026-08-01 — CLAUDE-P40-E2B1A: recursive projection conformance audit
+
+**Commit:** `53bb458`. Full suite: 1465 passed (was 1448). Not yet
+product-owner accepted. Starting state was `d64da5e` (P40-E2B1's own
+commit).
+
+Audited P40-E2B1 against an explicit interaction rule before touching
+code: "the single left panel is a root launcher, not an expandable
+navigation tree" - clicking a launcher with children projects them into
+Display, recursively, never duplicated inline in the panel itself.
+Found two real violations, despite the panel already being physically
+one panel (physical single-panel compliance is not the same as semantic
+root-launcher compliance):
+
+- Project names were listed inline beneath "Projects" in the left panel
+  (`base.html`'s `nav_recent_projects` loop).
+- Documents/Investigations/Chats were listed inline beneath the active
+  Project's own name in the left panel (`.launcher-project-context`).
+
+Fix: the left panel now holds ONLY root launchers - Projects, New
+Project, identity/Security/Sign out. Project names already had a
+correct projection target (`portal.projects_list`, `/projects` -
+unchanged). Documents/Investigations/Chats gained a new one: a
+restrained inline link row at the top of Display's own division
+(`.display-branch-nav` in `case_workspace.html`) - Overview/Documents/
+Investigations/Chats, present in every per-project state, reusing the
+exact same `?view=` URLs already built in P40-E2B1, no routing changes.
+"Projects" in the panel now stays highlighted for the whole open
+Project/Workspace subtree, not just the literal `/projects` path.
+
+Recursive chain verified end-to-end via a fresh Flask test client:
+Projects (root, `/projects`) -> a Project's own branch-nav (Display,
+level 2) -> a directory's own children (level 3) -> a leaf's real
+content in the active Display division (level 4, activating the shared
+conversation dock where relevant).
+
+Three pre-existing tests broke as a direct, correct consequence of the
+fix - not because anything they actually test regressed. They were
+incidentally relying on the OLD inline Project-name listing having been
+present on every authenticated page (Home, `/security/`) as their only
+source of that project name, not on their own stated subject
+(corrupted-legacy-workspace resilience, P32 non-disclosure). Updated to
+check each page's own real, correct content instead of that removed
+side effect.
+
+STATIC_VERSION 26 -> 27 (`main.css` changed). P40-E3 and P41 not
+started.
+
 ## 2026-08-01 — CLAUDE-P40-E2B1: single launcher panel, Display-projected directories
 
 **Commit:** `c0a125c`. Full suite: 1448 passed (was 1418). Not yet
