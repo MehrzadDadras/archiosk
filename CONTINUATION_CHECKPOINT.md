@@ -1,5 +1,67 @@
 # Continuation checkpoint
 
+## 2026-07-31 — CLAUDE-P40-E2: contextual Toolbox, recoverable Document/Project removal, Reset Project Data
+
+**Commit:** `7bcd250`. Full suite: 1339 passed (was 1311).
+
+The permanent Findings-only right pane is now a persistent, contextual
+Toolbox (`.workspace-pane-toolbox`, replacing `.workspace-pane-findings`
+- the grid area/CSS class were renamed, not just restyled): Investigation
+open shows Findings (moved in unchanged, still the same accordion);
+Document selected shows Remove/Restore Document; nothing selected shows
+restrained Project tools (Remove Project). Removed Items (this
+Project's removed Documents, plus a link to Removed Projects) and an
+admin-only Reset Project Data entry sit below, always visible. The
+Toolbox always renders now (unlike the old Findings pane, which needed
+`.case-workspace-single-column` to reclaim width when nothing was
+open) - that class was removed as dead CSS.
+
+Document/Project removal is recoverable, never a deletion:
+`Source`/`ProjectWorkspace` gained `removed_at`/`removed_by`/
+`removal_reason`; `CaseWorkspaceStore.remove_source`/`restore_source`/
+`remove_project`/`restore_project` enforce owner-or-admin authority in
+the store layer (same pattern as `grant_project_access`/`archive_case`).
+`active_sources()` is the new filter for display/AI-context/search
+reads of `workspace.sources`; a dependent reference (a Finding's own
+citation) still resolves a removed Source directly via `_find`, so the
+document viewer shows an honest "removed" state rather than breaking.
+New routes (`remove_document_route`/`restore_document_route`/
+`remove_project_route`/`restore_project_route`) reuse the
+`confirm=yes/no` vocabulary `routes/portal.py`'s pre-existing, unrelated,
+still-permanent `delete_project` already established (not the Approval
+Gate's `confirm=once|session|no`) via new `confirm_remove_document.html`/
+`confirm_remove_project.html`. `_accessible_documents` and `app.py`'s
+`_nav_recent_projects` both now exclude removed projects from every
+listing while leaving direct P32-authorized access untouched (the owner
+can still reach a removed project's own workspace page to restore it,
+via `/removed-projects`).
+
+Reset Project Data (`/admin/reset-project-data`, admin-only) shows an
+exact inventory (Projects/Documents/Investigations/Findings/
+Requirements), requires typing an exact confirmation phrase, snapshots
+the whole `REGISTRY_STORE_PATH` tree to a timestamped sibling
+`registry_snapshots/<stamp>/` directory before wiping it (except
+`security_governance/`, which holds auth-adjacent state - password
+reset/rate-limit records - not project content), and is guarded against
+duplicate submission by an `os.O_EXCL` lock file kept beside (not
+inside) the store path. User accounts (`instance/bhive.db`), `.env`/
+config, and schema version are never touched - the wipe only ever acts
+inside `REGISTRY_STORE_PATH`. An audit line (actor/time/snapshot path/
+removed entries) is appended to `security_governance/reset_audit.jsonl`,
+the one subdirectory the wipe skips.
+
+28 new tests (`tests/test_p40e2_toolbox_and_removal.py`) plus one
+existing DOM-order test updated for the Findings->Toolbox rename.
+STATIC_VERSION bumped to 23 (CSS grid-area rename, `main.css` changed).
+App restarted via the `restart-app` skill and verified serving `v=23`.
+
+Live-tested only against synthetic in-memory fixtures, never real
+project records, per this stage's own explicit safety instruction -
+Reset Project Data and Remove Project were deliberately not exercised
+against the real `instance/registry/` store in this session.
+
+---
+
 ## 2026-07-31 — CLAUDE-P40-E1A: product-owner acceptance seal
 
 **No code change - verification only.** P40-E1A (one physical
