@@ -2332,7 +2332,7 @@ def quick_start(project_id):
 
     if anchor is not None or _looks_like_project_question(text.lower()):
         _run_conversation_turn(project_id, store, workspace, None, text, anchor=anchor)
-        return redirect(url_for("workspace.show_workspace", project_id=project_id) + "#project-conversation")
+        return redirect(url_for("workspace.show_workspace", project_id=project_id) + "#conversation-dock")
 
     title = text if len(text) <= 80 else text[:77] + "..."
     case = store.create_case(workspace, title=title, objective="", created_by=_reviewer())
@@ -2383,13 +2383,13 @@ def discuss_object(project_id):
 
     # CLAUDE-P40-B (3.5): without a fragment, a plain redirect lands the
     # reviewer at the top of Project Home with no indication a reply
-    # exists or where to find it - Project Conversation is collapsed by
-    # default. The #project-conversation fragment (real html_id, added
-    # in Batch A) makes the browser scroll there AND triggers the
-    # already-built auto-open-on-anchor script, the same mechanism
-    # Batch A's "View all" links now rely on - not a new destination-
-    # tracking system, the same one used twice.
-    return redirect(url_for("workspace.show_workspace", project_id=project_id) + "#project-conversation")
+    # exists or where to find it - the conversation dock is collapsed by
+    # default. The #conversation-dock fragment (CLAUDE-P40-E1A: the ONE
+    # shared dock html_id, was #project-conversation) makes the browser
+    # scroll there AND triggers the already-built auto-open-on-anchor
+    # script, the same mechanism Batch A's "View all" links now rely on -
+    # not a new destination-tracking system, the same one used twice.
+    return redirect(url_for("workspace.show_workspace", project_id=project_id) + "#conversation-dock")
 
 
 @workspace_bp.route("/projects/<project_id>/workspace/apertures/<message_id>/start-investigation", methods=["POST"])

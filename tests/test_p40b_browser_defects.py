@@ -150,7 +150,10 @@ class ProjectHomeBrowserDefectTests(unittest.TestCase):
         body = self._page()
         self.assertIn('id="requirements"', body)
         self.assertIn('id="temporal-obligations"', body)
-        self.assertIn('id="project-conversation"', body)
+        # CLAUDE-P40-E1A: the conversation dock's own html_id is now the
+        # single shared "conversation-dock" (was "project-conversation")
+        # - see macros.conversation_dock.
+        self.assertIn('id="conversation-dock"', body)
 
     def test_view_all_technical_link_uses_a_truthful_count_label(self):
         body = self._page()
@@ -381,7 +384,7 @@ class ProjectQAContinuityTests(unittest.TestCase):
                 data={"text": "What is the name of the RFP?"},
             )
         self.assertEqual(resp.status_code, 302)
-        self.assertTrue(resp.headers["Location"].endswith("#project-conversation"))
+        self.assertTrue(resp.headers["Location"].endswith("#conversation-dock"))
 
     # -- 3.5: a plain question does not silently create a Case -------------
 
@@ -396,7 +399,7 @@ class ProjectQAContinuityTests(unittest.TestCase):
                 data={"text": "What is the name of this document?"},
             )
         self.assertEqual(resp.status_code, 302)
-        self.assertTrue(resp.headers["Location"].endswith("#project-conversation"))
+        self.assertTrue(resp.headers["Location"].endswith("#conversation-dock"))
         workspace = self.store.get(self.project_id)
         self.assertEqual(workspace.cases, [])
         self.assertEqual(len(workspace.project_conversation), 2)  # human + system

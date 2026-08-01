@@ -234,9 +234,11 @@ class RfiDelegationStillFunctionalTests(_BaseSingleComposerTestCase):
 
 class DraftPreservationStillWorksTests(_BaseSingleComposerTestCase):
     def test_dock_composer_still_carries_the_draft_preservation_attribute(self):
+        # CLAUDE-P40-E1A: the key is now the per-context scope_key
+        # ("project" on Project Home), not the project_id.
         client = self._client_as("p40e1_owner", 1)
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
-        self.assertIn(f'data-conversation-draft="{self.project_id}"', body)
+        self.assertIn('data-conversation-draft="project"', body)
 
 
 class AuthorizationStillEnforcedTests(_BaseSingleComposerTestCase):

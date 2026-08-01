@@ -308,7 +308,7 @@ class DiscussionWorkflowTests(unittest.TestCase):
         body = response.get_data(as_text=True)
         self.assertNotIn(thread["title"], body)
         self.assertNotIn("Predecessor concern.", body)
-        self.assertIn("No discussion yet on this Case.", body)
+        self.assertIn("No discussion yet on this Investigation.", body)
 
     def test_carried_forward_message_is_distinguishable_from_a_fresh_one(self):
         case = self._create_case()
@@ -328,7 +328,7 @@ class DiscussionWorkflowTests(unittest.TestCase):
 
         response = self.owner_client.get(f"/projects/{self.project_id}/workspace?case={derived_case['id']}")
         body = response.get_data(as_text=True)
-        self.assertIn("Carried forward from an archived predecessor Case", body)
+        self.assertIn("Carried forward from an archived predecessor Investigation", body)
         self.assertIn("Predecessor concern to reconsider.", body)
 
 

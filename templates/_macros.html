@@ -64,6 +64,58 @@
 </details>
 {% endmacro %}
 
+{# -- conversation_dock ------------------------------------------------
+   CLAUDE-P40-E1A, Section A: the ONE physical conversation dock. Called
+   once with Project-level data (nothing selected) or once with an
+   Investigation's own data (one open) - the two call sites in
+   case_workspace.html are themselves mutually exclusive branches, so
+   this macro is never rendered twice in the same response, but every
+   call produces byte-identical structure/classes/html_id
+   ("conversation-dock", always - never a different id per context) so
+   switching between Project and an Investigation always looks like the
+   same dock changing what it targets, never a second, structurally
+   different chatbox. The caller block supplies the message-list markup
+   (Case and Project messages render slightly differently - hotlinks/
+   grounded_in vs anchor labels/escalation offers - kept at the call
+   site rather than forced into one generic shape here) and any extra
+   context-specific content (the Investigation's RFI delegation-choice/
+   preview UI, for the Case call site only).
+
+   `scope_key` drives BOTH the draft-preservation and scroll-position
+   sessionStorage keys (static/js/case_workspace.js) - deliberately
+   different per context ("project" vs "case-<id>"), per Section A's
+   own explicit requirement that each conversation keeps its own
+   separate draft and scroll position, not a shared one. #}
+{% macro conversation_dock(heading, message_count, post_url, scope_key, placeholder, include_anchor_fields=False) %}
+{# Jinja's caller() only resolves against the NEAREST enclosing {% call %}
+   - captured into a variable here, before entering the nested
+   {% call accordion(...) %} below, so the reference used inside that
+   block resolves to THIS macro's own caller (the message-list markup
+   from case_workspace.html), not an undefined caller for accordion
+   itself. #}
+{% set dock_body %}{{ caller() }}{% endset %}
+{% call accordion(heading ~ ' (' ~ message_count ~ ')', group='conversation-dock', id='conversation-dock', html_id='conversation-dock', open=True) %}
+    <label class="conversation-dock-expand-toggle">
+        <input type="checkbox" id="conversation-expand-toggle">
+        Show full conversation history
+    </label>
+    <p class="pane-note" style="margin:-0.3rem 0 0.5rem;font-size:0.78rem;">
+        Named conversation history and saved investigation patterns are planned, not available yet.
+    </p>
+    {{ dock_body }}
+    <form class="conversation-input-form conversation-dock-composer" method="post" action="{{ post_url }}">
+        {% if include_anchor_fields %}
+        <input type="hidden" name="anchor_type" id="dock-composer-anchor-type" value="">
+        <input type="hidden" name="anchor_id" id="dock-composer-anchor-id" value="">
+        <input type="hidden" name="anchor_description" id="dock-composer-anchor-description" value="">
+        <span class="dock-composer-anchor-label" id="dock-composer-anchor-label" hidden></span>
+        {% endif %}
+        <input type="text" name="text" id="dock-composer-input" data-conversation-draft="{{ scope_key }}" placeholder="{{ placeholder }}" autocomplete="off" required>
+        <button type="submit">Send</button>
+    </form>
+{% endcall %}
+{% endmacro %}
+
 {# -- aperture ---------------------------------------------------------
    The contextual "ask Archiosk about this" affordance: attaches an
    Anchor (anchor_type/anchor_id/description - see the Anchor dataclass

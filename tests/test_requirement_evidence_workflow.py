@@ -219,7 +219,7 @@ class RequirementEvidenceWorkflowTests(unittest.TestCase):
         response = self.other_client.get(f"/projects/{self.project_id}/workspace")
         body = response.get_data(as_text=True)
         self.assertIn("Satisfied", body)  # the adjudication outcome/reasoning is project-wide, unchanged
-        self.assertIn("Evidence from a Case you don't have access to.", body)
+        self.assertIn("Evidence from an Investigation you don't have access to.", body)
         self.assertNotIn("Certificates confirm current labor licensure.", body)
         self.assertNotIn(self.case["title"], body)
 

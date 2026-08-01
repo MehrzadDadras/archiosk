@@ -377,6 +377,23 @@ html.nav-expanded .side-rail-project-nav { display: flex; }
     font-size: 0.76rem;
     margin-left: 0.2rem;
 }
+/* CLAUDE-P40-E1A, Section B: the per-Investigation name list under
+   Work - a non-link label row (count only, not itself a target) plus
+   one indented, truncated link per Investigation, same subtle active-
+   state treatment as .side-rail-link.active elsewhere in this rail. */
+.side-rail-project-sublabel {
+    font-family: var(--font-body);
+    font-size: 0.78rem;
+    color: var(--text-metadata);
+    margin: 0.2rem 0 0.1rem 0.6rem;
+}
+.side-rail-project-sublink {
+    padding-left: 1.2rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.side-rail-project-sublink.active { background: var(--surface-selected); color: var(--text-primary); }
 
 .app-main {
     flex: 1;
@@ -1270,19 +1287,25 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
 }
 .workspace-form button:hover { background: var(--surface-hover); }
 
-/* -- compact bottom conversation dock (CLAUDE-P40-E, Section E) -----------
-   One active dock per Workspace: #conversation (a Case is open) and
-   #project-conversation (nothing is open) are mutually exclusive
-   render branches (see case_workspace.html) sharing this identical
-   treatment - never both on screen, so this is still genuinely one
-   dock, not two. Sticky to the bottom of the viewport as the page
-   scrolls (no nested scroll container exists in this app's layout, so
-   the ordinary page scroll is what "sticky" pins against) - compact by
-   default (recent messages only, internal scroll), with an explicit
-   expand toggle for full history, same shape as the existing
+/* -- the ONE physical bottom conversation dock (CLAUDE-P40-E1A, Section A) -
+   #conversation-dock is the single html_id macros.conversation_dock
+   always renders, whether it's targeting the Project conversation or
+   an open Investigation's own - the two are mutually exclusive Jinja
+   branches (see case_workspace.html), never both on screen, so one id/
+   one set of rules is genuinely one dock, not a shared style applied
+   to two different elements. Rendered as a child of .case-workspace
+   (a grid) but not part of its named "workspace"/"findings" areas -
+   grid-column spans the full row so the dock reaches the "active
+   working width" (Section I) rather than being confined to just the
+   narrower "workspace" column. Sticky to the bottom of the viewport as
+   the page scrolls (no nested scroll container exists in this app's
+   layout, so the ordinary page scroll is what "sticky" pins against) -
+   compact by default (recent messages only, internal scroll), with an
+   explicit expand toggle for full history, same shape as the existing
    layer-risk-toggle/history-full-toggle checkbox-hack pattern
    (static/js/case_workspace.js) rather than a new mechanism. */
-#conversation, #project-conversation {
+#conversation-dock {
+    grid-column: 1 / -1;
     position: sticky;
     bottom: 0;
     z-index: 10;

@@ -293,7 +293,8 @@ class CasePrivacyRouteTests(unittest.TestCase):
         response = self.other_client.get(f"/projects/{self.project_id}/workspace")
         self.assertEqual(response.status_code, 200)
         self.assertNotIn(case["title"].encode(), response.data)
-        self.assertIn(b"Cases (0)", response.data)
+        # CLAUDE-P40-E1A: the accordion was renamed "Cases" -> "Investigations".
+        self.assertIn(b"Investigations (0)", response.data)
 
     def test_other_user_cannot_load_private_case_via_direct_case_param(self):
         case = self._create_case_as_owner()

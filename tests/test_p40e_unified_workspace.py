@@ -207,13 +207,13 @@ class ConversationDockTests(_BaseWorkspaceTestCase):
         body = resp.get_data(as_text=True)
         self.assertEqual(body.count("conversation-dock-composer"), 1)
 
-    def test_draft_preservation_key_is_stable_across_document_and_case_navigation(self):
-        # Section G/F#1: the client-side draft-preservation script keys
-        # sessionStorage by project_id (data-conversation-draft) - this
-        # server-side contract must stay the same project_id whether the
-        # dock is showing project-level or Case-level conversation, so a
-        # draft started in one context is still found after navigating
-        # to the other.
+    def test_draft_preservation_key_is_separate_per_conversation_context(self):
+        # CLAUDE-P40-E1A, Section A: "Preserve a separate draft and
+        # scroll position for each conversation context" - was a single
+        # shared project_id key (P40-E); now data-conversation-draft
+        # matches the same per-context scope_key data-conversation-scope
+        # already uses ("project" vs "case-<id>"), so switching context
+        # restores the RIGHT draft, not a shared one.
         client = self._client_as("p40e_owner", 1)
         client.post(f"/projects/{self.project_id}/workspace/cases", data={"title": "Drawing Review", "objective": ""})
         case_id = self._store().get(self.project_id).cases[0]["id"]
@@ -221,8 +221,8 @@ class ConversationDockTests(_BaseWorkspaceTestCase):
         home_body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
         case_body = client.get(f"/projects/{self.project_id}/workspace?case={case_id}").get_data(as_text=True)
 
-        self.assertIn(f'data-conversation-draft="{self.project_id}"', home_body)
-        self.assertIn(f'data-conversation-draft="{self.project_id}"', case_body)
+        self.assertIn('data-conversation-draft="project"', home_body)
+        self.assertIn(f'data-conversation-draft="case-{case_id}"', case_body)
 
     def test_no_fake_conversation_lifecycle_controls_only_honest_disclosure(self):
         # Sections F/H were left specified-but-unbuilt - confirms no

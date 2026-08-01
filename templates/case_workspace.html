@@ -163,7 +163,7 @@
            for. Everything else below keeps its prior relative order;
            this is a targeted fix for a signal (open=True) contradicting
            its own position, not a full re-ranking of the pane. #}
-        {% call macros.accordion('Cases (' ~ visible_cases|length ~ ')', group='left', id='cases', html_id='cases', open=True) %}
+        {% call macros.accordion('Investigations (' ~ visible_cases|length ~ ')', group='left', id='cases', html_id='cases', open=True) %}
         <ul class="case-list">
             {% for case in visible_cases %}
             <li>
@@ -193,7 +193,7 @@
                         </select>
                         <input type="text" name="reasoning" placeholder="Reasoning (required)" required>
                         <select name="duplicate_of_case_id">
-                            <option value="">If duplicate, which Case? (optional)</option>
+                            <option value="">If duplicate, which Investigation? (optional)</option>
                             {% for other_case in visible_cases if other_case.id != case.id %}
                             <option value="{{ other_case.id }}">{{ other_case.title }}</option>
                             {% endfor %}
@@ -216,20 +216,20 @@
                 </form>
                 {% elif case.status == 'archived' and (case.created_by == session.username or session.role == 'admin') %}
                 <form method="post" action="{{ url_for('workspace.derive_case', project_id=project_id, case_id=case.id) }}">
-                    <button type="submit" class="link-button">Derive Active Case</button>
+                    <button type="submit" class="link-button">Derive Active Investigation</button>
                 </form>
                 {% endif %}
             </li>
             {% else %}
-            <li style="color:var(--text-secondary);font-size:0.82rem;">No Cases yet.</li>
+            <li style="color:var(--text-secondary);font-size:0.82rem;">No Investigations yet.</li>
             {% endfor %}
         </ul>
 
-        {% call macros.subdisclosure('+ New Case') %}
+        {% call macros.subdisclosure('+ New Investigation') %}
             <form class="workspace-form" method="post" action="{{ url_for('workspace.create_case', project_id=project_id) }}">
-                <input type="text" name="title" placeholder="Case title (e.g. Schedule Conflict Review)" required>
+                <input type="text" name="title" placeholder="Investigation title (e.g. Schedule Conflict Review)" required>
                 <input type="text" name="objective" placeholder="Objective (optional)">
-                <button type="submit">Create Case</button>
+                <button type="submit">Create Investigation</button>
             </form>
         {% endcall %}
         {% endcall %}
@@ -302,7 +302,7 @@
             <p class="pane-note">
                 Machine-suggested Investigations, by outcome. &ldquo;Unresolved&rdquo; means no
                 verdict has been recorded yet - not that nothing happened. Record an outcome from
-                a Case's own &ldquo;Record Outcome&rdquo; disclosure above.
+                an Investigation's own &ldquo;Record Outcome&rdquo; disclosure above.
             </p>
             {% if investigation_quality_view.anchored_by_type %}
             {% for anchor_type, counts in investigation_quality_view.anchored_by_type.items() %}
@@ -472,8 +472,8 @@
         {% call macros.accordion('Accepted Knowledge (' ~ accepted_knowledge|length ~ ')', group='left', id='accepted-knowledge', html_id='accepted-knowledge') %}
         {% call macros.subdisclosure('How Accepted Knowledge works') %}
             <p class="pane-note">
-                Every Applied Finding across this Project's Cases, independent of which Case produced it —
-                the Project's accumulated intelligence, not a per-Case log. This is the visible result of
+                Every Applied Finding across this Project's Investigations, independent of which Investigation produced it —
+                the Project's accumulated intelligence, not a per-Investigation log. This is the visible result of
                 &ldquo;Apply Confirmed Findings&rdquo; below — the concrete effect an investigation had on governed project state.
             </p>
         {% endcall %}
@@ -497,7 +497,7 @@
                     {{ item.statement }}
                     <br><small class="text-muted">
                         established by {{ item.established_by }} &middot; {{ item.established_at }}
-                        &middot; from {{ row.source_case_title or 'an unknown Case' }}
+                        &middot; from {{ row.source_case_title or 'an unknown Investigation' }}
                     </small>
                     <br><small class="text-muted">
                         {% if row.linked_requirements %}
@@ -522,7 +522,7 @@
         {% call macros.accordion('Project Instructions', status='+', group='left', id='instructions', html_id='instructions') %}
             {% call macros.subdisclosure('What are Project Instructions?') %}
                 <p class="pane-note">
-                    Project / Case Operating Instructions guide terminology, conventions, and known assumptions
+                    Project / Investigation Operating Instructions guide terminology, conventions, and known assumptions
                     for this Project. Always subordinate to Archiosk governance &mdash; Stone Wall, source
                     authority, provenance, and approval boundaries take precedence and can never be overridden
                     here.
@@ -747,7 +747,7 @@
             <p class="pane-note">
                 For a Requirement's text that lives in a Source the legacy extraction pipeline
                 never saw - any governed Source, drawing or document. No Investigation needed;
-                a Requirement belongs to the Project, not to a Case.
+                a Requirement belongs to the Project, not to an Investigation.
             </p>
             <form class="workspace-form" method="post"
                   action="{{ url_for('workspace.register_requirement_route', project_id=project_id) }}">
@@ -813,7 +813,7 @@
                     {% if ef.visible %}
                     <span class="review-state-badge">{{ ef.claim_status }}</span> {{ ef.statement[:60] }} <em>({{ ef.case_title }})</em><br>
                     {% else %}
-                    <span>Evidence from a Case you don't have access to.</span><br>
+                    <span>Evidence from an Investigation you don't have access to.</span><br>
                     {% endif %}
                     {% endfor %}
                     {% endif %}
@@ -905,7 +905,7 @@
                         {% if perspective.machine %}
                         {{ perspective.machine.polarity }} (confidence {{ (perspective.machine.confidence * 100)|round|int }}%) &mdash; {{ perspective.machine.reasoning }}
                         {% else %}
-                        no independent assessment yet - ask a Case-shaped question anchored to this Requirement
+                        no independent assessment yet - ask an Investigation-shaped question anchored to this Requirement
                         {% endif %}
                     </p>
                     {% if perspective.agree is not none %}
@@ -1055,7 +1055,7 @@
         {% for notice in revision_notices %}
         <div class="revision-notice">
             <strong>Reference update detected</strong>
-            <p>A newer revision of a Source used in this Case was registered. The original evidence
+            <p>A newer revision of a Source used in this Investigation was registered. The original evidence
                behind existing Findings is preserved unchanged.</p>
             <div class="finding-provenance">
                 {% for status in notice.artifact_region_status %}
@@ -1066,7 +1066,7 @@
         </div>
         {% endfor %}
 
-        {% call macros.subdisclosure('+ Add drawing Source to this Case') %}
+        {% call macros.subdisclosure('+ Add drawing Source to this Investigation') %}
             <form class="workspace-form" method="post" enctype="multipart/form-data"
                   action="{{ url_for('workspace.add_drawing_source', project_id=project_id, case_id=active_case.id) }}">
                 <input type="file" name="drawing" accept=".png,.jpg,.jpeg" required>
@@ -1089,124 +1089,18 @@
         {% endcall %}
         {% endif %}
 
-        {# CLAUDE-P40-E, Section E: the compact bottom conversation dock.
-           Deliberately NOT relocated out of its existing position in the
-           document/Jinja source - the RFI delegation-choice/preview UI
-           immediately below is tightly coupled to what the last
-           conversation exchange produced, and Discussion (Review
-           threads, a distinct governed concept) shares this same
-           accordion group right after it; physically moving just the
-           message list would either duplicate that coupling or risk
-           breaking it. Instead, this accordion is DOCKED in place via
-           CSS (.conversation-dock, sticky to the bottom of the
-           viewport, internal scroll on the message list, composer
-           always reachable) - the single active conversation dock this
-           Case's Workspace has, exactly as specified, without a risky
-           markup relocation. Project Conversation (no Case open, at the
-           bottom of this file) gets the identical treatment - the two
-           are mutually exclusive branches, never on screen together,
-           so there is still only ever one dock. #}
-        {% call macros.accordion('Conversation (' ~ active_case.conversation|length ~ ')', group='center', id='conversation', html_id='conversation', open=True) %}
-        <label class="conversation-dock-expand-toggle">
-            <input type="checkbox" id="conversation-expand-toggle">
-            Show full conversation history
-        </label>
-        {# Sections F/H: named conversation threads (Start New/Archive/
-           History/Restore/Delete) and reviewer-saved investigation
-           patterns are specified, not built yet - see governance/
-           specified-unbuilt/conversation-thread-lifecycle.md and
-           reviewer-governed-pattern-suggestions.md. Named honestly here
-           rather than as a control that does nothing. #}
-        <p class="pane-note" style="margin:-0.3rem 0 0.5rem;font-size:0.78rem;">
-            Named conversation history and saved investigation patterns are planned, not available yet.
-        </p>
-        <div class="conversation-thread" data-conversation-scope="case-{{ active_case.id }}">
-            {% for message in active_case.conversation %}
-            <div class="conversation-message {{ message.role }}">
-                <span class="role-label">{{ "You" if message.role == "human" else "Archiosk" }}</span>
-                {{ message.text|hotlinks(workspace, project_id) }}
-                {% if message.grounded_in %}
-                {% call macros.subdisclosure('Source grounding') %}
-                    <ul class="source-list">{% for g in message.grounded_in %}<li class="source-item">{{ g }}</li>{% endfor %}</ul>
-                {% endcall %}
-                {% endif %}
-            </div>
-            {% else %}
-            {# CLAUDE-P40-B (3.7): this example previously always
-               suggested drawing analysis, regardless of whether this
-               Case's Sources include a drawing - confirmed misleading
-               for a text-document Case (a DOCX/PDF RFP has no "datum"
-               to analyze). drawing_sources is already computed above
-               (for the "+ Add drawing Source" control) - reused here,
-               not a new medium-detection mechanism. #}
-            <p class="conversation-empty">
-                {% if drawing_sources %}
-                No conversation yet. Try: &ldquo;Analyze this drawing for datum inconsistencies.&rdquo;
-                {% else %}
-                No conversation yet. Ask a question or investigate this Source.
-                {% endif %}
-            </p>
-            {% endfor %}
-        </div>
-
-        {% if pending_rfi_finding_id and can_originate_rfi %}
-        <div class="delegation-choice">
-            <p class="workspace-pane-label">How would you like to proceed?</p>
-            <form method="post" action="{{ url_for('workspace.create_rfi_draft', project_id=project_id, case_id=active_case.id) }}">
-                <input type="hidden" name="finding_id" value="{{ pending_rfi_finding_id }}">
-                <button type="submit" class="review-btn accept">Do it for me</button>
-            </form>
-            <form method="post" action="{{ url_for('workspace.preview_rfi_draft', project_id=project_id, case_id=active_case.id) }}">
-                <input type="hidden" name="finding_id" value="{{ pending_rfi_finding_id }}">
-                <button type="submit" class="review-btn needs_evidence">Show me the proposed action first</button>
-            </form>
-            <form method="post" action="{{ url_for('workspace.cancel_rfi_intent', project_id=project_id, case_id=active_case.id) }}">
-                <button type="submit" class="review-btn reject">Cancel</button>
-            </form>
-        </div>
-        {% elif pending_rfi_finding_id %}
-        <div class="delegation-choice">
-            <p style="color:var(--text-secondary);font-size:0.85rem;">
-                This project's {{ operating_environment_label }} environment does not originate RFIs
-                &mdash; that capability belongs to the Design-Builder / Proponent side.
-            </p>
-            <form method="post" action="{{ url_for('workspace.cancel_rfi_intent', project_id=project_id, case_id=active_case.id) }}">
-                <button type="submit" class="review-btn reject">Dismiss</button>
-            </form>
-        </div>
-        {% endif %}
-
-        {% if rfi_preview and can_originate_rfi %}
-        <div class="rfi-preview">
-            <p class="workspace-pane-label">Proposed RFI reference bundle (nothing created yet)</p>
-            <div class="finding-provenance">
-                <span>case:</span> <strong>{{ rfi_preview.case_title }}</strong><br>
-                <span>source:</span> <strong>{{ rfi_preview.source_name }}</strong> &middot; page <strong>{{ rfi_preview.page }}</strong><br>
-                {% if rfi_preview.region %}
-                <span>region:</span> <strong>x={{ "%.2f"|format(rfi_preview.region.x) }} y={{ "%.2f"|format(rfi_preview.region.y) }}</strong><br>
-                {% endif %}
-                <span>finding:</span> <strong>{{ rfi_preview.finding_statement }}</strong><br>
-                <span>reviewer validation:</span> <strong>{{ rfi_preview.reviewer_validation }}</strong> ({{ rfi_preview.reviewer }})
-            </div>
-            <form method="post" action="{{ url_for('workspace.create_rfi_draft', project_id=project_id, case_id=active_case.id) }}">
-                <input type="hidden" name="finding_id" value="{{ preview_finding_id }}">
-                <button type="submit" class="apply-button">Create this draft</button>
-            </form>
-        </div>
-        {% endif %}
-
-        <form class="conversation-input-form conversation-dock-composer" method="post"
-              action="{{ url_for('workspace.post_message', project_id=project_id, case_id=active_case.id) }}">
-            <input type="text" name="text" data-conversation-draft="{{ project_id }}"
-                   placeholder="{{ 'Analyze this drawing for datum inconsistencies…' if drawing_sources else 'Ask a question or investigate this Source…' }}" autocomplete="off" required>
-            <button type="submit">Send</button>
-        </form>
-        {% endcall %}
+        {# CLAUDE-P40-E1A, Section A: the Investigation's own conversation
+           now renders at the ONE shared physical dock position (after
+           the .case-workspace grid closes, below), not here - see
+           macros.conversation_dock and its call site near the end of
+           this file. Discussion (Review threads, a distinct governed
+           concept - not part of the conversation dock) stays exactly
+           where it was. #}
 
         {% call macros.accordion('Discussion (' ~ threads_view|length ~ ')', group='center', id='discussion') %}
         {% if active_case.status == 'archived' %}
         <p style="color:var(--text-secondary);font-size:0.88rem;">
-            This Case is archived — the discussion below is preserved exactly as it stood and is read-only.
+            This Investigation is archived — the discussion below is preserved exactly as it stood and is read-only.
         </p>
         {% endif %}
 
@@ -1242,7 +1136,7 @@
                     <span class="role-label">{{ message.actor }}</span>
                     <span style="color:var(--text-secondary);font-size:0.82rem;">{{ message.origin }} &middot; {{ message.created_at }}</span>
                     {% if message.message_type == 'carried_forward' %}
-                    <br><small style="color:var(--attention-amber);">Carried forward from an archived predecessor Case for renewed consideration — not originally authored here.</small>
+                    <br><small style="color:var(--attention-amber);">Carried forward from an archived predecessor Investigation for renewed consideration — not originally authored here.</small>
                     {% endif %}
                     <p style="margin:0.3rem 0;">{{ message.text }}</p>
                     {% if active_case.status != 'archived' %}
@@ -1321,7 +1215,7 @@
             {% endif %}
         </details>
         {% else %}
-        <p style="color:var(--text-secondary);font-size:0.82rem;">No discussion yet on this Case.</p>
+        <p style="color:var(--text-secondary);font-size:0.82rem;">No discussion yet on this Investigation.</p>
         {% endfor %}
 
         {% if active_case.status != 'archived' %}
@@ -1330,7 +1224,7 @@
                 <input type="text" name="title" placeholder="Discussion title" required>
                 {% if findings_view %}
                 <select name="related_finding_id">
-                    <option value="">General Case discussion</option>
+                    <option value="">General Investigation discussion</option>
                     {% for row in findings_view %}
                     <option value="{{ row.finding.id }}">Re: {{ row.finding.statement[:50] }}</option>
                     {% endfor %}
@@ -1528,7 +1422,7 @@
 
         <div class="apply-bar">
             <p>
-                {{ findings_view|length }} finding(s) in this Case &middot;
+                {{ findings_view|length }} finding(s) in this Investigation &middot;
                 {{ applied_count }} applied &middot;
                 {{ awaiting_apply_count }} Confirmed, awaiting Apply
             </p>
@@ -2063,72 +1957,152 @@
                 {% endcall %}
             {% endcall %}
 
-            {% call macros.accordion('Project Conversation (' ~ project_conversation_view|length ~ ')', group='project-home', id='project-conversation', html_id='project-conversation') %}
-                <p class="pane-note">
-                    Talk to the Project itself &mdash; general notes, or anything opened from a
-                    &ldquo;Discuss this&hellip;&rdquo; link elsewhere on this page (each message below
-                    shows what it was about, if anything).
-                </p>
-                <label class="conversation-dock-expand-toggle">
-                    <input type="checkbox" id="conversation-expand-toggle">
-                    Show full conversation history
-                </label>
-                <p class="pane-note" style="margin:-0.3rem 0 0.5rem;font-size:0.78rem;">
-                    Named conversation history and saved investigation patterns are planned, not available yet.
-                </p>
-                <div class="conversation-thread" data-conversation-scope="project">
-                    {% for message in project_conversation_view %}
-                    <div class="conversation-message {{ message.role }}">
-                        <span class="role-label">{{ "You" if message.role == "human" else "Archiosk" }}</span>
-                        {% if message.anchor %}
-                        <br><small class="text-muted">Re: {{ message.anchor.anchor_type.replace('_', ' ') }}{% if message.anchor.description %} &mdash; {{ message.anchor.description }}{% endif %}</small>
-                        {% endif %}
-                        {{ message.text|hotlinks(workspace, project_id) }}
-                        {% if message.grounded_in %}
-                        {% call macros.subdisclosure('Source grounding') %}
-                            <ul class="source-list">{% for g in message.grounded_in %}<li class="source-item">{{ g }}</li>{% endfor %}</ul>
-                        {% endcall %}
-                        {% endif %}
-                        {# The "conversation -> Investigation" escalation offer: only for the
-                           MOST RECENT message, and only when interpret_message actually
-                           recognized a Case-shaped action (needs_case) - never for an ordinary
-                           unmatched question, and it naturally stops being offered the moment
-                           anything else gets posted (see start_investigation_from_aperture's
-                           own docstring for what accepting it does). #}
-                        {% if loop.last and message.role == "system" and message.action_taken and message.action_taken.startswith("needs_case:") %}
-                        <form method="post" action="{{ url_for('workspace.start_investigation_from_aperture', project_id=project_id, message_id=message.action_taken.split(':', 1)[1]) }}">
-                            <button type="submit" class="review-btn needs_evidence">Start an Investigation from this</button>
-                        </form>
-                        {% endif %}
-                    </div>
-                    {% else %}
-                    <p class="conversation-empty">No Project Conversation yet.</p>
-                    {% endfor %}
-                </div>
-                {# CLAUDE-P40-E1: the ONE composer for this Workspace when
-                   no Investigation is open - routes.workspace.quick_start
-                   already classifies a plain question (grounded document
-                   Q&A, stays in this Project Conversation) from a real
-                   "start work" request (opens a new Investigation) -
-                   see that route's own docstring. Hidden anchor fields
-                   let a "Discuss this X" link elsewhere on the page
-                   (macros.aperture) attach context to a message typed
-                   HERE instead of rendering its own separate composer -
-                   see static/js/case_workspace.js's aperture-link
-                   handler. #}
-                <form class="conversation-input-form conversation-dock-composer" method="post" action="{{ url_for('workspace.quick_start', project_id=project_id) }}">
-                    <input type="hidden" name="anchor_type" id="dock-composer-anchor-type" value="">
-                    <input type="hidden" name="anchor_id" id="dock-composer-anchor-id" value="">
-                    <input type="hidden" name="anchor_description" id="dock-composer-anchor-description" value="">
-                    <span class="dock-composer-anchor-label" id="dock-composer-anchor-label" hidden></span>
-                    <input type="text" name="text" id="dock-composer-input" data-conversation-draft="{{ project_id }}" placeholder="Ask a question, or describe what you want to work on&hellip;" autocomplete="off" required>
-                    <button type="submit">Send</button>
-                </form>
-            {% endcall %}
+            {# CLAUDE-P40-E1A, Section A: the Project's own conversation now
+               renders at the ONE shared physical dock position (after the
+               .case-workspace grid closes, below), not here - see
+               macros.conversation_dock and its call site. #}
         </div>
     </div>
     </div>
 {% endif %}
+
+{# ---------------- The ONE physical conversation dock ----------------------
+   CLAUDE-P40-E1A, Section A: exactly one call site renders, depending on
+   whether an Investigation is open - never both, and always the same
+   macro/html_id/classes either way, so switching context never looks
+   like a second, structurally different chatbox. Deliberately OUTSIDE
+   the active_case if/else above (its own separate check) so it sits at
+   one single position in the DOM regardless of which branch rendered
+   the rest of the Workspace pane. #}
+{% if active_case %}
+    {% call macros.conversation_dock(
+        active_case.title,
+        active_case.conversation|length,
+        url_for('workspace.post_message', project_id=project_id, case_id=active_case.id),
+        'case-' ~ active_case.id,
+        ('Analyze this drawing for datum inconsistencies…' if drawing_sources else 'Ask a question or investigate this Source…'),
+    ) %}
+        <div class="conversation-thread" data-conversation-scope="case-{{ active_case.id }}">
+            {% for message in active_case.conversation %}
+            <div class="conversation-message {{ message.role }}">
+                <span class="role-label">{{ "You" if message.role == "human" else "Archiosk" }}</span>
+                {{ message.text|hotlinks(workspace, project_id) }}
+                {% if message.grounded_in %}
+                {% call macros.subdisclosure('Source grounding') %}
+                    <ul class="source-list">{% for g in message.grounded_in %}<li class="source-item">{{ g }}</li>{% endfor %}</ul>
+                {% endcall %}
+                {% endif %}
+            </div>
+            {% else %}
+            {# CLAUDE-P40-B (3.7): this example previously always
+               suggested drawing analysis, regardless of whether this
+               Investigation's Sources include a drawing - confirmed
+               misleading for a text-document Investigation (a DOCX/PDF
+               RFP has no "datum" to analyze). drawing_sources is already
+               computed above (for the "+ Add drawing Source" control) -
+               reused here, not a new medium-detection mechanism. #}
+            <p class="conversation-empty">
+                {% if drawing_sources %}
+                No conversation yet. Try: &ldquo;Analyze this drawing for datum inconsistencies.&rdquo;
+                {% else %}
+                No conversation yet. Ask a question or investigate this Source.
+                {% endif %}
+            </p>
+            {% endfor %}
+        </div>
+
+        {% if pending_rfi_finding_id and can_originate_rfi %}
+        <div class="delegation-choice">
+            <p class="workspace-pane-label">How would you like to proceed?</p>
+            <form method="post" action="{{ url_for('workspace.create_rfi_draft', project_id=project_id, case_id=active_case.id) }}">
+                <input type="hidden" name="finding_id" value="{{ pending_rfi_finding_id }}">
+                <button type="submit" class="review-btn accept">Do it for me</button>
+            </form>
+            <form method="post" action="{{ url_for('workspace.preview_rfi_draft', project_id=project_id, case_id=active_case.id) }}">
+                <input type="hidden" name="finding_id" value="{{ pending_rfi_finding_id }}">
+                <button type="submit" class="review-btn needs_evidence">Show me the proposed action first</button>
+            </form>
+            <form method="post" action="{{ url_for('workspace.cancel_rfi_intent', project_id=project_id, case_id=active_case.id) }}">
+                <button type="submit" class="review-btn reject">Cancel</button>
+            </form>
+        </div>
+        {% elif pending_rfi_finding_id %}
+        <div class="delegation-choice">
+            <p style="color:var(--text-secondary);font-size:0.85rem;">
+                This project's {{ operating_environment_label }} environment does not originate RFIs
+                &mdash; that capability belongs to the Design-Builder / Proponent side.
+            </p>
+            <form method="post" action="{{ url_for('workspace.cancel_rfi_intent', project_id=project_id, case_id=active_case.id) }}">
+                <button type="submit" class="review-btn reject">Dismiss</button>
+            </form>
+        </div>
+        {% endif %}
+
+        {% if rfi_preview and can_originate_rfi %}
+        <div class="rfi-preview">
+            <p class="workspace-pane-label">Proposed RFI reference bundle (nothing created yet)</p>
+            <div class="finding-provenance">
+                <span>investigation:</span> <strong>{{ rfi_preview.case_title }}</strong><br>
+                <span>source:</span> <strong>{{ rfi_preview.source_name }}</strong> &middot; page <strong>{{ rfi_preview.page }}</strong><br>
+                {% if rfi_preview.region %}
+                <span>region:</span> <strong>x={{ "%.2f"|format(rfi_preview.region.x) }} y={{ "%.2f"|format(rfi_preview.region.y) }}</strong><br>
+                {% endif %}
+                <span>finding:</span> <strong>{{ rfi_preview.finding_statement }}</strong><br>
+                <span>reviewer validation:</span> <strong>{{ rfi_preview.reviewer_validation }}</strong> ({{ rfi_preview.reviewer }})
+            </div>
+            <form method="post" action="{{ url_for('workspace.create_rfi_draft', project_id=project_id, case_id=active_case.id) }}">
+                <input type="hidden" name="finding_id" value="{{ preview_finding_id }}">
+                <button type="submit" class="apply-button">Create this draft</button>
+            </form>
+        </div>
+        {% endif %}
+    {% endcall %}
+    {% else %}
+    {% call macros.conversation_dock(
+        'Project Conversation',
+        project_conversation_view|length,
+        url_for('workspace.quick_start', project_id=project_id),
+        'project',
+        'Ask a question, or describe what you want to work on…',
+        include_anchor_fields=True,
+    ) %}
+        <p class="pane-note">
+            Talk to the Project itself &mdash; general notes, or anything opened from a
+            &ldquo;Discuss this&hellip;&rdquo; link elsewhere on this page (each message below
+            shows what it was about, if anything).
+        </p>
+        <div class="conversation-thread" data-conversation-scope="project">
+            {% for message in project_conversation_view %}
+            <div class="conversation-message {{ message.role }}">
+                <span class="role-label">{{ "You" if message.role == "human" else "Archiosk" }}</span>
+                {% if message.anchor %}
+                <br><small class="text-muted">Re: {{ message.anchor.anchor_type.replace('_', ' ') }}{% if message.anchor.description %} &mdash; {{ message.anchor.description }}{% endif %}</small>
+                {% endif %}
+                {{ message.text|hotlinks(workspace, project_id) }}
+                {% if message.grounded_in %}
+                {% call macros.subdisclosure('Source grounding') %}
+                    <ul class="source-list">{% for g in message.grounded_in %}<li class="source-item">{{ g }}</li>{% endfor %}</ul>
+                {% endcall %}
+                {% endif %}
+                {# The "conversation -> Investigation" escalation offer: only for the
+                   MOST RECENT message, and only when interpret_message actually
+                   recognized an Investigation-shaped action (needs_case) - never for
+                   an ordinary unmatched question, and it naturally stops being
+                   offered the moment anything else gets posted (see
+                   start_investigation_from_aperture's own docstring for what
+                   accepting it does). #}
+                {% if loop.last and message.role == "system" and message.action_taken and message.action_taken.startswith("needs_case:") %}
+                <form method="post" action="{{ url_for('workspace.start_investigation_from_aperture', project_id=project_id, message_id=message.action_taken.split(':', 1)[1]) }}">
+                    <button type="submit" class="review-btn needs_evidence">Start an Investigation from this</button>
+                </form>
+                {% endif %}
+            </div>
+            {% else %}
+            <p class="conversation-empty">No Project Conversation yet.</p>
+            {% endfor %}
+        </div>
+    {% endcall %}
+    {% endif %}
 </div>
 {% endblock %}
 
