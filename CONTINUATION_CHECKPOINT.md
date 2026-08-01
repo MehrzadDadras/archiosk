@@ -1,5 +1,45 @@
 # Continuation checkpoint
 
+## 2026-07-31 — CLAUDE-P40-E1A-VISUAL-CLOSE: de-box decorative containers
+
+**Commit:** `9e8fd66`. Full suite: 1311 passed (was 1291).
+
+A "Visual De-boxing Addendum" was referenced as having been issued
+separately - no record of it existed in this conversation or anywhere
+in the repository, so it could not have been implemented yet.
+Inspected the rendered Workspace's CSS, confirmed the decorative
+containers it describes were still present, and implemented it now,
+CSS-only (no template/class-name changes, no conversation/Investigation
+persistence, authorization, or provenance touched):
+
+`.workspace-pane` (wraps Project information, an open Investigation's
+own content, Findings, an opened document, Project Briefing, Project
+State) - was a filled/bordered/rounded card; now separated from
+adjacent sections by a restrained bottom divider only. `.case-item`/
+`.source-item` (Investigation/Source listing rows) - was a filled beige
+(Limestone, `--surface-secondary`) card per row; now a plain divided
+row, selected/active state kept as a real highlight.
+`#conversation-dock` (the enclosing Conversation card) - the
+box-shadow "lift" is gone, the `.accordion-section` top border it
+already had is the only edge left; background kept (functional -
+sticky-scroll legibility, not decoration). `.conversation-message` -
+the filled beige bubble (human) and bordered card (system) are both
+gone, distinguished now by indentation and the existing role-label
+alone.
+
+Deliberately untouched, per the addendum's own retention list: the
+composer's own input border, real controls, focus states, selected
+navigation rows, warnings, and consequential confirmations
+(`.delegation-choice`/`.rfi-preview`/`.rfi-draft-card`, `.finding-card`
+- discrete governed records/decision points, not ordinary messages).
+
+20 new tests (`tests/test_p40e1a_visual_deboxing.py`) - text-level
+checks against the real stylesheet (no browser/rendering tool exists
+in this environment) confirming the named decorative properties are
+gone and every explicitly-retained boundary is still there.
+
+---
+
 ## 2026-07-31 — CLAUDE-P40-E1A: one physical conversation dock, Investigation listing, no Case terminology
 
 **Commit:** `4c38cc6`. Full suite: 1291 passed (was 1275).
