@@ -1126,6 +1126,17 @@ def show_workspace(project_id):
         project_owner=workspace.owner,
         project_access_allow_list=workspace.access_allow_list,
         is_project_owner=(workspace.owner is not None and workspace.owner == _reviewer()),
+        # CLAUDE-P40-E2: "Remove Document" only changes LISTING/AI-context
+        # visibility, never the underlying record (see CaseWorkspaceStore.
+        # remove_source's own docstring) - the nav Sources list and the
+        # Toolbox both read active_sources, never workspace.sources
+        # directly, so a removed Document quietly stops appearing without
+        # its record, id, or any Finding/Requirement that cites it changing
+        # at all. removed_sources feeds the Toolbox's own "Removed
+        # Documents" tool.
+        active_sources=CaseWorkspaceStore.active_sources(workspace),
+        removed_sources=CaseWorkspaceStore.removed_sources(workspace),
+        is_project_removed=bool(workspace.removed_at),
     )
 
 
@@ -1488,6 +1499,104 @@ def revoke_project_access_route(project_id):
             governance_log=_log(),
         )
         flash(f"Access revoked for {username!r}.", "success")
+    except CaseWorkspaceError as exc:
+        flash(str(exc), "error")
+    return redirect(url_for("workspace.show_workspace", project_id=project_id))
+
+
+# -- CLAUDE-P40-E2: recoverable removal (Document/Project), not deletion ----
+
+@workspace_bp.route("/projects/<project_id>/workspace/sources/<source_id>/remove", methods=["POST"])
+@login_required
+def remove_document_route(project_id, source_id):
+    """"Remove Document" (Section B/C) - a simple confirm=yes/no gate,
+    the same idiom routes/portal.py's delete_project already uses for a
+    consequential-but-not-governed action, deliberately NOT the
+    Approval Gate's confirm=once|session|no vocabulary (CLAUDE.md's own
+    "two different confirm vocabularies" note - Remove is closer in
+    kind to Delete than to Apply/RFI-Issue)."""
+    _, store, workspace = _load_workspace_or_404(project_id)
+    source = next((s for s in workspace.sources if s["id"] == source_id), None)
+    if source is None:
+        abort(404)
+
+    confirm = request.form.get("confirm")
+    if confirm == "no":
+        flash("Cancelled - the Document was not removed.", "success")
+        return redirect(url_for("workspace.show_workspace", project_id=project_id, source=source_id))
+    if confirm != "yes":
+        return render_template(
+            "confirm_remove_document.html",
+            source_name=source["name"],
+            action_url=request.url,
+            project_id=project_id,
+        )
+
+    try:
+        store.remove_source(
+            workspace, source_id=source_id, actor=_reviewer(), actor_role=session.get("role") or "",
+            reason=(request.form.get("reason") or None), governance_log=_log(),
+        )
+        flash(f'"{source["name"]}" removed - restore it any time from Removed Items.', "success")
+    except CaseWorkspaceError as exc:
+        flash(str(exc), "error")
+    return redirect(url_for("workspace.show_workspace", project_id=project_id))
+
+
+@workspace_bp.route("/projects/<project_id>/workspace/sources/<source_id>/restore", methods=["POST"])
+@login_required
+def restore_document_route(project_id, source_id):
+    _, store, workspace = _load_workspace_or_404(project_id)
+    try:
+        source = store.restore_source(
+            workspace, source_id=source_id, actor=_reviewer(), actor_role=session.get("role") or "",
+            governance_log=_log(),
+        )
+        flash(f'"{source["name"]}" restored.', "success")
+    except CaseWorkspaceError as exc:
+        flash(str(exc), "error")
+    return redirect(url_for("workspace.show_workspace", project_id=project_id, source=source_id))
+
+
+@workspace_bp.route("/projects/<project_id>/workspace/remove", methods=["POST"])
+@login_required
+def remove_project_route(project_id):
+    """"Remove Project" (Section B/C) - a completely separate,
+    recoverable action from routes/portal.py's delete_project
+    (permanent, unchanged). Same confirm=yes/no gate as Document
+    removal above."""
+    _, store, workspace = _load_workspace_or_404(project_id)
+
+    confirm = request.form.get("confirm")
+    if confirm == "no":
+        flash("Cancelled - the Project was not removed.", "success")
+        return redirect(url_for("workspace.show_workspace", project_id=project_id))
+    if confirm != "yes":
+        return render_template(
+            "confirm_remove_project.html",
+            action_url=request.url,
+            project_id=project_id,
+        )
+
+    try:
+        store.remove_project(
+            workspace, actor=_reviewer(), actor_role=session.get("role") or "",
+            reason=(request.form.get("reason") or None), governance_log=_log(),
+        )
+        flash("Project removed - restore it any time from Removed Projects.", "success")
+    except CaseWorkspaceError as exc:
+        flash(str(exc), "error")
+        return redirect(url_for("workspace.show_workspace", project_id=project_id))
+    return redirect(url_for("portal.projects_list"))
+
+
+@workspace_bp.route("/projects/<project_id>/workspace/restore", methods=["POST"])
+@login_required
+def restore_project_route(project_id):
+    _, store, workspace = _load_workspace_or_404(project_id)
+    try:
+        store.restore_project(workspace, actor=_reviewer(), actor_role=session.get("role") or "", governance_log=_log())
+        flash("Project restored.", "success")
     except CaseWorkspaceError as exc:
         flash(str(exc), "error")
     return redirect(url_for("workspace.show_workspace", project_id=project_id))

@@ -13,7 +13,15 @@
 {% endcall %}
 {% endif %}
 
-<div class="case-workspace{% if not active_case %} case-workspace-single-column{% endif %}" data-project-id="{{ project_id }}">
+{# CLAUDE-P40-E2, Section A: the right column is now a persistent,
+   contextual Toolbox (see .workspace-pane-toolbox below) - Findings is
+   one tool inside it, not the whole pane, and the pane always has
+   something to show (project-level tools at minimum), so the grid is
+   always two columns now. case-workspace-single-column's old purpose
+   (reclaim width when the right column was genuinely empty) no longer
+   applies; the class stays defined in CSS only for the narrow-width
+   collapse. #}
+<div class="case-workspace" data-project-id="{{ project_id }}">
     <div class="workspace-column">
     {# ---------------- Project reference material -----------------------
        CLAUDE-P40-E: this used to be a permanently-visible third grid
@@ -556,9 +564,9 @@
            read raw everywhere. Fixing this safely means introducing a new
            method and auditing every existing raw-access call site first,
            which is more scope than this pass justifies - not attempted. #}
-        {% call macros.accordion('Sources (' ~ workspace.sources|length ~ ')', status='+', group='left', id='sources', html_id='project-sources') %}
+        {% call macros.accordion('Sources (' ~ active_sources|length ~ ')', status='+', group='left', id='sources', html_id='project-sources') %}
         <ul class="source-list">
-            {% for source in workspace.sources %}
+            {% for source in active_sources %}
             <li class="source-item">
                 <span class="source-kind-badge">{{ source.kind.replace('_', ' ') }}</span>
                 {% if source.file_path %}
@@ -730,7 +738,7 @@
             <form class="workspace-form" method="post"
                   action="{{ url_for('workspace.promote_requirement_item_route', project_id=project_id, case_id=active_case.id, requirement_item_id=item.id) }}">
                 <select name="source_id" required>
-                    {% for source in workspace.sources %}
+                    {% for source in active_sources %}
                     <option value="{{ source.id }}"{% if source.kind == 'rfq_rfp_document' %} selected{% endif %}>{{ source.name }} ({{ source.kind.replace('_', ' ') }})</option>
                     {% endfor %}
                 </select>
@@ -753,7 +761,7 @@
                   action="{{ url_for('workspace.register_requirement_route', project_id=project_id) }}">
                 <select name="source_id" required>
                     <option value="" disabled selected>Which Source states this?</option>
-                    {% for source in workspace.sources %}
+                    {% for source in active_sources %}
                     <option value="{{ source.id }}">{{ source.name }} ({{ source.kind.replace('_', ' ') }})</option>
                     {% endfor %}
                 </select>
@@ -1074,7 +1082,7 @@
             </form>
         {% endcall %}
 
-        {% set drawing_sources = workspace.sources|selectattr("kind", "equalto", "drawing")|selectattr("id", "in", active_case.source_ids)|list %}
+        {% set drawing_sources = active_sources|selectattr("kind", "equalto", "drawing")|selectattr("id", "in", active_case.source_ids)|list %}
         {% if drawing_sources %}
         {% call macros.subdisclosure('+ Register a new revision of an existing drawing Source') %}
             {% for source in drawing_sources if not source.superseded_by_source_id %}
@@ -1239,199 +1247,6 @@
     </section>
     </div>
 
-    {# ---------------- Contextual Findings/Artifact area ---------------- #}
-    <section class="workspace-pane workspace-pane-findings">
-        <h2>Artifact Workspace</h2>
-
-        {% call macros.accordion('Findings (' ~ findings_view|length ~ ')', status=(applied_count ~ ' applied' if applied_count else None), group='right', id='findings', open=True) %}
-        <div class="finding-list">
-            {% for row in findings_view %}
-            {% set finding = row.finding %}
-            {% set artifact = row.artifact %}
-            {% set latest_validation = row.latest_validation %}
-            {% set latest_disposition = row.latest_disposition %}
-            <article class="finding-card{% if finding.id == focused_finding_id %} focused{% endif %}">
-                <p class="finding-confidence">
-                    Machine finding &middot; confidence {{ (finding.machine_confidence * 100)|round|int }}%
-                    &middot; <span class="review-state-badge review-state-{{ row.review_state|lower|replace(' ', '-') }}">{{ row.review_state }}</span>
-                    {% if finding.claim_status == "applied" %}
-                    <span class="applied-badge">Applied</span>
-                    {% endif %}
-                </p>
-                <p class="finding-statement">{{ finding.statement }}</p>
-
-                {% if artifact %}
-                <img class="finding-artifact-thumb"
-                     src="{{ url_for('workspace.artifact_image', project_id=project_id, artifact_id=artifact.id) }}"
-                     alt="Focus Snip Artifact">
-                <div class="finding-provenance">
-                    <span>artifact:</span> <strong>{{ artifact.id }}</strong><br>
-                    <span>source:</span> <strong>{{ artifact.source_id }}</strong> &middot; page <strong>{{ artifact.page }}</strong><br>
-                    {% if artifact.crop %}
-                    <span>region:</span> <strong>x={{ "%.2f"|format(artifact.crop.x) }} y={{ "%.2f"|format(artifact.crop.y) }} w={{ "%.2f"|format(artifact.crop.width) }} h={{ "%.2f"|format(artifact.crop.height) }}</strong><br>
-                    {% endif %}
-                    <span>analysis:</span> <strong>{{ artifact.analysis_id }}</strong><br>
-                    <span>engine:</span> <strong>{{ artifact.engine_name }} {{ artifact.engine_version }}</strong><br>
-                    <span>created:</span> <strong>{{ artifact.created_at }}</strong>
-                </div>
-                {% endif %}
-
-                {% if row.investigation_step %}
-                {% set step = row.investigation_step %}
-                {% call macros.subdisclosure('How this was investigated') %}
-                    <p class="pane-note">
-                        Governed record of the investigation itself, not the model's raw reasoning
-                        (never captured or stored) - what was asked, what evidence was actually
-                        examined, and what came of it.
-                    </p>
-                    <p class="history-entry">
-                        <strong>Question asked:</strong> {{ step.question }}
-                    </p>
-                    <p class="history-entry">
-                        <strong>Evidence examined:</strong>
-                        {% if step.evidence_examined_ids.adjudication_ids %}{{ step.evidence_examined_ids.adjudication_ids|length }} adjudication(s){% endif %}
-                        {% if step.evidence_examined_ids.finding_ids %}, {{ step.evidence_examined_ids.finding_ids|length }} linked Finding(s){% endif %}
-                        {% if step.evidence_examined_ids.relationship_ids %}, {{ step.evidence_examined_ids.relationship_ids|length }} linked Relationship(s){% endif %}
-                        {% if step.evidence_examined_ids.accepted_knowledge_ids %}, {{ step.evidence_examined_ids.accepted_knowledge_ids|length }} Accepted Knowledge item(s){% endif %}
-                        {% if not (step.evidence_examined_ids.adjudication_ids or step.evidence_examined_ids.finding_ids or step.evidence_examined_ids.relationship_ids or step.evidence_examined_ids.accepted_knowledge_ids) %}
-                        none on record for this Requirement yet
-                        {% endif %}
-                    </p>
-                    {% if step.supporting_points %}
-                    <p class="history-entry">
-                        <strong>Grounded in:</strong>
-                        <ul>
-                            {% for point in step.supporting_points %}<li>{{ point }}</li>{% endfor %}
-                        </ul>
-                    </p>
-                    {% endif %}
-                    {% if step.open_questions %}
-                    <p class="history-entry">
-                        <strong>Open question(s):</strong>
-                        <ul>
-                            {% for q in step.open_questions %}<li>{{ q }}</li>{% endfor %}
-                        </ul>
-                    </p>
-                    {% endif %}
-                    <p class="history-entry">
-                        <strong>Confidence:</strong> {{ (step.confidence * 100)|round|int }}%
-                        {% if step.needs_human_judgment %}
-                        &middot; <span class="review-state-badge review-state-due">needs your judgment</span>
-                        {% endif %}
-                    </p>
-                {% endcall %}
-                {% endif %}
-
-                {% for validation in row.reviewer_validations if validation.correction_note %}
-                <div class="correction-note"><strong>Correction</strong> ({{ validation.reviewer }}): {{ validation.correction_note }}</div>
-                {% endfor %}
-
-                {% if latest_validation %}
-                <span class="review-decision-badge validation-{{ latest_validation.validation|lower|replace(' ', '_') }}">{{ latest_validation.validation }}</span>
-                {% endif %}
-                {% if latest_disposition %}
-                <span class="review-decision-badge disposition-{{ latest_disposition.disposition|lower|replace(' ', '_') }}">{{ latest_disposition.disposition }}</span>
-                {% endif %}
-
-                {% if finding.claim_status != "applied" %}
-                <p class="workspace-pane-label" style="margin-top:0.6rem;">Reviewer Validation</p>
-                <form class="finding-review-actions" method="post"
-                      action="{{ url_for('workspace.validate_finding', project_id=project_id, finding_id=finding.id) }}">
-                    <input type="hidden" name="case_id" value="{{ active_case.id }}">
-                    {% for state in reviewer_validation_states %}
-                    <button type="submit" name="validation" value="{{ state }}"
-                            class="review-btn {{ 'accept' if state == 'Correct' else ('reject' if state == 'Incorrect' else 'needs_evidence') }}">{{ state }}</button>
-                    {% endfor %}
-                </form>
-
-                {% if latest_validation %}
-                <p class="workspace-pane-label" style="margin-top:0.6rem;">Disposition</p>
-                <form class="finding-review-actions" method="post"
-                      action="{{ url_for('workspace.set_disposition', project_id=project_id, finding_id=finding.id) }}">
-                    <input type="hidden" name="case_id" value="{{ active_case.id }}">
-                    {% for state in dispositions %}
-                    <button type="submit" name="disposition" value="{{ state }}"
-                            class="review-btn {{ 'accept' if state in ['Confirmed', 'Known Accepted'] else ('reject' if state == 'Rejected' else 'needs_evidence') }}">{{ state }}</button>
-                    {% endfor %}
-                </form>
-                {% endif %}
-
-                <form class="finding-review-actions" method="post"
-                      action="{{ url_for('workspace.validate_finding', project_id=project_id, finding_id=finding.id) }}">
-                    <input type="hidden" name="case_id" value="{{ active_case.id }}">
-                    <input type="hidden" name="validation" value="Incorrect">
-                    <input type="text" name="correction_note" placeholder="Add Correction…" style="flex:1;font-family:var(--font-mono);font-size:0.85rem;background:var(--surface-primary);border:1px solid var(--border);border-radius:3px;color:var(--text-primary);padding:0.4rem 0.6rem;">
-                    <button type="submit" class="review-btn correction">Add Correction</button>
-                </form>
-                {% endif %}
-
-                {% for draft in row.rfi_drafts %}
-                <div class="rfi-draft-card">
-                    <p class="workspace-pane-label">RFI Draft &middot; {{ draft.status }}</p>
-                    <div class="finding-provenance">
-                        <span>source:</span> <strong>{{ draft.reference_snapshot.source_name }}</strong>
-                        &middot; page <strong>{{ draft.reference_snapshot.page }}</strong><br>
-                        <span>case:</span> <strong>{{ draft.reference_snapshot.case_title }}</strong><br>
-                        <span>reviewer:</span> <strong>{{ draft.reference_snapshot.reviewer }}</strong>
-                    </div>
-                    {% if draft.status == "draft" %}
-                        {% if can_originate_rfi %}
-                        <form method="post" action="{{ url_for('workspace.update_rfi_question', project_id=project_id, draft_id=draft.id) }}">
-                            <input type="hidden" name="case_id" value="{{ active_case.id }}">
-                            <textarea name="question_text" placeholder="RFI question…" style="width:100%;font-family:var(--font-body);background:var(--surface-primary);border:1px solid var(--border);color:var(--text-primary);border-radius:3px;padding:0.5rem;">{{ draft.question_text }}</textarea>
-                            <button type="submit" class="review-btn needs_evidence">Save question</button>
-                        </form>
-                        <form method="post" action="{{ url_for('workspace.issue_rfi_draft', project_id=project_id, draft_id=draft.id) }}">
-                            <input type="hidden" name="case_id" value="{{ active_case.id }}">
-                            <button type="submit" class="apply-button">Issue RFI</button>
-                        </form>
-                        {% else %}
-                        <p style="color:var(--text-secondary);font-size:0.8rem;">
-                            This project's {{ operating_environment_label }} environment does not originate RFIs.
-                        </p>
-                        {% endif %}
-                    <a class="btn btn-ghost" href="{{ url_for('workspace.export_rfi_draft', project_id=project_id, draft_id=draft.id) }}">Download Draft RFI (.docx)</a>
-                    {% elif draft.status == "issued" %}
-                    <p class="consistency-clean">Issued {{ draft.issued_at }} by {{ draft.issued_by }}.</p>
-                        {% if can_respond_rfi %}
-                        <form method="post" action="{{ url_for('workspace.respond_to_rfi_draft', project_id=project_id, draft_id=draft.id) }}">
-                            <input type="hidden" name="case_id" value="{{ active_case.id }}">
-                            <textarea name="response_text" placeholder="Authoritative response…" style="width:100%;font-family:var(--font-body);background:var(--surface-primary);border:1px solid var(--border);color:var(--text-primary);border-radius:3px;padding:0.5rem;" required></textarea>
-                            <button type="submit" class="apply-button">Record Response</button>
-                        </form>
-                        {% endif %}
-                    <a class="btn btn-ghost" href="{{ url_for('workspace.export_rfi_draft', project_id=project_id, draft_id=draft.id) }}">Download Issued RFI (.docx)</a>
-                    {% else %}
-                    <p class="consistency-clean">Answered {{ draft.responded_at }} by {{ draft.responded_by }}.</p>
-                    <div class="finding-provenance"><span>response:</span> {{ draft.response_text }}</div>
-                    <a class="btn btn-ghost" href="{{ url_for('workspace.export_rfi_draft', project_id=project_id, draft_id=draft.id) }}">Download Answered RFI (.docx)</a>
-                    {% endif %}
-                </div>
-                {% endfor %}
-            </article>
-            {% else %}
-            <p class="findings-empty">
-                {% if drawing_sources %}
-                No Findings yet. Ask the conversation to analyze a drawing Source to generate some.
-                {% else %}
-                No Findings yet. Investigate a Source to generate or record Findings.
-                {% endif %}
-            </p>
-            {% endfor %}
-        </div>
-
-        <div class="apply-bar">
-            <p>
-                {{ findings_view|length }} finding(s) in this Investigation &middot;
-                {{ applied_count }} applied &middot;
-                {{ awaiting_apply_count }} Confirmed, awaiting Apply
-            </p>
-            <form method="post" action="{{ url_for('workspace.apply_findings', project_id=project_id, case_id=active_case.id) }}">
-                <button type="submit" class="apply-button">Apply Confirmed Findings</button>
-            </form>
-        </div>
-        {% endcall %}
-    </section>
 {% else %}
     {% if selected_source %}
     {# ---------------- A selected document/drawing -------------------
@@ -1965,6 +1780,286 @@
     </div>
     </div>
 {% endif %}
+
+{# ---------------- Contextual Toolbox ---------------------------------------
+   CLAUDE-P40-E2, Section A: one right-side Toolbox, replacing the old
+   permanent Findings pane - Findings is now one tool inside it, not the
+   whole pane. Always renders (unlike the old Findings pane, which only
+   ever showed up alongside an active Investigation) so Remove/Restore
+   Document and Remove Project have a real UI surface regardless of what's
+   selected. Contextual per Section A's own priority order (matches the
+   existing active_case > selected_source > project-home priority already
+   established above for the main Display): Investigation selected ->
+   Investigation tools (Findings); Document selected -> Document tools;
+   nothing selected -> restrained Project tools. Removed Items and
+   (admin-only) Project Data Management sit below the contextual block,
+   always visible - project-wide reference material, the same pattern
+   .workspace-pane-nav already uses for Requirements/Sources/History.
+   Extension points for future tagging/attachments/comparison/evidence
+   tools: additional <section class="workspace-pane"> blocks inside the
+   relevant branch below - not built this stage, see
+   governance/specified-unbuilt/. #}
+<aside class="workspace-pane-toolbox">
+    <h2>Toolbox</h2>
+
+    {% if active_case %}
+    <section class="workspace-pane">
+        <h3>Investigation &middot; Findings</h3>
+        {% call macros.accordion('Findings (' ~ findings_view|length ~ ')', status=(applied_count ~ ' applied' if applied_count else None), group='right', id='findings', open=True) %}
+        <div class="finding-list">
+            {% for row in findings_view %}
+            {% set finding = row.finding %}
+            {% set artifact = row.artifact %}
+            {% set latest_validation = row.latest_validation %}
+            {% set latest_disposition = row.latest_disposition %}
+            <article class="finding-card{% if finding.id == focused_finding_id %} focused{% endif %}">
+                <p class="finding-confidence">
+                    Machine finding &middot; confidence {{ (finding.machine_confidence * 100)|round|int }}%
+                    &middot; <span class="review-state-badge review-state-{{ row.review_state|lower|replace(' ', '-') }}">{{ row.review_state }}</span>
+                    {% if finding.claim_status == "applied" %}
+                    <span class="applied-badge">Applied</span>
+                    {% endif %}
+                </p>
+                <p class="finding-statement">{{ finding.statement }}</p>
+
+                {% if artifact %}
+                <img class="finding-artifact-thumb"
+                     src="{{ url_for('workspace.artifact_image', project_id=project_id, artifact_id=artifact.id) }}"
+                     alt="Focus Snip Artifact">
+                <div class="finding-provenance">
+                    <span>artifact:</span> <strong>{{ artifact.id }}</strong><br>
+                    <span>source:</span> <strong>{{ artifact.source_id }}</strong> &middot; page <strong>{{ artifact.page }}</strong><br>
+                    {% if artifact.crop %}
+                    <span>region:</span> <strong>x={{ "%.2f"|format(artifact.crop.x) }} y={{ "%.2f"|format(artifact.crop.y) }} w={{ "%.2f"|format(artifact.crop.width) }} h={{ "%.2f"|format(artifact.crop.height) }}</strong><br>
+                    {% endif %}
+                    <span>analysis:</span> <strong>{{ artifact.analysis_id }}</strong><br>
+                    <span>engine:</span> <strong>{{ artifact.engine_name }} {{ artifact.engine_version }}</strong><br>
+                    <span>created:</span> <strong>{{ artifact.created_at }}</strong>
+                </div>
+                {% endif %}
+
+                {% if row.investigation_step %}
+                {% set step = row.investigation_step %}
+                {% call macros.subdisclosure('How this was investigated') %}
+                    <p class="pane-note">
+                        Governed record of the investigation itself, not the model's raw reasoning
+                        (never captured or stored) - what was asked, what evidence was actually
+                        examined, and what came of it.
+                    </p>
+                    <p class="history-entry">
+                        <strong>Question asked:</strong> {{ step.question }}
+                    </p>
+                    <p class="history-entry">
+                        <strong>Evidence examined:</strong>
+                        {% if step.evidence_examined_ids.adjudication_ids %}{{ step.evidence_examined_ids.adjudication_ids|length }} adjudication(s){% endif %}
+                        {% if step.evidence_examined_ids.finding_ids %}, {{ step.evidence_examined_ids.finding_ids|length }} linked Finding(s){% endif %}
+                        {% if step.evidence_examined_ids.relationship_ids %}, {{ step.evidence_examined_ids.relationship_ids|length }} linked Relationship(s){% endif %}
+                        {% if step.evidence_examined_ids.accepted_knowledge_ids %}, {{ step.evidence_examined_ids.accepted_knowledge_ids|length }} Accepted Knowledge item(s){% endif %}
+                        {% if not (step.evidence_examined_ids.adjudication_ids or step.evidence_examined_ids.finding_ids or step.evidence_examined_ids.relationship_ids or step.evidence_examined_ids.accepted_knowledge_ids) %}
+                        none on record for this Requirement yet
+                        {% endif %}
+                    </p>
+                    {% if step.supporting_points %}
+                    <p class="history-entry">
+                        <strong>Grounded in:</strong>
+                        <ul>
+                            {% for point in step.supporting_points %}<li>{{ point }}</li>{% endfor %}
+                        </ul>
+                    </p>
+                    {% endif %}
+                    {% if step.open_questions %}
+                    <p class="history-entry">
+                        <strong>Open question(s):</strong>
+                        <ul>
+                            {% for q in step.open_questions %}<li>{{ q }}</li>{% endfor %}
+                        </ul>
+                    </p>
+                    {% endif %}
+                    <p class="history-entry">
+                        <strong>Confidence:</strong> {{ (step.confidence * 100)|round|int }}%
+                        {% if step.needs_human_judgment %}
+                        &middot; <span class="review-state-badge review-state-due">needs your judgment</span>
+                        {% endif %}
+                    </p>
+                {% endcall %}
+                {% endif %}
+
+                {% for validation in row.reviewer_validations if validation.correction_note %}
+                <div class="correction-note"><strong>Correction</strong> ({{ validation.reviewer }}): {{ validation.correction_note }}</div>
+                {% endfor %}
+
+                {% if latest_validation %}
+                <span class="review-decision-badge validation-{{ latest_validation.validation|lower|replace(' ', '_') }}">{{ latest_validation.validation }}</span>
+                {% endif %}
+                {% if latest_disposition %}
+                <span class="review-decision-badge disposition-{{ latest_disposition.disposition|lower|replace(' ', '_') }}">{{ latest_disposition.disposition }}</span>
+                {% endif %}
+
+                {% if finding.claim_status != "applied" %}
+                <p class="workspace-pane-label" style="margin-top:0.6rem;">Reviewer Validation</p>
+                <form class="finding-review-actions" method="post"
+                      action="{{ url_for('workspace.validate_finding', project_id=project_id, finding_id=finding.id) }}">
+                    <input type="hidden" name="case_id" value="{{ active_case.id }}">
+                    {% for state in reviewer_validation_states %}
+                    <button type="submit" name="validation" value="{{ state }}"
+                            class="review-btn {{ 'accept' if state == 'Correct' else ('reject' if state == 'Incorrect' else 'needs_evidence') }}">{{ state }}</button>
+                    {% endfor %}
+                </form>
+
+                {% if latest_validation %}
+                <p class="workspace-pane-label" style="margin-top:0.6rem;">Disposition</p>
+                <form class="finding-review-actions" method="post"
+                      action="{{ url_for('workspace.set_disposition', project_id=project_id, finding_id=finding.id) }}">
+                    <input type="hidden" name="case_id" value="{{ active_case.id }}">
+                    {% for state in dispositions %}
+                    <button type="submit" name="disposition" value="{{ state }}"
+                            class="review-btn {{ 'accept' if state in ['Confirmed', 'Known Accepted'] else ('reject' if state == 'Rejected' else 'needs_evidence') }}">{{ state }}</button>
+                    {% endfor %}
+                </form>
+                {% endif %}
+
+                <form class="finding-review-actions" method="post"
+                      action="{{ url_for('workspace.validate_finding', project_id=project_id, finding_id=finding.id) }}">
+                    <input type="hidden" name="case_id" value="{{ active_case.id }}">
+                    <input type="hidden" name="validation" value="Incorrect">
+                    <input type="text" name="correction_note" placeholder="Add Correction…" style="flex:1;font-family:var(--font-mono);font-size:0.85rem;background:var(--surface-primary);border:1px solid var(--border);border-radius:3px;color:var(--text-primary);padding:0.4rem 0.6rem;">
+                    <button type="submit" class="review-btn correction">Add Correction</button>
+                </form>
+                {% endif %}
+
+                {% for draft in row.rfi_drafts %}
+                <div class="rfi-draft-card">
+                    <p class="workspace-pane-label">RFI Draft &middot; {{ draft.status }}</p>
+                    <div class="finding-provenance">
+                        <span>source:</span> <strong>{{ draft.reference_snapshot.source_name }}</strong>
+                        &middot; page <strong>{{ draft.reference_snapshot.page }}</strong><br>
+                        <span>case:</span> <strong>{{ draft.reference_snapshot.case_title }}</strong><br>
+                        <span>reviewer:</span> <strong>{{ draft.reference_snapshot.reviewer }}</strong>
+                    </div>
+                    {% if draft.status == "draft" %}
+                        {% if can_originate_rfi %}
+                        <form method="post" action="{{ url_for('workspace.update_rfi_question', project_id=project_id, draft_id=draft.id) }}">
+                            <input type="hidden" name="case_id" value="{{ active_case.id }}">
+                            <textarea name="question_text" placeholder="RFI question…" style="width:100%;font-family:var(--font-body);background:var(--surface-primary);border:1px solid var(--border);color:var(--text-primary);border-radius:3px;padding:0.5rem;">{{ draft.question_text }}</textarea>
+                            <button type="submit" class="review-btn needs_evidence">Save question</button>
+                        </form>
+                        <form method="post" action="{{ url_for('workspace.issue_rfi_draft', project_id=project_id, draft_id=draft.id) }}">
+                            <input type="hidden" name="case_id" value="{{ active_case.id }}">
+                            <button type="submit" class="apply-button">Issue RFI</button>
+                        </form>
+                        {% else %}
+                        <p style="color:var(--text-secondary);font-size:0.8rem;">
+                            This project's {{ operating_environment_label }} environment does not originate RFIs.
+                        </p>
+                        {% endif %}
+                    <a class="btn btn-ghost" href="{{ url_for('workspace.export_rfi_draft', project_id=project_id, draft_id=draft.id) }}">Download Draft RFI (.docx)</a>
+                    {% elif draft.status == "issued" %}
+                    <p class="consistency-clean">Issued {{ draft.issued_at }} by {{ draft.issued_by }}.</p>
+                        {% if can_respond_rfi %}
+                        <form method="post" action="{{ url_for('workspace.respond_to_rfi_draft', project_id=project_id, draft_id=draft.id) }}">
+                            <input type="hidden" name="case_id" value="{{ active_case.id }}">
+                            <textarea name="response_text" placeholder="Authoritative response…" style="width:100%;font-family:var(--font-body);background:var(--surface-primary);border:1px solid var(--border);color:var(--text-primary);border-radius:3px;padding:0.5rem;" required></textarea>
+                            <button type="submit" class="apply-button">Record Response</button>
+                        </form>
+                        {% endif %}
+                    <a class="btn btn-ghost" href="{{ url_for('workspace.export_rfi_draft', project_id=project_id, draft_id=draft.id) }}">Download Issued RFI (.docx)</a>
+                    {% else %}
+                    <p class="consistency-clean">Answered {{ draft.responded_at }} by {{ draft.responded_by }}.</p>
+                    <div class="finding-provenance"><span>response:</span> {{ draft.response_text }}</div>
+                    <a class="btn btn-ghost" href="{{ url_for('workspace.export_rfi_draft', project_id=project_id, draft_id=draft.id) }}">Download Answered RFI (.docx)</a>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </article>
+            {% else %}
+            <p class="findings-empty">
+                {% if drawing_sources %}
+                No Findings yet. Ask the conversation to analyze a drawing Source to generate some.
+                {% else %}
+                No Findings yet. Investigate a Source to generate or record Findings.
+                {% endif %}
+            </p>
+            {% endfor %}
+        </div>
+
+        <div class="apply-bar">
+            <p>
+                {{ findings_view|length }} finding(s) in this Investigation &middot;
+                {{ applied_count }} applied &middot;
+                {{ awaiting_apply_count }} Confirmed, awaiting Apply
+            </p>
+            <form method="post" action="{{ url_for('workspace.apply_findings', project_id=project_id, case_id=active_case.id) }}">
+                <button type="submit" class="apply-button">Apply Confirmed Findings</button>
+            </form>
+        </div>
+        {% endcall %}
+    </section>
+    {% elif selected_source %}
+    <section class="workspace-pane">
+        <h3>Document</h3>
+        <p class="workspace-pane-label">
+            {{ selected_source.kind.replace('_', ' ') }}
+            {% if selected_source.removed_at %}&middot; removed{% endif %}
+        </p>
+        <p class="pane-note">{{ selected_source.name }}</p>
+        {% if selected_source.removed_at %}
+        <p class="pane-note">
+            This Document has been removed &mdash; it no longer appears in active Documents,
+            search, or AI context. The original file and every Finding or Requirement that
+            references it are preserved untouched.
+        </p>
+        <form method="post" action="{{ url_for('workspace.restore_document_route', project_id=project_id, source_id=selected_source.id) }}">
+            <button type="submit" class="btn btn-primary">Restore Document</button>
+        </form>
+        {% else %}
+        <form method="post" action="{{ url_for('workspace.remove_document_route', project_id=project_id, source_id=selected_source.id) }}">
+            <button type="submit" class="btn btn-ghost">Remove Document</button>
+        </form>
+        {% endif %}
+    </section>
+    {% else %}
+    <section class="workspace-pane">
+        <h3>Project</h3>
+        <p class="pane-note">
+            No Investigation or Document is currently selected. Open one from the panel on the
+            left, or use the project-level tools below.
+        </p>
+        {% if is_project_owner or is_admin %}
+        <form method="post" action="{{ url_for('workspace.remove_project_route', project_id=project_id) }}">
+            <button type="submit" class="btn btn-ghost">Remove Project</button>
+        </form>
+        {% endif %}
+    </section>
+    {% endif %}
+
+    <section class="workspace-pane">
+        <h3>Removed Items</h3>
+        {% if removed_sources %}
+        <ul class="source-list">
+            {% for source in removed_sources %}
+            <li class="source-item">
+                {{ source.name }}
+                <br><small class="text-muted">Removed {{ source.removed_at }}{% if source.removed_by %} by {{ source.removed_by }}{% endif %}</small>
+                <form method="post" action="{{ url_for('workspace.restore_document_route', project_id=project_id, source_id=source.id) }}">
+                    <button type="submit" class="link-button">Restore Document</button>
+                </form>
+            </li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <p class="pane-note">No removed Documents in this Project.</p>
+        {% endif %}
+        <a class="btn btn-ghost workspace-link" href="{{ url_for('portal.removed_projects') }}">Removed Projects</a>
+    </section>
+
+    {% if is_admin %}
+    <section class="workspace-pane">
+        <h3>Project Data Management</h3>
+        <p class="pane-note">Administrator only.</p>
+        <a class="btn btn-ghost workspace-link" href="{{ url_for('portal.reset_project_data') }}">Reset Project Data&hellip;</a>
+    </section>
+    {% endif %}
+</aside>
 
 {# ---------------- The ONE physical conversation dock ----------------------
    CLAUDE-P40-E1A, Section A: exactly one call site renders, depending on

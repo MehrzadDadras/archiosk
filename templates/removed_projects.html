@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% import "_macros.html" as macros %}
+
+{% block title %}Removed Projects &mdash; Archiosk{% endblock %}
+
+{% block content %}
+{% call macros.page_header('Removed Projects', subtitle='Moved out of active use - restore any of these any time.') %}
+    <a class="btn btn-ghost" href="{{ url_for('portal.projects_list') }}">&larr; Back to Projects</a>
+{% endcall %}
+
+{% if removed %}
+<ul class="project-card-list">
+    {% for p in removed %}
+    <li class="project-card">
+        <div class="project-card-main">
+            <span class="project-card-name">{{ p.display_name }}</span>
+            <span class="project-card-id mono">{{ p.project_id }}</span>
+        </div>
+        <div class="project-card-meta">
+            <span>Removed {{ p.removed_at | humanize }}{% if p.removed_by %} by {{ p.removed_by }}{% endif %}</span>
+        </div>
+        <form method="post" action="{{ url_for('workspace.restore_project_route', project_id=p.project_id) }}">
+            <button type="submit" class="btn btn-primary">Restore</button>
+        </form>
+    </li>
+    {% endfor %}
+</ul>
+{% else %}
+<div class="projects-empty">
+    <p>No removed Projects.</p>
+</div>
+{% endif %}
+{% endblock %}

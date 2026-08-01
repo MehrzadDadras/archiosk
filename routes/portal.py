@@ -3,7 +3,10 @@ HTML pages: marketing home, upload form, and the Agility Engine dashboard.
 """
 from __future__ import annotations
 
+import json
+import os
 import shutil
+from datetime import datetime, timezone
 from pathlib import Path
 
 from flask import Blueprint, abort, current_app, flash, jsonify, redirect, render_template, request, session, url_for
@@ -36,7 +39,7 @@ def _safe_workspace(store: CaseWorkspaceStore, project_id: str):
         return None
 
 
-def _accessible_documents(registry, store):
+def _accessible_documents(registry, store, include_removed: bool = False):
     """
     CLAUDE-P32: every project-LISTING route in this file (index's
     recent-projects, projects_list, global_search) must filter to only
@@ -47,6 +50,15 @@ def _accessible_documents(registry, store):
     routes/workspace.py's _load_workspace_or_404 does, so a project
     doesn't sit permanently admin-only just because no one has opened
     its workspace page yet to trigger that backfill.
+
+    CLAUDE-P40-E2: excludes a removed Project (workspace.removed_at)
+    from every ordinary listing by default - "Remove Project" (Section
+    C) must actually remove it from active Projects/Chats, not just
+    hide a button. `include_removed=True` is the one deliberate
+    exception, used only by the Removed Projects view below, which
+    still goes through this same P32 access filter first - a project
+    someone can't already open never becomes visible just because it
+    was also removed.
     """
     from services.project_access import can_access_project, ensure_owner_backfilled, known_usernames
 
@@ -66,9 +78,11 @@ def _accessible_documents(registry, store):
             workspace = store.get_or_create(document.project_id)
             ensure_owner_backfilled(store, workspace, governance_log, usernames)
             allowed = can_access_project(workspace, username, admin)
+            removed = bool(workspace.removed_at)
         except TypeError:
             allowed = False
-        if allowed:
+            removed = False
+        if allowed and (removed == include_removed):
             accessible.append(document)
     return accessible
 
@@ -371,6 +385,34 @@ def projects_list():
     return render_template('projects.html', projects=projects, query=query, sort=sort)
 
 
+@portal_bp.route('/removed-projects')
+@login_required
+def removed_projects():
+    """CLAUDE-P40-E2, Section B: "Removed Projects" - where an
+    authorized user restores a whole Project removed via
+    workspace.remove_project_route. A removed Project's own workspace
+    page stays directly reachable to an authorized user (removal never
+    changes P32 access, only listing visibility - see
+    _accessible_documents), but nothing in the ordinary nav links to it
+    any more once removed; this page is the deliberate, explicit way
+    back to it."""
+    registry = get_registry(current_app)
+    store = CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"])
+    governance_log = get_governance_log(current_app)
+
+    documents = _accessible_documents(registry, store, include_removed=True)
+    removed = [
+        _project_summary(document, _safe_workspace(store, document.project_id), governance_log.read(document.project_id))
+        for document in documents
+    ]
+    for row, document in zip(removed, documents):
+        workspace = _safe_workspace(store, document.project_id)
+        row["removed_at"] = workspace.removed_at if workspace else None
+        row["removed_by"] = workspace.removed_by if workspace else None
+
+    return render_template('removed_projects.html', removed=removed)
+
+
 def _delete_project_files(app, project_id: str) -> None:
     """
     Permanently removes every stored artifact for a project - the legacy
@@ -423,6 +465,142 @@ def delete_project(project_id):
 
     _delete_project_files(current_app, project_id)
     flash(f'Project "{document.filename}" permanently deleted.', 'success')
+    return redirect(url_for('portal.projects_list'))
+
+
+# -- CLAUDE-P40-E2, Section D: Reset Project Data (administrator-only clean
+# test reset) -----------------------------------------------------------
+
+RESET_CONFIRMATION_PHRASE = "RESET PROJECT DATA"
+
+
+def _project_data_inventory(app) -> dict:
+    """Exact counts of everything Reset Project Data would remove -
+    every Project (active or removed), and the Documents/Investigations/
+    Findings/Requirements inside them. Shown to the administrator before
+    they can type the confirmation phrase (Section D: "show exact
+    inventory")."""
+    registry = get_registry(app)
+    store = CaseWorkspaceStore(app.config["REGISTRY_STORE_PATH"])
+    inventory = {"projects": 0, "documents": 0, "investigations": 0, "findings": 0, "requirements": 0}
+    for project_id in registry.list_ids():
+        document = registry.get(project_id)
+        if document is None:
+            continue
+        inventory["projects"] += 1
+        workspace = _safe_workspace(store, project_id)
+        if workspace is None:
+            continue
+        inventory["documents"] += len(workspace.sources)
+        inventory["investigations"] += len(workspace.cases)
+        inventory["findings"] += len(workspace.findings)
+        inventory["requirements"] += len(workspace.requirements)
+    return inventory
+
+
+def _reset_project_data(app, actor: str) -> Path:
+    """
+    Wipes every Project's data and returns to a clean no-project state,
+    while retaining user accounts (instance/bhive.db - a wholly separate
+    file this function never touches), application config/.env/schema
+    version (also never touched - this only ever acts inside
+    REGISTRY_STORE_PATH), and security policy/authorization config
+    (instance/registry/security_governance/ - password-reset and
+    rate-limit state, not project content - explicitly skipped below).
+
+    Never a destructive wipe with nothing kept (Section E): the whole
+    REGISTRY_STORE_PATH tree is copied to a timestamped snapshot
+    directory first. Restoring from that snapshot is a manual filesystem
+    operation, not a governed in-app action - this stage builds the
+    recoverable snapshot itself, not an in-app snapshot browser/restore
+    UI (out of scope for a "clean test reset", see Section A's own
+    extension-points note).
+    """
+    store_path = Path(app.config["REGISTRY_STORE_PATH"])
+    snapshot_root = store_path.parent / "registry_snapshots"
+    snapshot_root.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+    snapshot_dir = snapshot_root / stamp
+    shutil.copytree(store_path, snapshot_dir)
+
+    removed_entries = []
+    for entry in store_path.iterdir():
+        if entry.name == "security_governance":
+            continue
+        removed_entries.append(entry.name)
+        if entry.is_dir():
+            shutil.rmtree(entry)
+        else:
+            entry.unlink()
+
+    # Recorded here, not via GovernanceLog (per-project, and every
+    # project's own log was just wiped/snapshotted above) - this is the
+    # one durable record of the reset itself: actor, time, and what was
+    # removed (Section E: "record actor/time/reason/affected
+    # identifiers"). Lives under security_governance/, the one
+    # subdirectory this function deliberately never removes.
+    audit_dir = store_path / "security_governance"
+    audit_dir.mkdir(parents=True, exist_ok=True)
+    with (audit_dir / "reset_audit.jsonl").open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps({
+            "actor": actor,
+            "at": datetime.now(timezone.utc).isoformat(),
+            "snapshot_dir": str(snapshot_dir),
+            "removed_entries": sorted(removed_entries),
+        }) + "\n")
+
+    return snapshot_dir
+
+
+@portal_bp.route('/admin/reset-project-data', methods=['GET', 'POST'])
+@admin_required
+def reset_project_data():
+    """
+    GET shows the exact inventory and a typed-confirmation form. POST
+    requires the confirmation phrase to match exactly, and is guarded
+    against duplicate submission by an atomic lock file (os.O_EXCL - the
+    first request to create it wins; a second, concurrent or
+    double-clicked request sees FileExistsError and is told a reset is
+    already running, rather than racing a second reset) - Section E:
+    "make operations atomic or safely recoverable" /
+    "prevent duplicate submission".
+    """
+    store_path = Path(current_app.config["REGISTRY_STORE_PATH"])
+    # Deliberately a sibling of store_path, not inside it - so the lock
+    # file itself is never swept into the snapshot or the wipe loop
+    # below (both of which iterate store_path's own contents).
+    lock_path = store_path.parent / ".reset_project_data.lock"
+
+    if request.method == 'GET':
+        return render_template(
+            'reset_project_data.html',
+            inventory=_project_data_inventory(current_app),
+            confirmation_phrase=RESET_CONFIRMATION_PHRASE,
+            reset_in_progress=lock_path.exists(),
+        )
+
+    if lock_path.exists():
+        flash('A Reset is already in progress - please wait for it to finish.', 'error')
+        return redirect(url_for('portal.reset_project_data'))
+
+    typed = (request.form.get('confirmation_phrase') or '').strip()
+    if typed != RESET_CONFIRMATION_PHRASE:
+        flash(f'Type "{RESET_CONFIRMATION_PHRASE}" exactly to confirm - nothing was reset.', 'error')
+        return redirect(url_for('portal.reset_project_data'))
+
+    try:
+        fd = os.open(str(lock_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        os.close(fd)
+    except FileExistsError:
+        flash('A Reset is already in progress - please wait for it to finish.', 'error')
+        return redirect(url_for('portal.reset_project_data'))
+
+    try:
+        _reset_project_data(current_app, actor=session.get('username') or 'unknown')
+        flash('Project data reset - the Workspace is clean. Everything that was here was snapshotted first.', 'success')
+    finally:
+        lock_path.unlink(missing_ok=True)
+
     return redirect(url_for('portal.projects_list'))
 
 

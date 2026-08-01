@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% import "_macros.html" as macros %}
+
+{% block title %}Reset Project Data &mdash; Archiosk{% endblock %}
+
+{% block content %}
+{% call macros.page_header('Reset Project Data', subtitle='Administrator only &mdash; returns the app to a clean, no-project state.') %}
+    <a class="btn btn-ghost" href="{{ url_for('portal.projects_list') }}">&larr; Back to Projects</a>
+{% endcall %}
+
+{% if reset_in_progress %}
+<p class="pane-note">A Reset is already in progress. Refresh in a moment.</p>
+{% else %}
+
+<section class="workspace-pane">
+    <h2>What this removes</h2>
+    <ul class="source-list">
+        <li class="source-item">{{ inventory.projects }} Project(s)</li>
+        <li class="source-item">{{ inventory.documents }} Document(s)</li>
+        <li class="source-item">{{ inventory.investigations }} Investigation(s)</li>
+        <li class="source-item">{{ inventory.findings }} Finding(s)</li>
+        <li class="source-item">{{ inventory.requirements }} Requirement(s)</li>
+    </ul>
+    <p class="pane-note">
+        A complete snapshot of everything above is preserved on disk before anything is
+        removed &mdash; this is not permanent deletion. User accounts and sign-in, security
+        policies and authorization config, application config/credentials, and the current
+        software/schema version are all retained untouched.
+    </p>
+</section>
+
+<section class="workspace-pane">
+    <h2>Confirm</h2>
+    <p class="pane-note">
+        Type <strong>{{ confirmation_phrase }}</strong> exactly to proceed.
+    </p>
+    <form method="post" action="{{ url_for('portal.reset_project_data') }}" class="workspace-form">
+        <input type="text" name="confirmation_phrase" placeholder="{{ confirmation_phrase }}" autocomplete="off" required>
+        <button type="submit" class="review-btn reject">Reset Project Data</button>
+    </form>
+</section>
+
+{% endif %}
+{% endblock %}

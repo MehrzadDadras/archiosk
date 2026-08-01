@@ -542,7 +542,7 @@ def _nav_recent_projects(app: Flask, limit: int = 15) -> list:
         try:
             workspace = store.get_or_create(d.project_id)
             ensure_owner_backfilled(store, workspace, governance_log, usernames)
-            allowed = can_access_project(workspace, username, admin)
+            allowed = can_access_project(workspace, username, admin) and not workspace.removed_at
         except TypeError:
             allowed = False
         if allowed:

@@ -1,0 +1,24 @@
+{% extends "confirm_base.html" %}
+
+{% block confirm_title %}Remove Project{% endblock %}
+{% block confirm_label %}Recoverable removal{% endblock %}
+{% block confirm_heading %}Remove this Project?{% endblock %}
+{% block confirm_body %}
+<p style="color:var(--text-primary);">
+    This moves the Project out of active use &mdash; it disappears from your Projects list and
+    Chats. Its Documents, Investigations, and everything else move with it as one bundle. Nothing
+    is deleted: every record, identifier, and relationship is preserved untouched, and the whole
+    Project can be restored any time from Removed Projects.
+</p>
+{% endblock %}
+{% block confirm_actions %}
+<form method="post" action="{{ action_url }}" class="approval-gate-actions">
+    <button type="submit" name="confirm" value="yes" class="review-btn reject">
+        Yes &mdash; remove this Project
+    </button>
+    <button type="submit" name="confirm" value="no" class="btn btn-ghost">
+        No &mdash; keep this Project active
+    </button>
+</form>
+{% endblock %}
+{% block confirm_back_url %}{{ url_for('workspace.show_workspace', project_id=project_id) }}{% endblock %}

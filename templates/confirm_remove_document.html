@@ -1,0 +1,24 @@
+{% extends "confirm_base.html" %}
+
+{% block confirm_title %}Remove Document{% endblock %}
+{% block confirm_label %}Recoverable removal{% endblock %}
+{% block confirm_heading %}Remove &ldquo;{{ source_name }}&rdquo;?{% endblock %}
+{% block confirm_body %}
+<p style="color:var(--text-primary);">
+    This moves the Document out of active use &mdash; it disappears from the Documents list,
+    search, and the conversation&rsquo;s AI context. The original file, its identifiers, and every
+    Finding or Requirement that references it are preserved untouched. You can restore it any
+    time from Removed Items.
+</p>
+{% endblock %}
+{% block confirm_actions %}
+<form method="post" action="{{ action_url }}" class="approval-gate-actions">
+    <button type="submit" name="confirm" value="yes" class="review-btn reject">
+        Yes &mdash; remove this Document
+    </button>
+    <button type="submit" name="confirm" value="no" class="btn btn-ghost">
+        No &mdash; keep this Document active
+    </button>
+</form>
+{% endblock %}
+{% block confirm_back_url %}{{ url_for('workspace.show_workspace', project_id=project_id) }}{% endblock %}

@@ -4,7 +4,9 @@
 {% block title %}Projects &mdash; Archiosk{% endblock %}
 
 {% block content %}
-{{ macros.page_header('Projects') }}
+{% call macros.page_header('Projects') %}
+    <a class="btn btn-ghost" href="{{ url_for('portal.removed_projects') }}">Removed Projects</a>
+{% endcall %}
 
 <form class="projects-controls" method="get" action="{{ url_for('portal.projects_list') }}">
     <input

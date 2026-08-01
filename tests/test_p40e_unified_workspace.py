@@ -282,10 +282,10 @@ class ResponsiveDomOrderTests(_BaseWorkspaceTestCase):
 
         body = client.get(f"/projects/{self.project_id}/workspace?case={case_id}").get_data(as_text=True)
         workspace_pos = body.find('class="workspace-column"')
-        findings_pos = body.find("workspace-pane-findings")
+        toolbox_pos = body.find("workspace-pane-toolbox")
         self.assertGreater(workspace_pos, -1)
-        self.assertGreater(findings_pos, -1)
-        self.assertLess(workspace_pos, findings_pos)
+        self.assertGreater(toolbox_pos, -1)
+        self.assertLess(workspace_pos, toolbox_pos)
 
 
 class LegacyProjectPersistenceBoundaryStillIntactTests(_BaseWorkspaceTestCase):

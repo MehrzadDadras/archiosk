@@ -1071,7 +1071,7 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
 .workspace-link { margin-top: 0.8rem; font-size: 0.88rem; padding: 0.5rem 1rem; }
 
 /* ============================================================
-   Workspace — document-first work area | contextual Findings
+   Workspace — document-first work area | contextual Toolbox
    ============================================================ */
 /* CLAUDE-P40-E: was a permanent 3rd "nav" column (.workspace-pane-nav,
    grid-area of its own) running alongside whichever of
@@ -1089,16 +1089,15 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
    wrapper (.workspace-column, below) that occupies this grid's
    "workspace" area - never a second column of its own, and never a
    separate tab-order region either, since it's simply earlier content
-   within the same single column. Two real states share this grid
-   shape:
-     - a Case (or, in future, a document) is open: two columns,
-       "workspace" (nav-pane + active work, stacked) | "findings"
-       (contextual, only ever present alongside real content - never
-       reserved empty width, see .case-workspace-single-column below).
-     - nothing is open: .case-workspace-single-column removes the
-       findings column entirely (Section D: "do not allow it to
-       consume unnecessary width when empty") and the workspace column
-       spans the full width.
+   within the same single column.
+
+   CLAUDE-P40-E2, Section A: the right column ("findings") is now a
+   persistent, contextual Toolbox ("toolbox") - Findings is one tool
+   inside it, not the whole pane, so unlike the old Findings-only
+   column it always has something to show (project-level tools at
+   minimum) and the grid is always two columns now. The old
+   .case-workspace-single-column reclaim-width behavior no longer
+   applies and has been removed.
    Geometry reasoned from CSS Grid's specified behavior, not confirmed
    against a real rendered browser - no browser/screenshot tool exists
    in this environment. Treat as reasoned, not proven, until someone
@@ -1106,14 +1105,10 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
 .case-workspace {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
-    grid-template-areas: "workspace findings";
+    grid-template-areas: "workspace toolbox";
     gap: 1rem;
     padding: 1rem 0 2rem;
     align-items: start;
-}
-.case-workspace-single-column {
-    grid-template-columns: 1fr;
-    grid-template-areas: "workspace";
 }
 /* CLAUDE-P40-E: .workspace-pane-nav (project reference material) and
    either .workspace-pane-conversation (active Case) or .project-home
@@ -1129,19 +1124,37 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
     gap: 1rem;
     min-width: 0;
 }
-.workspace-pane-findings { grid-area: findings; }
+/* CLAUDE-P40-E2: the Toolbox itself - a flex stack of .workspace-pane
+   sections (Investigation/Document/Project tools, contextual; Removed
+   Items and admin-only Project Data Management, always visible - see
+   case_workspace.html), not a single pane of its own. */
+.workspace-pane-toolbox {
+    grid-area: toolbox;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    min-width: 0;
+}
+.workspace-pane-toolbox > h2 {
+    font-family: var(--font-display);
+    font-size: 0.95rem;
+    margin: 0;
+    color: var(--text-primary);
+}
 
 /* Medium and narrow: Workspace (the active work) always stays first in
    both visual order and DOM order - no reordering trick needed, since
-   it already IS first in the markup (case_workspace.html). Findings
+   it already IS first in the markup (case_workspace.html). Toolbox
    collapses to its own full-width row below rather than competing for
-   the first screenful. */
+   the first screenful - the minimal compliant reading of "may collapse
+   to a drawer but must stay accessible" (Section A) without inventing
+   new JS drawer machinery this pass didn't otherwise need. */
 @media (max-width: 1080px) {
     .case-workspace {
         grid-template-columns: 1fr;
         grid-template-areas:
             "workspace"
-            "findings";
+            "toolbox";
     }
 }
 
@@ -1164,12 +1177,13 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
     border-bottom: 1px solid var(--border);
 }
 .workspace-column > .workspace-pane:last-child,
-.case-workspace > .workspace-pane:last-child {
+.workspace-pane-toolbox > .workspace-pane:last-child {
     border-bottom: none;
     margin-bottom: 0;
     padding-bottom: 0;
 }
-.workspace-pane h2 {
+.workspace-pane h2,
+.workspace-pane h3 {
     font-family: var(--font-display);
     font-size: 0.95rem;
     margin: 0 0 0.6rem;
@@ -1320,10 +1334,10 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
    branches (see case_workspace.html), never both on screen, so one id/
    one set of rules is genuinely one dock, not a shared style applied
    to two different elements. Rendered as a child of .case-workspace
-   (a grid) but not part of its named "workspace"/"findings" areas -
+   (a grid) but not part of its named "workspace"/"toolbox" areas -
    grid-column spans the full row so the dock reaches the "active
    working width" (Section I) rather than being confined to just the
-   narrower "workspace" column. Sticky to the bottom of the viewport as
+   narrower "workspace"/"toolbox" columns. Sticky to the bottom of the viewport as
    the page scrolls (no nested scroll container exists in this app's
    layout, so the ordinary page scroll is what "sticky" pins against) -
    compact by default (recent messages only, internal scroll), with an
@@ -1524,9 +1538,9 @@ html.conversation-expanded .conversation-thread { max-height: 60vh; }
 /* CLAUDE-P40-E: rendered inside .workspace-column now (grid-area:
    workspace assigned to that wrapper, not to this element directly -
    see the .case-workspace comment above) - no separate grid-column
-   override needed at any width now that .case-workspace-single-column
-   removes the findings column entirely instead of Project Home
-   needing to explicitly span past it. */
+   override needed; the Toolbox column (CLAUDE-P40-E2) always renders
+   alongside it now, so this never needs to span past a reclaimed
+   width. */
 .project-home { max-width: 760px; padding: 0.25rem 0 1.5rem; }
 .project-home-back { font-size: 0.88rem; color: var(--text-secondary); margin: 0 0 0.6rem; }
 .project-home-back a { color: var(--text-secondary); }

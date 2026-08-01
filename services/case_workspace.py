@@ -773,6 +773,15 @@ class Source:
     note: Optional[str] = None
     supersedes_source_id: Optional[str] = None
     superseded_by_source_id: Optional[str] = None
+    # CLAUDE-P40-E2: recoverable "Remove Document" - deliberately not a
+    # deletion. `removed_at is None` is the only thing that means
+    # "active" anywhere this field is read; the record itself, its id,
+    # file_path, and every dependent reference (Findings/Artifacts/
+    # Requirements citing this Source) are completely untouched by
+    # removal - see CaseWorkspaceStore.remove_source/restore_source.
+    removed_at: Optional[str] = None
+    removed_by: Optional[str] = None
+    removal_reason: Optional[str] = None
     # -- document identity / provenance (Prompt 15) --------------------------
     # Deliberately distinct from `name`/`file_path` (Prompt 15 #3): `name` is
     # the physical file's name, `document_id` is the issuer's own document
@@ -2441,6 +2450,20 @@ class ProjectWorkspace:
     # an allow-listed user can open the project, nothing more.
     access_allow_list: list[str] = field(default_factory=list)
 
+    # CLAUDE-P40-E2: recoverable "Remove Project" - a completely
+    # separate mechanism from routes/portal.py's pre-existing, real,
+    # honestly-named delete_project (which stays exactly as
+    # permanent/destructive as it always was, "Project Entry Rule" for
+    # unwanted/duplicate/test entries - untouched by this stage).
+    # `removed_at is None` is the only thing that means "active" -
+    # every child record (Cases/Sources/Requirements/Findings/etc.)
+    # stays completely intact and unmodified; only the project's own
+    # listing visibility changes (see routes/portal.py's
+    # _accessible_documents and app.py's _nav_recent_projects).
+    removed_at: Optional[str] = None
+    removed_by: Optional[str] = None
+    removal_reason: Optional[str] = None
+
     perspective_assessments: list[dict] = field(default_factory=list)  # CLAUDE-P12R - see PerspectiveAssessment
     # Per-reviewer "who do I represent in this Project" (username ->
     # participant_id) - same personal/display-only shape as
@@ -4096,6 +4119,150 @@ class CaseWorkspaceStore:
 
     def revision_notices_for_case(self, workspace: ProjectWorkspace, case_id: str) -> list[dict]:
         return [n for n in workspace.revision_notices if n["case_id"] == case_id]
+
+    @staticmethod
+    def active_sources(workspace: ProjectWorkspace) -> list[dict]:
+        """CLAUDE-P40-E2: the filter every DISPLAY/AI-context/search
+        read of workspace.sources should use going forward - a removed
+        Source is excluded, never deleted. Provenance lookups that must
+        keep resolving a Source regardless of removal (a Finding's own
+        artifact/source citation, an existing Requirement's evidence
+        reference) deliberately do NOT use this filter - they call
+        _find directly against the full, unfiltered workspace.sources,
+        exactly as they always have, so "Document removed" can be shown
+        as an honest state on that reference rather than a broken one."""
+        return [s for s in workspace.sources if not s.get("removed_at")]
+
+    @staticmethod
+    def removed_sources(workspace: ProjectWorkspace) -> list[dict]:
+        return [s for s in workspace.sources if s.get("removed_at")]
+
+    def remove_source(
+        self, workspace: ProjectWorkspace, source_id: str, actor: str, actor_role: str = "",
+        reason: Optional[str] = None, governance_log: Optional[GovernanceLog] = None,
+    ) -> dict:
+        """CLAUDE-P40-E2, Section C: "Remove Document" - recoverable,
+        never a deletion. Only ever sets removed_at/removed_by/
+        removal_reason on the existing record; the id, file_path,
+        checksum-bearing content on disk, and every dependent
+        Finding/Artifact/Requirement reference are completely
+        untouched. Restoring re-activates the SAME record - no
+        re-ingestion, no new id (see restore_source). Owner-or-admin
+        authority - the same pattern grant_project_access/archive_case
+        already established in this module."""
+        if actor != workspace.owner and actor_role != "admin":
+            raise CaseWorkspaceError("Only the project owner or an admin may remove a Document.")
+        source = self._find(workspace.sources, source_id)
+        if source is None:
+            raise CaseWorkspaceError(f"Source {source_id} was not found.")
+        if source.get("removed_at"):
+            raise CaseWorkspaceError(f"Source {source_id} is already removed.")
+
+        removed_at = _now()
+        source["removed_at"] = removed_at
+        source["removed_by"] = actor
+        source["removal_reason"] = reason
+        self.save(workspace)
+
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id, event_type="document_removed",
+                actor=actor, role="human",
+                payload={"source_id": source_id, "name": source.get("name"), "reason": reason, "removed_at": removed_at},
+                correlation_id=source_id,
+            )
+        return source
+
+    def restore_source(
+        self, workspace: ProjectWorkspace, source_id: str, actor: str, actor_role: str = "",
+        governance_log: Optional[GovernanceLog] = None,
+    ) -> dict:
+        """The exact same record, re-activated - never a new id, never
+        re-ingested. See remove_source's own docstring. Same
+        owner-or-admin authority as removal itself."""
+        if actor != workspace.owner and actor_role != "admin":
+            raise CaseWorkspaceError("Only the project owner or an admin may restore a Document.")
+        source = self._find(workspace.sources, source_id)
+        if source is None:
+            raise CaseWorkspaceError(f"Source {source_id} was not found.")
+        if not source.get("removed_at"):
+            raise CaseWorkspaceError(f"Source {source_id} is not removed.")
+
+        source["removed_at"] = None
+        source["removed_by"] = None
+        source["removal_reason"] = None
+        self.save(workspace)
+
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id, event_type="document_restored",
+                actor=actor, role="human",
+                payload={"source_id": source_id, "name": source.get("name")},
+                correlation_id=source_id,
+            )
+        return source
+
+    def remove_project(
+        self, workspace: ProjectWorkspace, actor: str, actor_role: str = "",
+        reason: Optional[str] = None, governance_log: Optional[GovernanceLog] = None,
+    ) -> ProjectWorkspace:
+        """CLAUDE-P40-E2, Section C: "Remove Project" - a completely
+        separate, recoverable mechanism from routes/portal.py's
+        pre-existing delete_project (permanent, unchanged by this
+        stage - "Project Entry Rule" for unwanted/duplicate/test
+        entries). Removes the Project AND everything under it as one
+        bundle, from ACTIVE USE only - every Case/Source/Requirement/
+        Finding/conversation record is completely untouched in
+        storage; only this one workspace-level flag changes, and every
+        listing route (routes/portal.py's _accessible_documents,
+        app.py's _nav_recent_projects) is what actually excludes a
+        removed project from view. Restoring (restore_project) returns
+        the exact same project_id and every child identifier/
+        relationship unchanged - never a re-creation. Owner-or-admin
+        authority, same pattern as every other project-level write."""
+        if actor != workspace.owner and actor_role != "admin":
+            raise CaseWorkspaceError("Only the project owner or an admin may remove a Project.")
+        if workspace.removed_at:
+            raise CaseWorkspaceError("Project is already removed.")
+
+        removed_at = _now()
+        workspace.removed_at = removed_at
+        workspace.removed_by = actor
+        workspace.removal_reason = reason
+        self.save(workspace)
+
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id, event_type="project_removed",
+                actor=actor, role="human",
+                payload={"reason": reason, "removed_at": removed_at},
+            )
+        return workspace
+
+    def restore_project(
+        self, workspace: ProjectWorkspace, actor: str, actor_role: str = "",
+        governance_log: Optional[GovernanceLog] = None,
+    ) -> ProjectWorkspace:
+        """The exact same project, same project_id, every child record
+        and relationship unchanged - see remove_project's own
+        docstring. Same owner-or-admin authority as removal itself."""
+        if actor != workspace.owner and actor_role != "admin":
+            raise CaseWorkspaceError("Only the project owner or an admin may restore a Project.")
+        if not workspace.removed_at:
+            raise CaseWorkspaceError("Project is not removed.")
+
+        workspace.removed_at = None
+        workspace.removed_by = None
+        workspace.removal_reason = None
+        self.save(workspace)
+
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id, event_type="project_restored",
+                actor=actor, role="human",
+                payload={},
+            )
+        return workspace
 
     # -- cases -----------------------------------------------------------------
 
