@@ -57,7 +57,17 @@ class _BaseP40E2TestCase(unittest.TestCase):
         import app as app_module
         from models import User, db
 
-        self.tmp_dir = Path(tempfile.mkdtemp(prefix="beehive_test_p40e2_"))
+        # CLAUDE-P40-E2A2: registry_snapshots/, reset_transactions/, and
+        # the reset/restore lock file all live beside REGISTRY_STORE_PATH
+        # (tmp_dir.parent) - a bare tempfile.mkdtemp() puts tmp_dir
+        # directly under the shared OS temp root, meaning tmp_dir.parent
+        # would be that SAME shared root for every test in the whole
+        # suite, and all three would silently collide across tests. An
+        # isolated parent directory, with tmp_dir as ITS OWN child, keeps
+        # all three exclusively scoped to this one test.
+        self.tmp_root = Path(tempfile.mkdtemp(prefix="beehive_test_p40e2_"))
+        self.tmp_dir = self.tmp_root / "registry"
+        self.tmp_dir.mkdir()
         self.flask_app = app_module.create_app("testing")
         self.flask_app.config["REGISTRY_STORE_PATH"] = str(self.tmp_dir)
 
@@ -71,16 +81,11 @@ class _BaseP40E2TestCase(unittest.TestCase):
         self.project_id = self.doc.project_id
 
     def tearDown(self):
-        shutil.rmtree(self.tmp_dir, ignore_errors=True)
-        # Reset Project Data's snapshots land beside REGISTRY_STORE_PATH,
-        # not inside it - clean up any this test's own reset created so
-        # repeated test runs don't accumulate snapshot directories in the
-        # shared OS temp root.
-        snapshot_root = self.tmp_dir.parent / "registry_snapshots"
-        if snapshot_root.exists():
-            for entry in snapshot_root.iterdir():
-                if (entry / f"{self.project_id}.json").exists():
-                    shutil.rmtree(entry, ignore_errors=True)
+        # self.tmp_root exclusively owns tmp_dir (the registry itself)
+        # AND registry_snapshots/reset_transactions/the lock file - one
+        # rmtree cleans up everything this test could possibly have
+        # created.
+        shutil.rmtree(self.tmp_root, ignore_errors=True)
 
     def _ingest(self, owner: str, project_name: str, filename: str = "rfp.txt"):
         def fake_parse(self_parser, raw_bytes, filename_):
@@ -388,9 +393,15 @@ class ResetProjectDataTests(_BaseP40E2TestCase):
         self.assertIn("No projects yet.", listing)
 
     def test_duplicate_submission_is_rejected_by_the_lock(self):
+        # CLAUDE-P40-E2A2: a lock is only "genuinely active" (must block)
+        # if the PID recorded in it is still running - an abandoned lock
+        # (no PID, or a dead one) is auto-recovered instead, not a
+        # permanent block (Section C). Writing this test process's own
+        # (very much alive) PID simulates a real concurrent holder.
+        import os as _os
         lock_path = self.tmp_dir.parent / ".reset_project_data.lock"
         lock_path.parent.mkdir(parents=True, exist_ok=True)
-        lock_path.touch()
+        lock_path.write_text(str(_os.getpid()), encoding="ascii")
         try:
             client = self._admin_client()
             client.post("/admin/reset-project-data", data={"confirmation_phrase": "RESET PROJECT DATA"})

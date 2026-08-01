@@ -60,8 +60,60 @@ def create_app(config_name: str | None = None) -> Flask:
     _register_error_handlers(app)
     _register_context_processors(app)
     _register_template_filters(app)
+    _recover_registry_before_serving(app)
+    _register_registry_guard(app)
 
     return app
+
+
+def _recover_registry_before_serving(app: Flask) -> None:
+    """
+    CLAUDE-P40-E2A2, Section B: "Before application code reads the
+    registry ... detect an incomplete transaction." create_app() fully
+    completes before app.run()/the WSGI server ever accepts a request,
+    so calling this here - unconditionally, in every config including
+    "testing" (Section E's own failure-injection tests instantiate the
+    app exactly this way to prove recovery runs automatically on
+    "restart", not via a separate step a test has to remember to call) -
+    guarantees no route handler in this process can read
+    REGISTRY_STORE_PATH before any interrupted Reset/Restore from a
+    prior process has already been resolved. A no-op, near-free, for
+    the overwhelming majority of boots where no transaction was ever
+    left mid-flight (no reset_transactions/ directory exists yet).
+    """
+    from routes.portal import _recover_interrupted_transactions
+
+    _recover_interrupted_transactions(app)
+
+
+def _register_registry_guard(app: Flask) -> None:
+    """
+    CLAUDE-P40-E2A2, Section B: "Do not start the application against a
+    missing, mixed, or unverified registry." If
+    _recover_registry_before_serving (or a later on-demand recovery
+    pass triggered from the Reset/Restore admin pages themselves) could
+    not resolve some interrupted transaction safely, it sets
+    app.config["REGISTRY_RECOVERY_FAILED"] rather than guessing - this
+    hook then fails EVERY request closed with a plain 503 instead of
+    letting ordinary pages silently read a registry nobody has verified,
+    except /health (the one diagnostic surface that must keep reporting
+    the real failure - see that route's own registry check) and static
+    assets (so the 503 page itself can still be styled).
+    """
+    @app.before_request
+    def _block_when_registry_recovery_failed():
+        from flask import request
+
+        if not app.config.get("REGISTRY_RECOVERY_FAILED"):
+            return None
+        if request.path == "/health" or request.path.startswith("/static/"):
+            return None
+        return (
+            "Registry needs administrator attention - an interrupted Reset/Restore "
+            "operation could not be automatically recovered. See /admin/reset-project-data "
+            "/snapshots for diagnostics once this is resolved.",
+            503,
+        )
 
 
 def _register_database(app: Flask) -> None:

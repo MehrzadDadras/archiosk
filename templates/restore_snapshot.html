@@ -52,7 +52,14 @@
     </p>
 </section>
 
-{% if lock_info %}
+{% if recovery_failed %}
+<section class="workspace-pane">
+    <p class="pane-note" style="color:var(--failure-red);">
+        An interrupted Reset or Restore could not be automatically recovered &mdash; Restore is disabled
+        until this is resolved.
+    </p>
+</section>
+{% elif lock_info %}
 <section class="workspace-pane">
     <p class="pane-note">
         A Reset or Restore is already in progress (started {{ lock_info.age_seconds }}s ago) &mdash;

@@ -49,7 +49,18 @@ class _BaseTestCase(unittest.TestCase):
         import app as app_module
         from models import User, db
 
-        self.tmp_dir = Path(tempfile.mkdtemp(prefix="beehive_test_p40e2a_"))
+        # CLAUDE-P40-E2A2: registry_snapshots/, reset_transactions/, and
+        # the reset/restore lock file all live beside REGISTRY_STORE_PATH
+        # (tmp_dir.parent) - a bare tempfile.mkdtemp() puts tmp_dir
+        # directly under the shared OS temp root, meaning tmp_dir.parent
+        # would be that SAME shared root for every test in the whole
+        # suite, and all three would silently collide across tests (and
+        # across any other tool/script's temp usage). An isolated parent
+        # directory, with tmp_dir as ITS OWN child, keeps all three
+        # exclusively scoped to this one test.
+        self.tmp_root = Path(tempfile.mkdtemp(prefix="beehive_test_p40e2a_"))
+        self.tmp_dir = self.tmp_root / "registry"
+        self.tmp_dir.mkdir()
         self.flask_app = app_module.create_app("testing")
         self.flask_app.config["REGISTRY_STORE_PATH"] = str(self.tmp_dir)
 
@@ -63,16 +74,12 @@ class _BaseTestCase(unittest.TestCase):
         self.project_id = self.doc.project_id
 
     def tearDown(self):
-        shutil.rmtree(self.tmp_dir, ignore_errors=True)
-        snapshot_root = self.tmp_dir.parent / "registry_snapshots"
-        if snapshot_root.exists():
-            for entry in list(snapshot_root.iterdir()):
-                try:
-                    manifest = json.loads((entry / "_snapshot_manifest.snapshot").read_text(encoding="utf-8"))
-                except OSError:
-                    continue
-                if self.project_id in json.dumps(manifest):
-                    shutil.rmtree(entry, ignore_errors=True)
+        # self.tmp_root exclusively owns tmp_dir (the registry itself)
+        # AND registry_snapshots/reset_transactions/the lock file - one
+        # rmtree cleans up everything this test could possibly have
+        # created, with nothing left behind for a later test to collide
+        # with.
+        shutil.rmtree(self.tmp_root, ignore_errors=True)
 
     def _ingest(self, owner: str, project_name: str, filename: str = "rfp.txt"):
         def fake_parse(self_parser, raw_bytes, filename_):
@@ -341,12 +348,26 @@ class ResetSnapshotRestorationTests(_BaseTestCase):
         return client.post("/admin/reset-project-data", data={"confirmation_phrase": "RESET PROJECT DATA"})
 
     def _latest_snapshot_id(self):
+        # Scoped by actor AND by actually containing this test's own
+        # project record - registry_snapshots/ lives in the shared OS
+        # temp root, so other tests' snapshots (same actor username,
+        # different project_id) can otherwise be newer and get picked
+        # up here by mistake. A "reset" snapshot of THIS project always
+        # contains "<project_id>.json" among its checksums; a later
+        # "pre_restore_safety" snapshot of the already-reset (empty)
+        # store correctly does NOT, and is excluded here.
         snapshot_root = self.tmp_dir.parent / "registry_snapshots"
-        candidates = [
-            d for d in snapshot_root.iterdir()
-            if d.is_dir() and (d / "_snapshot_manifest.snapshot").exists()
-            and json.loads((d / "_snapshot_manifest.snapshot").read_text(encoding="utf-8"))["actor"] == "p40e2a_owner"
-        ]
+        candidates = []
+        for d in snapshot_root.iterdir():
+            manifest_path = d / "_snapshot_manifest.snapshot"
+            if not d.is_dir() or not manifest_path.exists():
+                continue
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            if manifest.get("actor") != "p40e2a_owner":
+                continue
+            if f"{self.project_id}.json" not in manifest.get("checksums", {}):
+                continue
+            candidates.append(d)
         candidates.sort(key=lambda d: (d / "_snapshot_manifest.snapshot").stat().st_mtime)
         return candidates[-1].name
 
@@ -456,9 +477,14 @@ class ResetSnapshotRestorationTests(_BaseTestCase):
         self._do_reset(client)
         snapshot_id = self._latest_snapshot_id()
 
+        # CLAUDE-P40-E2A2: a lock only blocks when the PID recorded in
+        # it is genuinely still running (Section C) - this test's own
+        # (alive) PID simulates a real concurrent holder, not an
+        # abandoned one that automatic recovery would clear instead.
+        import os as _os
         lock_path = self.tmp_dir.parent / ".reset_project_data.lock"
         lock_path.parent.mkdir(parents=True, exist_ok=True)
-        lock_path.touch()
+        lock_path.write_text(str(_os.getpid()), encoding="ascii")
         try:
             client.post(
                 f"/admin/reset-project-data/snapshots/{snapshot_id}/restore",

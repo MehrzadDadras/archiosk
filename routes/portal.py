@@ -186,16 +186,25 @@ def health():
     except OSError:
         registry_ok = False
 
+    # CLAUDE-P40-E2A2: distinct from plain unreachability - a registry
+    # that IS reachable but that automatic Reset/Restore recovery could
+    # not resolve safely (see app.py's _register_registry_guard, which
+    # already fails every OTHER route closed against this).
+    recovery_failed = bool(current_app.config.get('REGISTRY_RECOVERY_FAILED'))
+
     missing_config = []
     if not current_app.config.get('SECRET_KEY'):
         missing_config.append('FLASK_SECRET_KEY')
     if not current_app.config.get('ANTHROPIC_API_KEY'):
         missing_config.append('ANTHROPIC_API_KEY')
 
-    status_code = 200 if registry_ok else 503
+    status_code = 200 if (registry_ok and not recovery_failed) else 503
     return jsonify(
-        status='ok' if registry_ok else 'error',
-        checks={'registry_store': 'ok' if registry_ok else 'unreachable'},
+        status='ok' if (registry_ok and not recovery_failed) else 'error',
+        checks={
+            'registry_store': 'ok' if registry_ok else 'unreachable',
+            'registry_recovery': 'failed' if recovery_failed else 'ok',
+        },
         missing_config=missing_config,
     ), status_code
 
@@ -526,12 +535,6 @@ def _win_long_path(path: Path) -> str:
     return "\\\\?\\" + resolved
 
 
-class SnapshotIntegrityError(Exception):
-    def __init__(self, problems: list[str]):
-        super().__init__("; ".join(problems))
-        self.problems = problems
-
-
 def _sha256_of(path: Path) -> str:
     digest = hashlib.sha256()
     with open(_win_long_path(path), "rb") as fh:
@@ -569,6 +572,69 @@ def _project_data_inventory(app) -> dict:
     return _inventory_from_store_path(Path(app.config["REGISTRY_STORE_PATH"]))
 
 
+def _walk_root(dir_path: Path) -> Path:
+    """
+    CLAUDE-P40-E2A2, Section D: a plain Path.rglob("*") - unlike
+    shutil.copytree/os.rename, which _win_long_path already covers -
+    SILENTLY OMITS files past Windows' 260-character MAX_PATH from its
+    results (confirmed live, not assumed: a real registry_snapshots/
+    <stamp>/workspace_sources/<project_id>/<hash>_<filename> path at
+    286 characters was invisible to rglob() while still being a real,
+    readable file on disk - the exact same class of bug _win_long_path
+    was written for, in a walk this stage's own new checksum machinery
+    added and initially missed applying it to). Returns a Path wrapping
+    the \\\\?\\-prefixed string, so every path .rglob() yields from it
+    is already long-path-safe and .relative_to(this) still works
+    normally (pathlib's relative_to is purely lexical, unaffected by
+    the prefix)."""
+    return Path(_win_long_path(dir_path))
+
+
+def _checksums_for_dir(dir_path: Path, exclude_names: tuple[str, ...] = ()) -> dict[str, str]:
+    """sha256 of every real file under dir_path, keyed by its path
+    relative to dir_path - the one shared basis both a snapshot's own
+    manifest and a live-registry post-transaction verification are
+    built from (CLAUDE-P40-E2A2), so "does this directory match what
+    was expected" is always the same comparison regardless of which
+    directory is being checked."""
+    root = _walk_root(dir_path)
+    return {
+        str(path.relative_to(root).as_posix()): _sha256_of(path)
+        for path in sorted(root.rglob("*"))
+        if path.is_file() and path.name not in exclude_names
+    }
+
+
+def _verify_directory_against_checksums(
+    dir_path: Path, expected_checksums: dict[str, str], exclude_names: tuple[str, ...] = (),
+) -> tuple[bool, list[str]]:
+    """Recomputes checksums of every file CURRENTLY under dir_path and
+    compares against expected_checksums - a missing file, a changed
+    file, or an unexplained extra file are all reported. Used both for
+    a snapshot verifying itself against its own manifest
+    (_verify_snapshot_integrity) and for a transaction verifying the
+    LIVE registry against the manifest it recorded before making any
+    change (_run_registry_transaction / recovery)."""
+    if not dir_path.exists():
+        return False, ["Directory does not exist."]
+    root = _walk_root(dir_path)
+    current_files = {
+        str(path.relative_to(root).as_posix())
+        for path in root.rglob("*")
+        if path.is_file() and path.name not in exclude_names
+    }
+    problems = []
+    for rel_path, expected_hash in expected_checksums.items():
+        if rel_path not in current_files:
+            problems.append(f"Missing file: {rel_path}")
+            continue
+        if _sha256_of(dir_path / rel_path) != expected_hash:
+            problems.append(f"Checksum mismatch: {rel_path}")
+    for rel_path in sorted(current_files - set(expected_checksums.keys())):
+        problems.append(f"Unexpected extra file (not in manifest): {rel_path}")
+    return (len(problems) == 0), problems
+
+
 def _create_snapshot(store_path: Path, snapshot_root: Path, actor: str, kind: str) -> Path:
     """
     Copies the whole store_path tree into a new timestamped directory
@@ -578,20 +644,16 @@ def _create_snapshot(store_path: Path, snapshot_root: Path, actor: str, kind: st
     BEFORE the manifest itself is written, so the manifest never has to
     describe its own checksum). `kind` distinguishes a Reset Project
     Data snapshot ("reset") from a pre-restore safety snapshot
-    ("pre_restore_safety") taken automatically by _restore_snapshot -
-    both are ordinary, equally restorable snapshots; `kind` is a label
-    for the listing page, not a behavioral difference.
+    ("pre_restore_safety") taken automatically by a restore - both are
+    ordinary, equally restorable snapshots; `kind` is a label for the
+    listing page, not a behavioral difference.
     """
     snapshot_root.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ") + "-" + uuid.uuid4().hex[:8]
     snapshot_dir = snapshot_root / stamp
     shutil.copytree(_win_long_path(store_path), _win_long_path(snapshot_dir))
 
-    checksums = {
-        str(path.relative_to(snapshot_dir).as_posix()): _sha256_of(path)
-        for path in sorted(snapshot_dir.rglob("*"))
-        if path.is_file()
-    }
+    checksums = _checksums_for_dir(snapshot_dir)
     manifest = {
         "created_at": datetime.now(timezone.utc).isoformat(),
         "actor": actor,
@@ -619,24 +681,9 @@ def _verify_snapshot_integrity(snapshot_dir: Path) -> tuple[bool, list[str]]:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         return False, [f"Manifest could not be read: {exc}"]
-
-    recorded = manifest.get("checksums", {})
-    current_files = {
-        str(path.relative_to(snapshot_dir).as_posix())
-        for path in snapshot_dir.rglob("*")
-        if path.is_file() and path.name != SNAPSHOT_MANIFEST_FILENAME
-    }
-
-    problems = []
-    for rel_path, expected_hash in recorded.items():
-        if rel_path not in current_files:
-            problems.append(f"Missing file: {rel_path}")
-            continue
-        if _sha256_of(snapshot_dir / rel_path) != expected_hash:
-            problems.append(f"Checksum mismatch: {rel_path}")
-    for rel_path in sorted(current_files - set(recorded.keys())):
-        problems.append(f"Unexpected extra file (not in manifest): {rel_path}")
-    return (len(problems) == 0), problems
+    return _verify_directory_against_checksums(
+        snapshot_dir, manifest.get("checksums", {}), exclude_names=(SNAPSHOT_MANIFEST_FILENAME,),
+    )
 
 
 def _list_snapshots(app) -> list[dict]:
@@ -689,150 +736,531 @@ def _resolve_snapshot_dir(snapshot_root: Path, snapshot_id: str) -> Optional[Pat
     return candidate
 
 
+def _pid_is_alive(pid: int) -> bool:
+    """Cross-platform "is this process still running" check, used only
+    to decide whether a lock file is genuinely still held (Section C:
+    "a second process cannot clear a genuinely active lock") vs
+    abandoned by a crash. Windows has no os.kill(pid, 0) equivalent
+    (Python's os.kill on Windows does not reliably support signal 0),
+    so this uses OpenProcess directly via ctypes on Windows and the
+    standard os.kill(pid, 0) probe on POSIX - no extra dependency
+    either way."""
+    if os.name == "nt":
+        import ctypes
+
+        PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+        handle = ctypes.windll.kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+        if handle:
+            ctypes.windll.kernel32.CloseHandle(handle)
+            return True
+        return False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True  # exists, just not owned by us
+    return True
+
+
+def _lock_owner_pid(lock_path: Path) -> Optional[int]:
+    try:
+        content = lock_path.read_text(encoding="ascii").strip()
+        return int(content) if content else None
+    except (OSError, ValueError):
+        return None
+
+
+def _lock_is_stale(lock_path: Path) -> bool:
+    """True only if the lock file exists but does NOT correspond to a
+    currently-running process - safe for recovery to clear on its own.
+    False if the lock doesn't exist (nothing to clear) or genuinely
+    belongs to a live process (never touched - Section C)."""
+    if not lock_path.exists():
+        return False
+    pid = _lock_owner_pid(lock_path)
+    if pid is None:
+        return True  # unparseable/legacy lock content - treat as stale
+    return not _pid_is_alive(pid)
+
+
+def _acquire_lock(lock_path: Path) -> bool:
+    """os.O_EXCL is the actual race guard - atomic at the OS level, so
+    exactly one concurrent caller ever succeeds regardless of how many
+    ask at once (Section C: "an active transaction cannot be raced").
+    The PID written into it is ONLY ever used later to tell a genuinely
+    live process apart from an abandoned one (_lock_is_stale) - it is
+    not itself part of the race guard."""
+    try:
+        fd = os.open(str(lock_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+    except FileExistsError:
+        return False
+    os.write(fd, str(os.getpid()).encode("ascii"))
+    os.close(fd)
+    return True
+
+
 def _lock_info(lock_path: Path) -> Optional[dict]:
     """Section E/B: "safely handles interruption and stale duplicate-
     submission locks" - a lock left behind by a crashed/interrupted
     reset or restore blocks new ones (correct - never race two against
     the same store), but must not be a silent, unexplained wall. Shows
-    how long it's been held so an administrator can tell "this is
-    normal, wait" from "this is stuck, something crashed" - clearing it
-    is a manual filesystem action (deleting one lock file), deliberately
-    not exposed as an in-app override button that would defeat the
-    guard's own purpose."""
+    how long it's been held and whether it's stale (its owning process
+    is no longer running) so an administrator can tell "this is normal,
+    wait" from "this is stuck, recovery will clear it automatically" -
+    clearing a genuinely live lock is never exposed as an in-app
+    override button, which would defeat the guard's own purpose; a
+    STALE one is cleared automatically by recovery, not by a button
+    either (see _recover_interrupted_transactions)."""
     if not lock_path.exists():
         return None
-    return {"age_seconds": int(time.time() - lock_path.stat().st_mtime)}
+    return {
+        "age_seconds": int(time.time() - lock_path.stat().st_mtime),
+        "stale": _lock_is_stale(lock_path),
+    }
 
 
-def _reset_project_data(app, actor: str) -> Path:
+# -- CLAUDE-P40-E2A2, Section A/B: durable transaction journal + automatic
+# crash recovery ------------------------------------------------------------
+#
+# Confirmed absent before this stage by direct code search (no journal,
+# no PREPARED/LIVE_MOVED/etc. states, no automatic recovery anywhere in
+# this repository) - implemented now. Reset and Restore both now go
+# through ONE journal-backed executor (_run_registry_transaction) using
+# the identical staged-build-then-atomic-swap pattern. Reset previously
+# wiped store_path IN PLACE, file by file - Section E's "cannot leave a
+# partially active registry" applies just as much to Reset as to
+# Restore, so Reset no longer mutates the live directory directly at
+# all; it builds the "clean" result off to the side first, exactly like
+# Restore already did, so an interruption during EITHER operation is
+# recoverable by the identical mechanism.
+
+_JOURNAL_DIR_NAME = "reset_transactions"
+_TXN_TERMINAL_STATES = {"ROLLED_BACK", "RECOVERED", "FAILED"}
+
+
+class RegistryTransactionError(Exception):
+    """Raised when a transaction's own post-swap verification fails -
+    the live registry has been left at STAGED_INSTALLED, unresolved,
+    for the next recovery pass to fix (never rolled back inline here -
+    see _recover_one_transaction's STAGED_INSTALLED case, the identical
+    path a real crash at this point would use)."""
+
+
+class _DeliberateTestInterruption(Exception):
+    """CLAUDE-P40-E2A2, Section E: raised ONLY when a caller explicitly
+    passes _test_interrupt_after to _run_registry_transaction - no
+    route ever passes this argument, so this is never reachable from
+    any real request. Lets a test stop a transaction at an exact named
+    checkpoint (leaving the journal/filesystem in exactly that state)
+    and then prove _recover_interrupted_transactions brings it back to
+    a single, verified state."""
+    def __init__(self, checkpoint: str):
+        super().__init__(f"deliberate test interruption after {checkpoint}")
+        self.checkpoint = checkpoint
+
+
+def _journal_dir(store_path: Path) -> Path:
+    # A sibling of store_path, never inside it - the journal must
+    # survive regardless of which of store_path's two renames a crash
+    # lands between, so it can describe what happened either way.
+    return store_path.parent / _JOURNAL_DIR_NAME
+
+
+def _new_txn_id() -> str:
+    return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ") + "-" + uuid.uuid4().hex[:8]
+
+
+def _journal_path(store_path: Path, txn_id: str) -> Path:
+    return _journal_dir(store_path) / f"{txn_id}.journal.json"
+
+
+def _write_journal(journal_path: Path, entry: dict) -> None:
+    """Atomic journal write: the full new content is built in a temp
+    file beside the journal, then os.replace'd into place - os.replace
+    is atomic on both Windows and POSIX (unlike plain os.rename on
+    Windows, which fails outright if the destination already exists),
+    so a reader never observes a half-written journal, and a crash
+    mid-write leaves the OLD, still-valid journal content in place,
+    never a corrupt one."""
+    journal_path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = journal_path.with_name(journal_path.name + f".tmp{os.getpid()}")
+    with open(_win_long_path(tmp_path), "w", encoding="utf-8") as fh:
+        fh.write(json.dumps(entry, indent=2))
+    os.replace(_win_long_path(tmp_path), _win_long_path(journal_path))
+
+
+def _read_journal(journal_path: Path) -> Optional[dict]:
+    try:
+        return json.loads(journal_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def _journal_is_terminal(entry: dict) -> bool:
+    state = entry.get("state")
+    if state in _TXN_TERMINAL_STATES:
+        return True
+    return state == "VERIFIED" and bool(entry.get("cleanup_done"))
+
+
+def _append_journal_history(entry: dict, state: str) -> None:
+    entry["state"] = state
+    entry.setdefault("history", []).append({"state": state, "at": datetime.now(timezone.utc).isoformat()})
+
+
+def _run_registry_transaction(
+    app, operation: str, actor: str, target_snapshot_dir: Optional[Path] = None,
+    _test_interrupt_after: Optional[str] = None,
+) -> dict:
     """
-    Wipes every Project's data and returns to a clean no-project state,
-    while retaining user accounts (instance/bhive.db - a wholly separate
-    file this function never touches), application config/.env/schema
-    version (also never touched - this only ever acts inside
-    REGISTRY_STORE_PATH), and security policy/authorization config
-    (instance/registry/security_governance/ - password-reset and
-    rate-limit state, not project content - explicitly skipped below).
+    The ONE journal-backed executor for both Reset Project Data
+    ("reset") and Restore Snapshot ("restore"):
 
-    Never a destructive wipe with nothing kept: the whole
-    REGISTRY_STORE_PATH tree is copied to a checksummed, manifest-
-    bearing snapshot via _create_snapshot first - the same snapshot
-    format _restore_snapshot below knows how to verify and restore from
-    (CLAUDE-P40-E2A, Section B - restoration is now a real, tested,
-    in-app path, not "a manual filesystem operation" as this function's
-    own docstring previously, incorrectly, claimed).
+      1. PREPARED          - journal written FIRST, before any
+                              destructive action, naming every path
+                              this transaction will touch.
+      2. a safety snapshot of the CURRENT live state is taken (kind=
+         "reset" or "pre_restore_safety", unchanged in spirit from
+         before this stage) and recorded into the journal.
+      3. staged_dir is built completely, off to the side - a failure
+         here never touches live_path at all.
+      4. os.rename(live_path, old_path)            -> LIVE_MOVED
+      5. os.rename(staged_dir, live_path)           -> STAGED_INSTALLED
+      6. live_path re-verified against the checksums staged_dir was
+         built to match                             -> VERIFIED
+      7. rmtree(old_path)                           -> cleanup_done=True
+
+    The journal directory is a sibling of store_path, untouched by
+    either rename, so it survives to describe exactly what this
+    transaction was doing regardless of where a crash lands.
+
+    CLAUDE-P40-E2A2, Section D (Windows audit, empirically determined,
+    not assumed): step 4's os.rename(live_path, old_path) requires NO
+    open file handle anywhere inside live_path - a plain open(path,
+    "rb") on a file inside the registry (default sharing flags, no
+    FILE_SHARE_DELETE) blocks renaming the CONTAINING directory with
+    PermissionError ([WinError 5] Access is denied). POSIX rename has
+    no such restriction. This is safe, not silently corrupting: step 4
+    is the FIRST destructive action, so a PermissionError there means
+    old_path was never created and live_path was never touched - the
+    journal is left at PREPARED, and recovery (once whatever held the
+    handle releases it or the holding process is gone) finds a
+    completely untouched registry and simply discards the unused
+    staged directory (see _recover_one_transaction's Case A). staged_dir
+    and old_path are always siblings of live_path (same parent
+    directory, hence guaranteed same volume - asserted directly by
+    tests, not merely assumed), which is what makes each individual
+    os.rename atomic in the first place; a cross-volume REGISTRY_STORE_
+    PATH configuration is not supported by this design.
+
+    Never contains credentials or unvalidated user input: `actor` is a
+    username string (not a credential), and every path recorded is
+    server-computed from REGISTRY_STORE_PATH plus internally-generated
+    UUIDs/timestamps. The one value that ever originates from a request
+    (`snapshot_id` in the restore route) is already resolved to a
+    validated, existing snapshot directory (_resolve_snapshot_dir)
+    BEFORE it reaches this function as `target_snapshot_dir` - never a
+    raw, unvalidated user-controlled path.
+
+    `_test_interrupt_after` is a test-only fault-injection hook
+    (CLAUDE-P40-E2A2, Section E) - see _DeliberateTestInterruption.
     """
     store_path = Path(app.config["REGISTRY_STORE_PATH"])
     snapshot_root = store_path.parent / "registry_snapshots"
-    snapshot_dir = _create_snapshot(store_path, snapshot_root, actor=actor, kind="reset")
-
-    removed_entries = []
-    for entry in store_path.iterdir():
-        if entry.name == "security_governance":
-            continue
-        removed_entries.append(entry.name)
-        if entry.is_dir():
-            shutil.rmtree(_win_long_path(entry))
-        else:
-            entry.unlink()
-
-    # Recorded here, not via GovernanceLog (per-project, and every
-    # project's own log was just wiped/snapshotted above) - this is the
-    # one durable record of the reset itself: actor, time, and what was
-    # removed (Section E: "record actor/time/reason/affected
-    # identifiers"). Lives under security_governance/, the one
-    # subdirectory this function deliberately never removes.
-    audit_dir = store_path / "security_governance"
-    audit_dir.mkdir(parents=True, exist_ok=True)
-    with (audit_dir / "reset_audit.jsonl").open("a", encoding="utf-8") as fh:
-        fh.write(json.dumps({
-            "event": "reset",
-            "actor": actor,
-            "at": datetime.now(timezone.utc).isoformat(),
-            "snapshot_dir": str(snapshot_dir),
-            "removed_entries": sorted(removed_entries),
-        }) + "\n")
-
-    return snapshot_dir
-
-
-def _restore_snapshot(app, snapshot_dir: Path, actor: str) -> dict:
-    """
-    CLAUDE-P40-E2A, Section B: restores the complete project-record
-    family from a verified snapshot, atomically as the filesystem
-    allows.
-
-    Never reverts security_governance/ - accounts/security state stays
-    whatever is CURRENTLY live, never the snapshot's old copy ("retains
-    accounts, security governance, configuration, credentials and
-    schema" applies to a RESTORE too, not just a Reset). Never copies
-    the snapshot's own manifest file into the live store.
-
-    Atomicity - stated honestly, not oversold: a flat-JSON-file
-    directory tree has no built-in multi-file transaction the way a
-    database does. This gets as close as the filesystem allows: the
-    complete restored tree is built in a STAGING directory first (a
-    failure while copying never touches the live store at all), then
-    swapped into place with two single-directory os.rename calls, each
-    individually atomic on the same volume. The one residual risk is a
-    crash landing in the near-zero window BETWEEN those two renames,
-    which would leave the live store path briefly missing - this is
-    "safely recoverable", not full ACID atomicity. Mitigated three ways
-    rather than eliminated: (1) a safety snapshot of the CURRENT live
-    state is taken immediately before that window even opens, so
-    whatever was live is never lost regardless of what happens next;
-    (2) the shared reset/restore lock file makes an interrupted
-    operation visibly "in progress" rather than silently appearing to
-    have succeeded; (3) manual recovery from either snapshot is always
-    a plain filesystem copy, and both are named in the audit record
-    this function writes. If a future architecture needs stronger
-    guarantees than this, that is the exact limitation to report -
-    this implementation does not claim more than the above.
-    """
-    store_path = Path(app.config["REGISTRY_STORE_PATH"])
-    snapshot_root = store_path.parent / "registry_snapshots"
-
-    ok, problems = _verify_snapshot_integrity(snapshot_dir)
-    if not ok:
-        raise SnapshotIntegrityError(problems)
-
-    safety_snapshot_dir = _create_snapshot(store_path, snapshot_root, actor=actor, kind="pre_restore_safety")
+    txn_id = _new_txn_id()
+    journal_path = _journal_path(store_path, txn_id)
 
     token = uuid.uuid4().hex[:8]
-    staging_dir = store_path.parent / f".{store_path.name}.restoring_{token}"
-    old_dir = store_path.parent / f".{store_path.name}.superseded_{token}"
+    staged_dir = store_path.parent / f".{store_path.name}.staged_{token}"
+    old_path = store_path.parent / f".{store_path.name}.old_{token}"
 
-    staging_dir.mkdir(parents=True)
-    for entry in snapshot_dir.iterdir():
-        if entry.name in (SNAPSHOT_MANIFEST_FILENAME, "security_governance"):
-            continue
-        dest = staging_dir / entry.name
-        if entry.is_dir():
-            shutil.copytree(_win_long_path(entry), _win_long_path(dest))
-        else:
-            shutil.copy2(_win_long_path(entry), _win_long_path(dest))
-    # security_governance/ comes from the CURRENT live store, never the
-    # snapshot - see this function's own docstring.
+    def _checkpoint(name: str) -> None:
+        if _test_interrupt_after == name:
+            raise _DeliberateTestInterruption(name)
+
+    entry = {
+        "txn_id": txn_id,
+        "operation": operation,
+        "actor": actor,
+        "started_at": datetime.now(timezone.utc).isoformat(),
+        "live_path": str(store_path),
+        "staged_path": str(staged_dir),
+        "old_path": str(old_path),
+        "safety_backup_path": None,
+        "target_snapshot_dir": str(target_snapshot_dir) if target_snapshot_dir else None,
+        "expected_checksums": None,
+        "state": "PREPARED",
+        "cleanup_done": False,
+        "history": [],
+        "recovery": None,
+    }
+    _append_journal_history(entry, "PREPARED")
+    _write_journal(journal_path, entry)
+    _checkpoint("PREPARED")
+
+    safety_snapshot_dir = _create_snapshot(
+        store_path, snapshot_root, actor=actor,
+        kind=("pre_restore_safety" if operation == "restore" else "reset"),
+    )
+    entry["safety_backup_path"] = str(safety_snapshot_dir)
+    _write_journal(journal_path, entry)
+    _checkpoint("SAFETY_SNAPSHOT_CREATED")
+
+    staged_dir.mkdir(parents=True)
+    if operation == "restore":
+        for source_entry in target_snapshot_dir.iterdir():
+            if source_entry.name in (SNAPSHOT_MANIFEST_FILENAME, "security_governance"):
+                continue
+            dest = staged_dir / source_entry.name
+            if source_entry.is_dir():
+                shutil.copytree(_win_long_path(source_entry), _win_long_path(dest))
+            else:
+                shutil.copy2(_win_long_path(source_entry), _win_long_path(dest))
+    # operation == "reset": staged_dir starts empty - nothing to copy in.
+
+    # security_governance/ ALWAYS comes from the CURRENT live store,
+    # never the snapshot/target, for both operations - accounts and
+    # security state are never reverted by either Reset or Restore.
     live_security_dir = store_path / "security_governance"
     if live_security_dir.exists():
-        shutil.copytree(_win_long_path(live_security_dir), _win_long_path(staging_dir / "security_governance"))
+        shutil.copytree(_win_long_path(live_security_dir), _win_long_path(staged_dir / "security_governance"))
 
-    os.rename(_win_long_path(store_path), _win_long_path(old_dir))
-    os.rename(_win_long_path(staging_dir), _win_long_path(store_path))
-    shutil.rmtree(_win_long_path(old_dir), ignore_errors=True)
+    expected_checksums = _checksums_for_dir(staged_dir)
+    entry["expected_checksums"] = expected_checksums
+    _write_journal(journal_path, entry)
+
+    os.rename(_win_long_path(store_path), _win_long_path(old_path))
+    _append_journal_history(entry, "LIVE_MOVED")
+    _write_journal(journal_path, entry)
+    _checkpoint("LIVE_MOVED")
+
+    os.rename(_win_long_path(staged_dir), _win_long_path(store_path))
+    _append_journal_history(entry, "STAGED_INSTALLED")
+    _write_journal(journal_path, entry)
+    _checkpoint("STAGED_INSTALLED")
+
+    _checkpoint("VERIFICATION_BEGUN")
+    ok, problems = _verify_directory_against_checksums(store_path, expected_checksums)
+    if not ok:
+        # Left at STAGED_INSTALLED, unresolved - the identical path a
+        # real crash at this exact point would leave behind, handled by
+        # _recover_one_transaction's STAGED_INSTALLED case, not an ad
+        # hoc rollback inline here.
+        raise RegistryTransactionError(
+            f"Post-transaction verification failed: {'; '.join(problems)}. "
+            "The registry has been left for automatic recovery to resolve."
+        )
+
+    _append_journal_history(entry, "VERIFIED")
+    _write_journal(journal_path, entry)
+    _checkpoint("VERIFIED")
+
+    shutil.rmtree(_win_long_path(old_path), ignore_errors=True)
+    entry["cleanup_done"] = True
+    _write_journal(journal_path, entry)
+    _checkpoint("CLEANUP_DONE")
 
     audit_dir = store_path / "security_governance"
     audit_dir.mkdir(parents=True, exist_ok=True)
-    with (audit_dir / "reset_audit.jsonl").open("a", encoding="utf-8") as fh:
-        fh.write(json.dumps({
-            "event": "snapshot_restored",
+    with open(_win_long_path(audit_dir / "reset_audit.jsonl"), "a", encoding="utf-8") as fh:
+        audit_record = {
+            "event": ("snapshot_restored" if operation == "restore" else "reset"),
             "actor": actor,
             "at": datetime.now(timezone.utc).isoformat(),
-            "restored_snapshot_dir": str(snapshot_dir),
+            "txn_id": txn_id,
+            "snapshot_dir": str(safety_snapshot_dir),
             "safety_snapshot_dir": str(safety_snapshot_dir),
-        }) + "\n")
+        }
+        if operation == "restore":
+            audit_record["restored_snapshot_dir"] = str(target_snapshot_dir)
+        fh.write(json.dumps(audit_record) + "\n")
 
-    return {"safety_snapshot_dir": safety_snapshot_dir}
+    return {"txn_id": txn_id, "safety_snapshot_dir": safety_snapshot_dir}
+
+
+def _recover_one_transaction(store_path: Path, entry: dict, journal_path: Path) -> dict:
+    """
+    Ground truth is always what's ACTUALLY on disk right now - a crash
+    can happen at literally any point, so disk state is inspected
+    directly to decide what happened; the journal is read only to know
+    which paths this transaction was using and what the installed
+    result should check out against (expected_checksums). Produces
+    exactly one complete, verified live registry - either the pre-
+    transaction state (ROLLED_BACK) or the fully-installed target
+    state (RECOVERED) - never a mixture; FAILED only when neither can
+    be established safely.
+    """
+    live_path = Path(entry["live_path"])
+    staged_path = Path(entry["staged_path"])
+    old_path = Path(entry["old_path"])
+    expected_checksums = entry.get("expected_checksums")
+
+    diagnostics = {
+        "txn_id": entry["txn_id"],
+        "journal_state": entry.get("state"),
+        "live_exists": live_path.exists(),
+        "staged_exists": staged_path.exists(),
+        "old_exists": old_path.exists(),
+    }
+
+    def _finalize(outcome: str, action: str, extra: Optional[dict] = None) -> dict:
+        _append_journal_history(entry, outcome)
+        entry["recovery"] = {
+            "resumed_at": datetime.now(timezone.utc).isoformat(),
+            "action_taken": action,
+            "diagnostics": {**diagnostics, **(extra or {})},
+        }
+        if outcome != "FAILED":
+            entry["cleanup_done"] = True
+        _write_journal(journal_path, entry)
+        return {
+            "outcome": outcome, "txn_id": entry["txn_id"], "action": action,
+            "diagnostics": entry["recovery"]["diagnostics"],
+        }
+
+    # Case A: neither rename happened yet - live_path is still the
+    # ORIGINAL pre-transaction content (old_path was never created).
+    # Nothing on the live side needs touching; discard any partially-
+    # built staged_dir.
+    if not old_path.exists() and live_path.exists():
+        if staged_path.exists():
+            shutil.rmtree(_win_long_path(staged_path), ignore_errors=True)
+        return _finalize("ROLLED_BACK", "live registry was never touched - discarded any partially-built staged directory")
+
+    # Case B: the FIRST rename happened (live_path -> old_path) but the
+    # second may not have - live_path is currently missing.
+    if old_path.exists() and not live_path.exists():
+        if staged_path.exists() and expected_checksums is not None:
+            ok, problems = _verify_directory_against_checksums(staged_path, expected_checksums)
+            if ok:
+                os.rename(_win_long_path(staged_path), _win_long_path(live_path))
+                ok2, problems2 = _verify_directory_against_checksums(live_path, expected_checksums)
+                if ok2:
+                    shutil.rmtree(_win_long_path(old_path), ignore_errors=True)
+                    return _finalize("RECOVERED", "completed the swap - staged target verified and installed")
+                # Installed but somehow doesn't verify post-install
+                # (the rename itself cannot alter content, so this is
+                # essentially unreachable) - move it back out of the
+                # way rather than leave something unverified live.
+                os.rename(_win_long_path(live_path), _win_long_path(staged_path))
+                diagnostics["post_install_problems"] = problems2
+                diagnostics["quarantined_staged_at"] = str(staged_path)
+            else:
+                diagnostics["staged_problems"] = problems
+        # Staged copy missing or failed verification - fall back to the
+        # known pre-transaction registry.
+        os.rename(_win_long_path(old_path), _win_long_path(live_path))
+        return _finalize("ROLLED_BACK", "restored the pre-transaction registry - staged target was missing or failed verification")
+
+    # Case C: BOTH renames happened - live_path already holds the NEW
+    # content; old_path (the previous content) is either still sitting
+    # there awaiting cleanup, or verification/cleanup didn't finish.
+    if live_path.exists():
+        if expected_checksums is not None:
+            ok, problems = _verify_directory_against_checksums(live_path, expected_checksums)
+        else:
+            ok, problems = True, []
+        if ok:
+            if old_path.exists():
+                shutil.rmtree(_win_long_path(old_path), ignore_errors=True)
+            return _finalize("RECOVERED", "live registry already matched the target - completed verification and cleanup")
+        diagnostics["problems"] = problems
+        if old_path.exists():
+            # The installed copy is wrong; the pre-transaction copy is
+            # still intact one level over - quarantine the bad copy and
+            # restore the known-good one rather than leave a bad
+            # registry live.
+            quarantine_path = store_path.parent / f".{store_path.name}.quarantined_{uuid.uuid4().hex[:8]}"
+            os.rename(_win_long_path(live_path), _win_long_path(quarantine_path))
+            os.rename(_win_long_path(old_path), _win_long_path(live_path))
+            diagnostics["quarantined_bad_copy_at"] = str(quarantine_path)
+            return _finalize("ROLLED_BACK", "installed registry failed verification - quarantined it and restored the pre-transaction registry")
+        return _finalize("FAILED", "installed registry failed verification and no pre-transaction copy is available to fall back to")
+
+    # Neither live_path nor old_path exists - refuse to guess.
+    return _finalize("FAILED", "no live or pre-transaction registry directory found - manual review required")
+
+
+def _recover_interrupted_transactions(app) -> dict:
+    """
+    CLAUDE-P40-E2A2, Section B: runs (1) once per application boot,
+    before any route can read the registry (called from app.py's
+    create_app, before the app is returned), and (2) again at the top
+    of both reset_project_data and restore_reset_snapshot, so a
+    long-running process that never restarts still self-heals lazily,
+    not just at boot.
+
+    Never touches anything if the lock belongs to a genuinely live
+    process (Section C: "a second process cannot clear a genuinely
+    active lock") - recovering a transaction out from under the process
+    still actively running it would be exactly the race this guards
+    against. The lock itself is only ever cleared here once every
+    non-terminal journal has reached a terminal state (Section C:
+    "cleanup occurs only after verified completion or rollback").
+
+    If any transaction cannot be resolved safely, sets
+    app.config["REGISTRY_RECOVERY_FAILED"] (with diagnostics) rather
+    than guessing - see app.py's _register_registry_guard, which fails
+    the whole application closed against a missing/mixed/unverified
+    registry when this is set, per this stage's own instruction not to
+    start the application against exactly that.
+    """
+    store_path = Path(app.config["REGISTRY_STORE_PATH"])
+    lock_path = store_path.parent / ".reset_project_data.lock"
+
+    if lock_path.exists() and not _lock_is_stale(lock_path):
+        return {"skipped": "active_lock", "recovered": [], "failed": []}
+
+    journal_dir = _journal_dir(store_path)
+    recovered: list[dict] = []
+    failed: list[dict] = []
+    if journal_dir.exists():
+        for journal_path in sorted(journal_dir.glob("*.journal.json")):
+            entry = _read_journal(journal_path)
+            if entry is None or _journal_is_terminal(entry):
+                continue
+            result = _recover_one_transaction(store_path, entry, journal_path)
+            if result["outcome"] == "FAILED":
+                failed.append(result)
+                app.config["REGISTRY_RECOVERY_FAILED"] = True
+                app.config.setdefault("REGISTRY_RECOVERY_DIAGNOSTICS", []).append(result)
+            else:
+                recovered.append(result)
+
+    if lock_path.exists() and _lock_is_stale(lock_path) and not failed:
+        lock_path.unlink(missing_ok=True)
+
+    return {"recovered": recovered, "failed": failed}
+
+
+def _run_transaction_or_leave_for_recovery(
+    app, lock_path: Path, operation: str, actor: str, target_snapshot_dir: Optional[Path] = None,
+) -> tuple[bool, str]:
+    """Runs the transaction; on success, clears the lock. On ANY
+    failure (verification failure or an unexpected exception mid-swap),
+    deliberately leaves the lock in place - Section B/C: "clear the
+    lock only after recovery reaches a safe terminal state" - the next
+    call to _recover_interrupted_transactions (the very next request to
+    either admin page, or the next app restart) resolves it and clears
+    the lock itself."""
+    try:
+        _run_registry_transaction(app, operation=operation, actor=actor, target_snapshot_dir=target_snapshot_dir)
+    except RegistryTransactionError as exc:
+        return False, (
+            f"{operation.capitalize()} could not be verified and has been left for "
+            f"automatic recovery on the next attempt: {exc}"
+        )
+    except Exception as exc:  # noqa: BLE001 - deliberately broad: any failure here
+        # must leave the lock for recovery, never silently clear it
+        # over an unresolved transaction (see this function's own
+        # docstring).
+        return False, (
+            f"{operation.capitalize()} failed unexpectedly and has been left for "
+            f"automatic recovery on the next attempt: {exc}"
+        )
+    lock_path.unlink(missing_ok=True)
+    return True, ""
 
 
 @portal_bp.route('/admin/reset-project-data', methods=['GET', 'POST'])
@@ -848,13 +1276,17 @@ def reset_project_data():
     "make operations atomic or safely recoverable" /
     "prevent duplicate submission". The SAME lock file also guards
     restore_reset_snapshot below, so a reset and a restore against this
-    store can never run concurrently either.
+    store can never run concurrently either. Both GET and POST first
+    run _recover_interrupted_transactions, so visiting this page alone
+    is enough to self-heal a stuck prior operation.
     """
     store_path = Path(current_app.config["REGISTRY_STORE_PATH"])
     # Deliberately a sibling of store_path, not inside it - so the lock
-    # file itself is never swept into the snapshot or the wipe loop
-    # below (both of which iterate store_path's own contents).
+    # file itself is never swept into a snapshot or the transaction's
+    # own directory swap.
     lock_path = store_path.parent / ".reset_project_data.lock"
+
+    _recover_interrupted_transactions(current_app)
 
     if request.method == 'GET':
         return render_template(
@@ -862,7 +1294,12 @@ def reset_project_data():
             inventory=_project_data_inventory(current_app),
             confirmation_phrase=RESET_CONFIRMATION_PHRASE,
             lock_info=_lock_info(lock_path),
+            recovery_failed=current_app.config.get("REGISTRY_RECOVERY_FAILED", False),
         )
+
+    if current_app.config.get("REGISTRY_RECOVERY_FAILED"):
+        flash('The registry needs administrator attention before Reset can run again.', 'error')
+        return redirect(url_for('portal.reset_project_data'))
 
     if lock_path.exists():
         flash('A Reset or Restore is already in progress - please wait for it to finish.', 'error')
@@ -873,18 +1310,17 @@ def reset_project_data():
         flash(f'Type "{RESET_CONFIRMATION_PHRASE}" exactly to confirm - nothing was reset.', 'error')
         return redirect(url_for('portal.reset_project_data'))
 
-    try:
-        fd = os.open(str(lock_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-        os.close(fd)
-    except FileExistsError:
+    if not _acquire_lock(lock_path):
         flash('A Reset or Restore is already in progress - please wait for it to finish.', 'error')
         return redirect(url_for('portal.reset_project_data'))
 
-    try:
-        _reset_project_data(current_app, actor=session.get('username') or 'unknown')
+    ok, message = _run_transaction_or_leave_for_recovery(
+        current_app, lock_path, operation="reset", actor=session.get('username') or 'unknown',
+    )
+    if ok:
         flash('Project data reset - the Workspace is clean. Everything that was here was snapshotted first.', 'success')
-    finally:
-        lock_path.unlink(missing_ok=True)
+    else:
+        flash(message, 'error')
 
     return redirect(url_for('portal.projects_list'))
 
@@ -898,10 +1334,12 @@ def list_reset_snapshots():
     restore's automatic pre_restore_safety copy), newest first."""
     store_path = Path(current_app.config["REGISTRY_STORE_PATH"])
     lock_path = store_path.parent / ".reset_project_data.lock"
+    _recover_interrupted_transactions(current_app)
     return render_template(
         'reset_snapshots.html',
         snapshots=_list_snapshots(current_app),
         lock_info=_lock_info(lock_path),
+        recovery_failed=current_app.config.get("REGISTRY_RECOVERY_FAILED", False),
     )
 
 
@@ -915,11 +1353,14 @@ def restore_reset_snapshot(snapshot_id):
     typed-confirmation form - refused if integrity verification failed.
     POST re-verifies (never trusts the GET-time check alone), requires
     the confirmation phrase, and is guarded by the same lock file
-    reset_project_data uses.
+    reset_project_data uses. Both GET and POST first run
+    _recover_interrupted_transactions.
     """
     store_path = Path(current_app.config["REGISTRY_STORE_PATH"])
     snapshot_root = store_path.parent / "registry_snapshots"
     lock_path = store_path.parent / ".reset_project_data.lock"
+
+    _recover_interrupted_transactions(current_app)
 
     snapshot_dir = _resolve_snapshot_dir(snapshot_root, snapshot_id)
     if snapshot_dir is None:
@@ -940,7 +1381,12 @@ def restore_reset_snapshot(snapshot_id):
             current_inventory=_project_data_inventory(current_app),
             confirmation_phrase=RESTORE_CONFIRMATION_PHRASE,
             lock_info=_lock_info(lock_path),
+            recovery_failed=current_app.config.get("REGISTRY_RECOVERY_FAILED", False),
         )
+
+    if current_app.config.get("REGISTRY_RECOVERY_FAILED"):
+        flash('The registry needs administrator attention before Restore can run again.', 'error')
+        return redirect(url_for('portal.restore_reset_snapshot', snapshot_id=snapshot_id))
 
     if lock_path.exists():
         flash('A Reset or Restore is already in progress - please wait for it to finish.', 'error')
@@ -951,24 +1397,29 @@ def restore_reset_snapshot(snapshot_id):
         flash(f'Type "{RESTORE_CONFIRMATION_PHRASE}" exactly to confirm - nothing was restored.', 'error')
         return redirect(url_for('portal.restore_reset_snapshot', snapshot_id=snapshot_id))
 
-    try:
-        fd = os.open(str(lock_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-        os.close(fd)
-    except FileExistsError:
+    # Re-verified here (never trusts the GET-time check alone) BEFORE
+    # acquiring the lock or starting the transaction - a corrupt target
+    # snapshot must never even begin a swap.
+    ok, problems = _verify_snapshot_integrity(snapshot_dir)
+    if not ok:
+        flash('Snapshot failed integrity verification - nothing was restored: ' + '; '.join(problems), 'error')
+        return redirect(url_for('portal.restore_reset_snapshot', snapshot_id=snapshot_id))
+
+    if not _acquire_lock(lock_path):
         flash('A Reset or Restore is already in progress - please wait for it to finish.', 'error')
         return redirect(url_for('portal.restore_reset_snapshot', snapshot_id=snapshot_id))
 
-    try:
-        _restore_snapshot(current_app, snapshot_dir, actor=session.get('username') or 'unknown')
+    ok, message = _run_transaction_or_leave_for_recovery(
+        current_app, lock_path, operation="restore", actor=session.get('username') or 'unknown',
+        target_snapshot_dir=snapshot_dir,
+    )
+    if ok:
         flash('Snapshot restored. A safety snapshot of what was live just before this was also taken.', 'success')
-    except SnapshotIntegrityError as exc:
-        flash('Snapshot failed integrity verification - nothing was restored: ' + '; '.join(exc.problems), 'error')
+    else:
+        flash(message, 'error')
         return redirect(url_for('portal.restore_reset_snapshot', snapshot_id=snapshot_id))
-    finally:
-        lock_path.unlink(missing_ok=True)
 
     return redirect(url_for('portal.projects_list'))
-
 
 @portal_bp.route('/search')
 @login_required

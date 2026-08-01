@@ -9,12 +9,19 @@
     <a class="btn btn-ghost" href="{{ url_for('portal.projects_list') }}">&larr; Back to Projects</a>
 {% endcall %}
 
-{% if lock_info %}
+{% if recovery_failed %}
+<p class="pane-note" style="color:var(--failure-red);">
+    An interrupted Reset or Restore could not be automatically recovered. Reset is disabled until this is
+    resolved - see <a href="{{ url_for('portal.list_reset_snapshots') }}">Reset Snapshots</a> for diagnostics.
+</p>
+{% elif lock_info %}
 <p class="pane-note">
-    A Reset or Restore is already in progress (started {{ lock_info.age_seconds }}s ago). Refresh in a moment.
-    If this persists far longer than a reset/restore normally takes, it may be a stale lock left by an
-    interrupted operation - see <a href="{{ url_for('portal.list_reset_snapshots') }}">Reset Snapshots</a>
-    for the audit trail.
+    {% if lock_info.stale %}
+    A stale lock from an interrupted operation was just found - automatic recovery is resolving it now.
+    Refresh in a moment.
+    {% else %}
+    A Reset or Restore is currently in progress (started {{ lock_info.age_seconds }}s ago). Refresh in a moment.
+    {% endif %}
 </p>
 {% else %}
 

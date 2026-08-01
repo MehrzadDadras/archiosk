@@ -8,7 +8,13 @@
     <a class="btn btn-ghost" href="{{ url_for('portal.reset_project_data') }}">&larr; Back to Reset Project Data</a>
 {% endcall %}
 
-{% if lock_info %}
+{% if recovery_failed %}
+<p class="pane-note" style="color:var(--failure-red);">
+    An interrupted Reset or Restore could not be automatically recovered &mdash; Reset/Restore are disabled
+    until this is resolved. Check the most recent journal entries under <code>reset_transactions/</code>
+    beside the registry store, and each snapshot's own manifest, for diagnostics.
+</p>
+{% elif lock_info %}
 <p class="pane-note">
     A Reset or Restore is currently in progress (started {{ lock_info.age_seconds }}s ago) &mdash;
     restoring a snapshot is disabled until it finishes.
