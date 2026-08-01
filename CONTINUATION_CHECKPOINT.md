@@ -1,5 +1,88 @@
 # Continuation checkpoint
 
+## 2026-08-01 — CLAUDE-P40-E2B: flexible Workspace frame, resizable Chat, multi-display
+
+**Commit:** `17ec86c`. Full suite: 1418 passed (was 1385). Not yet
+product-owner accepted. Starting state was `82ec4d0` (P40-E2A2's own
+acceptance seal).
+
+Required wide geometry (top bar; Lists | Display | Toolbox; Lists |
+Chat | Toolbox, Chat beneath Display only) built as a genuine
+restructuring, not a re-skin:
+
+**Section A** - a new Workspace-page-specific top bar
+(`templates/case_workspace.html`) replaced the old conditional
+`page_header` `<h1>` - identity/breadcrumb, Lists/Toolbox show-hide,
+Display Layout menu, a contextual removed-Document badge, an overflow
+menu. Deliberately excludes Home/search/Open Project/Project
+Gateway/a second brand card - all already live in `base.html`'s
+side-rail.
+
+**Section B** - Lists (was folded into Display's own column under
+P40-E specifically because it was *permanently* visible) is a real,
+independently-collapsible column again - collapsibility resolves the
+original complaint directly. Both Lists and Toolbox hide via a class
+on `<html>` (never DOM removal - every form/draft/scroll position
+inside survives), applied before first paint (same pattern as
+`base.html`'s `nav-expanded`), reviewer-specific via localStorage,
+never a `ProjectWorkspace` write.
+
+**Section C** - the conversation dock is no longer a `<details>`/
+accordion (which could collapse to nothing) - now an always-visible
+panel beneath Display only (`grid-area: chat`, never spanning Lists/
+Toolbox), resizable via a real ARIA separator (drag or
+Arrow/Home/End when focused) or Compact/Expanded presets, clamped
+120-640px, persisted per-reviewer via a `--chat-height` CSS custom
+property.
+
+**Section D** - Display Layout menu with four real layouts (Single/
+Side by side/Stacked/Four-panel grid), each a genuinely different CSS
+grid, never a decorative icon. Division 0 is always the server-
+rendered active Investigation/Document/Project Home and the only
+division Toolbox stays bound to (via the ordinary `?source=` query
+string - the honest answer for a shared, server-rendered Toolbox).
+Divisions 1-3 are client-side slots loading content through the SAME
+authorized `workspace.source_file` route a normal `?source=` view
+already uses - never a raw/guessed URL, never a removed or
+cross-Project Source (`active_sources` only, resolved server-side into
+a `file_url` a JS data island reads). Closing a division never touches
+the underlying Source.
+
+**Section E** - `.workspace-pane-display`/`.document-viewer-frame`/
+`.document-viewer-image` no longer reference `--surface-secondary`
+(Limestone/beige) or `border-radius` - a plain near-white surface,
+matching a Document's own natural page background instead of clashing
+with it.
+
+**Section F** - re-verified by the full suite, not just asserted:
+Project/Document removal, Toolbox controls, removed-state tombstones,
+Reset/Restore/transaction recovery (`tests/test_p40e2a*.py` all green
+unchanged), Findings-in-Toolbox, the one conversation dock,
+Investigation navigation/terminology, `source_file`'s own 404 for a
+foreign source_id, and P40-D2's no-structural-mutation-on-GET
+invariant (re-tested against this stage's own new query-string/layout
+surface area - only `last_viewed_by` changes, matching the
+pre-existing, already-accepted invariant).
+
+**Section G** - medium (`<=1080px`) stacks Lists/Toolbox to full-width
+rows and collapses multi-division layouts to one column; narrow
+(`<=640px`) turns Lists/Toolbox into real `position: fixed` overlay
+drawers (same toggle buttons/classes, not a second mechanism),
+closable via Escape.
+
+38 new tests (`tests/test_p40e2b_flexible_workspace_frame.py`) covering
+all 16 required points at the level actually provable without a real
+browser (server-rendered HTML/attributes, real CSS/JS source text -
+the same honest limitation this whole session has disclosed
+throughout: no rendering/screenshot tool exists in this environment).
+4 existing test files updated for two deliberate renames (the
+`page_header` `<h1>` → top-bar breadcrumb, and `#conversation-dock` →
+`.conversation-dock-panel` as the styled selector) - not regressions.
+
+App restarted, `STATIC_VERSION` bumped to 24, verified serving.
+
+---
+
 ## 2026-08-01 — CLAUDE-P40-E2A2: product-owner acceptance seal
 
 **No code change - verification only.** The full P40-E2/P40-E2A/
