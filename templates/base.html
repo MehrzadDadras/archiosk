@@ -147,23 +147,28 @@
                     <details class="side-rail-project-group accordion-section" data-accordion-group="side-rail-project" data-accordion-id="side-rail-project-work" open>
                         <summary class="side-rail-project-group-summary">Work</summary>
                         <div class="side-rail-project-group-items">
-                            {# CLAUDE-P40-E1A, Section B: every authorized
-                               Investigation's own name, listed directly under
-                               Work - a bare count alone left no way to see
-                               (let alone open) any specific one, including a
-                               just-created one, from the nav. visible_cases
-                               is already the same P32/Case-privacy-filtered
-                               list the Workspace body's own "Investigations"
-                               accordion uses (CaseWorkspaceStore.
-                               visible_cases_for) - never re-derived or
-                               widened here. #}
-                            <p class="side-rail-project-sublabel">Investigations <span class="side-rail-project-count">{{ visible_cases|length }}</span></p>
-                            {% for c in visible_cases %}
-                            <a class="side-rail-project-link side-rail-project-sublink{% if active_case and active_case.id == c.id %} active{% endif %}"
-                               href="{{ url_for('workspace.show_workspace', project_id=project_id, case=c.id) }}">{{ c.title }}</a>
-                            {% else %}
-                            <span class="side-rail-project-link side-rail-project-sublink side-rail-project-link-disabled">No Investigations yet</span>
-                            {% endfor %}
+                            {# CLAUDE-P40-E2B-QA-CLOSE: CLAUDE-P40-E1A, Section
+                               B originally listed every authorized
+                               Investigation's own name directly here - "a
+                               bare count alone left no way to see... any
+                               specific one... from the nav." That reasoning
+                               no longer holds: P40-E2B brought back a real,
+                               always-reachable Lists column
+                               (case_workspace.html's own #cases accordion,
+                               the SAME visible_cases list) with the full
+                               name/status/visibility/outcome detail this
+                               side-rail entry could only ever show a bare
+                               name for - keeping both meant two "Investigation
+                               list" surfaces rendering the same names
+                               simultaneously, right next to each other, on
+                               the one page where both are ever shown. This
+                               is now a single link (count only, no per-name
+                               enumeration) into Lists' own canonical list -
+                               "unified navigation" (this side-rail's own
+                               purpose) means a reviewer can still always get
+                               there from here, not that the names have to
+                               be duplicated to do it. #}
+                            <a class="side-rail-project-link" href="{{ url_for('workspace.show_workspace', project_id=project_id) }}#cases">Investigations <span class="side-rail-project-count">{{ visible_cases|length }}</span></a>
                             <a class="side-rail-project-link" href="{{ url_for('workspace.show_workspace', project_id=project_id) }}#needs-attention">Needs Attention <span class="side-rail-project-count">{{ needs_attention_count }}</span></a>
                             <a class="side-rail-project-link" href="{{ url_for('workspace.show_workspace', project_id=project_id) }}#recent-focus">Recent Focus</a>
                         </div>

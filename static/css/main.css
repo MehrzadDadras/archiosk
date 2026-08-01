@@ -1688,14 +1688,29 @@ html.toolbox-hidden .workspace-pane-toolbox {
    --chat-height row track that grid-template-rows defines - a flex
    column internally, so the resize handle/header/note stay a fixed
    size, .conversation-thread (history) takes the remaining space and
-   scrolls internally, and the composer stays pinned at the panel's own
-   bottom edge (never the viewport's) via flex, not position:sticky -
-   the whole panel already lives at a fixed position in the grid, it no
-   longer needs to chase the viewport's scroll position the way the
-   old full-row dock did. */
+   scrolls internally, and the composer stays pinned at the panel's
+   OWN bottom edge via flex (never needs position:sticky for that -
+   flex already keeps it there regardless of the panel's own height).
+
+   CLAUDE-P40-E2B-QA-CLOSE: position: sticky/bottom: 0 on the PANEL
+   itself is still needed, and was wrongly dropped in the first P40-
+   E2B pass on the (incorrect) reasoning that "the panel already lives
+   at a fixed position in the grid". It doesn't - Lists/Toolbox span
+   BOTH grid rows, so when Display's own row (auto height) is taller
+   than the viewport, the whole .case-workspace grid is taller than
+   the viewport too, and Chat's row sits at the bottom of that tall
+   grid - scrolled well out of view while reading the top of a long
+   Document/Investigation unless it stays sticky, exactly the same
+   "remains reachable while scrolling" behavior the pre-P40-E2B full-
+   row dock already had (CLAUDE-P40-E1A) and Section C's own "Chat
+   remains reachable" still requires. Confined to the chat grid-area's
+   own column width now (not the full row), same as before this fix. */
 .conversation-dock-panel {
     grid-area: chat;
     height: 100%;
+    position: sticky;
+    bottom: 0;
+    z-index: 10;
     display: flex;
     flex-direction: column;
     overflow: hidden;

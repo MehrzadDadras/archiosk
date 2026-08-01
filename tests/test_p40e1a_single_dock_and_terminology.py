@@ -216,6 +216,17 @@ class DraftAndScrollPerThreadTests(_BaseDockTestCase):
 
 class InvestigationListingTests(_BaseDockTestCase):
     def test_every_authorized_investigation_title_is_listed_under_work(self):
+        # CLAUDE-P40-E2B-QA-CLOSE: the side-rail's own per-Investigation
+        # name links (side-rail-project-sublink) were removed - P40-E2B
+        # brought back a real Lists column (case_workspace.html's own
+        # #cases accordion) that already renders the full, canonical
+        # name/status/detail list, and keeping both meant two
+        # "Investigation list" surfaces showing the same names at once.
+        # The side-rail's "Work" group now links to that ONE canonical
+        # list (with a count) instead of duplicating it - "every
+        # authorized Investigation's title is reachable from the nav"
+        # still holds, just through Lists' own accordion rather than a
+        # second copy in the side-rail.
         client = self._client_as("p40e1a_owner", 1)
         self._create_investigation(client, title="Draft 1")
         client2 = self._client_as("p40e1a_owner", 1)
@@ -224,7 +235,12 @@ class InvestigationListingTests(_BaseDockTestCase):
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
         self.assertIn("Draft 1", body)
         self.assertIn("Schedule Conflict Review", body)
-        self.assertIn("side-rail-project-sublink", body)
+        self.assertIn('class="case-item', body)
+        self.assertIn('href="{}#cases">Investigations <span class="side-rail-project-count">2</span></a>'.format(
+            f"/projects/{self.project_id}/workspace"
+        ), body)
+        # never duplicated as a second, side-rail-only name link
+        self.assertNotIn("side-rail-project-sublink", body)
 
     def test_newly_created_investigation_appears_immediately_and_becomes_active(self):
         client = self._client_as("p40e1a_owner", 1)
@@ -240,7 +256,10 @@ class InvestigationListingTests(_BaseDockTestCase):
         # just a nav entry, opened in the main Display panel.
         self.assertIn('class="workspace-pane workspace-pane-conversation"', body)
         self.assertIn("<h2>Draft 1</h2>", body)
-        self.assertIn('side-rail-project-sublink active"', body)
+        # CLAUDE-P40-E2B-QA-CLOSE: active-Investigation highlighting now
+        # lives only in Lists' own #cases list (case-item active) - the
+        # side-rail no longer renders a second, per-name active marker.
+        self.assertIn('class="case-item active"', body)
 
 
 class UnauthorizedInvestigationsHiddenTests(_BaseDockTestCase):
