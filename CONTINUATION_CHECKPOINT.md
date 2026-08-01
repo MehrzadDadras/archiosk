@@ -1,5 +1,47 @@
 # Continuation checkpoint
 
+## 2026-07-31 — CLAUDE-P40-E1A: one physical conversation dock, Investigation listing, no Case terminology
+
+**Commit:** `4c38cc6`. Full suite: 1291 passed (was 1275).
+
+Real browser evidence (not caught by P40-E1's own tests) found the
+dock was only partially unified: an open Investigation still rendered
+its own accordion (`#conversation`), structurally separate from
+Project Home's (`#project-conversation`) - different html_id,
+different DOM position - so switching context still looked like a
+different chatbox. Fixed by relocating both to one shared physical
+position outside `.case-workspace`'s grid, through one macro
+(`macros.conversation_dock`) with identical html_id/structure every
+call. Draft and scroll-position keys are now scoped per conversation
+context (`"project"` vs `"case-<id>"`, was a single shared project_id
+key) - Section A's own explicit "preserve a separate draft... for each
+conversation context."
+
+Every authorized Investigation's own title (not just a count) now
+lists under Work in the unified rail, sourced from the same P32/Case-
+privacy-filtered `visible_cases` list the Workspace body already uses.
+User-facing "Case" terminology (creation form, accordion title, and
+roughly a dozen scattered strings) renamed to "Investigation" -
+**the internal Case domain model, dataclass fields, route paths, and
+`CaseWorkspaceStore` method names are all unchanged** - no
+domain-model rename was performed, per this stage's own explicit
+instruction not to risk one merely for display text.
+
+**Correction to this checkpoint's own prior record:** the P40-E entry
+below states conversation-thread lifecycle (Section F) and reviewer-
+governed pattern suggestions (Section H) are "specified-but-unbuilt."
+That remains accurate and unchanged by this stage - neither was
+implemented here either. Restated explicitly because this stage's own
+internal task tracking had marked the scoping *decision* as
+"completed," which could be misread as the *feature* being complete;
+it is not - see `governance/specified-unbuilt/conversation-thread-
+lifecycle.md` and `reviewer-governed-pattern-suggestions.md`, both
+still real, both still unbuilt.
+
+30 new tests (`tests/test_p40e1a_single_dock_and_terminology.py`).
+
+---
+
 ## 2026-07-31 — CLAUDE-P40-E1: exactly one conversation composer
 
 **Commit:** `2fef98e`. Full suite: 1275 passed (was 1261).
