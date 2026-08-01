@@ -1033,45 +1033,7 @@
         {% endcall %}
     </aside>
 
-{% if selected_source %}
-    {# ---------------- Workspace: a selected document/drawing -------------
-       CLAUDE-P40-E, Section D/G: opens directly inside the Workspace
-       pane rather than a separate download/new-tab destination.
-       Resolved only against this already-authorized project's own
-       Sources (see show_workspace) - never an unverified id. Page/
-       clause-level navigation within the document is honestly not
-       available for any current format (no per-page index exists for
-       an arbitrary .txt/.pdf/.docx source, or for a drawing image) -
-       specified, not simulated; see governance/specified-unbuilt/. #}
-    <section class="workspace-pane workspace-pane-document">
-        <h2>{{ selected_source.name }}</h2>
-        <p class="workspace-pane-label">
-            {{ selected_source.kind.replace('_', ' ') }}
-            {% if selected_source.superseded_by_source_id %}&middot; superseded by a later revision{% endif %}
-        </p>
-        {% if selected_source.file_path %}
-        {% if selected_source.kind == 'drawing' %}
-        <img class="document-viewer-image"
-             src="{{ url_for('workspace.source_file', project_id=project_id, source_id=selected_source.id) }}"
-             alt="{{ selected_source.name }}">
-        {% else %}
-        <iframe class="document-viewer-frame"
-                src="{{ url_for('workspace.source_file', project_id=project_id, source_id=selected_source.id) }}"
-                title="{{ selected_source.name }}"></iframe>
-        {% endif %}
-        {% else %}
-        <p style="color:var(--text-secondary);font-size:0.85rem;">
-            No stored file for this Source (true for a legacy-ingested document from
-            before original uploads were preserved) - nothing to display here.
-        </p>
-        {% endif %}
-        <p class="pane-note">
-            Jumping to a specific page, clause, or evidence location inside this
-            document isn't available yet for this format - specified, not simulated.
-        </p>
-        <a class="btn btn-ghost workspace-link" href="{{ url_for('workspace.show_workspace', project_id=project_id) }}">&larr; Back to Project Overview</a>
-    </section>
-{% elif active_case %}
+{% if active_case %}
     {# ---------------- Workspace: active Case ---------------- #}
     <section class="workspace-pane workspace-pane-conversation">
         <h2>{{ active_case.title }}</h2>
@@ -1577,6 +1539,52 @@
         {% endcall %}
     </section>
 {% else %}
+    {% if selected_source %}
+    {# ---------------- A selected document/drawing -------------------
+       CLAUDE-P40-E, Section D/G: opens directly inside the Workspace
+       pane rather than a separate download/new-tab destination.
+       Resolved only against this already-authorized project's own
+       Sources (see show_workspace) - never an unverified id. Page/
+       clause-level navigation within the document is honestly not
+       available for any current format (no per-page index exists for
+       an arbitrary .txt/.pdf/.docx source, or for a drawing image) -
+       specified, not simulated; see governance/specified-unbuilt/.
+
+       CLAUDE-P40-E1: rendered ALONGSIDE Project Home (below), not
+       instead of it - the single conversation dock lives inside
+       Project Home's own "Project Conversation" section, and "opening
+       a document does not add another composer" (P40-E1's own
+       acceptance test) requires that dock to still be there when a
+       document is open, not replaced by the document viewer. #}
+    <section class="workspace-pane workspace-pane-document">
+        <h2>{{ selected_source.name }}</h2>
+        <p class="workspace-pane-label">
+            {{ selected_source.kind.replace('_', ' ') }}
+            {% if selected_source.superseded_by_source_id %}&middot; superseded by a later revision{% endif %}
+        </p>
+        {% if selected_source.file_path %}
+        {% if selected_source.kind == 'drawing' %}
+        <img class="document-viewer-image"
+             src="{{ url_for('workspace.source_file', project_id=project_id, source_id=selected_source.id) }}"
+             alt="{{ selected_source.name }}">
+        {% else %}
+        <iframe class="document-viewer-frame"
+                src="{{ url_for('workspace.source_file', project_id=project_id, source_id=selected_source.id) }}"
+                title="{{ selected_source.name }}"></iframe>
+        {% endif %}
+        {% else %}
+        <p style="color:var(--text-secondary);font-size:0.85rem;">
+            No stored file for this Source (true for a legacy-ingested document from
+            before original uploads were preserved) - nothing to display here.
+        </p>
+        {% endif %}
+        <p class="pane-note">
+            Jumping to a specific page, clause, or evidence location inside this
+            document isn't available yet for this format - specified, not simulated.
+        </p>
+        <a class="btn btn-ghost workspace-link" href="{{ url_for('workspace.show_workspace', project_id=project_id) }}">&larr; Back to Project Overview</a>
+    </section>
+    {% endif %}
     <div class="project-home">
         <p class="project-home-back">
             <a href="{{ url_for('portal.projects_list') }}">&larr; Projects</a>
@@ -1853,21 +1861,23 @@
             {% endif %}
             {% endif %}
 
-            <p class="workspace-pane-label" style="margin-top:0.6rem;">Ask about the project documents</p>
-            <p style="font-size:0.78rem;color:var(--text-secondary);margin:-0.3rem 0 0.3rem;">Read-only, grounded source Q&amp;A &mdash; does not start or change anything.</p>
-            <form class="conversation-input-form" method="post" action="{{ url_for('workspace.discuss_object', project_id=project_id) }}">
-                <input type="text" name="text" placeholder="e.g. What are the objectives of this RFP?" autocomplete="off" required>
-                <button type="submit">Ask</button>
-            </form>
+            {# CLAUDE-P40-E1: "Ask about the project documents" and "Start
+               or continue project work" (their own composers, ~Send/Ask
+               buttons) removed - both were separate entry points into
+               the exact same underlying mechanism the single Project
+               Conversation composer (bottom dock) already reaches
+               (routes/workspace.py's _run_conversation_turn docstring
+               already called these "the same conversational entry
+               point, reached from three places"). Document Q&A and
+               starting a new Investigation both still work through that
+               one composer - see workspace.quick_start's own question-
+               vs-work classification. Tools (document/snapshot/
+               Investigation shortcuts) stay reachable below, not folded
+               into the composer itself. #}
         </div>
 
         <div class="project-home-composer">
-            <p class="workspace-pane-label" style="margin-bottom:0.2rem;">Start or continue project work</p>
-            <p style="font-size:0.78rem;color:var(--text-secondary);margin:0 0 0.3rem;">Findings, comparisons, corrections, investigations, and RFIs &mdash; opens a new Investigation.</p>
-            <form class="conversation-input-form" method="post" action="{{ url_for('workspace.quick_start', project_id=project_id) }}">
-                <input type="text" name="text" placeholder="What are we working on?" autocomplete="off" required>
-                <button type="submit">Send</button>
-            </form>
+            <p class="workspace-pane-label" style="margin-bottom:0.2rem;">Tools</p>
             <details class="composer-plus">
                 <summary>+</summary>
                 <p class="composer-plus-links">
@@ -2057,8 +2067,7 @@
                 <p class="pane-note">
                     Talk to the Project itself &mdash; general notes, or anything opened from a
                     &ldquo;Discuss this&hellip;&rdquo; link elsewhere on this page (each message below
-                    shows what it was about, if anything). Separate from an Investigation's own
-                    Conversation, which stays with that Investigation.
+                    shows what it was about, if anything).
                 </p>
                 <label class="conversation-dock-expand-toggle">
                     <input type="checkbox" id="conversation-expand-toggle">
@@ -2096,8 +2105,23 @@
                     <p class="conversation-empty">No Project Conversation yet.</p>
                     {% endfor %}
                 </div>
-                <form class="conversation-input-form conversation-dock-composer" method="post" action="{{ url_for('workspace.discuss_object', project_id=project_id) }}">
-                    <input type="text" name="text" data-conversation-draft="{{ project_id }}" placeholder="Talk to this Project&hellip;" autocomplete="off" required>
+                {# CLAUDE-P40-E1: the ONE composer for this Workspace when
+                   no Investigation is open - routes.workspace.quick_start
+                   already classifies a plain question (grounded document
+                   Q&A, stays in this Project Conversation) from a real
+                   "start work" request (opens a new Investigation) -
+                   see that route's own docstring. Hidden anchor fields
+                   let a "Discuss this X" link elsewhere on the page
+                   (macros.aperture) attach context to a message typed
+                   HERE instead of rendering its own separate composer -
+                   see static/js/case_workspace.js's aperture-link
+                   handler. #}
+                <form class="conversation-input-form conversation-dock-composer" method="post" action="{{ url_for('workspace.quick_start', project_id=project_id) }}">
+                    <input type="hidden" name="anchor_type" id="dock-composer-anchor-type" value="">
+                    <input type="hidden" name="anchor_id" id="dock-composer-anchor-id" value="">
+                    <input type="hidden" name="anchor_description" id="dock-composer-anchor-description" value="">
+                    <span class="dock-composer-anchor-label" id="dock-composer-anchor-label" hidden></span>
+                    <input type="text" name="text" id="dock-composer-input" data-conversation-draft="{{ project_id }}" placeholder="Ask a question, or describe what you want to work on&hellip;" autocomplete="off" required>
                     <button type="submit">Send</button>
                 </form>
             {% endcall %}

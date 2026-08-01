@@ -776,12 +776,17 @@ class ProjectBriefingPageHierarchyTests(unittest.TestCase):
         briefing_section = body[briefing_start:briefing_start + 8000]
         self.assertNotIn("Other extracted items", briefing_section)
 
-    def test_composers_are_labeled_distinctly(self):
+    def test_only_one_composer_remains_not_two_separately_labeled_ones(self):
+        # CLAUDE-P40-E1: "Ask about the project documents" and "Start or
+        # continue project work" were two separate composers duplicating
+        # the same underlying conversational entry point - removed. Only
+        # the Project Conversation dock composer remains; it still
+        # handles both a plain question and a real "start work" request
+        # (see routes/workspace.py's quick_start).
         body = self._page()
-        self.assertIn("Ask about the project documents", body)
-        self.assertIn("Read-only, grounded source Q&amp;A", body)
-        self.assertIn("Start or continue project work", body)
-        self.assertIn("opens a new Investigation", body)
+        self.assertNotIn("Ask about the project documents", body)
+        self.assertNotIn("Start or continue project work", body)
+        self.assertEqual(body.count("conversation-dock-composer"), 1)
 
     def test_lifecycle_and_layers_are_collapsed_not_permanently_visible(self):
         body = self._page()

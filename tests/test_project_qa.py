@@ -6,8 +6,10 @@ split:
   - ProjectQAServiceTests: services/project_qa.py directly, network
     call mocked (standard practice for testing an external-API
     integration).
-  - ProjectQAInterpreterTests: the real route stack (discuss_object),
-    proving the "Talk to this Project..." composer's own promise --
+  - ProjectQAInterpreterTests: the real route stack (discuss_object -
+    CLAUDE-P40-E1: the aperture "Discuss this X" affordance now posts
+    through workspace.quick_start with an anchor instead, but this
+    route itself is unchanged and still directly reachable), proving
     ordinary read-only project questions get answered, not rejected as
     an unrecognized action -- and that the same CLAUDE-P36 external-AI
     policy gate applies here too.

@@ -2297,6 +2297,21 @@ def quick_start(project_id):
     doesn't read as a plain question (a real "start work" request, an
     "Analyze...", "Compare...", etc.) is completely unaffected - still
     creates a Case exactly as before.
+
+    CLAUDE-P40-E1: this is now also the ONE Workspace composer's actual
+    route (the separate "Ask about the project documents"/discuss_object
+    composer and the plain "Start or continue project work" composer
+    were removed as duplicate entry points into this same underlying
+    mechanism - see _run_conversation_turn's own docstring, which
+    already called all three "the same conversational entry point").
+    Optional anchor_type/anchor_id/anchor_description form fields (set
+    by static/js/case_workspace.js when a "Discuss this X" link
+    elsewhere on the page is clicked, matching discuss_object's own
+    anchor shape) mean an anchored message ALWAYS lands in the
+    project-level conversation with that anchor attached, the same as
+    discuss_object always did - a "Discuss this Requirement" click must
+    never accidentally spawn a new Investigation just because its text
+    doesn't happen to read as a question.
     """
     _, store, workspace = _load_workspace_or_404(project_id)
 
@@ -2305,8 +2320,18 @@ def quick_start(project_id):
         flash("Describe what you want to work on to start.", "error")
         return redirect(url_for("workspace.show_workspace", project_id=project_id))
 
-    if _looks_like_project_question(text.lower()):
-        _run_conversation_turn(project_id, store, workspace, None, text)
+    anchor_type = (request.form.get("anchor_type") or "").strip()
+    anchor_id = (request.form.get("anchor_id") or "").strip()
+    anchor = None
+    if anchor_type and anchor_id:
+        anchor = asdict(Anchor(
+            anchor_type=anchor_type,
+            anchor_id=anchor_id,
+            description=(request.form.get("anchor_description") or None),
+        ))
+
+    if anchor is not None or _looks_like_project_question(text.lower()):
+        _run_conversation_turn(project_id, store, workspace, None, text, anchor=anchor)
         return redirect(url_for("workspace.show_workspace", project_id=project_id) + "#project-conversation")
 
     title = text if len(text) <= 80 else text[:77] + "..."

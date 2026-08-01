@@ -1343,7 +1343,21 @@ html.conversation-expanded .conversation-thread { max-height: 60vh; }
 .conversation-message.system .role-label { color: var(--machine-blue); }
 .conversation-empty { color: var(--text-secondary); font-size: 0.85rem; }
 
-.conversation-input-form { display: flex; gap: 0.6rem; }
+.conversation-input-form { display: flex; flex-wrap: wrap; gap: 0.6rem; }
+/* CLAUDE-P40-E1: the "Re: <anchored object>" badge a "Discuss this X"
+   click (macros.aperture) sets on the ONE dock composer - flex-basis
+   100% forces it onto its own line above the input/button when shown,
+   rather than cramming into the same row. */
+.dock-composer-anchor-label {
+    flex-basis: 100%;
+    font-family: var(--font-body);
+    font-size: 0.78rem;
+    color: var(--text-metadata);
+    background: var(--surface-secondary);
+    border-radius: 4px;
+    padding: 0.25rem 0.5rem;
+    width: fit-content;
+}
 .conversation-input-form input[type="text"] {
     flex: 1;
     font-family: var(--font-body);

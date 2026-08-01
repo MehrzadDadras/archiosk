@@ -165,4 +165,31 @@ document.addEventListener('DOMContentLoaded', () => {
             window.sessionStorage.setItem(scrollKey, String(conversationThread.scrollTop));
         });
     }
+
+    // CLAUDE-P40-E1: "Discuss this X" (macros.aperture) no longer
+    // renders its own composer - it attaches an anchor to the ONE
+    // dock composer instead. Only ever wired when that composer is
+    // actually on screen (no active Case - the aperture macro is only
+    // called from Project-Home-scoped content today); a Case-open page
+    // simply has no aperture buttons to wire, not a broken feature.
+    document.querySelectorAll('.aperture-link').forEach((button) => {
+        button.addEventListener('click', () => {
+            const anchorTypeField = document.getElementById('dock-composer-anchor-type');
+            const anchorIdField = document.getElementById('dock-composer-anchor-id');
+            const anchorDescriptionField = document.getElementById('dock-composer-anchor-description');
+            const anchorLabel = document.getElementById('dock-composer-anchor-label');
+            const composerInput = document.getElementById('dock-composer-input');
+            if (!anchorTypeField || !anchorIdField || !composerInput) return;
+
+            anchorTypeField.value = button.dataset.apertureAnchorType || '';
+            anchorIdField.value = button.dataset.apertureAnchorId || '';
+            anchorDescriptionField.value = button.dataset.apertureAnchorDescription || '';
+            if (anchorLabel) {
+                anchorLabel.textContent = `Re: ${button.dataset.apertureAnchorLabel || 'this'}`;
+                anchorLabel.hidden = false;
+            }
+            composerInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            composerInput.focus();
+        });
+    });
 });

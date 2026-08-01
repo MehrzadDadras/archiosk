@@ -65,31 +65,28 @@
 {% endmacro %}
 
 {# -- aperture ---------------------------------------------------------
-   The contextual "ask Archiosk about this" affordance: a quiet
-   subdisclosure attached to one governed object, carrying an Anchor
-   (anchor_type/anchor_id/description - see the Anchor dataclass and
-   ConversationMessage's own docstring) so a message typed here already
-   knows what "this" means. Deliberately renders nothing but a small
-   disclosure and a form - no floating panel, no state of its own - and
-   is generic across object kinds so a future aperture is a one-line
-   call here, not hand-copied markup per object type (see
-   routes/workspace.py's discuss_object for what happens on submit, and
-   its own comment on why this is intentionally attached to only one
-   object kind so far). #}
+   The contextual "ask Archiosk about this" affordance: attaches an
+   Anchor (anchor_type/anchor_id/description - see the Anchor dataclass
+   and ConversationMessage's own docstring) to the ONE Workspace
+   conversation composer (the bottom dock), so a message typed there
+   already knows what "this" means.
+
+   CLAUDE-P40-E1: this used to render its OWN small <form>/text input
+   (a second, hidden-until-expanded composer duplicating the dock) -
+   removed per the "exactly one composer in the Workspace DOM"
+   requirement. Now a plain button: static/js/case_workspace.js's
+   aperture-link handler copies anchor_type/anchor_id/description into
+   the dock composer's own hidden fields (#dock-composer-anchor-*),
+   shows a small "Re: ..." label next to it, scrolls the dock into
+   view, and focuses its real text input - one composer, contextually
+   aware of what was clicked, never a second one. Generic across object
+   kinds so a future aperture is still a one-line call here (see
+   routes/workspace.py's quick_start for what happens on submit when an
+   anchor is present). #}
 {% macro aperture(project_id, anchor_type, anchor_id, description, label='Discuss this') %}
-{% call subdisclosure(label) %}
-    <p class="pane-note">
-        Ask or note something about this right here &mdash; no need to open an
-        Investigation first. A Case-shaped question (&ldquo;Analyze&hellip;&rdquo;,
-        &ldquo;Compare&hellip;&rdquo;) will offer to start one; anything else just
-        stays here, in the Project Conversation, already knowing what you meant.
-    </p>
-    <form class="workspace-form" method="post" action="{{ url_for('workspace.discuss_object', project_id=project_id) }}">
-        <input type="hidden" name="anchor_type" value="{{ anchor_type }}">
-        <input type="hidden" name="anchor_id" value="{{ anchor_id }}">
-        <input type="hidden" name="anchor_description" value="{{ description }}">
-        <input type="text" name="text" placeholder="Why is this like this? Check this. Something is wrong here&hellip;" required>
-        <button type="submit">Send</button>
-    </form>
-{% endcall %}
+<button type="button" class="aperture-link link-button"
+        data-aperture-anchor-type="{{ anchor_type }}"
+        data-aperture-anchor-id="{{ anchor_id }}"
+        data-aperture-anchor-description="{{ description }}"
+        data-aperture-anchor-label="{{ label }}">{{ label }}</button>
 {% endmacro %}

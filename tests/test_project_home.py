@@ -58,7 +58,11 @@ class ProjectHomeTests(unittest.TestCase):
         body = response.get_data(as_text=True)
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn("What are we working on?", body)
+        # CLAUDE-P40-E1: the separate "Start or continue project work"
+        # composer (placeholder "What are we working on?") was removed -
+        # the single Project Conversation dock composer now covers both
+        # a plain question and a real "start work" request.
+        self.assertIn("Ask a question, or describe what you want to work on", body)
         # CLAUDE-P38-C: this explanation moved behind a collapsed
         # "What is Project State?" disclosure - still present in the
         # rendered HTML (a <details> element's content is always in the
@@ -87,7 +91,7 @@ class ProjectHomeTests(unittest.TestCase):
 
         self.assertIn("Workspace</h1>", body)
         self.assertIn("Structural Drawing Review", body)
-        self.assertNotIn("What are we working on?", body)
+        self.assertNotIn("Ask a question, or describe what you want to work on", body)
 
     def test_left_aside_always_visible_regardless_of_case_selection(self):
         # Sources/Requirements/RFIs/History are project-scoped, not
@@ -207,7 +211,7 @@ class ProjectHomeTests(unittest.TestCase):
 
     def test_quick_start_requires_text(self):
         response = self.client.post(f"/projects/{self.project_id}/workspace/quick-start", data={"text": "  "}, follow_redirects=True)
-        self.assertIn("What are we working on?", response.get_data(as_text=True))
+        self.assertIn("Ask a question, or describe what you want to work on", response.get_data(as_text=True))
         self.assertEqual(len(self._store().get(self.project_id).cases), 0)
 
     # -- active work summary -------------------------------------------------------
