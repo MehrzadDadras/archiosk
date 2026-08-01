@@ -495,6 +495,37 @@ RESTORE_CONFIRMATION_PHRASE = "RESTORE SNAPSHOT"
 SNAPSHOT_MANIFEST_FILENAME = "_snapshot_manifest.snapshot"
 
 
+def _win_long_path(path: Path) -> str:
+    """
+    CLAUDE-P40-E2A1: a real, live isolated-process run of Reset Project
+    Data raised `shutil.Error([WinError 3] The system cannot find the
+    path specified)` from `shutil.copytree` the moment a snapshot's own
+    directory (registry_snapshots/<stamp>/) added one more level of
+    nesting on top of an already-deep `workspace_sources/<project_id>/
+    <hash>_<filename>` path - not an artifact of that verification
+    environment (its shorter, un-nested source path copied fine at
+    ingestion time), a genuine Windows MAX_PATH (260 character) limit
+    that any sufficiently long REGISTRY_STORE_PATH/filename combination
+    can hit in the real deployment too, snapshot-nesting or not.
+
+    The Windows-sanctioned fix without any OS-level configuration
+    change (a `LongPathsEnabled` registry/group-policy opt-in cannot be
+    assumed present on a given deployment host) is the `\\\\?\\`
+    extended-length prefix, which raises the effective limit to ~32,767
+    characters for that one call. Applied at the exact point every
+    shutil/os call in this snapshot/reset/restore code path touches the
+    filesystem - never earlier, since `\\\\?\\`-prefixed strings skip
+    normal path normalization (they must already be absolute, backslash-
+    separated, with no `..` segments) and would break ordinary Path
+    methods (`.relative_to`, `.name`, glob) used everywhere else in this
+    module. A no-op (returns the plain resolved path) on any other OS.
+    """
+    resolved = str(path.resolve())
+    if os.name != "nt" or resolved.startswith("\\\\?\\"):
+        return resolved
+    return "\\\\?\\" + resolved
+
+
 class SnapshotIntegrityError(Exception):
     def __init__(self, problems: list[str]):
         super().__init__("; ".join(problems))
@@ -503,7 +534,7 @@ class SnapshotIntegrityError(Exception):
 
 def _sha256_of(path: Path) -> str:
     digest = hashlib.sha256()
-    with path.open("rb") as fh:
+    with open(_win_long_path(path), "rb") as fh:
         for chunk in iter(lambda: fh.read(65536), b""):
             digest.update(chunk)
     return digest.hexdigest()
@@ -554,7 +585,7 @@ def _create_snapshot(store_path: Path, snapshot_root: Path, actor: str, kind: st
     snapshot_root.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ") + "-" + uuid.uuid4().hex[:8]
     snapshot_dir = snapshot_root / stamp
-    shutil.copytree(store_path, snapshot_dir)
+    shutil.copytree(_win_long_path(store_path), _win_long_path(snapshot_dir))
 
     checksums = {
         str(path.relative_to(snapshot_dir).as_posix()): _sha256_of(path)
@@ -569,7 +600,8 @@ def _create_snapshot(store_path: Path, snapshot_root: Path, actor: str, kind: st
         "file_count": len(checksums),
         "checksums": checksums,
     }
-    (snapshot_dir / SNAPSHOT_MANIFEST_FILENAME).write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    with open(_win_long_path(snapshot_dir / SNAPSHOT_MANIFEST_FILENAME), "w", encoding="utf-8") as fh:
+        fh.write(json.dumps(manifest, indent=2))
     return snapshot_dir
 
 
@@ -700,7 +732,7 @@ def _reset_project_data(app, actor: str) -> Path:
             continue
         removed_entries.append(entry.name)
         if entry.is_dir():
-            shutil.rmtree(entry)
+            shutil.rmtree(_win_long_path(entry))
         else:
             entry.unlink()
 
@@ -776,18 +808,18 @@ def _restore_snapshot(app, snapshot_dir: Path, actor: str) -> dict:
             continue
         dest = staging_dir / entry.name
         if entry.is_dir():
-            shutil.copytree(entry, dest)
+            shutil.copytree(_win_long_path(entry), _win_long_path(dest))
         else:
-            shutil.copy2(entry, dest)
+            shutil.copy2(_win_long_path(entry), _win_long_path(dest))
     # security_governance/ comes from the CURRENT live store, never the
     # snapshot - see this function's own docstring.
     live_security_dir = store_path / "security_governance"
     if live_security_dir.exists():
-        shutil.copytree(live_security_dir, staging_dir / "security_governance")
+        shutil.copytree(_win_long_path(live_security_dir), _win_long_path(staging_dir / "security_governance"))
 
-    os.rename(str(store_path), str(old_dir))
-    os.rename(str(staging_dir), str(store_path))
-    shutil.rmtree(old_dir, ignore_errors=True)
+    os.rename(_win_long_path(store_path), _win_long_path(old_dir))
+    os.rename(_win_long_path(staging_dir), _win_long_path(store_path))
+    shutil.rmtree(_win_long_path(old_dir), ignore_errors=True)
 
     audit_dir = store_path / "security_governance"
     audit_dir.mkdir(parents=True, exist_ok=True)

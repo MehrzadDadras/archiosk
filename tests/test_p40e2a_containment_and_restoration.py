@@ -520,6 +520,85 @@ class ResetSnapshotRestorationTests(_BaseTestCase):
         resp = client.get("/admin/reset-project-data/snapshots/..%2F..%2Fetc/restore")
         self.assertEqual(resp.status_code, 404)
 
+    def test_reset_and_restore_succeed_past_windows_max_path(self):
+        """
+        CLAUDE-P40-E2A1: a real, LIVE isolated-process run of Reset
+        Project Data (a completely separate Flask process against a
+        temporary isolated registry, driven over real HTTP - not this
+        pytest suite) hit a real shutil.Error([WinError 3]) the moment a
+        snapshot's own extra directory level (registry_snapshots/
+        <stamp>/) pushed an already-long workspace_sources/<project_id>/
+        <filename> path past Windows' classic 260-character MAX_PATH -
+        not an artifact of that verification's own temp path (its
+        SHORTER, un-nested original file wrote and read back fine at
+        seed time). Reproduced here deterministically: a filename length
+        computed so the ORIGINAL Source path stays under 260 chars
+        (ingestion/display must keep working normally) while the SAME
+        path, nested one level deeper the way a snapshot always is,
+        exceeds it (proving the bug this test targets, not some other
+        failure) - both bounds computed from this test's own actual temp
+        directory length, not hardcoded, so the test stays meaningful
+        regardless of where the OS puts its temp folder.
+        """
+        store = self._store()
+        workspace = store.get(self.project_id)
+        project_id = self.project_id
+
+        sources_dir = self.tmp_dir / "workspace_sources" / project_id
+        sources_dir.mkdir(parents=True, exist_ok=True)
+
+        # Aim the original path at ~250 chars (comfortably under 260)
+        # and let the snapshot's own extra ~50+ chars of nesting
+        # (registry_snapshots/<~40-char stamp>/) push it over.
+        base_len = len(str(sources_dir)) + 1  # +1 for the path separator before the filename
+        filename_len = max(20, 250 - base_len)
+        long_name = ("a" * filename_len) + ".txt"
+        target = sources_dir / long_name
+        original_path_len = len(str(target))
+        self.assertLess(original_path_len, 260, "test setup itself would exceed MAX_PATH - not what this test targets")
+        target.write_bytes(b"long path content")
+        from routes.portal import _sha256_of, _win_long_path
+        original_checksum = _sha256_of(target)
+
+        workspace.sources.append({
+            "id": "long-path-source", "project_id": project_id, "kind": "rfq_rfp_document",
+            "name": long_name, "added_at": "2026-01-01T00:00:00+00:00", "file_path": str(target),
+        })
+        store.save(workspace)
+
+        client = self._admin_client()
+        reset_resp = client.post("/admin/reset-project-data", data={"confirmation_phrase": "RESET PROJECT DATA"})
+        self.assertEqual(reset_resp.status_code, 302)
+        self.assertIsNone(self._store().get(project_id), "reset must succeed even with a long-path Source")
+
+        # Plain pathlib .exists()/.read_bytes() are themselves subject to
+        # the exact same >260-char MAX_PATH limitation this test targets
+        # (confirmed live - the whole reason routes/portal.py's
+        # _win_long_path helper exists), so verifying the snapshot's own
+        # copy has to go through that same long-path-safe open, not a
+        # plain pathlib call that would give a false negative here.
+        snapshot_id = self._latest_snapshot_id()
+        snapshot_dir = self.tmp_dir.parent / "registry_snapshots" / snapshot_id
+        restored_file = snapshot_dir / "workspace_sources" / project_id / long_name
+        self.assertGreater(len(str(restored_file)), 260, "test setup did not actually exercise the >260-char case")
+        with open(_win_long_path(restored_file), "rb") as fh:
+            self.assertEqual(fh.read(), b"long path content")
+        self.assertEqual(
+            _sha256_of(restored_file), original_checksum,
+            "snapshot's copy of the long-path file must match the original byte-for-byte",
+        )
+
+        restore_resp = client.post(
+            f"/admin/reset-project-data/snapshots/{snapshot_id}/restore",
+            data={"confirmation_phrase": "RESTORE SNAPSHOT"},
+        )
+        self.assertEqual(restore_resp.status_code, 302)
+
+        restored_workspace = self._store().get(project_id)
+        self.assertIsNotNone(restored_workspace)
+        restored_source = next(s for s in restored_workspace.sources if s["id"] == "long-path-source")
+        self.assertEqual(Path(restored_source["file_path"]).read_bytes(), b"long path content")
+
 
 if __name__ == "__main__":
     unittest.main()
