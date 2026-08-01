@@ -1,5 +1,19 @@
 # Continuation checkpoint
 
+## 2026-08-01 — CLAUDE-P40-E2A2: product-owner acceptance seal
+
+**No code change - verification only.** The full P40-E2/P40-E2A/
+P40-E2A1/P40-E2A2 line of work - contextual Toolbox, recoverable
+Document/Project removal, removed-state route containment, Reset
+Project Data, checksummed reset-snapshot restoration, the durable
+transaction journal, and automatic crash recovery - is product-owner
+accepted as of commit `83ece12` (checkpoint `5e99623`), 1,385 tests
+passing. This closes the acceptance gap P40-E2A/E2A1 were explicitly
+held back pending: Global Reset/Restore now has a proven, live-verified
+automatic recovery path, not just an in-principle design.
+
+---
+
 ## 2026-08-01 — CLAUDE-P40-E2A2: durable transaction journal, automatic crash recovery, final safety gate
 
 **Commit:** `83ece12`. Full suite: 1385 passed (was 1365). Still not
