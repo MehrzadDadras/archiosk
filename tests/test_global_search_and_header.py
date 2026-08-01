@@ -212,20 +212,27 @@ class ProjectsTreeTests(unittest.TestCase):
         self.assertEqual(match.group(1), "/projects")
 
     def test_individual_projects_are_real_links_into_their_workspace(self):
-        body = self.client.get("/").get_data(as_text=True)
+        # CLAUDE-P40-E2B1A: Project names are the Projects root
+        # launcher's own projected children - they live on /projects
+        # (Display's level-1 projection target), never listed inline in
+        # the launcher panel itself on every page.
+        body = self.client.get("/projects").get_data(as_text=True)
         self.assertIn('href="/projects/alpha/workspace"', body)
         self.assertIn('href="/projects/beta/workspace"', body)
         self.assertIn("Alpha.pdf", body)
         self.assertIn("Beta.pdf", body)
 
-    def test_active_project_highlighted_in_launcher_not_via_separate_block(self):
+    def test_projects_root_launcher_stays_highlighted_inside_an_open_workspace(self):
+        # CLAUDE-P40-E2B1A: no per-project row exists in the panel to
+        # highlight anymore (Rule 5 - no duplicated child hierarchy) -
+        # the "Projects" root launcher itself stays active for as long
+        # as any Project/Workspace subtree is open, and the in-Display
+        # branch-nav's own "Overview" entry is the level-2 highlight.
         body = self.client.get("/projects/alpha/workspace").get_data(as_text=True)
-        self.assertIn("launcher-project-item active", body)
-        # The old standalone "Current Project" orientation block is gone -
-        # the launcher's own highlighting is the only signal now. Checked
-        # as the rendered label pattern, not a bare substring, since this
-        # file's own explanatory comments legitimately mention the old
-        # block by name.
+        self.assertIn('launcher-heading active', body)
+        self.assertIn('display-branch-link active', body)
+        self.assertNotIn("launcher-project-item", body)
+        # The old standalone "Current Project" orientation block is gone.
         self.assertNotIn('side-rail-context-label">Current Project<', body)
 
     def test_recent_projects_block_removed_from_sidebar(self):

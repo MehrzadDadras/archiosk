@@ -380,11 +380,14 @@ class MarketCriticalGoldenPathTests(unittest.TestCase):
             '{"project_id": "' + corrupted_project_id + '", "totally_unrecognized_field_xyz": []}', encoding="utf-8",
         )
 
-        # The nav sidebar and /projects listing must not crash for ANY
-        # authenticated user merely because this one corrupted record exists.
+        # The launcher panel and /projects listing must not crash for ANY
+        # authenticated user merely because this one corrupted record
+        # exists. CLAUDE-P40-E2B1A: Home itself no longer lists Project
+        # names (they're the Projects root launcher's own projected
+        # children, on /projects only) - checked here is only that Home
+        # still renders at all, not that it lists anything.
         home_response = self.alice.get("/")
         self.assertEqual(home_response.status_code, 200)
-        self.assertIn(b"Healthy Project", home_response.data)
 
         projects_response = self.alice.get("/projects")
         self.assertEqual(projects_response.status_code, 200)

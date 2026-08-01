@@ -45,6 +45,31 @@
             </span>
         </div>
 
+    {# ---------------- Project branch navigation (CLAUDE-P40-E2B1A) -----------
+       The recursive-projection level-2 surface for this Project's own
+       branch (see the interaction rule this stage audited base.html
+       against) - Documents/Investigations/Chats/Overview are never
+       listed in the left launcher panel itself (that panel only ever
+       holds root launchers); clicking "Projects" there projects the
+       Project directory into Display, and clicking a Project projects
+       THIS branch-nav (plus whichever content it currently selects)
+       here instead - never a second copy of the hierarchy duplicated in
+       the panel. Present in every per-project Display state (Project
+       Home, all three directories, an open Investigation, a selected
+       Document) so a reviewer can pivot laterally between siblings
+       without leaving Display - a restrained inline link row, never a
+       second panel/column/flyout (Rule 5). #}
+    <nav class="display-branch-nav" aria-label="{{ workspace.display_title or document.filename }} sections">
+        <a class="display-branch-link{% if not directory_view and not active_case and not selected_source %} active{% endif %}"
+           href="{{ url_for('workspace.show_workspace', project_id=project_id) }}">Overview</a>
+        <a class="display-branch-link{% if directory_view == 'documents' or selected_source %} active{% endif %}"
+           href="{{ url_for('workspace.show_workspace', project_id=project_id, view='documents') }}">Documents <span class="display-branch-count">{{ active_sources|length }}</span></a>
+        <a class="display-branch-link{% if directory_view == 'investigations' or active_case %} active{% endif %}"
+           href="{{ url_for('workspace.show_workspace', project_id=project_id, view='investigations') }}">Investigations <span class="display-branch-count">{{ visible_cases|length }}</span></a>
+        <a class="display-branch-link{% if directory_view == 'chats' %} active{% endif %}"
+           href="{{ url_for('workspace.show_workspace', project_id=project_id, view='chats') }}">Chats</a>
+    </nav>
+
     {# ---------------- Project reference material (CLAUDE-P40-E2B1, Section C/E) --
        Previously the standalone Lists panel (.workspace-pane-lists,
        "LISTS" grid area, always visible beside Display regardless of
@@ -2190,8 +2215,8 @@
     <section class="workspace-pane">
         <h3>Project</h3>
         <p class="pane-note">
-            No Investigation or Document is currently selected. Open one from the panel on the
-            left, or use the project-level tools below.
+            No Investigation or Document is currently selected. Open one from Documents or
+            Investigations above, or use the project-level tools below.
         </p>
         {% if is_project_owner or is_admin %}
         <form method="post" action="{{ url_for('workspace.remove_project_route', project_id=project_id) }}">

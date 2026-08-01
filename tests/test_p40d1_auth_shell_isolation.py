@@ -232,9 +232,12 @@ class AuthenticatedShellStillRendersNormallyTests(_BaseAuthShellTestCase):
         self.assertIn("app-shell", body)
         self.assertIn("launcher-panel", body)
 
-    def test_authenticated_home_page_lists_the_real_project(self):
+    def test_authenticated_project_directory_lists_the_real_project(self):
+        # CLAUDE-P40-E2B1A: Project names are the Projects root
+        # launcher's own projected children (/projects), not listed
+        # inline on Home anymore.
         client = self._client_as("shelluser", 1)
-        resp = client.get("/")
+        resp = client.get("/projects")
         self.assertEqual(resp.status_code, 200)
         self.assertIn(_DISTINCTIVE_PROJECT_NAME, resp.get_data(as_text=True))
 

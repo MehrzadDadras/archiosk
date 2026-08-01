@@ -341,7 +341,17 @@ class SecurityDepartmentRouteTests(_BaseAssuranceTestCase):
         resp = self.client.get("/security/")
         self.assertEqual(resp.status_code, 200)
         body = resp.get_data(as_text=True)
-        self.assertIn("Security Department Corrupted Sibling", body)
+        # security_department.html's own Projects list always shows
+        # {{ p.document.filename }}, never project_name/display_title
+        # (templates/security_department.html) - "a.txt" here, matching
+        # the fixed filename this file's own _ingest() helper always
+        # uses. CLAUDE-P40-E2B1A: this test used to also find the
+        # project_name text via the old launcher panel's inline Project-
+        # names listing (present on every authenticated page including
+        # this one) - that listing violated the root-launcher rule and
+        # is gone now, so this assertion checks the security page's own
+        # real listing instead, not an incidental side effect of it.
+        self.assertIn("a.txt", body)
         # The corrupted project still appears in the list (degraded, not
         # excluded -- an admin should still be able to see and act on it),
         # with its profile control showing "legacy"/"not set" rather than

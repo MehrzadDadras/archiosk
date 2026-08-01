@@ -229,7 +229,7 @@ class InvestigationListingTests(_BaseDockTestCase):
         client2.post(f"/projects/{self.project_id}/workspace/cases", data={"title": "Schedule Conflict Review", "objective": ""})
 
         home_body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
-        self.assertIn('href="{}?view=investigations">Investigations <span class="launcher-count">2</span></a>'.format(
+        self.assertIn('href="{}?view=investigations">Investigations <span class="display-branch-count">2</span></a>'.format(
             f"/projects/{self.project_id}/workspace"
         ), home_body)
 
@@ -252,13 +252,15 @@ class InvestigationListingTests(_BaseDockTestCase):
         # just a nav entry, opened in the main Display panel.
         self.assertIn('class="workspace-pane workspace-pane-conversation"', body)
         self.assertIn("<h2>Draft 1</h2>", body)
-        # CLAUDE-P40-E2B1, Section D: "highlight the originating
-        # launcher" - the launcher panel's own "Investigations" link
+        # CLAUDE-P40-E2B1A, Section D: "highlight the originating
+        # launcher" - Display's own branch-nav "Investigations" entry
         # stays highlighted while any Investigation is open, even though
         # the directory listing itself isn't rendered alongside it
-        # anymore (no second navigation column - Section E).
+        # anymore (no second navigation column - Section E). This entry
+        # lives in Display now, not the left panel (Section H's
+        # root-launcher rule).
         import re
-        match = re.search(r'<a class="launcher-link( active)?"\s+href="[^"]*view=investigations">Investigations', body)
+        match = re.search(r'<a class="display-branch-link( active)?"\s+href="[^"]*view=investigations">Investigations', body)
         self.assertIsNotNone(match)
         self.assertEqual(match.group(1), " active")
 

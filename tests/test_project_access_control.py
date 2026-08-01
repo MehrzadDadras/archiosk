@@ -249,13 +249,20 @@ class PortalBypassPathsClosedTests(_BaseAccessControlTestCase):
         self.assertIn("Bob Listed", body)
         self.assertNotIn("Carol Not Listed To Bob", body)
 
-    def test_home_page_recent_projects_excludes_inaccessible_projects(self):
+    def test_home_page_lists_no_project_names_accessible_or_not(self):
+        # CLAUDE-P40-E2B1A: the launcher panel is a root launcher, not an
+        # expandable navigation tree - Project names (Bob's own
+        # accessible one included) are no longer listed inline on Home
+        # at all; they are the Projects root launcher's own projected
+        # children, reachable only via /projects (see
+        # test_projects_list_excludes_inaccessible_projects for the
+        # authorization-filtering proof at that, now-correct, location).
         bob_doc = self._ingest(owner="bob", project_name="Bob Home")
         carol_doc = self._ingest(owner="carol", project_name="Carol Not On Bob Home")
 
         response = self.bob_client.get("/")
         body = response.data.decode()
-        self.assertIn("Bob Home", body)
+        self.assertNotIn("Bob Home", body)
         self.assertNotIn("Carol Not On Bob Home", body)
 
     def test_global_search_excludes_inaccessible_projects(self):

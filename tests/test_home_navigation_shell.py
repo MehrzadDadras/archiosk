@@ -82,9 +82,14 @@ class HomeNavigationShellTests(unittest.TestCase):
         # the old "Recent Projects" block by name.
         self.assertNotIn('side-rail-context-label">Recent Projects<', body)
         self.assertNotIn('class="workspace-pane-label">Recent Projects<', body)
-        # The project still appears exactly once - as an object node in
-        # the sidebar's Projects tree, not a second time in page content.
-        self.assertEqual(body.count("rfp.md"), 1)
+        # CLAUDE-P40-E2B1A: the launcher panel is a root launcher, not an
+        # expandable tree (Section H's interaction rule) - Project names
+        # are never listed inline on Home (or anywhere else in the
+        # panel) anymore. They exist only as the Projects root
+        # launcher's own projected children, on /projects itself.
+        self.assertNotIn("rfp.md", body)
+        directory_body = client.get("/projects").get_data(as_text=True)
+        self.assertEqual(directory_body.count("rfp.md"), 1)
 
     def test_nav_rail_present_with_toggle(self):
         # CLAUDE-P40-E2B1: the old two-state (icon-only/labeled) side-rail
@@ -129,14 +134,17 @@ class HomeNavigationShellTests(unittest.TestCase):
         response = client.get(f"/projects/{project_id}/workspace")
         body = response.get_data(as_text=True)
 
-        # CLAUDE-P40-E2B1: current-Project context now shows in the
+        # CLAUDE-P40-E2B1A: current-Project context now shows in the
         # application-wide top bar's breadcrumb (workspace-topbar-project)
-        # and in the launcher panel's own active-project highlighting -
-        # there is no literal "Current Project" label anywhere, but the
-        # project's own identity is genuinely present in both places.
+        # and via the "Projects" root launcher's own active highlighting
+        # plus Display's branch-nav "Overview" entry - there is no
+        # literal "Current Project" label anywhere, and no per-project
+        # row in the panel to highlight (Section H's root-launcher rule),
+        # but the project's own identity is genuinely present throughout.
         self.assertIn("rfp.md", body)
         self.assertIn(project_id, body)
-        self.assertIn("launcher-project-item active", body)
+        self.assertIn("launcher-heading active", body)
+        self.assertIn("display-branch-link active", body)
 
     def test_non_admin_does_not_see_new_project_link(self):
         client = self.flask_app.test_client()

@@ -179,16 +179,18 @@ class TopBarSpansShellTests(_BaseTestCase):
 
 class ProjectNamesOnlyUnderProjectsTests(_BaseTestCase):
     def test_other_project_names_do_not_leak_into_an_open_workspace(self):
+        # CLAUDE-P40-E2B1A: the launcher panel is a root launcher, not an
+        # expandable tree (Section H's interaction rule) - Project names
+        # are never listed inline in the panel at all anymore, on any
+        # page. They exist ONLY as the Projects root launcher's own
+        # projected children, on /projects itself.
         other = self._ingest(owner="p40e2b1_owner", project_name="A Distinct Other Project Name")
         client = self._client_as("p40e2b1_owner", 1)
-        body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
-        # The other Project legitimately appears once, in the launcher's
-        # own Projects list - never a second time describing THIS
-        # Project's own content.
-        self.assertEqual(body.count("A Distinct Other Project Name"), 1)
-        launcher_start = body.index('id="launcher-panel"')
-        launcher_end = body.index("</nav>", launcher_start)
-        self.assertIn("A Distinct Other Project Name", body[launcher_start:launcher_end])
+        workspace_body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
+        self.assertNotIn("A Distinct Other Project Name", workspace_body)
+
+        directory_body = client.get("/projects").get_data(as_text=True)
+        self.assertIn("A Distinct Other Project Name", directory_body)
 
 
 # ---------------------------------------------------------------------------
@@ -247,12 +249,12 @@ class NewInvestigationAppearsImmediatelyTests(_BaseTestCase):
     def test_launcher_investigation_count_updates_immediately(self):
         client = self._client_as("p40e2b1_owner", 1)
         before = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
-        self.assertIn('Investigations <span class="launcher-count">0</span>', before)
+        self.assertIn('Investigations <span class="display-branch-count">0</span>', before)
 
         client.post(f"/projects/{self.project_id}/workspace/cases", data={"title": "Count Check", "objective": ""})
 
         after = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
-        self.assertIn('Investigations <span class="launcher-count">1</span>', after)
+        self.assertIn('Investigations <span class="display-branch-count">1</span>', after)
 
 
 # ---------------------------------------------------------------------------

@@ -97,42 +97,35 @@
 
         <div class="app-shell-body">
         {% if authenticated %}
-        {# ---------------- The one left launcher panel (CLAUDE-P40-E2B1) -----------
-           Restrained orientation + direct launchers only - never a full
-           listing of Documents/Investigations/Requirements/History/
-           Governance (those are Display views or Toolbox tools now, see
-           case_workspace.html). This is the single physical left panel for
-           the whole authenticated application; the old per-Workspace
-           .workspace-pane-lists column is gone (Section E). #}
+        {# ---------------- The one left launcher panel (CLAUDE-P40-E2B1A) ----------
+           A root launcher, not an expandable navigation tree (Section H's
+           own interaction rule): every one of its entries is a top-level
+           launcher only - Project names, and an open Project's own
+           Documents/Investigations/Chats, are never listed inline here.
+           Clicking "Projects" projects the authorized Project directory
+           into the main content area (portal.projects_list, already
+           extends this same shell); clicking a Project projects THAT
+           Project's own Documents/Investigations/Chats branch-nav into
+           Display instead (see case_workspace.html's own note at the top
+           of the Display division) - recursive projection, never a second
+           copy of the hierarchy duplicated in this panel. This is the
+           single physical left panel for the whole authenticated
+           application; the old per-Workspace .workspace-pane-lists column
+           is gone (Section E). #}
         <nav class="launcher-panel" id="launcher-panel" aria-label="Primary">
             <div class="launcher-panel-body">
                 <div class="launcher-section">
-                    <a class="launcher-heading{% if request.path == url_for('portal.projects_list') %} active{% endif %}" href="{{ url_for('portal.projects_list') }}">Projects</a>
-                    <div class="launcher-items">
-                        {% for p in nav_recent_projects %}
-                        <a class="launcher-link launcher-project-item{% if project_id is defined and project_id == p.project_id %} active{% endif %}"
-                           href="{{ url_for('workspace.show_workspace', project_id=p.project_id) }}">{{ p.display_name }}</a>
-                        {% endfor %}
-                    </div>
+                    {# "active" whenever anywhere inside the Projects/
+                       Workspace subtree is open, not only on the literal
+                       /projects URL - this is the root launcher for that
+                       whole branch, and stays highlighted for as long as
+                       any of its descendants (a Project, its Documents/
+                       Investigations/Chats, an open Investigation) are. #}
+                    <a class="launcher-heading{% if request.path == url_for('portal.projects_list') or project_id is defined %} active{% endif %}" href="{{ url_for('portal.projects_list') }}">Projects</a>
                     {% if is_admin %}
                     <a class="launcher-link launcher-new-project" href="{{ url_for('portal.upload') }}">+ New Project</a>
                     {% endif %}
                 </div>
-
-                {# Only ever rendered on an open Project's Workspace page -
-                   these are direct launchers into that Project's own
-                   directories (Section C), never the listings themselves. #}
-                {% if project_id is defined and workspace is defined %}
-                <div class="launcher-section launcher-project-context">
-                    <p class="launcher-project-heading">{{ workspace.display_title or document.filename }}</p>
-                    <a class="launcher-link{% if directory_view == 'documents' or selected_source %} active{% endif %}"
-                       href="{{ url_for('workspace.show_workspace', project_id=project_id, view='documents') }}">Documents <span class="launcher-count">{{ active_sources|length }}</span></a>
-                    <a class="launcher-link{% if directory_view == 'investigations' or active_case %} active{% endif %}"
-                       href="{{ url_for('workspace.show_workspace', project_id=project_id, view='investigations') }}">Investigations <span class="launcher-count">{{ visible_cases|length }}</span></a>
-                    <a class="launcher-link{% if directory_view == 'chats' %} active{% endif %}"
-                       href="{{ url_for('workspace.show_workspace', project_id=project_id, view='chats') }}">Chats</a>
-                </div>
-                {% endif %}
             </div>
 
             <div class="launcher-identity">

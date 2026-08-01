@@ -183,7 +183,6 @@ html.launcher-hidden .launcher-panel { display: none; }
     border-radius: 5px;
 }
 .launcher-heading:hover, .launcher-heading.active { background: var(--surface-hover); color: var(--text-primary); text-decoration: none; }
-.launcher-items { display: flex; flex-direction: column; gap: 0.05rem; }
 .launcher-link {
     display: block;
     padding: 0.45rem 0.55rem;
@@ -197,24 +196,7 @@ html.launcher-hidden .launcher-panel { display: none; }
 }
 .launcher-link:hover { background: var(--surface-hover); color: var(--text-primary); text-decoration: none; }
 .launcher-link.active { background: var(--surface-selected); color: var(--text-primary); }
-.launcher-count { color: var(--text-metadata); font-size: 0.76rem; margin-left: 0.2rem; }
 .launcher-new-project { color: var(--machine-blue); }
-.launcher-project-context {
-    padding-top: 0.7rem;
-    border-top: 1px solid var(--border);
-    gap: 0.15rem;
-}
-.launcher-project-heading {
-    font-family: var(--font-body);
-    font-weight: 600;
-    font-size: 0.82rem;
-    color: var(--text-primary);
-    margin: 0 0 0.3rem;
-    padding: 0 0.55rem;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
 .launcher-identity {
     padding: 0.6rem 0.7rem 1rem;
     border-top: 1px solid var(--border);
@@ -1140,6 +1122,37 @@ html.toolbox-hidden .workspace-pane-toolbox {
     flex-shrink: 0;
 }
 .display-division-close:hover { color: var(--failure-red); }
+
+/* CLAUDE-P40-E2B1A: the recursive-projection level-2 surface for an open
+   Project's own branch (Documents/Investigations/Chats/Overview) - a
+   restrained inline link row inside Display, never a boxed/bordered
+   "second panel" (Section E's own no-cards rule applies here too). A
+   plain bottom-border divider separates it from whatever content
+   follows, the same restrained-divider language every other Display
+   section already uses. */
+.display-branch-nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.2rem;
+    padding-bottom: 0.8rem;
+    margin-bottom: 1.2rem;
+    border-bottom: 1px solid var(--border);
+}
+.display-branch-link {
+    font-family: var(--font-body);
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    padding: 0.15rem 0;
+    border-bottom: 2px solid transparent;
+}
+.display-branch-link:hover { color: var(--text-primary); text-decoration: none; }
+.display-branch-link.active {
+    color: var(--text-primary);
+    font-weight: 600;
+    border-bottom-color: var(--machine-blue);
+}
+.display-branch-count { color: var(--text-metadata); font-size: 0.76rem; margin-left: 0.15rem; }
+
 .display-division-empty {
     padding: 1.5rem 0;
     color: var(--text-secondary);

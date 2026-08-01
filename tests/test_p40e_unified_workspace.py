@@ -126,17 +126,18 @@ class SecondNavigationColumnRemovedTests(_BaseWorkspaceTestCase):
         body = resp.get_data(as_text=True)
         self.assertNotIn('grid-template-areas: "nav conversation findings"', body)
 
-    def test_project_navigation_appears_in_unified_left_rail(self):
-        # CLAUDE-P40-E2B1: the old side-rail-project-nav accordion group
-        # (Project/Documents/Work/Governance, each with its own detailed
-        # sub-link list) is superseded by the one launcher panel's
-        # restrained direct launchers (Section B) - no grouping headings,
-        # just Documents/Investigations/Chats under the active Project's
-        # own name.
+    def test_project_navigation_appears_projected_in_display_not_the_left_panel(self):
+        # CLAUDE-P40-E2B1A: the old side-rail-project-nav accordion group
+        # was first superseded by launcher-panel direct launchers
+        # (P40-E2B1), then THOSE were found to violate the root-launcher/
+        # no-nested-tree rule (Section H) - Documents/Investigations/
+        # Chats are now projected into Display's own branch-nav, never
+        # listed in the left panel itself.
         client = self._client_as("p40e_owner", 1)
         resp = client.get(f"/projects/{self.project_id}/workspace")
         body = resp.get_data(as_text=True)
-        self.assertIn("launcher-project-context", body)
+        self.assertIn("display-branch-nav", body)
+        self.assertNotIn("launcher-project-context", body)
         self.assertIn(self.project_id, body)
         self.assertIn(">Documents", body)
         self.assertIn(">Investigations", body)
@@ -155,6 +156,7 @@ class SecondNavigationColumnRemovedTests(_BaseWorkspaceTestCase):
         resp = client.get("/")
         body = resp.get_data(as_text=True)
         self.assertNotIn("launcher-project-context", body)
+        self.assertNotIn("display-branch-nav", body)
 
 
 class WorkspaceHeadingRenameTests(_BaseWorkspaceTestCase):
