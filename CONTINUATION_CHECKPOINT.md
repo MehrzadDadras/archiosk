@@ -1,5 +1,84 @@
 # Continuation checkpoint
 
+## 2026-08-01 — CLAUDE-P40-E2B1: single launcher panel, Display-projected directories
+
+**Commit:** `c0a125c`. Full suite: 1448 passed (was 1418). Not yet
+product-owner accepted. Starting state was `4b57490` (the P40-E2B-QA-CLOSE
+commit below - QA-close itself was never a separate checkpoint entry,
+folded into this one since its own finding is what triggered this
+stage).
+
+Product correction, not a re-skin: the QA-close audit confirmed **two**
+physical left panels rendered simultaneously on the Workspace page -
+`base.html`'s app-wide side rail and `case_workspace.html`'s own
+Workspace-local Lists panel (`.workspace-pane-lists`). This stage
+eliminates the second column entirely, replacing both with **one**
+restrained launcher panel.
+
+- `base.html`: the side rail is gone. In its place, `.launcher-panel` -
+  Projects (heading links to the authorized Project directory; names
+  only beneath it, no per-project detail), New Project, and (only when
+  a Project is open) that Project's own Documents/Investigations/Chats
+  launchers, plus identity+Security+Sign out anchored at the bottom.
+  "Pinned" is omitted outright - grepped the whole codebase, no backing
+  implementation exists to fabricate a launcher for. The top bar
+  (previously Workspace-page-local) moved here too, application-shell
+  level, spanning Launcher/Display/Toolbox on every authenticated page,
+  not just the Workspace - Display Layout/Toolbox toggle/document
+  context stay gated to when a Workspace is actually open. Superseded
+  Home/search/hamburger controls removed outright per spec, not hidden.
+- `case_workspace.html`: `.workspace-pane-lists` is gone. Documents and
+  Investigations become their own launcher-projected Display directories
+  (`?view=documents`/`?view=investigations`/`?view=chats` on the SAME
+  existing `show_workspace` GET route - no new routes, no client
+  routing, exactly the `?source=`/`?case=` pattern already established).
+  New Investigation creation moved into its own directory. Everything
+  else previously in Lists (Operating Environment/Access/Settings/Needs
+  Attention/Recent Focus/Investigation Quality/Participants/Go-No-Go/
+  Accepted Knowledge/Instructions/Requirement Compliance/RFIs/
+  Requirements/Key Dates/History) re-homed into Display's own Project
+  Home view - a real regression was caught and fixed here during
+  testing: this reference material was first gated on
+  `not active_case and not directory_view`, which silently broke
+  P40-E2B's own established, tested invariant ("Requirements/Sources/
+  RFIs/Accepted Knowledge/History... a reviewer needs even while an
+  Investigation is open" - `tests/test_workflow_integration.py`).
+  Corrected to gate on `not directory_view` only, restoring that
+  behavior exactly.
+- `routes/workspace.py`: `?view=` resolution (a real `?case=`/`?source=`
+  selection always wins over a bare directory view);
+  `add_document_source`/`add_text_record_source` redirects now preserve
+  `?view=documents` instead of dropping back to Project Home.
+- `app.py`: `current_username` exposed via `inject_globals()` for the
+  launcher's identity block.
+- `main.css`/`case_workspace.js`: `.case-workspace` grid reduced from
+  three columns (Lists/Display/Toolbox) to two (Display/Toolbox) - Chat
+  still beneath Display only, Toolbox still spans both rows. The
+  Launcher panel's own show/hide preference (`beehive:panel:launcher`)
+  is reviewer-wide, not per-project like the old Lists toggle it
+  replaces, since the panel itself is now global rather than
+  Workspace-local.
+
+Verified via rendered-DOM inspection (fresh Flask test client, real
+GET requests, not just template compilation): exactly one top bar/
+launcher panel/Toolbox/conversation dock/composer/Send/Display Layout
+menu on every Workspace state (Project Home, all three directories, an
+open Investigation), the top bar structurally precedes
+`.app-shell-body` on every page (proving it genuinely spans above
+Launcher+Main, not confined to one column), the launcher panel is
+present with zero Toolbox/Chat/Display-Layout markup on non-Workspace
+pages (Home, Projects list), and the old Lists panel is absent
+everywhere. `auth_shell.html` (login/forgot-password/reset-password)
+untouched - re-confirmed it still never extends `base.html`.
+
+No browser/rendering tool exists in this environment - real `<details>`
+keyboard operability, actual CSS Grid rendering, and pointer/keyboard
+resize execution remain reasoned-not-proven, same honest limitation as
+every prior stage.
+
+STATIC_VERSION 25 -> 26 (`main.css`/`case_workspace.js` both changed).
+P40-E3 and P41 not started.
+
 ## 2026-08-01 — CLAUDE-P40-E2B: flexible Workspace frame, resizable Chat, multi-display
 
 **Commit:** `17ec86c`. Full suite: 1418 passed (was 1385). Not yet
