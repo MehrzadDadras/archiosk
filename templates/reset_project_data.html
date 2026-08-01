@@ -5,11 +5,17 @@
 
 {% block content %}
 {% call macros.page_header('Reset Project Data', subtitle='Administrator only &mdash; returns the app to a clean, no-project state.') %}
+    <a class="btn btn-ghost" href="{{ url_for('portal.list_reset_snapshots') }}">View Reset Snapshots</a>
     <a class="btn btn-ghost" href="{{ url_for('portal.projects_list') }}">&larr; Back to Projects</a>
 {% endcall %}
 
-{% if reset_in_progress %}
-<p class="pane-note">A Reset is already in progress. Refresh in a moment.</p>
+{% if lock_info %}
+<p class="pane-note">
+    A Reset or Restore is already in progress (started {{ lock_info.age_seconds }}s ago). Refresh in a moment.
+    If this persists far longer than a reset/restore normally takes, it may be a stale lock left by an
+    interrupted operation - see <a href="{{ url_for('portal.list_reset_snapshots') }}">Reset Snapshots</a>
+    for the audit trail.
+</p>
 {% else %}
 
 <section class="workspace-pane">
@@ -22,10 +28,15 @@
         <li class="source-item">{{ inventory.requirements }} Requirement(s)</li>
     </ul>
     <p class="pane-note">
-        A complete snapshot of everything above is preserved on disk before anything is
-        removed &mdash; this is not permanent deletion. User accounts and sign-in, security
-        policies and authorization config, application config/credentials, and the current
+        A complete, checksummed snapshot of everything above is preserved on disk before anything is
+        removed &mdash; this is not permanent deletion, and can be restored from
+        <a href="{{ url_for('portal.list_reset_snapshots') }}">Reset Snapshots</a>. User accounts and sign-in,
+        security policies and authorization config, application config/credentials, and the current
         software/schema version are all retained untouched.
+    </p>
+    <p class="pane-note" style="color:var(--attention-amber);">
+        Do not run this against real project records until a snapshot restoration has been verified to
+        work - see Reset Snapshots for the current verified/unverified state of any existing snapshot.
     </p>
 </section>
 

@@ -212,7 +212,10 @@ def interpret_message(
     # makes, not a new medium-detection mechanism.
     has_drawing_source = bool(
         case is not None
-        and any(s["id"] in case["source_ids"] and s["kind"] == "drawing" for s in workspace.sources)
+        and any(
+            s["id"] in case["source_ids"] and s["kind"] == "drawing"
+            for s in CaseWorkspaceStore.active_sources(workspace)
+        )
     )
     analyze_example = (
         "\"Analyze this drawing for ...\", " if has_drawing_source
@@ -278,7 +281,7 @@ def _handle_analyze(
     triggering_message_id: Optional[str],
 ) -> InterpretationResult:
     drawing_sources = [
-        s for s in workspace.sources
+        s for s in CaseWorkspaceStore.active_sources(workspace)
         if s["id"] in case["source_ids"] and s["kind"] == "drawing"
     ]
     if not drawing_sources:

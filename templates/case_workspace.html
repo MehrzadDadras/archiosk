@@ -1270,7 +1270,26 @@
         <p class="workspace-pane-label">
             {{ selected_source.kind.replace('_', ' ') }}
             {% if selected_source.superseded_by_source_id %}&middot; superseded by a later revision{% endif %}
+            {% if selected_source.removed_at %}&middot; removed{% endif %}
         </p>
+        {% if selected_source.removed_at %}
+        {# CLAUDE-P40-E2A, Section A: "ordinary document-viewer... routes
+           must not treat it as active" - a removed Document's own
+           viewer never embeds the file (workspace.source_file itself
+           also refuses to serve it, see that route), and never claims
+           this pane still supports jumping to a location inside it.
+           Name/id/provenance stay visible (the heading/label above);
+           only the content and processing affordances are withheld. #}
+        <p class="pane-note">
+            This Document has been removed &mdash; it no longer appears in active Documents,
+            search, or AI context, and its content is not shown here. The original file,
+            its identifier, and every Finding or Requirement that references it are
+            preserved untouched.
+        </p>
+        <form method="post" action="{{ url_for('workspace.restore_document_route', project_id=project_id, source_id=selected_source.id) }}">
+            <button type="submit" class="btn btn-primary">Restore Document</button>
+        </form>
+        {% else %}
         {% if selected_source.file_path %}
         {% if selected_source.kind == 'drawing' %}
         <img class="document-viewer-image"
@@ -1291,6 +1310,7 @@
             Jumping to a specific page, clause, or evidence location inside this
             document isn't available yet for this format - specified, not simulated.
         </p>
+        {% endif %}
         <a class="btn btn-ghost workspace-link" href="{{ url_for('workspace.show_workspace', project_id=project_id) }}">&larr; Back to Project Overview</a>
     </section>
     {% endif %}

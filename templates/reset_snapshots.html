@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% import "_macros.html" as macros %}
+
+{% block title %}Reset Snapshots &mdash; Archiosk{% endblock %}
+
+{% block content %}
+{% call macros.page_header('Reset Snapshots', subtitle='Administrator only &mdash; every snapshot taken before a Reset or Restore, newest first.') %}
+    <a class="btn btn-ghost" href="{{ url_for('portal.reset_project_data') }}">&larr; Back to Reset Project Data</a>
+{% endcall %}
+
+{% if lock_info %}
+<p class="pane-note">
+    A Reset or Restore is currently in progress (started {{ lock_info.age_seconds }}s ago) &mdash;
+    restoring a snapshot is disabled until it finishes.
+</p>
+{% endif %}
+
+{% if snapshots %}
+<ul class="source-list">
+    {% for snap in snapshots %}
+    <li class="source-item">
+        <span class="source-kind-badge">{{ snap.kind }}</span>
+        <strong>{{ snap.created_at }}</strong> by {{ snap.actor }}
+        <br><small class="text-muted">
+            {{ snap.inventory.projects }} Project(s) &middot;
+            {{ snap.inventory.documents }} Document(s) &middot;
+            {{ snap.inventory.investigations }} Investigation(s) &middot;
+            {{ snap.inventory.findings }} Finding(s) &middot;
+            {{ snap.inventory.requirements }} Requirement(s) &middot;
+            {{ snap.file_count }} file(s)
+        </small>
+        <br>
+        <a class="btn btn-ghost" href="{{ url_for('portal.restore_reset_snapshot', snapshot_id=snap.snapshot_id) }}">Preview &amp; Restore this snapshot&hellip;</a>
+    </li>
+    {% endfor %}
+</ul>
+{% else %}
+<p class="pane-note">No Reset Snapshots exist yet &mdash; one is created automatically the first time Reset Project Data runs.</p>
+{% endif %}
+{% endblock %}

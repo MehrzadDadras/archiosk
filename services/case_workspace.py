@@ -5945,6 +5945,14 @@ class CaseWorkspaceStore:
         source = self._find(workspace.sources, source_id)
         if source is None:
             raise CaseWorkspaceError(f"Source {source_id} was not found.")
+        # CLAUDE-P40-E2A, Section A: registering a NEW Requirement is
+        # new analysis work, not an existing dependent reference (unlike
+        # a prior Requirement/Finding that already cites this Source,
+        # which must keep resolving it honestly - see active_sources'
+        # own docstring) - removed content must not silently re-enter
+        # active Workspace state this way.
+        if source.get("removed_at"):
+            raise CaseWorkspaceError(f"Source {source_id} has been removed. Restore it first.")
         if registration_method not in KNOWN_REQUIREMENT_REGISTRATION_METHODS:
             raise CaseWorkspaceError(
                 f"'{registration_method}' is not a recognized Requirement registration "
@@ -6290,6 +6298,8 @@ class CaseWorkspaceStore:
         source = self._find(workspace.sources, source_id)
         if source is None:
             raise CaseWorkspaceError(f"Source {source_id} was not found.")
+        if source.get("removed_at"):
+            raise CaseWorkspaceError(f"Source {source_id} has been removed. Restore it first.")
 
         missing = [f for f in ("id", "text", "confidence") if f not in requirement_item]
         if missing:

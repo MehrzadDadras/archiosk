@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% import "_macros.html" as macros %}
+
+{% block title %}Project removed &mdash; Archiosk{% endblock %}
+
+{% block content %}
+{% call macros.page_header('Project removed') %}
+    <a class="btn btn-ghost" href="{{ url_for('portal.projects_list') }}">&larr; Back to Projects</a>
+{% endcall %}
+
+<section class="workspace-pane">
+    <h2>{{ display_name }}</h2>
+    <p class="pane-note">
+        This Project has been moved out of active use &mdash; its Workspace, Documents,
+        Investigations, and every action inside it are unavailable until it is restored.
+        Nothing was deleted: the complete Project, unchanged, is one Restore away.
+    </p>
+    <p class="pane-note">
+        Removed {{ removed_at }}{% if removed_by %} by {{ removed_by }}{% endif %}.
+    </p>
+    <form method="post" action="{{ url_for('workspace.restore_project_route', project_id=project_id) }}">
+        <button type="submit" class="btn btn-primary">Restore Project</button>
+    </form>
+</section>
+{% endblock %}

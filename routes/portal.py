@@ -3,11 +3,15 @@ HTML pages: marketing home, upload form, and the Agility Engine dashboard.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import shutil
+import time
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Optional
 
 from flask import Blueprint, abort, current_app, flash, jsonify, redirect, render_template, request, session, url_for
 
@@ -20,6 +24,7 @@ from services.ingestion import UploadError, get_governance_log, get_registry, in
 from services.password_reset import (
     complete_password_reset, get_valid_reset_token, is_dev_fallback_active, request_password_reset,
 )
+from services.requirements_registry import RequirementsRegistry
 
 portal_bp = Blueprint('portal', __name__)
 
@@ -468,20 +473,51 @@ def delete_project(project_id):
     return redirect(url_for('portal.projects_list'))
 
 
-# -- CLAUDE-P40-E2, Section D: Reset Project Data (administrator-only clean
-# test reset) -----------------------------------------------------------
+# -- CLAUDE-P40-E2/E2A, Section D/B: Reset Project Data (administrator-only
+# clean test reset) and reset-snapshot restoration ------------------------
+#
+# Every snapshot this module creates (a Reset's own pre-wipe copy, or a
+# Restore's own pre-restore safety copy) carries a manifest -
+# SNAPSHOT_MANIFEST_FILENAME, written inside the snapshot directory
+# itself - recording who/when/what-kind and a sha256 checksum of every
+# file, so a later restore can PROVE the snapshot it's about to use is
+# exactly what was captured, not silently corrupted or partially copied.
 
 RESET_CONFIRMATION_PHRASE = "RESET PROJECT DATA"
+RESTORE_CONFIRMATION_PHRASE = "RESTORE SNAPSHOT"
+
+# Deliberately NOT ".json" - RequirementsRegistry.list_ids() globs "*.json"
+# directly against whatever store_path it's given (see that module's own
+# comment on why ".workspace.json" needs its own exclusion), and this
+# manifest lives inside snapshot directories that get inventoried the
+# exact same way a live store does (_inventory_from_store_path below). A
+# ".json" name here would be misread as a bogus extra "project".
+SNAPSHOT_MANIFEST_FILENAME = "_snapshot_manifest.snapshot"
 
 
-def _project_data_inventory(app) -> dict:
-    """Exact counts of everything Reset Project Data would remove -
-    every Project (active or removed), and the Documents/Investigations/
-    Findings/Requirements inside them. Shown to the administrator before
-    they can type the confirmation phrase (Section D: "show exact
-    inventory")."""
-    registry = get_registry(app)
-    store = CaseWorkspaceStore(app.config["REGISTRY_STORE_PATH"])
+class SnapshotIntegrityError(Exception):
+    def __init__(self, problems: list[str]):
+        super().__init__("; ".join(problems))
+        self.problems = problems
+
+
+def _sha256_of(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as fh:
+        for chunk in iter(lambda: fh.read(65536), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _inventory_from_store_path(store_path: Path) -> dict:
+    """Exact counts of everything under an arbitrary registry store
+    directory - every Project (active or removed), and the Documents/
+    Investigations/Findings/Requirements inside them. Works identically
+    against the live store (Reset's own preview) or a snapshot's copy
+    (the snapshot-listing/restore-preview pages), since both are just
+    RequirementsRegistry/CaseWorkspaceStore-shaped directories."""
+    registry = RequirementsRegistry(str(store_path))
+    store = CaseWorkspaceStore(str(store_path))
     inventory = {"projects": 0, "documents": 0, "investigations": 0, "findings": 0, "requirements": 0}
     for project_id in registry.list_ids():
         document = registry.get(project_id)
@@ -498,6 +534,144 @@ def _project_data_inventory(app) -> dict:
     return inventory
 
 
+def _project_data_inventory(app) -> dict:
+    return _inventory_from_store_path(Path(app.config["REGISTRY_STORE_PATH"]))
+
+
+def _create_snapshot(store_path: Path, snapshot_root: Path, actor: str, kind: str) -> Path:
+    """
+    Copies the whole store_path tree into a new timestamped directory
+    under snapshot_root, then writes SNAPSHOT_MANIFEST_FILENAME inside
+    that same directory: actor/time/kind, the inventory computed once
+    at creation time, and a sha256 checksum of every real file (recorded
+    BEFORE the manifest itself is written, so the manifest never has to
+    describe its own checksum). `kind` distinguishes a Reset Project
+    Data snapshot ("reset") from a pre-restore safety snapshot
+    ("pre_restore_safety") taken automatically by _restore_snapshot -
+    both are ordinary, equally restorable snapshots; `kind` is a label
+    for the listing page, not a behavioral difference.
+    """
+    snapshot_root.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ") + "-" + uuid.uuid4().hex[:8]
+    snapshot_dir = snapshot_root / stamp
+    shutil.copytree(store_path, snapshot_dir)
+
+    checksums = {
+        str(path.relative_to(snapshot_dir).as_posix()): _sha256_of(path)
+        for path in sorted(snapshot_dir.rglob("*"))
+        if path.is_file()
+    }
+    manifest = {
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "actor": actor,
+        "kind": kind,
+        "inventory": _inventory_from_store_path(snapshot_dir),
+        "file_count": len(checksums),
+        "checksums": checksums,
+    }
+    (snapshot_dir / SNAPSHOT_MANIFEST_FILENAME).write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    return snapshot_dir
+
+
+def _verify_snapshot_integrity(snapshot_dir: Path) -> tuple[bool, list[str]]:
+    """Recomputes checksums of every file CURRENTLY in snapshot_dir and
+    compares against what its own manifest recorded at creation time -
+    Section B: "verifies the snapshot manifest and checksums before
+    restoration". A missing file, a changed file, or an unexplained
+    extra file are all reported; restoration never proceeds if this
+    returns any problems."""
+    manifest_path = snapshot_dir / SNAPSHOT_MANIFEST_FILENAME
+    if not manifest_path.exists():
+        return False, ["No manifest found for this snapshot - cannot verify integrity."]
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return False, [f"Manifest could not be read: {exc}"]
+
+    recorded = manifest.get("checksums", {})
+    current_files = {
+        str(path.relative_to(snapshot_dir).as_posix())
+        for path in snapshot_dir.rglob("*")
+        if path.is_file() and path.name != SNAPSHOT_MANIFEST_FILENAME
+    }
+
+    problems = []
+    for rel_path, expected_hash in recorded.items():
+        if rel_path not in current_files:
+            problems.append(f"Missing file: {rel_path}")
+            continue
+        if _sha256_of(snapshot_dir / rel_path) != expected_hash:
+            problems.append(f"Checksum mismatch: {rel_path}")
+    for rel_path in sorted(current_files - set(recorded.keys())):
+        problems.append(f"Unexpected extra file (not in manifest): {rel_path}")
+    return (len(problems) == 0), problems
+
+
+def _list_snapshots(app) -> list[dict]:
+    store_path = Path(app.config["REGISTRY_STORE_PATH"])
+    snapshot_root = store_path.parent / "registry_snapshots"
+    if not snapshot_root.exists():
+        return []
+    rows = []
+    for entry in snapshot_root.iterdir():
+        if not entry.is_dir():
+            continue
+        manifest_path = entry / SNAPSHOT_MANIFEST_FILENAME
+        if not manifest_path.exists():
+            # Not a manifest-bearing snapshot (a directory that predates
+            # this stage, or something unrelated left in the same
+            # parent folder) - skip rather than guess at its shape.
+            continue
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        rows.append({
+            "snapshot_id": entry.name,
+            "created_at": manifest.get("created_at"),
+            "actor": manifest.get("actor"),
+            "kind": manifest.get("kind"),
+            "inventory": manifest.get("inventory", {}),
+            "file_count": manifest.get("file_count"),
+        })
+    rows.sort(key=lambda r: r["created_at"] or "", reverse=True)
+    return rows
+
+
+def _resolve_snapshot_dir(snapshot_root: Path, snapshot_id: str) -> Optional[Path]:
+    """`snapshot_id` arrives as a raw URL segment - validated against
+    path traversal two ways (a plain substring check, and confirming
+    the resolved path actually lives inside snapshot_root) before it's
+    ever used to build a filesystem path, matching this codebase's
+    existing "never trust a raw id from the request" discipline
+    (see e.g. show_workspace's own ?source= handling)."""
+    if not snapshot_id or "/" in snapshot_id or "\\" in snapshot_id or ".." in snapshot_id:
+        return None
+    candidate = (snapshot_root / snapshot_id).resolve()
+    try:
+        candidate.relative_to(snapshot_root.resolve())
+    except ValueError:
+        return None
+    if not candidate.is_dir() or not (candidate / SNAPSHOT_MANIFEST_FILENAME).exists():
+        return None
+    return candidate
+
+
+def _lock_info(lock_path: Path) -> Optional[dict]:
+    """Section E/B: "safely handles interruption and stale duplicate-
+    submission locks" - a lock left behind by a crashed/interrupted
+    reset or restore blocks new ones (correct - never race two against
+    the same store), but must not be a silent, unexplained wall. Shows
+    how long it's been held so an administrator can tell "this is
+    normal, wait" from "this is stuck, something crashed" - clearing it
+    is a manual filesystem action (deleting one lock file), deliberately
+    not exposed as an in-app override button that would defeat the
+    guard's own purpose."""
+    if not lock_path.exists():
+        return None
+    return {"age_seconds": int(time.time() - lock_path.stat().st_mtime)}
+
+
 def _reset_project_data(app, actor: str) -> Path:
     """
     Wipes every Project's data and returns to a clean no-project state,
@@ -508,20 +682,17 @@ def _reset_project_data(app, actor: str) -> Path:
     (instance/registry/security_governance/ - password-reset and
     rate-limit state, not project content - explicitly skipped below).
 
-    Never a destructive wipe with nothing kept (Section E): the whole
-    REGISTRY_STORE_PATH tree is copied to a timestamped snapshot
-    directory first. Restoring from that snapshot is a manual filesystem
-    operation, not a governed in-app action - this stage builds the
-    recoverable snapshot itself, not an in-app snapshot browser/restore
-    UI (out of scope for a "clean test reset", see Section A's own
-    extension-points note).
+    Never a destructive wipe with nothing kept: the whole
+    REGISTRY_STORE_PATH tree is copied to a checksummed, manifest-
+    bearing snapshot via _create_snapshot first - the same snapshot
+    format _restore_snapshot below knows how to verify and restore from
+    (CLAUDE-P40-E2A, Section B - restoration is now a real, tested,
+    in-app path, not "a manual filesystem operation" as this function's
+    own docstring previously, incorrectly, claimed).
     """
     store_path = Path(app.config["REGISTRY_STORE_PATH"])
     snapshot_root = store_path.parent / "registry_snapshots"
-    snapshot_root.mkdir(parents=True, exist_ok=True)
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
-    snapshot_dir = snapshot_root / stamp
-    shutil.copytree(store_path, snapshot_dir)
+    snapshot_dir = _create_snapshot(store_path, snapshot_root, actor=actor, kind="reset")
 
     removed_entries = []
     for entry in store_path.iterdir():
@@ -543,6 +714,7 @@ def _reset_project_data(app, actor: str) -> Path:
     audit_dir.mkdir(parents=True, exist_ok=True)
     with (audit_dir / "reset_audit.jsonl").open("a", encoding="utf-8") as fh:
         fh.write(json.dumps({
+            "event": "reset",
             "actor": actor,
             "at": datetime.now(timezone.utc).isoformat(),
             "snapshot_dir": str(snapshot_dir),
@@ -550,6 +722,85 @@ def _reset_project_data(app, actor: str) -> Path:
         }) + "\n")
 
     return snapshot_dir
+
+
+def _restore_snapshot(app, snapshot_dir: Path, actor: str) -> dict:
+    """
+    CLAUDE-P40-E2A, Section B: restores the complete project-record
+    family from a verified snapshot, atomically as the filesystem
+    allows.
+
+    Never reverts security_governance/ - accounts/security state stays
+    whatever is CURRENTLY live, never the snapshot's old copy ("retains
+    accounts, security governance, configuration, credentials and
+    schema" applies to a RESTORE too, not just a Reset). Never copies
+    the snapshot's own manifest file into the live store.
+
+    Atomicity - stated honestly, not oversold: a flat-JSON-file
+    directory tree has no built-in multi-file transaction the way a
+    database does. This gets as close as the filesystem allows: the
+    complete restored tree is built in a STAGING directory first (a
+    failure while copying never touches the live store at all), then
+    swapped into place with two single-directory os.rename calls, each
+    individually atomic on the same volume. The one residual risk is a
+    crash landing in the near-zero window BETWEEN those two renames,
+    which would leave the live store path briefly missing - this is
+    "safely recoverable", not full ACID atomicity. Mitigated three ways
+    rather than eliminated: (1) a safety snapshot of the CURRENT live
+    state is taken immediately before that window even opens, so
+    whatever was live is never lost regardless of what happens next;
+    (2) the shared reset/restore lock file makes an interrupted
+    operation visibly "in progress" rather than silently appearing to
+    have succeeded; (3) manual recovery from either snapshot is always
+    a plain filesystem copy, and both are named in the audit record
+    this function writes. If a future architecture needs stronger
+    guarantees than this, that is the exact limitation to report -
+    this implementation does not claim more than the above.
+    """
+    store_path = Path(app.config["REGISTRY_STORE_PATH"])
+    snapshot_root = store_path.parent / "registry_snapshots"
+
+    ok, problems = _verify_snapshot_integrity(snapshot_dir)
+    if not ok:
+        raise SnapshotIntegrityError(problems)
+
+    safety_snapshot_dir = _create_snapshot(store_path, snapshot_root, actor=actor, kind="pre_restore_safety")
+
+    token = uuid.uuid4().hex[:8]
+    staging_dir = store_path.parent / f".{store_path.name}.restoring_{token}"
+    old_dir = store_path.parent / f".{store_path.name}.superseded_{token}"
+
+    staging_dir.mkdir(parents=True)
+    for entry in snapshot_dir.iterdir():
+        if entry.name in (SNAPSHOT_MANIFEST_FILENAME, "security_governance"):
+            continue
+        dest = staging_dir / entry.name
+        if entry.is_dir():
+            shutil.copytree(entry, dest)
+        else:
+            shutil.copy2(entry, dest)
+    # security_governance/ comes from the CURRENT live store, never the
+    # snapshot - see this function's own docstring.
+    live_security_dir = store_path / "security_governance"
+    if live_security_dir.exists():
+        shutil.copytree(live_security_dir, staging_dir / "security_governance")
+
+    os.rename(str(store_path), str(old_dir))
+    os.rename(str(staging_dir), str(store_path))
+    shutil.rmtree(old_dir, ignore_errors=True)
+
+    audit_dir = store_path / "security_governance"
+    audit_dir.mkdir(parents=True, exist_ok=True)
+    with (audit_dir / "reset_audit.jsonl").open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps({
+            "event": "snapshot_restored",
+            "actor": actor,
+            "at": datetime.now(timezone.utc).isoformat(),
+            "restored_snapshot_dir": str(snapshot_dir),
+            "safety_snapshot_dir": str(safety_snapshot_dir),
+        }) + "\n")
+
+    return {"safety_snapshot_dir": safety_snapshot_dir}
 
 
 @portal_bp.route('/admin/reset-project-data', methods=['GET', 'POST'])
@@ -563,7 +814,9 @@ def reset_project_data():
     double-clicked request sees FileExistsError and is told a reset is
     already running, rather than racing a second reset) - Section E:
     "make operations atomic or safely recoverable" /
-    "prevent duplicate submission".
+    "prevent duplicate submission". The SAME lock file also guards
+    restore_reset_snapshot below, so a reset and a restore against this
+    store can never run concurrently either.
     """
     store_path = Path(current_app.config["REGISTRY_STORE_PATH"])
     # Deliberately a sibling of store_path, not inside it - so the lock
@@ -576,11 +829,11 @@ def reset_project_data():
             'reset_project_data.html',
             inventory=_project_data_inventory(current_app),
             confirmation_phrase=RESET_CONFIRMATION_PHRASE,
-            reset_in_progress=lock_path.exists(),
+            lock_info=_lock_info(lock_path),
         )
 
     if lock_path.exists():
-        flash('A Reset is already in progress - please wait for it to finish.', 'error')
+        flash('A Reset or Restore is already in progress - please wait for it to finish.', 'error')
         return redirect(url_for('portal.reset_project_data'))
 
     typed = (request.form.get('confirmation_phrase') or '').strip()
@@ -592,12 +845,93 @@ def reset_project_data():
         fd = os.open(str(lock_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
         os.close(fd)
     except FileExistsError:
-        flash('A Reset is already in progress - please wait for it to finish.', 'error')
+        flash('A Reset or Restore is already in progress - please wait for it to finish.', 'error')
         return redirect(url_for('portal.reset_project_data'))
 
     try:
         _reset_project_data(current_app, actor=session.get('username') or 'unknown')
         flash('Project data reset - the Workspace is clean. Everything that was here was snapshotted first.', 'success')
+    finally:
+        lock_path.unlink(missing_ok=True)
+
+    return redirect(url_for('portal.projects_list'))
+
+
+@portal_bp.route('/admin/reset-project-data/snapshots')
+@admin_required
+def list_reset_snapshots():
+    """CLAUDE-P40-E2A, Section B: "lists available reset snapshots by
+    timestamp, actor and inventory" - every snapshot _create_snapshot
+    has ever written (both Reset Project Data's own, and any prior
+    restore's automatic pre_restore_safety copy), newest first."""
+    store_path = Path(current_app.config["REGISTRY_STORE_PATH"])
+    lock_path = store_path.parent / ".reset_project_data.lock"
+    return render_template(
+        'reset_snapshots.html',
+        snapshots=_list_snapshots(current_app),
+        lock_info=_lock_info(lock_path),
+    )
+
+
+@portal_bp.route('/admin/reset-project-data/snapshots/<snapshot_id>/restore', methods=['GET', 'POST'])
+@admin_required
+def restore_reset_snapshot(snapshot_id):
+    """
+    GET verifies the snapshot's own checksums, previews what restoring
+    it would replace (the CURRENT live inventory) against what it would
+    bring back (the snapshot's own recorded inventory), and shows the
+    typed-confirmation form - refused if integrity verification failed.
+    POST re-verifies (never trusts the GET-time check alone), requires
+    the confirmation phrase, and is guarded by the same lock file
+    reset_project_data uses.
+    """
+    store_path = Path(current_app.config["REGISTRY_STORE_PATH"])
+    snapshot_root = store_path.parent / "registry_snapshots"
+    lock_path = store_path.parent / ".reset_project_data.lock"
+
+    snapshot_dir = _resolve_snapshot_dir(snapshot_root, snapshot_id)
+    if snapshot_dir is None:
+        abort(404)
+
+    if request.method == 'GET':
+        try:
+            manifest = json.loads((snapshot_dir / SNAPSHOT_MANIFEST_FILENAME).read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            manifest = {}
+        ok, problems = _verify_snapshot_integrity(snapshot_dir)
+        return render_template(
+            'restore_snapshot.html',
+            snapshot_id=snapshot_id,
+            manifest=manifest,
+            integrity_ok=ok,
+            integrity_problems=problems,
+            current_inventory=_project_data_inventory(current_app),
+            confirmation_phrase=RESTORE_CONFIRMATION_PHRASE,
+            lock_info=_lock_info(lock_path),
+        )
+
+    if lock_path.exists():
+        flash('A Reset or Restore is already in progress - please wait for it to finish.', 'error')
+        return redirect(url_for('portal.restore_reset_snapshot', snapshot_id=snapshot_id))
+
+    typed = (request.form.get('confirmation_phrase') or '').strip()
+    if typed != RESTORE_CONFIRMATION_PHRASE:
+        flash(f'Type "{RESTORE_CONFIRMATION_PHRASE}" exactly to confirm - nothing was restored.', 'error')
+        return redirect(url_for('portal.restore_reset_snapshot', snapshot_id=snapshot_id))
+
+    try:
+        fd = os.open(str(lock_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        os.close(fd)
+    except FileExistsError:
+        flash('A Reset or Restore is already in progress - please wait for it to finish.', 'error')
+        return redirect(url_for('portal.restore_reset_snapshot', snapshot_id=snapshot_id))
+
+    try:
+        _restore_snapshot(current_app, snapshot_dir, actor=session.get('username') or 'unknown')
+        flash('Snapshot restored. A safety snapshot of what was live just before this was also taken.', 'success')
+    except SnapshotIntegrityError as exc:
+        flash('Snapshot failed integrity verification - nothing was restored: ' + '; '.join(exc.problems), 'error')
+        return redirect(url_for('portal.restore_reset_snapshot', snapshot_id=snapshot_id))
     finally:
         lock_path.unlink(missing_ok=True)
 

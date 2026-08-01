@@ -127,7 +127,7 @@ def _log() -> GovernanceLog:
     return GovernanceLog(current_app.config["REGISTRY_STORE_PATH"])
 
 
-def _load_workspace_or_404(project_id: str):
+def _load_workspace_or_404(project_id: str, allow_removed: bool = False):
     """
     CLAUDE-P32: the near-universal choke point every route in this file
     reaches project data through (47 of this blueprint's 50 routes
@@ -138,6 +138,22 @@ def _load_workspace_or_404(project_id: str):
     _require_visible_case's own established "don't confirm existence to
     a non-member" convention, applied one layer up from Case privacy to
     project-level access itself.
+
+    CLAUDE-P40-E2A, Section A: authorization and lifecycle are different
+    checks. An authorized (P32-passing) caller reaching a REMOVED
+    project's route is redirected here to the one tombstone view
+    (show_workspace itself, which renders "Project removed" instead of
+    the active Workspace when it detects this) rather than being allowed
+    to continue into whatever mutation/read that route was about to do -
+    this is the single choke point every child Document/Investigation
+    route already passes through, so blocking here means every one of
+    them inherits the removed state automatically, with no per-route
+    change needed. `allow_removed=True` is the deliberate, narrow
+    exception, used only by show_workspace itself (to render the
+    tombstone) and restore_project_route (the one action that must keep
+    working on a removed project). An unauthorized caller still gets the
+    existing fail-closed 404 above, unaffected by any of this - the
+    removed-state check only runs for a caller who already passed P32.
     """
     document = get_registry(current_app).get(project_id)
     if document is None:
@@ -168,6 +184,10 @@ def _load_workspace_or_404(project_id: str):
     ensure_owner_backfilled(store, workspace, _log(), known_usernames())
     if not can_access_project(workspace, session.get("username"), session.get("role") == "admin"):
         abort(404)
+
+    if workspace.removed_at and not allow_removed:
+        flash("This Project has been removed. Restore it to resume work.", "error")
+        abort(redirect(url_for("workspace.show_workspace", project_id=project_id)))
 
     return document, store, workspace
 
@@ -359,7 +379,25 @@ def _require_approval(action_class: str, description: str, project_id: str, case
 @workspace_bp.route("/projects/<project_id>/workspace")
 @login_required
 def show_workspace(project_id):
-    document, store, workspace = _load_workspace_or_404(project_id)
+    document, store, workspace = _load_workspace_or_404(project_id, allow_removed=True)
+
+    # CLAUDE-P40-E2A, Section A: a removed Project's authorized direct
+    # URL shows a restrained tombstone, never the active Workspace -
+    # returned here, before any of the active-workspace computation
+    # below runs (findings_view/active_case/etc. would be meaningless
+    # for a Project that's out of active use). Restoration is the one
+    # action offered; every other mutation an authorized user might try
+    # is already blocked one layer down, at _load_workspace_or_404
+    # itself (see that function's own docstring).
+    if workspace.removed_at:
+        return render_template(
+            "project_removed.html",
+            project_id=project_id,
+            display_name=(workspace.display_title or document.filename),
+            removed_at=workspace.removed_at,
+            removed_by=workspace.removed_by,
+            removal_reason=workspace.removal_reason,
+        )
 
     # CLAUDE-P40-E: ?source=<id> opens a document/drawing directly inside
     # the Workspace pane (Section D) - resolved only against THIS
@@ -1593,7 +1631,9 @@ def remove_project_route(project_id):
 @workspace_bp.route("/projects/<project_id>/workspace/restore", methods=["POST"])
 @login_required
 def restore_project_route(project_id):
-    _, store, workspace = _load_workspace_or_404(project_id)
+    # allow_removed=True - this is the one action a removed Project's
+    # tombstone must still be able to reach.
+    _, store, workspace = _load_workspace_or_404(project_id, allow_removed=True)
     try:
         store.restore_project(workspace, actor=_reviewer(), actor_role=session.get("role") or "", governance_log=_log())
         flash("Project restored.", "success")
@@ -2188,6 +2228,14 @@ def source_file(project_id, source_id):
     source = next((s for s in workspace.sources if s["id"] == source_id), None)
     if source is None or not source.get("file_path"):
         abort(404)
+    # CLAUDE-P40-E2A, Section A: "ordinary document-viewer and processing
+    # routes must not treat it as active" - a removed Source's own file
+    # is never served here, even to an authorized caller who somehow
+    # still has the direct URL (a stale tab, a bookmark). The file on
+    # disk is completely untouched by this - restoring the Source makes
+    # this route work again with no re-upload.
+    if source.get("removed_at"):
+        abort(404)
 
     file_path = Path(source["file_path"])
     if not file_path.exists():
@@ -2213,6 +2261,14 @@ def revise_source(project_id, source_id):
     stale)."""
     _, store, workspace = _load_workspace_or_404(project_id)
     case_id = request.form.get("case_id")
+
+    # CLAUDE-P40-E2A, Section A: "document processing routes must not
+    # treat it as active" - registering a new revision IS processing;
+    # blocked while the Source is removed, restore it first.
+    existing_source = next((s for s in workspace.sources if s["id"] == source_id), None)
+    if existing_source is not None and existing_source.get("removed_at"):
+        flash("This Source has been removed. Restore it before registering a new revision.", "error")
+        return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
 
     gate = _require_approval(
         "source_revision",

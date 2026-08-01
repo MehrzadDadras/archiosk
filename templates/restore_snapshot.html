@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% import "_macros.html" as macros %}
+
+{% block title %}Restore Snapshot &mdash; Archiosk{% endblock %}
+
+{% block content %}
+{% call macros.page_header('Restore Snapshot', subtitle='Administrator only.') %}
+    <a class="btn btn-ghost" href="{{ url_for('portal.list_reset_snapshots') }}">&larr; Back to Reset Snapshots</a>
+{% endcall %}
+
+<section class="workspace-pane">
+    <h2>Snapshot integrity</h2>
+    {% if integrity_ok %}
+    <p class="pane-note" style="color:var(--accepted-green);">
+        Verified &mdash; every file's checksum matches this snapshot's own manifest, recorded
+        {{ manifest.created_at }} by {{ manifest.actor }} ({{ manifest.kind }}).
+    </p>
+    {% else %}
+    <p class="pane-note" style="color:var(--failure-red);">
+        Integrity check failed &mdash; this snapshot cannot be restored:
+    </p>
+    <ul class="source-list">
+        {% for problem in integrity_problems %}
+        <li class="source-item">{{ problem }}</li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+</section>
+
+<section class="workspace-pane">
+    <h2>What restoring this replaces</h2>
+    <p class="pane-note">Currently live (will be moved aside into its own safety snapshot first):</p>
+    <ul class="source-list">
+        <li class="source-item">{{ current_inventory.projects }} Project(s)</li>
+        <li class="source-item">{{ current_inventory.documents }} Document(s)</li>
+        <li class="source-item">{{ current_inventory.investigations }} Investigation(s)</li>
+        <li class="source-item">{{ current_inventory.findings }} Finding(s)</li>
+        <li class="source-item">{{ current_inventory.requirements }} Requirement(s)</li>
+    </ul>
+    <p class="pane-note">Will become live again, from this snapshot:</p>
+    <ul class="source-list">
+        <li class="source-item">{{ manifest.inventory.projects }} Project(s)</li>
+        <li class="source-item">{{ manifest.inventory.documents }} Document(s)</li>
+        <li class="source-item">{{ manifest.inventory.investigations }} Investigation(s)</li>
+        <li class="source-item">{{ manifest.inventory.findings }} Finding(s)</li>
+        <li class="source-item">{{ manifest.inventory.requirements }} Requirement(s)</li>
+    </ul>
+    <p class="pane-note">
+        User accounts, security governance, application config/credentials, and the current
+        software/schema version are never replaced by this &mdash; they stay whatever is
+        currently live, not the snapshot's old copy.
+    </p>
+</section>
+
+{% if lock_info %}
+<section class="workspace-pane">
+    <p class="pane-note">
+        A Reset or Restore is already in progress (started {{ lock_info.age_seconds }}s ago) &mdash;
+        restoring is disabled until it finishes.
+    </p>
+</section>
+{% elif integrity_ok %}
+<section class="workspace-pane">
+    <h2>Confirm</h2>
+    <p class="pane-note">
+        Type <strong>{{ confirmation_phrase }}</strong> exactly to proceed.
+    </p>
+    <form method="post" action="{{ url_for('portal.restore_reset_snapshot', snapshot_id=snapshot_id) }}" class="workspace-form">
+        <input type="text" name="confirmation_phrase" placeholder="{{ confirmation_phrase }}" autocomplete="off" required>
+        <button type="submit" class="review-btn reject">Restore this Snapshot</button>
+    </form>
+</section>
+{% endif %}
+{% endblock %}
