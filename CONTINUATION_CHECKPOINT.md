@@ -1,5 +1,75 @@
 # Continuation checkpoint
 
+## 2026-08-01 — CLAUDE-P40-E2A2: durable transaction journal, automatic crash recovery, final safety gate
+
+**Commit:** `83ece12`. Full suite: 1385 passed (was 1365). Still not
+product-owner accepted.
+
+P40-E2A1 proved Reset/Restore work end-to-end but never built automatic
+recovery from an interruption - a direct code search at the start of
+this stage confirmed no journal, no PREPARED/LIVE_MOVED/etc. states,
+and no automatic recovery existed anywhere in the repository. Built now:
+
+**Journal (Section A).** `routes/portal.py`'s `_run_registry_transaction`
+is the one journal-backed executor for both Reset and Restore -
+PREPARED -> safety snapshot -> staged result built off to the side ->
+LIVE_MOVED -> STAGED_INSTALLED -> re-verified against the checksums the
+staged result was built to match -> VERIFIED -> old copy cleaned up.
+Reset no longer wipes the live registry file-by-file in place (a real
+gap - a crash mid-loop could have left a partially-wiped registry); it
+now builds an empty result and swaps it in exactly like Restore always
+did. The journal (`reset_transactions/`, a sibling of the registry,
+untouched by either rename) carries no credentials or unvalidated
+paths.
+
+**Automatic recovery (Section B).** `_recover_interrupted_transactions`
+runs at app boot (wired into `app.py`'s `create_app`, before any route
+can read the registry) and at the top of every Reset/Restore admin
+request. Ground truth is always what's actually on disk, not the
+journal's last recorded state alone - completes forward if the staged
+target verifies, rolls back to the pre-transaction copy (quarantining
+a bad installed copy rather than deleting it) if it doesn't. A
+transaction it can't resolve safely sets `REGISTRY_RECOVERY_FAILED`,
+which a new app-wide `before_request` guard fails every request closed
+against (except `/health` and static assets).
+
+**Stale locks (Section C).** The lock file now records its owner's PID,
+so recovery can tell a genuinely live process (never touched) from an
+abandoned one (auto-recovered, lock cleared once terminal). Reset and
+Restore share one lock, so they can never race each other.
+
+**Two real bugs found and fixed by live verification, not just unit
+tests (Sections D/F):**
+1. `_checksums_for_dir`'s directory walk (`Path.rglob`) silently omits
+   files past Windows' 260-char MAX_PATH from its results (unlike
+   `shutil.copytree`/`os.rename`, which the E2A1 `_win_long_path` fix
+   already covered) - a Restore's `expected_checksums` built from an
+   already-nested snapshot path silently excluded a real file, and
+   post-swap verification correctly (if confusingly) rejected the
+   transaction. Fixed via a shared `_walk_root` helper.
+2. An open file handle inside the registry blocks `os.rename()` of the
+   containing directory on Windows (PermissionError) - POSIX has no
+   such restriction. Fails safely (nothing touched yet) and recovers
+   cleanly once released.
+
+Both were caught by a real, separate isolated Flask process (its own
+port, its own temporary registry/DB) driven over real HTTP: bug #1 hit
+on the first live restore attempt; after each fix, the SAME process was
+restarted (proving automatic recovery resolves the stuck transaction
+with zero manual directory surgery) and re-driven through a clean
+reset/restore cycle to `VERIFIED`/`cleanup_done=true`, with
+byte-identical restored records confirmed via `diff`. The real
+`instance/registry` (19 projects, a whole-tree fingerprint checked
+before and after every stage of this session) was never touched -
+confirmed by direct filesystem inspection, not assumed.
+
+39 new/updated tests, including all 7 of Section E's required
+interruption points for BOTH operations with the app literally
+re-instantiated (`create_app()` called again) to simulate a process
+restart, proving recovery runs automatically with no separate step.
+
+---
+
 ## 2026-08-01 — CLAUDE-P40-E2A1: live isolated-process validation of Global Reset - found and fixed a real bug
 
 **Commit:** `a3e6d3e`. Full suite: 1365 passed (was 1364). Still not
