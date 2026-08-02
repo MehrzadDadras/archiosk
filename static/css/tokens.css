@@ -181,3 +181,54 @@
        happens to look the same as a metadata label. */
     --pressure-quiet-text: var(--text-metadata);
 }
+
+/* -- dark mode (CLAUDE-P40-VW3) -----------------------------------------
+   This file's own header above anticipated a dark theme as a SECOND
+   FILE swapping the whole <link>, on the assumption a mode is global
+   to the page. That assumption no longer holds: VW3 requires Menu,
+   Lists, Display, Toolbox, and Chat to each independently be Light,
+   Dark, or Tinted at the same time (e.g. Dark Display with Light
+   Lists). A page-wide file swap cannot express that; per-surface CSS
+   custom-property SCOPING can - see static/css/main.css's own
+   .appearance-dark rule, which redefines these same standard token
+   names locally on whichever surface's own root element carries that
+   class, so every existing component rule below (already written as
+   var(--surface-primary) etc. throughout main.css) repaints correctly
+   for free, with zero per-component changes.
+
+   Same hue family as the light palette above (~38-42deg warm neutral
+   for surfaces/borders, matching hues for the seven semantic accents)
+   with lightness inverted, not a different palette - "ink on paper"
+   becomes "paper-warm ink on dark ground," the same relationship
+   reversed. Every pairing below is verified via tools/check_contrast.py
+   against the same required-pairing list this file's light tokens are
+   held to (4.5:1 body text, 3:1 accent/badge text) - see that script's
+   own docstring for how to re-run it against a candidate file. #}
+:root {
+    --dark-canvas: #1A1814;
+    --dark-surface-primary: #25221D;
+    --dark-surface-secondary: #393328;
+    --dark-surface-hover: #494131;
+    --dark-surface-selected: #655534;
+    --dark-border: #685D45;
+    --dark-border-strong: #837454;
+    --dark-text-primary: #F0ECE6;
+    --dark-text-secondary: #D5CFC3;
+    --dark-text-metadata: #B9B1A2;
+    --dark-text-disabled: #918978;
+
+    --dark-seal-red: #E2655A;
+    --dark-seal-red-tint: #4F2421;
+    --dark-machine-blue: #6FAECD;
+    --dark-machine-blue-tint: #293D47;
+    --dark-highlight-orange: #E2905A;
+    --dark-highlight-orange-tint: #4E3422;
+    --dark-accepted-green: #7CC08A;
+    --dark-accepted-green-tint: #2D4332;
+    --dark-attention-amber: #E2A95A;
+    --dark-attention-amber-tint: #513C1F;
+    --dark-failure-red: #D97063;
+    --dark-failure-red-tint: #4B2A25;
+    --dark-risk-red: #E0735C;
+    --dark-risk-red-tint: #4D2B23;
+}

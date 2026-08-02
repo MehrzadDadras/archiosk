@@ -92,20 +92,47 @@
                     </div>
                 </details>
 
-                {# ---------------- Appearance menu (CLAUDE-P40-E3A, Section 10) ----------
-                   Applies the SAME existing presentation choice (the plain/
-                   de-tinted surface already established for Display since
-                   P40-E2B) independently to each region - never a new color,
-                   never a Project-record write, reviewer-specific
-                   localStorage like every other presentation preference on
-                   this page. #}
+                {# ---------------- Appearance menu (CLAUDE-P40-E3A, Section 10;
+                   CLAUDE-P40-VW3 replaced the single plain/tinted checkbox
+                   per surface with a real Light/Dark/Tinted matrix) --------
+                   Five independently configurable surfaces (Menu - this bar
+                   itself, plus Lists/Display/Toolbox/Chat), three mutually
+                   exclusive modes each - real radio semantics (one <input
+                   type=radio> group per row), never a checkbox pretending to
+                   be tri-state. Reviewer/device presentation state only
+                   (localStorage, keyed per surface - see this stage's own
+                   JS below), never a Project-record write. Rows ordered by
+                   the page's own visual hierarchy: Menu (top), then Lists/
+                   Display/Toolbox left-to-right (middle), then Chat
+                   (bottom). #}
                 <details class="workspace-appearance-menu" id="workspace-appearance-menu">
                     <summary class="workspace-topbar-btn">Appearance</summary>
                     <div class="workspace-appearance-options" role="group" aria-label="Appearance">
-                        <label class="workspace-appearance-option"><input type="checkbox" data-appearance-target="lists"> Lists</label>
-                        <label class="workspace-appearance-option"><input type="checkbox" data-appearance-target="display"> Display</label>
-                        <label class="workspace-appearance-option"><input type="checkbox" data-appearance-target="toolbox"> Toolbox</label>
-                        <label class="workspace-appearance-option"><input type="checkbox" data-appearance-target="chat"> Chat</label>
+                        <table class="appearance-matrix">
+                            <caption class="visually-hidden">Per-surface appearance - choose Light, Dark, or Tinted for each surface</caption>
+                            <thead>
+                                <tr>
+                                    <th scope="col"><span class="visually-hidden">Surface</span></th>
+                                    <th scope="col">Light</th>
+                                    <th scope="col">Dark</th>
+                                    <th scope="col">Tinted</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for surface_key, surface_label in [('menu', 'Menu'), ('lists', 'Lists'), ('display', 'Display'), ('toolbox', 'Toolbox'), ('chat', 'Chat')] %}
+                                <tr>
+                                    <th scope="row">{{ surface_label }}</th>
+                                    {% for mode_key, mode_label in [('light', 'Light'), ('dark', 'Dark'), ('tinted', 'Tinted')] %}
+                                    <td>
+                                        <input type="radio" name="appearance-{{ surface_key }}" id="appearance-{{ surface_key }}-{{ mode_key }}"
+                                               data-appearance-target="{{ surface_key }}" data-appearance-mode="{{ mode_key }}"
+                                               aria-label="{{ surface_label }} appearance: {{ mode_label }}">
+                                    </td>
+                                    {% endfor %}
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
                     </div>
                 </details>
                 {% endif %}
@@ -566,30 +593,63 @@
             });
         })();
 
-        // CLAUDE-P40-E3A, Section 10: Appearance menu - applies the
-        // existing plain/de-tinted-vs-tinted presentation choice
-        // independently per region. Reviewer/device presentation state
-        // only (localStorage), never a Project-record write.
+        // CLAUDE-P40-E3A, Section 10; CLAUDE-P40-VW3: Appearance menu -
+        // applies one of three modes (Light/Dark/Tinted) independently
+        // per surface, including the top Menu bar (new this stage).
+        // Reviewer/device presentation state only (localStorage, one key
+        // per surface, same key names as before), never a Project-record
+        // write - same persistence boundary VW3's own prompt requires
+        // preserving.
+        //
+        // Compatibility mapping (VW3's own required "honest mapping"
+        // from the old checkbox state): the old model stored exactly
+        // 'tinted' or 'plain' per surface (Menu had no key at all - it
+        // wasn't configurable before). 'tinted' meant, and still means,
+        // exactly the same thing, so it carries over unchanged. 'plain'
+        // (or no stored value at all, including every existing Menu
+        // reader) meant the untinted default look, which is exactly
+        // what 'light' now IS - so both map to 'light', losslessly: no
+        // reviewer's prior preference is reinterpreted as something they
+        // didn't choose. A value already in the new vocabulary (light/
+        // dark/tinted, written by this stage's own code) passes through
+        // unchanged, making the mapping idempotent on re-application.
         (function () {
             var targets = {
+                menu: document.querySelector('.workspace-topbar'),
                 lists: document.querySelector('.launcher-panel'),
                 display: document.querySelector('.app-main'),
                 toolbox: document.querySelector('.workspace-pane-toolbox'),
                 chat: document.querySelector('.chat-region'),
             };
-            document.querySelectorAll('[data-appearance-target]').forEach(function (checkbox) {
-                var key = checkbox.getAttribute('data-appearance-target');
+
+            function resolveStoredMode(stored) {
+                if (stored === 'tinted' || stored === 'dark') return stored;
+                return 'light'; // covers 'plain', null/missing, and any unrecognized value
+            }
+
+            function applyMode(el, mode) {
+                el.classList.toggle('appearance-dark', mode === 'dark');
+                el.classList.toggle('appearance-tinted', mode === 'tinted');
+            }
+
+            Object.keys(targets).forEach(function (key) {
                 var el = targets[key];
                 if (!el) return;
                 var storageKey = 'beehive:appearance:' + key;
                 var stored = null;
                 try { stored = window.localStorage.getItem(storageKey); } catch (e) { /* ignore */ }
-                var tinted = stored === 'tinted';
-                el.classList.toggle('appearance-tinted', tinted);
-                checkbox.checked = tinted;
-                checkbox.addEventListener('change', function () {
-                    el.classList.toggle('appearance-tinted', checkbox.checked);
-                    try { window.localStorage.setItem(storageKey, checkbox.checked ? 'tinted' : 'plain'); } catch (e) { /* ignore */ }
+                var mode = resolveStoredMode(stored);
+                applyMode(el, mode);
+
+                var radios = document.querySelectorAll('[data-appearance-target="' + key + '"]');
+                radios.forEach(function (radio) {
+                    radio.checked = (radio.getAttribute('data-appearance-mode') === mode);
+                    radio.addEventListener('change', function () {
+                        if (!radio.checked) return;
+                        var newMode = radio.getAttribute('data-appearance-mode');
+                        applyMode(el, newMode);
+                        try { window.localStorage.setItem(storageKey, newMode); } catch (e) { /* ignore */ }
+                    });
                 });
             });
         })();

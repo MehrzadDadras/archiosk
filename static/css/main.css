@@ -320,11 +320,30 @@ html.launcher-hidden .launcher-panel { display: none; }
 }
 .tree-leaf.launcher-new-project { color: var(--machine-blue); }
 
-/* Appearance menu (Section 10): the existing plain/tinted presentation
-   choice, applied independently per region - --surface-secondary
-   (Limestone) is the token main.css's own header comment already
-   reserves for "nav surfaces, grouped controls", so this reuses an
-   existing meaning rather than introducing a new color. */
+/* Appearance menu (CLAUDE-P40-E3A Section 10; CLAUDE-P40-VW3 replaced
+   the single plain/tinted checkbox with three independent modes per
+   surface - Light/Dark/Tinted). Light is the unmarked default -
+   identical to every rule in this file already, nothing added for it.
+   Tinted swaps just the surface's own background to --surface-secondary
+   (Limestone) - the token main.css's own header comment already
+   reserves for "nav surfaces, grouped controls", reusing an existing
+   meaning rather than introducing a new color. Dark REDEFINES the
+   standard token names locally on the surface's own root element (see
+   tokens.css's own comment on why scoping, not a file swap, is
+   required here) - every existing component rule in this file that
+   already reads var(--surface-primary)/var(--text-primary)/etc.
+   repaints correctly for free, no per-component change needed. Menu
+   (.workspace-topbar) is a newly configurable surface this stage - it
+   had no background of its own before (just a border-bottom sitting on
+   --canvas), so its own tinted rule sets one explicitly, unlike the
+   other four which already painted their own surface. The actual
+   .appearance-dark rule is defined further below (near .chat-region's
+   own rules) - deliberately AFTER every one of the five surfaces' own
+   base component rules, not here, so a test (or a future reader) doing
+   a plain textual "first rule whose selector contains .app-main" search
+   still finds each surface's real base rule, not this shared one that
+   also happens to name it as part of a compound selector. */
+.workspace-topbar.appearance-tinted { background: var(--surface-secondary); }
 .launcher-panel.appearance-tinted { background: var(--surface-secondary); }
 .launcher-identity {
     padding: 0.6rem 0.7rem 1rem;
@@ -1063,6 +1082,54 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
     z-index: 20;
     min-width: 170px;
 }
+/* CLAUDE-P40-VW3: the Light/Dark/Tinted-per-surface matrix - real
+   tabular data (row = surface, column = mode), not decoration, so a
+   real <table> with row/col headers plus each radio's own aria-label
+   (belt-and-braces: correct under table navigation AND under a plain
+   linear read). Sits inside .workspace-appearance-options above, which
+   already supplies this popover's own background/border/padding - this
+   only lays out the grid itself, compact enough that 5 rows x 3 modes
+   doesn't turn the popover into its own scrolling panel. */
+.appearance-matrix {
+    border-collapse: collapse;
+    font-size: var(--text-sm);
+}
+.appearance-matrix th,
+.appearance-matrix td {
+    padding: 0.2rem 0.4rem;
+    text-align: center;
+}
+.appearance-matrix thead th {
+    color: var(--text-metadata);
+    font-weight: 400;
+    font-size: var(--text-xs);
+}
+.appearance-matrix tbody th {
+    text-align: left;
+    font-weight: 500;
+    color: var(--text-primary);
+    padding-right: 0.6rem;
+    white-space: nowrap;
+}
+.appearance-matrix input[type="radio"] {
+    margin: 0;
+    cursor: pointer;
+}
+/* Standard visually-hidden pattern: present to assistive tech and
+   keyboard navigation, removed from normal visual flow only - never
+   `display: none`, which would also remove it from the accessibility
+   tree. */
+.visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
 .workspace-layout-option,
 .workspace-overflow-item {
     font-family: var(--font-body);
@@ -1202,6 +1269,10 @@ html.toolbox-hidden .workspace-pane-toolbox {
 }
 .app-main.appearance-tinted .workspace-pane-display {
     background: var(--surface-secondary);
+}
+.app-main.appearance-dark .workspace-pane-display {
+    background: var(--surface-primary);
+    color: var(--text-primary);
 }
 
 /* CLAUDE-P40-E3A, Section 6: dynamic multi-Display geometry - an
@@ -1685,9 +1756,62 @@ html.toolbox-hidden .workspace-pane-toolbox {
    .conversation-dock-resize-handle's own (its ::before below is already
    documented, since CLAUDE-P40-E2B, as THE one visual divider handle
    reviewers see - "the handle IS the divider"). One line, not two. */
+/* CLAUDE-P40-VW3: the shared Dark-mode rule, positioned here
+   deliberately - AFTER every one of the five surfaces' own base
+   component rules (.launcher-panel, .app-main, .workspace-topbar,
+   .workspace-pane-toolbox, and .chat-region's own rule directly
+   above), so a plain textual "first rule whose selector contains
+   .app-main" search (an existing test-helper convention - see
+   tests/test_p40e2b_flexible_workspace_frame.py's own _rule_body)
+   still finds each surface's real base rule first, not this one, even
+   though this rule's own selector list also names each of them as
+   part of a compound selector. See the Appearance-menu comment above
+   (near .workspace-topbar.appearance-tinted) for the full rationale -
+   REDEFINES the standard token names locally on whichever surface's
+   own root carries .appearance-dark, so every existing rule in this
+   file already written as var(--surface-primary)/var(--text-primary)/
+   etc. repaints correctly for free. */
+.workspace-topbar.appearance-dark,
+.launcher-panel.appearance-dark,
+.app-main.appearance-dark,
+.workspace-pane-toolbox.appearance-dark,
+.chat-region.appearance-dark {
+    --canvas: var(--dark-canvas);
+    --surface-primary: var(--dark-surface-primary);
+    --surface-secondary: var(--dark-surface-secondary);
+    --surface-hover: var(--dark-surface-hover);
+    --surface-selected: var(--dark-surface-selected);
+    --border: var(--dark-border);
+    --border-strong: var(--dark-border-strong);
+    --text-primary: var(--dark-text-primary);
+    --text-secondary: var(--dark-text-secondary);
+    --text-metadata: var(--dark-text-metadata);
+    --text-disabled: var(--dark-text-disabled);
+    --seal-red: var(--dark-seal-red);
+    --seal-red-tint: var(--dark-seal-red-tint);
+    --machine-blue: var(--dark-machine-blue);
+    --machine-blue-tint: var(--dark-machine-blue-tint);
+    --highlight-orange: var(--dark-highlight-orange);
+    --highlight-orange-tint: var(--dark-highlight-orange-tint);
+    --accepted-green: var(--dark-accepted-green);
+    --accepted-green-tint: var(--dark-accepted-green-tint);
+    --attention-amber: var(--dark-attention-amber);
+    --attention-amber-tint: var(--dark-attention-amber-tint);
+    --failure-red: var(--dark-failure-red);
+    --failure-red-tint: var(--dark-failure-red-tint);
+    --risk-red: var(--dark-risk-red);
+    --risk-red-tint: var(--dark-risk-red-tint);
+    background: var(--surface-primary);
+    color: var(--text-primary);
+}
 .chat-region.appearance-tinted,
 .chat-region.appearance-tinted .conversation-dock-panel {
     background: var(--surface-secondary);
+}
+.chat-region.appearance-dark,
+.chat-region.appearance-dark .conversation-dock-panel {
+    background: var(--surface-primary);
+    color: var(--text-primary);
 }
 /* CLAUDE-P40-E2B: the drag/keyboard-operable divider between Display
    and Chat - a real ARIA separator (draggable via
