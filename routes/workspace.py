@@ -455,6 +455,22 @@ def show_workspace(project_id):
     if directory_view not in ("overview",):
         directory_view = None
 
+    # CLAUDE-P40-VW7B: "panel" rendering - the exact same authorization,
+    # data computation, and Division-0 content this route already
+    # produces, wrapped in templates/panel_shell.html (a minimal
+    # standalone document) instead of base.html's full application
+    # shell. This is what makes "a leaf selection projects into the
+    # active Display" honest for an Investigation/Overview the same way
+    # it already was for a Document (a real file, embedded via a plain
+    # <iframe src=...>) - static/js/case_workspace.js's own
+    # ArchioskDisplay.populateDivision builds an <iframe> pointing at
+    # this same URL with &panel=1 appended, for whichever non-zero
+    # Display is currently the active target. No new route, no
+    # duplicated access-control logic: an unauthorized request to
+    # ?panel=1 fails at the exact same _load_workspace_or_404 call
+    # above that already gates every other view of this same data.
+    panel_only = request.args.get("panel") == "1"
+
     # CLAUDE-P40-E3A follow-through: every Project-level (non-case/source-
     # scoped) POST handler in this module that used to redirect back to a
     # bare show_workspace(project_id=...) - which, before this stage,
@@ -1287,6 +1303,7 @@ def show_workspace(project_id):
             }
             for s in CaseWorkspaceStore.active_sources(workspace)
         ]),
+        panel_only=panel_only,
     )
 
 

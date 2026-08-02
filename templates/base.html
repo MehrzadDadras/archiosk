@@ -225,7 +225,7 @@
                                 <a class="tree-leaf launcher-link active" data-ref="lists.project.self" href="{{ url_for('workspace.show_workspace', project_id=p.project_id) }}">{{ p.display_name }}</a>
                                 <ul class="tree-children" data-tree-open>
                                     <li class="tree-node" data-tree-node>
-                                        <a class="tree-leaf launcher-link{% if directory_view == 'overview' %} active{% endif %}" data-ref="lists.project.overview" href="{{ url_for('workspace.show_workspace', project_id=project_id, view='overview') }}">Overview</a>
+                                        <a class="tree-leaf launcher-link{% if directory_view == 'overview' %} active{% endif %}" data-ref="lists.project.overview" data-view="overview" href="{{ url_for('workspace.show_workspace', project_id=project_id, view='overview') }}">Overview</a>
                                     </li>
                                     <li class="tree-node" data-tree-node>
                                         <button type="button" class="tree-toggle launcher-link" data-tree-parent data-tree-owns="source" data-ref="lists.project.documents" aria-expanded="{{ 'true' if selected_source else 'false' }}">
@@ -241,6 +241,13 @@
                                                    is preserved here as a title tooltip rather than dropped outright. #}
                                                 <a class="tree-leaf launcher-link{% if selected_source and selected_source.id == s.id %} active{% endif %}" data-ref="lists.project.documents.leaf" href="{{ url_for('workspace.show_workspace', project_id=project_id, source=s.id) }}" data-source-id="{{ s.id }}" title="Added {{ s.added_at }}">{{ s.name }}</a>
                                             </li>
+                                            {% else %}
+                                            {# CLAUDE-P40-VW7B: a coherent empty state, matching the
+                                               pattern CLAUDE-P40-VW7's own Tasks/Tags branches already
+                                               established (Section 5's own "coherent empty state"
+                                               requirement) - Investigations/RFIs below get the same
+                                               treatment. #}
+                                            <li class="tree-node-empty"><span class="pane-note">No Documents yet.</span></li>
                                             {% endfor %}
                                         </ul>
                                     </li>
@@ -251,8 +258,10 @@
                                         <ul class="tree-children"{% if active_case %} data-tree-open{% endif %}>
                                             {% for c in visible_cases %}
                                             <li class="tree-node" data-tree-node>
-                                                <a class="tree-leaf launcher-link{% if active_case and active_case.id == c.id %} active{% endif %}" data-ref="lists.project.investigations.leaf" href="{{ url_for('workspace.show_workspace', project_id=project_id, case=c.id) }}">{{ c.title }}</a>
+                                                <a class="tree-leaf launcher-link{% if active_case and active_case.id == c.id %} active{% endif %}" data-ref="lists.project.investigations.leaf" data-case-id="{{ c.id }}" data-case-title="{{ c.title }}" href="{{ url_for('workspace.show_workspace', project_id=project_id, case=c.id) }}">{{ c.title }}</a>
                                             </li>
+                                            {% else %}
+                                            <li class="tree-node-empty"><span class="pane-note">No Investigations yet.</span></li>
                                             {% endfor %}
                                         </ul>
                                     </li>
@@ -276,8 +285,10 @@
                                                doesn't exist. #}
                                             {% for row in rfi_drafts_view %}
                                             <li class="tree-node" data-tree-node>
-                                                <a class="tree-leaf launcher-link" data-ref="lists.project.rfis.leaf" href="{{ url_for('workspace.show_workspace', project_id=project_id, case=row.draft.case_id) }}">{{ row.draft.question_text[:60] }}{% if row.draft.question_text|length > 60 %}&hellip;{% endif %}</a>
+                                                <a class="tree-leaf launcher-link{% if active_case and active_case.id == row.draft.case_id %} active{% endif %}" data-ref="lists.project.rfis.leaf" data-case-id="{{ row.draft.case_id }}" data-case-title="{{ row.case_title }}" href="{{ url_for('workspace.show_workspace', project_id=project_id, case=row.draft.case_id) }}">{{ row.draft.question_text[:60] }}{% if row.draft.question_text|length > 60 %}&hellip;{% endif %}</a>
                                             </li>
+                                            {% else %}
+                                            <li class="tree-node-empty"><span class="pane-note">No RFIs yet.</span></li>
                                             {% endfor %}
                                         </ul>
                                     </li>
@@ -461,13 +472,6 @@
                                                     <p class="pane-note" data-ref="lists.project.tools.removed-items">No removed Documents in this Project.</p>
                                                     {% endif %}
                                                 {% endcall %}
-
-                                                {% if is_admin %}
-                                                {% call macros.subdisclosure('Project Data Management', html_id='project-data-management') %}
-                                                    <p class="pane-note">Administrator only.</p>
-                                                    <a class="btn btn-ghost workspace-link" data-ref="lists.project.tools.data-management" href="{{ url_for('portal.reset_project_data') }}">Reset Project Data&hellip;</a>
-                                                {% endcall %}
-                                                {% endif %}
                                             </li>
                                         </ul>
                                     </li>
@@ -499,6 +503,23 @@
                     {% if is_admin %}
                     <li class="tree-node" data-tree-node>
                         <a class="tree-leaf launcher-link" data-ref="lists.security" href="{{ url_for('security.department_home') }}">Security</a>
+                    </li>
+                    {# CLAUDE-P40-VW7B: relocated here from the active Project's own
+                       "Project Tools" branch - routes/portal.py's reset_project_data
+                       operates on the WHOLE REGISTRY_STORE_PATH ("returns the app to
+                       a clean, no-project state", per that route's own template),
+                       not this one Project's data. Nesting it under one Project's
+                       tools misrepresented its real scope (Section 3's own
+                       "Administrative/account functions do not automatically belong
+                       inside the active Project root"); same route, same form-less
+                       link, same admin-only gate, same html_id="project-data-
+                       management" test/DOM anchor - only the position and reference
+                       id changed. #}
+                    <li class="tree-node" data-tree-node>
+                        {% call macros.subdisclosure('Project Data Management', html_id='project-data-management') %}
+                            <p class="pane-note">Administrator only &mdash; resets every Project in this deployment, not just one.</p>
+                            <a class="btn btn-ghost workspace-link" data-ref="lists.system-data-management" href="{{ url_for('portal.reset_project_data') }}">Reset Project Data&hellip;</a>
+                        {% endcall %}
                     </li>
                     {% endif %}
                 </ul>
@@ -726,30 +747,60 @@
             });
         })();
 
-        // CLAUDE-P40-E3A, Section 6: route a Document leaf click to
-        // whichever Display division is the current active target.
-        // Division 0 (the default target) keeps its ordinary real
-        // navigation untouched - window.ArchioskDisplay only exists on a
-        // Workspace page with a Display to target, and only intercepts
-        // when a NON-zero division is the active target. Clicking the
-        // Document already showing in that division clears it instead
-        // (the same "click the active leaf again to clear" rule Section 4
-        // states for Lists, applied to a targeted division).
+        // CLAUDE-P40-E3A, Section 6; CLAUDE-P40-VW7B: route a Document/
+        // Investigation/Overview leaf click to whichever Display
+        // division is the current active target. Division 0 (the
+        // default target) keeps its ordinary real navigation untouched
+        // - window.ArchioskDisplay only exists on a Workspace page with
+        // a Display to target, and only intercepts when a NON-zero
+        // division is the active target. Clicking the record already
+        // showing in that division clears it instead (the same "click
+        // the active leaf again to clear" rule Section 4 states for
+        // Lists, applied to a targeted division).
+        //
+        // CLAUDE-P40-VW7B generalized this from Documents-only (a real
+        // file, embedded via a plain <iframe src=file_url>/<img>) to
+        // also cover Investigations and Overview - neither is a static
+        // file, so their content is instead embedded via an <iframe>
+        // pointing back at this same route with &panel=1 (see
+        // routes/workspace.py's panel_only comment and
+        // templates/panel_shell.html). An RFI leaf carries the SAME
+        // data-case-id/data-case-title as the Investigation that owns
+        // it (an RFI draft has no standalone page of its own - see
+        // that leaf's own template comment) - clicking one while a
+        // non-zero Display is active projects the owning Investigation,
+        // exactly matching what its real-navigation href already does.
         (function () {
             var root = document.querySelector('[data-tree-root]');
             if (!root) return;
             root.addEventListener('click', function (e) {
-                var link = e.target.closest('a[data-source-id]');
+                var link = e.target.closest('a[data-source-id], a[data-case-id], a[data-view]');
                 if (!link || !root.contains(link)) return;
                 if (!window.ArchioskDisplay) return;
                 var target = window.ArchioskDisplay.getActiveTarget();
                 if (!target) return; // target 0: let the normal navigation happen
+
+                var kind, id, displayName;
+                if (link.hasAttribute('data-source-id')) {
+                    kind = 'source';
+                    id = link.getAttribute('data-source-id');
+                    displayName = link.textContent.trim();
+                } else if (link.hasAttribute('data-case-id')) {
+                    kind = 'case';
+                    id = link.getAttribute('data-case-id');
+                    displayName = link.getAttribute('data-case-title') || link.textContent.trim();
+                } else {
+                    kind = 'overview';
+                    id = '';
+                    displayName = 'Overview';
+                }
+
                 e.preventDefault();
-                var sourceId = link.getAttribute('data-source-id');
-                if (window.ArchioskDisplay.getDivisionSource(target) === sourceId) {
+                var current = window.ArchioskDisplay.getDivisionRecord(target);
+                if (current && current.kind === kind && current.id === id) {
                     window.ArchioskDisplay.clearDivision(target);
                 } else {
-                    window.ArchioskDisplay.populateDivision(target, sourceId);
+                    window.ArchioskDisplay.populateDivision(target, kind, id, displayName);
                 }
             });
         })();

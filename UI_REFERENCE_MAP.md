@@ -1,23 +1,42 @@
 # UI Reference Map
 
-**CLAUDE-P40-VW7A.** A stable-ID registry over the application's Menu,
-Lists, Display, Toolbox, and Chat surfaces — the traceability layer
-future stages (starting with CLAUDE-P40-VW7B) use to know what a
-control currently is, means, and does before renaming, reparenting, or
-retiring it. This document is a durable record, updated alongside the
-code, the same way `MANIFEST.md` and `CONTINUATION_CHECKPOINT.md` are.
+**CLAUDE-P40-VW7A**, updated by **CLAUDE-P40-VW7B**. A stable-ID
+registry over the application's Menu, Lists, Display, Toolbox, and
+Chat surfaces — the traceability layer this and future stages use to
+know what a control currently is, means, and does before renaming,
+reparenting, or retiring it. This document is a durable record,
+updated alongside the code, the same way `MANIFEST.md` and
+`CONTINUATION_CHECKPOINT.md` are.
+
+**VW7B in one line:** the active-Display-targeting mechanism (until
+now, Documents only — a real file, embedded via a plain `<iframe src=
+file_url>`/`<img>`) was generalized to also cover Investigations and
+Overview, via a new `?panel=1` query flag on the existing
+`workspace.show_workspace` route (no new route) and
+`templates/panel_shell.html` (a minimal standalone document
+`case_workspace.html` extends instead of `base.html` when that flag is
+set) — see the Display section below and routes/workspace.py's own
+`panel_only` comment. `lists.project.tools.data-management` was
+retired and relocated (see "Retired references") after VW7B's own
+inspection found it resets **every** Project in the deployment, not
+the active one — nesting it under one Project's own tools misrepresented
+its real scope.
 
 ## What this is, and isn't
 
-This stage is purely additive and instrumentation-only: every control
-below already existed before VW7A: nothing was renamed, moved, or
-behaviorally changed to build this registry. A `data-ref="<id>"`
-attribute was added directly on the existing element — never a new
-wrapper element, never a change to an existing `id`/class/route/href.
-`git diff` against the VW7A commit shows only `data-ref="..."`
-insertions (plus the new UI Reference Mode toggle itself and its CSS/
-JS) — confirm this before trusting any claim below that a control's
-behavior is unchanged.
+VW7A was purely additive and instrumentation-only: every control
+already existed before it; nothing was renamed, moved, or behaviorally
+changed to build this registry — `git diff` against the VW7A commit
+shows only `data-ref="..."` insertions (plus the new UI Reference Mode
+toggle itself and its CSS/JS).
+
+VW7B is a real (if bounded) behavior/structure stage, exactly what
+this registry exists to make traceable: it generalized the active-
+Display-targeting mechanism to Investigations/Overview, relocated one
+misplaced admin control, and added coherent empty states to three
+families that were missing them. Every row below states current
+behavior as of VW7B, not VW7A — where VW7B changed something, the row
+says so; where it didn't, the row is unchanged from VW7A.
 
 **Turn on UI Reference Mode** (Account menu, top-right, "UI Reference
 Mode" checkbox) to see every instrumented control's own `data-ref`
@@ -79,19 +98,20 @@ otherwise.
 | `lists.new-project` | tree-leaf `<a>` | "+ New Project" | Navigates to `portal.upload` | **Admin only** — `is_admin` | active |
 | `lists.removed-projects` | tree-leaf `<a>` | "Removed Projects" | Navigates to `portal.removed_projects` | Every authenticated page | active |
 | `lists.security` | tree-leaf `<a>` | "Security" | Navigates to `security.department_home` | **Admin only** — `is_admin` | active |
+| `lists.system-data-management` | `<a>` inside a subdisclosure | "Reset Project Data…" | Navigates to `portal.reset_project_data`. **CLAUDE-P40-VW7B:** relocated here from the active Project's own "Project Tools" branch (`lists.project.tools.data-management`, retired — see below) — the route resets `REGISTRY_STORE_PATH` in full ("returns the app to a clean, no-project state"), every Project in the deployment, not the one whose tools branch it used to sit in | **Admin only** — `is_admin` | active |
 
 ## Lists — active Project branch (`templates/base.html`, only inside the currently open Project's own row)
 
 | Reference | Element | Label | Current behavior | Auth notes | Status |
 |---|---|---|---|---|---|
 | `lists.project.self` | tree-leaf `<a>`, `active` | active Project's own display name | Navigates to its own workspace (a no-op — already there); this row is what expands into every entry below | Same as `_load_workspace_or_404` (project owner/allow-list/admin) | active |
-| `lists.project.overview` | tree-leaf `<a>` | "Overview" | Navigates to `?view=overview` — fills Display division 0 with the Project Briefing/Project State content (`display.overview`, below) | Same as workspace access | active |
-| `lists.project.documents` | tree-toggle `<button>` | "Documents (`<count>`)" | Expands/collapses; count = `active_sources\|length` | Same as workspace access | active |
-| `lists.project.documents.leaf` | tree-leaf `<a>` (pattern) | Document name | Navigates to `?source=<id>` — fills Display division 0 with Document content, syncs Toolbox to `toolbox.document` | Same as workspace access | active |
-| `lists.project.investigations` | tree-toggle `<button>` | "Investigations (`<count>`)" | Expands/collapses; count = `visible_cases\|length` | Same as workspace access, further filtered to `visible_cases` (Case-privacy-aware) | active |
-| `lists.project.investigations.leaf` | tree-leaf `<a>` (pattern) | Investigation title | Navigates to `?case=<id>` — fills Display division 0 with Investigation content, syncs Toolbox to `toolbox.investigation-findings` | Same as `visible_cases` | active |
-| `lists.project.rfis` | tree-toggle `<button>` | "RFIs (`<count>`)" | Expands/collapses; count = `rfi_drafts_view\|length` | Same as workspace access | active |
-| `lists.project.rfis.leaf` | tree-leaf `<a>` (pattern) | RFI question text (truncated) | Navigates to the **owning Investigation's** `?case=<id>` (an RFI draft has no standalone page — deliberate, documented since CLAUDE-P40-E3A) | Same as workspace access | active |
+| `lists.project.overview` | tree-leaf `<a>`, `data-view="overview"` | "Overview" | **Division 0 is the active target (default):** real navigation to `?view=overview`. **A non-zero Display is the active target (CLAUDE-P40-VW7B):** client-side-intercepted, no navigation — projects into that division via `window.ArchioskDisplay.populateDivision(target, 'overview', '', 'Overview')`, an `<iframe src="...?view=overview&panel=1">`. Either way the content is `display.overview`, below | Same as workspace access | active |
+| `lists.project.documents` | tree-toggle `<button>` | "Documents (`<count>`)" | Expands/collapses; count = `active_sources\|length`; "No Documents yet." empty state (CLAUDE-P40-VW7B) | Same as workspace access | active |
+| `lists.project.documents.leaf` | tree-leaf `<a>`, `data-source-id` (pattern) | Document name | **Division 0 active target:** real navigation to `?source=<id>`. **Non-zero Display active target:** client-side `populateDivision(target, 'source', sourceId, name)` — unchanged since VW7A, a real file embedded via `<iframe src=file_url>`/`<img>`, never the `&panel=1` mechanism. Syncs Toolbox to `toolbox.document` | Same as workspace access | active |
+| `lists.project.investigations` | tree-toggle `<button>` | "Investigations (`<count>`)" | Expands/collapses; count = `visible_cases\|length`; "No Investigations yet." empty state (CLAUDE-P40-VW7B) | Same as workspace access, further filtered to `visible_cases` (Case-privacy-aware) | active |
+| `lists.project.investigations.leaf` | tree-leaf `<a>`, `data-case-id`/`data-case-title` (pattern) | Investigation title | **Division 0 active target:** real navigation to `?case=<id>`. **Non-zero Display active target (CLAUDE-P40-VW7B, new):** client-side, no navigation — `populateDivision(target, 'case', caseId, title)`, an `<iframe src="...?case=<id>&panel=1">` rendering the exact same content Division 0 would have shown, wrapped in `panel_shell.html` instead of the full shell. Syncs Toolbox to `toolbox.investigation-findings` only when it's Division 0 (a non-zero division's iframe has no Toolbox of its own — see `templates/panel_shell.html`) | Same as `visible_cases` | active |
+| `lists.project.rfis` | tree-toggle `<button>` | "RFIs (`<count>`)" | Expands/collapses; count = `rfi_drafts_view\|length`; "No RFIs yet." empty state (CLAUDE-P40-VW7B) | Same as workspace access | active |
+| `lists.project.rfis.leaf` | tree-leaf `<a>`, `data-case-id`/`data-case-title` (pattern) | RFI question text (truncated) | Targets the **owning Investigation**, exactly like `lists.project.investigations.leaf` above — an RFI draft has no standalone page (deliberate, documented since CLAUDE-P40-E3A). CLAUDE-P40-VW7B: now also carries `active`-state (when its owning Investigation is `active_case`) and the same `data-case-id`/`data-case-title` attributes, so it participates in active-Display projection identically to an Investigations leaf | Same as workspace access | active |
 | `lists.project.chats` | tree-leaf `<a>` | "Chats" | Navigates to the bare workspace URL (no `?source=`/`?case=`) — renders Project Conversation (`chat.thread`, project scope) | Same as workspace access | active |
 | `lists.project.tasks` | tree-toggle `<button>` | "Tasks (`<total>`)" | Expands/collapses; contains `lists.project.tasks.open`/`.completed` sub-groups | Same as workspace access | active |
 | `lists.project.tasks.open` | sub-heading `<p>` | "Open (`<count>`)" | Not a toggle — plain grouping label | — | active |
@@ -103,24 +123,49 @@ otherwise.
 | `lists.project.tags.group` | sub-heading `<p>` (pattern) | tag name + color swatch + occurrence count | Not a toggle — plain grouping label; always expanded (`data-tree-open`) | — | active |
 | `lists.project.tags.leaf` | tree-leaf `<a>`/`<span>` (pattern) | quoted passage (truncated) | Navigates to `#conv-source-<...>` — same scroll/flash mechanism as Tasks. Renders unavailable when the anchor no longer resolves | Same as workspace access | active |
 | `lists.project.tags.remove` | `<button>` in a `<form>` (pattern) | "Remove" | `fetch()` POST to `remove_tag_occurrence_route`, live-patches counts/DOM without reload | Same as workspace access | active |
-| `lists.project.tools` | tree-toggle `<button>` | "Project Tools" | Expands/collapses; contains every control below | Same as workspace access (individual controls below carry their own, narrower gates) | active |
+| `lists.project.tools` | tree-toggle `<button>` | "Project Tools" | Expands/collapses; contains every control below. **CLAUDE-P40-VW7B:** no longer contains Reset Project Data — see `lists.system-data-management` above and "Retired references" below | Same as workspace access (individual controls below carry their own, narrower gates) | active |
 | `lists.project.tools.remove-project` | `<button>` in a `<form>` | "Remove Project" | POST to `remove_project_route` (Approval-Gate `confirm=yes\|no` vocabulary) | **Owner or admin** — `is_project_owner or is_admin` | active |
 | `lists.project.tools.add-document` | `<form>` inside a subdisclosure | "+ Add Documents" | POST (multipart) to `add_document_source` | Same as workspace access | active |
 | `lists.project.tools.add-text-record` | `<form>` inside a subdisclosure | "+ Add Text Record" | POST to `add_text_record_source` | Same as workspace access | active |
 | `lists.project.tools.add-external-source` | `<p>` inside a subdisclosure | "+ Add External Source" | **Not implemented** — static "not yet available" text, no form | Same as workspace access | active |
 | `lists.project.tools.removed-items` | `<ul>`/`<p>` inside a subdisclosure | "Removed Items (`<count>`)" | Lists removed Documents in this Project (or "No removed Documents…") | Same as workspace access | active |
 | `lists.project.tools.removed-items.restore` | `<button>` in a `<form>` (pattern) | "Restore Document" | POST to `restore_document_route` | Same as workspace access | active |
-| `lists.project.tools.data-management` | `<a>` inside a subdisclosure | "Reset Project Data…" | Navigates to `portal.reset_project_data` | **Admin only** — `is_admin` | active |
 
 ## Display (`templates/case_workspace.html`)
+
+**CLAUDE-P40-VW7B, the `panel_only`/`panel_shell.html` mechanism:**
+Division 0 is always the real, server-navigated page (`base.html`'s
+full shell) — unchanged. A non-zero division (1-5) that shows a
+Document embeds the real file directly (`<iframe src=file_url>`/
+`<img>`, unchanged since VW7A). A non-zero division that shows an
+Investigation or Overview instead embeds an `<iframe>` pointing back
+at the SAME `workspace.show_workspace` route with `&panel=1` appended
+(`routes/workspace.py`'s own `panel_only` flag) — `case_workspace.html`
+extends `templates/panel_shell.html` (a minimal standalone document:
+CSS links, CSRF meta + auto-inject, a `.app-main`-scoped Appearance-
+mode script, `{% block content %}`/`{% block extra_scripts %}`) instead
+of `base.html` when that flag is set, so the identical Division-0
+content renders without Menu/Lists/Toolbox/Chat chrome. No new route,
+no duplicated authorization — an unauthorized `?panel=1` request fails
+at the exact same `_load_workspace_or_404` call every other view of
+this data already goes through. Division 0's own header, Overview's
+"← Projects" link, AND the entire divisions-1-5-plus-context-menu
+block are all suppressed inside a panel (`{% if not panel_only %}`) —
+the first two because the OUTER division already provides equivalent
+chrome, the last because it is not merely redundant but actively
+recursive if left unguarded: a panel's own `case_workspace.js` instance
+would otherwise try to restore/populate its own divisions 1-5 from
+`sessionStorage`, which could itself embed another panel iframe. Caught
+by `tests/test_p40vw7b_root_system_and_projection.py`'s own structural
+assertion before ever shipping, not discovered live.
 
 | Reference | Element | Current behavior | Auth notes | Status |
 |---|---|---|---|---|
 | `display.divisions` | `#workspace-display-panel` | The whole Display surface — 1-6 divisions (VW4's independent Vertical/Horizontal axes), managed by `window.ArchioskDisplay` (`case_workspace.js`) | Same as workspace access | active |
-| `display.division` | `.display-division` (pattern — division 0 is always server-rendered/real navigation; divisions 1-5 are client-side-only slots) | Shows whichever record is currently projected into it (Investigation/Document/Overview for division 0; a Document only, via `display.division.picker`, for 1-5) | Division 0: same as workspace access. Divisions 1-5: can only ever load a Document already in `active_sources` (same authorization, enforced by `workspace.source_file`) | active |
-| `display.division.picker` | `<select>` (pattern, divisions 1-5 only) | "Open a Document here…" — populates that division client-side via `window.ArchioskDisplay.populateDivision` | Options limited to `active_sources` | active |
-| `display.division.close` | `<button>` (pattern, divisions 1-5 only) | Clears that division, shrinks the Vertical/Horizontal layout by one (VW4's deterministic shrink rule) | — | active |
-| `display.overview` | `#project-overview` | The Overview leaf's actual content: Operating Environment, Access/Settings, Needs Attention, Recent Focus, Investigation Quality, Participants, Go/No-Go, Accepted Knowledge, Instructions, Requirement Compliance, RFIs, Requirements, Key Dates, History — all consolidated under this one leaf (CLAUDE-P40-E3A, Section 5) | Same as workspace access | active |
+| `display.division` | `.display-division` (pattern — division 0 is always server-rendered/real navigation; divisions 1-5 are client-side-only slots) | Shows whichever record is currently projected into it. **CLAUDE-P40-VW7B:** divisions 1-5 can now show a Document (real file, unchanged), an Investigation, or Overview (both via the `panel_only` iframe mechanism above) — previously Documents only | Division 0: same as workspace access. Divisions 1-5: a Document can only ever be one already in `active_sources` (enforced by `workspace.source_file`); an Investigation/Overview goes through the identical `_load_workspace_or_404`/`visible_cases` checks `?panel=1` shares with every other view | active |
+| `display.division.picker` | `<select>` (pattern, divisions 1-5 only) | "Open a Document here…" — populates that division client-side via `window.ArchioskDisplay.populateDivision`. **Still Documents-only** — not extended to list Investigations this stage (a considered, deferred enhancement; the Lists-leaf-click path above is what VW7B's own prompt asked for, not this picker) | Options limited to `active_sources` | active |
+| `display.division.close` | `<button>` (pattern, divisions 1-5 only) | Clears that division (any kind — Document, Investigation, or Overview), shrinks the Vertical/Horizontal layout by one (VW4's deterministic shrink rule) | — | active |
+| `display.overview` | `#project-overview` | The Overview leaf's actual content: Operating Environment, Access/Settings, Needs Attention, Recent Focus, Investigation Quality, Participants, Go/No-Go, Accepted Knowledge, Instructions, Requirement Compliance, RFIs, Requirements, Key Dates, History — all consolidated under this one leaf (CLAUDE-P40-E3A, Section 5). Its own "← Projects" back-link is suppressed when rendered inside a panel (CLAUDE-P40-VW7B) | Same as workspace access | active |
 
 ## Toolbox (`templates/case_workspace.html`)
 
@@ -159,10 +204,13 @@ actually need to cite, not maximal coverage for its own sake.
 
 ## Retired references
 
-None yet — this is VW7A's first version of the registry. Future
-stages: when a control this map names is genuinely removed (not just
-renamed/reparented — see the ID scheme note above), move its row here
-with the stage that retired it and why, and never reuse the same
+| Reference | Retired by | Reason | Replacement |
+|---|---|---|---|
+| `lists.project.tools.data-management` | CLAUDE-P40-VW7B | Nested inside the active Project's own "Project Tools" branch, but `portal.reset_project_data` operates on the whole `REGISTRY_STORE_PATH` — every Project in the deployment, not this one. Misrepresented scope, evidenced by reading that route directly before moving anything (Section 3's own "Administrative/account functions do not automatically belong inside the active Project root") | `lists.system-data-management` (same route, same admin-only gate, same `html_id="project-data-management"` — only position and reference id changed) |
+
+Future stages: when a control this map names is genuinely removed (not
+just renamed/reparented — see the ID scheme note above), move its row
+here with the stage that retired it and why, and never reuse the same
 `data-ref` value for a different control afterward.
 
 ## Known gap, not yet fixed

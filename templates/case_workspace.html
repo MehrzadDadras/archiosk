@@ -1,4 +1,13 @@
-{% extends "base.html" %}
+{# CLAUDE-P40-VW7B: dynamic {% extends %} - a panel_only render (a
+   non-zero Display division's own <iframe> content; see
+   routes/workspace.py's panel_only comment) uses panel_shell.html, a
+   minimal standalone document, instead of base.html's full
+   Menu/Lists/Toolbox/Chat shell. Everything below this line - every
+   block, every {% if active_case %}/{% elif selected_source %}/
+   {% elif directory_view == 'overview' %} branch - is completely
+   unchanged and renders identically either way; only the ENCLOSING
+   shell differs. #}
+{% extends "panel_shell.html" if panel_only else "base.html" %}
 {% import "_macros.html" as macros %}
 
 {% block title %}Workspace &mdash; {{ document.filename }}{% endblock %}
@@ -15,11 +24,20 @@
 <div class="workspace-pane-display" id="workspace-display-panel" data-project-id="{{ project_id }}" data-ref="display.divisions">
     <div class="display-divisions" id="display-divisions" data-vertical="1" data-horizontal="1" data-count="1">
     <div class="display-division display-division-primary active" data-division="0" id="display-division-0" data-ref="display.division">
+        {# CLAUDE-P40-VW7B: suppressed inside a panel (panel_only) - the
+           OUTER division that embeds this whole document via <iframe>
+           already renders its own header/name/close button
+           (case_workspace.js's own populateDivision sets
+           .display-division-header-name to this same record's title);
+           showing a second, redundant "division 0"-shaped header inside
+           the iframe's own content would just duplicate it. #}
+        {% if not panel_only %}
         <div class="display-division-header">
             <span class="display-division-header-name">
                 {% if active_case %}{{ active_case.title }}{% elif selected_source %}{{ selected_source.name }}{% elif directory_view == 'overview' %}Overview{% endif %}
             </span>
         </div>
+        {% endif %}
 
     {# ---------------- Project overview (CLAUDE-P40-E3A, Section 5) -----------
        The product owner's own resolution of the P40-E2B1A conflict
@@ -1204,9 +1222,15 @@
        after this whole block, unchanged (see macros.conversation_dock's
        own call site). #}
     <div class="project-home">
+        {# CLAUDE-P40-VW7B: suppressed inside a panel - navigating this
+           iframe to /projects (leaving the OUTER page's own Display
+           entirely untouched) would be confusing; closing the division
+           from the outer page is the honest way to leave it. #}
+        {% if not panel_only %}
         <p class="project-home-back">
             <a href="{{ url_for('portal.projects_list') }}">&larr; Projects</a>
         </p>
+        {% endif %}
 
         {% call macros.page_header(workspace.display_title or document.filename, subtitle=workspace.display_description, subtitle_class="project-home-subtitle") %}
             <div class="project-home-controls">
@@ -1695,6 +1719,16 @@
 {% endif %}
     </div>
 
+    {# CLAUDE-P40-VW7B: everything from here through the Display context
+       menu below is multi-division chrome - meaningless (and, left
+       unguarded, actively recursive: this panel's own case_workspace.js
+       would try to restore/populate ITS OWN divisions 1-5 from
+       sessionStorage, which could itself embed another panel iframe)
+       inside a panel_only render, which is always exactly ONE record's
+       content with no divisions of its own. Suppressed as a whole,
+       matching the same {% if not panel_only %} pattern used for
+       Division 0's own header and Overview's back-link above. #}
+    {% if not panel_only %}
     {# ---------------- Additional Display divisions (CLAUDE-P40-E3A, Section 6) --
        Empty by default - static/js/case_workspace.js populates them (a
        picker choosing an active_sources entry, a Lists Document click
@@ -1765,6 +1799,7 @@
             <button type="button" class="workspace-layout-apply" id="display-context-apply" role="menuitem">Apply</button>
         </div>
     </div>
+    {% endif %}
     </div>
 
     {# CLAUDE-P40-E2B, Section D: the one data source

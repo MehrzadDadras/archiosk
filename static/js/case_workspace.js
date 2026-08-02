@@ -418,71 +418,144 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         })();
 
+        // CLAUDE-P40-VW7B: {kind, id, displayName} per open division, not
+        // a bare source id - generalized once Investigations/Overview
+        // joined Documents as projectable record kinds (see
+        // populateDivision below). Backward-compatible: a plain string
+        // entry from a session saved before this stage is treated as
+        // {kind:'source', id: <string>} on restore, the same "honest
+        // mapping, no reinterpretation" pattern VW4's own
+        // normalizeStoredLayout already established for a different
+        // stored shape.
         function saveOpenDivisions() {
             const open = [];
             for (let i = 1; i < MAX_DISPLAY_DIVISIONS; i++) {
                 const division = document.getElementById(`display-division-${i}`);
-                if (division && division.dataset.sourceId) open.push(division.dataset.sourceId);
+                if (division && division.dataset.kind) {
+                    open.push({
+                        kind: division.dataset.kind,
+                        id: division.dataset.recordId || '',
+                        displayName: division.dataset.displayName || '',
+                    });
+                }
             }
             try { window.sessionStorage.setItem(openDivisionsKey, JSON.stringify(open)); } catch (e) { /* ignore */ }
         }
 
-        function promoteDivision(sourceId) {
-            // Division 0 is about to become this Document (a real
-            // navigation - the only honest way for Toolbox to follow
-            // "the active division" in a server-rendered page) -
-            // preserve every OTHER currently-open division across it.
-            const open = [];
+        // CLAUDE-P40-VW7B: which Lists leaves this function itself most
+        // recently marked .active for a non-zero division's content -
+        // tracked separately so clearing/repopulating a division can
+        // safely remove exactly those, never a leaf's own server-
+        // rendered .active state (division 0's real selection, from the
+        // page's own navigation - untouched here under any
+        // circumstance). Section 7: "Lists active-state communication
+        // must remain understandable when several Displays show
+        // different items" - every leaf whose record is CURRENTLY SHOWN
+        // in ANY division (0 through 5) reads as active, not only the
+        // one division 0 or the active target happens to hold.
+        let clientManagedActiveLeaves = [];
+        function cssEscapeValue(value) {
+            return (window.CSS && CSS.escape) ? CSS.escape(value) : String(value).replace(/["\\]/g, '\\$&');
+        }
+        function syncListsActiveState() {
+            const listsRoot = document.querySelector('[data-tree-root]');
+            if (!listsRoot) return;
+            clientManagedActiveLeaves.forEach((el) => el.classList.remove('active'));
+            clientManagedActiveLeaves = [];
             for (let i = 1; i < MAX_DISPLAY_DIVISIONS; i++) {
                 const division = document.getElementById(`display-division-${i}`);
-                if (division && division.dataset.sourceId && division.dataset.sourceId !== sourceId) {
-                    open.push(division.dataset.sourceId);
-                }
+                if (!division || !division.dataset.kind) continue;
+                const kind = division.dataset.kind;
+                const id = division.dataset.recordId || '';
+                const selector = kind === 'source' ? `a[data-source-id="${cssEscapeValue(id)}"]`
+                    : kind === 'case' ? `a[data-case-id="${cssEscapeValue(id)}"]`
+                    : 'a[data-view="overview"]';
+                listsRoot.querySelectorAll(selector).forEach((el) => {
+                    if (!el.classList.contains('active')) {
+                        el.classList.add('active');
+                        clientManagedActiveLeaves.push(el);
+                    }
+                });
             }
-            try { window.sessionStorage.setItem(openDivisionsKey, JSON.stringify(open)); } catch (e) { /* ignore */ }
-            const url = new URL(window.location.href);
-            url.searchParams.set('source', sourceId);
-            url.searchParams.delete('case');
-            window.location.href = url.toString();
         }
 
         function clearDivision(divisionIndex) {
             const division = document.getElementById(`display-division-${divisionIndex}`);
             if (!division) return;
             division.classList.remove('display-division-populated', 'active');
-            delete division.dataset.sourceId;
+            delete division.dataset.kind;
+            delete division.dataset.recordId;
+            delete division.dataset.displayName;
             const contentEl = division.querySelector('.display-division-content');
             if (contentEl) { contentEl.innerHTML = ''; contentEl.hidden = true; }
             const picker = division.querySelector('.display-division-picker');
             if (picker) picker.value = '';
             saveOpenDivisions();
+            syncListsActiveState();
         }
 
-        function populateDivision(divisionIndex, sourceId, persist) {
+        // Mirrors routes/workspace.py's own ?case=/?view=overview
+        // vocabulary exactly - &panel=1 is the one addition (see that
+        // route's own panel_only comment and templates/panel_shell.html).
+        function buildPanelUrl(kind, id) {
+            const url = new URL(window.location.href);
+            url.search = '';
+            if (kind === 'case') url.searchParams.set('case', id);
+            else if (kind === 'overview') url.searchParams.set('view', 'overview');
+            url.searchParams.set('panel', '1');
+            return url.toString();
+        }
+
+        // CLAUDE-P40-VW7B: generalized from Documents-only to also
+        // project Investigations/Overview - a Document is a real file
+        // (embedded via a plain <img>/<iframe src=file_url>, unchanged
+        // below); an Investigation/Overview is not, so its content is
+        // instead embedded via an <iframe> pointing back at this same
+        // Workspace route with &panel=1, rendering the exact same
+        // Division-0 content this page already knows how to show, just
+        // wrapped in panel_shell.html instead of the full application
+        // shell (see routes/workspace.py's panel_only comment).
+        function populateDivision(divisionIndex, kind, id, displayName, persist) {
             const division = document.getElementById(`display-division-${divisionIndex}`);
-            const source = sourcesById[sourceId];
-            if (!division || !source) return;
-
+            if (!division) return;
             const nameEl = division.querySelector('.display-division-header-name');
-            if (nameEl) nameEl.textContent = source.name;
-
             const contentEl = division.querySelector('.display-division-content');
-            contentEl.textContent = '';
-            contentEl.hidden = false;
-            if (source.kind === 'drawing') {
-                const img = document.createElement('img');
-                img.src = source.file_url;
-                img.alt = source.name;
-                contentEl.appendChild(img);
-            } else {
+            if (!contentEl) return;
+
+            if (kind === 'source') {
+                const source = sourcesById[id];
+                if (!source) return;
+                displayName = source.name;
+                contentEl.textContent = '';
+                if (source.kind === 'drawing') {
+                    const img = document.createElement('img');
+                    img.src = source.file_url;
+                    img.alt = source.name;
+                    contentEl.appendChild(img);
+                } else {
+                    const frame = document.createElement('iframe');
+                    frame.src = source.file_url;
+                    frame.title = source.name;
+                    contentEl.appendChild(frame);
+                }
+            } else if (kind === 'case' || kind === 'overview') {
+                contentEl.textContent = '';
                 const frame = document.createElement('iframe');
-                frame.src = source.file_url;
-                frame.title = source.name;
+                frame.src = buildPanelUrl(kind, id);
+                frame.title = displayName || (kind === 'overview' ? 'Overview' : '');
                 contentEl.appendChild(frame);
+            } else {
+                return;
             }
+
+            if (nameEl) nameEl.textContent = displayName || '';
+            contentEl.hidden = false;
             division.classList.add('display-division-populated');
-            division.dataset.sourceId = sourceId;
+            division.dataset.kind = kind;
+            division.dataset.recordId = id || '';
+            division.dataset.displayName = displayName || '';
             if (persist !== false) saveOpenDivisions();
+            syncListsActiveState();
         }
 
         document.querySelectorAll('.display-division-picker').forEach((picker) => {
@@ -548,11 +621,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
         window.ArchioskDisplay = {
             getActiveTarget: () => activeTarget,
-            populateDivision: (index, sourceId) => populateDivision(index, sourceId, true),
+            // CLAUDE-P40-VW7B: generalized from (index, sourceId) to
+            // (index, kind, id, displayName) - kind is 'source'
+            // (Documents, unchanged real-file embedding) or 'case'/
+            // 'overview' (Investigations/Overview, embedded via the new
+            // &panel=1 iframe route - see populateDivision's own
+            // comment above).
+            populateDivision: (index, kind, id, displayName) => populateDivision(index, kind, id, displayName, true),
             clearDivision: (index) => clearDivision(index),
-            getDivisionSource: (index) => {
+            getDivisionRecord: (index) => {
                 const division = document.getElementById(`display-division-${index}`);
-                return division ? division.dataset.sourceId : undefined;
+                if (!division || !division.dataset.kind) return undefined;
+                return { kind: division.dataset.kind, id: division.dataset.recordId || '' };
             },
         };
 
@@ -645,11 +725,12 @@ document.addEventListener('DOMContentLoaded', () => {
             primaryNameEl.setAttribute('aria-label', `${primaryNameEl.textContent.trim()} (active division)`);
         }
 
-        // Restore whatever was open before the last navigation - a
-        // promotion (or any other navigation within this Project) must
-        // not silently lose the rest of a split view someone was
-        // actively using. Presentation state only (sessionStorage) -
-        // never a Project/Document write (Section 6's boundary).
+        // Restore whatever was open before the last navigation or
+        // refresh (Section 6.7/6.8 - "restore the same projection") -
+        // any real navigation within this Project must not silently
+        // lose the rest of a split view someone was actively using.
+        // Presentation state only (sessionStorage) - never a Project/
+        // Document write (Section 6's boundary).
         let storedLayout = null;
         try { storedLayout = JSON.parse(window.localStorage.getItem(layoutKey) || 'null'); } catch (e) { /* ignore */ }
         const normalizedLayout = normalizeStoredLayout(storedLayout);
@@ -661,8 +742,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
         let savedOpen = [];
         try { savedOpen = JSON.parse(window.sessionStorage.getItem(openDivisionsKey) || '[]'); } catch (e) { /* ignore */ }
-        savedOpen.forEach((sourceId, idx) => {
-            if (idx < MAX_DISPLAY_DIVISIONS - 1 && sourcesById[sourceId]) populateDivision(idx + 1, sourceId, false);
+        savedOpen.forEach((entry, idx) => {
+            if (idx >= MAX_DISPLAY_DIVISIONS - 1) return;
+            // Backward compatibility: a plain string entry, saved by a
+            // session from before CLAUDE-P40-VW7B generalized this
+            // beyond Documents, is a bare source id - same "honest
+            // mapping, no reinterpretation" pattern VW4's own
+            // normalizeStoredLayout already established for a
+            // different stored shape.
+            const normalized = typeof entry === 'string' ? { kind: 'source', id: entry, displayName: '' } : entry;
+            if (!normalized || !normalized.kind) return;
+            if (normalized.kind === 'source') {
+                if (sourcesById[normalized.id]) populateDivision(idx + 1, 'source', normalized.id, sourcesById[normalized.id].name, false);
+            } else if (normalized.kind === 'case' || normalized.kind === 'overview') {
+                populateDivision(idx + 1, normalized.kind, normalized.id, normalized.displayName, false);
+            }
         });
     })();
 

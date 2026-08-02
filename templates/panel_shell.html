@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}Archiosk{% endblock %}</title>
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/tokens.css') }}?v={{ static_version }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v={{ static_version }}">
+    <script>
+        {# CLAUDE-P40-VW7B: templates/base.html's own pre-paint script has
+           three concerns (Lists hidden, Toolbox hidden, UI Reference
+           Mode) - only the third applies here, since this document has
+           no Lists/Toolbox of its own (it is ONLY ever the content of a
+           non-zero Display division, embedded via <iframe>, for a
+           record kind - Investigation/Overview - that isn't a real
+           file the way a Document is; see routes/workspace.py's
+           panel_only comment and case_workspace.js's own
+           ArchioskDisplay.populateDivision for how it gets here). #}
+        try {
+            if (window.localStorage.getItem('beehive:ui-reference-mode') === 'on') {
+                document.documentElement.classList.add('ui-reference-mode-active');
+            }
+        } catch (e) { /* localStorage unavailable - default to off */ }
+    </script>
+</head>
+<body>
+    <div class="app-main">
+        <main>
+            {% with flashed = get_flashed_messages(with_categories=true) %}
+            {% if flashed %}
+            <div class="flash-stack">
+                {% for category, message in flashed %}
+                <div class="flash-message flash-{{ category }}">{{ message }}</div>
+                {% endfor %}
+            </div>
+            {% endif %}
+            {% endwith %}
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+
+    <script>
+        {# CLAUDE-P40-VW7B: this panel is always the content of exactly
+           one Display division - only .app-main's own appearance mode
+           is relevant here (there is no Menu/Lists/Toolbox/Chat surface
+           inside an iframe), so this reads the SAME
+           beehive:appearance:display key base.html's own five-surface
+           script already writes, rather than duplicating that whole
+           script for four surfaces that don't exist in this document. #}
+        (function () {
+            var el = document.querySelector('.app-main');
+            if (!el) return;
+            var stored = null;
+            try { stored = window.localStorage.getItem('beehive:appearance:display'); } catch (e) { /* ignore */ }
+            var mode = (stored === 'tinted' || stored === 'dark') ? stored : 'light';
+            el.classList.toggle('appearance-dark', mode === 'dark');
+            el.classList.toggle('appearance-tinted', mode === 'tinted');
+        })();
+    </script>
+    <script>
+        {# CLAUDE-P27-B's own CSRF auto-inject, duplicated rather than
+           shared - this codebase's established convention is one
+           inline script per template, not a factored-out partial for a
+           single small block (see base.html's own comment on this same
+           script). Needed here because this panel's content can
+           include real POST forms (Investigation discussion replies,
+           drawing-source uploads, etc.) with no other page to inherit
+           the hidden csrf_token field from. #}
+        (function () {
+            var meta = document.querySelector('meta[name="csrf-token"]');
+            if (!meta) return;
+            var token = meta.getAttribute('content');
+            document.querySelectorAll('form').forEach(function (form) {
+                if (form.method && form.method.toLowerCase() !== 'post') return;
+                if (form.querySelector('input[name="csrf_token"]')) return;
+                var input = document.createElement('input');
+                input.type = 'hidden';
+                input.name = 'csrf_token';
+                input.value = token;
+                form.appendChild(input);
+            });
+        })();
+    </script>
+    {% block extra_scripts %}{% endblock %}
+</body>
+</html>
