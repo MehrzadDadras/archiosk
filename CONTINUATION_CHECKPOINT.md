@@ -1,5 +1,94 @@
 # Continuation checkpoint
 
+## 2026-08-02 — CLAUDE-P40-VW7A: left Lists/Menu/Display/Toolbox/Chat UI reference registry
+
+**Commits:** `fd9044e` (implementation), `cbccadf` (tests). Starting
+state was `62919ba` (the P40-VW7 checkpoint-correction commit) - HEAD
+and `origin/main` verified equal beforehand, tree clean except the
+pre-existing untracked
+`tests/fixtures/nreocrc/_lab_instance_scratch_002/`. Full suite: 1768
+passed, 0 failed (was 1745; 27 net new). **No product-owner acceptance
+seal recorded.**
+
+**Why this stage exists**: CLAUDE-P40-VW7B's own prompt assumed a
+"CLAUDE-P40-VW7A UI-reference registry/map" already existed from a
+prior stage - it did not. Verified directly (`git log --all` for any
+VW7A commit, a repo-wide search for a registry file or `data-ref`-
+style attribute) before touching anything, surfaced the discrepancy,
+and asked how to proceed rather than silently fabricating a "VW7A
+already happened" story or guessing at reference ids while
+implementing VW7B's much larger scope. Product owner chose: build
+VW7A for real, as its own bounded, committed stage, then run VW7B
+against it - this entry is that stage.
+
+**What VW7A is**: purely additive instrumentation, zero behavior
+change. Every family/leaf-pattern/action across Menu, Lists, Display,
+Toolbox, and Chat gained a stable `data-ref="<surface>.<family>..."`
+attribute directly on its existing element - never a new wrapper,
+never a route/class/behavior change. `UI_REFERENCE_MAP.md` (new,
+repo-root, alongside `MANIFEST.md`/`CONTINUATION_CHECKPOINT.md`) is
+the central registry: 55 reference ids, one row each, documenting
+current element/label/behavior/authorization notes/status
+(active/retired). A new "UI Reference Mode" toggle (Account menu, off
+by default, `localStorage`-persisted like the existing risk-layer/
+history-full toggles) overlays each `data-ref` value as a small CSS
+badge (`content: attr(data-ref)` - no new JS needed to read it) for
+live cross-checking against the registry.
+
+**Design choices worth remembering**:
+- `data-ref` identifies a KIND of control, not one instance - a
+  repeating pattern (a Document leaf, a Task row) shares one value
+  across every rendered instance; the existing per-instance attributes
+  (`data-source-id`, `data-task-id`, an `href`) still disambiguate
+  which one, unchanged.
+- Deliberately NOT instrumented: per-instance content inside an
+  already-referenced family (a single Finding card, a single
+  Appearance-matrix radio) - proportional coverage for what VW7B and
+  beyond actually need to cite, not maximal coverage for its own sake;
+  documented explicitly in `UI_REFERENCE_MAP.md` itself so this reads
+  as a stated boundary, not a gap.
+- The badge's z-index (100) deliberately sits one tier above VW7's own
+  Add Tag/Make Task dialogs (80, previously the file's own claimed
+  ceiling) - a debug/QA aid must stay visible even while inspecting a
+  control inside an open dialog. `tests/test_p40vw6_theme_correction.py`
+  updated accordingly (see below) - this is the second time that
+  file's "global max z-index" invariant has needed updating as new,
+  legitimately-higher overlays were added; a future stage introducing
+  a THIRD new overlay tier should expect the same.
+- The badge's font-family reuses `--font-mono` (a technical dot-path
+  id string is exactly IBM Plex Mono's reserved register per
+  `tokens.css`'s own doctrine, the same class `.finding-provenance`/
+  `.region-status` already occupy) and its font-size uses the existing
+  `--text-2xs` token (11.2px) specifically to clear this app's own
+  11px legibility floor - an initial `0.62rem` value failed that floor
+  and was corrected before committing, not discovered after.
+
+**Test-infrastructure note**: six pre-existing tests failed on the
+first full-suite run after implementation - all six were either a
+brittle exact-string/exact-attribute-order assertion broken by an
+inserted (harmless) `data-ref` attribute, or a z-index/font-mono-count
+invariant that genuinely needed updating for the same legitimate
+reasons above. None were regressions; each was fixed by updating the
+test's own selector/expected-count to the new, still-correct reality
+(same pattern this repo's CLAUDE.md already documents for the font-
+mono/wordmark tests, and the same pattern VW7 itself used once for the
+popup-stacking test). Full list: `test_global_search_and_header.py`
+(brand-lockup selector, font-mono count 2→3),
+`test_p40e1a_single_dock_and_terminology.py` and
+`test_projects_directory_redesign.py` (two Lists-toggle/leaf exact-
+string matches), `test_p40vw6_theme_correction.py` (retired the
+"conv-dialog is the global max" claim, added the badge-is-now-the-max
+assertion in its place).
+
+**Remaining/uncertain**: no real-browser walkthrough performed (no
+browser-automation tool connected in this environment). `STATIC_VERSION`
+bumped to 36 in `.env` (git-ignored) and the dev-server reloader chain
+(4 accumulated processes, same accumulation pattern the `restart-app`
+skill exists for) killed and restarted; verified serving `main.css?v=36`.
+
+**Next**: CLAUDE-P40-VW7B (Left Lists Root System and Active-Display
+Projection Cleanup) proceeds from here, against this registry.
+
 ## 2026-08-02 — CLAUDE-P40-VW7: project-scoped conversation Tags and Tasks
 
 **Commits:** `3457c9f` (implementation), `a2715fe` (tests), `0651c91`
