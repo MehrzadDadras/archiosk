@@ -1323,6 +1323,16 @@ html.toolbox-hidden .workspace-pane-toolbox {
     z-index: 40;
     min-width: 190px;
 }
+/* CLAUDE-P40-VW1: an author-origin class selector of equal specificity
+   to the UA stylesheet's `[hidden] { display: none }` always wins the
+   cascade regardless of source order, so `display: flex` above silently
+   defeated the JS-toggled `hidden` attribute and left the menu
+   permanently visible. The top-bar menus (.workspace-layout-menu etc.)
+   never hit this because they're native <details> disclosure widgets,
+   not a plain hidden-attribute toggle. */
+.display-context-menu[hidden] {
+    display: none;
+}
 .display-context-item {
     font-family: var(--font-body);
     font-size: 0.82rem;
