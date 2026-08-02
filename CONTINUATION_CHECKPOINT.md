@@ -1,5 +1,69 @@
 # Continuation checkpoint
 
+## 2026-08-02 — CLAUDE-P40-E3A-QA: browser-grounded layout reconciliation
+
+**Commit:** `2eb23b4`. Full suite: 1507 passed (was 1491). Not yet
+product-owner accepted. Starting state was `ee271e6` (P40-E3A's own
+checkpoint commit).
+
+Product owner opened the real application in a real browser for the
+first time this stage and **approved the four-zone chassis direction**
+(top bar / recursive Lists / Display+Toolbox / full-width Chat) - but
+flagged concrete gaps between P40-E3A's implementation and the
+reviewed prototype. Every flag traced to a real, confirmed repository
+cause, not a cosmetic guess:
+
+- RFIs branch disappearing at zero drafts - the only one of four
+  sibling branches gated on non-empty content; made unconditional.
+- Chat "visually heavy": two simultaneous Compact/Expanded buttons
+  replaced by one state-naming toggle; retired "planned, not available
+  yet" disclosure line removed (Section 13 already documents that
+  scope, a runtime repeat was clutter); empty-history state now
+  centers instead of leaving a bare gap; **three** stacked divider
+  lines above the resize handle found and reduced to one (this
+  stage's own new `.chat-region` border duplicated the handle's
+  already-documented divider, and `.conversation-dock-panel` was never
+  exempted from the generic `.accordion-section` border every other
+  caller already is).
+- Toolbox "visually heavy... project-level controls" bleeding into
+  contextual views - Add a Document/Removed Items/Project Data
+  Management used to render unconditionally below whatever was
+  selected; scoped to the no-selection state only.
+- "Beige/default tinted surfaces" - `.workspace-pane-toolbox` never
+  got a default background in this stage's own earlier rewrite,
+  letting the page's warm `--canvas` bleed straight through; now
+  matches Lists/Display's own plain `--surface-primary` default.
+- Context-menu position now clamps to the viewport; `.panel-divider`
+  given an explicit low z-index so it can never paint above an
+  overlay.
+
+Independently audited (forked, read the real `git diff`, not the
+implementer's own prior self-report) the ~135 pre-existing test
+changes from the P40-E3A commit against a 5-bucket classification: no
+weakened authorization/persistence/provenance/privacy/legacy-
+compatibility invariant found. Top bar and the six-division ceiling
+(explicitly verified, not reconsidered, per this stage's own
+instruction) were already compliant.
+
+3 pre-existing tests updated to reflect the corrections above; 16 new
+focused tests added (`tests/test_p40e3a_qa_reconciliation.py`). One
+pre-existing, low-frequency flake noted honestly, not hidden or
+silently patched: `StableUrlRestorationTests::
+test_navigating_away_and_back_via_fresh_requests_restores_identical_state`
+failed in 2 of 5 full-suite runs today, always passed in isolation or
+a partial run replaying the same prior order; its own test body is
+unchanged since before P40-E3A - a pre-existing, environment-scale
+flake, not a regression from this stage, left as-is rather than
+weakened.
+
+No real browser/screenshot tool exists in this environment - fixes
+came from direct code inspection against the product owner's specific
+observations, verified structurally (CSS/JS source assertions,
+server-rendered HTML), not a rendered window. STATIC_VERSION 28 -> 29
+(`main.css`, `case_workspace.js`, `_macros.html` all changed);
+dev-server chain restarted and reverified serving it. P40-E3B and P41
+not started.
+
 ## 2026-08-01 — CLAUDE-P40-E3A: numbered prototype layout transfer and interface reconciliation
 
 **Commit:** `484a171`. Full suite: 1491 passed (was 1465). Not yet
