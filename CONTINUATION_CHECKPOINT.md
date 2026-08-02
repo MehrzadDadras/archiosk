@@ -1,5 +1,50 @@
 # Continuation checkpoint
 
+## 2026-08-02 — CLAUDE-P40-E3A-F1-QA-CLOSE: Stable URL Restoration flake closed
+
+**Seal commit:** (this checkpoint commit itself). Starting state was
+`e67e048` (P40-E3A-F1's own checkpoint commit) - HEAD and `origin/main`
+verified equal before recording this seal; working tree clean except
+the pre-existing, unrelated untracked
+`tests/fixtures/nreocrc/_lab_instance_scratch_002/`.
+
+**The product owner accepts the P40-E3A-F1 correction**, on the basis
+of an independent review (fresh reviewer context, no prior involvement
+in the fix) that classified it ACCEPT: read the actual installed
+`flask_wtf`/`itsdangerous` source and independently reproduced the
+timestamped-re-signing mechanism live; proved the companion CSRF-
+secret-stability assertion load-bearing by a reversible local break
+(then fully reverted, confirmed via empty `git diff`); confirmed the
+diff touches exactly `tests/test_p40e2b1a_recursive_projection.py` and
+`CONTINUATION_CHECKPOINT.md`, nothing else; ran the targeted test (17
+passed) and the full suite independently twice (1507 passed, 0 failed,
+both times). No material concern remained.
+
+**This seal closes one specific, narrow item - it does not re-open or
+broaden anything else already recorded:**
+
+- The Stable URL Restoration flake itself (`StableUrlRestorationTests::
+  test_navigating_away_and_back_via_fresh_requests_restores_identical_state`)
+  is now closed - root-caused, fixed, and independently verified.
+- P40-E3A and P40-E3A-QA remain conditionally accepted exactly as
+  previously recorded (P40-E3A-QA-CLOSE, `1c56999`) - this seal does
+  not upgrade that to unconditional acceptance.
+- The rendered-detail differences from the independently developed
+  numbered prototype, recorded in that same P40-E3A-QA-CLOSE entry,
+  remain deferred to a future visual-reconciliation round - untouched
+  by this seal.
+- The E3A test-change audit's category counts remain recorded as
+  approximate (~89-135, methodology gap already documented) - this
+  seal does not attempt to make them exact.
+
+No application code, test, template, CSS, JavaScript, schema, or
+project/document data was changed to record this seal.
+`MANIFEST.md` was not updated - it does not catalogue individual
+`tests/*.py` files (its own stated scope) or continuation-checkpoint
+content, so nothing in it was stale as a result of this seal; no new
+documentation convention was introduced. P40-E3B and P41 remain not
+started.
+
 ## 2026-08-02 — CLAUDE-P40-E3A-F1: StableUrlRestoration flake root-caused and fixed
 
 **Commit:** `97e51f9`. Full suite: 1507 passed (unchanged count - test-only
