@@ -440,10 +440,19 @@ class DivisionAuthorizationTests(_BaseTestCase):
         body = client.get(f"/projects/{self.project_id}/workspace?source={source_id}").get_data(as_text=True)
         self.assertIn("Remove Document", body)
 
-    def test_promoting_a_division_via_navigation_rebinds_toolbox(self):
-        js = _JS_PATH.read_text(encoding="utf-8")
-        self.assertIn("url.searchParams.set('source', sourceId)", js)
-        self.assertIn("function promoteDivision", js)
+    # test_promoting_a_division_via_navigation_rebinds_toolbox removed
+    # (CLAUDE-P40-VW7B): it only ever asserted that promoteDivision's
+    # own source text was present in the file, not that it ran -
+    # confirmed via a repo-wide search that promoteDivision had zero
+    # callers anywhere (templates or JS), a leftover from before real
+    # <a href> navigation took over Division 0's own toolbox-rebinding
+    # duty, which test_toolbox_binds_to_the_selected_source_query_param
+    # directly above already verifies against a real request. Removed
+    # as genuinely dead code (VW7B's own "remove redundant... paths
+    # only when safe, compatible, and fully evidenced" allowance) while
+    # generalizing populateDivision/clearDivision to also project
+    # Investigations/Overview - see static/js/case_workspace.js's own
+    # comment at populateDivision.
 
 
 # ---------------------------------------------------------------------------

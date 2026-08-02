@@ -399,10 +399,17 @@ class PreservationTests(_BaseTestCase):
             self.assertIn('data-horizontal="1"', body)
 
     def test_active_target_routing_untouched(self):
+        # CLAUDE-P40-VW7B: populateDivision's own signature is no longer
+        # (index, sourceId) - it generalized to (index, kind, id,
+        # displayName) so Investigations/Overview can also project into
+        # a Display division, not only Documents (see that function's
+        # own comment in case_workspace.js). The invariant this test
+        # actually protects - "one active-target mechanism, not two
+        # competing ones" - still holds and is asserted directly.
         js = _JS_PATH.read_text(encoding="utf-8")
         self.assertIn("window.ArchioskDisplay = {", js)
         self.assertIn("getActiveTarget: () => activeTarget,", js)
-        self.assertIn("populateDivision: (index, sourceId) => populateDivision(index, sourceId, true),", js)
+        self.assertIn("populateDivision: (index, kind, id, displayName) => populateDivision(index, kind, id, displayName, true),", js)
 
     def test_six_divisions_still_server_rendered_zero_through_five(self):
         client = self._client_as("vw4_owner", 1)

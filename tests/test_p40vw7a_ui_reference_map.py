@@ -214,18 +214,24 @@ class RootFamilyReferencePresenceTests(_BaseTestCase):
 
 class AuthorizationAwareReferenceTests(_BaseTestCase):
     def test_admin_only_refs_absent_for_non_admin(self):
+        # CLAUDE-P40-VW7B: lists.project.tools.data-management retired
+        # and replaced by lists.system-data-management, relocated out of
+        # the active Project's own "Project Tools" branch - Reset
+        # Project Data resets EVERY Project in the deployment, not just
+        # this one (see UI_REFERENCE_MAP.md's own retired-references
+        # entry and templates/base.html's relocation comment).
         client = self._client_as("vw7a_granted_reviewer", 3, role="read_only")
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
         self.assertNotIn('data-ref="lists.new-project"', body)
         self.assertNotIn('data-ref="lists.security"', body)
-        self.assertNotIn('data-ref="lists.project.tools.data-management"', body)
+        self.assertNotIn('data-ref="lists.system-data-management"', body)
 
     def test_admin_only_refs_present_for_admin(self):
         client = self._client_as("vw7a_admin", 4, role="admin")
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
         self.assertIn('data-ref="lists.new-project"', body)
         self.assertIn('data-ref="lists.security"', body)
-        self.assertIn('data-ref="lists.project.tools.data-management"', body)
+        self.assertIn('data-ref="lists.system-data-management"', body)
 
     def test_remove_project_ref_owner_or_admin_only(self):
         client = self._client_as("vw7a_granted_reviewer", 3, role="read_only")
