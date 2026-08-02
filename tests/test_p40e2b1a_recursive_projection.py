@@ -348,13 +348,50 @@ class StableUrlRestorationTests(_BaseTestCase):
         # "which view was open" - only the URL does. Uses the retired
         # ?view=documents URL (now a stable blank Display, unlike
         # ?view=overview which legitimately varies visit-to-visit via
-        # the "since your last visit" marker) so this is a genuine
-        # strict byte comparison, not a flaky one.
+        # the "since your last visit" marker) so page STATE is a genuine
+        # strict comparison.
+        #
+        # CLAUDE-P40-E3A-F1: the raw HTTP body is NOT byte-stable across
+        # two different requests, even in the identical test-client
+        # session - the <meta name="csrf-token"> value changes.
+        # Root-caused via a fast, deterministic 400-iteration
+        # reproduction (isolated single-request timing never surfaces it
+        # - full-suite timing sometimes does): Flask-WTF's generate_csrf()
+        # re-signs the session's own stable CSRF secret with a FRESH
+        # itsdangerous timestamp on every call, by design (the timestamp
+        # is what lets a token later be checked for expiry) - it does not
+        # cache the fully-signed string across requests, only the raw
+        # secret in session[csrf_token_key]. Two requests landing in
+        # different wall-clock seconds get a different signed token
+        # even though nothing about the session or the page's own state
+        # changed; two requests completing within the same second get an
+        # identical one, which is why this only ever surfaced under
+        # full-suite-scale system load (GC/IO pressure widening the gap
+        # between the two requests enough to cross a second boundary),
+        # never in isolation. This is expected, correct CSRF behavior,
+        # not a defect in routes/workspace.py or its templates - the
+        # test's own prior comment ("so this is a genuine strict byte
+        # comparison, not a flaky one") was simply wrong about that one
+        # tag. Confirmed harmless to normalize out: the encoded SECRET
+        # segment (before the first ".") is asserted identical below in
+        # both requests every time - only the re-signed wrapper around it
+        # changes, never the underlying token itself.
+        csrf_re = re.compile(r'<meta name="csrf-token" content="([^"]+)">')
+
+        def csrf_secret_segment(html: str) -> str:
+            match = csrf_re.search(html)
+            self.assertIsNotNone(match, "no csrf-token meta tag found")
+            return match.group(1).split(".")[0]
+
         client = self._client_as("p40e2b1a_owner", 1)
         docs_before = client.get(f"/projects/{self.project_id}/workspace?view=documents").get_data(as_text=True)
         client.get(f"/projects/{self.project_id}/workspace?view=investigations")
         docs_after_navigating_away_and_back = client.get(f"/projects/{self.project_id}/workspace?view=documents").get_data(as_text=True)
-        self.assertEqual(docs_before, docs_after_navigating_away_and_back)
+
+        self.assertEqual(csrf_secret_segment(docs_before), csrf_secret_segment(docs_after_navigating_away_and_back))
+        normalized_before = csrf_re.sub('<meta name="csrf-token" content="NORMALIZED">', docs_before)
+        normalized_after = csrf_re.sub('<meta name="csrf-token" content="NORMALIZED">', docs_after_navigating_away_and_back)
+        self.assertEqual(normalized_before, normalized_after)
 
 
 # ---------------------------------------------------------------------------
