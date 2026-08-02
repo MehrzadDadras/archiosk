@@ -213,7 +213,14 @@ class ContextMenuJsWiringUnchangedTests(unittest.TestCase):
         apply_block = self.js[self.js.index("if (applyBtn) applyBtn.addEventListener"):]
         apply_block = apply_block[:apply_block.index("})();")]
         self.assertIn("closeMenu();", apply_block)
-        close_block = self.js[self.js.index("if (closeBtn) closeBtn.addEventListener"):self.js.index("if (decBtn)")]
+        # CLAUDE-P40-VW4: decBtn/incBtn (single shared quantity) renamed
+        # to vDec/vInc/hDec/hInc (two independent axes, also present in
+        # the EARLIER top-bar IIFE under the same names - search for
+        # "if (vDec)" starting from closeBtn's own position, not index
+        # 0, or this finds the wrong (top-bar) occurrence). See that
+        # stage's own test file for the new steppers' own coverage.
+        close_start = self.js.index("if (closeBtn) closeBtn.addEventListener")
+        close_block = self.js[close_start:self.js.index("if (vDec)", close_start)]
         self.assertIn("closeMenu();", close_block)
 
     def test_global_display_layout_menu_control_untouched(self):

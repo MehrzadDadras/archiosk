@@ -13,7 +13,7 @@
    live in base.html now (application-shell level) - not here. See that
    template's own notes at .workspace-topbar and [data-tree-root]. #}
 <div class="workspace-pane-display" id="workspace-display-panel" data-project-id="{{ project_id }}">
-    <div class="display-divisions" id="display-divisions" data-orientation="vertical" data-count="1">
+    <div class="display-divisions" id="display-divisions" data-vertical="1" data-horizontal="1" data-count="1">
     <div class="display-division display-division-primary active" data-division="0" id="display-division-0">
         <div class="display-division-header">
             <span class="display-division-header-name">
@@ -1735,25 +1735,33 @@
     {% endfor %}
     </div>
 
-    {# ---------------- Display context menu (CLAUDE-P40-E3A, Section 6) ----------
+    {# ---------------- Display context menu (CLAUDE-P40-E3A, Section 6;
+       CLAUDE-P40-VW4 replaced the single either/or direction + one shared
+       quantity with two INDEPENDENT numbers, same as the top-bar control
+       in base.html - see that markup's own comment for the full
+       rationale) ----------------------------------------------------
        ONE shared right-click menu, repositioned to whichever division was
        clicked - not one DOM copy per division. Closes on outside click or
        Escape (static/js/case_workspace.js). Only the capabilities honestly
-       implemented this stage: Close/Divide/direction/quantity/Apply - no
+       implemented this stage: Close/Divide/Vertical/Horizontal/Apply - no
        drawing "modes" (Section 6's own explicit exclusion). #}
     <div class="display-context-menu" id="display-context-menu" role="menu" hidden>
         <button type="button" class="display-context-item" id="display-context-close" role="menuitem">Close this Display</button>
         <div class="display-context-divide">
             <p class="workspace-pane-label">Divide this Display</p>
-            <div class="workspace-layout-orientation" role="radiogroup" aria-label="Division direction">
-                <button type="button" class="workspace-layout-option" id="display-context-orientation-vertical" data-context-orientation="vertical" aria-pressed="true">Vertical</button>
-                <button type="button" class="workspace-layout-option" id="display-context-orientation-horizontal" data-context-orientation="horizontal" aria-pressed="false">Horizontal</button>
+            <div class="workspace-layout-quantity" role="group" aria-label="Vertical divisions">
+                <span class="workspace-layout-quantity-label">Vertical divisions</span>
+                <button type="button" class="workspace-layout-stepper" id="display-context-vertical-decrement" aria-label="Decrease vertical divisions">&minus;</button>
+                <span class="workspace-layout-quantity-value" id="display-context-vertical-value" aria-live="polite">1</span>
+                <button type="button" class="workspace-layout-stepper" id="display-context-vertical-increment" aria-label="Increase vertical divisions">+</button>
             </div>
-            <div class="workspace-layout-quantity">
-                <button type="button" class="workspace-layout-stepper" id="display-context-decrement" aria-label="Decrease number of parts">&minus;</button>
-                <span class="workspace-layout-quantity-value" id="display-context-quantity-value" aria-live="polite">2</span>
-                <button type="button" class="workspace-layout-stepper" id="display-context-increment" aria-label="Increase number of parts">+</button>
+            <div class="workspace-layout-quantity" role="group" aria-label="Horizontal divisions">
+                <span class="workspace-layout-quantity-label">Horizontal divisions</span>
+                <button type="button" class="workspace-layout-stepper" id="display-context-horizontal-decrement" aria-label="Decrease horizontal divisions">&minus;</button>
+                <span class="workspace-layout-quantity-value" id="display-context-horizontal-value" aria-live="polite">1</span>
+                <button type="button" class="workspace-layout-stepper" id="display-context-horizontal-increment" aria-label="Increase horizontal divisions">+</button>
             </div>
+            <p class="workspace-layout-limit-note">Maximum 6 Displays total (Vertical &times; Horizontal).</p>
             <button type="button" class="workspace-layout-apply" id="display-context-apply" role="menuitem">Apply</button>
         </div>
     </div>

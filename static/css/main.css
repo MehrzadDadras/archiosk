@@ -1130,7 +1130,6 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
     white-space: nowrap;
     border: 0;
 }
-.workspace-layout-option,
 .workspace-overflow-item {
     font-family: var(--font-body);
     font-size: 0.82rem;
@@ -1145,32 +1144,33 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
     display: block;
     width: 100%;
 }
-.workspace-layout-option:hover,
 .workspace-overflow-item:hover {
     background: var(--surface-hover);
-}
-.workspace-layout-option[aria-pressed="true"] {
-    color: var(--machine-blue);
-    font-weight: 600;
 }
 .workspace-user-name {
     font-weight: 600;
     margin-right: 0.2rem;
 }
 
-/* Display Layout menu internals (CLAUDE-P40-E3A, Section 6): orientation
-   choice, a numeric stepper (never a bare text field), Apply - nothing
-   here re-renders on every keystroke, only on the explicit Apply click.
-   The same three controls are reused inside the per-division right-click
-   context menu (#display-context-menu) below. */
-.workspace-layout-orientation {
-    display: flex;
-    gap: 0.3rem;
-    margin-bottom: 0.3rem;
+/* Display Layout menu internals (CLAUDE-P40-E3A, Section 6; CLAUDE-P40-
+   VW4 replaced the old either/or orientation choice with two independent
+   numeric steppers, one per axis - the old .workspace-layout-orientation/
+   .workspace-layout-option radiogroup this comment used to describe is
+   retired, no markup references it anymore): a numeric stepper (never a
+   bare text field), Apply - nothing here re-renders on every keystroke,
+   only on the explicit Apply click. The same controls are reused inside
+   the per-division right-click context menu (#display-context-menu)
+   below. */
+.workspace-layout-quantity-label {
+    display: block;
+    font-size: var(--text-xs);
+    color: var(--text-metadata);
+    margin-bottom: 0.15rem;
 }
-.workspace-layout-orientation .workspace-layout-option {
-    flex: 1;
-    text-align: center;
+.workspace-layout-limit-note {
+    font-size: var(--text-xs);
+    color: var(--text-metadata);
+    margin: 0.3rem 0;
 }
 .workspace-layout-quantity {
     display: flex;
@@ -1191,6 +1191,17 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
     cursor: pointer;
 }
 .workspace-layout-stepper:hover { background: var(--surface-hover); border-color: var(--border-strong); }
+/* CLAUDE-P40-VW4, Requirement 5/6: the relevant stepper is disabled the
+   moment incrementing it would exceed six Displays (or decrementing
+   below one) - token-based, not a hardcoded gray, so it stays legible
+   under every VW3 appearance mode. */
+.workspace-layout-stepper:disabled {
+    color: var(--text-disabled);
+    border-color: var(--border);
+    background: var(--surface-primary);
+    cursor: not-allowed;
+}
+.workspace-layout-stepper:disabled:hover { background: var(--surface-primary); border-color: var(--border); }
 .workspace-layout-quantity-value {
     font-family: var(--font-body);
     font-variant-numeric: tabular-nums;
@@ -1275,33 +1286,58 @@ html.toolbox-hidden .workspace-pane-toolbox {
     color: var(--text-primary);
 }
 
-/* CLAUDE-P40-E3A, Section 6: dynamic multi-Display geometry - an
-   orientation (vertical = side-by-side columns, horizontal = stacked
-   rows) and a quantity (1-6, [data-count]) applied via Apply, not a
-   fixed preset menu (the old [data-layout="single/side-by-side/stacked/
-   grid"] system this replaces). Mobile-first: the base rule below
-   always stacks divisions in one column regardless of the chosen
-   orientation/count - the multi-column/multi-row geometry only applies
-   above the 900px breakpoint further down, where there's room for it
-   (Section 11: Display remains usable, never forced into unreadably
-   narrow slices). Divisions are separated only by a restrained divider
-   line (Section 5 - "no cards, shadows, rounded containers"), never a
-   bordered/shadowed box per division. */
+/* CLAUDE-P40-E3A, Section 6; CLAUDE-P40-VW4 replaced the single either/
+   or orientation + one shared quantity with a genuine two-axis grid -
+   Vertical divisions (--display-v, columns) and Horizontal divisions
+   (--display-h, rows), independently 1-6, applied via Apply (never a
+   fixed preset menu, the old [data-layout="single/side-by-side/stacked/
+   grid"] system this already replaced once). A true V x H rectangle has
+   14 valid combinations with V*H<=6 (not a linear 1-6 range), too many
+   to enumerate as static [data-orientation][data-count] attribute
+   selectors the way the single-axis version did - static/js/
+   case_workspace.js's own applyLayout sets --display-v/--display-h as
+   inline custom properties instead, and grid-template-columns/rows
+   below reads them directly. Mobile-first: the base rule always stacks
+   divisions in one column regardless of the applied V/H - the real
+   multi-column/multi-row geometry only applies above the 900px
+   breakpoint further down, where there's room for it (Section 11:
+   Display remains usable, never forced into unreadably narrow slices).
+   Divisions are separated only by a restrained 1px divider line
+   (Section 5 - "no cards, shadows, rounded containers"), never a
+   bordered/shadowed box per division - a `gap` the same color as
+   --border, with each division painting its own --surface-primary
+   background over it, is the simplest way to get a real hairline on
+   BOTH axes of a true 2D grid (the old border-swaps-side-per-
+   orientation technique didn't generalize past one axis). */
 .display-divisions {
     display: grid;
     grid-template-columns: 1fr;
     grid-auto-flow: row;
+    gap: 1px;
+    background: var(--border);
 }
-.display-division { min-width: 0; min-height: 0; }
-.display-division:not(:first-child) {
-    border-top: 1px solid var(--border);
-    padding-top: 1.25rem;
-    margin-top: 1.25rem;
+.display-division {
+    min-width: 0;
+    min-height: 0;
+    background: var(--surface-primary);
+    /* Uniform on every division, including index 0 - a per-edge "no
+       padding on whichever side touches the pane's own edge" rule
+       doesn't generalize cleanly across an arbitrary V x H grid (which
+       divisions sit on the top/left edge depends on both axes at once,
+       not just "is this the first one"), and VW4's own scope is the
+       Vertical/Horizontal split itself, not a pixel-level padding
+       reconciliation. */
+    padding: 1.25rem;
 }
 /* Only the first [data-count] divisions (always 0..count-1, in document
    order) are ever shown - divisions beyond the applied count stay in
    the DOM (their picker/content state is never lost) but are not
-   displayed, same as the old [data-layout="single"] behaviour. */
+   displayed, same as the old [data-layout="single"] behaviour.
+   [data-count] is still vertical*horizontal (set alongside --display-v/
+   --display-h by the same applyLayout call) - this show/hide table
+   itself is unchanged from before VW4, since which INDIVIDUAL divisions
+   are visible only ever depended on the total, never on the
+   arrangement. */
 .display-divisions[data-count="1"] [data-division]:not([data-division="0"]) { display: none; }
 .display-divisions[data-count="2"] [data-division="2"],
 .display-divisions[data-count="2"] [data-division="3"],
@@ -1315,27 +1351,9 @@ html.toolbox-hidden .workspace-pane-toolbox {
 .display-divisions[data-count="5"] [data-division="5"] { display: none; }
 
 @media (min-width: 900px) {
-    .display-divisions[data-orientation="vertical"] { grid-auto-flow: column; grid-template-rows: 1fr; }
-    .display-divisions[data-orientation="horizontal"] { grid-auto-flow: row; grid-template-columns: 1fr; }
-    .display-divisions[data-orientation="vertical"][data-count="1"] { grid-template-columns: repeat(1, 1fr); }
-    .display-divisions[data-orientation="vertical"][data-count="2"] { grid-template-columns: repeat(2, 1fr); }
-    .display-divisions[data-orientation="vertical"][data-count="3"] { grid-template-columns: repeat(3, 1fr); }
-    .display-divisions[data-orientation="vertical"][data-count="4"] { grid-template-columns: repeat(4, 1fr); }
-    .display-divisions[data-orientation="vertical"][data-count="5"] { grid-template-columns: repeat(5, 1fr); }
-    .display-divisions[data-orientation="vertical"][data-count="6"] { grid-template-columns: repeat(6, 1fr); }
-    .display-divisions[data-orientation="horizontal"][data-count="1"] { grid-template-rows: repeat(1, 1fr); }
-    .display-divisions[data-orientation="horizontal"][data-count="2"] { grid-template-rows: repeat(2, 1fr); }
-    .display-divisions[data-orientation="horizontal"][data-count="3"] { grid-template-rows: repeat(3, 1fr); }
-    .display-divisions[data-orientation="horizontal"][data-count="4"] { grid-template-rows: repeat(4, 1fr); }
-    .display-divisions[data-orientation="horizontal"][data-count="5"] { grid-template-rows: repeat(5, 1fr); }
-    .display-divisions[data-orientation="horizontal"][data-count="6"] { grid-template-rows: repeat(6, 1fr); }
-    .display-divisions[data-orientation="vertical"] .display-division:not(:first-child) {
-        border-top: none;
-        padding-top: 0;
-        margin-top: 0;
-        border-left: 1px solid var(--border);
-        padding-left: 1.25rem;
-        margin-left: 1.25rem;
+    .display-divisions {
+        grid-template-columns: repeat(var(--display-v, 1), 1fr);
+        grid-template-rows: repeat(var(--display-h, 1), 1fr);
     }
 }
 

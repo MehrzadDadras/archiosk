@@ -322,34 +322,41 @@ class SingleComposerTests(_BaseTestCase):
 # ---------------------------------------------------------------------------
 
 class DisplayLayoutTests(_BaseTestCase):
-    def test_all_four_layout_options_render_in_top_bar(self):
-        # SUPERSEDED (CLAUDE-P40-E3A, Section 6): the old fixed single/
-        # side-by-side/stacked/grid preset menu is retired - replaced by
-        # a genuinely dynamic orientation (vertical/horizontal) + numeric
-        # quantity (1-6) + Apply control, "not limited to decorative
-        # presets such as 1, 2 or 3" per the stage's own instruction.
+    def test_all_layout_options_render_in_top_bar(self):
+        # SUPERSEDED TWICE: CLAUDE-P40-E3A, Section 6 retired the old
+        # fixed single/side-by-side/stacked/grid preset menu for a
+        # dynamic orientation + one shared quantity; CLAUDE-P40-VW4 then
+        # retired THAT either/or orientation choice for two fully
+        # independent numeric steppers (Vertical, Horizontal), each
+        # 1-6, product capped at 6 - the product owner's own correction
+        # that "Vertical and Horizontal must each have their own
+        # independently adjustable number."
         client = self._client_as("p40e2b_owner", 1)
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
-        self.assertIn('id="display-orientation-vertical"', body)
-        self.assertIn('id="display-orientation-horizontal"', body)
-        self.assertIn('id="display-quantity-decrement"', body)
-        self.assertIn('id="display-quantity-increment"', body)
-        self.assertIn('id="display-quantity-value"', body)
+        self.assertIn('id="display-vertical-decrement"', body)
+        self.assertIn('id="display-vertical-increment"', body)
+        self.assertIn('id="display-vertical-value"', body)
+        self.assertIn('id="display-horizontal-decrement"', body)
+        self.assertIn('id="display-horizontal-increment"', body)
+        self.assertIn('id="display-horizontal-value"', body)
         self.assertIn('id="display-layout-apply"', body)
+        self.assertNotIn('id="display-orientation-vertical"', body)
+        self.assertNotIn('id="display-orientation-horizontal"', body)
 
-    def test_every_layout_option_produces_a_distinct_real_grid(self):
+    def test_grid_template_reads_the_two_independent_axes_from_css_custom_properties(self):
+        # CLAUDE-P40-VW4: 14 valid Vertical x Horizontal <= 6 combinations
+        # exist - too many for a static [data-orientation][data-count]
+        # attribute-selector table the way the single-axis version used
+        # (that table is gone) - grid-template-columns/rows now read
+        # --display-v/--display-h, set inline by JS per Apply.
         css = _CSS_PATH.read_text(encoding="utf-8")
-        # Different counts produce different real column/row templates -
-        # never a decorative no-op - and vertical/horizontal produce
-        # genuinely different axes for the same count.
-        two_col = _rule_body(css, '.display-divisions[data-orientation="vertical"][data-count="2"]')
-        three_col = _rule_body(css, '.display-divisions[data-orientation="vertical"][data-count="3"]')
-        self.assertIn("grid-template-columns: repeat(2, 1fr)", two_col)
-        self.assertIn("grid-template-columns: repeat(3, 1fr)", three_col)
-        self.assertNotEqual(two_col, three_col)
-        two_row = _rule_body(css, '.display-divisions[data-orientation="horizontal"][data-count="2"]')
-        self.assertIn("grid-template-rows: repeat(2, 1fr)", two_row)
-        self.assertNotEqual(two_col, two_row)
+        media_match = re.search(r"@media \(min-width: 900px\) \{(.*?)\n\}", css, re.S)
+        self.assertIsNotNone(media_match, "no 900px breakpoint block found")
+        media_block = media_match.group(1)
+        self.assertIn("grid-template-columns: repeat(var(--display-v, 1), 1fr)", media_block)
+        self.assertIn("grid-template-rows: repeat(var(--display-h, 1), 1fr)", media_block)
+        self.assertNotIn('[data-orientation="vertical"]', css)
+        self.assertNotIn('[data-orientation="horizontal"]', css)
 
     def test_single_layout_hides_every_division_but_the_primary(self):
         css = _CSS_PATH.read_text(encoding="utf-8")
@@ -357,13 +364,17 @@ class DisplayLayoutTests(_BaseTestCase):
         self.assertIn("display: none", body)
 
     def test_layout_choice_is_never_a_dead_decorative_no_op(self):
-        # Every control carries a real, distinct id/data attribute the
-        # JS reads to set .display-divisions[data-count]/[data-orientation]
-        # - never a bare icon with no handler, and only committed on the
-        # explicit Apply click (never re-rendering on every keystroke).
+        # Every control carries a real, distinct id the JS reads to set
+        # .display-divisions[data-count]/[data-vertical]/[data-horizontal]
+        # and the --display-v/--display-h custom properties - never a
+        # bare icon with no handler, and only committed on the explicit
+        # Apply click (never re-rendering on every keystroke).
         js = _JS_PATH.read_text(encoding="utf-8")
         self.assertIn("divisionsRoot.dataset.count = String(quantity)", js)
-        self.assertIn("divisionsRoot.dataset.orientation = orientation", js)
+        self.assertIn("divisionsRoot.dataset.vertical = String(vertical)", js)
+        self.assertIn("divisionsRoot.dataset.horizontal = String(horizontal)", js)
+        self.assertIn("divisionsRoot.style.setProperty('--display-v', String(vertical))", js)
+        self.assertIn("divisionsRoot.style.setProperty('--display-h', String(horizontal))", js)
         self.assertIn("display-layout-apply", js)
         self.assertIn("MAX_DISPLAY_DIVISIONS = 6", js)
 
@@ -507,15 +518,24 @@ class DisplayBackgroundTests(unittest.TestCase):
         self.assertNotIn("border-radius", body)
 
     def test_divisions_are_separated_by_lines_not_boxes(self):
-        # SUPERSEDED (CLAUDE-P40-E3A): the old fixed 2-division
-        # side-by-side/stacked preset selectors are retired - divisions
-        # are separated by a border on the SECOND-and-later division
-        # (:not(:first-child)) now, real for any count/orientation, not
-        # just a hardcoded 2-way split.
-        body = _rule_body(self.css, '.display-divisions[data-orientation="vertical"] .display-division:not(:first-child)')
-        self.assertNotIn("box-shadow", body)
-        self.assertNotIn("border-radius", body)
-        self.assertIn("border-left", body)
+        # SUPERSEDED TWICE: CLAUDE-P40-E3A's own fixed 2-division preset
+        # selectors were retired for a border on every division but the
+        # first; CLAUDE-P40-VW4 then retired THAT (a true two-axis grid
+        # has no single "first" that generalizes across both axes -
+        # which divisions sit on the grid's top/left edge depends on
+        # both Vertical and Horizontal at once) for a 1px `gap` the same
+        # color as --border, with each division painting its own
+        # --surface-primary over it - a hairline on both axes at once,
+        # never a card/box (no box-shadow/border-radius anywhere in
+        # either rule).
+        divisions_body = _rule_body(self.css, ".display-divisions")
+        self.assertIn("gap: 1px", divisions_body)
+        self.assertIn("var(--border)", divisions_body)
+        self.assertNotIn("box-shadow", divisions_body)
+        division_body = _rule_body(self.css, ".display-division")
+        self.assertIn("var(--surface-primary)", division_body)
+        self.assertNotIn("box-shadow", division_body)
+        self.assertNotIn("border-radius", division_body)
 
 
 if __name__ == "__main__":

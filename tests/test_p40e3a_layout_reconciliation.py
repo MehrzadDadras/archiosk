@@ -273,12 +273,16 @@ class MultiDisplayMarkupTests(_BaseTestCase):
         for i in range(6):
             self.assertIn(f'id="display-division-{i}"', body)
 
-    def test_dynamic_orientation_and_count_attributes_not_fixed_presets(self):
+    def test_dynamic_vertical_horizontal_and_count_attributes_not_fixed_presets(self):
+        # SUPERSEDED (CLAUDE-P40-VW4): data-orientation is retired -
+        # replaced by two independent axes, data-vertical/data-horizontal.
         client = self._client_as("e3a_owner", 1)
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
-        self.assertIn('data-orientation="vertical"', body)
+        self.assertIn('data-vertical="1"', body)
+        self.assertIn('data-horizontal="1"', body)
         self.assertIn('data-count="1"', body)
         self.assertNotIn("data-layout=", body)
+        self.assertNotIn("data-orientation=", body)
 
     def test_divisions_one_through_five_have_header_and_close_division_zero_does_not(self):
         client = self._client_as("e3a_owner", 1)
@@ -288,18 +292,22 @@ class MultiDisplayMarkupTests(_BaseTestCase):
         division_zero = body[body.index('id="display-division-0"'):body.index('id="display-division-1"')]
         self.assertNotIn("data-division-close", division_zero)
 
-    def test_context_menu_offers_only_close_divide_direction_quantity_apply(self):
+    def test_context_menu_offers_only_close_divide_vertical_horizontal_apply(self):
+        # SUPERSEDED (CLAUDE-P40-VW4): the either/or direction radiogroup
+        # is retired - replaced by two independent Vertical/Horizontal
+        # steppers, same as the top-bar control.
         client = self._client_as("e3a_owner", 1)
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
         self.assertIn('id="display-context-menu"', body)
         menu = body[body.index('id="display-context-menu"'):body.index("</body>")]
         menu = menu[:menu.index("</div>\n    </div>") + 10] if "</div>\n    </div>" in menu else menu[:2000]
         self.assertIn('id="display-context-close"', body)
-        self.assertIn('id="display-context-orientation-vertical"', body)
-        self.assertIn('id="display-context-orientation-horizontal"', body)
-        self.assertIn('id="display-context-decrement"', body)
-        self.assertIn('id="display-context-increment"', body)
+        self.assertIn('id="display-context-vertical-decrement"', body)
+        self.assertIn('id="display-context-vertical-increment"', body)
+        self.assertIn('id="display-context-horizontal-decrement"', body)
+        self.assertIn('id="display-context-horizontal-increment"', body)
         self.assertIn('id="display-context-apply"', body)
+        self.assertNotIn('id="display-context-orientation-vertical"', body)
         # No drawing "modes" (Section 6's own explicit exclusion).
         self.assertNotIn("drawing-mode", body)
 

@@ -63,31 +63,41 @@
             </div>
             <div class="workspace-topbar-controls">
                 {% if project_id is defined and workspace is defined %}
-                {# ---------------- Display-layout control (CLAUDE-P40-E3A, Section 6) ----
-                   Replaces the old single/side-by-side/stacked/grid preset
-                   menu with a genuinely dynamic count: an orientation choice
-                   (vertical/horizontal divisions), a numeric quantity with
-                   permanently visible increment/decrement (never hidden
-                   behind a text field only), and an explicit Apply - nothing
-                   here silently re-renders on every keystroke. 6 is the
-                   practical ceiling (static/js/case_workspace.js's own
-                   MAX_DISPLAY_DIVISIONS): past 6 simultaneous divisions a
-                   typical 1280-1920px viewport gives each one under ~200px
-                   in the vertical orientation, too narrow to usefully read
-                   an architectural drawing or document - a real usability
-                   floor, not a decorative round number. #}
+                {# ---------------- Display-layout control (CLAUDE-P40-E3A, Section 6;
+                   CLAUDE-P40-VW4 replaced the single either/or orientation +
+                   one shared quantity with two INDEPENDENT numbers) --------
+                   Vertical divisions = side-by-side columns, Horizontal
+                   divisions = stacked rows, resulting Display count = their
+                   PRODUCT (a 2x3 arrangement and a 3x2 arrangement both
+                   total six Displays but are genuinely different
+                   arrangements - product-owner's own worked examples).
+                   Both steppers are permanently visible simultaneously
+                   (never hidden behind an either/or choice), each with its
+                   own increment/decrement (never a bare text field only),
+                   and an explicit Apply - nothing here silently re-renders
+                   on every keystroke. 6 is the practical ceiling on the
+                   PRODUCT (static/js/case_workspace.js's own
+                   MAX_DISPLAY_DIVISIONS): past 6 simultaneous Displays a
+                   typical 1280-1920px viewport gives each one too little
+                   room to usefully read an architectural drawing or
+                   document - a real usability floor, not a decorative
+                   round number. #}
                 <details class="workspace-layout-menu" id="workspace-layout-menu">
                     <summary class="workspace-topbar-btn workspace-layout-summary">Display Layout</summary>
                     <div class="workspace-layout-options" role="group" aria-label="Display Layout">
-                        <div class="workspace-layout-orientation" role="radiogroup" aria-label="Division direction">
-                            <button type="button" class="workspace-layout-option" id="display-orientation-vertical" data-display-orientation="vertical" aria-pressed="true">Vertical divisions</button>
-                            <button type="button" class="workspace-layout-option" id="display-orientation-horizontal" data-display-orientation="horizontal" aria-pressed="false">Horizontal divisions</button>
+                        <div class="workspace-layout-quantity" role="group" aria-label="Vertical divisions">
+                            <span class="workspace-layout-quantity-label">Vertical divisions</span>
+                            <button type="button" class="workspace-layout-stepper" id="display-vertical-decrement" aria-label="Decrease vertical divisions">&minus;</button>
+                            <span class="workspace-layout-quantity-value" id="display-vertical-value" aria-live="polite">1</span>
+                            <button type="button" class="workspace-layout-stepper" id="display-vertical-increment" aria-label="Increase vertical divisions">+</button>
                         </div>
-                        <div class="workspace-layout-quantity">
-                            <button type="button" class="workspace-layout-stepper" id="display-quantity-decrement" aria-label="Decrease number of Displays">&minus;</button>
-                            <span class="workspace-layout-quantity-value" id="display-quantity-value" aria-live="polite">1</span>
-                            <button type="button" class="workspace-layout-stepper" id="display-quantity-increment" aria-label="Increase number of Displays">+</button>
+                        <div class="workspace-layout-quantity" role="group" aria-label="Horizontal divisions">
+                            <span class="workspace-layout-quantity-label">Horizontal divisions</span>
+                            <button type="button" class="workspace-layout-stepper" id="display-horizontal-decrement" aria-label="Decrease horizontal divisions">&minus;</button>
+                            <span class="workspace-layout-quantity-value" id="display-horizontal-value" aria-live="polite">1</span>
+                            <button type="button" class="workspace-layout-stepper" id="display-horizontal-increment" aria-label="Increase horizontal divisions">+</button>
                         </div>
+                        <p class="workspace-layout-limit-note">Maximum 6 Displays total (Vertical &times; Horizontal).</p>
                         <button type="button" class="workspace-layout-apply" id="display-layout-apply">Apply</button>
                     </div>
                 </details>

@@ -165,8 +165,14 @@ class SixDivisionCeilingTests(_BaseTestCase):
         self.assertRegex(js, r"MAX_DISPLAY_DIVISIONS\s*=\s*6")
 
     def test_quantity_stepper_cannot_exceed_six(self):
+        # SUPERSEDED (CLAUDE-P40-VW4): the single shared pendingQuantity
+        # clamped via Math.min is retired - Vertical and Horizontal are
+        # now independent, and the ceiling applies to their PRODUCT, so
+        # each increment handler guards on (thisAxis + 1) * otherAxis
+        # rather than clamping one shared number.
         js = _JS_PATH.read_text(encoding="utf-8")
-        self.assertIn("Math.min(MAX_DISPLAY_DIVISIONS, pendingQuantity + 1)", js)
+        self.assertIn("if ((pendingVertical + 1) * pendingHorizontal > MAX_DISPLAY_DIVISIONS) return;", js)
+        self.assertIn("if (pendingVertical * (pendingHorizontal + 1) > MAX_DISPLAY_DIVISIONS) return;", js)
 
 
 # ---------------------------------------------------------------------------

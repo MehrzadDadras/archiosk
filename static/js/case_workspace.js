@@ -267,58 +267,154 @@ document.addEventListener('DOMContentLoaded', () => {
         const openDivisionsKey = `beehive:display:open:${projectId}`;
         const targetKey = `beehive:display:target:${projectId}`;
 
+        // CLAUDE-P40-VW4: Vertical and Horizontal are two INDEPENDENT
+        // numbers, not one quantity plus an either/or orientation choice
+        // (the E3A/E3A-QA/VW1 model this replaces) - Vertical = side-by-
+        // side columns, Horizontal = stacked rows, and the resulting
+        // Display count is their PRODUCT (product owner's own worked
+        // examples: 2x3 and 3x2 both total six, but are different
+        // arrangements). `quantity` is retained as a plain derived value
+        // (vertical * horizontal) so the rest of this function - active-
+        // target bounds, saved-open-division restore - doesn't need to
+        // change shape.
+        let vertical = 1;
+        let horizontal = 1;
         let quantity = 1;
-        let orientation = 'vertical';
         let activeTarget = 0;
 
-        function applyLayout(nextQuantity, nextOrientation, persist) {
-            quantity = Math.max(MIN_DISPLAY_DIVISIONS, Math.min(MAX_DISPLAY_DIVISIONS, nextQuantity));
-            orientation = nextOrientation === 'horizontal' ? 'horizontal' : 'vertical';
+        function applyLayout(nextVertical, nextHorizontal, persist) {
+            const safeVertical = Number.isInteger(nextVertical) ? nextVertical : MIN_DISPLAY_DIVISIONS;
+            const safeHorizontal = Number.isInteger(nextHorizontal) ? nextHorizontal : MIN_DISPLAY_DIVISIONS;
+            let v = Math.max(MIN_DISPLAY_DIVISIONS, Math.min(MAX_DISPLAY_DIVISIONS, safeVertical));
+            let h = Math.max(MIN_DISPLAY_DIVISIONS, Math.min(MAX_DISPLAY_DIVISIONS, safeHorizontal));
+            // The six-Display ceiling applies to the PRODUCT, not either
+            // axis alone (Requirement 5/7: never accept a partially-
+            // applied or corrupted, >6 layout, even from a hand-edited or
+            // stale localStorage value) - shrink whichever axis is
+            // currently larger until the product fits, same deterministic
+            // rule "Close this Display" below uses.
+            while (v * h > MAX_DISPLAY_DIVISIONS) {
+                if (h > MIN_DISPLAY_DIVISIONS && h >= v) h -= 1;
+                else if (v > MIN_DISPLAY_DIVISIONS) v -= 1;
+                else break;
+            }
+            vertical = v;
+            horizontal = h;
+            quantity = vertical * horizontal;
             divisionsRoot.dataset.count = String(quantity);
-            divisionsRoot.dataset.orientation = orientation;
+            divisionsRoot.dataset.vertical = String(vertical);
+            divisionsRoot.dataset.horizontal = String(horizontal);
+            // Read by the [900px breakpoint] grid-template rule in
+            // main.css (repeat(var(--display-v), 1fr) / repeat(var(
+            // --display-h), 1fr)) - a genuine two-axis grid can't be
+            // expressed by the old finite [data-orientation][data-count]
+            // attribute-selector table (14 valid V*H<=6 combinations,
+            // not a linear 1-6 range), so the column/row counts are
+            // handed to CSS as custom properties instead.
+            divisionsRoot.style.setProperty('--display-v', String(vertical));
+            divisionsRoot.style.setProperty('--display-h', String(horizontal));
             if (activeTarget >= quantity) setActiveTarget(0);
             if (persist !== false) {
-                try { window.localStorage.setItem(layoutKey, JSON.stringify({ quantity: quantity, orientation: orientation })); } catch (e) { /* ignore */ }
+                try { window.localStorage.setItem(layoutKey, JSON.stringify({ vertical: vertical, horizontal: horizontal })); } catch (e) { /* ignore */ }
             }
         }
 
-        function syncMenuControls(menuPrefix, pendingQuantity, pendingOrientation) {
-            const valueEl = document.getElementById(`${menuPrefix}-quantity-value`);
-            if (valueEl) valueEl.textContent = String(pendingQuantity);
-            const vBtn = document.getElementById(`${menuPrefix}-orientation-vertical`) || document.querySelector(`[data-context-orientation="vertical"]`);
-            const hBtn = document.getElementById(`${menuPrefix}-orientation-horizontal`) || document.querySelector(`[data-context-orientation="horizontal"]`);
-            if (vBtn) vBtn.setAttribute('aria-pressed', String(pendingOrientation === 'vertical'));
-            if (hBtn) hBtn.setAttribute('aria-pressed', String(pendingOrientation === 'horizontal'));
+        // CLAUDE-P40-VW4: backward compatibility for a `layoutKey` value
+        // saved before this stage - {quantity, orientation} rather than
+        // {vertical, horizontal}. Mapping is the one this stage's own
+        // prompt specifies verbatim: an unsplit Display (quantity 1) is
+        // Vertical 1 / Horizontal 1 regardless of its old orientation
+        // (equivalent at quantity 1); a "vertical" quantity N was N
+        // side-by-side columns, so becomes Vertical N / Horizontal 1; a
+        // "horizontal" quantity N was N stacked rows, so becomes
+        // Vertical 1 / Horizontal N. A value already in the new shape
+        // (written by this stage's own code) passes through unchanged,
+        // making the mapping idempotent on re-application - same
+        // approach VW3's own Appearance-mode compatibility mapping used.
+        function normalizeStoredLayout(stored) {
+            if (stored && Number.isInteger(stored.vertical) && Number.isInteger(stored.horizontal)) {
+                return { vertical: stored.vertical, horizontal: stored.horizontal };
+            }
+            if (stored && Number.isInteger(stored.quantity)) {
+                return stored.orientation === 'horizontal'
+                    ? { vertical: 1, horizontal: stored.quantity }
+                    : { vertical: stored.quantity, horizontal: 1 };
+            }
+            return { vertical: 1, horizontal: 1 };
+        }
+
+        // CLAUDE-P40-VW4, Requirement 6: "provide a concise explanation
+        // rather than silently changing the other number" - the relevant
+        // increment button is actually disabled (not just refused on
+        // click) the moment applying it would exceed the six-Display
+        // ceiling, and the static helper text next to Apply (rendered in
+        // both menus - see base.html/case_workspace.html) states the
+        // rule up front rather than only reacting after the fact.
+        function syncQuantityControls(prefix, pendingVertical, pendingHorizontal) {
+            const vValueEl = document.getElementById(`${prefix}-vertical-value`);
+            if (vValueEl) vValueEl.textContent = String(pendingVertical);
+            const hValueEl = document.getElementById(`${prefix}-horizontal-value`);
+            if (hValueEl) hValueEl.textContent = String(pendingHorizontal);
+            const vDec = document.getElementById(`${prefix}-vertical-decrement`);
+            const vInc = document.getElementById(`${prefix}-vertical-increment`);
+            const hDec = document.getElementById(`${prefix}-horizontal-decrement`);
+            const hInc = document.getElementById(`${prefix}-horizontal-increment`);
+            if (vDec) vDec.disabled = pendingVertical <= MIN_DISPLAY_DIVISIONS;
+            if (hDec) hDec.disabled = pendingHorizontal <= MIN_DISPLAY_DIVISIONS;
+            if (vInc) vInc.disabled = (pendingVertical + 1) * pendingHorizontal > MAX_DISPLAY_DIVISIONS;
+            if (hInc) hInc.disabled = pendingVertical * (pendingHorizontal + 1) > MAX_DISPLAY_DIVISIONS;
         }
 
         // ---------------- Top-bar Display-layout control (base.html) -----
         (function wireTopBarLayoutControl() {
-            const decBtn = document.getElementById('display-quantity-decrement');
-            const incBtn = document.getElementById('display-quantity-increment');
+            const vDec = document.getElementById('display-vertical-decrement');
+            const vInc = document.getElementById('display-vertical-increment');
+            const hDec = document.getElementById('display-horizontal-decrement');
+            const hInc = document.getElementById('display-horizontal-increment');
             const applyBtn = document.getElementById('display-layout-apply');
-            const vBtn = document.getElementById('display-orientation-vertical');
-            const hBtn = document.getElementById('display-orientation-horizontal');
-            if (!decBtn || !incBtn || !applyBtn) return;
+            const menuDetails = document.getElementById('workspace-layout-menu');
+            if (!vDec || !vInc || !hDec || !hInc || !applyBtn) return;
 
-            let pendingQuantity = quantity;
-            let pendingOrientation = orientation;
-            syncMenuControls('display', pendingQuantity, pendingOrientation);
+            let pendingVertical = vertical;
+            let pendingHorizontal = horizontal;
+            syncQuantityControls('display', pendingVertical, pendingHorizontal);
 
-            decBtn.addEventListener('click', () => {
-                pendingQuantity = Math.max(MIN_DISPLAY_DIVISIONS, pendingQuantity - 1);
-                syncMenuControls('display', pendingQuantity, pendingOrientation);
+            // Requirement 9: dismissing/reopening without Apply must not
+            // show a stale unapplied edit next time - reset the pending
+            // values to whatever is actually applied every time the
+            // popover opens (native <details> "toggle" event fires on
+            // both open and close; only re-seed on open).
+            if (menuDetails) {
+                menuDetails.addEventListener('toggle', () => {
+                    if (!menuDetails.open) return;
+                    pendingVertical = vertical;
+                    pendingHorizontal = horizontal;
+                    syncQuantityControls('display', pendingVertical, pendingHorizontal);
+                });
+            }
+
+            vDec.addEventListener('click', () => {
+                pendingVertical = Math.max(MIN_DISPLAY_DIVISIONS, pendingVertical - 1);
+                syncQuantityControls('display', pendingVertical, pendingHorizontal);
             });
-            incBtn.addEventListener('click', () => {
-                pendingQuantity = Math.min(MAX_DISPLAY_DIVISIONS, pendingQuantity + 1);
-                syncMenuControls('display', pendingQuantity, pendingOrientation);
+            vInc.addEventListener('click', () => {
+                if ((pendingVertical + 1) * pendingHorizontal > MAX_DISPLAY_DIVISIONS) return;
+                pendingVertical += 1;
+                syncQuantityControls('display', pendingVertical, pendingHorizontal);
             });
-            if (vBtn) vBtn.addEventListener('click', () => { pendingOrientation = 'vertical'; syncMenuControls('display', pendingQuantity, pendingOrientation); });
-            if (hBtn) hBtn.addEventListener('click', () => { pendingOrientation = 'horizontal'; syncMenuControls('display', pendingQuantity, pendingOrientation); });
+            hDec.addEventListener('click', () => {
+                pendingHorizontal = Math.max(MIN_DISPLAY_DIVISIONS, pendingHorizontal - 1);
+                syncQuantityControls('display', pendingVertical, pendingHorizontal);
+            });
+            hInc.addEventListener('click', () => {
+                if (pendingVertical * (pendingHorizontal + 1) > MAX_DISPLAY_DIVISIONS) return;
+                pendingHorizontal += 1;
+                syncQuantityControls('display', pendingVertical, pendingHorizontal);
+            });
 
             applyBtn.addEventListener('click', () => {
-                applyLayout(pendingQuantity, pendingOrientation);
-                const menu = document.getElementById('workspace-layout-menu');
-                if (menu) menu.open = false;
+                applyLayout(pendingVertical, pendingHorizontal);
+                if (menuDetails) menuDetails.open = false;
             });
         })();
 
@@ -396,6 +492,26 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         });
 
+        // CLAUDE-P40-VW4: a true V x H rectangle can't shrink by exactly
+        // one cell and stay a full rectangle (Requirement 7: never a
+        // partially-applied or corrupted/ragged layout) - "close one
+        // Display" shrinks whichever axis is currently larger by one
+        // (ties favor shrinking Horizontal, keeping Vertical - listed
+        // and asked-for first everywhere else in this UI - intact
+        // longest), the smallest possible reduction that still yields a
+        // full rectangle. Division 0/quantity-1 floor: unreachable in
+        // practice, since the only caller-visible "close" controls are
+        // already hidden whenever vertical*horizontal is already 1 (see
+        // closeBtn.hidden below and data-division-close's own template
+        // gating, division 0 never renders one).
+        function shrinkLayoutByOne() {
+            if (horizontal > 1 && horizontal >= vertical) {
+                applyLayout(vertical, horizontal - 1);
+            } else if (vertical > 1) {
+                applyLayout(vertical - 1, horizontal);
+            }
+        }
+
         // ---------------- Close a Display: remaining Displays expand -----
         // (CLAUDE-P40-E3A, Section 6). Division 0 has no close button - it
         // is the always-present primary. At least one Display always
@@ -405,7 +521,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 e.stopPropagation();
                 const idx = parseInt(btn.dataset.divisionClose, 10);
                 clearDivision(idx);
-                applyLayout(quantity - 1, orientation);
+                shrinkLayoutByOne();
             });
         });
 
@@ -449,21 +565,26 @@ document.addEventListener('DOMContentLoaded', () => {
             const menu = document.getElementById('display-context-menu');
             const closeBtn = document.getElementById('display-context-close');
             const applyBtn = document.getElementById('display-context-apply');
-            const decBtn = document.getElementById('display-context-decrement');
-            const incBtn = document.getElementById('display-context-increment');
-            const vBtn = document.getElementById('display-context-orientation-vertical');
-            const hBtn = document.getElementById('display-context-orientation-horizontal');
+            const vDec = document.getElementById('display-context-vertical-decrement');
+            const vInc = document.getElementById('display-context-vertical-increment');
+            const hDec = document.getElementById('display-context-horizontal-decrement');
+            const hInc = document.getElementById('display-context-horizontal-increment');
             if (!menu) return;
 
             let menuDivisionIndex = null;
-            let pendingQuantity = 2;
-            let pendingOrientation = 'vertical';
+            let pendingVertical = vertical;
+            let pendingHorizontal = horizontal;
 
             function openMenu(x, y, divisionIndex) {
                 menuDivisionIndex = divisionIndex;
-                pendingQuantity = 2;
-                pendingOrientation = orientation;
-                syncMenuControls('display-context', pendingQuantity, pendingOrientation);
+                // CLAUDE-P40-VW4: seed the pending values from the
+                // CURRENTLY APPLIED layout (not a fixed preset) - matches
+                // the top-bar control and satisfies Requirement 9
+                // (dismissing without Apply must show the real state next
+                // time, whichever control reopens it).
+                pendingVertical = vertical;
+                pendingHorizontal = horizontal;
+                syncQuantityControls('display-context', pendingVertical, pendingHorizontal);
                 if (closeBtn) closeBtn.hidden = (divisionIndex === 0);
                 // CLAUDE-P40-E3A-QA, Section 6: "position within the usable
                 // application surface" - a right-click near the right or
@@ -495,23 +616,23 @@ document.addEventListener('DOMContentLoaded', () => {
             if (closeBtn) closeBtn.addEventListener('click', () => {
                 if (menuDivisionIndex) {
                     clearDivision(menuDivisionIndex);
-                    applyLayout(quantity - 1, orientation);
+                    shrinkLayoutByOne();
                 }
                 closeMenu();
             });
-            if (decBtn) decBtn.addEventListener('click', () => { pendingQuantity = Math.max(2, pendingQuantity - 1); syncMenuControls('display-context', pendingQuantity, pendingOrientation); });
-            if (incBtn) incBtn.addEventListener('click', () => { pendingQuantity = Math.min(MAX_DISPLAY_DIVISIONS, pendingQuantity + 1); syncMenuControls('display-context', pendingQuantity, pendingOrientation); });
-            if (vBtn) vBtn.addEventListener('click', () => { pendingOrientation = 'vertical'; syncMenuControls('display-context', pendingQuantity, pendingOrientation); });
-            if (hBtn) hBtn.addEventListener('click', () => { pendingOrientation = 'horizontal'; syncMenuControls('display-context', pendingQuantity, pendingOrientation); });
+            if (vDec) vDec.addEventListener('click', () => { pendingVertical = Math.max(MIN_DISPLAY_DIVISIONS, pendingVertical - 1); syncQuantityControls('display-context', pendingVertical, pendingHorizontal); });
+            if (vInc) vInc.addEventListener('click', () => { if ((pendingVertical + 1) * pendingHorizontal > MAX_DISPLAY_DIVISIONS) return; pendingVertical += 1; syncQuantityControls('display-context', pendingVertical, pendingHorizontal); });
+            if (hDec) hDec.addEventListener('click', () => { pendingHorizontal = Math.max(MIN_DISPLAY_DIVISIONS, pendingHorizontal - 1); syncQuantityControls('display-context', pendingVertical, pendingHorizontal); });
+            if (hInc) hInc.addEventListener('click', () => { if (pendingVertical * (pendingHorizontal + 1) > MAX_DISPLAY_DIVISIONS) return; pendingHorizontal += 1; syncQuantityControls('display-context', pendingVertical, pendingHorizontal); });
             if (applyBtn) applyBtn.addEventListener('click', () => {
                 // "Divide this Display" - this stage's own honest scope:
-                // applies the chosen direction/quantity to the WHOLE
-                // Display (extending the existing dynamic-N mechanism),
+                // applies the chosen Vertical x Horizontal to the WHOLE
+                // Display (extending the existing dynamic-grid mechanism),
                 // not a true nested sub-grid within one division - a
                 // fully independent per-division sub-split is not
                 // implemented this stage (Section 6 asks only for the
                 // presentation-state foundation, not every refinement).
-                applyLayout(pendingQuantity, pendingOrientation);
+                applyLayout(pendingVertical, pendingHorizontal);
                 closeMenu();
             });
         })();
@@ -531,7 +652,8 @@ document.addEventListener('DOMContentLoaded', () => {
         // never a Project/Document write (Section 6's boundary).
         let storedLayout = null;
         try { storedLayout = JSON.parse(window.localStorage.getItem(layoutKey) || 'null'); } catch (e) { /* ignore */ }
-        applyLayout(storedLayout ? storedLayout.quantity : 1, storedLayout ? storedLayout.orientation : 'vertical', false);
+        const normalizedLayout = normalizeStoredLayout(storedLayout);
+        applyLayout(normalizedLayout.vertical, normalizedLayout.horizontal, false);
 
         let storedTarget = null;
         try { storedTarget = parseInt(window.sessionStorage.getItem(targetKey), 10); } catch (e) { /* ignore */ }
