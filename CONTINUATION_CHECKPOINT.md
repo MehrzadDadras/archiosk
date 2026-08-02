@@ -1,5 +1,105 @@
 # Continuation checkpoint
 
+## 2026-08-02 — CLAUDE-P40-VW7: project-scoped conversation Tags and Tasks
+
+**Commits:** `3457c9f` (implementation), `a2715fe` (tests). Starting
+state was `a0c0552` (the P40-E3A-F1-QA-CLOSE checkpoint acceptance
+commit) - HEAD and `origin/main` verified equal beforehand, tree clean
+except the pre-existing untracked
+`tests/fixtures/nreocrc/_lab_instance_scratch_002/`. Full suite: 1745
+passed, 0 failed (was 1690 before this stage; 55 net new - 54 in the
+new `tests/test_p40vw7_conversation_tags_and_tasks.py`, plus one
+replacing an obsoleted VW6 assertion, see below). **No product-owner
+acceptance seal recorded** - not requested this stage, and the
+prompt's own Section 13 explicitly said not to issue one; subject to
+the real-browser walkthrough this environment has no tool to perform
+itself (stated as a limitation below, not fabricated).
+
+**What this authorizes, narrowly**: a OneNote-style contextual toolbar
+on selected Project Conversation text (`Add Tag`/`Make Task`/
+`Highlight`/`Important`/`Question`/`Copy`), persistent source-anchored
+Tags/Highlights and real persisted Tasks, and two new Lists branches
+(`Tasks <count>`/`Tags <count>`) inside the active Project's own tree
+that update live without a reload. Explicitly NOT authorized by this
+same prompt: cross-project intelligence, machine-generated assumption
+correction, organization-wide task management, external integrations,
+or general autonomous chat governance - `governance/STATUS.md` gained
+one new row recording exactly this boundary, not a reopening of the
+"Application implementation, broadly: STILL FROZEN" default.
+
+**Design choices worth remembering**:
+- Anchoring is a text-quote-selector (scope + case/message/guidance
+  identity + start/end offsets + exact quotation + limited prefix/
+  suffix), computed client-side via `Range`-based offset math against
+  a message's own `.conv-message-text` span - a new wrapper added
+  specifically so the offset computation walks exactly the canonical
+  `message.text` string, never the surrounding role-label/"Re:"/
+  Source-grounding chrome that shares the same `.conversation-message`
+  div. Confirmed `hotlinks()` never changes character count, so
+  offsets computed against rendered `.textContent` stay valid against
+  the server-stored string.
+- `Highlight`/`Important`/`Question` are `BUILT_IN_TAGS` - fixed code
+  constants, never stored per-project - so they mean the same thing in
+  every Project regardless of who tags first; a custom tag whose
+  normalized name collides with a built-in's name resolves to the
+  built-in instead of creating a duplicate.
+- `_validate_source_anchor` performs a REAL existence check (the case/
+  message actually resolves against the current workspace) before
+  anything is ever persisted - Tag/Task creation cannot itself produce
+  an unresolvable anchor. `resolve_conversation_anchor` is the separate
+  READ-time check `show_workspace` uses to decide "Source unavailable"
+  - exercised in tests by directly editing a persisted record's
+  `message_id` to simulate data drift, since the write path can't
+  produce that state on its own.
+- Deliberate scope simplification: Tags/Highlights are NOT rendered as
+  permanent inline in-message highlights. The Lists panel is the sole
+  discovery surface; navigating to a source scrolls the whole message
+  into view and applies a temporary flash (`--highlight-orange-tint`,
+  2.5s, removed by JS) rather than a permanent `<mark>` wrap reconciled
+  against `hotlinks()`'s own substring-wrapping - reported here as an
+  honest, bounded corner, not silently cut.
+- First use of `fetch()` anywhere in this app - `tools/
+  dependency_fit.py` was actually run beforehand per CLAUDE.md's own
+  instruction (clean PASS on all 6 checks) rather than assumed
+  compatible. Used only where Section 12's browser-verification steps
+  require an update with no reload (Tag/Task creation, Tag removal);
+  Task complete/reopen stayed classic form-POST + redirect on purpose.
+- New `--tagcolor-*` tokens (`tokens.css`) are deliberately
+  mode-invariant, unlike every other token in that file - they're
+  never text, only a small bordered swatch dot, so a border ring
+  (not six more dark/tinted variants) is what actually keeps them
+  visible in Light/Dark/Tinted. The navigate-to-source flash instead
+  reuses the existing, already mode-verified `--highlight-orange-tint`
+  (a genuine semantic fit - "current position in a sequence") rather
+  than a raw swatch color, after checking that a raw yellow flash
+  would fail contrast against white Dark-mode text.
+- `governance/STATUS.md`'s new row and this entry both explicitly do
+  NOT interpret this authorization as covering cross-project
+  intelligence, autonomous chat governance, or CLAUDE-P41 - none of
+  that was started.
+
+**Test-infrastructure note**: `tests/test_p40vw6_theme_correction.py`'s
+`test_popup_z_index_is_the_highest_in_the_file` asserted the VW6
+Appearance popup's z-index was the file's global maximum - the new
+selection toolbar (70) and Add Tag/Make Task dialogs (80) legitimately
+need to sit above it too (a dialog opened while the popup happens to
+be open must still render on top), so that specific numeric ceiling is
+now genuinely different, not regressed. Renamed/restructured rather
+than weakened: the popup's own real invariant (strictly above the
+Display context menu) is preserved and asserted directly, and a new
+test confirms the toolbar/dialog are now the correctly-ordered top two
+overlays with the dialog as the file's actual maximum.
+
+**Remaining/uncertain**: no real-browser walkthrough was performed (no
+browser-automation tool connected in this environment, consistent with
+every VW stage before this one) - the 17-step journey the prompt's
+Section 12 describes is verified here only via structural HTML/route/
+JSON assertions, not pixel-level positioning, keyboard focus order, or
+actual Light/Dark/Tinted visual rendering. `STATIC_VERSION` bumped to
+35 in `.env` (git-ignored, not part of either commit) and the dev
+server restarted via the `restart-app` skill for the CSS/JS changes to
+take effect.
+
 ## 2026-08-02 — CLAUDE-P40-VW6: corrected Light, Dark, and Tinted panel rendering
 
 **Commit:** `8abbd0d`. Full suite: 1690 passed, 0 failed (was 1650; 40
