@@ -115,12 +115,11 @@ document.addEventListener('DOMContentLoaded', () => {
     // CLAUDE-P40-E2B, Section C: Chat's continuous resize replaces the
     // old binary "show full history" checkbox entirely - a drag handle
     // (pointer events), keyboard resize (ArrowUp/ArrowDown/Home/End
-    // when the handle is focused), and two discrete Compact/Expanded
-    // presets as the keyboard-friendly alternative Section C itself
-    // asks for. Height is a CSS custom property on .case-workspace
-    // (--chat-height), read by grid-template-rows - one write point,
-    // so the drag handle and the preset buttons never fight each other
-    // or drift out of sync.
+    // when the handle is focused), and one size toggle as the keyboard-
+    // friendly alternative Section C itself asks for. Height is a CSS
+    // custom property (--chat-height, on .app-shell), read by the Chat
+    // row's own height rule - one write point, so the drag handle and
+    // the toggle never fight each other or drift out of sync.
     (function setUpChatResize() {
         // CLAUDE-P40-E3A, Section 9: Chat is now a full-width row in the
         // application shell's own grid (base.html's .app-shell), not
@@ -134,16 +133,33 @@ document.addEventListener('DOMContentLoaded', () => {
         const MAX_HEIGHT = 640;
         const COMPACT_HEIGHT = 220;
         const EXPANDED_HEIGHT = 520;
+        // CLAUDE-P40-E3A-QA, Section 10: the one size toggle's label names
+        // the action it performs next, not a fixed preset name - "closer to
+        // Expanded than Compact" (the arithmetic midpoint between the two
+        // presets) is "already expanded", so the toggle offers to Compact
+        // it, and vice versa. Applies regardless of whether the height got
+        // there via drag, keyboard, or the toggle itself.
+        const SIZE_MIDPOINT = (COMPACT_HEIGHT + EXPANDED_HEIGHT) / 2;
         const heightKey = `beehive:chat:height:${projectId}`;
+        const sizeToggle = document.getElementById('conversation-size-toggle');
 
         function clamp(px) {
             return Math.max(MIN_HEIGHT, Math.min(MAX_HEIGHT, px));
+        }
+
+        function syncSizeToggle(px) {
+            if (!sizeToggle) return;
+            const isExpanded = px > SIZE_MIDPOINT;
+            sizeToggle.textContent = isExpanded ? 'Compact' : 'Expand';
+            sizeToggle.setAttribute('aria-pressed', String(isExpanded));
+            sizeToggle.setAttribute('aria-label', isExpanded ? 'Compact the conversation panel' : 'Expand the conversation panel');
         }
 
         function applyHeight(px, persist) {
             const clamped = clamp(px);
             grid.style.setProperty('--chat-height', `${clamped}px`);
             handle.setAttribute('aria-valuenow', String(clamped));
+            syncSizeToggle(clamped);
             if (persist !== false) {
                 try { window.localStorage.setItem(heightKey, String(clamped)); } catch (e) { /* ignore */ }
             }
@@ -191,16 +207,14 @@ document.addEventListener('DOMContentLoaded', () => {
             else if (e.key === 'End') { applyHeight(MAX_HEIGHT); e.preventDefault(); }
         });
 
-        document.querySelectorAll('.conversation-preset-btn').forEach((btn) => {
-            btn.addEventListener('click', () => {
-                const target = btn.dataset.conversationPreset === 'expanded' ? EXPANDED_HEIGHT : COMPACT_HEIGHT;
-                const applied = applyHeight(target);
-                document.querySelectorAll('.conversation-preset-btn').forEach((other) => {
-                    other.setAttribute('aria-pressed', String(other === btn));
-                });
+        if (sizeToggle) {
+            sizeToggle.addEventListener('click', () => {
+                const current = parseInt(handle.getAttribute('aria-valuenow'), 10) || COMPACT_HEIGHT;
+                const target = current > SIZE_MIDPOINT ? COMPACT_HEIGHT : EXPANDED_HEIGHT;
+                applyHeight(target);
                 handle.focus();
             });
-        });
+        }
     })();
 
     // CLAUDE-P40-E3A, Section 7: Toolbox's own show/hide toggle is now the
@@ -451,9 +465,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 pendingOrientation = orientation;
                 syncMenuControls('display-context', pendingQuantity, pendingOrientation);
                 if (closeBtn) closeBtn.hidden = (divisionIndex === 0);
-                menu.style.left = `${x}px`;
-                menu.style.top = `${y}px`;
+                // CLAUDE-P40-E3A-QA, Section 6: "position within the usable
+                // application surface" - a right-click near the right or
+                // bottom edge must not push the menu partially off-screen.
+                // Measured AFTER menu.hidden = false so offsetWidth/Height
+                // reflect its real rendered size, then clamped.
                 menu.hidden = false;
+                const margin = 8;
+                const maxLeft = window.innerWidth - menu.offsetWidth - margin;
+                const maxTop = window.innerHeight - menu.offsetHeight - margin;
+                menu.style.left = `${Math.max(margin, Math.min(x, maxLeft))}px`;
+                menu.style.top = `${Math.max(margin, Math.min(y, maxTop))}px`;
             }
             function closeMenu() { menu.hidden = true; menuDivisionIndex = null; }
 

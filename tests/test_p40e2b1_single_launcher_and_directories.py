@@ -244,11 +244,21 @@ class DirectoryLauncherTests(_BaseTestCase):
         self.assertNotIn(f'href="/projects/{self.project_id}/workspace?view=documents"', body)
 
     def test_documents_directory_lists_sources_and_supports_adding_one(self):
+        # SUPERSEDED IN PART (CLAUDE-P40-E3A-QA, Section 9): "Add a
+        # Document" used to render unconditionally in Toolbox regardless
+        # of what was selected - product-owner browser observation named
+        # the Toolbox "visually heavy... project-level controls" bleeding
+        # into a contextual (per-Document/per-Investigation) view. Now
+        # scoped to the no-selection ("project-level tools") Toolbox
+        # state only, matching Section 9's own Expected-context table
+        # ("Document: existing Document tools as applicable" - Remove
+        # Document only, not Add-a-Document too).
         client = self._client_as("p40e2b1_owner", 1)
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
         self.assertIn("rfp.txt", body)
+        self.assertIn('action="/projects/{}/workspace/sources/document"'.format(self.project_id), body)
         add_body = client.get(f"/projects/{self.project_id}/workspace?source=" + self._store().get(self.project_id).sources[0]["id"]).get_data(as_text=True)
-        self.assertIn('action="/projects/{}/workspace/sources/document"'.format(self.project_id), add_body)
+        self.assertNotIn('action="/projects/{}/workspace/sources/document"'.format(self.project_id), add_body)
 
     def test_investigations_launcher_link_targets_the_investigations_directory(self):
         client = self._client_as("p40e2b1_owner", 1)

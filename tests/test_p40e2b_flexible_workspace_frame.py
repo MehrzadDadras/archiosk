@@ -243,11 +243,19 @@ class ChatResizeTests(_BaseTestCase):
         self.assertRegex(js, r"MAX_HEIGHT\s*=\s*640")
         self.assertIn("Math.max(MIN_HEIGHT, Math.min(MAX_HEIGHT", js)
 
-    def test_compact_and_expanded_presets_exist_as_keyboard_friendly_alternative(self):
+    def test_one_size_toggle_exists_as_keyboard_friendly_alternative(self):
+        # SUPERSEDED (CLAUDE-P40-E3A-QA, Section 10): the two
+        # simultaneously-visible "Compact"/"Expanded" buttons this test
+        # used to check for are gone - product-owner browser observation
+        # named them visually heavy and ambiguous about which reflected
+        # the current state. Replaced by ONE toggle whose own label names
+        # the next action (also implying current state); still a real,
+        # keyboard-operable (plain <button>) alternative to dragging the
+        # resize handle, same requirement this test's own name states.
         client = self._client_as("p40e2b_owner", 1)
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
-        self.assertIn('data-conversation-preset="compact"', body)
-        self.assertIn('data-conversation-preset="expanded"', body)
+        self.assertIn('id="conversation-size-toggle"', body)
+        self.assertNotIn('data-conversation-preset=', body)
 
     def test_height_persisted_as_reviewer_specific_css_custom_property(self):
         js = _JS_PATH.read_text(encoding="utf-8")

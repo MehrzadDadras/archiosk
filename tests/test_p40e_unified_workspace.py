@@ -236,13 +236,25 @@ class ConversationDockTests(_BaseWorkspaceTestCase):
         self.assertIn('data-conversation-draft="project"', home_body)
         self.assertIn(f'data-conversation-draft="case-{case_id}"', case_body)
 
-    def test_no_fake_conversation_lifecycle_controls_only_honest_disclosure(self):
+    def test_no_fake_conversation_lifecycle_controls(self):
         # Sections F/H were left specified-but-unbuilt - confirms no
         # dead/misleading "Start New Conversation"/"Archive"/"Save
-        # Pattern" control exists, only the honest note.
+        # Pattern" control exists.
+        #
+        # SUPERSEDED IN PART (CLAUDE-P40-E3A-QA, Section 10): the inline
+        # "Named conversation history and saved investigation patterns
+        # are planned, not available yet" disclosure this test used to
+        # also require is removed outright - product-owner browser
+        # observation named it clutter ("remove outdated or unnecessary
+        # planning copy... when that copy merely clutters the working
+        # surface"), and CLAUDE-P40-E3A, Section 13's own exclusion list
+        # is the actual place that scope stays documented as unbuilt, not
+        # a runtime disclaimer repeated on every Chat dock. The real
+        # invariant this test protects - no fake lifecycle control
+        # actually exists - is unchanged and still checked below.
         client = self._client_as("p40e_owner", 1)
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
-        self.assertIn("planned, not available yet", body)
+        self.assertNotIn("planned, not available yet", body)
         for control in ("Start New Conversation", "Archive Conversation", "Save Pattern"):
             self.assertNotIn(control, body)
 

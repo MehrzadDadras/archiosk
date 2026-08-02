@@ -90,12 +90,26 @@
    CLAUDE-P40-E2B, Section C: no longer a <details>/accordion - Chat is
    now always visible (never collapsed via a disclosure triangle),
    varying only in HEIGHT (a resize handle, dragged or keyboard-
-   operated; Compact/Expanded preset buttons as the discrete
-   alternative - static/js/case_workspace.js). The old checkbox-based
+   operated, or the one size toggle below). The old checkbox-based
    "Show full conversation history" binary toggle is gone; continuous
    resize replaces it. A plain <div role="region"> with the same
    accordion-section visual treatment (top border, spacing) the
-   previous <details> already had, not a new decorative container. #}
+   previous <details> already had, not a new decorative container.
+
+   CLAUDE-P40-E3A-QA, Section 10: was two simultaneously-visible
+   "Compact"/"Expanded" buttons (product-owner browser observation:
+   visually heavy, ambiguous which one reflects the current state) -
+   now ONE toggle whose own label names the action it performs next
+   ("Expand" while compact, "Compact" while already expanded), so its
+   text alone also communicates current state without a second
+   pressed-style indicator to read. static/js/case_workspace.js keeps
+   its label in sync with height changes from ANY source (drag,
+   keyboard, or the toggle itself), never just the toggle's own clicks.
+   The "planned, not available yet" line for named history/saved
+   patterns is removed outright per the same section - clutter, not
+   information; those remain genuinely unbuilt (CLAUDE-P40-E3A, Section
+   13's own exclusion list), nothing here claims otherwise by staying
+   silent about them. #}
 {% macro conversation_dock(heading, message_count, post_url, scope_key, placeholder, include_anchor_fields=False) %}
 <div class="accordion-section conversation-dock-panel" id="conversation-dock" role="region" aria-label="{{ heading }} conversation">
     <div class="conversation-dock-resize-handle" id="conversation-dock-resize-handle"
@@ -103,14 +117,8 @@
          tabindex="0" aria-valuemin="120" aria-valuemax="640"></div>
     <div class="conversation-dock-header">
         <span class="accordion-summary-text">{{ heading }} ({{ message_count }})</span>
-        <div class="conversation-dock-presets" role="group" aria-label="Conversation panel size">
-            <button type="button" class="conversation-preset-btn" data-conversation-preset="compact">Compact</button>
-            <button type="button" class="conversation-preset-btn" data-conversation-preset="expanded">Expanded</button>
-        </div>
+        <button type="button" class="conversation-size-toggle" id="conversation-size-toggle" aria-pressed="false">Expand</button>
     </div>
-    <p class="pane-note" style="margin:-0.3rem 0 0.5rem;font-size:0.78rem;flex-shrink:0;">
-        Named conversation history and saved investigation patterns are planned, not available yet.
-    </p>
     {{ caller() }}
     <form class="conversation-input-form conversation-dock-composer" method="post" action="{{ post_url }}">
         {% if include_anchor_fields %}

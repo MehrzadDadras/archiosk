@@ -2017,11 +2017,17 @@
         </form>
         {% endif %}
     </section>
-    {% endif %}
 
-    {# CLAUDE-P40-E3A, Section 8: relocated from the former ?view=documents
-       Display body (now removed, Section 4) - existing tools only, same
-       routes, same forms. #}
+    {# CLAUDE-P40-E3A-QA, Section 9 fix: "Add a Document"/"Removed Items"/
+       "Project Data Management" used to render unconditionally below the
+       contextual section above - meaning opening an Investigation's
+       Findings, or a Document, ALSO always dragged in three project-level
+       sections underneath, regardless of relevance. Product-owner browser
+       observation: "visually heavy... contains lengthy explanatory text
+       and project-level controls." Section 9's own Expected-context table
+       lists these only under "no selected item: minimal Project-level
+       tools only" - Investigation/Document contexts list only their own
+       tools. Scoped here, inside the no-selection branch, to match. #}
     <section class="workspace-pane">
         <h3>Add a Document</h3>
         {% call macros.subdisclosure('+ Add Documents', html_id='project-sources-add-document') %}
@@ -2073,6 +2079,7 @@
         <p class="pane-note">Administrator only.</p>
         <a class="btn btn-ghost workspace-link" href="{{ url_for('portal.reset_project_data') }}">Reset Project Data&hellip;</a>
     </section>
+    {% endif %}
     {% endif %}
 {% endblock %}
 

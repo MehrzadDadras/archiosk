@@ -184,6 +184,13 @@ a:focus-visible, button:focus-visible, input:focus-visible {
     cursor: pointer;
     background: transparent;
     position: relative;
+    /* CLAUDE-P40-E3A-QA, Section 7: explicit low z-index (rather than
+       relying on implicit stacking order) so this line can never paint
+       above the top-bar menus (z-index 20), the Display context menu
+       (z-index 40), or the narrow-screen Lists/Toolbox drawers (z-index
+       30) even if a future change gives an ancestor of theirs its own
+       stacking context - verified structurally, not just by omission. */
+    z-index: 1;
 }
 .panel-divider::before {
     content: "";
@@ -1374,6 +1381,14 @@ html.toolbox-hidden .workspace-pane-toolbox {
     flex-direction: column;
     gap: 1rem;
     min-width: 0;
+    /* CLAUDE-P40-E3A-QA, Section 8 fix: never had a default background at
+       all (a real gap from this stage's own rewrite, not a deliberate
+       choice) - transparent let the page's own warm --canvas bleed
+       straight through, which is exactly the "beige/default tinted
+       surfaces" the product owner flagged. Lists (.launcher-panel) and
+       Display (.workspace-pane-display) already default to this same
+       plain --surface-primary; Toolbox now matches them. */
+    background: var(--surface-primary);
 }
 .workspace-pane-toolbox.appearance-tinted { background: var(--surface-secondary); }
 .workspace-pane-toolbox > h2 {
@@ -1622,6 +1637,20 @@ html.toolbox-hidden .workspace-pane-toolbox {
     overflow: hidden;
     background: var(--surface-primary);
     min-height: 0;
+    /* CLAUDE-P40-E3A-QA, Section 10 fix: .accordion-section (a class this
+       element also carries - see the macro's own comment on reusing its
+       visual treatment) sets border-top/margin-top/padding-top by
+       default. CLAUDE-P40-E2B already intended the resize handle's own
+       divider line to be THE one divider ("the handle IS the divider,
+       not a separate invisible hit-target floating over a decorative
+       one") but never actually zeroed these out here, leaving a second,
+       redundant border+gap stacked directly above the handle's own -
+       exactly the "visually heavy separators" the product owner flagged.
+       Zeroed here, not by editing .accordion-section itself (still
+       correct for its many other, actually-nested, callers). */
+    border-top: none;
+    margin-top: 0;
+    padding-top: 0;
 }
 /* CLAUDE-P40-E3A, Section 9: the shell-level full-width Chat row itself
    - "spans the entire application width beneath Lists, Display and
@@ -1639,8 +1668,13 @@ html.toolbox-hidden .workspace-pane-toolbox {
     z-index: 10;
     height: var(--chat-height, 220px);
     background: var(--surface-primary);
-    border-top: 1px solid var(--border);
 }
+/* CLAUDE-P40-E3A-QA, Section 10 fix: no border-top here - product-owner
+   browser observation named "visually heavy separators", and this rule
+   was stacking a second divider line directly above
+   .conversation-dock-resize-handle's own (its ::before below is already
+   documented, since CLAUDE-P40-E2B, as THE one visual divider handle
+   reviewers see - "the handle IS the divider"). One line, not two. */
 .chat-region.appearance-tinted,
 .chat-region.appearance-tinted .conversation-dock-panel {
     background: var(--surface-secondary);
@@ -1689,15 +1723,16 @@ html.toolbox-hidden .workspace-pane-toolbox {
     flex-shrink: 0;
     margin-bottom: 0.5rem;
 }
-.conversation-dock-presets {
-    display: flex;
-    gap: 0.4rem;
-    text-transform: none;
-    letter-spacing: normal;
-}
-.conversation-preset-btn {
+/* CLAUDE-P40-E3A-QA, Section 10: one size toggle, replacing the old
+   two-button .conversation-dock-presets/.conversation-preset-btn pair -
+   its own label already names the action ("Expand"/"Compact"), so no
+   aria-pressed-driven color distinction between two buttons is needed
+   anymore. */
+.conversation-size-toggle {
     font-family: var(--font-body);
     font-size: 0.78rem;
+    text-transform: none;
+    letter-spacing: normal;
     color: var(--text-secondary);
     background: none;
     border: 1px solid var(--border);
@@ -1705,8 +1740,7 @@ html.toolbox-hidden .workspace-pane-toolbox {
     padding: 0.15rem 0.5rem;
     cursor: pointer;
 }
-.conversation-preset-btn:hover,
-.conversation-preset-btn[aria-pressed="true"] {
+.conversation-size-toggle:hover {
     color: var(--text-primary);
     border-color: var(--border-strong);
 }
@@ -1749,6 +1783,20 @@ html.toolbox-hidden .workspace-pane-toolbox {
 }
 .conversation-message.system .role-label { color: var(--machine-blue); }
 .conversation-empty { color: var(--text-secondary); font-size: 0.85rem; }
+/* CLAUDE-P40-E3A-QA, Section 10: product-owner browser observation named
+   an "oversized empty-history area" - .conversation-thread is flex:1
+   (fills whatever Chat height is currently set, by design, so continuous
+   resize has somewhere to put the extra space), which pinned a single
+   empty-state line to the top and left a large bare gap beneath it.
+   Centering only the genuinely-empty case (the message is the thread's
+   only child) fills that same space on purpose instead of leaving it
+   looking like an accident - a real conversation with messages keeps
+   align-content: start (top-packed, scrollable) unaffected. */
+.conversation-thread:has(> .conversation-empty:only-child) {
+    align-content: center;
+    justify-items: center;
+}
+.conversation-thread .conversation-empty { text-align: center; }
 
 .conversation-input-form { display: flex; flex-wrap: wrap; gap: 0.6rem; flex-shrink: 0; }
 /* CLAUDE-P40-E1: the "Re: <anchored object>" badge a "Discuss this X"

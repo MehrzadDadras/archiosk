@@ -192,7 +192,13 @@
                                             {% endfor %}
                                         </ul>
                                     </li>
-                                    {% if rfi_drafts_view %}
+                                    {# CLAUDE-P40-E3A-QA fix: this branch used to be wrapped in
+                                       {% if rfi_drafts_view %}, unlike its Documents/Investigations
+                                       siblings above (which always render their heading, count
+                                       included, even at 0) - a Project with no RFI drafts yet
+                                       silently lost the whole RFIs row instead of showing "RFIs
+                                       (0)" like every other branch. Matches the sibling pattern
+                                       now: always present, count reflects reality. #}
                                     <li class="tree-node" data-tree-node>
                                         <button type="button" class="tree-toggle launcher-link" data-tree-parent aria-expanded="false">
                                             <span class="tree-label">RFIs <span class="launcher-count">{{ rfi_drafts_view|length }}</span></span>
@@ -211,7 +217,6 @@
                                             {% endfor %}
                                         </ul>
                                     </li>
-                                    {% endif %}
                                     {# Communications: omitted outright - no honest existing listing
                                        exists anywhere in this codebase to show (CLAUDE-P40-E3A,
                                        Section 4's own "only if an honest existing listing exists"
