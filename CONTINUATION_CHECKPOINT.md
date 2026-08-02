@@ -1,5 +1,41 @@
 # Continuation checkpoint
 
+## 2026-08-02 — CLAUDE-P40-E3B-DEFER-CLOSE: evidence-backed Defer decision accepted
+
+**Seal commit:** (this checkpoint commit itself). Starting state was
+`a0c0552` (P40-E3A-F1-QA-CLOSE's own checkpoint commit) - HEAD and
+`origin/main` verified equal before recording this seal; working tree
+clean except the pre-existing, unrelated untracked
+`tests/fixtures/nreocrc/_lab_instance_scratch_002/`. Last independently
+verified full suite: **1507 passed, 0 failed** (unchanged - no code
+changed since that run).
+
+**The product owner accepts the P40-E3B conclusion: DEFER.** P40-E3B
+performed repository-grounded scope derivation - reconciling this
+checkpoint, the full P40-E3A/E3A-QA/F1 commit history, `governance/
+STATUS.md`, and the current templates/CSS/JS/routes/tests - and found
+no genuine, safe, marketable increment available within its own
+boundaries. **No E3B implementation occurred.**
+
+- Shell relocation and navigation, the left-panel recursive hierarchy,
+  and dynamic Multi-Display state/projection were already delivered by
+  P40-E3A and conditionally accepted (P40-E3A-QA-CLOSE, `1c56999`).
+- Drawing/annotation, governed chat tagging and assumption correction,
+  and cross-project intelligence/later integrations remain separately
+  authorization-dependent (per `governance/STATUS.md`'s application-wide
+  freeze default and `governance/specified-unbuilt/`) and were not
+  started.
+- The rendered-detail differences from the numbered prototype remain
+  reserved for a future product-owner visual walkthrough - not
+  attempted from prose in this stage, per P40-E3B's own scope boundary.
+
+No application code, test, template, CSS, JavaScript, schema, or
+project/document data was changed to reach or record this decision.
+`MANIFEST.md` was not updated - nothing in it went stale, since no
+tracked file it catalogues was touched. **The next productive activity
+is the deferred visual walkthrough with the product owner.** P40-E3B is
+now closed as DEFER; P41 was not started.
+
 ## 2026-08-02 — CLAUDE-P40-E3A-F1-QA-CLOSE: Stable URL Restoration flake closed
 
 **Seal commit:** (this checkpoint commit itself). Starting state was
