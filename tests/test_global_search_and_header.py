@@ -132,8 +132,14 @@ class HeaderAndBrandTests(unittest.TestCase):
         # (.workspace-topbar-brand, base.html) - see that template's own
         # note on why identity now lives there instead of the launcher
         # panel.
+        # CLAUDE-P40-VW7A added a data-ref="menu.brand" attribute to this
+        # same element (UI_REFERENCE_MAP.md) - selector updated to allow
+        # attributes between the class and href, not asserting their
+        # absence (this test's own subject is the visible text, not the
+        # exact attribute ordering).
         body = self.client.get("/").get_data(as_text=True)
-        self.assertIn('workspace-topbar-brand" href="/">Archiosk<', body)
+        self.assertIn('workspace-topbar-brand"', body)
+        self.assertRegex(body, r'workspace-topbar-brand"[^>]*href="/">Archiosk<')
 
     def test_search_toggle_and_nav_toggle_are_gone(self):
         # CLAUDE-P40-E2B1, Section F: "Remove superseded Home, search,
@@ -289,9 +295,16 @@ class TypographyCorrectionTests(unittest.TestCase):
         # must not leak into any other rule.
         self.assertEqual(self.css.count("Space Grotesk"), 1)
 
-    def test_font_mono_reduced_to_exactly_the_two_technical_exceptions(self):
-        self.assertEqual(self.css.count("font-family: var(--font-mono);"), 2)
+    def test_font_mono_reduced_to_exactly_the_three_technical_exceptions(self):
+        # CLAUDE-P40-VW7A added a third: the UI Reference Mode badge
+        # (.ui-reference-mode-active [data-ref]::after) renders a
+        # dot-path identifier string - exactly the "technical register"
+        # tokens.css's own header reserves --font-mono for (paths, ids,
+        # logs), the same category .finding-provenance and
+        # .region-status already were. Not a leak into ordinary UI text.
+        self.assertEqual(self.css.count("font-family: var(--font-mono);"), 3)
         self.assertIn(".region-status { font-family: var(--font-mono); }", self.css)
+        self.assertIn(".ui-reference-mode-active [data-ref]::after {", self.css)
 
     def test_common_ui_elements_no_longer_reference_font_mono(self):
         # Spot-check a representative sample of exactly the element types

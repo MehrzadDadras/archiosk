@@ -432,21 +432,34 @@ class PopupOpacityAndStackingTests(unittest.TestCase):
         popup_z = int(re.search(r"\.workspace-layout-options,.*?z-index:\s*(\d+)", self.main_css, re.S).group(1))
         self.assertLess(context_menu_z, popup_z)
 
-    def test_conv_selection_toolbar_and_dialog_are_the_new_top_overlays(self):
+    def test_conv_selection_toolbar_and_dialog_are_correctly_ordered_overlays(self):
         # CLAUDE-P40-VW7's own two new overlay layers - the selection
-        # toolbar and the Add Tag/Make Task dialogs - are now the file's
-        # actual highest z-indices, each strictly above the layer below
-        # it (dialog > toolbar > Appearance popup > Display context
-        # menu), mirroring this file's own established "explicit,
-        # comfortable margin" stacking discipline rather than reusing an
-        # existing tier.
-        all_z = [int(m) for m in re.findall(r"z-index:\s*(-?\d+)", self.main_css)]
+        # toolbar and the Add Tag/Make Task dialogs - sit strictly above
+        # the layer below each (dialog > toolbar > Appearance popup >
+        # Display context menu), mirroring this file's own established
+        # "explicit, comfortable margin" stacking discipline rather than
+        # reusing an existing tier. No longer asserted as the file's
+        # global maximum - CLAUDE-P40-VW7A's UI Reference Mode badge
+        # (z-index 100) deliberately sits one tier above the dialog, so
+        # a reference badge is never hidden behind a popup/dialog while
+        # inspecting one; see test_ui_reference_mode_badge_is_the_new_
+        # top_overlay below for that invariant.
         popup_z = int(re.search(r"\.workspace-layout-options,.*?z-index:\s*(\d+)", self.main_css, re.S).group(1))
         toolbar_z = int(re.search(r"\.conv-selection-toolbar\s*\{[^}]*z-index:\s*(\d+)", self.main_css, re.S).group(1))
         dialog_z = int(re.search(r"\.conv-dialog\s*\{[^}]*z-index:\s*(\d+)", self.main_css, re.S).group(1))
         self.assertGreater(toolbar_z, popup_z)
         self.assertGreater(dialog_z, toolbar_z)
-        self.assertEqual(dialog_z, max(all_z), f"conv-dialog z-index {dialog_z} is not the highest in the file (max={max(all_z)})")
+
+    def test_ui_reference_mode_badge_is_the_new_top_overlay(self):
+        # CLAUDE-P40-VW7A: the reference-mode badge is a developer/QA
+        # aid, not a normal application overlay - it needs to stay
+        # visible even when inspecting a control inside an open dialog,
+        # so it is deliberately the file's actual highest z-index now.
+        all_z = [int(m) for m in re.findall(r"z-index:\s*(-?\d+)", self.main_css)]
+        dialog_z = int(re.search(r"\.conv-dialog\s*\{[^}]*z-index:\s*(\d+)", self.main_css, re.S).group(1))
+        badge_z = int(re.search(r"\.ui-reference-mode-active \[data-ref\]::after\s*\{[^}]*z-index:\s*(\d+)", self.main_css, re.S).group(1))
+        self.assertGreater(badge_z, dialog_z)
+        self.assertEqual(badge_z, max(all_z), f"UI Reference Mode badge z-index {badge_z} is not the highest in the file (max={max(all_z)})")
 
 
 # ---------------------------------------------------------------------------

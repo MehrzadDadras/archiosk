@@ -160,10 +160,18 @@ class ProjectsDirectoryRedesignTests(unittest.TestCase):
         # "Investigations" - in the hierarchy), not a navigating <a>
         # anymore. It's still highlighted while viewing the directory
         # (pinned open, "active" class on the toggle).
+        # CLAUDE-P40-VW7A added data-ref="lists.projects" to this same
+        # button (UI_REFERENCE_MAP.md) - regex tolerates an attribute
+        # between data-tree-parent and aria-expanded rather than
+        # asserting an exact, now-stale ordering.
+        import re
         response = self.client.get("/projects")
         body = response.get_data(as_text=True)
 
-        self.assertIn('<button type="button" class="tree-toggle launcher-heading active" data-tree-parent aria-expanded="true">', body)
+        self.assertRegex(
+            body,
+            r'<button type="button" class="tree-toggle launcher-heading active" data-tree-parent[^>]*aria-expanded="true">',
+        )
 
 
 if __name__ == "__main__":

@@ -255,11 +255,16 @@ class InvestigationListingTests(_BaseDockTestCase):
         # Investigation itself renders as the active Lists leaf inside
         # it - back in the ONE left panel (Section 2's reversal), not a
         # retired Display branch-nav entry.
+        # CLAUDE-P40-VW7A added data-ref="lists.project.investigations"/
+        # "...leaf" attributes to these same two elements
+        # (UI_REFERENCE_MAP.md) - both selectors below tolerate
+        # attributes appearing between the existing ones rather than
+        # asserting an exact, now-stale attribute ordering.
         import re
-        match = re.search(r'<button type="button" class="tree-toggle launcher-link" data-tree-parent data-tree-owns="case" aria-expanded="(true|false)">', body)
+        match = re.search(r'<button type="button" class="tree-toggle launcher-link" data-tree-parent data-tree-owns="case"[^>]*aria-expanded="(true|false)">', body)
         self.assertIsNotNone(match)
         self.assertEqual(match.group(1), "true")
-        self.assertIn('<a class="tree-leaf launcher-link active" href="', body)
+        self.assertRegex(body, r'<a class="tree-leaf launcher-link active"[^>]*href="')
 
 
 class UnauthorizedInvestigationsHiddenTests(_BaseDockTestCase):
