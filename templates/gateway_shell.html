@@ -1,0 +1,93 @@
+{# ============================================================
+   CLAUDE-P40-VW5: standalone Project Gateway shell.
+
+   Root cause of the defect this file fixes: templates/gateway_base.html
+   used to `{% extends "base.html" %}`, overriding only {% block content
+   %} - so the Lists panel (base.html's own <nav class="launcher-panel">,
+   gated on bare `authenticated`, not on `project_id is defined` the way
+   Toolbox/Chat/Display-Layout already are) rendered around Gateway's
+   centered action-picker card on every visit. This file is the fix:
+   gateway_base.html now extends THIS shell instead - genuinely
+   standalone, the same principle templates/auth_shell.html already
+   established for /login et al. (see that file's own comment) applied
+   one level up the authenticated side. No Lists markup exists in this
+   file to leak, and app.py's inject_globals() skips the
+   nav_recent_projects store query for this route entirely (see its own
+   _NO_PROJECT_LISTING_ENDPOINTS comment) - CSS-hiding was never the
+   actual fix for the auth pages, and it isn't the fix here either.
+
+   Gateway still needs a minimal top bar of its own, unlike the auth
+   pages - real authenticated/is_admin/current_username, an account menu
+   (Sign out, Removed Projects, admin-only Security) so those functions
+   stay reachable now that they're not Lists leaves on this page (VW5's
+   own Section 3: "make them accessible through the appropriate central
+   Gateway action or authenticated account/admin menu" - server-side
+   authorization on each of those routes is unchanged and is the real
+   enforcement; this menu is discoverability only). #}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}Archiosk{% endblock %}</title>
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/tokens.css') }}?v={{ static_version }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v={{ static_version }}">
+</head>
+<body>
+    <div class="blueprint-grid"></div>
+    <div class="gateway-shell">
+        <div class="workspace-topbar">
+            <div class="workspace-topbar-identity">
+                <a class="workspace-topbar-brand" href="{{ url_for('portal.index') }}">Archiosk</a>
+            </div>
+            <div class="workspace-topbar-controls">
+                <details class="workspace-user-menu" id="workspace-user-menu">
+                    <summary class="workspace-topbar-btn workspace-user-summary" aria-label="Account menu">
+                        {% if current_username %}<span class="workspace-user-name">{{ current_username }}</span>{% endif %}
+                        <span aria-hidden="true">&hellip;</span>
+                    </summary>
+                    <div class="workspace-user-options" role="group" aria-label="Account">
+                        <a class="workspace-overflow-item" href="{{ url_for('portal.removed_projects') }}">Removed Projects</a>
+                        {% if is_admin %}
+                        <a class="workspace-overflow-item" href="{{ url_for('security.department_home') }}">Security</a>
+                        {% endif %}
+                        <a class="workspace-overflow-item" href="{{ url_for('portal.logout') }}">Sign out</a>
+                    </div>
+                </details>
+            </div>
+        </div>
+
+        {% with flashed = get_flashed_messages(with_categories=true) %}
+        {% if flashed %}
+        <div class="flash-stack">
+            {% for category, message in flashed %}
+            <div class="flash-message flash-{{ category }}">{{ message }}</div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% endwith %}
+
+        {% block content %}{% endblock %}
+    </div>
+    <script>
+        // Same outside-click/Escape-closes idiom base.html's own top-bar
+        // <details> menus use (CLAUDE-P40-E3A, Section 3/6) - kept
+        // consistent even though this shell is otherwise standalone.
+        (function () {
+            var menu = document.getElementById('workspace-user-menu');
+            if (!menu) return;
+            document.addEventListener('click', function (e) {
+                if (menu.open && !menu.contains(e.target)) menu.open = false;
+            });
+            document.addEventListener('keydown', function (e) {
+                if (e.key === 'Escape' && menu.open) {
+                    menu.open = false;
+                    var summary = menu.querySelector('summary');
+                    if (summary) summary.focus();
+                }
+            });
+        })();
+    </script>
+</body>
+</html>

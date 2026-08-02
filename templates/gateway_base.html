@@ -1,17 +1,26 @@
 {# ============================================================
-   Entry/gateway page family: login.html and gateway.html - a centered
-   card, the Archiosk brand lockup, one primary decision. Both are real,
-   live pages (see the "gateway.html is not dead" correction in
-   main.css's page-template-families note - login() redirects here by
-   default), not a family of one.
+   Entry/gateway page family: gateway.html - a centered card, the
+   Archiosk brand lockup, one primary decision. A real, live page (see
+   the "gateway.html is not dead" correction in main.css's page-
+   template-families note - login() redirects here by default).
+
+   CLAUDE-P40-VW5: extends gateway_shell.html now, not base.html - see
+   that file's own comment for why (the Lists-panel leak this fixes).
+   login.html/forgot_password.html/reset_password.html never extended
+   this family at all (they use auth_shell.html directly, unaffected
+   by this change) - gateway.html is this family's only real member.
+   gateway-card-wide widens the shared .gateway-card beyond auth's
+   compact 480px (Section 2: "must use the available width and remain
+   visually centred") without touching the base width login/forgot/
+   reset-password's own .gateway-card-compact modifier still relies on.
    ============================================================ #}
-{% extends "base.html" %}
+{% extends "gateway_shell.html" %}
 
 {% block title %}{% block gateway_title %}Archiosk{% endblock %}{% endblock %}
 
 {% block content %}
 <div class="gateway-page">
-    <div class="gateway-card{% block gateway_card_modifier %}{% endblock %}">
+    <div class="gateway-card gateway-card-wide{% block gateway_card_modifier %}{% endblock %}">
         <div class="gateway-brand">
             <div class="gateway-logo">A</div>
             <div>

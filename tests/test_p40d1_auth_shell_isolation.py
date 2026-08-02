@@ -221,12 +221,29 @@ class AuthenticatedShellStillRendersNormallyTests(_BaseAuthShellTestCase):
     """Sanity check: this stage must not have accidentally broken the
     real authenticated app shell for ordinary pages."""
 
-    def test_authenticated_gateway_page_still_shows_the_app_shell(self):
-        # CLAUDE-P40-E2B1: the old side-rail is retired in favor of the
-        # one launcher panel (base.html) - still real chrome, just a
-        # different class name.
+    def test_authenticated_gateway_page_now_uses_the_standalone_gateway_shell(self):
+        # SUPERSEDED (CLAUDE-P40-VW5): this test used to assert /gateway
+        # showed the same app-shell/launcher-panel chrome as every other
+        # authenticated page - that premise is exactly what VW5's own
+        # product-owner correction overturned ("The Project Gateway
+        # currently displays the left Lists panel. That is wrong.").
+        # Gateway now renders templates/gateway_shell.html, a genuinely
+        # standalone shell (see that file's own comment) - checked here
+        # is the new, deliberately different chrome.
         client = self._client_as("shelluser", 1)
         resp = client.get("/gateway")
+        self.assertEqual(resp.status_code, 200)
+        body = resp.get_data(as_text=True)
+        self.assertIn("gateway-shell", body)
+        self.assertNotIn("app-shell", body)
+        self.assertNotIn("launcher-panel", body)
+
+    def test_authenticated_workspace_page_still_shows_the_real_app_shell(self):
+        # The actual thing this class's own docstring means to protect -
+        # an opened Project workspace, not Gateway - still gets the real
+        # chrome, unaffected by VW5.
+        client = self._client_as("shelluser", 1)
+        resp = client.get(f"/projects/{self.doc.project_id}/workspace")
         self.assertEqual(resp.status_code, 200)
         body = resp.get_data(as_text=True)
         self.assertIn("app-shell", body)

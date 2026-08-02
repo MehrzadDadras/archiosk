@@ -147,13 +147,23 @@ def _project_summary(document, workspace, events) -> dict:
 def index():
     """
     Project-first entry point: "what project are we working on," not a
-    marketing page and not "how can I help you today." Anonymous visitors
-    see the identity line + sign-in only. Authenticated visitors see a
-    small, restrained recent-projects list - see _project_summary for the
-    indicator set.
+    marketing page and not "how can I help you today." Authenticated
+    visitors see a small, restrained recent-projects list - see
+    _project_summary for the indicator set.
+
+    CLAUDE-P40-VW5: an anonymous visit used to render this same
+    template's own "identity line + sign-in link" branch - a real,
+    if minimal, intermediate landing page before Sign-in, not Sign-in
+    itself. Product-owner correction: "a fresh unauthenticated visit
+    to the normal application entry route must begin at Sign-in" -
+    redirects straight to the standalone auth shell (auth_shell.html,
+    never base.html) instead of rendering anything here. No `next=` -
+    the front door isn't a protected resource someone was trying to
+    reach, so login()'s own default post-login destination (the
+    Project Gateway) applies once they do sign in.
     """
     if not is_authenticated():
-        return render_template('index.html', recent_projects=[])
+        return redirect(url_for('portal.login'))
 
     registry = get_registry(current_app)
     store = CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"])

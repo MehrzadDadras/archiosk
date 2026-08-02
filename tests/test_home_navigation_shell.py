@@ -38,13 +38,22 @@ class HomeNavigationShellTests(unittest.TestCase):
             sess["username"] = "tester"
             sess["role"] = role
 
-    def test_anonymous_home_shows_sign_in_only(self):
+    def test_anonymous_home_redirects_straight_to_sign_in(self):
+        # SUPERSEDED (CLAUDE-P40-VW5): an anonymous "/" visit used to
+        # render this same index.html template's own minimal identity-
+        # line-plus-link branch - a real intermediate landing page, not
+        # Sign-in itself. Product-owner correction: "a fresh
+        # unauthenticated visit to the normal application entry route
+        # must begin at Sign-in" - now a redirect straight to /login,
+        # never rendering index.html for an anonymous visitor at all.
         client = self.flask_app.test_client()
-        response = client.get("/")
-        body = response.get_data(as_text=True)
+        response = client.get("/", follow_redirects=False)
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response.headers["Location"].endswith("/login"))
 
-        self.assertEqual(response.status_code, 200)
-        self.assertIn("Sign in to get started", body)
+        followed = client.get("/", follow_redirects=True)
+        body = followed.get_data(as_text=True)
+        self.assertIn("Sign in", body)
         self.assertNotIn("New Project", body)
         self.assertNotIn("Open Project", body)
 

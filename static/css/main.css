@@ -931,6 +931,28 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
     letter-spacing: 0.02em;
 }
 
+/* CLAUDE-P40-VW5: templates/gateway_shell.html's own top-level wrapper -
+   a real top bar (.workspace-topbar, reused as-is) above the centered
+   action-picker card, structurally never inside .app-shell/.app-main
+   (no Lists/Toolbox/Display siblings exist on this page at all - see
+   that template's own comment on why). .gateway-page keeps its
+   existing centering rule; flex: 1 here just lets it claim the full
+   height below the top bar instead of collapsing to content height. */
+.gateway-shell {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+}
+.gateway-shell > .gateway-page {
+    flex: 1;
+    align-items: center;
+}
+/* Wider than the shared 480px .gateway-card default (Section 2: "must
+   use the available width and remain visually centred") - scoped to
+   this modifier only, so login/forgot-password/reset-password's own
+   .gateway-card-compact (auth_shell.html) is completely untouched. */
+.gateway-card-wide { width: min(920px, 100%); }
+
 /* CLAUDE-P40-D1: the standalone authentication shell (auth_shell.html
    - /login, /forgot-password, /reset-password). Reuses .gateway-card
    and its children as-is for visual consistency with the post-login

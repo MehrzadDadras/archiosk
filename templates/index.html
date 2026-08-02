@@ -2,21 +2,20 @@
 
 {% block title %}Archiosk{% endblock %}
 
+{# CLAUDE-P40-VW5: the anonymous branch this template used to have -
+   an identity line plus a "Sign in to get started" link - is gone.
+   routes/portal.py's own index() now redirects an unauthenticated
+   visit straight to /login before this template is ever reached, so
+   an `authenticated=False` render of this file can no longer happen
+   in practice; kept as a real conditional rather than assumed true
+   without an assertion (see this stage's own test coverage) purely
+   because Jinja can't express "this variable is always True here"
+   any other way. #}
 {% block content %}
 <section class="entry">
-    {% if not authenticated %}
-    <p class="entry-copy">
-        Governed project intelligence, from source evidence to professional decision.
-    </p>
-    {% endif %}
-
     {% if authenticated %}
     <div class="entry-actions">
         <a class="btn btn-primary" href="{{ url_for('portal.projects_list') }}">Open Project</a>
-    </div>
-    {% else %}
-    <div class="entry-actions">
-        <a class="btn btn-primary" href="{{ url_for('portal.login') }}">Sign in to get started</a>
     </div>
     {% endif %}
 </section>

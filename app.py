@@ -449,6 +449,17 @@ def _register_error_handlers(app: Flask) -> None:
 
 _STANDALONE_AUTH_ENDPOINTS = {"portal.login", "portal.forgot_password", "portal.reset_password"}
 
+# CLAUDE-P40-VW5: the Gateway (templates/gateway_shell.html) is a
+# SECOND standalone shell, distinct from the auth pages above - it
+# genuinely needs real authenticated/is_admin/current_username (its
+# own minimal account menu), unlike /login etc., which mask those
+# outright. What it never needs is nav_recent_projects - it has no
+# Lists panel to feed at all. Same principle as the auth-page guard's
+# own comment below ("the query and the data being present at all was
+# the defect, not just its rendering") applied to the one query that's
+# actually irrelevant here, not the whole context.
+_NO_PROJECT_LISTING_ENDPOINTS = _STANDALONE_AUTH_ENDPOINTS | {"portal.gateway"}
+
 
 def _register_context_processors(app: Flask) -> None:
     @app.context_processor
@@ -473,13 +484,14 @@ def _register_context_processors(app: Flask) -> None:
         # the context data being present at all was.
         on_standalone_auth_page = request.endpoint in _STANDALONE_AUTH_ENDPOINTS
         authenticated = is_authenticated() and not on_standalone_auth_page
+        skip_project_listing = request.endpoint in _NO_PROJECT_LISTING_ENDPOINTS
 
         return {
             "current_year": datetime.now(timezone.utc).year,
             "static_version": app.config["STATIC_VERSION"],
             "authenticated": authenticated,
             "is_admin": is_admin() and not on_standalone_auth_page,
-            "nav_recent_projects": _nav_recent_projects(app) if authenticated else [],
+            "nav_recent_projects": _nav_recent_projects(app) if (authenticated and not skip_project_listing) else [],
             # CLAUDE-P40-E2B1, Section B: the single launcher panel's
             # identity/menu anchored at the bottom needs the reviewer's
             # own username - session["username"] already exists (set at
