@@ -1,5 +1,104 @@
 # Continuation checkpoint
 
+## 2026-08-02 — CLAUDE-P40-VW5: standalone Sign-in and Project Gateway shell isolation
+
+**Commit:** `a02425c`. Full suite: 1650 passed, 0 failed (was 1613; 36
+new). Starting state was `2f89d70` (the P40-VW4 checkpoint) - HEAD and
+`origin/main` verified equal, tree clean except the pre-existing
+untracked `tests/fixtures/nreocrc/_lab_instance_scratch_002/`. **No
+product-owner acceptance seal recorded** - explicitly not requested
+this stage.
+
+**Product-owner walkthrough correction**: the Project Gateway
+(`/gateway`) displayed the left Lists panel. Required journey: fresh
+unauthenticated entry -> standalone Sign-in -> successful sign-in ->
+Project Gateway (no Lists/workspace shell) -> open/create a Project ->
+full Project workspace (with its Lists panel).
+
+**Root cause, diagnosed before changing anything**: `templates/
+gateway_base.html` extended `base.html` and overrode only `{% block
+content %}` - `base.html`'s own Lists panel is gated on bare
+`authenticated`, unlike Toolbox/Chat/Display-Layout (already gated on
+`project_id is defined and workspace is defined`), so it rendered
+around Gateway's centered card on every visit.
+
+**Fix**: `templates/gateway_shell.html` - a genuinely standalone shell
+(the same principle `templates/auth_shell.html` already established
+for `/login` et al., CLAUDE-P40-D1) that `gateway_base.html` now
+extends instead of `base.html`. No Lists/Toolbox/Display/Chat markup
+exists in this file to leak - structurally absent, not CSS-hidden. It
+has its own minimal top bar (real `authenticated`/`is_admin`/
+`current_username`, an account menu: Sign out, Removed Projects,
+admin-only Security) so those functions stay reachable now that
+they're not Lists leaves on this page - server-side authorization on
+each route is unchanged and is the real enforcement, the menu is
+discoverability only. `app.py`'s `inject_globals()` now skips the
+`nav_recent_projects` store query for the Gateway endpoint
+specifically, not just its rendering.
+
+`routes/portal.py`'s `index()` now redirects an unauthenticated `/`
+visit straight to `/login` instead of rendering an intermediate
+marketing page. `login_required`/`admin_required` (`services/auth.py`)
+were already correct and untouched: unauthenticated access to
+`/gateway` or any Project workspace already redirected to
+`/login?next=...`, and admin-only routes already returned 403 for an
+authenticated non-admin - both re-confirmed by this stage's own tests,
+not re-implemented.
+
+Widened `.gateway-card` via a new `.gateway-card-wide` modifier
+(Section 2: "must use the available width and remain visually
+centred") without touching the base 480px width `login`/`forgot-
+password`/`reset-password`'s own `.gateway-card-compact` still relies
+on.
+
+**Test-infrastructure note**: updated 2 pre-existing tests whose
+premise VW5 deliberately supersedes (a Gateway sanity check that used
+to assert `/gateway` showed `app-shell`/`launcher-panel`; an anonymous-
+home test that used to assert HTTP 200 with a "Sign in to get started"
+link) - not weakened, checking the new, deliberately different
+behaviour instead, with a real workspace-page check added to cover
+what the first test's own docstring actually meant to protect.
+
+**Tests**: added `tests/test_p40vw5_signin_gateway_isolation.py` (36
+tests) across all 16 required areas from the prompt. Confirmed load-
+bearing by reverting every changed file (including deleting the new
+shell) and observing 9/36 fail with the exact pre-fix leak visible in
+the diff, then restoring everything. Directly affected suites re-run
+explicitly (370 tests) - all passing. Full suite run to termination:
+1650 passed, 0 failed.
+
+**Browser evidence and its limitation, stated honestly**: no browser-
+automation tool was actually connected in this session (checked
+directly via tool search both before and during this stage,
+consistent with every prior VW stage). Verification rests entirely on
+structural HTML/route assertions. **The product owner should walk the
+complete journey in a real browser** (logout/fresh session -> confirm
+standalone Sign-in -> sign in -> confirm the centered Gateway with no
+left panel -> open a Project -> confirm the full workspace and Lists
+panel -> return to Gateway -> confirm the workspace shell and Project-
+specific content disappear -> logout -> confirm return to Sign-in),
+including wide and narrow viewports, during the continued walkthrough.
+
+**MANIFEST.md**: updated entries for `routes/portal.py`,
+`templates/index.html`, `templates/login.html` (also corrected a pre-
+existing drift found while here: it extends `auth_shell.html`, not
+`base.html` - stale since CLAUDE-P40-D1, not introduced by VW5), and
+`templates/gateway.html`; added a row for the new `gateway_shell.html`.
+
+**STATIC_VERSION correction**: `.env` (untracked) was bumped 32->33
+for this stage's `main.css` changes (`.gateway-shell`, `.gateway-card-
+wide`) - the VW5 implementation commit's own message incorrectly
+claimed no bump was needed; caught and corrected in this same session,
+recorded honestly here rather than silently amended.
+
+Preserves the completed VW1-VW4 corrections (re-confirmed by this
+stage's own tests inside a real Project workspace), authentication/
+authorization/CSRF/safe-redirect behaviour, project ownership/allow-
+list enforcement, existing Project-creation/operating-environment
+locks, and all real Project/Document/Investigation/RFI/conversation
+data - none were touched. P40-E3B remains closed as DEFER; the
+conversation Tasks/Tags work and P41 were not started.
+
 ## 2026-08-02 — CLAUDE-P40-VW4: independent Vertical/Horizontal Display division controls
 
 **Commit:** `0919b54`. Full suite: 1613 passed, 0 failed (was 1568; 45
