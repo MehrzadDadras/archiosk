@@ -262,6 +262,113 @@
                                     <li class="tree-node" data-tree-node>
                                         <a class="tree-leaf launcher-link{% if directory_view is none and not active_case and not selected_source %} active{% endif %}" href="{{ url_for('workspace.show_workspace', project_id=project_id) }}">Chats</a>
                                     </li>
+                                    {# ---------------- Tasks (CLAUDE-P40-VW7) --------------------------
+                                       Real, persisted project Tasks created via "Make Task" on a
+                                       selected Project Conversation passage (Section 6) - not a
+                                       decorative checkbox. Closed by default (same reasoning as
+                                       Project Tools below - nothing here has a "currently
+                                       selected" state to auto-open). Open/Completed are plain
+                                       sub-labels, not their own toggles - Tasks itself is the one
+                                       collapsible unit, matching every other branch's "collapsible
+                                       project-level branch" shape rather than inventing a second
+                                       nesting mechanism. id="lists-tasks-*" anchors are read by
+                                       static/js/case_workspace.js's own live-update code after a
+                                       Task is created via the selection toolbar - see that file's
+                                       own comment for why creation specifically must not require a
+                                       reload (Section 12's own browser-verification requirement),
+                                       while Complete/Reopen (plain forms below) stay classic
+                                       redirects. #}
+                                    <li class="tree-node" data-tree-node id="lists-tasks-branch">
+                                        <button type="button" class="tree-toggle launcher-link" data-tree-parent aria-expanded="false">
+                                            <span class="tree-label">Tasks <span class="launcher-count" id="lists-tasks-count">{{ tasks_view|length }}</span></span>
+                                        </button>
+                                        <ul class="tree-children">
+                                            <li class="tree-node-group">
+                                                <p class="launcher-subheading">Open <span class="launcher-count" id="lists-tasks-open-count">{{ tasks_open_view|length }}</span></p>
+                                                <ul class="tree-children" data-tree-open id="lists-tasks-open-list">
+                                                    {% for task in tasks_open_view %}
+                                                    <li class="tree-node" data-tree-node data-task-id="{{ task.id }}">
+                                                        <div class="launcher-task-row">
+                                                            {% if task.source_available %}
+                                                            <a class="tree-leaf launcher-link" href="{{ task.source_url }}">{{ task.title }}</a>
+                                                            {% else %}
+                                                            <span class="tree-leaf launcher-link launcher-link-unavailable">{{ task.title }} <small>(Source unavailable)</small></span>
+                                                            {% endif %}
+                                                            <form method="post" action="{{ url_for('workspace.complete_task_route', project_id=project_id, task_id=task.id) }}">
+                                                                <button type="submit" class="link-button">Mark complete</button>
+                                                            </form>
+                                                        </div>
+                                                    </li>
+                                                    {% else %}
+                                                    <li class="tree-node-empty"><span class="pane-note">No open Tasks.</span></li>
+                                                    {% endfor %}
+                                                </ul>
+                                            </li>
+                                            <li class="tree-node-group">
+                                                <p class="launcher-subheading">Completed <span class="launcher-count" id="lists-tasks-completed-count">{{ tasks_completed_view|length }}</span></p>
+                                                <ul class="tree-children" id="lists-tasks-completed-list">
+                                                    {% for task in tasks_completed_view %}
+                                                    <li class="tree-node" data-tree-node data-task-id="{{ task.id }}">
+                                                        <div class="launcher-task-row">
+                                                            {% if task.source_available %}
+                                                            <a class="tree-leaf launcher-link launcher-task-completed" href="{{ task.source_url }}">{{ task.title }}</a>
+                                                            {% else %}
+                                                            <span class="tree-leaf launcher-link launcher-link-unavailable">{{ task.title }} <small>(Source unavailable)</small></span>
+                                                            {% endif %}
+                                                            <form method="post" action="{{ url_for('workspace.reopen_task_route', project_id=project_id, task_id=task.id) }}">
+                                                                <button type="submit" class="link-button">Reopen</button>
+                                                            </form>
+                                                        </div>
+                                                    </li>
+                                                    {% else %}
+                                                    <li class="tree-node-empty"><span class="pane-note">No completed Tasks.</span></li>
+                                                    {% endfor %}
+                                                </ul>
+                                            </li>
+                                        </ul>
+                                    </li>
+                                    {# ---------------- Tags (CLAUDE-P40-VW7) ---------------------------
+                                       Tagged/highlighted Project Conversation passages, grouped by
+                                       tag identity - Highlight/Important/Question are built-in tags
+                                       under the hood (services.case_workspace.BUILT_IN_TAGS), so
+                                       they appear here exactly like a custom tag, not through a
+                                       second display mechanism. Removing an occurrence (the small
+                                       "Remove" form per row) updates this branch's counts
+                                       immediately via fetch() - Section 7's own explicit
+                                       requirement - never a full reload. #}
+                                    <li class="tree-node" data-tree-node id="lists-tags-branch">
+                                        <button type="button" class="tree-toggle launcher-link" data-tree-parent aria-expanded="false">
+                                            <span class="tree-label">Tags <span class="launcher-count" id="lists-tags-count">{{ tag_occurrences_total }}</span></span>
+                                        </button>
+                                        <ul class="tree-children" id="lists-tags-groups">
+                                            {% for group in tag_groups_view %}
+                                            <li class="tree-node-group" data-tag-group="{{ group.tag.id }}">
+                                                <p class="launcher-subheading">
+                                                    <span class="launcher-tag-swatch conv-tag-color-{{ group.tag.color }}" aria-hidden="true"></span>
+                                                    {{ group.tag.name }} <span class="launcher-count" data-tag-group-count>{{ group.occurrences|length }}</span>
+                                                </p>
+                                                <ul class="tree-children" data-tree-open>
+                                                    {% for occ in group.occurrences %}
+                                                    <li class="tree-node" data-tree-node data-tag-occurrence-id="{{ occ.id }}">
+                                                        <div class="launcher-task-row">
+                                                            {% if occ.source_available %}
+                                                            <a class="tree-leaf launcher-link" href="{{ occ.source_url }}">&ldquo;{{ occ.quote[:60] }}{% if occ.quote|length > 60 %}&hellip;{% endif %}&rdquo;</a>
+                                                            {% else %}
+                                                            <span class="tree-leaf launcher-link launcher-link-unavailable">&ldquo;{{ occ.quote[:60] }}{% if occ.quote|length > 60 %}&hellip;{% endif %}&rdquo; <small>(Source unavailable)</small></span>
+                                                            {% endif %}
+                                                            <form method="post" action="{{ url_for('workspace.remove_tag_occurrence_route', project_id=project_id, occurrence_id=occ.id) }}" data-tag-remove-form data-occurrence-id="{{ occ.id }}">
+                                                                <button type="submit" class="link-button">Remove</button>
+                                                            </form>
+                                                        </div>
+                                                    </li>
+                                                    {% endfor %}
+                                                </ul>
+                                            </li>
+                                            {% else %}
+                                            <li class="tree-node-empty"><span class="pane-note">No Tags yet.</span></li>
+                                            {% endfor %}
+                                        </ul>
+                                    </li>
                                     {# ---------------- Project Tools (CLAUDE-P40-VW2) -----------------
                                        Product-owner walkthrough correction: these project-level
                                        controls (Remove Project, the three Add-a-Source forms,

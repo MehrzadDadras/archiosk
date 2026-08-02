@@ -2060,11 +2060,19 @@
         'case-' ~ active_case.id,
         ('Analyze this drawing for datum inconsistencies…' if drawing_sources else 'Ask a question or investigate this Source…'),
     ) %}
-        <div class="conversation-thread" data-conversation-scope="case-{{ active_case.id }}">
+        <div class="conversation-thread" data-conversation-scope="case-{{ active_case.id }}" data-anchor-scope="case" data-anchor-case-id="{{ active_case.id }}">
             {% for message in active_case.conversation %}
-            <div class="conversation-message {{ message.role }}">
+            <div class="conversation-message {{ message.role }}" id="message-{{ message.id }}" data-message-id="{{ message.id }}">
                 <span class="role-label">{{ "You" if message.role == "human" else "Archiosk" }}</span>
-                {{ message.text|hotlinks(workspace, project_id) }}
+                {# CLAUDE-P40-VW7: message.text is wrapped in its own span,
+                   isolated from the role-label and Source-grounding chrome
+                   above/below it, so static/js/case_workspace.js's TreeWalker
+                   offset computation walks exactly the canonical stored
+                   string (character-identical to it - hotlinks only wraps
+                   substrings in <a>, never changes textContent length) and
+                   never a "You"/"Archiosk" label or grounding list text by
+                   accident. #}
+                <span class="conv-message-text" data-message-text>{{ message.text|hotlinks(workspace, project_id) }}</span>
                 {% if message.grounded_in %}
                 {% call macros.subdisclosure('Source grounding') %}
                     <ul class="source-list">{% for g in message.grounded_in %}<li class="source-item">{{ g }}</li>{% endfor %}</ul>
@@ -2144,19 +2152,19 @@
         'Ask a question, or describe what you want to work on…',
         include_anchor_fields=True,
     ) %}
-        <p class="pane-note">
+        <p class="pane-note" id="project-conversation-guidance" data-anchor-scope="guidance" data-guidance-key="{{ conversation_guidance_key }}">
             Talk to the Project itself &mdash; general notes, or anything opened from a
             &ldquo;Discuss this&hellip;&rdquo; link elsewhere on this page (each message below
             shows what it was about, if anything).
         </p>
-        <div class="conversation-thread" data-conversation-scope="project">
+        <div class="conversation-thread" data-conversation-scope="project" data-anchor-scope="project">
             {% for message in project_conversation_view %}
-            <div class="conversation-message {{ message.role }}">
+            <div class="conversation-message {{ message.role }}" id="message-{{ message.id }}" data-message-id="{{ message.id }}">
                 <span class="role-label">{{ "You" if message.role == "human" else "Archiosk" }}</span>
                 {% if message.anchor %}
                 <br><small class="text-muted">Re: {{ message.anchor.anchor_type.replace('_', ' ') }}{% if message.anchor.description %} &mdash; {{ message.anchor.description }}{% endif %}</small>
                 {% endif %}
-                {{ message.text|hotlinks(workspace, project_id) }}
+                <span class="conv-message-text" data-message-text>{{ message.text|hotlinks(workspace, project_id) }}</span>
                 {% if message.grounded_in %}
                 {% call macros.subdisclosure('Source grounding') %}
                     <ul class="source-list">{% for g in message.grounded_in %}<li class="source-item">{{ g }}</li>{% endfor %}</ul>
@@ -2181,6 +2189,76 @@
         </div>
     {% endcall %}
     {% endif %}
+
+    {# ---------------- Selection toolbar + Tag/Task dialogs (CLAUDE-P40-VW7) ----
+       OneNote-style contextual toolbar for a meaningful Project
+       Conversation text selection - rendered ONCE here (outside the
+       if/active_case branch above, which two mutually exclusive
+       conversation_dock calls share) rather than duplicated per
+       branch. Hidden by default; static/js/case_workspace.js positions
+       and shows it near a real selection, never a permanent floating
+       toolbar (Section 10's own explicit "avoid adding" instruction).
+       Built-in Important/Question/Highlight are one-click (no dialog -
+       see services.case_workspace.BUILT_IN_TAGS); Add Tag and Make
+       Task open the small dialogs below, both real <form>s so the
+       existing app-wide CSRF auto-injection script populates their
+       hidden csrf_token field exactly like every other form on this
+       page - the fetch() calls in case_workspace.js read that same
+       field's value rather than inventing a second CSRF mechanism. #}
+    <div class="conv-selection-toolbar" id="conv-selection-toolbar" role="toolbar" aria-label="Selected text actions" hidden>
+        <button type="button" class="conv-selection-btn" data-conv-action="tag">Add Tag</button>
+        <button type="button" class="conv-selection-btn" data-conv-action="task">Make Task</button>
+        <button type="button" class="conv-selection-btn" data-conv-action="highlight">Highlight</button>
+        <button type="button" class="conv-selection-btn" data-conv-action="important">Important</button>
+        <button type="button" class="conv-selection-btn" data-conv-action="question">Question</button>
+        <button type="button" class="conv-selection-btn" data-conv-action="copy">Copy</button>
+    </div>
+    <p class="conv-selection-status" id="conv-selection-status" role="status" aria-live="polite" hidden></p>
+
+    <div class="conv-dialog" id="conv-tag-dialog" role="dialog" aria-modal="true" aria-labelledby="conv-tag-dialog-heading" hidden>
+        <form method="post" action="{{ url_for('workspace.add_tag_occurrence_route', project_id=project_id) }}" id="conv-tag-form">
+            <p class="conv-dialog-heading" id="conv-tag-dialog-heading">Add Tag</p>
+            <p class="conv-dialog-error" data-conv-dialog-error role="alert" hidden></p>
+            <p class="conv-dialog-quote" id="conv-tag-dialog-quote"></p>
+            <label for="conv-tag-select">Existing project tag</label>
+            <select id="conv-tag-select" name="tag_id">
+                <option value="">Choose a tag&hellip;</option>
+                {% for tag in available_tags_view %}
+                <option value="{{ tag.id }}">{{ tag.name }}</option>
+                {% endfor %}
+            </select>
+            <p class="conv-dialog-or">or create a new tag</p>
+            <label for="conv-tag-new-name">New tag name</label>
+            <input type="text" id="conv-tag-new-name" name="new_tag_name" maxlength="60" placeholder="e.g. Follow up" autocomplete="off">
+            <fieldset class="conv-tag-color-picker">
+                <legend>Colour</legend>
+                {% for color in tag_color_palette %}
+                <label class="conv-tag-color-option">
+                    <input type="radio" name="new_tag_color" value="{{ color }}"{% if loop.first %} checked{% endif %}>
+                    <span class="conv-tag-color-swatch conv-tag-color-{{ color }}" aria-hidden="true"></span>
+                    {{ color }}
+                </label>
+                {% endfor %}
+            </fieldset>
+            <div class="conv-dialog-actions">
+                <button type="submit" class="btn btn-primary">Add Tag</button>
+                <button type="button" class="btn btn-ghost" data-conv-dialog-cancel>Cancel</button>
+            </div>
+        </form>
+    </div>
+
+    <div class="conv-dialog" id="conv-task-dialog" role="dialog" aria-modal="true" aria-labelledby="conv-task-dialog-heading" hidden>
+        <form method="post" action="{{ url_for('workspace.create_task_route', project_id=project_id) }}" id="conv-task-form">
+            <p class="conv-dialog-heading" id="conv-task-dialog-heading">Make Task</p>
+            <p class="conv-dialog-error" data-conv-dialog-error role="alert" hidden></p>
+            <label for="conv-task-title">Task title</label>
+            <input type="text" id="conv-task-title" name="title" maxlength="200" required>
+            <div class="conv-dialog-actions">
+                <button type="submit" class="btn btn-primary">Create Task</button>
+                <button type="button" class="btn btn-ghost" data-conv-dialog-cancel>Cancel</button>
+            </div>
+        </form>
+    </div>
 {% endblock %}
 
 {% block extra_scripts %}

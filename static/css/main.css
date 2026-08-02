@@ -335,6 +335,81 @@ html.launcher-hidden .launcher-panel { display: none; }
 }
 .tree-leaf.launcher-new-project { color: var(--machine-blue); }
 
+/* CLAUDE-P40-VW7: Tasks/Tags branches - reuse the tree idiom above as-
+   is (.tree-node/.tree-toggle/.tree-children/.launcher-count already do
+   the collapsing, indentation, and count-badge work); this block only
+   adds what's specific to a Task/Tag row: the Open/Completed and per-
+   tag sub-labels (a plain heading, not a second toggle - Tasks/Tags
+   itself is the one collapsible unit per branch), the inline row that
+   pairs a navigable link with its own small action form, the tag-color
+   swatch dot, and the two empty/unavailable states. */
+.launcher-subheading {
+    font-family: var(--font-body);
+    font-size: 0.76rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-metadata);
+    padding: 0.35rem 0.55rem 0.15rem;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+.tree-node-group { margin: 0; }
+.tree-node-empty { padding: 0.2rem 0.55rem; }
+.tree-node-empty .pane-note { margin: 0; font-size: var(--text-xs); }
+.launcher-task-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.4rem;
+    min-width: 0;
+}
+.launcher-task-row .launcher-link {
+    flex: 1;
+    min-width: 0;
+}
+.launcher-task-completed {
+    text-decoration: line-through;
+    color: var(--text-metadata);
+}
+.launcher-link-unavailable {
+    color: var(--text-disabled);
+    cursor: default;
+}
+.launcher-link-unavailable:hover { background: none; }
+.launcher-link-unavailable small { font-style: italic; }
+.launcher-tag-swatch {
+    display: inline-block;
+    width: 0.6rem;
+    height: 0.6rem;
+    border-radius: 50%;
+    border: 1px solid var(--border-strong);
+    flex-shrink: 0;
+}
+.conv-tag-color-yellow { background: var(--tagcolor-yellow); }
+.conv-tag-color-orange { background: var(--tagcolor-orange); }
+.conv-tag-color-red { background: var(--tagcolor-red); }
+.conv-tag-color-green { background: var(--tagcolor-green); }
+.conv-tag-color-blue { background: var(--tagcolor-blue); }
+.conv-tag-color-purple { background: var(--tagcolor-purple); }
+
+/* A small, quiet text-style action inside a Lists row (Mark complete /
+   Reopen / Remove) - .btn's own padding (0.85rem 1.5rem) is sized for a
+   standalone page action, far too large for an inline list row. */
+.link-button {
+    background: none;
+    border: none;
+    padding: 0;
+    font: inherit;
+    font-size: 0.72rem;
+    color: var(--machine-blue);
+    text-decoration: underline;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+.link-button:hover { color: var(--text-primary); }
+
 /* Appearance menu (CLAUDE-P40-E3A Section 10; CLAUDE-P40-VW3 replaced
    the single plain/tinted checkbox with three independent modes per
    surface - Light/Dark/Tinted; CLAUDE-P40-VW6 corrected both Dark and
@@ -2090,6 +2165,194 @@ html.toolbox-hidden .workspace-pane-toolbox {
     color: var(--surface-primary);
     font-weight: 600;
     cursor: pointer;
+}
+
+/* CLAUDE-P40-VW7: OneNote-style selection toolbar for Project
+   Conversation text -> Tags/Highlights/Tasks (static/js/case_workspace.js
+   positions/shows/hides this; hidden by default via the [hidden]
+   attribute, never a permanent floating toolbar - Section 10's own
+   explicit "avoid adding" instruction). position:fixed because
+   positionToolbar() computes against getBoundingClientRect(), viewport-
+   relative coordinates. Solid token background (never rgba/translucent)
+   and a z-index above every other overlay in this file, same fix and
+   same reasoning as the Appearance popup's own comment above
+   (.workspace-appearance-options, z-index 60) - "text beneath the popup
+   remains visible through it" is a stacking defect, not a transparency
+   one, so the fix here is identical: paint solid, stack higher than
+   anything it could ever appear over (70, one step above the existing
+   ceiling of 60). */
+.conv-selection-toolbar {
+    position: fixed;
+    display: flex;
+    align-items: center;
+    gap: 0.2rem;
+    background: var(--surface-primary);
+    border: 1px solid var(--border-strong);
+    border-radius: 5px;
+    padding: 0.25rem;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
+    z-index: 70;
+}
+.conv-selection-btn {
+    font-family: var(--font-body);
+    font-size: 0.76rem;
+    padding: 0.35rem 0.55rem;
+    border-radius: 4px;
+    border: none;
+    background: none;
+    color: var(--text-primary);
+    cursor: pointer;
+    white-space: nowrap;
+}
+.conv-selection-btn:hover:not(:disabled) { background: var(--surface-hover); }
+.conv-selection-btn:disabled { color: var(--text-disabled); cursor: default; }
+.conv-selection-status {
+    position: fixed;
+    z-index: 70;
+    font-size: var(--text-xs);
+    color: var(--text-metadata);
+    background: var(--surface-primary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.3rem 0.5rem;
+    bottom: 1rem;
+    right: 1rem;
+    max-width: 320px;
+}
+
+/* Add Tag / Make Task - small, compact dialogs (Section 10: "don't
+   cover most of the selection", "avoid heavy shadows/filled cards"), a
+   fixed-position centered card rather than a full-screen modal takeover
+   - the conversation stays visible around it. Same solid-background/
+   raised-z-index treatment as the selection toolbar above, one step
+   higher again (80) so a dialog always paints over a still-visible
+   toolbar rather than the two fighting for stacking order. */
+.conv-dialog {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 80;
+    width: min(360px, calc(100vw - 2rem));
+    max-height: calc(100vh - 2rem);
+    overflow-y: auto;
+    background: var(--surface-primary);
+    border: 1px solid var(--border-strong);
+    border-radius: 6px;
+    padding: 0.9rem;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.22);
+}
+.conv-dialog form { display: flex; flex-direction: column; gap: 0.5rem; }
+.conv-dialog-heading {
+    font-family: var(--font-body);
+    font-weight: 600;
+    font-size: 1rem;
+    margin: 0 0 0.2rem;
+    color: var(--text-primary);
+}
+.conv-dialog-error {
+    font-size: var(--text-sm);
+    color: var(--failure-red);
+    background: var(--failure-red-tint);
+    border-radius: 4px;
+    padding: 0.35rem 0.5rem;
+    margin: 0;
+}
+.conv-dialog-quote {
+    font-size: var(--text-sm);
+    color: var(--text-secondary);
+    font-style: italic;
+    border-left: 3px solid var(--border-strong);
+    padding-left: 0.6rem;
+    margin: 0 0 0.3rem;
+}
+.conv-dialog-or {
+    font-size: var(--text-xs);
+    color: var(--text-metadata);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin: 0.2rem 0 0;
+}
+.conv-dialog label {
+    font-size: var(--text-xs);
+    color: var(--text-metadata);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+.conv-dialog select,
+.conv-dialog input[type="text"] {
+    font-family: var(--font-body);
+    font-size: 0.9rem;
+    padding: 0.5rem 0.6rem;
+    background: var(--surface-primary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text-primary);
+}
+.conv-tag-color-picker {
+    border: none;
+    padding: 0;
+    margin: 0.2rem 0 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+.conv-tag-color-picker legend {
+    font-size: var(--text-xs);
+    color: var(--text-metadata);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 0;
+    width: 100%;
+}
+.conv-tag-color-option {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: var(--text-xs);
+    text-transform: capitalize;
+    color: var(--text-secondary);
+    cursor: pointer;
+}
+.conv-tag-color-swatch {
+    display: inline-block;
+    width: 0.85rem;
+    height: 0.85rem;
+    border-radius: 50%;
+    border: 1px solid var(--border-strong);
+}
+.conv-dialog-actions {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 0.3rem;
+}
+.conv-dialog-actions .btn { padding: 0.5rem 1rem; font-size: 0.82rem; }
+
+/* Navigate-to-source (Section 4): a temporary, animated flash - never a
+   permanent border/fill (CLAUDE-P40-E1A-VISUAL's own "remove borders and
+   filled cards around ordinary...messages" de-boxing rule above still
+   applies to a message's RESTING appearance; this is time-boxed feedback
+   that JS removes 2.5s after applying it, not a redesign of that
+   resting state). Uses --highlight-orange-tint, not one of the new
+   --tagcolor-* swatch colors - those are raw, mode-invariant decorative
+   choices never verified as a TEXT background, whereas -tint tokens are
+   built for exactly this (a background wash unmodified text stays
+   readable against, verified per Light/Dark/Tinted the same as every
+   other -tint hover state in this file) and --highlight-orange already
+   means "the one current/active position in a sequence" - a genuine
+   semantic match for "this is what you navigated to," not a
+   repurposing. Respects reduced-motion by skipping the fade and still
+   leaving a brief flat wash. */
+.conv-source-flash {
+    animation: conv-source-flash-fade 2.5s ease-out;
+    border-radius: 4px;
+}
+@keyframes conv-source-flash-fade {
+    0% { background: var(--highlight-orange-tint); }
+    100% { background: transparent; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .conv-source-flash { animation: none; background: var(--highlight-orange-tint); }
 }
 
 /* -- disclosure grammar (application-wide) ---------------------------------

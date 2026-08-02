@@ -304,3 +304,28 @@
 :root {
     --divider-strong: #756B57;
 }
+
+/* CLAUDE-P40-VW7: Tag/Highlight swatch colors - services/case_workspace.py's
+   own TAG_COLOR_PALETTE names, given values here (the store layer stays
+   ignorant of presentation, per that file's own comment). Deliberately
+   mode-invariant, like --divider-strong above, and for the same class of
+   reason: these are never text, only a small bordered dot next to a tag
+   name (.launcher-tag-swatch) or a color-picker radio swatch
+   (.conv-tag-color-swatch) - a literal user-facing color CHOICE, the one
+   deliberate exception to this file's "name for meaning, not raw
+   appearance" rule (see header comment above), since the whole point of
+   a tag color picker is picking a raw appearance. main.css always pairs
+   these with a 1px border (var(--border-strong)) so the dot itself stays
+   visible against any of the three canvas/surface colors, rather than
+   needing six more dark/tinted variants to solve the same problem VW6's
+   token-redefinition mechanism exists for. Independent of --bee-yellow
+   and every semantic accent above - never spread the identity mark or an
+   authority/status color into a decorative, user-assignable palette. */
+:root {
+    --tagcolor-yellow: #E0B400;
+    --tagcolor-orange: #C97A2E;
+    --tagcolor-red: #B23A2E;
+    --tagcolor-green: #3E7D4A;
+    --tagcolor-blue: #3B6EA5;
+    --tagcolor-purple: #7A5AA6;
+}

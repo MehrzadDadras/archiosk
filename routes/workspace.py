@@ -34,6 +34,7 @@ from flask import (
     abort,
     current_app,
     flash,
+    jsonify,
     redirect,
     render_template,
     request,
@@ -47,8 +48,13 @@ from werkzeug.utils import secure_filename
 from services.auth import admin_required, login_required
 from services.case_workspace import (
     ANALYSIS_TRIGGER_USER_INITIATED,
+    BUILT_IN_TAGS,
     CASE_OUTCOME_STATES,
     CASE_ORIGIN_AUTONOMOUS,
+    CONVERSATION_ANCHOR_SCOPE_CASE,
+    CONVERSATION_ANCHOR_SCOPE_GUIDANCE,
+    CONVERSATION_ANCHOR_SCOPE_PROJECT,
+    CONVERSATION_GUIDANCE_PROJECT_INTRO,
     GO_NO_GO_DECISIONS,
     KNOWN_PARTICIPANT_ROLES,
     KNOWN_PERSPECTIVE_POLARITIES,
@@ -64,6 +70,8 @@ from services.case_workspace import (
     REQUIREMENT_STATUS_SUPERSEDED,
     SOURCE_KIND_PROJECT_DOCUMENT,
     SOURCE_KIND_TEXT_RECORD,
+    TAG_COLOR_PALETTE,
+    TASK_STATUS_COMPLETED,
     Anchor,
     AnalysisTrigger,
     CaseWorkspaceError,
@@ -984,6 +992,37 @@ def show_workspace(project_id):
         key=lambda row: row["draft"]["created_at"], reverse=True,
     )
 
+    # CLAUDE-P40-VW7: Tasks/Tags read-side views for the Lists Tasks/Tags
+    # branches - navigation URL and source-availability computed once
+    # here (never in the template) so "Source unavailable" (Section 4's
+    # own explicit requirement) is decided against the SAME workspace
+    # state being rendered, not re-derived client-side.
+    tasks_view = sorted(
+        (
+            {**task, "source_url": _conversation_source_url(project_id, task["source_anchor"]),
+             "source_available": store.resolve_conversation_anchor(workspace, task["source_anchor"])}
+            for task in workspace.tasks
+        ),
+        key=lambda row: row["created_at"], reverse=True,
+    )
+    tasks_open_view = [t for t in tasks_view if t["status"] != TASK_STATUS_COMPLETED]
+    tasks_completed_view = [t for t in tasks_view if t["status"] == TASK_STATUS_COMPLETED]
+
+    _tag_groups_by_id: dict[str, dict] = {}
+    for occ in workspace.tag_occurrences:
+        tag = store.resolve_tag(workspace, occ["tag_id"])
+        if tag is None:
+            continue  # defensive - a tag_id that no longer resolves is never shown, never crashes
+        group = _tag_groups_by_id.setdefault(occ["tag_id"], {"tag": tag, "occurrences": []})
+        group["occurrences"].append({
+            **occ,
+            "source_url": _conversation_source_url(project_id, occ["source_anchor"]),
+            "source_available": store.resolve_conversation_anchor(workspace, occ["source_anchor"]),
+        })
+    tag_groups_view = sorted(_tag_groups_by_id.values(), key=lambda g: g["tag"]["name"].lower())
+    tag_occurrences_total = sum(len(g["occurrences"]) for g in tag_groups_view)
+    available_tags_view = list(BUILT_IN_TAGS.values()) + store.list_custom_tags(workspace)
+
     # "Where did I leave off?" - the contextual-companion continuity
     # trail: this reviewer's own recent anchored conversation (from
     # store.recent_anchors_for, itself derived purely from existing
@@ -1158,6 +1197,14 @@ def show_workspace(project_id):
         briefing_generation_in_progress=briefing_generation_in_progress,
         briefing_has_evidence=briefing_has_evidence,
         rfi_drafts_view=rfi_drafts_view,
+        tasks_view=tasks_view,
+        tasks_open_view=tasks_open_view,
+        tasks_completed_view=tasks_completed_view,
+        tag_groups_view=tag_groups_view,
+        tag_occurrences_total=tag_occurrences_total,
+        available_tags_view=available_tags_view,
+        tag_color_palette=TAG_COLOR_PALETTE,
+        conversation_guidance_key=CONVERSATION_GUIDANCE_PROJECT_INTRO,
         recent_focus_view=recent_focus_view,
         threads_view=threads_view,
         known_usernames=known_usernames,
@@ -2586,6 +2633,179 @@ def quick_start(project_id):
     _run_conversation_turn(project_id, store, workspace, case, text)
 
     return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case["id"]))
+
+
+# ---------------------------------------------------------------------
+# CLAUDE-P40-VW7: project-scoped conversation Tags/Highlights/Tasks.
+#
+# All five routes below share the same shape: _load_workspace_or_404
+# (the same P32 project-access/removed-state choke point every other
+# route in this blueprint already uses - see that function's own
+# docstring) is the ENTIRE authorization boundary; no separate Tag/
+# Task-specific access rule exists, matching the prompt's own "the same
+# Project owner, allow-list, and admin-bypass rules governing the
+# source conversation must govern its Tasks and Tags" instruction.
+# JSON responses (not a redirect) because Section 7's own explicit
+# requirement is that Lists updates immediately, without a reload - the
+# one deliberate, bounded exception to this app's usual full-page-
+# reload convention (see static/js/case_workspace.js's own comment on
+# the fetch() calls that hit these routes, and tools/dependency_fit.py,
+# consulted before introducing it: fetch() itself required no new
+# dependency and passed every existing architectural constraint clean).
+# CSRF is still fully enforced (Flask-WTF's CSRFProtect checks the
+# X-CSRFToken header on these exactly the way it checks the hidden
+# csrf_token field on every other POST in this app - see that JS
+# comment for where the header value comes from).
+# ---------------------------------------------------------------------
+
+def _conversation_source_url(project_id: str, source_anchor: dict) -> str:
+    """The one URL that reopens Project Conversation (bare workspace URL
+    - the project-level conversation renders whenever no Investigation
+    is open, unconditionally, per CLAUDE-P40-E3A) or an Investigation's
+    own conversation (?case=), scrolled/flashed to the exact anchored
+    message via the #conv-source-<id> fragment static/js/
+    case_workspace.js reads on load (Section 4's own "navigate to and
+    scroll the source into view / visibly identify the exact anchored
+    passage" requirement) - never a second, ambiguous navigation
+    mechanism."""
+    scope = source_anchor.get("scope")
+    if scope == CONVERSATION_ANCHOR_SCOPE_CASE:
+        base = url_for("workspace.show_workspace", project_id=project_id, case=source_anchor.get("case_id"))
+        fragment = f"conv-source-{source_anchor.get('message_id')}"
+    elif scope == CONVERSATION_ANCHOR_SCOPE_GUIDANCE:
+        base = url_for("workspace.show_workspace", project_id=project_id)
+        fragment = "conv-source-guidance"
+    else:
+        base = url_for("workspace.show_workspace", project_id=project_id)
+        fragment = f"conv-source-{source_anchor.get('message_id')}"
+    return f"{base}#{fragment}"
+
+
+def _source_anchor_from_form() -> dict:
+    def _int_or_none(raw):
+        try:
+            return int(raw)
+        except (TypeError, ValueError):
+            return None
+
+    return {
+        "scope": (request.form.get("anchor_scope") or "").strip(),
+        "case_id": (request.form.get("anchor_case_id") or "").strip() or None,
+        "message_id": (request.form.get("anchor_message_id") or "").strip() or None,
+        "guidance_key": (request.form.get("anchor_guidance_key") or "").strip() or None,
+        "start_offset": _int_or_none(request.form.get("anchor_start_offset")),
+        "end_offset": _int_or_none(request.form.get("anchor_end_offset")),
+        "quote": request.form.get("anchor_quote") or "",
+        "prefix": request.form.get("anchor_prefix") or "",
+        "suffix": request.form.get("anchor_suffix") or "",
+    }
+
+
+def _tag_counts(workspace) -> dict:
+    occurrences = workspace.tag_occurrences
+    groups: dict[str, dict] = {}
+    for occ in occurrences:
+        bucket = groups.setdefault(occ["tag_id"], {"count": 0})
+        bucket["count"] += 1
+    return {"total": len(occurrences), "by_tag": {tag_id: g["count"] for tag_id, g in groups.items()}}
+
+
+def _task_counts(workspace) -> dict:
+    tasks = workspace.tasks
+    open_count = sum(1 for t in tasks if t["status"] != TASK_STATUS_COMPLETED)
+    return {"total": len(tasks), "open": open_count, "completed": len(tasks) - open_count}
+
+
+@workspace_bp.route("/projects/<project_id>/workspace/tags", methods=["POST"])
+@login_required
+def add_tag_occurrence_route(project_id):
+    """Add Tag / Highlight / Important / Question - one route for all
+    four toolbar actions (Section 5's own "Highlight is honestly just
+    another built-in tag" design - see BUILT_IN_TAGS). `tag_id` selects
+    an existing tag (built-in or custom); `new_tag_name`+`new_tag_color`
+    creates (or, on a normalized-name match, reuses) a custom tag first."""
+    _, store, workspace = _load_workspace_or_404(project_id)
+
+    tag_id = (request.form.get("tag_id") or "").strip()
+    new_tag_name = (request.form.get("new_tag_name") or "").strip()
+    new_tag_color = (request.form.get("new_tag_color") or "").strip()
+
+    try:
+        if not tag_id and new_tag_name:
+            tag = store.create_custom_tag(workspace, new_tag_name, new_tag_color, actor=_reviewer())
+            workspace = store.get(project_id)
+            tag_id = tag["id"]
+        elif not tag_id:
+            return jsonify({"ok": False, "error": "A tag is required."}), 400
+
+        occurrence = store.add_tag_occurrence(workspace, tag_id, _source_anchor_from_form(), actor=_reviewer())
+    except CaseWorkspaceError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+
+    workspace = store.get(project_id)
+    tag = store.resolve_tag(workspace, tag_id)
+    return jsonify({
+        "ok": True,
+        "occurrence": occurrence,
+        "tag": tag,
+        "counts": _tag_counts(workspace),
+    })
+
+
+@workspace_bp.route("/projects/<project_id>/workspace/tags/<occurrence_id>/remove", methods=["POST"])
+@login_required
+def remove_tag_occurrence_route(project_id, occurrence_id):
+    _, store, workspace = _load_workspace_or_404(project_id)
+    try:
+        store.remove_tag_occurrence(workspace, occurrence_id)
+    except CaseWorkspaceError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 404
+
+    workspace = store.get(project_id)
+    return jsonify({"ok": True, "counts": _tag_counts(workspace)})
+
+
+@workspace_bp.route("/projects/<project_id>/workspace/tasks", methods=["POST"])
+@login_required
+def create_task_route(project_id):
+    _, store, workspace = _load_workspace_or_404(project_id)
+    title = request.form.get("title") or ""
+    try:
+        task = store.create_task(workspace, _source_anchor_from_form(), title=title, actor=_reviewer())
+    except CaseWorkspaceError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+
+    workspace = store.get(project_id)
+    return jsonify({"ok": True, "task": task, "counts": _task_counts(workspace)})
+
+
+@workspace_bp.route("/projects/<project_id>/workspace/tasks/<task_id>/complete", methods=["POST"])
+@login_required
+def complete_task_route(project_id, task_id):
+    """Unlike Tag/Task CREATION (Section 12's own explicit "confirm Tasks
+    and Tags appear immediately in Lists" browser-verification step),
+    nothing requires completion/reopening to update without a reload -
+    a classic form-POST + redirect, this app's normal convention for
+    every other mutation, is simpler and lower-risk than extending the
+    fetch()-based live-DOM-patch machinery to also move a Task between
+    the Open/Completed groups client-side."""
+    _, store, workspace = _load_workspace_or_404(project_id)
+    try:
+        store.complete_task(workspace, task_id, actor=_reviewer())
+    except CaseWorkspaceError as exc:
+        flash(str(exc), "error")
+    return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
+
+
+@workspace_bp.route("/projects/<project_id>/workspace/tasks/<task_id>/reopen", methods=["POST"])
+@login_required
+def reopen_task_route(project_id, task_id):
+    _, store, workspace = _load_workspace_or_404(project_id)
+    try:
+        store.reopen_task(workspace, task_id, actor=_reviewer())
+    except CaseWorkspaceError as exc:
+        flash(str(exc), "error")
+    return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
 
 
 @workspace_bp.route("/projects/<project_id>/workspace/discuss", methods=["POST"])

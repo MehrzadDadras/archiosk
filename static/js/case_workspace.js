@@ -731,4 +731,599 @@ document.addEventListener('DOMContentLoaded', () => {
             composerInput.focus();
         });
     });
+
+    // CLAUDE-P40-VW7: OneNote-style selection toolbar for Project
+    // Conversation text -> Tags/Highlights/Tasks, plus the Lists Tasks/
+    // Tags branches' live-update behaviour and navigate-to-source flash.
+    // A bounded, project-scoped capability - see this stage's own
+    // authorization comment in routes/workspace.py and
+    // services/case_workspace.py. First use of fetch() in this file
+    // (tools/dependency_fit.py checked clean beforehand) - used ONLY
+    // for the specific cases Section 7/12 require to update without a
+    // full page reload (Tag/Task creation, Tag removal); Task complete/
+    // reopen stay classic form-POST + redirect, this app's normal
+    // convention, and never touch this code path at all.
+    (function setUpConversationTagsAndTasks() {
+        const toolbar = document.getElementById('conv-selection-toolbar');
+        const statusEl = document.getElementById('conv-selection-status');
+        const tagDialog = document.getElementById('conv-tag-dialog');
+        const taskDialog = document.getElementById('conv-task-dialog');
+        if (!toolbar || !statusEl || !tagDialog || !taskDialog) return;
+
+        const tagForm = document.getElementById('conv-tag-form');
+        const taskForm = document.getElementById('conv-task-form');
+
+        // Mirrors services/case_workspace.py's own BUILT_IN_TAG_* string
+        // constants exactly - these three are fixed code-level identities
+        // on the server (never stored per-project), so the client only
+        // ever needs to know their literal ids, not fetch them.
+        const BUILT_IN_TAG_IMPORTANT = 'built-in:important';
+        const BUILT_IN_TAG_QUESTION = 'built-in:question';
+        const BUILT_IN_TAG_HIGHLIGHT = 'built-in:highlight';
+
+        let currentAnchor = null; // last computed anchor (or {ambiguous:true,...}), from the most recent meaningful selection
+        let currentQuoteText = '';
+        let pendingAnchor = null; // anchor captured at the moment a dialog opened - selection may already be gone by submit time
+        let dialogTriggerEl = null;
+        let statusHideTimer = null;
+        let selectionDebounce = null;
+
+        function csrfToken() {
+            const meta = document.querySelector('meta[name="csrf-token"]');
+            return meta ? meta.content : '';
+        }
+
+        function postForm(url, fields) {
+            const formData = new FormData();
+            Object.keys(fields).forEach((key) => formData.append(key, fields[key]));
+            return fetch(url, {
+                method: 'POST',
+                body: formData,
+                headers: { 'X-CSRFToken': csrfToken() },
+                credentials: 'same-origin',
+            }).then((resp) => resp.json().then((data) => ({ ok: resp.ok, data: data })));
+        }
+
+        function showStatus(message, autoHide) {
+            statusEl.textContent = message;
+            statusEl.hidden = false;
+            window.clearTimeout(statusHideTimer);
+            if (autoHide) {
+                statusHideTimer = window.setTimeout(() => { statusEl.hidden = true; }, 2500);
+            }
+        }
+        function hideStatus() {
+            window.clearTimeout(statusHideTimer);
+            statusEl.hidden = true;
+            statusEl.textContent = '';
+        }
+
+        function hideToolbar() {
+            toolbar.hidden = true;
+            hideStatus();
+            currentAnchor = null;
+            currentQuoteText = '';
+        }
+
+        function dialogOpen() {
+            return !tagDialog.hidden || !taskDialog.hidden;
+        }
+
+        // -------- Anchor computation (Section 4: text-quote anchoring, --
+        // -------- never fragile DOM coordinates) -------------------------
+        function withinConversationDock(node) {
+            const el = node.nodeType === Node.TEXT_NODE ? node.parentElement : node;
+            return !!(el && el.closest('#conversation-dock'));
+        }
+
+        function resolveAnchorContainer(node) {
+            const el = node.nodeType === Node.TEXT_NODE ? node.parentElement : node;
+            if (!el) return null;
+            return el.closest('[data-message-text]') || el.closest('#project-conversation-guidance');
+        }
+
+        // Range.toString() of "container start -> this boundary" gives the
+        // exact rendered-text offset without a manual TreeWalker - simpler
+        // and just as correct, since hotlinks() never changes text length.
+        function offsetWithin(container, node, nodeOffset) {
+            const r = document.createRange();
+            r.selectNodeContents(container);
+            try {
+                r.setEnd(node, nodeOffset);
+            } catch (e) {
+                return container.textContent.length;
+            }
+            return r.toString().length;
+        }
+
+        function computeAnchorFromSelection(range, text) {
+            const startContainer = resolveAnchorContainer(range.startContainer);
+            const endContainer = resolveAnchorContainer(range.endContainer);
+            // Cross-message/cross-source-block selections must not create
+            // an ambiguous anchor (Section 3) - Copy stays available,
+            // everything source-dependent gets disabled by the caller.
+            if (!startContainer || !endContainer || startContainer !== endContainer) {
+                return { ambiguous: true, quote: text };
+            }
+            const container = startContainer;
+            const isGuidance = container.id === 'project-conversation-guidance';
+            let scope; let caseId = null; let messageId = null; let guidanceKey = null;
+            if (isGuidance) {
+                scope = 'guidance';
+                guidanceKey = container.dataset.guidanceKey || '';
+            } else {
+                const messageEl = container.closest('[data-message-id]');
+                const scopeEl = container.closest('[data-anchor-scope]');
+                if (!messageEl || !scopeEl) return { ambiguous: true, quote: text };
+                messageId = messageEl.dataset.messageId;
+                scope = scopeEl.dataset.anchorScope;
+                if (scope === 'case') caseId = scopeEl.dataset.anchorCaseId;
+            }
+            const rawStart = offsetWithin(container, range.startContainer, range.startOffset);
+            const rawEnd = offsetWithin(container, range.endContainer, range.endOffset);
+            const startOffset = Math.min(rawStart, rawEnd);
+            const endOffset = Math.max(rawStart, rawEnd);
+            const fullText = container.textContent;
+            const CONTEXT_LEN = 40;
+            return {
+                ambiguous: false,
+                scope: scope,
+                caseId: caseId,
+                messageId: messageId,
+                guidanceKey: guidanceKey,
+                startOffset: startOffset,
+                endOffset: endOffset,
+                quote: text,
+                prefix: fullText.slice(Math.max(0, startOffset - CONTEXT_LEN), startOffset),
+                suffix: fullText.slice(endOffset, endOffset + CONTEXT_LEN),
+            };
+        }
+
+        function anchorFormFields(anchor) {
+            return {
+                anchor_scope: anchor.scope || '',
+                anchor_case_id: anchor.caseId || '',
+                anchor_message_id: anchor.messageId || '',
+                anchor_guidance_key: anchor.guidanceKey || '',
+                anchor_start_offset: anchor.startOffset != null ? String(anchor.startOffset) : '',
+                anchor_end_offset: anchor.endOffset != null ? String(anchor.endOffset) : '',
+                anchor_quote: anchor.quote || '',
+                anchor_prefix: anchor.prefix || '',
+                anchor_suffix: anchor.suffix || '',
+            };
+        }
+
+        // Mirrors routes/workspace.py's own _conversation_source_url -
+        // the current page's own path IS the show_workspace URL whenever
+        // this script runs (case_workspace.js loads on no other page),
+        // so no project_id needs deriving separately.
+        function buildSourceUrl(anchor) {
+            const basePath = window.location.pathname;
+            let query = '';
+            let fragment;
+            if (anchor.scope === 'case') {
+                query = `?case=${encodeURIComponent(anchor.case_id)}`;
+                fragment = `conv-source-${anchor.message_id}`;
+            } else if (anchor.scope === 'guidance') {
+                fragment = 'conv-source-guidance';
+            } else {
+                fragment = `conv-source-${anchor.message_id}`;
+            }
+            return `${basePath}${query}#${fragment}`;
+        }
+
+        // -------- Toolbar visibility + positioning (Section 3/10) --------
+        function applyToolbarAvailability(anchor) {
+            const sourceDependent = toolbar.querySelectorAll('[data-conv-action]:not([data-conv-action="copy"])');
+            const usable = !!(anchor && !anchor.ambiguous);
+            sourceDependent.forEach((btn) => {
+                btn.disabled = !usable;
+                btn.title = usable ? '' : 'Select text within a single message or the guidance note to use this action.';
+            });
+            if (!usable && anchor) {
+                showStatus('Selection spans multiple messages \u2014 only Copy is available.', false);
+            } else {
+                hideStatus();
+            }
+        }
+
+        function positionToolbar(rect) {
+            toolbar.hidden = false;
+            const margin = 8;
+            let top = rect.top - toolbar.offsetHeight - margin;
+            if (top < margin) top = rect.bottom + margin;
+            if (top + toolbar.offsetHeight > window.innerHeight - margin) {
+                top = Math.max(margin, window.innerHeight - toolbar.offsetHeight - margin);
+            }
+            let left = rect.left + (rect.width / 2) - (toolbar.offsetWidth / 2);
+            left = Math.max(margin, Math.min(left, window.innerWidth - toolbar.offsetWidth - margin));
+            toolbar.style.top = `${top}px`;
+            toolbar.style.left = `${left}px`;
+        }
+
+        function handleSelectionMaybeChanged() {
+            if (dialogOpen()) return;
+            const active = document.activeElement;
+            if (active && ['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON'].indexOf(active.tagName) !== -1) {
+                hideToolbar();
+                return;
+            }
+            const sel = window.getSelection();
+            if (!sel || sel.rangeCount === 0 || sel.isCollapsed) { hideToolbar(); return; }
+            const text = sel.toString();
+            if (!text || !text.trim()) { hideToolbar(); return; }
+            const range = sel.getRangeAt(0);
+            if (!withinConversationDock(range.startContainer) && !withinConversationDock(range.endContainer)) {
+                hideToolbar();
+                return;
+            }
+            const anchor = computeAnchorFromSelection(range, text);
+            currentAnchor = anchor;
+            currentQuoteText = text;
+            positionToolbar(range.getBoundingClientRect());
+            applyToolbarAvailability(anchor);
+        }
+
+        document.addEventListener('selectionchange', () => {
+            window.clearTimeout(selectionDebounce);
+            selectionDebounce = window.setTimeout(handleSelectionMaybeChanged, 150);
+        });
+
+        // -------- Copy (Section 9) ----------------------------------------
+        function fallbackCopy(text, cb) {
+            const ta = document.createElement('textarea');
+            ta.value = text;
+            ta.setAttribute('readonly', '');
+            ta.style.position = 'fixed';
+            ta.style.opacity = '0';
+            document.body.appendChild(ta);
+            ta.select();
+            let ok = false;
+            try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+            document.body.removeChild(ta);
+            cb(ok);
+        }
+        function doCopy(text) {
+            function done(ok) { showStatus(ok ? 'Copied.' : 'Copy failed.', true); }
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).then(() => done(true), () => fallbackCopy(text, done));
+            } else {
+                fallbackCopy(text, done);
+            }
+        }
+
+        // -------- Truncation for Task titles / dialog quote preview ------
+        function truncateForDisplay(text, maxLen) {
+            const trimmed = text.trim().replace(/\s+/g, ' ');
+            if (trimmed.length <= maxLen) return trimmed;
+            let cut = trimmed.slice(0, maxLen);
+            const lastSpace = cut.lastIndexOf(' ');
+            if (lastSpace > maxLen * 0.6) cut = cut.slice(0, lastSpace);
+            return `${cut}\u2026`;
+        }
+
+        // -------- Add Tag / Make Task dialogs (Section 5/6) ---------------
+        function showDialogError(dialog, message) {
+            const el = dialog.querySelector('[data-conv-dialog-error]');
+            if (!el) return;
+            el.textContent = message;
+            el.hidden = false;
+        }
+        function clearDialogError(dialog) {
+            const el = dialog.querySelector('[data-conv-dialog-error]');
+            if (el) { el.hidden = true; el.textContent = ''; }
+        }
+
+        function injectAnchorHiddenFields(form, anchor) {
+            form.querySelectorAll('[data-conv-anchor-field]').forEach((el) => el.remove());
+            const fields = anchorFormFields(anchor);
+            Object.keys(fields).forEach((name) => {
+                const input = document.createElement('input');
+                input.type = 'hidden';
+                input.name = name;
+                input.value = fields[name];
+                input.setAttribute('data-conv-anchor-field', '');
+                form.appendChild(input);
+            });
+        }
+
+        function showDialog(dialog) {
+            clearDialogError(dialog);
+            dialog.hidden = false;
+            const focusable = dialog.querySelector('input, select, textarea');
+            if (focusable) focusable.focus();
+        }
+        function closeDialog(dialog) {
+            dialog.hidden = true;
+            pendingAnchor = null;
+            const returnTarget = (dialogTriggerEl && document.body.contains(dialogTriggerEl)) ? dialogTriggerEl : null;
+            if (returnTarget && typeof returnTarget.focus === 'function') returnTarget.focus();
+            dialogTriggerEl = null;
+        }
+
+        function openTagDialog(anchor, quote, triggerEl) {
+            pendingAnchor = anchor;
+            dialogTriggerEl = triggerEl;
+            hideToolbar();
+            tagForm.reset();
+            document.getElementById('conv-tag-dialog-quote').textContent = `\u201C${truncateForDisplay(quote, 140)}\u201D`;
+            injectAnchorHiddenFields(tagForm, anchor);
+            showDialog(tagDialog);
+        }
+        function openTaskDialog(anchor, quote, triggerEl) {
+            pendingAnchor = anchor;
+            dialogTriggerEl = triggerEl;
+            hideToolbar();
+            taskForm.reset();
+            document.getElementById('conv-task-title').value = truncateForDisplay(quote, 200);
+            injectAnchorHiddenFields(taskForm, anchor);
+            showDialog(taskDialog);
+        }
+
+        document.querySelectorAll('[data-conv-dialog-cancel]').forEach((btn) => {
+            btn.addEventListener('click', () => closeDialog(btn.closest('.conv-dialog')));
+        });
+        document.addEventListener('keydown', (e) => {
+            if (e.key !== 'Escape') return;
+            if (!tagDialog.hidden) { closeDialog(tagDialog); return; }
+            if (!taskDialog.hidden) { closeDialog(taskDialog); return; }
+            if (!toolbar.hidden) hideToolbar();
+        });
+        document.addEventListener('mousedown', (e) => {
+            if (!tagDialog.hidden && !tagDialog.contains(e.target)) { closeDialog(tagDialog); return; }
+            if (!taskDialog.hidden && !taskDialog.contains(e.target)) { closeDialog(taskDialog); return; }
+            if (!toolbar.hidden && !toolbar.contains(e.target)) {
+                const sel = window.getSelection();
+                if (!sel || sel.isCollapsed || !sel.toString().trim()) hideToolbar();
+            }
+        });
+
+        [tagForm, taskForm].forEach((form) => {
+            form.addEventListener('submit', (e) => {
+                e.preventDefault();
+                clearDialogError(form.closest('.conv-dialog'));
+                const formData = new FormData(form);
+                fetch(form.action, {
+                    method: 'POST',
+                    body: formData,
+                    headers: { 'X-CSRFToken': csrfToken() },
+                    credentials: 'same-origin',
+                }).then((resp) => resp.json()).then((data) => {
+                    if (!data.ok) {
+                        showDialogError(form.closest('.conv-dialog'), data.error || 'Something went wrong.');
+                        return;
+                    }
+                    if (form === tagForm) {
+                        patchTagsListOnAdd(data.occurrence, data.tag, data.counts);
+                        showStatus(`Tagged as ${data.tag.name}.`, true);
+                    } else {
+                        patchTasksListOnCreate(data.task, data.counts);
+                        showStatus('Task created.', true);
+                    }
+                    closeDialog(form.closest('.conv-dialog'));
+                }).catch(() => showDialogError(form.closest('.conv-dialog'), 'Network error \u2014 please try again.'));
+            });
+        });
+
+        // -------- Toolbar button handling ---------------------------------
+        toolbar.addEventListener('mousedown', (e) => {
+            // Preserve the live text selection through the click - a plain
+            // browser default would shift focus to the button on mousedown
+            // and collapse the selection before the click handler below
+            // ever runs (Section 3's own "must not destroy selection before
+            // an action captures it"). The click event itself still fires
+            // normally afterwards; only the focus-shift side effect is
+            // suppressed.
+            e.preventDefault();
+        });
+        toolbar.addEventListener('keydown', (e) => {
+            if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+            const buttons = Array.from(toolbar.querySelectorAll('[data-conv-action]:not([disabled])'));
+            const idx = buttons.indexOf(document.activeElement);
+            if (idx === -1) return;
+            e.preventDefault();
+            const next = e.key === 'ArrowRight' ? (idx + 1) % buttons.length : (idx - 1 + buttons.length) % buttons.length;
+            buttons[next].focus();
+        });
+        toolbar.addEventListener('click', (e) => {
+            const btn = e.target.closest('[data-conv-action]');
+            if (!btn || btn.disabled) return;
+            const action = btn.dataset.convAction;
+            const anchor = currentAnchor;
+            const quote = currentQuoteText;
+            if (action === 'copy') { doCopy(quote); return; }
+            if (!anchor || anchor.ambiguous) return; // defensive - button is already disabled in this state
+            if (action === 'tag') { openTagDialog(anchor, quote, btn); return; }
+            if (action === 'task') { openTaskDialog(anchor, quote, btn); return; }
+            const builtIn = action === 'important' ? { id: BUILT_IN_TAG_IMPORTANT, name: 'Important' }
+                : action === 'question' ? { id: BUILT_IN_TAG_QUESTION, name: 'Question' }
+                : action === 'highlight' ? { id: BUILT_IN_TAG_HIGHLIGHT, name: 'Highlight' } : null;
+            if (!builtIn) return;
+            postForm(tagForm.action, Object.assign({ tag_id: builtIn.id }, anchorFormFields(anchor))).then(({ ok, data }) => {
+                if (!ok || !data.ok) {
+                    showStatus((data && data.error) || 'Could not apply tag.', true);
+                    return;
+                }
+                patchTagsListOnAdd(data.occurrence, data.tag, data.counts);
+                showStatus(`Tagged as ${builtIn.name}.`, true);
+                hideToolbar();
+            });
+        });
+
+        // -------- Live Lists DOM patching (Section 7) ---------------------
+        function cssEscape(value) {
+            return (window.CSS && CSS.escape) ? CSS.escape(value) : String(value).replace(/["\\]/g, '\\$&');
+        }
+        function buildEmptyRow(message) {
+            const li = document.createElement('li');
+            li.className = 'tree-node-empty';
+            const span = document.createElement('span');
+            span.className = 'pane-note';
+            span.textContent = message;
+            li.appendChild(span);
+            return li;
+        }
+        function buildTagGroupElement(tag) {
+            const li = document.createElement('li');
+            li.className = 'tree-node-group';
+            li.setAttribute('data-tag-group', tag.id);
+            const p = document.createElement('p');
+            p.className = 'launcher-subheading';
+            const swatch = document.createElement('span');
+            swatch.className = `launcher-tag-swatch conv-tag-color-${tag.color}`;
+            swatch.setAttribute('aria-hidden', 'true');
+            p.appendChild(swatch);
+            p.appendChild(document.createTextNode(` ${tag.name} `));
+            const countSpan = document.createElement('span');
+            countSpan.className = 'launcher-count';
+            countSpan.setAttribute('data-tag-group-count', '');
+            countSpan.textContent = '0';
+            p.appendChild(countSpan);
+            li.appendChild(p);
+            const ul = document.createElement('ul');
+            ul.className = 'tree-children';
+            ul.setAttribute('data-tree-open', '');
+            li.appendChild(ul);
+            return li;
+        }
+        function removeOccurrenceUrl(occurrenceId) {
+            // Mirrors remove_tag_occurrence_route's own path. Built here
+            // rather than copied from an existing row's action=, because
+            // the very first Tag ever added to a Project has no existing
+            // row to copy from.
+            return `${window.location.pathname}/tags/${encodeURIComponent(occurrenceId)}/remove`;
+        }
+        function buildTagOccurrenceElement(occurrence) {
+            const li = document.createElement('li');
+            li.className = 'tree-node';
+            li.setAttribute('data-tree-node', '');
+            li.setAttribute('data-tag-occurrence-id', occurrence.id);
+            const row = document.createElement('div');
+            row.className = 'launcher-task-row';
+            const a = document.createElement('a');
+            a.className = 'tree-leaf launcher-link';
+            a.href = buildSourceUrl(occurrence.source_anchor);
+            a.textContent = `\u201C${truncateForDisplay(occurrence.quote, 60)}\u201D`;
+            row.appendChild(a);
+            const form = document.createElement('form');
+            form.method = 'post';
+            form.action = removeOccurrenceUrl(occurrence.id);
+            form.setAttribute('data-tag-remove-form', '');
+            form.setAttribute('data-occurrence-id', occurrence.id);
+            const btn = document.createElement('button');
+            btn.type = 'submit';
+            btn.className = 'link-button';
+            btn.textContent = 'Remove';
+            form.appendChild(btn);
+            row.appendChild(form);
+            li.appendChild(row);
+            return li;
+        }
+        function patchTagsListOnAdd(occurrence, tag, counts) {
+            const countEl = document.getElementById('lists-tags-count');
+            if (countEl) countEl.textContent = String(counts.total);
+            const groupsRoot = document.getElementById('lists-tags-groups');
+            if (!groupsRoot) return;
+            const emptyRow = groupsRoot.querySelector('.tree-node-empty');
+            if (emptyRow) emptyRow.remove();
+            let group = groupsRoot.querySelector(`[data-tag-group="${cssEscape(tag.id)}"]`);
+            if (!group) {
+                group = buildTagGroupElement(tag);
+                groupsRoot.appendChild(group);
+            }
+            const list = group.querySelector('ul.tree-children');
+            list.appendChild(buildTagOccurrenceElement(occurrence));
+            const groupCountEl = group.querySelector('[data-tag-group-count]');
+            const known = counts.by_tag && counts.by_tag[tag.id] != null ? counts.by_tag[tag.id] : list.children.length;
+            if (groupCountEl) groupCountEl.textContent = String(known);
+        }
+
+        function buildTaskElement(task, open) {
+            const li = document.createElement('li');
+            li.className = 'tree-node';
+            li.setAttribute('data-tree-node', '');
+            li.setAttribute('data-task-id', task.id);
+            const row = document.createElement('div');
+            row.className = 'launcher-task-row';
+            const a = document.createElement('a');
+            a.className = open ? 'tree-leaf launcher-link' : 'tree-leaf launcher-link launcher-task-completed';
+            a.href = buildSourceUrl(task.source_anchor);
+            a.textContent = task.title;
+            row.appendChild(a);
+            const form = document.createElement('form');
+            form.method = 'post';
+            form.action = `${window.location.pathname}/tasks/${encodeURIComponent(task.id)}/${open ? 'complete' : 'reopen'}`;
+            const btn = document.createElement('button');
+            btn.type = 'submit';
+            btn.className = 'link-button';
+            btn.textContent = open ? 'Mark complete' : 'Reopen';
+            form.appendChild(btn);
+            row.appendChild(form);
+            li.appendChild(row);
+            return li;
+        }
+        function patchTasksListOnCreate(task, counts) {
+            const countEl = document.getElementById('lists-tasks-count');
+            if (countEl) countEl.textContent = String(counts.total);
+            const openCountEl = document.getElementById('lists-tasks-open-count');
+            if (openCountEl) openCountEl.textContent = String(counts.open);
+            const completedCountEl = document.getElementById('lists-tasks-completed-count');
+            if (completedCountEl) completedCountEl.textContent = String(counts.completed);
+            const openList = document.getElementById('lists-tasks-open-list');
+            if (!openList) return;
+            const emptyRow = openList.querySelector('.tree-node-empty');
+            if (emptyRow) emptyRow.remove();
+            openList.appendChild(buildTaskElement(task, true));
+        }
+
+        // Removal is wired via delegation so it uniformly covers both
+        // server-rendered rows (present on page load) and rows this
+        // script itself just inserted, without a second binding pass.
+        document.addEventListener('submit', (e) => {
+            const form = e.target.closest('[data-tag-remove-form]');
+            if (!form) return;
+            e.preventDefault();
+            const row = form.closest('[data-tag-occurrence-id]');
+            const group = form.closest('[data-tag-group]');
+            postForm(form.action, {}).then(({ ok, data }) => {
+                if (!ok || !data.ok) {
+                    showStatus((data && data.error) || 'Could not remove tag.', true);
+                    return;
+                }
+                if (row) row.remove();
+                const countEl = document.getElementById('lists-tags-count');
+                if (countEl) countEl.textContent = String(data.counts.total);
+                if (group) {
+                    const tagId = group.getAttribute('data-tag-group');
+                    const remaining = data.counts.by_tag && data.counts.by_tag[tagId] != null ? data.counts.by_tag[tagId] : 0;
+                    if (remaining <= 0) {
+                        group.remove();
+                        const groupsRoot = document.getElementById('lists-tags-groups');
+                        if (groupsRoot && !groupsRoot.querySelector('[data-tag-group]')) {
+                            groupsRoot.appendChild(buildEmptyRow('No Tags yet.'));
+                        }
+                    } else {
+                        const groupCountEl = group.querySelector('[data-tag-group-count]');
+                        if (groupCountEl) groupCountEl.textContent = String(remaining);
+                    }
+                }
+            });
+        });
+
+        // -------- Navigate-to-source flash (Section 4) --------------------
+        function navigateToConversationSource() {
+            const hash = window.location.hash;
+            if (!hash || hash.indexOf('#conv-source-') !== 0) return;
+            const key = hash.slice('#conv-source-'.length);
+            const target = key === 'guidance'
+                ? document.getElementById('project-conversation-guidance')
+                : document.getElementById(`message-${key}`);
+            if (!target) return;
+            target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            target.classList.add('conv-source-flash');
+            window.setTimeout(() => target.classList.remove('conv-source-flash'), 2500);
+        }
+        navigateToConversationSource();
+        window.addEventListener('hashchange', navigateToConversationSource);
+    })();
 });

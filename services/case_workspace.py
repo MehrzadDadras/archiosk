@@ -860,6 +860,142 @@ class Requirement:
     effective_context: Optional[str] = None
 
 
+# CLAUDE-P40-VW7: bounded, project-scoped authorization for Project
+# Conversation text Tags/Highlights/Tasks - an explicit, narrow lift of
+# the "Application implementation, broadly: STILL FROZEN" default (see
+# governance/STATUS.md's own authorization table, updated alongside
+# this stage), NOT a general annotation/task-management architecture.
+# Deliberately excluded, per the authorizing prompt itself: cross-
+# project intelligence, machine-generated assumption correction,
+# organization-wide task management, external integrations, general
+# autonomous chat governance, user assignment, due dates, notifications.
+#
+# TAG_COLOR_PALETTE is a small, fixed set of NAMED colors (not raw hex)
+# - CSS (static/css/tokens.css's --tagcolor-* family) maps each name to
+# an actual swatch value per Light/Dark/Tinted mode, the same
+# scoped-custom-property mechanism CLAUDE-P40-VW6 already established
+# for the rest of the palette. Storing a name here, not a hex code,
+# keeps the store layer honestly ignorant of the CSS token system and
+# guarantees every tag - built-in or custom - renders correctly in
+# every appearance mode without per-tag special-casing.
+TAG_COLOR_PALETTE: tuple[str, ...] = ("yellow", "orange", "red", "green", "blue", "purple")
+
+# Built-in tags: fixed, code-level identities (never stored in
+# ProjectWorkspace.tags - creating one would misrepresent them as
+# project-scoped custom tags, which they're explicitly not) so every
+# project shares the exact same "Important"/"Question" meaning, and
+# "Highlight" is honestly just another built-in tag under the hood
+# (same TagOccurrence shape, same rendering path) rather than a
+# second, parallel highlighting mechanism.
+BUILT_IN_TAG_IMPORTANT = "built-in:important"
+BUILT_IN_TAG_QUESTION = "built-in:question"
+BUILT_IN_TAG_HIGHLIGHT = "built-in:highlight"
+BUILT_IN_TAGS: dict[str, dict] = {
+    BUILT_IN_TAG_IMPORTANT: {"id": BUILT_IN_TAG_IMPORTANT, "name": "Important", "color": "red"},
+    BUILT_IN_TAG_QUESTION: {"id": BUILT_IN_TAG_QUESTION, "name": "Question", "color": "blue"},
+    BUILT_IN_TAG_HIGHLIGHT: {"id": BUILT_IN_TAG_HIGHLIGHT, "name": "Highlight", "color": "yellow"},
+}
+
+# Conversation-source-anchor scopes - which of the two existing
+# conversation lists (or the one static piece of guidance copy) a
+# selection was made in. Deliberately mirrors ConversationMessage's own
+# case_id=None-means-project-level convention rather than inventing a
+# different one.
+CONVERSATION_ANCHOR_SCOPE_CASE = "case"
+CONVERSATION_ANCHOR_SCOPE_PROJECT = "project"
+CONVERSATION_ANCHOR_SCOPE_GUIDANCE = "guidance"
+KNOWN_CONVERSATION_ANCHOR_SCOPES = frozenset({
+    CONVERSATION_ANCHOR_SCOPE_CASE, CONVERSATION_ANCHOR_SCOPE_PROJECT, CONVERSATION_ANCHOR_SCOPE_GUIDANCE,
+})
+
+# The one static guidance passage this stage anchors to a stable NAME
+# rather than a fabricated conversation message (Section 4's own
+# explicit instruction) - templates/case_workspace.html's own project-
+# conversation "Talk to the Project itself..." paragraph. A second
+# named guidance passage (none exists today) would get its own key
+# here, not a new mechanism.
+CONVERSATION_GUIDANCE_PROJECT_INTRO = "project-conversation-intro"
+
+
+@dataclass
+class ConversationSourceAnchor:
+    """
+    CLAUDE-P40-VW7: what a Tag/Highlight/Task occurrence actually points
+    back to - a text-quote-style anchor (canonical offsets + the exact
+    quotation + limited prefix/suffix context), not fragile DOM
+    coordinates (Section 4's own explicit instruction). `case_id=None`
+    with `scope="project"` mirrors ConversationMessage's own project-
+    level convention; `scope="guidance"` never has a `message_id` at
+    all (there is no message to point to - see
+    CONVERSATION_GUIDANCE_PROJECT_INTRO above).
+    """
+
+    scope: str  # KNOWN_CONVERSATION_ANCHOR_SCOPES
+    case_id: Optional[str] = None
+    message_id: Optional[str] = None
+    guidance_key: Optional[str] = None
+    start_offset: int = 0
+    end_offset: int = 0
+    quote: str = ""
+    prefix: str = ""
+    suffix: str = ""
+
+
+@dataclass
+class Tag:
+    """A project-scoped custom tag definition (built-in tags - Important/
+    Question/Highlight - are NOT stored here, see BUILT_IN_TAGS above).
+    Deliberately no organization-wide taxonomy: this list lives on ONE
+    ProjectWorkspace, never shared or merged across projects."""
+
+    id: str
+    name: str
+    color: str  # one of TAG_COLOR_PALETTE
+    created_by: str
+    created_at: str
+
+
+@dataclass
+class TagOccurrence:
+    """One tagged/highlighted passage. `tag_id` is either a BUILT_IN_TAGS
+    key or a real Tag.id from workspace.tags - resolve_tag() below is
+    the one place that distinguishes them. Removing an occurrence never
+    touches the source conversation text it points to (Section 5's own
+    explicit requirement) - it only ever removes this record."""
+
+    id: str
+    tag_id: str
+    source_anchor: dict  # asdict(ConversationSourceAnchor)
+    quote: str
+    created_by: str
+    created_at: str
+
+
+@dataclass
+class Task:
+    """A real persisted project Task created from a selected Project
+    Conversation passage - Section 6's own explicit "not a decorative
+    checkbox or temporary browser state" requirement. Deliberately no
+    assignee/due-date/notification fields - those remain unauthorized
+    by this same stage's own scope boundary."""
+
+    id: str
+    source_anchor: dict  # asdict(ConversationSourceAnchor)
+    quote: str
+    title: str
+    status: str  # "open" | "completed"
+    created_by: str
+    created_at: str
+    completed_by: Optional[str] = None
+    completed_at: Optional[str] = None
+    reopened_by: Optional[str] = None
+    reopened_at: Optional[str] = None
+
+
+TASK_STATUS_OPEN = "open"
+TASK_STATUS_COMPLETED = "completed"
+
+
 @dataclass
 class ConversationMessage:
     """
@@ -2409,6 +2545,16 @@ class ProjectWorkspace:
     case_outcomes: list[dict] = field(default_factory=list)  # CLAUDE-P11 - see CaseOutcome
     participants: list[dict] = field(default_factory=list)  # CLAUDE-P12R - see Participant
     go_no_go_assessments: list[dict] = field(default_factory=list)  # CLAUDE-P30 - see GoNoGoAssessment
+    # CLAUDE-P40-VW7: project-scoped conversation Tags/Tasks. Purely
+    # additive (a legacy record predating this stage simply lacks these
+    # keys and loads with the empty-list default, same pattern as every
+    # other list field on this dataclass - see save()'s own docstring
+    # on why this is always backward-compatible). tags holds only
+    # CUSTOM tag definitions (see Tag/BUILT_IN_TAGS above); built-in
+    # tags are never written here.
+    tags: list[dict] = field(default_factory=list)  # see Tag
+    tag_occurrences: list[dict] = field(default_factory=list)  # see TagOccurrence
+    tasks: list[dict] = field(default_factory=list)  # see Task
 
     # CLAUDE-P31: this project's Security Profile (services.security_policy.
     # INFORMATION_CLASSIFICATIONS) -- unlike operating_environment, NOT
@@ -5047,6 +5193,213 @@ class CaseWorkspaceStore:
 
     def project_conversation_for(self, workspace: ProjectWorkspace) -> list[dict]:
         return list(workspace.project_conversation)
+
+    # ---------------------------------------------------------------
+    # CLAUDE-P40-VW7: project-scoped conversation Tags/Highlights/Tasks.
+    # ---------------------------------------------------------------
+
+    @staticmethod
+    def _normalize_tag_name(name: str) -> str:
+        """Collapses surrounding whitespace and internal run-whitespace,
+        casefolds for COMPARISON only (the stored/displayed name keeps
+        its original casing) - Section 5's own explicit "avoid
+        accidental duplicates caused only by capitalization or
+        surrounding whitespace" requirement."""
+        return re.sub(r"\s+", " ", name).strip().casefold()
+
+    def resolve_tag(self, workspace: ProjectWorkspace, tag_id: str) -> Optional[dict]:
+        """Built-in tags (BUILT_IN_TAGS) and project-scoped custom tags
+        (workspace.tags) share one id-space from every caller's point of
+        view - this is the one place that actually distinguishes them,
+        so nothing else needs to."""
+        if tag_id in BUILT_IN_TAGS:
+            return dict(BUILT_IN_TAGS[tag_id])
+        return self._find(workspace.tags, tag_id)
+
+    def list_custom_tags(self, workspace: ProjectWorkspace) -> list[dict]:
+        return list(workspace.tags)
+
+    def create_custom_tag(self, workspace: ProjectWorkspace, name: str, color: str, actor: str) -> dict:
+        """Idempotent by normalized name: re-submitting the same name
+        (any casing/whitespace) returns the EXISTING tag rather than
+        creating a duplicate - the actual mechanism behind Section 5's
+        "avoid accidental duplicates" requirement, not just a display-
+        time collapse. A collision with a BUILT-IN tag's name (e.g.
+        typing "Important" into the custom-tag field) also returns the
+        built-in tag's own id, so "Important" only ever means one thing
+        in a given project regardless of which path created it."""
+        stripped = re.sub(r"\s+", " ", (name or "")).strip()
+        if not stripped:
+            raise CaseWorkspaceError("Tag name cannot be empty.")
+        if len(stripped) > 60:
+            raise CaseWorkspaceError("Tag name is too long (60 characters max).")
+        if color not in TAG_COLOR_PALETTE:
+            raise CaseWorkspaceError(f"Unknown tag colour {color!r}.")
+
+        normalized = self._normalize_tag_name(stripped)
+        for builtin in BUILT_IN_TAGS.values():
+            if self._normalize_tag_name(builtin["name"]) == normalized:
+                return dict(builtin)
+        for existing in workspace.tags:
+            if self._normalize_tag_name(existing["name"]) == normalized:
+                return existing
+
+        tag = Tag(id=_new_id(), name=stripped, color=color, created_by=actor, created_at=_now())
+        workspace.tags.append(asdict(tag))
+        self.save(workspace)
+        return asdict(tag)
+
+    def _validate_source_anchor(self, workspace: ProjectWorkspace, source_anchor: dict) -> dict:
+        """Real validation, not just shape-checking - confirms the
+        anchor's own case_id/message_id actually resolve against this
+        SAME workspace before anything gets persisted, so a tampered or
+        stale anchor can never be recorded as if it were real (Section
+        8's own "prevent ID tampering" requirement, applied to the
+        anchor payload itself, not just the surrounding project_id/
+        occurrence_id path parameters route-layer checks already
+        cover)."""
+        scope = source_anchor.get("scope")
+        if scope not in KNOWN_CONVERSATION_ANCHOR_SCOPES:
+            raise CaseWorkspaceError(f"Unknown source anchor scope {scope!r}.")
+
+        quote = (source_anchor.get("quote") or "").strip()
+        if not quote:
+            raise CaseWorkspaceError("Selected text cannot be empty.")
+        if len(quote) > 2000:
+            raise CaseWorkspaceError("Selected text is too long (2000 characters max).")
+
+        start_offset = source_anchor.get("start_offset")
+        end_offset = source_anchor.get("end_offset")
+        if not isinstance(start_offset, int) or not isinstance(end_offset, int) or start_offset < 0 or end_offset <= start_offset:
+            raise CaseWorkspaceError("Selection offsets are invalid.")
+
+        if scope == CONVERSATION_ANCHOR_SCOPE_GUIDANCE:
+            if source_anchor.get("guidance_key") != CONVERSATION_GUIDANCE_PROJECT_INTRO:
+                raise CaseWorkspaceError("Unknown guidance source.")
+            case_id = None
+            message_id = None
+        else:
+            case_id = source_anchor.get("case_id")
+            message_id = source_anchor.get("message_id")
+            if not message_id:
+                raise CaseWorkspaceError("A message source anchor requires a message id.")
+            if scope == CONVERSATION_ANCHOR_SCOPE_CASE:
+                case = self._find(workspace.cases, case_id) if case_id else None
+                if case is None:
+                    raise CaseWorkspaceError(f"Investigation {case_id} was not found.")
+                message = self._find(case["conversation"], message_id)
+            else:
+                case_id = None
+                message = self._find(workspace.project_conversation, message_id)
+            if message is None:
+                raise CaseWorkspaceError(f"Conversation message {message_id} was not found.")
+
+        return {
+            "scope": scope,
+            "case_id": case_id,
+            "message_id": message_id,
+            "guidance_key": source_anchor.get("guidance_key") if scope == CONVERSATION_ANCHOR_SCOPE_GUIDANCE else None,
+            "start_offset": start_offset,
+            "end_offset": end_offset,
+            "quote": quote,
+            "prefix": (source_anchor.get("prefix") or "")[:80],
+            "suffix": (source_anchor.get("suffix") or "")[:80],
+        }
+
+    def resolve_conversation_anchor(self, workspace: ProjectWorkspace, source_anchor: dict) -> bool:
+        """Section 4's own "Source unavailable" requirement: True only
+        if the anchor's target can genuinely still be resolved against
+        the CURRENT state of this workspace (the Investigation and
+        message still exist) - never assumed true merely because the
+        record itself exists. Read-only, used by the Lists Tasks/Tags
+        rendering to decide whether a "Source unavailable" state should
+        show instead of a normal navigation link."""
+        scope = source_anchor.get("scope")
+        if scope == CONVERSATION_ANCHOR_SCOPE_GUIDANCE:
+            return source_anchor.get("guidance_key") == CONVERSATION_GUIDANCE_PROJECT_INTRO
+        message_id = source_anchor.get("message_id")
+        if not message_id:
+            return False
+        if scope == CONVERSATION_ANCHOR_SCOPE_CASE:
+            case = self._find(workspace.cases, source_anchor.get("case_id"))
+            if case is None:
+                return False
+            return self._find(case["conversation"], message_id) is not None
+        if scope == CONVERSATION_ANCHOR_SCOPE_PROJECT:
+            return self._find(workspace.project_conversation, message_id) is not None
+        return False
+
+    def add_tag_occurrence(
+        self, workspace: ProjectWorkspace, tag_id: str, source_anchor: dict, actor: str,
+    ) -> dict:
+        if self.resolve_tag(workspace, tag_id) is None:
+            raise CaseWorkspaceError(f"Tag {tag_id} was not found.")
+        validated_anchor = self._validate_source_anchor(workspace, source_anchor)
+
+        occurrence = TagOccurrence(
+            id=_new_id(), tag_id=tag_id, source_anchor=validated_anchor,
+            quote=validated_anchor["quote"], created_by=actor, created_at=_now(),
+        )
+        workspace.tag_occurrences.append(asdict(occurrence))
+        self.save(workspace)
+        return asdict(occurrence)
+
+    def remove_tag_occurrence(self, workspace: ProjectWorkspace, occurrence_id: str) -> None:
+        """Removes only this occurrence record - never touches the
+        source conversation message/text it pointed to (Section 5's own
+        explicit requirement)."""
+        occurrence = self._find(workspace.tag_occurrences, occurrence_id)
+        if occurrence is None:
+            raise CaseWorkspaceError(f"Tag occurrence {occurrence_id} was not found.")
+        workspace.tag_occurrences.remove(occurrence)
+        self.save(workspace)
+
+    def tag_occurrences_for_project(self, workspace: ProjectWorkspace) -> list[dict]:
+        return list(workspace.tag_occurrences)
+
+    def create_task(self, workspace: ProjectWorkspace, source_anchor: dict, title: str, actor: str) -> dict:
+        stripped_title = re.sub(r"\s+", " ", (title or "")).strip()
+        if not stripped_title:
+            raise CaseWorkspaceError("Task title cannot be empty.")
+        if len(stripped_title) > 200:
+            stripped_title = stripped_title[:197] + "..."
+
+        validated_anchor = self._validate_source_anchor(workspace, source_anchor)
+
+        task = Task(
+            id=_new_id(), source_anchor=validated_anchor, quote=validated_anchor["quote"],
+            title=stripped_title, status=TASK_STATUS_OPEN, created_by=actor, created_at=_now(),
+        )
+        workspace.tasks.append(asdict(task))
+        self.save(workspace)
+        return asdict(task)
+
+    def complete_task(self, workspace: ProjectWorkspace, task_id: str, actor: str) -> dict:
+        task = self._find(workspace.tasks, task_id)
+        if task is None:
+            raise CaseWorkspaceError(f"Task {task_id} was not found.")
+        if task["status"] == TASK_STATUS_COMPLETED:
+            raise CaseWorkspaceError("Task is already completed.")
+        task["status"] = TASK_STATUS_COMPLETED
+        task["completed_by"] = actor
+        task["completed_at"] = _now()
+        self.save(workspace)
+        return task
+
+    def reopen_task(self, workspace: ProjectWorkspace, task_id: str, actor: str) -> dict:
+        task = self._find(workspace.tasks, task_id)
+        if task is None:
+            raise CaseWorkspaceError(f"Task {task_id} was not found.")
+        if task["status"] == TASK_STATUS_OPEN:
+            raise CaseWorkspaceError("Task is already open.")
+        task["status"] = TASK_STATUS_OPEN
+        task["reopened_by"] = actor
+        task["reopened_at"] = _now()
+        self.save(workspace)
+        return task
+
+    def tasks_for_project(self, workspace: ProjectWorkspace) -> list[dict]:
+        return list(workspace.tasks)
 
     def recent_anchors_for(
         self, workspace: ProjectWorkspace, reviewer: str, case_ids: set, limit: int = 5,
