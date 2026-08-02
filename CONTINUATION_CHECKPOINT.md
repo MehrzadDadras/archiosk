@@ -1,5 +1,37 @@
 # Continuation checkpoint
 
+## 2026-08-02 — CLAUDE-P40-E3A-QA-CLOSE: conditional acceptance seal
+
+**Seal commit:** (this checkpoint commit itself). Starting state was
+`a31f863` (P40-E3A-QA's own checkpoint commit) - HEAD and `origin/main`
+verified equal before recording this seal; working tree clean except
+the pre-existing, unrelated untracked
+`tests/fixtures/nreocrc/_lab_instance_scratch_002/`. Last verified full
+suite: **1507 passed, 0 failed**.
+
+**The product owner conditionally accepts P40-E3A and P40-E3A-QA as
+the current working layout baseline.** This is explicitly not a
+declaration that the interface is 100% complete - the following
+residuals are recorded honestly, not fixed here, per this seal's own
+instruction not to change application code or weaken tests:
+
+- Some rendered details still differ from the independently developed
+  numbered prototype - further visual reconciliation is deferred to a
+  fresh future round, not considered closed by this seal.
+- The intermittent `StableUrlRestorationTests::
+  test_navigating_away_and_back_via_fresh_requests_restores_identical_state`
+  flake (documented in the P40-E3A-QA entry above: failed 2 of 5
+  full-suite runs that day, always passed isolated or in a partial
+  replay of the same prior order, test body unchanged since before
+  P40-E3A) remains unresolved.
+- The E3A test-change audit (forked, independent read of the real
+  diff) did not produce exact counts for every requested category -
+  it reported a range (~89-135, methodology gap explained in its own
+  findings) rather than one precise number per bucket.
+
+No application code was changed to reach this seal; no test was
+weakened. P40-E3B and P41 remain not started.
+
 ## 2026-08-02 — CLAUDE-P40-E3A-QA: browser-grounded layout reconciliation
 
 **Commit:** `2eb23b4`. Full suite: 1507 passed (was 1491). Not yet
