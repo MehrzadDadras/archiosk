@@ -1,5 +1,75 @@
 # Continuation checkpoint
 
+## 2026-08-02 — CLAUDE-P40-VW1: fixed the permanently-visible Display context menu
+
+**Commit:** `7b83e82`. Full suite: 1522 passed, 0 failed (was 1507; 15
+new tests added, none removed). Starting state was `510c4ef` (the
+P40-E3B-DEFER-CLOSE seal) - HEAD and `origin/main` verified equal, tree
+clean except the pre-existing untracked
+`tests/fixtures/nreocrc/_lab_instance_scratch_002/`.
+
+**Product-owner walkthrough defect, first observation of the visual
+walkthrough session**: the per-Display right-click menu
+(`#display-context-menu` - Close/Divide/direction/quantity/Apply) was
+permanently visible near the upper-left corner of a blank main Display
+instead of hidden until a real right-click, and right-clicking a
+Display did not visibly open it at the pointer.
+
+**Root cause, confirmed by direct CSS/JS source inspection (not
+assumed to be "just CSS" without checking)**: `static/css/main.css`'s
+`.display-context-menu` rule sets `display: flex` via a plain class
+selector - the same specificity (0,1,0) as the browser's own
+user-agent-stylesheet rule `[hidden] { display: none }`. An
+author-origin CSS rule always wins over a user-agent-origin rule at
+equal specificity regardless of source order, so the JS-toggled
+`hidden` attribute was being silently defeated on every render,
+including the very first one. `static/js/case_workspace.js`'s
+`setUpContextMenu` (open/close/target/Escape/outside-click/Apply-Close
+dismissal, viewport clamping) was already correct and complete and
+needed no change - this was not a JS bug. The top-bar Display
+Layout/Appearance/User menus never hit this because they are native
+`<details>`/`<summary>` disclosure widgets, an unrelated, unaffected
+visibility mechanism.
+
+**Fix** (one CSS rule, no JS/template/schema change): added
+`.display-context-menu[hidden] { display: none; }` (specificity
+0,2,0), which reliably overrides the base rule regardless of source
+order. Verified load-bearing by reverting it locally (`git stash`),
+observing the new test fail, then restoring it. `STATIC_VERSION`
+bumped 29→30 (`.env`, untracked, per this repo's own CSS-change
+discipline).
+
+**Tests**: added `tests/test_p40vw1_display_context_menu.py` (15
+tests) - the menu's `hidden` attribute survives initial and repeat
+fresh renders on both a blank and a populated Display; the CSS
+override rule exists without removing the open-state flex layout; the
+existing JS wiring (per-division-scoped listener, native-menu
+suppression scope, pointer targeting, `hidden` toggling, outside-click/
+Escape/Apply/Close dismissal, untouched top-bar control) is asserted
+intact. Directly affected suites re-run explicitly
+(`test_p40e3a_layout_reconciliation.py`,
+`test_p40e3a_qa_reconciliation.py`,
+`test_p40e2b1a_recursive_projection.py` including the Stable URL
+Restoration test) - all passing. Full suite run to termination: 1522
+passed, 0 failed.
+
+**Browser evidence and its limitation, stated honestly**: no browser/
+pointer-interaction tool exists in this environment. Diagnosis and
+verification rest on direct CSS-cascade-specificity reasoning (a well-
+defined, deterministic browser behavior, not a guess) plus source-level
+JS assertions; the actual visual result (menu now hidden, opens at the
+pointer, targets the right division, stays clamped, dismisses
+correctly) has NOT been confirmed by a real click in a real browser.
+**The product owner should verify this correction with a real
+right-click during the continued walkthrough.**
+
+Preserves every existing Display-layout contract (orientation,
+quantity, six-division ceiling, close/reflow, active-target routing,
+document projection), the Stable URL Restoration guarantee, and all
+navigation/Lists/Toolbox/Chat/persistence/authorization boundaries -
+none were touched. P40-E3B remains closed as DEFER; P41 was not
+started.
+
 ## 2026-08-02 — CLAUDE-P40-E3B-DEFER-CLOSE: evidence-backed Defer decision accepted
 
 **Seal commit:** (this checkpoint commit itself). Starting state was
