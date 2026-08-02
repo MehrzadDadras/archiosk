@@ -54,32 +54,45 @@ class ProjectHomeTests(unittest.TestCase):
     # -- landing state -----------------------------------------------------
 
     def test_opening_a_project_lands_on_project_home_not_a_case(self):
+        # SUPERSEDED (CLAUDE-P40-E3A, Section 5): the bare workspace URL
+        # (no ?view=) no longer lands on Project Home by default - Display
+        # is blank unless a leaf is explicitly selected, and "Overview" is
+        # now that explicit leaf (?view=overview). The chat composer
+        # (shell-level, Section 9) still renders regardless, since Chat is
+        # not part of Display's own blank/non-blank state.
         response = self.client.get(f"/projects/{self.project_id}/workspace")
         body = response.get_data(as_text=True)
-
         self.assertEqual(response.status_code, 200)
+        self.assertNotIn('id="project-overview"', body)
+        self.assertIn("Ask a question, or describe what you want to work on", body)
+        self.assertNotIn("workspace-topbar-sep", body)
+
+        overview_response = self.client.get(f"/projects/{self.project_id}/workspace?view=overview")
+        overview_body = overview_response.get_data(as_text=True)
+        self.assertEqual(overview_response.status_code, 200)
         # CLAUDE-P40-E1: the separate "Start or continue project work"
         # composer (placeholder "What are we working on?") was removed -
         # the single Project Conversation dock composer now covers both
         # a plain question and a real "start work" request.
-        self.assertIn("Ask a question, or describe what you want to work on", body)
+        self.assertIn("Ask a question, or describe what you want to work on", overview_body)
         # CLAUDE-P38-C: this explanation moved behind a collapsed
         # "What is Project State?" disclosure - still present in the
         # rendered HTML (a <details> element's content is always in the
         # DOM, just visually collapsed), only reformatted onto several
         # source lines, so checked as separate fragments rather than one
         # exact-whitespace string.
-        self.assertIn("What is Project State?", body)
-        self.assertIn("You are working inside the current governed project state.", body)
-        self.assertIn("New work inherits its sources,", body)
+        self.assertIn("What is Project State?", overview_body)
+        self.assertIn("You are working inside the current governed project state.", overview_body)
+        self.assertIn("New work inherits its sources,", overview_body)
         # CLAUDE-P40-E2B: the page_header <h1> (was renamed from "Case
         # Workspace" to "Workspace" under P40-E) is gone entirely,
-        # replaced by the top bar's own breadcrumb - the real invariant
-        # (no active-Investigation context leaks into a Project Home
-        # render) is now checked against that breadcrumb's own
-        # separator, which only ever renders when an Investigation or
-        # Document is active.
-        self.assertNotIn("workspace-topbar-sep", body)
+        # replaced by the top bar's own breadcrumb. SUPERSEDED here
+        # (CLAUDE-P40-E3A): Overview is now itself a real breadcrumb leaf
+        # (base.html's own "elif directory_view == 'overview'" branch), so
+        # the separator DOES render for it too - it's no longer exclusive
+        # to an active Investigation/Document.
+        self.assertIn("workspace-topbar-sep", overview_body)
+        self.assertIn(">Overview<", overview_body)
 
     def test_explicit_case_param_still_reaches_deep_case_view(self):
         self.client.post(
@@ -98,18 +111,22 @@ class ProjectHomeTests(unittest.TestCase):
     def test_left_aside_always_visible_regardless_of_case_selection(self):
         # Requirements/RFIs/History are project-scoped, not Case-scoped -
         # they must stay reachable even with zero Cases. ("RFI Export"
-        # renamed to "RFIs" - CLAUDE-P38 OBS-08.) CLAUDE-P40-E2B1:
-        # Sources/Documents moved out into their own launcher-projected
-        # Documents directory (?view=documents), checked separately.
-        response = self.client.get(f"/projects/{self.project_id}/workspace")
+        # renamed to "RFIs" - CLAUDE-P38 OBS-08.) SUPERSEDED (CLAUDE-P40-
+        # E3A): this content now lives behind the explicit Overview leaf
+        # (?view=overview), not the bare workspace URL (Section 5 - blank
+        # by default). Sources/Documents moved out of Display entirely -
+        # their names and count now live only in Lists' own recursive
+        # hierarchy (Section 4), checked against that instead of a
+        # retired "Sources (N)" Display heading.
+        response = self.client.get(f"/projects/{self.project_id}/workspace?view=overview")
         body = response.get_data(as_text=True)
 
         self.assertIn("Project Instructions", body)
         self.assertIn(">RFIs<", body)
         self.assertIn("History (", body)
 
-        documents_body = self.client.get(f"/projects/{self.project_id}/workspace?view=documents").get_data(as_text=True)
-        self.assertIn("Sources (1)", documents_body)
+        self.assertIn('Documents <span class="launcher-count">1</span>', body)
+        self.assertIn("rfp.md", body)
 
     # -- star ----------------------------------------------------------------
 
@@ -163,6 +180,11 @@ class ProjectHomeTests(unittest.TestCase):
     # -- project sources ---------------------------------------------------------
 
     def test_add_text_record_source_becomes_a_project_source(self):
+        # SUPERSEDED (CLAUDE-P40-E3A): the retired "Sources (N)" Display
+        # heading is gone - confirmation is now the success flash plus
+        # Lists' own Documents count/name, both present on the redirect
+        # target (view=overview, Section 5's own required consequence -
+        # see routes/workspace.py's own note on this redirect target).
         response = self.client.post(
             f"/projects/{self.project_id}/workspace/sources/text-record",
             data={"title": "Site visit note", "content": "Observed standing water near loading dock."},
@@ -170,7 +192,8 @@ class ProjectHomeTests(unittest.TestCase):
         )
         body = response.get_data(as_text=True)
 
-        self.assertIn("Sources (2)", body)
+        self.assertIn("Text Record added as a Project Source.", body)
+        self.assertIn('Documents <span class="launcher-count">2</span>', body)
         self.assertIn("Site visit note", body)
         workspace = self._store().get(self.project_id)
         text_source = next(s for s in workspace.sources if s["kind"] == "text_record")
@@ -191,7 +214,9 @@ class ProjectHomeTests(unittest.TestCase):
             f"/projects/{self.project_id}/workspace/sources/document",
             data=data, content_type="multipart/form-data", follow_redirects=True,
         )
-        self.assertIn("Sources (2)", response.get_data(as_text=True))
+        body = response.get_data(as_text=True)
+        self.assertIn("Document added as a Project Source.", body)
+        self.assertIn('Documents <span class="launcher-count">2</span>', body)
 
     def test_external_source_shown_as_disabled_placeholder(self):
         # CLAUDE-P40-E2B1: Sources/Documents moved out of Project Home
@@ -231,7 +256,7 @@ class ProjectHomeTests(unittest.TestCase):
             f"/projects/{self.project_id}/workspace/cases",
             data={"title": "Spec Review", "objective": "x"}, follow_redirects=True,
         )
-        response = self.client.get(f"/projects/{self.project_id}/workspace")
+        response = self.client.get(f"/projects/{self.project_id}/workspace?view=overview")
         body = response.get_data(as_text=True)
 
         self.assertIn("1 Investigation", body)

@@ -3,97 +3,45 @@
 
 {% block title %}Workspace &mdash; {{ document.filename }}{% endblock %}
 
-{# CLAUDE-P40-E2B1: the Launcher panel's show/hide preference is now
-   handled globally, in base.html's own extra_head script (reviewer-wide,
-   not per-project - see that template's own note). Toolbox remains the
-   one per-Workspace, project-keyed collapse preference here. #}
-{% block extra_head %}
-<script>
-    try {
-        if (window.localStorage.getItem('beehive:panel:toolbox:{{ project_id }}') === 'hidden') {
-            document.documentElement.classList.add('toolbox-hidden');
-        }
-    } catch (e) { /* localStorage unavailable - default to shown */ }
-</script>
-{% endblock %}
+{# CLAUDE-P40-E3A: both the Lists (reviewer-wide) and Toolbox
+   (per-Project) show/hide pre-paint scripts now live in base.html's own
+   extra_head block, unconditionally for every authenticated page - see
+   that template's own note. Nothing left to add here. #}
 
 {% block content %}
-{# CLAUDE-P40-E2B1, Section F: the full-width top bar now lives in
-   base.html (application-shell level, spanning Launcher Lists/Display/
-   Toolbox) - not here. See base.html's own note at .workspace-topbar. #}
-
-{# CLAUDE-P40-E2, Section A: the right column is now a persistent,
-   contextual Toolbox (see .workspace-pane-toolbox below) - Findings is
-   one tool inside it, not the whole pane, and the pane always has
-   something to show (project-level tools at minimum), so the grid is
-   always two columns now. case-workspace-single-column's old purpose
-   (reclaim width when the right column was genuinely empty) no longer
-   applies; the class stays defined in CSS only for the narrow-width
-   collapse. #}
-<div class="case-workspace" data-project-id="{{ project_id }}">
-    {# ---------------- DISPLAY: active Investigation / launcher-projected
-       directory / selected Document / Project Home (CLAUDE-P40-E2B1,
-       Section A/C) - the one left launcher panel (base.html) now opens
-       everything here rather than into a second Lists column, which is
-       eliminated (Section E). #}
-    <div class="workspace-pane-display" id="workspace-display-panel">
-    <div class="display-divisions" id="display-divisions" data-layout="single">
+{# CLAUDE-P40-E3A: the full-width top bar and the Lists hierarchy both
+   live in base.html now (application-shell level) - not here. See that
+   template's own notes at .workspace-topbar and [data-tree-root]. #}
+<div class="workspace-pane-display" id="workspace-display-panel" data-project-id="{{ project_id }}">
+    <div class="display-divisions" id="display-divisions" data-orientation="vertical" data-count="1">
     <div class="display-division display-division-primary active" data-division="0" id="display-division-0">
         <div class="display-division-header">
             <span class="display-division-header-name">
-                {% if active_case %}{{ active_case.title }}{% elif directory_view == 'documents' %}Documents{% elif directory_view == 'investigations' %}Investigations{% elif directory_view == 'chats' %}Chats{% elif selected_source %}{{ selected_source.name }}{% else %}Project Home{% endif %}
+                {% if active_case %}{{ active_case.title }}{% elif selected_source %}{{ selected_source.name }}{% elif directory_view == 'overview' %}Overview{% endif %}
             </span>
         </div>
 
-    {# ---------------- Project branch navigation (CLAUDE-P40-E2B1A) -----------
-       The recursive-projection level-2 surface for this Project's own
-       branch (see the interaction rule this stage audited base.html
-       against) - Documents/Investigations/Chats/Overview are never
-       listed in the left launcher panel itself (that panel only ever
-       holds root launchers); clicking "Projects" there projects the
-       Project directory into Display, and clicking a Project projects
-       THIS branch-nav (plus whichever content it currently selects)
-       here instead - never a second copy of the hierarchy duplicated in
-       the panel. Present in every per-project Display state (Project
-       Home, all three directories, an open Investigation, a selected
-       Document) so a reviewer can pivot laterally between siblings
-       without leaving Display - a restrained inline link row, never a
-       second panel/column/flyout (Rule 5). #}
-    <nav class="display-branch-nav" aria-label="{{ workspace.display_title or document.filename }} sections">
-        <a class="display-branch-link{% if not directory_view and not active_case and not selected_source %} active{% endif %}"
-           href="{{ url_for('workspace.show_workspace', project_id=project_id) }}">Overview</a>
-        <a class="display-branch-link{% if directory_view == 'documents' or selected_source %} active{% endif %}"
-           href="{{ url_for('workspace.show_workspace', project_id=project_id, view='documents') }}">Documents <span class="display-branch-count">{{ active_sources|length }}</span></a>
-        <a class="display-branch-link{% if directory_view == 'investigations' or active_case %} active{% endif %}"
-           href="{{ url_for('workspace.show_workspace', project_id=project_id, view='investigations') }}">Investigations <span class="display-branch-count">{{ visible_cases|length }}</span></a>
-        <a class="display-branch-link{% if directory_view == 'chats' %} active{% endif %}"
-           href="{{ url_for('workspace.show_workspace', project_id=project_id, view='chats') }}">Chats</a>
-    </nav>
-
-    {# ---------------- Project reference material (CLAUDE-P40-E2B1, Section C/E) --
-       Previously the standalone Lists panel (.workspace-pane-lists,
-       "LISTS" grid area, always visible beside Display regardless of
-       active_case) - that second left column is eliminated (Section E)
-       and this project-wide reference material now lives inside
-       Display itself instead, stacked above whatever else Display is
-       showing. Deliberately gated on `not directory_view` ONLY, not
-       `not active_case` too: P40-E2B's own established invariant -
-       "Requirements/Sources/RFIs/Accepted Knowledge/History are genuine
-       project-wide reference material a reviewer needs even while an
-       Investigation is open" (confirmed by a real, already-accepted
-       test asserting a Requirement's adjudication text is visible on a
-       ?case=... render, tests/test_workflow_integration.py) - still
-       holds; it would be a silent regression to make this vanish just
-       because an Investigation is open. Documents and Investigations
-       are pulled out into their own launcher-projected directory views
-       below (Section C) rather than staying folded in here - everything
-       else (Operating Environment/Access/Settings/Needs Attention/
-       Recent Focus/Investigation Quality/Participants/Go-No-Go/Accepted
-       Knowledge/Instructions/Requirement Compliance/RFIs/Requirements/
-       Key Dates/History) stays exactly as it was, just re-homed. Only
-       excluded from the three NEW, deliberately-focused directory views
-       themselves (documents/investigations/chats). #}
-    {% if not directory_view %}
+    {# ---------------- Project overview (CLAUDE-P40-E3A, Section 5) -----------
+       The product owner's own resolution of the P40-E2B1A conflict
+       (Section 2 of this stage's prompt): Documents/Investigations/RFIs/
+       Chats now live ONLY in the Lists panel's recursive hierarchy
+       (base.html) - Display must never re-list what Lists already lists
+       (Section 4). "Overview" is the one remaining leaf that opens real
+       content here: everything previously called Project Home plus the
+       project-wide reference material P40-E2B established stays reachable
+       while an Investigation is open (Operating Environment/Access/
+       Settings/Needs Attention/Recent Focus/Investigation Quality/
+       Participants/Go-No-Go/Accepted Knowledge/Instructions/Requirement
+       Compliance/RFIs/Requirements/Key Dates/History) - consolidated into
+       this one explicit leaf instead of showing automatically, per
+       Section 5's "Display must be blank" rule for the unselected state.
+       This IS a behavior change from P40-E2B's own invariant (that
+       material used to be visible even while an Investigation was open;
+       now it is reached via Overview specifically, mutually exclusive
+       with an open Investigation, per this stage's own leaf-exclusivity
+       rule) - flagged explicitly in this stage's completion report, not
+       decided silently. #}
+    {% if directory_view == 'overview' %}
         <div id="project-overview">
         {# CLAUDE-P29: Project Operating Environment -- locked, never an
            edit control once set. Deliberately no form/button anywhere in
@@ -218,96 +166,19 @@
         {% endcall %}
     {% endif %}
 
-    {# ---------------- Investigations directory (CLAUDE-P40-E2B1, Section C) --
-       Launcher-projected: the left panel's "Investigations" launcher
-       opens this directory in Display (?view=investigations). Every
-       authorized Investigation appears here, including one just
-       created (the redirect after creating one still opens it directly
-       - see routes/workspace.py's create_case - but revisiting this
-       directory shows it immediately either way, since visible_cases is
-       recomputed fresh on every GET). New Investigation creation happens
-       here, not in a second navigation column. #}
-    {% if directory_view == 'investigations' %}
-        {# Cases is the one accordion the app itself already marks as
-           primary (open=True, the only one) - it belongs first, not
-           after three closed reference accordions a user would have to
-           scroll past to reach the thing they actually opened this pane
-           for. Everything else below keeps its prior relative order;
-           this is a targeted fix for a signal (open=True) contradicting
-           its own position, not a full re-ranking of the pane. #}
-        {% call macros.accordion('Investigations (' ~ visible_cases|length ~ ')', group='left', id='cases', html_id='cases', open=True) %}
-        <ul class="case-list">
-            {% for case in visible_cases %}
-            <li>
-                <a class="case-item{% if active_case and case.id == active_case.id %} active{% endif %}"
-                   href="{{ url_for('workspace.show_workspace', project_id=project_id, case=case.id) }}">
-                    <span class="case-status-badge">{{ case.status }}</span>
-                    <span class="case-status-badge">{{ case.visibility }}</span>
-                    {% if case_origin_kinds.get(case.id) == case_origin_autonomous %}
-                    <span class="case-status-badge" title="The machine opened this on its own - not itself authority, only a suggestion worth investigating.">autonomous</span>
-                    {% endif %}
-                    {% set outcome_state = case_outcome_states.get(case.id, 'unresolved') %}
-                    {% if outcome_state != 'unresolved' %}
-                    <span class="review-state-badge">{{ outcome_state }}</span>
-                    {% endif %}
-                    {{ case.title }}
-                </a>
-                {% call macros.subdisclosure('Record Outcome') %}
-                    <p class="pane-note">
-                        Did the hypothesis that justified opening this Investigation hold up?
-                        Reasoning is required - a bare outcome word is never enough on its own.
-                    </p>
-                    <form class="workspace-form" method="post" action="{{ url_for('workspace.record_case_outcome_route', project_id=project_id, case_id=case.id) }}">
-                        <select name="outcome" required>
-                            {% for outcome in case_outcome_options %}
-                            <option value="{{ outcome }}">{{ outcome }}</option>
-                            {% endfor %}
-                        </select>
-                        <input type="text" name="reasoning" placeholder="Reasoning (required)" required>
-                        <select name="duplicate_of_case_id">
-                            <option value="">If duplicate, which Investigation? (optional)</option>
-                            {% for other_case in visible_cases if other_case.id != case.id %}
-                            <option value="{{ other_case.id }}">{{ other_case.title }}</option>
-                            {% endfor %}
-                        </select>
-                        <button type="submit">Record Outcome</button>
-                    </form>
-                {% endcall %}
-                {% if case.status != 'archived' and case.visibility == 'private' and case.created_by == session.username %}
-                <form method="post" action="{{ url_for('workspace.share_case', project_id=project_id, case_id=case.id) }}">
-                    <button type="submit" class="link-button">Share</button>
-                </form>
-                {% elif case.status != 'archived' and case.visibility == 'shared' and case.created_by == session.username %}
-                <form method="post" action="{{ url_for('workspace.retract_case', project_id=project_id, case_id=case.id) }}">
-                    <button type="submit" class="link-button">Retract to Private</button>
-                </form>
-                {% endif %}
-                {% if case.status != 'archived' and (case.created_by == session.username or session.role == 'admin') %}
-                <form method="post" action="{{ url_for('workspace.archive_case', project_id=project_id, case_id=case.id) }}">
-                    <button type="submit" class="link-button">Archive</button>
-                </form>
-                {% elif case.status == 'archived' and (case.created_by == session.username or session.role == 'admin') %}
-                <form method="post" action="{{ url_for('workspace.derive_case', project_id=project_id, case_id=case.id) }}">
-                    <button type="submit" class="link-button">Derive Active Investigation</button>
-                </form>
-                {% endif %}
-            </li>
-            {% else %}
-            <li style="color:var(--text-secondary);font-size:0.82rem;">No Investigations yet.</li>
-            {% endfor %}
-        </ul>
+    {# CLAUDE-P40-E3A: the Investigations directory (list + Share/Retract/
+       Archive/Derive/Record-Outcome actions) that used to live here as its
+       own ?view=investigations Display body is removed outright - Section
+       4's "no second navigation directory in Display" rule - Investigation
+       NAMES now live only in the Lists panel's own recursive hierarchy
+       (base.html). Its own "+ New Investigation" form is not relocated
+       either: Project Home's pre-existing, separate "+ Start Investigation"
+       control (Active Work, further below) already covers Investigation
+       creation - see this stage's completion report. Selecting an
+       Investigation by name still opens its real content below,
+       unchanged. #}
 
-        {% call macros.subdisclosure('+ New Investigation') %}
-            <form class="workspace-form" method="post" action="{{ url_for('workspace.create_case', project_id=project_id) }}">
-                <input type="text" name="title" placeholder="Investigation title (e.g. Schedule Conflict Review)" required>
-                <input type="text" name="objective" placeholder="Objective (optional)">
-                <button type="submit">Create Investigation</button>
-            </form>
-        {% endcall %}
-        {% endcall %}
-    {% endif %}
-
-    {% if not directory_view %}
+    {% if directory_view == 'overview' %}
         {% set needs_attention_count = needs_attention_view|map(attribute='findings')|map('length')|sum %}
         {% call macros.accordion('Needs Attention (' ~ needs_attention_count ~ ')', group='left', id='needs-attention', html_id='needs-attention', open=(needs_attention_count > 0)) %}
             <p class="pane-note">
@@ -620,146 +491,18 @@
         {% endcall %}
     {% endif %}
 
-    {# ---------------- Documents directory (CLAUDE-P40-E2B1, Section C) -------
-       Launcher-projected: the left panel's "Documents" launcher opens
-       this directory in Display (?view=documents). Selecting a Document
-       opens it in the active Display division (?source=<id>, unchanged
-       existing behaviour); adding one uses the existing authorized
-       controls below, which now redirect back into this same directory
-       (see routes/workspace.py's add_document_source/
-       add_text_record_source) instead of Project Home. Removed Documents
-       (honest removed state) are listed further down, alongside the
-       Toolbox's own Restore control - this directory does not duplicate
-       that list, it links a reviewer to it. #}
-    {% if directory_view == 'documents' %}
-        {# OPEN, NOT YET JUSTIFIED TO FIX: workspace.sources renders in
-           storage order, and a superseded Source (source.superseded_by_source_id
-           set) is never moved after its replacement - superseded revisions
-           accumulate ahead of the current one exactly like archived Cases
-           did before that fix. Structurally the same binary, low-ambiguity
-           signal (superseded vs. current) that made the Cases sort safe -
-           but unlike Cases, there's no existing query-layer method
-           (visible_cases_for's equivalent) to extend; workspace.sources is
-           read raw everywhere. Fixing this safely means introducing a new
-           method and auditing every existing raw-access call site first,
-           which is more scope than this pass justifies - not attempted. #}
-        {% call macros.accordion('Sources (' ~ active_sources|length ~ ')', status='+', group='left', id='sources', html_id='project-sources') %}
-        <ul class="source-list">
-            {% for source in active_sources %}
-            <li class="source-item">
-                <span class="source-kind-badge">{{ source.kind.replace('_', ' ') }}</span>
-                {% if source.file_path %}
-                {# CLAUDE-P40-E, Section D/G: opens inside the Workspace
-                   pane (?source=) rather than a raw new-tab file link -
-                   "display it inside the Workspace," not a departure
-                   from the app. #}
-                <a href="{{ url_for('workspace.show_workspace', project_id=project_id, source=source.id) }}">{{ source.name }}</a>
-                {% else %}
-                {{ source.name }}
-                {% endif %}
-                {% if source.superseded_by_source_id %}
-                <br><small style="color:var(--attention-amber);">Superseded by a newer revision.</small>
-                {% endif %}
-                {% if source.supersedes_source_id %}
-                <br><small style="color:var(--machine-blue);">Revision of a prior Source.</small>
-                {% endif %}
-                {% if source.note %}<br><small class="text-muted">{{ source.note }}</small>{% endif %}
-                {# CLAUDE-P38 (OBS-06): added upload date - the one field
-                   from this observation's "keep the source card focused
-                   on" list that was cheaply available (Source.added_at)
-                   without inventing a new per-Source uploader field this
-                   dataclass doesn't have today. Derived analysis (extracted
-                   requirement/milestone counts) already lives in its own
-                   Requirements/Requirement Compliance sections, not here. #}
-                <br><small class="text-muted">added {{ source.added_at }}</small>
-                {% if not source.file_path and source.kind == 'rfq_rfp_document' %}
-                <br><small style="color:var(--text-disabled);font-style:italic;">Original file not stored (ingested before file retention was added).</small>
-                {% endif %}
-            </li>
-            {% endfor %}
-        </ul>
+    {# CLAUDE-P40-E3A: the Documents and Chats directories (Sources listing,
+       Project Conversation/Investigation Conversation listings) that used
+       to live here as ?view=documents/?view=chats Display bodies are
+       removed outright, same reasoning as the Investigations directory
+       above - those names now live only in Lists' recursive hierarchy.
+       "+ Add Documents"/"+ Add Text Record"/"+ Add External Source" are
+       relocated to Toolbox (an existing-tools relocation, Section 8), next
+       to the Removed Documents restore control already there. Selecting a
+       Document by name still opens it below via the unchanged
+       selected_source branch. #}
 
-        {% call macros.subdisclosure('+ Add Documents', html_id='project-sources-add-document') %}
-            <form class="workspace-form" method="post" enctype="multipart/form-data" action="{{ url_for('workspace.add_document_source', project_id=project_id) }}">
-                <input type="file" name="document" accept=".pdf,.docx,.txt,.csv,.md" required>
-                <button type="submit">Add Document</button>
-            </form>
-        {% endcall %}
-
-        {% call macros.subdisclosure('+ Add Text Record') %}
-            <form class="workspace-form" method="post" action="{{ url_for('workspace.add_text_record_source', project_id=project_id) }}">
-                <input type="text" name="title" placeholder="Title (e.g. Site visit note &mdash; May 3)" required>
-                <textarea name="content" placeholder="Content" required></textarea>
-                <button type="submit">Add Record</button>
-            </form>
-        {% endcall %}
-
-        {% call macros.subdisclosure('+ Add External Source') %}
-            <p style="font-size:0.85rem;color:var(--text-secondary);">
-                Not yet available &mdash; no external source connector is configured for this deployment.
-            </p>
-        {% endcall %}
-        {% endcall %}
-
-        {% if removed_sources %}
-        {% call macros.subdisclosure('Removed Documents (' ~ removed_sources|length ~ ')', html_id='project-sources-removed') %}
-            <ul class="source-list">
-                {% for source in removed_sources %}
-                <li class="source-item">
-                    {{ source.name }}
-                    <br><small class="text-muted">Removed {{ source.removed_at }}{% if source.removed_by %} by {{ source.removed_by }}{% endif %}</small>
-                    <form method="post" action="{{ url_for('workspace.restore_document_route', project_id=project_id, source_id=source.id) }}">
-                        <button type="submit" class="link-button">Restore Document</button>
-                    </form>
-                </li>
-                {% endfor %}
-            </ul>
-        {% endcall %}
-        {% endif %}
-    {% endif %}
-
-    {# ---------------- Chats directory (CLAUDE-P40-E2B1, Section C) -----------
-       Launcher-projected: the left panel's "Chats" launcher opens this
-       directory in Display (?view=chats), listing real, already-
-       implemented conversation records for this Project only - Project
-       Conversation plus every visible Investigation that has any
-       messages. No cross-project index exists (CaseWorkspaceStore is one
-       flat-JSON file per Project - see the Assumption Audit delivered
-       with this stage), so this is not a global inbox. Selecting an
-       entry opens that Project/Investigation context and activates the
-       one shared conversation dock (?case=<id>, or plain Project
-       Conversation when nothing is selected) - never a second composer.
-       No archive/delete/named-thread lifecycle here, matching Section C's
-       own restraint. #}
-    {% if directory_view == 'chats' %}
-        {% call macros.accordion('Project Conversation (' ~ (project_conversation_view|length if project_conversation_view else 0) ~ ')', group='left', id='chats-project', html_id='chats-project', open=True) %}
-        {% if project_conversation_view %}
-        <p class="pane-note">{{ project_conversation_view|length }} message(s) recorded.</p>
-        <a class="btn btn-ghost workspace-link" href="{{ url_for('workspace.show_workspace', project_id=project_id) }}">Open Project Conversation</a>
-        {% else %}
-        <p class="pane-note">No Project Conversation yet.</p>
-        {% endif %}
-        {% endcall %}
-
-        {% call macros.accordion('Investigation Conversations', group='left', id='chats-cases', html_id='chats-cases', open=True) %}
-        {% set case_conversations = visible_cases|selectattr('conversation')|list %}
-        {% if case_conversations %}
-        <ul class="case-list">
-            {% for case in case_conversations %}
-            <li>
-                <a class="case-item" href="{{ url_for('workspace.show_workspace', project_id=project_id, case=case.id) }}">
-                    {{ case.title }} ({{ case.conversation|length }})
-                </a>
-            </li>
-            {% endfor %}
-        </ul>
-        {% else %}
-        <p class="pane-note">No Investigation conversations yet.</p>
-        {% endif %}
-        {% endcall %}
-    {% endif %}
-
-    {% if not directory_view %}
+    {% if directory_view == 'overview' %}
         {% call macros.accordion('Requirement Compliance', status=(requirements_view|length ~ ' governed' if requirements_view else None), group='left', id='requirement-compliance') %}
         {% if requirements_view %}
         <p class="pane-note">
@@ -1384,8 +1127,7 @@
         {% endcall %}
     </section>
 
-{% elif not directory_view %}
-    {% if selected_source %}
+{% elif selected_source %}
     {# ---------------- A selected document/drawing -------------------
        CLAUDE-P40-E, Section D/G: opens directly inside the Workspace
        pane rather than a separate download/new-tab destination.
@@ -1448,9 +1190,19 @@
             document isn't available yet for this format - specified, not simulated.
         </p>
         {% endif %}
-        <a class="btn btn-ghost workspace-link" href="{{ url_for('workspace.show_workspace', project_id=project_id) }}">&larr; Back to Project Overview</a>
+        <a class="btn btn-ghost workspace-link" href="{{ url_for('workspace.show_workspace', project_id=project_id, view='overview') }}">&larr; Back to Overview</a>
     </section>
-    {% endif %}
+
+{% elif directory_view == 'overview' %}
+    {# CLAUDE-P40-E3A, Section 5: "opening a document does not add another
+       composer" - the single conversation dock lives inside Overview's
+       own Project Conversation area regardless of whether a document is
+       ALSO open, per P40-E1's own acceptance test. Since a selected
+       Document and Overview are now mutually exclusive leaves rather than
+       always-rendered-together, that dock stays reachable in both states
+       independently - it renders at the one shared physical position
+       after this whole block, unchanged (see macros.conversation_dock's
+       own call site). #}
     <div class="project-home">
         <p class="project-home-back">
             <a href="{{ url_for('portal.projects_list') }}">&larr; Projects</a>
@@ -1935,19 +1687,40 @@
                macros.conversation_dock and its call site. #}
         </div>
     </div>
+{% else %}
+    {# CLAUDE-P40-E3A, Section 5: "if no leaf or action is selected,
+       Display must be blank" - no Project cards, no UUIDs, no search
+       box, no instructions, no onboarding, no "select a Project"
+       message, no empty-state illustration. Deliberately empty. #}
 {% endif %}
     </div>
 
-    {# ---------------- Additional Display divisions (Section D) --------------
-       Empty by default - static/js/case_workspace.js populates them
-       (a picker choosing an active_sources entry, or a Document link/
-       hotlink/Toolbox "open alongside" action elsewhere on the page)
-       and toggles .display-division-populated once one has content.
-       Only ever offers active_sources - a removed Document, or one
-       from another Project, is never an option here, the same
-       authorization boundary the Sources list itself already enforces. #}
-    {% for division_index in [1, 2, 3] %}
+    {# ---------------- Additional Display divisions (CLAUDE-P40-E3A, Section 6) --
+       Empty by default - static/js/case_workspace.js populates them (a
+       picker choosing an active_sources entry, a Lists Document click
+       routed to whichever division is the current active target, or a
+       Toolbox "open alongside" action) and toggles
+       .display-division-populated once one has content. Only ever offers
+       active_sources - a removed Document, or one from another Project,
+       is never an option here, the same authorization boundary the
+       Sources list itself already enforces.
+
+       6 total divisions (0 + 5 here) is the practical ceiling this stage
+       sets (see base.html's own Display-layout-menu comment for the
+       reasoning) - MAX_DISPLAY_DIVISIONS in case_workspace.js is the one
+       place that number is defined; these 5 extra slots are always
+       server-rendered (matching the existing division-1-3 pattern) and
+       shown/hidden client-side up to whatever quantity is actually
+       applied, never dynamically created from scratch. Each carries its
+       own right-click context menu (Close / Divide / direction /
+       quantity / Apply), Section 6's own "local presentation menu",
+       wired entirely client-side. #}
+    {% for division_index in [1, 2, 3, 4, 5] %}
     <div class="display-division" data-division="{{ division_index }}" id="display-division-{{ division_index }}">
+        <div class="display-division-header">
+            <span class="display-division-header-name">Division {{ division_index + 1 }}</span>
+            <button type="button" class="display-division-close" data-division-close="{{ division_index }}" aria-label="Close this Display">&times;</button>
+        </div>
         <div class="display-division-empty">
             <p class="pane-note">Nothing open in this division.</p>
             <select class="display-division-picker" data-division-picker="{{ division_index }}">
@@ -1960,6 +1733,29 @@
         <div class="display-division-content" hidden></div>
     </div>
     {% endfor %}
+    </div>
+
+    {# ---------------- Display context menu (CLAUDE-P40-E3A, Section 6) ----------
+       ONE shared right-click menu, repositioned to whichever division was
+       clicked - not one DOM copy per division. Closes on outside click or
+       Escape (static/js/case_workspace.js). Only the capabilities honestly
+       implemented this stage: Close/Divide/direction/quantity/Apply - no
+       drawing "modes" (Section 6's own explicit exclusion). #}
+    <div class="display-context-menu" id="display-context-menu" role="menu" hidden>
+        <button type="button" class="display-context-item" id="display-context-close" role="menuitem">Close this Display</button>
+        <div class="display-context-divide">
+            <p class="workspace-pane-label">Divide this Display</p>
+            <div class="workspace-layout-orientation" role="radiogroup" aria-label="Division direction">
+                <button type="button" class="workspace-layout-option" id="display-context-orientation-vertical" data-context-orientation="vertical" aria-pressed="true">Vertical</button>
+                <button type="button" class="workspace-layout-option" id="display-context-orientation-horizontal" data-context-orientation="horizontal" aria-pressed="false">Horizontal</button>
+            </div>
+            <div class="workspace-layout-quantity">
+                <button type="button" class="workspace-layout-stepper" id="display-context-decrement" aria-label="Decrease number of parts">&minus;</button>
+                <span class="workspace-layout-quantity-value" id="display-context-quantity-value" aria-live="polite">2</span>
+                <button type="button" class="workspace-layout-stepper" id="display-context-increment" aria-label="Increase number of parts">+</button>
+            </div>
+            <button type="button" class="workspace-layout-apply" id="display-context-apply" role="menuitem">Apply</button>
+        </div>
     </div>
     </div>
 
@@ -1974,29 +1770,27 @@
     <script type="application/json" id="workspace-active-sources-data">
         {{ active_sources_json | safe }}
     </script>
+{% endblock %}
 
-{# ---------------- Contextual Toolbox ---------------------------------------
-   CLAUDE-P40-E2, Section A: one right-side Toolbox, replacing the old
-   permanent Findings pane - Findings is now one tool inside it, not the
-   whole pane. Always renders (unlike the old Findings pane, which only
-   ever showed up alongside an active Investigation) so Remove/Restore
-   Document and Remove Project have a real UI surface regardless of what's
-   selected. Contextual per Section A's own priority order (matches the
-   existing active_case > selected_source > project-home priority already
-   established above for the main Display): Investigation selected ->
-   Investigation tools (Findings); Document selected -> Document tools;
-   nothing selected -> restrained Project tools. Removed Items and
-   (admin-only) Project Data Management sit below the contextual block,
-   always visible - project-wide reference material, the same pattern
-   .workspace-pane-nav already uses for Requirements/Sources/History.
-   Extension points for future tagging/attachments/comparison/evidence
-   tools: additional <section class="workspace-pane"> blocks inside the
-   relevant branch below - not built this stage, see
-   governance/specified-unbuilt/. #}
-<aside class="workspace-pane-toolbox" id="workspace-toolbox-panel">
+{% block toolbox %}
+{# ---------------- Contextual Toolbox (CLAUDE-P40-E3A, Section 8) -----------
+   The <aside> element itself now lives in base.html (part of the
+   application-wide shell, always present, empty on non-Workspace pages) -
+   this block only fills its content. One right-side Toolbox, contextual
+   per the existing active_case > selected_source > project-home priority
+   order: Investigation selected -> Investigation tools (Findings);
+   Document selected -> Document tools; nothing selected -> restrained
+   Project tools. Removed Items, Add-a-Document, and (admin-only) Project
+   Data Management sit below the contextual block, always visible - this
+   stage relocates and preserves existing tools only (no drawing tools,
+   no chat tagging, no new persisted objects). #}
     <h2>Toolbox</h2>
 
     {% if active_case %}
+    {# CLAUDE-P40-E3A bucket-b fix: same cross-block {% set %} scoping
+       issue as {% block chat %}'s own note below - drawing_sources must
+       be recomputed here too, not inherited from {% block content %}. #}
+    {% set drawing_sources = active_sources|selectattr("kind", "equalto", "drawing")|selectattr("id", "in", active_case.source_ids)|list %}
     <section class="workspace-pane">
         <h3>Investigation &middot; Findings</h3>
         {% call macros.accordion('Findings (' ~ findings_view|length ~ ')', status=(applied_count ~ ' applied' if applied_count else None), group='right', id='findings', open=True) %}
@@ -2213,10 +2007,9 @@
     </section>
     {% else %}
     <section class="workspace-pane">
-        <h3>Project</h3>
         <p class="pane-note">
             No Investigation or Document is currently selected. Open one from Documents or
-            Investigations above, or use the project-level tools below.
+            Investigations in Lists, or use the project-level tools below.
         </p>
         {% if is_project_owner or is_admin %}
         <form method="post" action="{{ url_for('workspace.remove_project_route', project_id=project_id) }}">
@@ -2226,6 +2019,35 @@
     </section>
     {% endif %}
 
+    {# CLAUDE-P40-E3A, Section 8: relocated from the former ?view=documents
+       Display body (now removed, Section 4) - existing tools only, same
+       routes, same forms. #}
+    <section class="workspace-pane">
+        <h3>Add a Document</h3>
+        {% call macros.subdisclosure('+ Add Documents', html_id='project-sources-add-document') %}
+            <form class="workspace-form" method="post" enctype="multipart/form-data" action="{{ url_for('workspace.add_document_source', project_id=project_id) }}">
+                <input type="file" name="document" accept=".pdf,.docx,.txt,.csv,.md" required>
+                <button type="submit">Add Document</button>
+            </form>
+        {% endcall %}
+        {% call macros.subdisclosure('+ Add Text Record') %}
+            <form class="workspace-form" method="post" action="{{ url_for('workspace.add_text_record_source', project_id=project_id) }}">
+                <input type="text" name="title" placeholder="Title (e.g. Site visit note &mdash; May 3)" required>
+                <textarea name="content" placeholder="Content" required></textarea>
+                <button type="submit">Add Record</button>
+            </form>
+        {% endcall %}
+        {% call macros.subdisclosure('+ Add External Source') %}
+            <p style="font-size:0.85rem;color:var(--text-secondary);">
+                Not yet available &mdash; no external source connector is configured for this deployment.
+            </p>
+        {% endcall %}
+    </section>
+
+    {# CLAUDE-P40-E3A, Section 8: "Removed Projects" cross-link removed -
+       it already lives in Lists (base.html), never duplicated here. This
+       section stays for what it alone owns: removed DOCUMENTS within
+       THIS Project. #}
     <section class="workspace-pane">
         <h3>Removed Items</h3>
         {% if removed_sources %}
@@ -2243,7 +2065,6 @@
         {% else %}
         <p class="pane-note">No removed Documents in this Project.</p>
         {% endif %}
-        <a class="btn btn-ghost workspace-link" href="{{ url_for('portal.removed_projects') }}">Removed Projects</a>
     </section>
 
     {% if is_admin %}
@@ -2253,17 +2074,28 @@
         <a class="btn btn-ghost workspace-link" href="{{ url_for('portal.reset_project_data') }}">Reset Project Data&hellip;</a>
     </section>
     {% endif %}
-</aside>
+{% endblock %}
 
-{# ---------------- The ONE physical conversation dock ----------------------
-   CLAUDE-P40-E1A, Section A: exactly one call site renders, depending on
-   whether an Investigation is open - never both, and always the same
-   macro/html_id/classes either way, so switching context never looks
-   like a second, structurally different chatbox. Deliberately OUTSIDE
-   the active_case if/else above (its own separate check) so it sits at
-   one single position in the DOM regardless of which branch rendered
-   the rest of the Workspace pane. #}
+{% block chat %}
+{# ---------------- The ONE physical conversation dock (CLAUDE-P40-E3A) -----
+   The full-width Chat region itself now lives in base.html (Section 9 -
+   spans the complete application width beneath Lists/Display/Toolbox,
+   always the bottom row) - this block only fills its content. Exactly one
+   call site renders, depending on whether an Investigation is open -
+   never both, and always the same macro/html_id/classes either way, so
+   switching context never looks like a second, structurally different
+   chatbox - no new composer, no tags, no archive/lifecycle, no new
+   persistence this stage. #}
 {% if active_case %}
+    {# CLAUDE-P40-E3A bucket-b fix: {% set drawing_sources %} in
+       {% block content %} (Display) does not carry over into this
+       separate {% block chat %} - Jinja blocks don't share {% set %}
+       state across each other, only with the surrounding template scope
+       each was defined in. Recomputed here (identical one-line filter
+       chain to {% block content %}'s own) rather than restructured to
+       share state across blocks - the cheapest correct fix, not a new
+       mechanism. #}
+    {% set drawing_sources = active_sources|selectattr("kind", "equalto", "drawing")|selectattr("id", "in", active_case.source_ids)|list %}
     {% call macros.conversation_dock(
         active_case.title,
         active_case.conversation|length,
@@ -2392,7 +2224,6 @@
         </div>
     {% endcall %}
     {% endif %}
-</div>
 {% endblock %}
 
 {% block extra_scripts %}

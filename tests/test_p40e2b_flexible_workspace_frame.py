@@ -120,10 +120,13 @@ class _BaseTestCase(unittest.TestCase):
 
 class IndependentPanelCollapseTests(_BaseTestCase):
     def test_launcher_and_toolbox_have_independent_toggle_controls(self):
+        # SUPERSEDED (CLAUDE-P40-E3A, Section 7): the top-bar toggle
+        # buttons are retired - the panel-dividing lines themselves are
+        # the collapse controls now (#lists-divider/#toolbox-divider).
         client = self._client_as("p40e2b_owner", 1)
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
-        self.assertIn('id="launcher-toggle-btn"', body)
-        self.assertIn('id="toolbox-toggle-btn"', body)
+        self.assertIn('id="lists-divider"', body)
+        self.assertIn('id="toolbox-divider"', body)
         self.assertIn('id="launcher-panel"', body)
         self.assertIn('id="workspace-toolbox-panel"', body)
 
@@ -147,13 +150,20 @@ class IndependentPanelCollapseTests(_BaseTestCase):
         self.assertIn("display: none", body)
 
     def test_hiding_toolbox_releases_its_grid_column_to_display(self):
+        # SUPERSEDED (CLAUDE-P40-E3A): the old .case-workspace grid (whose
+        # column count had to be explicitly recomputed for the
+        # toolbox-hidden state) is retired - Lists/Display/Toolbox are
+        # now flex siblings in base.html's .app-shell-body, so Display
+        # (flex: 1) automatically expands into Toolbox's released space
+        # the moment display:none removes it, with no separate
+        # column-count override needed at all. That absence is itself
+        # the thing to confirm here.
         css = _CSS_PATH.read_text(encoding="utf-8")
-        base = _rule_body(css, ".case-workspace")
-        toolbox_hidden = _rule_body(css, "html.toolbox-hidden .case-workspace")
-        base_columns = re.search(r"grid-template-columns:\s*([^;]+);", base).group(1)
-        hidden_columns = re.search(r"grid-template-columns:\s*([^;]+);", toolbox_hidden).group(1)
-        self.assertNotEqual(base_columns, hidden_columns)
-        self.assertEqual(base_columns.count("minmax") - 1, hidden_columns.count("minmax"))
+        self.assertIn("flex: 1", _rule_body(css, ".app-main"))
+        self.assertIn("display: none", _rule_body(css, "html.toolbox-hidden .workspace-pane-toolbox"))
+        # No active rule for the retired grid (historical comments
+        # mentioning its old name are fine and expected).
+        self.assertNotIn(".case-workspace {", css)
 
     def test_hidden_panel_mechanism_is_display_none_not_merely_invisible(self):
         # display:none is what makes a hidden panel's own contents fall
@@ -167,22 +177,21 @@ class IndependentPanelCollapseTests(_BaseTestCase):
         self.assertIn("display: none", _rule_body(css, "html.toolbox-hidden .workspace-pane-toolbox"))
 
     def test_preferences_are_localstorage_reviewer_specific_not_a_project_write(self):
-        # Toggling panels is pure client-side viewing state - the route
-        # itself performs no write; GETting the page twice never
-        # touches workspace.json (see the dedicated no-mutation test
-        # below). Both toggle scripts only ever call
+        # SUPERSEDED (CLAUDE-P40-E3A, Section 7): the old top-bar-button
+        # toggle scripts (setUpPanelToggles in case_workspace.js,
+        # #launcher-toggle-btn wiring in base.html) are retired -
+        # replaced by the shared panel-divider script (setUpDivider),
+        # inline in base.html. Toggling panels is still pure client-side
+        # viewing state - the route itself performs no write; GETting the
+        # page twice never touches workspace.json (see the dedicated
+        # no-mutation test below). The divider script only ever calls
         # window.localStorage, never fetch()/a form submit, to persist
         # panel state.
-        js = _JS_PATH.read_text(encoding="utf-8")
-        panel_toggle_section = js[js.index("setUpPanelToggles"):js.index("setUpPanelToggles") + 2500]
-        self.assertIn("window.localStorage", panel_toggle_section)
-        self.assertNotIn("fetch(", panel_toggle_section)
-
         base_html = (Path(__file__).resolve().parent.parent / "templates" / "base.html").read_text(encoding="utf-8")
-        anchor = "getElementById('launcher-toggle-btn')"
-        launcher_toggle_section = base_html[base_html.index(anchor):base_html.index(anchor) + 1500]
-        self.assertIn("window.localStorage", launcher_toggle_section)
-        self.assertNotIn("fetch(", launcher_toggle_section)
+        anchor = "function setUpDivider"
+        divider_section = base_html[base_html.index(anchor):base_html.index(anchor) + 2000]
+        self.assertIn("window.localStorage", divider_section)
+        self.assertNotIn("fetch(", divider_section)
 
 
 # ---------------------------------------------------------------------------
@@ -257,19 +266,20 @@ class ChatResizeTests(_BaseTestCase):
         self.assertIn("data-conversation-scope=", body)
 
     def test_chat_grid_row_never_shares_the_toolbox_column(self):
+        # SUPERSEDED (CLAUDE-P40-E3A, Section 9): Chat is no longer
+        # confined to a "chat" grid-area sharing a row with "toolbox"
+        # inside the retired .case-workspace grid - it's now a full-
+        # width flex row (.chat-region) beneath .app-shell-body
+        # entirely, structurally incapable of sharing a column with
+        # Toolbox (which lives INSIDE .app-shell-body). Checked
+        # structurally: .conversation-dock-panel carries no leftover
+        # grid-area, and .chat-region is its own top-level rule, never
+        # nested under .workspace-pane-toolbox's own selector.
         css = _CSS_PATH.read_text(encoding="utf-8")
-        grid = _rule_body(css, ".case-workspace")
-        # CLAUDE-P40-E2B1: the Lists column is eliminated (Section E) -
-        # the grid is now two columns, Display/Toolbox with Chat beneath
-        # Display only, same "chat never shares the toolbox column"
-        # invariant this test's own name asserts.
-        self.assertIn('"display toolbox"', grid)
-        self.assertIn('"chat    toolbox"', grid)
-        # "chat" never appears standalone spanning the full row (the
-        # old grid-column: 1/-1 full-row dock is gone).
         panel = _rule_body(css, ".conversation-dock-panel")
-        self.assertIn("grid-area: chat", panel)
-        self.assertNotIn("1 / -1", panel)
+        self.assertNotIn("grid-area", panel)
+        self.assertIn("flex-shrink: 0", _rule_body(css, ".chat-region"))
+        self.assertNotIn(".case-workspace {", css)
 
 
 # ---------------------------------------------------------------------------
@@ -305,46 +315,49 @@ class SingleComposerTests(_BaseTestCase):
 
 class DisplayLayoutTests(_BaseTestCase):
     def test_all_four_layout_options_render_in_top_bar(self):
+        # SUPERSEDED (CLAUDE-P40-E3A, Section 6): the old fixed single/
+        # side-by-side/stacked/grid preset menu is retired - replaced by
+        # a genuinely dynamic orientation (vertical/horizontal) + numeric
+        # quantity (1-6) + Apply control, "not limited to decorative
+        # presets such as 1, 2 or 3" per the stage's own instruction.
         client = self._client_as("p40e2b_owner", 1)
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
-        for layout in ("single", "side-by-side", "stacked", "grid"):
-            self.assertIn(f'data-display-layout="{layout}"', body)
+        self.assertIn('id="display-orientation-vertical"', body)
+        self.assertIn('id="display-orientation-horizontal"', body)
+        self.assertIn('id="display-quantity-decrement"', body)
+        self.assertIn('id="display-quantity-increment"', body)
+        self.assertIn('id="display-quantity-value"', body)
+        self.assertIn('id="display-layout-apply"', body)
 
     def test_every_layout_option_produces_a_distinct_real_grid(self):
         css = _CSS_PATH.read_text(encoding="utf-8")
-        geometries = {}
-        for layout in ("single", "side-by-side", "stacked", "grid"):
-            selector = f'.display-divisions[data-layout="{layout}"]'
-            if layout == "single":
-                # single has no distinct grid-template-columns override
-                # of its own (the base .display-divisions rule already
-                # is one column) - its real geometry change is hiding
-                # every division but the primary one, checked below.
-                continue
-            body = _rule_body(css, selector)
-            match = re.search(r"grid-template-columns:\s*([^;]+);", body)
-            geometries[layout] = match.group(1) if match else None
-        # side-by-side and grid are both 2-column but grid additionally
-        # declares real rows - not a decorative duplicate of side-by-side.
-        self.assertIsNotNone(geometries["side-by-side"])
-        self.assertIsNotNone(geometries["grid"])
-        grid_body = _rule_body(css, '.display-divisions[data-layout="grid"]')
-        self.assertIn("grid-template-rows:", grid_body)
-        side_by_side_body = _rule_body(css, '.display-divisions[data-layout="side-by-side"]')
-        self.assertNotIn("grid-template-rows:", side_by_side_body)
+        # Different counts produce different real column/row templates -
+        # never a decorative no-op - and vertical/horizontal produce
+        # genuinely different axes for the same count.
+        two_col = _rule_body(css, '.display-divisions[data-orientation="vertical"][data-count="2"]')
+        three_col = _rule_body(css, '.display-divisions[data-orientation="vertical"][data-count="3"]')
+        self.assertIn("grid-template-columns: repeat(2, 1fr)", two_col)
+        self.assertIn("grid-template-columns: repeat(3, 1fr)", three_col)
+        self.assertNotEqual(two_col, three_col)
+        two_row = _rule_body(css, '.display-divisions[data-orientation="horizontal"][data-count="2"]')
+        self.assertIn("grid-template-rows: repeat(2, 1fr)", two_row)
+        self.assertNotEqual(two_col, two_row)
 
     def test_single_layout_hides_every_division_but_the_primary(self):
         css = _CSS_PATH.read_text(encoding="utf-8")
-        body = _rule_body(css, '.display-divisions[data-layout="single"] .display-division:not(.display-division-primary)')
+        body = _rule_body(css, '.display-divisions[data-count="1"] [data-division]:not([data-division="0"])')
         self.assertIn("display: none", body)
 
     def test_layout_choice_is_never_a_dead_decorative_no_op(self):
-        # Every option button carries a real, distinct data attribute
-        # the JS reads to set .display-divisions[data-layout] - never a
-        # bare icon with no handler.
+        # Every control carries a real, distinct id/data attribute the
+        # JS reads to set .display-divisions[data-count]/[data-orientation]
+        # - never a bare icon with no handler, and only committed on the
+        # explicit Apply click (never re-rendering on every keystroke).
         js = _JS_PATH.read_text(encoding="utf-8")
-        self.assertIn("divisionsRoot.dataset.layout = layout", js)
-        self.assertIn("workspace-layout-option", js)
+        self.assertIn("divisionsRoot.dataset.count = String(quantity)", js)
+        self.assertIn("divisionsRoot.dataset.orientation = orientation", js)
+        self.assertIn("display-layout-apply", js)
+        self.assertIn("MAX_DISPLAY_DIVISIONS = 6", js)
 
 
 # ---------------------------------------------------------------------------
@@ -442,17 +455,24 @@ class NarrowScreenFallbackTests(unittest.TestCase):
         )
 
     def test_multi_division_layouts_collapse_to_one_column_at_medium_width(self):
-        match = re.search(r"@media \(max-width: 1080px\) \{(.+?)\n\}\n\n", self.css, re.DOTALL)
-        self.assertIsNotNone(match)
-        medium_block = match.group(1)
-        self.assertIn('display-divisions[data-layout="side-by-side"]', medium_block)
-        self.assertIn('display-divisions[data-layout="grid"]', medium_block)
-        self.assertIn("grid-template-columns: 1fr", medium_block)
+        # SUPERSEDED (CLAUDE-P40-E3A): mobile-first now, not a max-width
+        # override - .display-divisions' own BASE rule (outside any media
+        # query) is already single-column/stacked; the dynamic multi-
+        # column/multi-row geometry only activates inside
+        # @media (min-width: 900px), so anything narrower automatically
+        # gets the single-column base rule with no override needed.
+        base_body = _rule_body(self.css, ".display-divisions")
+        self.assertIn("grid-template-columns: 1fr", base_body)
+        self.assertIn("@media (min-width: 900px)", self.css)
 
     def test_escape_closes_narrow_drawers(self):
-        js = _JS_PATH.read_text(encoding="utf-8")
-        self.assertIn("e.key !== 'Escape'", js)
-        self.assertIn("matchMedia('(min-width: 641px)')", js)
+        # SUPERSEDED (CLAUDE-P40-E3A): base.html's own divider script
+        # uses the direct max-width threshold check now, not the old
+        # inverted min-width one - same 640/641px breakpoint, different
+        # phrasing.
+        base_html = (Path(__file__).resolve().parent.parent / "templates" / "base.html").read_text(encoding="utf-8")
+        self.assertIn("e.key !== 'Escape'", base_html)
+        self.assertIn("matchMedia('(max-width: 640px)')", base_html)
 
 
 # ---------------------------------------------------------------------------
@@ -479,10 +499,15 @@ class DisplayBackgroundTests(unittest.TestCase):
         self.assertNotIn("border-radius", body)
 
     def test_divisions_are_separated_by_lines_not_boxes(self):
-        body = _rule_body(self.css, '.display-divisions[data-layout="side-by-side"] [data-division="0"]')
+        # SUPERSEDED (CLAUDE-P40-E3A): the old fixed 2-division
+        # side-by-side/stacked preset selectors are retired - divisions
+        # are separated by a border on the SECOND-and-later division
+        # (:not(:first-child)) now, real for any count/orientation, not
+        # just a hardcoded 2-way split.
+        body = _rule_body(self.css, '.display-divisions[data-orientation="vertical"] .display-division:not(:first-child)')
         self.assertNotIn("box-shadow", body)
         self.assertNotIn("border-radius", body)
-        self.assertIn("border-right", body)
+        self.assertIn("border-left", body)
 
 
 if __name__ == "__main__":

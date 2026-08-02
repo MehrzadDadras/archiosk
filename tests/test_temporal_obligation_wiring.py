@@ -44,7 +44,7 @@ class TemporalObligationWiringTests(unittest.TestCase):
             sess["user_id"] = 1
             sess["username"] = "owner1"
             sess["role"] = "admin"
-        self.client.get(f"/projects/{self.project_id}/workspace")
+        self.client.get(f"/projects/{self.project_id}/workspace?view=overview")
 
         self.store = CaseWorkspaceStore(self.tmp_dir)
         self.client.post(
@@ -103,8 +103,14 @@ class TemporalObligationWiringTests(unittest.TestCase):
         self.assertEqual(len(obligations), 0)
 
     def test_key_dates_accordion_shows_created_obligation(self):
+        # SUPERSEDED (CLAUDE-P40-E3A): Key Dates is project-wide Overview
+        # content - it used to stay visible even while an Investigation
+        # was open (P40-E2B's own invariant), but Overview and an open
+        # Investigation are now mutually exclusive leaves (Section 4/5),
+        # a deliberate, documented consequence of this stage's own
+        # leaf-exclusivity model.
         self._create()
-        resp = self.client.get(f"/projects/{self.project_id}/workspace?case={self.case_id}")
+        resp = self.client.get(f"/projects/{self.project_id}/workspace?view=overview")
         body = resp.get_data(as_text=True)
         self.assertIn("RFI response", body)
         self.assertIn("Key Dates (1)", body)
@@ -116,7 +122,7 @@ class TemporalObligationWiringTests(unittest.TestCase):
         self._create(title="Future submittal", accepted_date=next_year)
         self._create(title="Overdue RFI", accepted_date=yesterday)
 
-        resp = self.client.get(f"/projects/{self.project_id}/workspace?case={self.case_id}")
+        resp = self.client.get(f"/projects/{self.project_id}/workspace?view=overview")
         body = resp.get_data(as_text=True)
         # overdue must render before the future one despite being created second
         self.assertLess(body.index("Overdue RFI"), body.index("Future submittal"))

@@ -82,27 +82,34 @@ class HomeNavigationShellTests(unittest.TestCase):
         # the old "Recent Projects" block by name.
         self.assertNotIn('side-rail-context-label">Recent Projects<', body)
         self.assertNotIn('class="workspace-pane-label">Recent Projects<', body)
-        # CLAUDE-P40-E2B1A: the launcher panel is a root launcher, not an
-        # expandable tree (Section H's interaction rule) - Project names
-        # are never listed inline on Home (or anywhere else in the
-        # panel) anymore. They exist only as the Projects root
-        # launcher's own projected children, on /projects itself.
-        self.assertNotIn("rfp.md", body)
+        # SUPERSEDED (CLAUDE-P40-E3A, Section 2): the product owner
+        # reversed P40-E2B1A's pure-root-launcher rule - the ONE panel is
+        # a recursive hierarchy now, and DOES legitimately list every
+        # authorized Project (including on Home) as a Lists leaf. What
+        # this test still protects - no SECOND, duplicate listing
+        # alongside it - is checked as an exact-once count instead of an
+        # absence.
+        self.assertEqual(body.count("rfp.md"), 1)
+        # On /projects itself, "rfp.md" legitimately appears twice now:
+        # once in Lists (present on every page, Section 2) and once in
+        # the actual /projects directory listing this page renders.
         directory_body = client.get("/projects").get_data(as_text=True)
-        self.assertEqual(directory_body.count("rfp.md"), 1)
+        self.assertEqual(directory_body.count("rfp.md"), 2)
 
     def test_nav_rail_present_with_toggle(self):
         # CLAUDE-P40-E2B1: the old two-state (icon-only/labeled) side-rail
         # and its own hamburger toggle are retired - the one launcher
-        # panel now hides/shows in full via the top bar's "Lists" toggle
-        # (a reviewer-wide, not per-project, localStorage preference).
+        # panel now hides/shows in full via the panel-dividing line
+        # (CLAUDE-P40-E3A, Section 7 - #lists-divider, replacing the
+        # even-older top-bar toggle button), a reviewer-wide, not
+        # per-project, localStorage preference.
         client = self.flask_app.test_client()
         self._login(client)
 
         response = client.get("/")
         body = response.get_data(as_text=True)
 
-        self.assertIn('id="launcher-toggle-btn"', body)
+        self.assertIn('id="lists-divider"', body)
         self.assertIn('id="launcher-panel"', body)
         self.assertIn("beehive:panel:launcher", body)
         self.assertNotIn('id="nav-toggle"', body)
@@ -115,7 +122,7 @@ class HomeNavigationShellTests(unittest.TestCase):
         body = response.get_data(as_text=True)
 
         self.assertIn(">Projects<", body)
-        self.assertIn(">+ New Project<", body)
+        self.assertIn("+ New Project", body)
         # No global nav links were fabricated for destinations that only
         # exist nested inside a specific project's Case Workspace.
         self.assertNotIn(">Sources<", body)
@@ -134,19 +141,28 @@ class HomeNavigationShellTests(unittest.TestCase):
         response = client.get(f"/projects/{project_id}/workspace")
         body = response.get_data(as_text=True)
 
-        # CLAUDE-P40-E2B1A: current-Project context now shows in the
-        # application-wide top bar's breadcrumb (workspace-topbar-project)
-        # and via the "Projects" root launcher's own active highlighting
-        # plus Display's branch-nav "Overview" entry - there is no
-        # literal "Current Project" label anywhere, and no per-project
-        # row in the panel to highlight (Section H's root-launcher rule),
-        # but the project's own identity is genuinely present throughout.
+        # SUPERSEDED (CLAUDE-P40-E3A): current-Project context now shows
+        # in the application-wide top bar's breadcrumb
+        # (workspace-topbar-project) AND, since Section 2's reversal, as
+        # the active Project's own highlighted Lists leaf/branch (no
+        # longer a root-launcher-only panel with no per-project
+        # highlighting) - there is no literal "Current Project" label
+        # anywhere, but the project's own identity is genuinely present
+        # throughout.
         self.assertIn("rfp.md", body)
         self.assertIn(project_id, body)
         self.assertIn("launcher-heading active", body)
-        self.assertIn("display-branch-link active", body)
+        self.assertIn("tree-leaf launcher-link active", body)
 
     def test_non_admin_does_not_see_new_project_link(self):
+        # BUCKET-B FIX (CLAUDE-P40-E3A): base.html's own recursive-tree
+        # "New Project" leaf was rendering unconditionally - a real
+        # authorization gap, since portal.upload is @admin_required
+        # (routes/portal.py) - a read_only reviewer clicking it would
+        # have hit a 403. Now gated behind is_admin, matching Section 4's
+        # "unauthorized... branches must never render". "Open Project"
+        # (index.html's own dashboard hero CTA, role-independent, out of
+        # this stage's shell-only scope) is unaffected and still present.
         client = self.flask_app.test_client()
         self._login(client, role="read_only")
 

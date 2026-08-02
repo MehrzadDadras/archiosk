@@ -162,7 +162,7 @@ class ExactlyOneComposerTests(_BaseSingleComposerTestCase):
             f"/projects/{self.project_id}/workspace/requirements/register",
             data={"source_id": source_id, "original_requirement_identifier": "4.2", "text_reference": "The system shall do X."},
         )
-        body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
+        body = client.get(f"/projects/{self.project_id}/workspace?view=overview").get_data(as_text=True)
         self.assertIn("aperture-link", body)
         self.assertEqual(body.count('class="conversation-input-form conversation-dock-composer"'), 1)
 

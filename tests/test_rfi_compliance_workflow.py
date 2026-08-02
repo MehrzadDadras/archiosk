@@ -56,7 +56,7 @@ class RFIExportTests(unittest.TestCase):
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
 
     def test_download_link_reachable_from_case_workspace(self):
-        response = self.client.get(f"/projects/{self.project_id}/workspace")
+        response = self.client.get(f"/projects/{self.project_id}/workspace?view=overview")
         body = response.get_data(as_text=True)
         self.assertIn(f"/projects/{self.project_id}/workspace/rfi-export", body)
         self.assertIn("Download RFI (.docx)", body)
@@ -103,7 +103,7 @@ class RFIExportTests(unittest.TestCase):
         )
         RequirementsRegistry(self.tmp_dir).save(clean_document)
 
-        response = self.client.get(f"/projects/{clean_project_id}/workspace")
+        response = self.client.get(f"/projects/{clean_project_id}/workspace?view=overview")
         body = response.get_data(as_text=True)
         self.assertNotIn("Download RFI (.docx)", body)
         self.assertIn("no contradictions were flagged", body)
@@ -169,7 +169,7 @@ class ComplianceRollupTests(unittest.TestCase):
         case = self._create_case()
         self._promote(case["id"], self.item_a)
 
-        response = self.client.get(f"/projects/{self.project_id}/workspace?case={case['id']}")
+        response = self.client.get(f"/projects/{self.project_id}/workspace?view=overview")
         body = response.get_data(as_text=True)
         self.assertIn("1 Not Yet Assessed", body)
 
@@ -184,7 +184,7 @@ class ComplianceRollupTests(unittest.TestCase):
             follow_redirects=True,
         )
 
-        response = self.client.get(f"/projects/{self.project_id}/workspace?case={case['id']}")
+        response = self.client.get(f"/projects/{self.project_id}/workspace?view=overview")
         body = response.get_data(as_text=True)
         self.assertIn("1 Satisfied", body)
         self.assertIn("1 Not Yet Assessed", body)
@@ -204,7 +204,7 @@ class ComplianceRollupTests(unittest.TestCase):
             follow_redirects=True,
         )
 
-        response = self.client.get(f"/projects/{self.project_id}/workspace?case={case['id']}")
+        response = self.client.get(f"/projects/{self.project_id}/workspace?view=overview")
         body = response.get_data(as_text=True)
         self.assertIn("1 Satisfied", body)
         self.assertIn("1 Not Satisfied", body)
@@ -243,14 +243,14 @@ class ComplianceRollupTests(unittest.TestCase):
             sess["username"] = "design-manager"
             sess["role"] = "admin"
 
-        response = fresh_client.get(f"/projects/{self.project_id}/workspace?case={case['id']}")
+        response = fresh_client.get(f"/projects/{self.project_id}/workspace?view=overview")
         body = response.get_data(as_text=True)
         self.assertIn("1 Satisfied", body)
 
     def test_drill_down_link_present(self):
         case = self._create_case()
         self._promote(case["id"], self.item_a)
-        response = self.client.get(f"/projects/{self.project_id}/workspace?case={case['id']}")
+        response = self.client.get(f"/projects/{self.project_id}/workspace?view=overview")
         body = response.get_data(as_text=True)
         self.assertIn('href="#governed-requirements"', body)
         self.assertIn('id="governed-requirements"', body)
@@ -294,7 +294,7 @@ class ApplyFeedbackTests(unittest.TestCase):
         store.record_reviewer_validation(workspace, finding_id=finding_id, validation="Correct", reviewer="design-manager")
         store.record_disposition(workspace, finding_id=finding_id, disposition="Confirmed", reviewer="design-manager")
 
-        response = self.client.get(f"/projects/{self.project_id}/workspace?case={case['id']}")
+        response = self.client.get(f"/projects/{self.project_id}/workspace?view=overview")
         body = response.get_data(as_text=True)
         self.assertNotIn("View accepted knowledge", body)  # nothing applied yet
 
@@ -304,7 +304,7 @@ class ApplyFeedbackTests(unittest.TestCase):
         )
         self.assertEqual(apply_response.status_code, 200)
 
-        response = self.client.get(f"/projects/{self.project_id}/workspace?case={case['id']}")
+        response = self.client.get(f"/projects/{self.project_id}/workspace?view=overview")
         body = response.get_data(as_text=True)
         self.assertIn("View accepted knowledge", body)
         self.assertIn("Beam undersized per drawing S-101.", body)

@@ -47,7 +47,7 @@ class VisualPressureTests(unittest.TestCase):
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
 
     def _register_requirement(self):
-        self.client.get(f"/projects/{self.project_id}/workspace")  # registers the auto document Source
+        self.client.get(f"/projects/{self.project_id}/workspace?view=overview")  # registers the auto document Source
         workspace = self.store.get(self.project_id)
         source_id = workspace.sources[0]["id"]
         return self.store.register_requirement(
@@ -70,8 +70,8 @@ class VisualPressureTests(unittest.TestCase):
         # First visit establishes the marker; a Requirement that has
         # never been adjudicated stays at full strength no matter how
         # many subsequent visits pass - "settled" is a precondition.
-        self.client.get(f"/projects/{self.project_id}/workspace")
-        resp = self.client.get(f"/projects/{self.project_id}/workspace")
+        self.client.get(f"/projects/{self.project_id}/workspace?view=overview")
+        resp = self.client.get(f"/projects/{self.project_id}/workspace?view=overview")
         self.assertNotIn("pressure-quiet-text", resp.get_data(as_text=True))
 
     def test_settled_requirement_stays_full_strength_until_a_visit_has_passed(self):
@@ -80,22 +80,22 @@ class VisualPressureTests(unittest.TestCase):
         # This is the SAME visit the adjudication happened in (no fresh
         # page load establishing a new last-visited marker afterward) -
         # brand new news must never be presented as already-quiet.
-        resp = self.client.get(f"/projects/{self.project_id}/workspace")
+        resp = self.client.get(f"/projects/{self.project_id}/workspace?view=overview")
         self.assertNotIn("pressure-quiet-text", resp.get_data(as_text=True))
 
     def test_settled_requirement_quiets_after_a_later_visit(self):
         requirement = self._register_requirement()
         self._adjudicate(requirement)
-        self.client.get(f"/projects/{self.project_id}/workspace")  # records a visit AFTER the adjudication
-        resp = self.client.get(f"/projects/{self.project_id}/workspace")
+        self.client.get(f"/projects/{self.project_id}/workspace?view=overview")  # records a visit AFTER the adjudication
+        resp = self.client.get(f"/projects/{self.project_id}/workspace?view=overview")
         self.assertIn("pressure-quiet-text", resp.get_data(as_text=True))
 
     def test_requirement_still_renders_in_full_when_quiet(self):
         """Quieting must never remove content - only its text color."""
         requirement = self._register_requirement()
         self._adjudicate(requirement)
-        self.client.get(f"/projects/{self.project_id}/workspace")
-        resp = self.client.get(f"/projects/{self.project_id}/workspace")
+        self.client.get(f"/projects/{self.project_id}/workspace?view=overview")
+        resp = self.client.get(f"/projects/{self.project_id}/workspace?view=overview")
         body = resp.get_data(as_text=True)
         self.assertIn("Contractor shall provide as-built drawings.", body)
         self.assertIn("Satisfied", body)
@@ -104,7 +104,7 @@ class VisualPressureTests(unittest.TestCase):
     def test_settled_requirement_stays_loud_while_this_reviewer_still_discusses_it(self):
         requirement = self._register_requirement()
         self._adjudicate(requirement)
-        self.client.get(f"/projects/{self.project_id}/workspace")  # a visit passes - would otherwise quiet
+        self.client.get(f"/projects/{self.project_id}/workspace?view=overview")  # a visit passes - would otherwise quiet
         self.client.post(
             f"/projects/{self.project_id}/workspace/discuss",
             data={
@@ -114,14 +114,14 @@ class VisualPressureTests(unittest.TestCase):
                 "anchor_description": "Section 3.1",
             },
         )
-        resp = self.client.get(f"/projects/{self.project_id}/workspace")
+        resp = self.client.get(f"/projects/{self.project_id}/workspace?view=overview")
         self.assertNotIn("pressure-quiet-text", resp.get_data(as_text=True))
 
     def test_pressure_is_per_reviewer(self):
         requirement = self._register_requirement()
         self._adjudicate(requirement)
-        self.client.get(f"/projects/{self.project_id}/workspace")
-        self.client.get(f"/projects/{self.project_id}/workspace")
+        self.client.get(f"/projects/{self.project_id}/workspace?view=overview")
+        self.client.get(f"/projects/{self.project_id}/workspace?view=overview")
 
         other_client = self.flask_app.test_client()
         with other_client.session_transaction() as sess:
@@ -131,7 +131,7 @@ class VisualPressureTests(unittest.TestCase):
         # owner2's own first-ever visit - no established "old news"
         # boundary yet, so nothing quiets for them regardless of owner1's
         # visit history.
-        resp = other_client.get(f"/projects/{self.project_id}/workspace")
+        resp = other_client.get(f"/projects/{self.project_id}/workspace?view=overview")
         self.assertNotIn("pressure-quiet-text", resp.get_data(as_text=True))
 
 

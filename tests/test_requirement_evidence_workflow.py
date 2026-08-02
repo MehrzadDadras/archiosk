@@ -137,7 +137,7 @@ class RequirementEvidenceWorkflowTests(unittest.TestCase):
         finding_id = self._create_finding(self.case["id"], "Certificates confirm current labor licensure.")
         self._adjudicate(requirement["id"], "Satisfied", "Confirmed via submitted certificates.", [finding_id])
 
-        response = self.owner_client.get(f"/projects/{self.project_id}/workspace?case={self.case['id']}")
+        response = self.owner_client.get(f"/projects/{self.project_id}/workspace?view=overview")
         body = response.get_data(as_text=True)
         self.assertIn("Certificates confirm current labor licensure.", body)
         self.assertIn(self.case["title"], body)
@@ -147,7 +147,7 @@ class RequirementEvidenceWorkflowTests(unittest.TestCase):
         requirement = self._promote_requirement()
         self._adjudicate(requirement["id"], "Not Applicable", "This clause does not apply to this scope.")
 
-        response = self.owner_client.get(f"/projects/{self.project_id}/workspace?case={self.case['id']}")
+        response = self.owner_client.get(f"/projects/{self.project_id}/workspace?view=overview")
         body = response.get_data(as_text=True)
         self.assertIn("No connected Findings or Accepted Knowledge cited as evidence yet.", body)
 
@@ -157,7 +157,7 @@ class RequirementEvidenceWorkflowTests(unittest.TestCase):
         finding_id = self._create_finding(self.case["id"], "Beam undersized per drawing S-101.")
         self._validate_dispose_apply(self.case["id"], finding_id)
 
-        response = self.owner_client.get(f"/projects/{self.project_id}/workspace?case={self.case['id']}")
+        response = self.owner_client.get(f"/projects/{self.project_id}/workspace?view=overview")
         body = response.get_data(as_text=True)
         self.assertIn("Beam undersized per drawing S-101.", body)
         self.assertIn(f"from {self.case['title']}", body)
@@ -169,7 +169,7 @@ class RequirementEvidenceWorkflowTests(unittest.TestCase):
         self._adjudicate(requirement["id"], "Satisfied", "Confirmed via submitted certificates.", [finding_id])
         self._validate_dispose_apply(self.case["id"], finding_id)
 
-        response = self.owner_client.get(f"/projects/{self.project_id}/workspace?case={self.case['id']}")
+        response = self.owner_client.get(f"/projects/{self.project_id}/workspace?view=overview")
         body = response.get_data(as_text=True)
         self.assertIn("Linked Requirement(s):", body)
         self.assertIn(requirement["text_reference"][:40], body)
@@ -198,15 +198,15 @@ class RequirementEvidenceWorkflowTests(unittest.TestCase):
         requirement = self._promote_requirement()
         finding_id = self._create_finding(self.case["id"])
 
-        response = self.owner_client.get(f"/projects/{self.project_id}/workspace?case={self.case['id']}")
+        response = self.owner_client.get(f"/projects/{self.project_id}/workspace?view=overview")
         self.assertIn("Not Yet Assessed", response.get_data(as_text=True))
 
         self._adjudicate(requirement["id"], "Satisfied", "Initial determination.", [finding_id])
-        response = self.owner_client.get(f"/projects/{self.project_id}/workspace?case={self.case['id']}")
+        response = self.owner_client.get(f"/projects/{self.project_id}/workspace?view=overview")
         self.assertIn("Satisfied", response.get_data(as_text=True))
 
         self._adjudicate(requirement["id"], "Not Satisfied", "New evidence changed the determination.", [finding_id])
-        response = self.owner_client.get(f"/projects/{self.project_id}/workspace?case={self.case['id']}")
+        response = self.owner_client.get(f"/projects/{self.project_id}/workspace?view=overview")
         self.assertIn("Not Satisfied", response.get_data(as_text=True))
 
     # -- privacy -------------------------------------------------------------
@@ -216,7 +216,7 @@ class RequirementEvidenceWorkflowTests(unittest.TestCase):
         finding_id = self._create_finding(self.case["id"], "Certificates confirm current labor licensure.")
         self._adjudicate(requirement["id"], "Satisfied", "Confirmed via submitted certificates.", [finding_id])
 
-        response = self.other_client.get(f"/projects/{self.project_id}/workspace")
+        response = self.other_client.get(f"/projects/{self.project_id}/workspace?view=overview")
         body = response.get_data(as_text=True)
         self.assertIn("Satisfied", body)  # the adjudication outcome/reasoning is project-wide, unchanged
         self.assertIn("Evidence from an Investigation you don't have access to.", body)
@@ -234,7 +234,7 @@ class RequirementEvidenceWorkflowTests(unittest.TestCase):
         RequirementsRegistry(self.tmp_dir).save(
             ParsedDocument(project_id=other_project_id, filename="other.md", ingested_at="2026-01-01T00:00:00+00:00")
         )
-        response = self.owner_client.get(f"/projects/{other_project_id}/workspace")
+        response = self.owner_client.get(f"/projects/{other_project_id}/workspace?view=overview")
         body = response.get_data(as_text=True)
         self.assertNotIn("Certificates confirm current labor licensure.", body)
         self.assertNotIn(requirement["text_reference"], body)
@@ -253,7 +253,7 @@ class RequirementEvidenceWorkflowTests(unittest.TestCase):
             sess["username"] = "owner1"
             sess["role"] = "read_only"
 
-        response = fresh_client.get(f"/projects/{self.project_id}/workspace?case={self.case['id']}")
+        response = fresh_client.get(f"/projects/{self.project_id}/workspace?view=overview")
         body = response.get_data(as_text=True)
         self.assertIn("Certificates confirm current labor licensure.", body)
         self.assertIn("Linked Requirement(s):", body)

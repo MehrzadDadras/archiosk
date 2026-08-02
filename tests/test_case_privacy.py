@@ -290,7 +290,7 @@ class CasePrivacyRouteTests(unittest.TestCase):
 
     def test_other_user_does_not_see_private_case_in_listing(self):
         case = self._create_case_as_owner()
-        response = self.other_client.get(f"/projects/{self.project_id}/workspace")
+        response = self.other_client.get(f"/projects/{self.project_id}/workspace?view=overview")
         self.assertEqual(response.status_code, 200)
         self.assertNotIn(case["title"].encode(), response.data)
         # CLAUDE-P40-E1A: the accordion was renamed "Cases" -> "Investigations".

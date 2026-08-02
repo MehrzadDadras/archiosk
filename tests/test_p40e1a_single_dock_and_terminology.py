@@ -216,27 +216,23 @@ class DraftAndScrollPerThreadTests(_BaseDockTestCase):
 
 class InvestigationListingTests(_BaseDockTestCase):
     def test_every_authorized_investigation_title_is_listed_under_work(self):
-        # CLAUDE-P40-E2B1: the old Workspace-local Lists column
-        # (case_workspace.html's #cases accordion, permanently visible
-        # alongside everything else) is eliminated - the launcher panel's
-        # "Investigations" link now opens this same canonical listing as
-        # its own launcher-projected Display directory (?view=
-        # investigations), rather than a second, permanently-visible nav
-        # column duplicating it.
+        # SUPERSEDED (CLAUDE-P40-E3A, Section 2/4): the retired
+        # ?view=investigations Display directory this test originally
+        # checked is gone - every authorized Investigation title is now
+        # listed as a real child leaf of the Lists panel's own
+        # "Investigations" tree-toggle (its count shown as
+        # .launcher-count, not the old .display-branch-count), reachable
+        # directly, on every page, not a second navigation column.
         client = self._client_as("p40e1a_owner", 1)
         self._create_investigation(client, title="Draft 1")
         client2 = self._client_as("p40e1a_owner", 1)
         client2.post(f"/projects/{self.project_id}/workspace/cases", data={"title": "Schedule Conflict Review", "objective": ""})
 
         home_body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
-        self.assertIn('href="{}?view=investigations">Investigations <span class="display-branch-count">2</span></a>'.format(
-            f"/projects/{self.project_id}/workspace"
-        ), home_body)
-
-        dir_body = client.get(f"/projects/{self.project_id}/workspace?view=investigations").get_data(as_text=True)
-        self.assertIn("Draft 1", dir_body)
-        self.assertIn("Schedule Conflict Review", dir_body)
-        self.assertIn('class="case-item', dir_body)
+        self.assertIn('Investigations <span class="launcher-count">2</span>', home_body)
+        self.assertIn("Draft 1", home_body)
+        self.assertIn("Schedule Conflict Review", home_body)
+        self.assertIn('data-tree-owns="case"', home_body)
 
     def test_newly_created_investigation_appears_immediately_and_becomes_active(self):
         client = self._client_as("p40e1a_owner", 1)
@@ -252,17 +248,18 @@ class InvestigationListingTests(_BaseDockTestCase):
         # just a nav entry, opened in the main Display panel.
         self.assertIn('class="workspace-pane workspace-pane-conversation"', body)
         self.assertIn("<h2>Draft 1</h2>", body)
-        # CLAUDE-P40-E2B1A, Section D: "highlight the originating
-        # launcher" - Display's own branch-nav "Investigations" entry
-        # stays highlighted while any Investigation is open, even though
-        # the directory listing itself isn't rendered alongside it
-        # anymore (no second navigation column - Section E). This entry
-        # lives in Display now, not the left panel (Section H's
-        # root-launcher rule).
+        # SUPERSEDED (CLAUDE-P40-E3A): "highlight the originating
+        # launcher" now means the Lists panel's own "Investigations"
+        # tree-toggle stays pinned open (aria-expanded="true"/
+        # data-tree-open) while any Investigation is open, and the new
+        # Investigation itself renders as the active Lists leaf inside
+        # it - back in the ONE left panel (Section 2's reversal), not a
+        # retired Display branch-nav entry.
         import re
-        match = re.search(r'<a class="display-branch-link( active)?"\s+href="[^"]*view=investigations">Investigations', body)
+        match = re.search(r'<button type="button" class="tree-toggle launcher-link" data-tree-parent data-tree-owns="case" aria-expanded="(true|false)">', body)
         self.assertIsNotNone(match)
-        self.assertEqual(match.group(1), " active")
+        self.assertEqual(match.group(1), "true")
+        self.assertIn('<a class="tree-leaf launcher-link active" href="', body)
 
 
 class UnauthorizedInvestigationsHiddenTests(_BaseDockTestCase):
@@ -300,12 +297,13 @@ class UnauthorizedInvestigationsHiddenTests(_BaseDockTestCase):
 
 class NoCaseTerminologyTests(_BaseDockTestCase):
     def test_creation_form_says_investigation_not_case(self):
-        # CLAUDE-P40-E2B1, Section C: "New Investigation creation occurs
-        # in this Display view" - the Investigations directory
-        # (?view=investigations), not Project Home.
+        # SUPERSEDED (CLAUDE-P40-E3A): the retired ?view=investigations
+        # directory this test originally checked is gone - "+ Start
+        # Investigation" now lives in Overview's own "Active Work"
+        # accordion (?view=overview).
         client = self._client_as("p40e1a_owner", 1)
-        body = client.get(f"/projects/{self.project_id}/workspace?view=investigations").get_data(as_text=True)
-        self.assertIn("New Investigation", body)
+        body = client.get(f"/projects/{self.project_id}/workspace?view=overview").get_data(as_text=True)
+        self.assertIn("Start Investigation", body)
         self.assertIn("Investigation title", body)
         self.assertIn("Create Investigation", body)
         self.assertNotIn("New Case", body)
@@ -313,8 +311,10 @@ class NoCaseTerminologyTests(_BaseDockTestCase):
         self.assertNotIn(">Create Case<", body)
 
     def test_workspace_heading_and_accordion_say_investigation_not_case(self):
+        # SUPERSEDED (CLAUDE-P40-E3A): Overview-scoped content now
+        # (Section 5 - blank by default), reached via ?view=overview.
         client = self._client_as("p40e1a_owner", 1)
-        body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
+        body = client.get(f"/projects/{self.project_id}/workspace?view=overview").get_data(as_text=True)
         self.assertIn("Investigations (", body)
         self.assertNotIn("Cases (", body)
         self.assertNotIn("Case Workspace", body)

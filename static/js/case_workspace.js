@@ -9,7 +9,10 @@
  * near the top of the column.
  */
 document.addEventListener('DOMContentLoaded', () => {
-    const root = document.querySelector('.case-workspace');
+    // CLAUDE-P40-E3A: .case-workspace is retired - Toolbox and Chat moved
+    // out to base.html's own shell-level grid, so .workspace-pane-display
+    // (Display alone) is the root or this whole Workspace page has none.
+    const root = document.querySelector('.workspace-pane-display');
     if (!root) return;
 
     const projectId = root.dataset.projectId || 'default';
@@ -119,7 +122,11 @@ document.addEventListener('DOMContentLoaded', () => {
     // so the drag handle and the preset buttons never fight each other
     // or drift out of sync.
     (function setUpChatResize() {
-        const grid = document.querySelector('.case-workspace');
+        // CLAUDE-P40-E3A, Section 9: Chat is now a full-width row in the
+        // application shell's own grid (base.html's .app-shell), not
+        // nested inside a Workspace-local grid - --chat-height moves with
+        // it to the new grid container.
+        const grid = document.querySelector('.app-shell');
         const handle = document.getElementById('conversation-dock-resize-handle');
         if (!grid || !handle) return;
 
@@ -196,95 +203,46 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     })();
 
-    // CLAUDE-P40-E2B1: Toolbox hides/shows independently via a plain
-    // class toggle on .case-workspace - never DOM removal, so every
-    // form/draft/scroll position inside a hidden panel survives
-    // untouched, and reopening needs no re-fetch. State is a
-    // reviewer-specific, per-Project localStorage preference (never a
-    // ProjectWorkspace write - collapsing a panel is pure viewing, not
-    // a governed action), applied before first paint via the inline
-    // script in case_workspace.html's own extra_head block. The
-    // Launcher panel's own equivalent toggle now lives in base.html
-    // (application-shell level, reviewer-wide not per-project) since
-    // the panel itself moved there - see that template's own script.
-    (function setUpPanelToggles() {
-        const grid = document.querySelector('.case-workspace');
-        if (!grid) return;
-        const html = document.documentElement;
+    // CLAUDE-P40-E3A, Section 7: Toolbox's own show/hide toggle is now the
+    // Display|Toolbox panel-dividing line itself, wired in base.html's own
+    // inline script (application-shell level) alongside the Lists divider
+    // - both panels' dividers live in one place now, not split across two
+    // files. Nothing left to wire here. The Display-Layout/Appearance/User
+    // menus' click-outside-close also moved to base.html (those controls
+    // themselves are shell-level now, present on every authenticated page,
+    // not just this one).
 
-        [
-            { key: 'toolbox', btnId: 'toolbox-toggle-btn', panelId: 'workspace-toolbox-panel', hiddenClass: 'toolbox-hidden', labelShow: 'Show Toolbox', labelHide: 'Hide Toolbox' },
-        ].forEach((cfg) => {
-            const btn = document.getElementById(cfg.btnId);
-            const panel = document.getElementById(cfg.panelId);
-            if (!btn || !panel) return;
-            const prefKey = `beehive:panel:${cfg.key}:${projectId}`;
-
-            function setHidden(hidden, persist) {
-                html.classList.toggle(cfg.hiddenClass, hidden);
-                btn.setAttribute('aria-expanded', String(!hidden));
-                btn.setAttribute('aria-label', hidden ? cfg.labelShow : cfg.labelHide);
-                if (persist !== false) {
-                    try { window.localStorage.setItem(prefKey, hidden ? 'hidden' : 'shown'); } catch (e) { /* ignore */ }
-                }
-            }
-
-            btn.setAttribute('aria-controls', cfg.panelId);
-            // The inline before-paint script (case_workspace.html's own
-            // extra_head block) already applied the stored preference
-            // as a class on <html> (avoids a flash) - this just syncs
-            // the button's own ARIA state to match what's already
-            // rendered, without writing anything back.
-            setHidden(html.classList.contains(cfg.hiddenClass), false);
-
-            btn.addEventListener('click', () => {
-                setHidden(!html.classList.contains(cfg.hiddenClass));
-            });
-        });
-
-        // CLAUDE-P40-E2B1, Section G: on narrow screens Toolbox renders
-        // as an overlay drawer (main.css's own max-width: 640px rules) -
-        // Escape closes it if open. The Launcher panel's own equivalent
-        // drawer/Escape handling now lives in base.html (it moved there
-        // along with the panel itself).
-        document.addEventListener('keydown', (e) => {
-            if (e.key !== 'Escape') return;
-            if (window.matchMedia('(min-width: 641px)').matches) return;
-            if (!html.classList.contains('toolbox-hidden')) {
-                document.getElementById('toolbox-toggle-btn') && document.getElementById('toolbox-toggle-btn').click();
-            }
-        });
-    })();
-
-    // CLAUDE-P40-E2B, Section A: the Display Layout and overflow menus
-    // are plain <details>/<summary> (native keyboard operability/focus
-    // management for free) - the only thing added here is closing one
-    // when a click lands outside it, the one behavior <details> does
-    // not provide natively.
-    document.querySelectorAll('.workspace-layout-menu, .workspace-topbar-overflow').forEach((menu) => {
-        document.addEventListener('click', (e) => {
-            if (menu.open && !menu.contains(e.target)) menu.open = false;
-        });
-    });
-
-    // CLAUDE-P40-E2B, Section D: Display Layout + multi-division
-    // viewing. Division 0 is always whatever the server rendered
-    // (Investigation/Document/Project Home) - never closed, never
-    // client-side-repopulated - and stays the one division Toolbox is
-    // bound to (the ordinary ?source=/?case= query string). Divisions
-    // 1-3 are client-side-only "also open alongside it" slots: each
-    // loads its content from the SAME authorized workspace.source_file
-    // route a normal ?source= view already uses (see
-    // workspace-active-sources-data's own file_url, resolved server-
-    // side via url_for), so a division can never render a Document
-    // this reviewer/Project isn't already authorized for, and never a
-    // removed one (active_sources only). "Opening several Documents"
-    // is simultaneous viewing only - nothing here performs or implies
-    // cross-document analysis.
+    // CLAUDE-P40-E3A, Section 6: dynamic multi-division Display. Division
+    // 0 is always whatever the server rendered (Investigation/Document/
+    // Overview) - never closed, never client-side-repopulated, and stays
+    // the one division Toolbox is bound to (the ordinary ?source=/?case=
+    // query string - the only honest way a shared, server-rendered
+    // Toolbox can follow "the active division"). Divisions 1-5 are
+    // client-side-only slots: each loads its content from the SAME
+    // authorized workspace.source_file route a normal ?source= view
+    // already uses (workspace-active-sources-data's own file_url,
+    // resolved server-side via url_for), so a division can never render a
+    // Document this reviewer/Project isn't already authorized for, and
+    // never a removed one (active_sources only). Multi-Display geometry
+    // (orientation, quantity, which division holds which Document) is
+    // reviewer/device presentation state only - localStorage/
+    // sessionStorage, never a Project/Document/ownership/authorization/
+    // evidence/conversation/governance-log write (Section 6's own
+    // "presentation-state boundary").
     (function setUpDisplayLayout() {
         const divisionsRoot = document.getElementById('display-divisions');
         const dataScript = document.getElementById('workspace-active-sources-data');
         if (!divisionsRoot || !dataScript) return;
+
+        // MAX_DISPLAY_DIVISIONS = 6 (division 0 + 5 more, all always
+        // server-rendered - see case_workspace.html's own comment on
+        // this exact number): a restrained, explained ceiling, not a
+        // decorative round one. Past 6 simultaneous divisions a typical
+        // 1280-1920px viewport gives each one under ~200px in the
+        // vertical orientation - too narrow to usefully read an
+        // architectural drawing or document.
+        const MAX_DISPLAY_DIVISIONS = 6;
+        const MIN_DISPLAY_DIVISIONS = 1;
 
         let sourcesById = {};
         try {
@@ -293,35 +251,69 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const layoutKey = `beehive:display:layout:${projectId}`;
         const openDivisionsKey = `beehive:display:open:${projectId}`;
+        const targetKey = `beehive:display:target:${projectId}`;
 
-        function applyLayout(layout, persist) {
-            divisionsRoot.dataset.layout = layout;
-            document.querySelectorAll('.workspace-layout-option').forEach((btn) => {
-                btn.setAttribute('aria-pressed', String(btn.dataset.displayLayout === layout));
-            });
+        let quantity = 1;
+        let orientation = 'vertical';
+        let activeTarget = 0;
+
+        function applyLayout(nextQuantity, nextOrientation, persist) {
+            quantity = Math.max(MIN_DISPLAY_DIVISIONS, Math.min(MAX_DISPLAY_DIVISIONS, nextQuantity));
+            orientation = nextOrientation === 'horizontal' ? 'horizontal' : 'vertical';
+            divisionsRoot.dataset.count = String(quantity);
+            divisionsRoot.dataset.orientation = orientation;
+            if (activeTarget >= quantity) setActiveTarget(0);
             if (persist !== false) {
-                try { window.localStorage.setItem(layoutKey, layout); } catch (e) { /* ignore */ }
+                try { window.localStorage.setItem(layoutKey, JSON.stringify({ quantity: quantity, orientation: orientation })); } catch (e) { /* ignore */ }
             }
         }
 
-        let storedLayout = null;
-        try { storedLayout = window.localStorage.getItem(layoutKey); } catch (e) { /* ignore */ }
-        applyLayout(storedLayout || 'single', false);
+        function syncMenuControls(menuPrefix, pendingQuantity, pendingOrientation) {
+            const valueEl = document.getElementById(`${menuPrefix}-quantity-value`);
+            if (valueEl) valueEl.textContent = String(pendingQuantity);
+            const vBtn = document.getElementById(`${menuPrefix}-orientation-vertical`) || document.querySelector(`[data-context-orientation="vertical"]`);
+            const hBtn = document.getElementById(`${menuPrefix}-orientation-horizontal`) || document.querySelector(`[data-context-orientation="horizontal"]`);
+            if (vBtn) vBtn.setAttribute('aria-pressed', String(pendingOrientation === 'vertical'));
+            if (hBtn) hBtn.setAttribute('aria-pressed', String(pendingOrientation === 'horizontal'));
+        }
 
-        document.querySelectorAll('.workspace-layout-option').forEach((btn) => {
-            btn.addEventListener('click', () => {
-                applyLayout(btn.dataset.displayLayout);
+        // ---------------- Top-bar Display-layout control (base.html) -----
+        (function wireTopBarLayoutControl() {
+            const decBtn = document.getElementById('display-quantity-decrement');
+            const incBtn = document.getElementById('display-quantity-increment');
+            const applyBtn = document.getElementById('display-layout-apply');
+            const vBtn = document.getElementById('display-orientation-vertical');
+            const hBtn = document.getElementById('display-orientation-horizontal');
+            if (!decBtn || !incBtn || !applyBtn) return;
+
+            let pendingQuantity = quantity;
+            let pendingOrientation = orientation;
+            syncMenuControls('display', pendingQuantity, pendingOrientation);
+
+            decBtn.addEventListener('click', () => {
+                pendingQuantity = Math.max(MIN_DISPLAY_DIVISIONS, pendingQuantity - 1);
+                syncMenuControls('display', pendingQuantity, pendingOrientation);
+            });
+            incBtn.addEventListener('click', () => {
+                pendingQuantity = Math.min(MAX_DISPLAY_DIVISIONS, pendingQuantity + 1);
+                syncMenuControls('display', pendingQuantity, pendingOrientation);
+            });
+            if (vBtn) vBtn.addEventListener('click', () => { pendingOrientation = 'vertical'; syncMenuControls('display', pendingQuantity, pendingOrientation); });
+            if (hBtn) hBtn.addEventListener('click', () => { pendingOrientation = 'horizontal'; syncMenuControls('display', pendingQuantity, pendingOrientation); });
+
+            applyBtn.addEventListener('click', () => {
+                applyLayout(pendingQuantity, pendingOrientation);
                 const menu = document.getElementById('workspace-layout-menu');
                 if (menu) menu.open = false;
             });
-        });
+        })();
 
         function saveOpenDivisions() {
             const open = [];
-            [1, 2, 3].forEach((i) => {
+            for (let i = 1; i < MAX_DISPLAY_DIVISIONS; i++) {
                 const division = document.getElementById(`display-division-${i}`);
                 if (division && division.dataset.sourceId) open.push(division.dataset.sourceId);
-            });
+            }
             try { window.sessionStorage.setItem(openDivisionsKey, JSON.stringify(open)); } catch (e) { /* ignore */ }
         }
 
@@ -331,12 +323,12 @@ document.addEventListener('DOMContentLoaded', () => {
             // "the active division" in a server-rendered page) -
             // preserve every OTHER currently-open division across it.
             const open = [];
-            [1, 2, 3].forEach((i) => {
+            for (let i = 1; i < MAX_DISPLAY_DIVISIONS; i++) {
                 const division = document.getElementById(`display-division-${i}`);
                 if (division && division.dataset.sourceId && division.dataset.sourceId !== sourceId) {
                     open.push(division.dataset.sourceId);
                 }
-            });
+            }
             try { window.sessionStorage.setItem(openDivisionsKey, JSON.stringify(open)); } catch (e) { /* ignore */ }
             const url = new URL(window.location.href);
             url.searchParams.set('source', sourceId);
@@ -349,8 +341,6 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!division) return;
             division.classList.remove('display-division-populated', 'active');
             delete division.dataset.sourceId;
-            const header = division.querySelector('.display-division-header');
-            if (header) header.remove();
             const contentEl = division.querySelector('.display-division-content');
             if (contentEl) { contentEl.innerHTML = ''; contentEl.hidden = true; }
             const picker = division.querySelector('.display-division-picker');
@@ -363,34 +353,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const source = sourcesById[sourceId];
             if (!division || !source) return;
 
-            let header = division.querySelector('.display-division-header');
-            if (!header) {
-                header = document.createElement('div');
-                header.className = 'display-division-header';
-                division.insertBefore(header, division.firstChild);
-            }
-            header.textContent = '';
-
-            const nameEl = document.createElement('span');
-            nameEl.className = 'display-division-header-name';
-            nameEl.textContent = source.name;
-            nameEl.tabIndex = 0;
-            nameEl.setAttribute('role', 'button');
-            nameEl.setAttribute('aria-label', `Make ${source.name} the active division`);
-            nameEl.addEventListener('click', (e) => { e.stopPropagation(); promoteDivision(sourceId); });
-            nameEl.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); promoteDivision(sourceId); }
-            });
-
-            const closeBtn = document.createElement('button');
-            closeBtn.type = 'button';
-            closeBtn.className = 'display-division-close';
-            closeBtn.textContent = 'Close';
-            closeBtn.setAttribute('aria-label', `Close ${source.name} - does not delete the Document`);
-            closeBtn.addEventListener('click', (e) => { e.stopPropagation(); clearDivision(divisionIndex); });
-
-            header.appendChild(nameEl);
-            header.appendChild(closeBtn);
+            const nameEl = division.querySelector('.display-division-header-name');
+            if (nameEl) nameEl.textContent = source.name;
 
             const contentEl = division.querySelector('.display-division-content');
             contentEl.textContent = '';
@@ -418,36 +382,143 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         });
 
-        // Division 0's own header name is also clickable/keyboard-
-        // operable - it's already active, but still needs to identify
-        // itself and accept focus like every other division's header.
-        const primaryNameEl = document.querySelector('#display-division-0 .display-division-header-name');
-        if (primaryNameEl) {
-            primaryNameEl.tabIndex = 0;
-            primaryNameEl.setAttribute('role', 'button');
-            primaryNameEl.setAttribute('aria-label', `${primaryNameEl.textContent.trim()} (active division)`);
-        }
-
-        // "allow selection as the active division" (a plain visual
-        // highlight for divisions 1-3 that aren't yet promoted; 0 is
-        // always .active already) - separate from promoteDivision,
-        // which is the only thing that actually changes what Toolbox
-        // is bound to.
-        divisionsRoot.querySelectorAll('.display-division').forEach((division) => {
-            division.addEventListener('click', () => {
-                divisionsRoot.querySelectorAll('.display-division').forEach((d) => d.classList.remove('active'));
-                division.classList.add('active');
+        // ---------------- Close a Display: remaining Displays expand -----
+        // (CLAUDE-P40-E3A, Section 6). Division 0 has no close button - it
+        // is the always-present primary. At least one Display always
+        // remains: quantity never drops below MIN_DISPLAY_DIVISIONS.
+        document.querySelectorAll('[data-division-close]').forEach((btn) => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const idx = parseInt(btn.dataset.divisionClose, 10);
+                clearDivision(idx);
+                applyLayout(quantity - 1, orientation);
             });
         });
 
-        // Restore whatever was open in divisions 1-3 before the last
-        // navigation - a promotion (or any other navigation within
-        // this Project) must not silently lose the rest of a split
-        // view someone was actively using.
+        // ---------------- Active target division (Section 6) -------------
+        // "One Display is always the active target... clicking a Display
+        // selects it... the next selected Document opens in that Display
+        // only." Division 0 remains the default target (a real ?source=
+        // navigation, unchanged); selecting a different Display makes
+        // Lists route the next Document click there instead, client-side
+        // (see base.html's own leaf-click handler, which calls
+        // window.ArchioskDisplay.populateDivision below).
+        function setActiveTarget(index) {
+            activeTarget = index;
+            divisionsRoot.querySelectorAll('.display-division').forEach((d) => {
+                d.classList.toggle('active', parseInt(d.dataset.division, 10) === index);
+            });
+            try { window.sessionStorage.setItem(targetKey, String(index)); } catch (e) { /* ignore */ }
+        }
+        divisionsRoot.querySelectorAll('.display-division').forEach((division) => {
+            division.addEventListener('click', () => {
+                setActiveTarget(parseInt(division.dataset.division, 10));
+            });
+        });
+
+        window.ArchioskDisplay = {
+            getActiveTarget: () => activeTarget,
+            populateDivision: (index, sourceId) => populateDivision(index, sourceId, true),
+            clearDivision: (index) => clearDivision(index),
+            getDivisionSource: (index) => {
+                const division = document.getElementById(`display-division-${index}`);
+                return division ? division.dataset.sourceId : undefined;
+            },
+        };
+
+        // ---------------- Right-click context menu (Section 6) -----------
+        // ONE shared menu, repositioned to whichever Display was
+        // right-clicked - Close / Divide (direction + quantity + Apply)
+        // only, the capabilities honestly implemented this stage. Closes
+        // on outside click or Escape.
+        (function setUpContextMenu() {
+            const menu = document.getElementById('display-context-menu');
+            const closeBtn = document.getElementById('display-context-close');
+            const applyBtn = document.getElementById('display-context-apply');
+            const decBtn = document.getElementById('display-context-decrement');
+            const incBtn = document.getElementById('display-context-increment');
+            const vBtn = document.getElementById('display-context-orientation-vertical');
+            const hBtn = document.getElementById('display-context-orientation-horizontal');
+            if (!menu) return;
+
+            let menuDivisionIndex = null;
+            let pendingQuantity = 2;
+            let pendingOrientation = 'vertical';
+
+            function openMenu(x, y, divisionIndex) {
+                menuDivisionIndex = divisionIndex;
+                pendingQuantity = 2;
+                pendingOrientation = orientation;
+                syncMenuControls('display-context', pendingQuantity, pendingOrientation);
+                if (closeBtn) closeBtn.hidden = (divisionIndex === 0);
+                menu.style.left = `${x}px`;
+                menu.style.top = `${y}px`;
+                menu.hidden = false;
+            }
+            function closeMenu() { menu.hidden = true; menuDivisionIndex = null; }
+
+            divisionsRoot.querySelectorAll('.display-division').forEach((division) => {
+                division.addEventListener('contextmenu', (e) => {
+                    e.preventDefault();
+                    openMenu(e.clientX, e.clientY, parseInt(division.dataset.division, 10));
+                });
+            });
+            document.addEventListener('click', (e) => {
+                if (!menu.hidden && !menu.contains(e.target)) closeMenu();
+            });
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape' && !menu.hidden) closeMenu();
+            });
+
+            if (closeBtn) closeBtn.addEventListener('click', () => {
+                if (menuDivisionIndex) {
+                    clearDivision(menuDivisionIndex);
+                    applyLayout(quantity - 1, orientation);
+                }
+                closeMenu();
+            });
+            if (decBtn) decBtn.addEventListener('click', () => { pendingQuantity = Math.max(2, pendingQuantity - 1); syncMenuControls('display-context', pendingQuantity, pendingOrientation); });
+            if (incBtn) incBtn.addEventListener('click', () => { pendingQuantity = Math.min(MAX_DISPLAY_DIVISIONS, pendingQuantity + 1); syncMenuControls('display-context', pendingQuantity, pendingOrientation); });
+            if (vBtn) vBtn.addEventListener('click', () => { pendingOrientation = 'vertical'; syncMenuControls('display-context', pendingQuantity, pendingOrientation); });
+            if (hBtn) hBtn.addEventListener('click', () => { pendingOrientation = 'horizontal'; syncMenuControls('display-context', pendingQuantity, pendingOrientation); });
+            if (applyBtn) applyBtn.addEventListener('click', () => {
+                // "Divide this Display" - this stage's own honest scope:
+                // applies the chosen direction/quantity to the WHOLE
+                // Display (extending the existing dynamic-N mechanism),
+                // not a true nested sub-grid within one division - a
+                // fully independent per-division sub-split is not
+                // implemented this stage (Section 6 asks only for the
+                // presentation-state foundation, not every refinement).
+                applyLayout(pendingQuantity, pendingOrientation);
+                closeMenu();
+            });
+        })();
+
+        // Division 0's own header name identifies the active division -
+        // no separate click behavior needed (it's already division 0,
+        // already the default target).
+        const primaryNameEl = document.querySelector('#display-division-0 .display-division-header-name');
+        if (primaryNameEl) {
+            primaryNameEl.setAttribute('aria-label', `${primaryNameEl.textContent.trim()} (active division)`);
+        }
+
+        // Restore whatever was open before the last navigation - a
+        // promotion (or any other navigation within this Project) must
+        // not silently lose the rest of a split view someone was
+        // actively using. Presentation state only (sessionStorage) -
+        // never a Project/Document write (Section 6's boundary).
+        let storedLayout = null;
+        try { storedLayout = JSON.parse(window.localStorage.getItem(layoutKey) || 'null'); } catch (e) { /* ignore */ }
+        applyLayout(storedLayout ? storedLayout.quantity : 1, storedLayout ? storedLayout.orientation : 'vertical', false);
+
+        let storedTarget = null;
+        try { storedTarget = parseInt(window.sessionStorage.getItem(targetKey), 10); } catch (e) { /* ignore */ }
+        setActiveTarget(Number.isInteger(storedTarget) && storedTarget < quantity ? storedTarget : 0);
+
         let savedOpen = [];
         try { savedOpen = JSON.parse(window.sessionStorage.getItem(openDivisionsKey) || '[]'); } catch (e) { /* ignore */ }
         savedOpen.forEach((sourceId, idx) => {
-            if (idx < 3 && sourcesById[sourceId]) populateDivision(idx + 1, sourceId, false);
+            if (idx < MAX_DISPLAY_DIVISIONS - 1 && sourcesById[sourceId]) populateDivision(idx + 1, sourceId, false);
         });
     })();
 

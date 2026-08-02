@@ -127,17 +127,16 @@ class SecondNavigationColumnRemovedTests(_BaseWorkspaceTestCase):
         self.assertNotIn('grid-template-areas: "nav conversation findings"', body)
 
     def test_project_navigation_appears_projected_in_display_not_the_left_panel(self):
-        # CLAUDE-P40-E2B1A: the old side-rail-project-nav accordion group
-        # was first superseded by launcher-panel direct launchers
-        # (P40-E2B1), then THOSE were found to violate the root-launcher/
-        # no-nested-tree rule (Section H) - Documents/Investigations/
-        # Chats are now projected into Display's own branch-nav, never
-        # listed in the left panel itself.
+        # SUPERSEDED (CLAUDE-P40-E3A, Section 2): the pendulum swung back
+        # - Documents/Investigations/Chats are Lists tree children of the
+        # active Project again (the recursive hierarchy explicitly
+        # re-authorized this stage), never projected into Display
+        # (Section 4/5's own no-second-navigation-directory rule forbids
+        # that direction now).
         client = self._client_as("p40e_owner", 1)
         resp = client.get(f"/projects/{self.project_id}/workspace")
         body = resp.get_data(as_text=True)
-        self.assertIn("display-branch-nav", body)
-        self.assertNotIn("launcher-project-context", body)
+        self.assertNotIn("display-branch-nav", body)
         self.assertIn(self.project_id, body)
         self.assertIn(">Documents", body)
         self.assertIn(">Investigations", body)
@@ -298,8 +297,13 @@ class ResponsiveDomOrderTests(_BaseWorkspaceTestCase):
         # together) was split into standalone .workspace-pane-lists and
         # .workspace-pane-display columns - DOM order (Lists, then
         # Display, then Toolbox) is what this test now checks.
+        # Matched against the actual container id, not a bare class-name
+        # substring - base.html's own pre-paint <head> script legitimately
+        # mentions ".workspace-pane-toolbox" in an explanatory comment
+        # before Display ever appears in the body, which a bare substring
+        # search would wrongly match.
         workspace_pos = body.find('id="workspace-display-panel"')
-        toolbox_pos = body.find("workspace-pane-toolbox")
+        toolbox_pos = body.find('id="workspace-toolbox-panel"')
         self.assertGreater(workspace_pos, -1)
         self.assertGreater(toolbox_pos, -1)
         self.assertLess(workspace_pos, toolbox_pos)
@@ -328,7 +332,17 @@ class LegacyProjectPersistenceBoundaryStillIntactTests(_BaseWorkspaceTestCase):
         client = self._client_as("p40e_owner", 1)
         resp = client.get(f"/projects/{self.project_id}/workspace?case=legacy-case-no-visibility")
         self.assertEqual(resp.status_code, 200)
-        self.assertIn(CASE_VISIBILITY_SHARED, resp.get_data(as_text=True))
+        self.assertIn("<h2>Legacy</h2>", resp.get_data(as_text=True))
+
+        # SUPERSEDED (CLAUDE-P40-E3A): the visibility badge itself only
+        # ever rendered in Overview's own "Active Work" case list - and
+        # Overview/an open Investigation are now mutually exclusive
+        # leaves (Section 4/5), so it can no longer be checked on the
+        # SAME ?case=... request. A second GET (still a GET, still
+        # covered by the no-rewrite assertion below) confirms the
+        # default is applied without ever persisting it.
+        overview_resp = client.get(f"/projects/{self.project_id}/workspace?view=overview")
+        self.assertIn(CASE_VISIBILITY_SHARED, overview_resp.get_data(as_text=True))
 
         after_raw = json.loads((self.tmp_dir / f"{self.project_id}.workspace.json").read_text(encoding="utf-8"))
         changed_keys = {k for k in set(before_raw) | set(after_raw) if before_raw.get(k) != after_raw.get(k)}

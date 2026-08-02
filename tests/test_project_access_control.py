@@ -249,20 +249,20 @@ class PortalBypassPathsClosedTests(_BaseAccessControlTestCase):
         self.assertIn("Bob Listed", body)
         self.assertNotIn("Carol Not Listed To Bob", body)
 
-    def test_home_page_lists_no_project_names_accessible_or_not(self):
-        # CLAUDE-P40-E2B1A: the launcher panel is a root launcher, not an
-        # expandable navigation tree - Project names (Bob's own
-        # accessible one included) are no longer listed inline on Home
-        # at all; they are the Projects root launcher's own projected
-        # children, reachable only via /projects (see
-        # test_projects_list_excludes_inaccessible_projects for the
-        # authorization-filtering proof at that, now-correct, location).
+    def test_home_page_lists_no_unauthorized_project_names(self):
+        # SUPERSEDED (CLAUDE-P40-E3A, Section 2): the product owner
+        # reversed P40-E2B1A's pure-root-launcher rule - Lists is a
+        # recursive hierarchy again and DOES legitimately list every
+        # authorized Project (Bob's own included) on every page,
+        # including Home. What must still never happen - the actual
+        # authorization boundary this test protects - is a project Bob
+        # has no access to (Carol's) ever appearing.
         bob_doc = self._ingest(owner="bob", project_name="Bob Home")
         carol_doc = self._ingest(owner="carol", project_name="Carol Not On Bob Home")
 
         response = self.bob_client.get("/")
         body = response.data.decode()
-        self.assertNotIn("Bob Home", body)
+        self.assertIn("Bob Home", body)
         self.assertNotIn("Carol Not On Bob Home", body)
 
     def test_global_search_excludes_inaccessible_projects(self):

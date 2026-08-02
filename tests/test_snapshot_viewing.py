@@ -49,7 +49,7 @@ class SnapshotViewingTests(unittest.TestCase):
             sess["user_id"] = 1
             sess["username"] = "owner1"
             sess["role"] = "admin"
-        self.client.get(f"/projects/{self.project_id}/workspace")
+        self.client.get(f"/projects/{self.project_id}/workspace?view=overview")
         self.store = CaseWorkspaceStore(self.tmp_dir)
         self.store.add_source(
             self.store.get(self.project_id), name="RFP.md", file_path="/tmp/rfp.md",
@@ -60,14 +60,14 @@ class SnapshotViewingTests(unittest.TestCase):
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
 
     def test_created_snapshot_is_visible_afterward(self):
-        resp = self.client.get(f"/projects/{self.project_id}/workspace")
+        resp = self.client.get(f"/projects/{self.project_id}/workspace?view=overview")
         self.assertIn("No Snapshots recorded yet.", resp.get_data(as_text=True))
 
         self.client.post(
             f"/projects/{self.project_id}/workspace/snapshots",
             data={"label": "Pre-Award baseline", "note": "Before the award decision"},
         )
-        resp = self.client.get(f"/projects/{self.project_id}/workspace")
+        resp = self.client.get(f"/projects/{self.project_id}/workspace?view=overview")
         body = resp.get_data(as_text=True)
         self.assertIn("View Snapshots (1)", body)
         self.assertIn("Pre-Award baseline", body)
@@ -83,7 +83,7 @@ class SnapshotViewingTests(unittest.TestCase):
         self.client.post(
             f"/projects/{self.project_id}/workspace/snapshots", data={"label": "Second snapshot"},
         )
-        resp = self.client.get(f"/projects/{self.project_id}/workspace")
+        resp = self.client.get(f"/projects/{self.project_id}/workspace?view=overview")
         body = resp.get_data(as_text=True)
         self.assertLess(body.index("Second snapshot"), body.index("First snapshot"))
 
@@ -94,7 +94,7 @@ class SnapshotViewingTests(unittest.TestCase):
         workspace = self.store.get(self.project_id)
         snapshot_id = workspace.snapshots[0]["id"]
 
-        resp = self.client.get(f"/projects/{self.project_id}/workspace?snapshot={snapshot_id}")
+        resp = self.client.get(f"/projects/{self.project_id}/workspace?view=overview&snapshot={snapshot_id}")
         body = resp.get_data(as_text=True)
         self.assertIn("project state version", body)
         # 2 of 2: the auto-registered RFQ/RFP source plus the one setUp
@@ -122,7 +122,7 @@ class SnapshotViewingTests(unittest.TestCase):
         workspace.sources.pop()
         self.store.save(workspace)
 
-        resp = self.client.get(f"/projects/{self.project_id}/workspace?snapshot={snapshot_id}")
+        resp = self.client.get(f"/projects/{self.project_id}/workspace?view=overview&snapshot={snapshot_id}")
         body = resp.get_data(as_text=True)
         self.assertIn("sources: 1 of 2 resolve to current records", body)
         self.assertIn("1 no longer resolvable", body)
@@ -145,7 +145,7 @@ class SnapshotViewingTests(unittest.TestCase):
         second_id = next(s["id"] for s in workspace.snapshots if s["label"] == "Second")
 
         resp = self.client.get(
-            f"/projects/{self.project_id}/workspace?compare_a={first_id}&compare_b={second_id}"
+            f"/projects/{self.project_id}/workspace?view=overview&compare_a={first_id}&compare_b={second_id}"
         )
         body = resp.get_data(as_text=True)
         self.assertIn("First", body)

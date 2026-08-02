@@ -44,7 +44,7 @@ class NeedsAttentionAggregationTests(unittest.TestCase):
             sess["user_id"] = 1
             sess["username"] = "owner1"
             sess["role"] = "admin"
-        self.client.get(f"/projects/{self.project_id}/workspace")
+        self.client.get(f"/projects/{self.project_id}/workspace?view=overview")
         self.store = CaseWorkspaceStore(self.tmp_dir)
         self.source = self.store.add_source(
             self.store.get(self.project_id), name="RFP.md", file_path="/tmp/rfp.md",
@@ -70,11 +70,18 @@ class NeedsAttentionAggregationTests(unittest.TestCase):
         return case, analysis["finding_ids"][0]
 
     def test_unresolved_finding_in_a_different_case_is_surfaced(self):
+        # SUPERSEDED (CLAUDE-P40-E3A): Needs Attention is project-wide
+        # Overview content - it used to stay visible even while a
+        # DIFFERENT Investigation was open (P40-E2B's own invariant), but
+        # Overview and an open Investigation are now mutually exclusive
+        # leaves (Section 4/5), a deliberate, documented consequence of
+        # this stage's own leaf-exclusivity model. What this test still
+        # protects - aggregation ACROSS every open Investigation, not
+        # just one - is checked via Overview directly instead.
         case_a, _ = self._make_case_with_finding("Case A")
         case_b, _ = self._make_case_with_finding("Case B")
 
-        # view Case A - Case B's own unresolved finding must still appear
-        resp = self.client.get(f"/projects/{self.project_id}/workspace?case={case_a['id']}")
+        resp = self.client.get(f"/projects/{self.project_id}/workspace?view=overview")
         body = resp.get_data(as_text=True)
         self.assertIn("Needs Attention (2)", body)
         self.assertIn("Finding for Case A", body)
@@ -94,7 +101,7 @@ class NeedsAttentionAggregationTests(unittest.TestCase):
         self.client.post(
             f"/projects/{self.project_id}/workspace/cases/{case_a['id']}/apply", data={"confirm": "once"},
         )
-        resp = self.client.get(f"/projects/{self.project_id}/workspace")
+        resp = self.client.get(f"/projects/{self.project_id}/workspace?view=overview")
         body = resp.get_data(as_text=True)
         self.assertIn("Needs Attention (0)", body)
         self.assertIn("Nothing outstanding", body)
@@ -102,7 +109,7 @@ class NeedsAttentionAggregationTests(unittest.TestCase):
     def test_archived_case_findings_are_excluded(self):
         case_a, _ = self._make_case_with_finding("Case A")
         self.client.post(f"/projects/{self.project_id}/workspace/cases/{case_a['id']}/archive")
-        resp = self.client.get(f"/projects/{self.project_id}/workspace")
+        resp = self.client.get(f"/projects/{self.project_id}/workspace?view=overview")
         body = resp.get_data(as_text=True)
         self.assertIn("Needs Attention (0)", body)
 
@@ -113,7 +120,7 @@ class NeedsAttentionAggregationTests(unittest.TestCase):
             sess["user_id"] = 2
             sess["username"] = "owner2"
             sess["role"] = "admin"
-        resp = other_client.get(f"/projects/{self.project_id}/workspace")
+        resp = other_client.get(f"/projects/{self.project_id}/workspace?view=overview")
         body = resp.get_data(as_text=True)
         self.assertIn("Needs Attention (0)", body)
         self.assertNotIn("Owner1's private case", body)

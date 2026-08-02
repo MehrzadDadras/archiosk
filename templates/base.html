@@ -8,18 +8,22 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/tokens.css') }}?v={{ static_version }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v={{ static_version }}">
     <script>
-        // Applied before first paint (inline, in <head>) so the launcher
-        // panel's own show/hide preference never flashes the wrong state on
-        // a fresh page load - a full server-rendered page reload per
-        // navigation, not an SPA. CLAUDE-P40-E2B1: this preference is now
-        // reviewer-wide (one launcher panel, shared across every
-        // authenticated page), not project-scoped like the old per-Workspace
-        // Lists toggle it replaces - see main.css's own note at
-        // html.launcher-hidden.
+        // Applied before first paint (inline, in <head>) so panel show/hide
+        // state never flashes the wrong layout on a fresh page load - a
+        // full server-rendered page reload per navigation, not an SPA.
+        // CLAUDE-P40-E3A: Lists is reviewer-wide (one panel, every
+        // authenticated page); Toolbox stays per-Project (its content is
+        // Workspace-specific even though its container now renders on
+        // every page - see .workspace-pane-toolbox below).
         try {
             if (window.localStorage.getItem('beehive:panel:launcher') === 'hidden') {
                 document.documentElement.classList.add('launcher-hidden');
             }
+            {% if project_id is defined %}
+            if (window.localStorage.getItem('beehive:panel:toolbox:{{ project_id }}') === 'hidden') {
+                document.documentElement.classList.add('toolbox-hidden');
+            }
+            {% endif %}
         } catch (e) { /* localStorage unavailable - default to shown */ }
     </script>
     {% block extra_head %}{% endblock %}
@@ -28,19 +32,13 @@
     <div class="blueprint-grid"></div>
 
     <div class="app-shell">
-        {# ---------------- Application-wide top bar (CLAUDE-P40-E2B1, Section F) ----
-           Moved here from case_workspace.html (was Workspace-page-local) so
-           it genuinely spans the full authenticated shell - Launcher Lists,
-           Display, Toolbox - on every authenticated page, not just the
-           Workspace. Never rendered for the standalone auth shell (login/
-           forgot-password/reset-password use templates/auth_shell.html,
-           which does not extend this file at all - see that template's own
-           isolation note). Display Layout / Toolbox toggle / document
-           context only mean anything inside an open Project's Workspace
-           (project_id/workspace are real render-context variables
-           show_workspace passes to case_workspace.html, never re-derived
-           here), so they're gated on that the same way the old side-rail's
-           per-project section already was. #}
+        {# ---------------- Application-wide top bar (CLAUDE-P40-E3A) ---------------
+           Spans the complete application width above LISTS | DISPLAY | TOOLBOX
+           and above CHAT - the one shell every authenticated page shares.
+           Lists/Toolbox no longer have discrete toggle buttons here (Section
+           7): the panel-dividing lines themselves are the collapse controls
+           now (see .panel-divider below) - removing the redundant buttons
+           this replaces. #}
         {% if authenticated %}
         <div class="workspace-topbar">
             <div class="workspace-topbar-identity">
@@ -55,40 +53,73 @@
                     <span class="workspace-topbar-sep" aria-hidden="true">/</span>
                     <span class="workspace-topbar-doc">{{ selected_source.name }}</span>
                     {% if selected_source.removed_at %}<span class="workspace-topbar-badge">removed</span>{% endif %}
-                    {% elif directory_view %}
+                    {% elif directory_view == 'overview' %}
                     <span class="workspace-topbar-sep" aria-hidden="true">/</span>
-                    <span class="workspace-topbar-doc">{{ directory_view|capitalize }}</span>
+                    <span class="workspace-topbar-doc">Overview</span>
                     {% endif %}
                 </span>
                 {% endif %}
             </div>
             <div class="workspace-topbar-controls">
-                <button type="button" id="launcher-toggle-btn" class="workspace-topbar-btn" aria-expanded="true" aria-controls="launcher-panel">Lists</button>
-
                 {% if project_id is defined and workspace is defined %}
+                {# ---------------- Display-layout control (CLAUDE-P40-E3A, Section 6) ----
+                   Replaces the old single/side-by-side/stacked/grid preset
+                   menu with a genuinely dynamic count: an orientation choice
+                   (vertical/horizontal divisions), a numeric quantity with
+                   permanently visible increment/decrement (never hidden
+                   behind a text field only), and an explicit Apply - nothing
+                   here silently re-renders on every keystroke. 6 is the
+                   practical ceiling (static/js/case_workspace.js's own
+                   MAX_DISPLAY_DIVISIONS): past 6 simultaneous divisions a
+                   typical 1280-1920px viewport gives each one under ~200px
+                   in the vertical orientation, too narrow to usefully read
+                   an architectural drawing or document - a real usability
+                   floor, not a decorative round number. #}
                 <details class="workspace-layout-menu" id="workspace-layout-menu">
                     <summary class="workspace-topbar-btn workspace-layout-summary">Display Layout</summary>
                     <div class="workspace-layout-options" role="group" aria-label="Display Layout">
-                        <button type="button" class="workspace-layout-option" data-display-layout="single">Single</button>
-                        <button type="button" class="workspace-layout-option" data-display-layout="side-by-side">Side by side</button>
-                        <button type="button" class="workspace-layout-option" data-display-layout="stacked">Stacked</button>
-                        <button type="button" class="workspace-layout-option" data-display-layout="grid">Four-panel grid</button>
+                        <div class="workspace-layout-orientation" role="radiogroup" aria-label="Division direction">
+                            <button type="button" class="workspace-layout-option" id="display-orientation-vertical" data-display-orientation="vertical" aria-pressed="true">Vertical divisions</button>
+                            <button type="button" class="workspace-layout-option" id="display-orientation-horizontal" data-display-orientation="horizontal" aria-pressed="false">Horizontal divisions</button>
+                        </div>
+                        <div class="workspace-layout-quantity">
+                            <button type="button" class="workspace-layout-stepper" id="display-quantity-decrement" aria-label="Decrease number of Displays">&minus;</button>
+                            <span class="workspace-layout-quantity-value" id="display-quantity-value" aria-live="polite">1</span>
+                            <button type="button" class="workspace-layout-stepper" id="display-quantity-increment" aria-label="Increase number of Displays">+</button>
+                        </div>
+                        <button type="button" class="workspace-layout-apply" id="display-layout-apply">Apply</button>
                     </div>
                 </details>
 
-                <button type="button" id="toolbox-toggle-btn" class="workspace-topbar-btn" aria-expanded="true" aria-controls="workspace-toolbox-panel">Toolbox</button>
+                {# ---------------- Appearance menu (CLAUDE-P40-E3A, Section 10) ----------
+                   Applies the SAME existing presentation choice (the plain/
+                   de-tinted surface already established for Display since
+                   P40-E2B) independently to each region - never a new color,
+                   never a Project-record write, reviewer-specific
+                   localStorage like every other presentation preference on
+                   this page. #}
+                <details class="workspace-appearance-menu" id="workspace-appearance-menu">
+                    <summary class="workspace-topbar-btn">Appearance</summary>
+                    <div class="workspace-appearance-options" role="group" aria-label="Appearance">
+                        <label class="workspace-appearance-option"><input type="checkbox" data-appearance-target="lists"> Lists</label>
+                        <label class="workspace-appearance-option"><input type="checkbox" data-appearance-target="display"> Display</label>
+                        <label class="workspace-appearance-option"><input type="checkbox" data-appearance-target="toolbox"> Toolbox</label>
+                        <label class="workspace-appearance-option"><input type="checkbox" data-appearance-target="chat"> Chat</label>
+                    </div>
+                </details>
                 {% endif %}
 
-                <details class="workspace-topbar-overflow" id="workspace-overflow-menu">
-                    <summary class="workspace-topbar-btn workspace-overflow-summary" aria-label="More actions">&hellip;</summary>
-                    <div class="workspace-overflow-options">
-                        {% if project_id is defined and workspace is defined %}
-                        <button type="button" id="collapse-all-btn" class="workspace-overflow-item">Collapse All</button>
-                        {% if active_case or selected_source or directory_view %}
-                        <a class="workspace-overflow-item" href="{{ url_for('workspace.show_workspace', project_id=project_id) }}">&larr; Back to Project</a>
-                        {% endif %}
-                        {% endif %}
-                        <a class="workspace-overflow-item" href="{{ url_for('portal.removed_projects') }}">Removed Projects</a>
+                {# ---------------- User three-dot menu (CLAUDE-P40-E3A, Section 3) -------
+                   Username + Sign out (its child) live here now, not the
+                   Lists panel's own identity block - Security stays in
+                   Lists per the explicit instruction not to move it. #}
+                <details class="workspace-user-menu" id="workspace-user-menu">
+                    <summary class="workspace-topbar-btn workspace-user-summary" aria-label="Account menu">
+                        {% if current_username %}<span class="workspace-user-name">{{ current_username }}</span>{% endif %}
+                        <span aria-hidden="true">&hellip;</span>
+                    </summary>
+                    <div class="workspace-user-options" role="group" aria-label="Account">
+                        <a class="workspace-overflow-item" href="{{ url_for('portal.logout') }}">Sign out</a>
                     </div>
                 </details>
             </div>
@@ -97,49 +128,135 @@
 
         <div class="app-shell-body">
         {% if authenticated %}
-        {# ---------------- The one left launcher panel (CLAUDE-P40-E2B1A) ----------
-           A root launcher, not an expandable navigation tree (Section H's
-           own interaction rule): every one of its entries is a top-level
-           launcher only - Project names, and an open Project's own
-           Documents/Investigations/Chats, are never listed inline here.
-           Clicking "Projects" projects the authorized Project directory
-           into the main content area (portal.projects_list, already
-           extends this same shell); clicking a Project projects THAT
-           Project's own Documents/Investigations/Chats branch-nav into
-           Display instead (see case_workspace.html's own note at the top
-           of the Display division) - recursive projection, never a second
-           copy of the hierarchy duplicated in this panel. This is the
-           single physical left panel for the whole authenticated
-           application; the old per-Workspace .workspace-pane-lists column
-           is gone (Section E). #}
+        {# ---------------- The one left Lists panel (CLAUDE-P40-E3A) ---------------
+           Product-owner resolution (Section 2 of this stage's own prompt):
+           this IS a recursive hierarchy now, superseding P40-E2B1A's pure-
+           root-launcher rule - a deliberate reversal, not a regression. One
+           physical panel still; no second navigation panel; Display never
+           re-lists what this panel already lists (Section 4/5).
+
+           Only the currently OPEN Project's own branch (Documents/
+           Investigations/RFIs/Chats) expands to real child names - every
+           other Project row is a plain navigation leaf into its own
+           Workspace, where ITS branch then becomes the expandable one. This
+           is a deliberate, documented simplification: expanding a Project
+           you are not currently viewing would need its data fetched without
+           navigating there, which this app's classic form-POST/GET,
+           no-client-build, no-fetch-layer architecture (routes/workspace.py's
+           own module docstring) does not support - see this stage's
+           completion report for the reasoning in full. #}
         <nav class="launcher-panel" id="launcher-panel" aria-label="Primary">
             <div class="launcher-panel-body">
-                <div class="launcher-section">
-                    {# "active" whenever anywhere inside the Projects/
-                       Workspace subtree is open, not only on the literal
-                       /projects URL - this is the root launcher for that
-                       whole branch, and stays highlighted for as long as
-                       any of its descendants (a Project, its Documents/
-                       Investigations/Chats, an open Investigation) are. #}
-                    <a class="launcher-heading{% if request.path == url_for('portal.projects_list') or project_id is defined %} active{% endif %}" href="{{ url_for('portal.projects_list') }}">Projects</a>
+                {% set projects_open = project_id is defined or request.path == url_for('portal.projects_list') %}
+                <ul class="tree" data-tree-root>
+                    <li class="tree-node" data-tree-node>
+                        <button type="button" class="tree-toggle launcher-heading{% if projects_open %} active{% endif %}" data-tree-parent aria-expanded="{{ 'true' if projects_open else 'false' }}">
+                            <span class="tree-label">Projects</span>
+                        </button>
+                        <ul class="tree-children"{% if projects_open %} data-tree-open{% endif %}>
+                            {% for p in nav_recent_projects %}
+                            {% if project_id is defined and project_id == p.project_id %}
+                            {# ---------------- The active Project's own real branch ------------- #}
+                            <li class="tree-node" data-tree-node>
+                                <a class="tree-leaf launcher-link active" href="{{ url_for('workspace.show_workspace', project_id=p.project_id) }}">{{ p.display_name }}</a>
+                                <ul class="tree-children" data-tree-open>
+                                    <li class="tree-node" data-tree-node>
+                                        <a class="tree-leaf launcher-link{% if directory_view == 'overview' %} active{% endif %}" href="{{ url_for('workspace.show_workspace', project_id=project_id, view='overview') }}">Overview</a>
+                                    </li>
+                                    <li class="tree-node" data-tree-node>
+                                        <button type="button" class="tree-toggle launcher-link" data-tree-parent data-tree-owns="source" aria-expanded="{{ 'true' if selected_source else 'false' }}">
+                                            <span class="tree-label">Documents <span class="launcher-count">{{ active_sources|length }}</span></span>
+                                        </button>
+                                        <ul class="tree-children"{% if selected_source %} data-tree-open{% endif %}>
+                                            {% for s in active_sources %}
+                                            <li class="tree-node" data-tree-node>
+                                                {# CLAUDE-P40-E3A: the retired ?view=documents directory body used to
+                                                   show each Source's added-date inline; Section 4 forbids restoring
+                                                   that as a second visible directory in Display, but the provenance
+                                                   detail itself (Section 12: "current source-document provenance")
+                                                   is preserved here as a title tooltip rather than dropped outright. #}
+                                                <a class="tree-leaf launcher-link{% if selected_source and selected_source.id == s.id %} active{% endif %}" href="{{ url_for('workspace.show_workspace', project_id=project_id, source=s.id) }}" data-source-id="{{ s.id }}" title="Added {{ s.added_at }}">{{ s.name }}</a>
+                                            </li>
+                                            {% endfor %}
+                                        </ul>
+                                    </li>
+                                    <li class="tree-node" data-tree-node>
+                                        <button type="button" class="tree-toggle launcher-link" data-tree-parent data-tree-owns="case" aria-expanded="{{ 'true' if active_case else 'false' }}">
+                                            <span class="tree-label">Investigations <span class="launcher-count">{{ visible_cases|length }}</span></span>
+                                        </button>
+                                        <ul class="tree-children"{% if active_case %} data-tree-open{% endif %}>
+                                            {% for c in visible_cases %}
+                                            <li class="tree-node" data-tree-node>
+                                                <a class="tree-leaf launcher-link{% if active_case and active_case.id == c.id %} active{% endif %}" href="{{ url_for('workspace.show_workspace', project_id=project_id, case=c.id) }}">{{ c.title }}</a>
+                                            </li>
+                                            {% endfor %}
+                                        </ul>
+                                    </li>
+                                    {% if rfi_drafts_view %}
+                                    <li class="tree-node" data-tree-node>
+                                        <button type="button" class="tree-toggle launcher-link" data-tree-parent aria-expanded="false">
+                                            <span class="tree-label">RFIs <span class="launcher-count">{{ rfi_drafts_view|length }}</span></span>
+                                        </button>
+                                        <ul class="tree-children">
+                                            {# An RFI draft has no standalone content page of its own - it
+                                               lives inside the Investigation that owns it, visible in
+                                               Toolbox once that Investigation is open (existing,
+                                               unchanged behaviour). Selecting one here opens that
+                                               Investigation, honestly, rather than inventing a page that
+                                               doesn't exist. #}
+                                            {% for row in rfi_drafts_view %}
+                                            <li class="tree-node" data-tree-node>
+                                                <a class="tree-leaf launcher-link" href="{{ url_for('workspace.show_workspace', project_id=project_id, case=row.draft.case_id) }}">{{ row.draft.question_text[:60] }}{% if row.draft.question_text|length > 60 %}&hellip;{% endif %}</a>
+                                            </li>
+                                            {% endfor %}
+                                        </ul>
+                                    </li>
+                                    {% endif %}
+                                    {# Communications: omitted outright - no honest existing listing
+                                       exists anywhere in this codebase to show (CLAUDE-P40-E3A,
+                                       Section 4's own "only if an honest existing listing exists"
+                                       instruction; confirmed absent during CLAUDE-P40-E3-PLAN). #}
+                                    <li class="tree-node" data-tree-node>
+                                        <a class="tree-leaf launcher-link{% if directory_view is none and not active_case and not selected_source %} active{% endif %}" href="{{ url_for('workspace.show_workspace', project_id=project_id) }}">Chats</a>
+                                    </li>
+                                </ul>
+                            </li>
+                            {% else %}
+                            <li class="tree-node" data-tree-node>
+                                <a class="tree-leaf launcher-link" href="{{ url_for('workspace.show_workspace', project_id=p.project_id) }}">{{ p.display_name }}</a>
+                            </li>
+                            {% endif %}
+                            {% endfor %}
+                        </ul>
+                    </li>
                     {% if is_admin %}
-                    <a class="launcher-link launcher-new-project" href="{{ url_for('portal.upload') }}">+ New Project</a>
+                    {# portal.upload is @admin_required (routes/portal.py) - this leaf must
+                       never render for a non-admin reviewer (Section 4: "unauthorized...
+                       branches must never render"). #}
+                    <li class="tree-node" data-tree-node>
+                        <a class="tree-leaf launcher-link launcher-new-project" href="{{ url_for('portal.upload') }}">+ New Project</a>
+                    </li>
                     {% endif %}
-                </div>
-            </div>
-
-            <div class="launcher-identity">
-                {% if current_username %}<p class="launcher-identity-name">{{ current_username }}</p>{% endif %}
-                {% if is_admin %}
-                <a class="launcher-link" href="{{ url_for('security.department_home') }}">Security</a>
-                {% endif %}
-                <a class="launcher-link" href="{{ url_for('portal.logout') }}">Sign out</a>
+                    {# Global "Chats" root (cross-Project) omitted outright - no
+                       cross-Project conversation index exists anywhere in this
+                       codebase; only per-Project conversation does (see the
+                       Project branch above). Nothing honest to list here. #}
+                    <li class="tree-node" data-tree-node>
+                        <a class="tree-leaf launcher-link" href="{{ url_for('portal.removed_projects') }}">Removed Projects</a>
+                    </li>
+                    {% if is_admin %}
+                    <li class="tree-node" data-tree-node>
+                        <a class="tree-leaf launcher-link" href="{{ url_for('security.department_home') }}">Security</a>
+                    </li>
+                    {% endif %}
+                </ul>
             </div>
         </nav>
+        <button type="button" class="panel-divider panel-divider-lists" id="lists-divider" aria-expanded="true" aria-controls="launcher-panel" aria-label="Collapse Lists panel"></button>
         {% else %}
         <!-- True zero state (State 0 - Unauthenticated): the authenticated
-             shell (launcher panel, top bar, project/workspace controls) is
-             not rendered at all pre-auth, not merely hidden/blurred - see
+             shell (Lists panel, top bar, project/workspace controls) is not
+             rendered at all pre-auth, not merely hidden/blurred - see
              memory note project-entry-state-invariant. Only a minimal
              identity mark carries brand presence here. -->
         <div class="entry-shell-brand">
@@ -161,36 +278,237 @@
                 {% block content %}{% endblock %}
             </main>
         </div>
+
+        {% if project_id is defined and workspace is defined %}
+        <button type="button" class="panel-divider panel-divider-toolbox" id="toolbox-divider" aria-expanded="true" aria-controls="workspace-toolbox-panel" aria-label="Collapse Toolbox"></button>
+        {# ---------------- The one right Toolbox (CLAUDE-P40-E3A, Section 8) --------
+           Shell-owned markup (one definition, one place), but only actually
+           present within an open, ACTIVE Workspace - "workspace is defined"
+           (not just project_id) is the same gate the top bar's Display-
+           layout/Appearance controls already use, deliberately narrower than
+           the Lists hierarchy's own project_id-only gate: project_removed.html
+           (the removed-Project tombstone, Section 12's "removed-state
+           containment") passes project_id but never workspace, so this
+           correctly stays absent there too, not just on the dashboard/
+           Security/uploads pages. Content comes from {% block toolbox %},
+           filled in only by case_workspace.html. #}
+        <aside class="workspace-pane-toolbox" id="workspace-toolbox-panel">
+            {% block toolbox %}{% endblock %}
+        </aside>
+        {% endif %}
         </div>
+
+        {% if project_id is defined and workspace is defined %}
+        {# ---------------- The one Chat region (CLAUDE-P40-E3A, Section 9) ----------
+           Full application width, beneath Lists/Display/Toolbox, the bottom
+           row of the shell - present only within an open, ACTIVE Workspace
+           (same "workspace is defined" reasoning as Toolbox above - a
+           sticky, height-bearing bar has no honest reason to occupy space
+           on the dashboard/Security/uploads pages OR a removed-Project
+           tombstone, none of which have real conversation context). Content
+           comes from {% block chat %}, filled in only by case_workspace.html. #}
+        <div class="chat-region" id="chat-region">
+            {% block chat %}{% endblock %}
+        </div>
+        {% endif %}
     </div>
 
     <script>
+        // CLAUDE-P40-E3A, Section 7: the panel-dividing lines are the
+        // collapse controls - a plain class toggle on <html>, never DOM
+        // removal (every form/draft/scroll position inside a hidden panel
+        // survives). Lists is reviewer-wide; Toolbox stays per-Project.
         (function () {
-            var toggle = document.getElementById('launcher-toggle-btn');
             var html = document.documentElement;
-            if (!toggle) return;
-            function applyState(hidden) {
-                toggle.setAttribute('aria-expanded', hidden ? 'false' : 'true');
-                toggle.setAttribute('aria-label', hidden ? 'Show Lists' : 'Hide Lists');
+
+            function setUpDivider(btn, hiddenClass, storageKey, labelBase) {
+                if (!btn) return;
+                function applyState(hidden) {
+                    btn.setAttribute('aria-expanded', hidden ? 'false' : 'true');
+                    btn.setAttribute('aria-label', (hidden ? 'Show ' : 'Collapse ') + labelBase);
+                }
+                function setHidden(hidden) {
+                    html.classList.toggle(hiddenClass, hidden);
+                    applyState(hidden);
+                    try { window.localStorage.setItem(storageKey, hidden ? 'hidden' : 'shown'); } catch (e) { /* ignore */ }
+                }
+                applyState(html.classList.contains(hiddenClass));
+                btn.addEventListener('click', function () {
+                    setHidden(!html.classList.contains(hiddenClass));
+                });
+                return setHidden;
             }
-            function setHidden(hidden) {
-                html.classList.toggle('launcher-hidden', hidden);
-                applyState(hidden);
-                try { window.localStorage.setItem('beehive:panel:launcher', hidden ? 'hidden' : 'shown'); } catch (e) { /* ignore */ }
+
+            var listsDivider = document.getElementById('lists-divider');
+            var toolboxDivider = document.getElementById('toolbox-divider');
+            var setListsHidden = setUpDivider(listsDivider, 'launcher-hidden', 'beehive:panel:launcher', 'Lists panel');
+            {% if project_id is defined %}
+            var setToolboxHidden = setUpDivider(toolboxDivider, 'toolbox-hidden', 'beehive:panel:toolbox:{{ project_id }}', 'Toolbox');
+            {% endif %}
+
+            // Narrow screens: only one overlay should obstruct Display at a
+            // time (Section 11) - opening one closes the other rather than
+            // stacking two drawers.
+            function onNarrow() { return window.matchMedia('(max-width: 640px)').matches; }
+            if (listsDivider) {
+                listsDivider.addEventListener('click', function () {
+                    if (onNarrow() && !html.classList.contains('launcher-hidden') && setToolboxHidden) {
+                        setToolboxHidden(true);
+                    }
+                });
             }
-            applyState(html.classList.contains('launcher-hidden'));
-            toggle.addEventListener('click', function () {
-                setHidden(!html.classList.contains('launcher-hidden'));
-            });
-            // CLAUDE-P40-E2B1, Section G: on narrow screens the launcher
-            // panel renders as an overlay drawer (main.css's own
-            // max-width: 640px rules) - Escape closes it, the same
-            // keyboard affordance the Toolbox drawer (static/js/
-            // case_workspace.js) already supports.
+            if (toolboxDivider) {
+                toolboxDivider.addEventListener('click', function () {
+                    if (onNarrow() && !html.classList.contains('toolbox-hidden')) {
+                        setListsHidden(true);
+                    }
+                });
+            }
+
             document.addEventListener('keydown', function (e) {
                 if (e.key !== 'Escape') return;
-                if (window.matchMedia('(min-width: 641px)').matches) return;
-                if (!html.classList.contains('launcher-hidden')) setHidden(true);
+                if (!onNarrow()) return;
+                if (listsDivider && !html.classList.contains('launcher-hidden')) setListsHidden(true);
+                if (toolboxDivider && setToolboxHidden && !html.classList.contains('toolbox-hidden')) setToolboxHidden(true);
+            });
+        })();
+    </script>
+    <script>
+        // CLAUDE-P40-E3A: the recursive Lists hierarchy - hover temporarily
+        // reveals a parent's children; clicking pins them open (persists
+        // regardless of hover); clicking the pinned parent again collapses
+        // it AND, if the collapsed branch owns the query param currently
+        // driving Display (?source=/?case=), navigates to clear it - Section
+        // 4's "collapsing a parent clears an active descendant from
+        // Display." Leaves (plain <a>) always just navigate normally.
+        (function () {
+            var root = document.querySelector('[data-tree-root]');
+            if (!root) return;
+
+            function isDescendantActive(node) {
+                return !!node.querySelector('.tree-leaf.active');
+            }
+
+            root.querySelectorAll('[data-tree-parent]').forEach(function (toggle) {
+                var node = toggle.closest('[data-tree-node]');
+                var children = node.querySelector(':scope > .tree-children');
+                if (!children) return;
+                var pinned = children.hasAttribute('data-tree-open');
+
+                function setOpen(open) {
+                    children.setAttribute('data-tree-open', '');
+                    if (!open) children.removeAttribute('data-tree-open');
+                    toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+                }
+                setOpen(pinned);
+
+                node.addEventListener('mouseenter', function () {
+                    if (!pinned) setOpen(true);
+                });
+                node.addEventListener('mouseleave', function () {
+                    if (!pinned) setOpen(false);
+                });
+
+                toggle.addEventListener('click', function () {
+                    pinned = !pinned;
+                    setOpen(pinned);
+                    if (!pinned && isDescendantActive(node)) {
+                        var owns = toggle.getAttribute('data-tree-owns');
+                        var url = new URL(window.location.href);
+                        if (owns) {
+                            url.searchParams.delete(owns);
+                        } else {
+                            url.searchParams.delete('source');
+                            url.searchParams.delete('case');
+                            url.searchParams.delete('view');
+                        }
+                        window.location.href = url.toString();
+                    }
+                });
+            });
+        })();
+    </script>
+    <script>
+        // CLAUDE-P40-E3A, Section 3/6: close the three top-bar <details>
+        // menus (Display Layout, Appearance, Account) on outside click or
+        // Escape - the native <details> element has no such behaviour on
+        // its own, and leaving one open after a click elsewhere would sit
+        // on top of Display indefinitely.
+        (function () {
+            var menus = Array.prototype.slice.call(
+                document.querySelectorAll('.workspace-layout-menu, .workspace-appearance-menu, .workspace-user-menu')
+            );
+            if (!menus.length) return;
+
+            document.addEventListener('click', function (e) {
+                menus.forEach(function (menu) {
+                    if (menu.open && !menu.contains(e.target)) menu.open = false;
+                });
+            });
+            document.addEventListener('keydown', function (e) {
+                if (e.key !== 'Escape') return;
+                menus.forEach(function (menu) {
+                    if (menu.open) {
+                        menu.open = false;
+                        menu.querySelector('summary').focus();
+                    }
+                });
+            });
+        })();
+
+        // CLAUDE-P40-E3A, Section 6: route a Document leaf click to
+        // whichever Display division is the current active target.
+        // Division 0 (the default target) keeps its ordinary real
+        // navigation untouched - window.ArchioskDisplay only exists on a
+        // Workspace page with a Display to target, and only intercepts
+        // when a NON-zero division is the active target. Clicking the
+        // Document already showing in that division clears it instead
+        // (the same "click the active leaf again to clear" rule Section 4
+        // states for Lists, applied to a targeted division).
+        (function () {
+            var root = document.querySelector('[data-tree-root]');
+            if (!root) return;
+            root.addEventListener('click', function (e) {
+                var link = e.target.closest('a[data-source-id]');
+                if (!link || !root.contains(link)) return;
+                if (!window.ArchioskDisplay) return;
+                var target = window.ArchioskDisplay.getActiveTarget();
+                if (!target) return; // target 0: let the normal navigation happen
+                e.preventDefault();
+                var sourceId = link.getAttribute('data-source-id');
+                if (window.ArchioskDisplay.getDivisionSource(target) === sourceId) {
+                    window.ArchioskDisplay.clearDivision(target);
+                } else {
+                    window.ArchioskDisplay.populateDivision(target, sourceId);
+                }
+            });
+        })();
+
+        // CLAUDE-P40-E3A, Section 10: Appearance menu - applies the
+        // existing plain/de-tinted-vs-tinted presentation choice
+        // independently per region. Reviewer/device presentation state
+        // only (localStorage), never a Project-record write.
+        (function () {
+            var targets = {
+                lists: document.querySelector('.launcher-panel'),
+                display: document.querySelector('.app-main'),
+                toolbox: document.querySelector('.workspace-pane-toolbox'),
+                chat: document.querySelector('.chat-region'),
+            };
+            document.querySelectorAll('[data-appearance-target]').forEach(function (checkbox) {
+                var key = checkbox.getAttribute('data-appearance-target');
+                var el = targets[key];
+                if (!el) return;
+                var storageKey = 'beehive:appearance:' + key;
+                var stored = null;
+                try { stored = window.localStorage.getItem(storageKey); } catch (e) { /* ignore */ }
+                var tinted = stored === 'tinted';
+                el.classList.toggle('appearance-tinted', tinted);
+                checkbox.checked = tinted;
+                checkbox.addEventListener('change', function () {
+                    el.classList.toggle('appearance-tinted', checkbox.checked);
+                    try { window.localStorage.setItem(storageKey, checkbox.checked ? 'tinted' : 'plain'); } catch (e) { /* ignore */ }
+                });
             });
         })();
     </script>

@@ -142,7 +142,10 @@ class ProjectHomeBrowserDefectTests(unittest.TestCase):
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
 
     def _page(self):
-        return self.client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
+        # CLAUDE-P40-E3A, Section 5: the bare workspace URL is blank by
+        # default now - this Overview-scoped content needs the explicit
+        # ?view=overview leaf.
+        return self.client.get(f"/projects/{self.project_id}/workspace?view=overview").get_data(as_text=True)
 
     # -- 3.3: View-all controls actually resolve --------------------------
 

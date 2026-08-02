@@ -154,14 +154,16 @@ class ProjectsDirectoryRedesignTests(unittest.TestCase):
             shutil.rmtree(empty_dir, ignore_errors=True)
 
     def test_projects_heading_present_and_highlighted_in_launcher_panel(self):
-        # CLAUDE-P40-E2B1: the old expand/collapse-only "Projects" tree
-        # node is superseded - the launcher panel's "Projects" heading is
-        # now a real, navigating link (Section C), highlighted as active
-        # while viewing the directory it opens.
+        # SUPERSEDED (CLAUDE-P40-E3A, Section 2): "Projects" is the
+        # recursive tree's own root PARENT (a <button> expand/collapse
+        # toggle, matching every other parent - "Documents"/
+        # "Investigations" - in the hierarchy), not a navigating <a>
+        # anymore. It's still highlighted while viewing the directory
+        # (pinned open, "active" class on the toggle).
         response = self.client.get("/projects")
         body = response.get_data(as_text=True)
 
-        self.assertIn('<a class="launcher-heading active" href="/projects">Projects</a>', body)
+        self.assertIn('<button type="button" class="tree-toggle launcher-heading active" data-tree-parent aria-expanded="true">', body)
 
 
 if __name__ == "__main__":

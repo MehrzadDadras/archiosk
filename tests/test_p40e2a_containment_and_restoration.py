@@ -125,8 +125,18 @@ class RemovedProjectContainmentTests(_BaseTestCase):
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
         self.assertIn("Project removed", body)
         self.assertIn("Restore Project", body)
-        # the active Workspace's own distinctive content must not render
-        self.assertNotIn("workspace-pane-toolbox", body)
+        # the active Workspace's own distinctive content must not render -
+        # BUCKET-B FIX (CLAUDE-P40-E3A): base.html's Toolbox/Chat shell
+        # containers were gated on bare "project_id is defined", which
+        # project_removed.html also sets - narrowed to "project_id is
+        # defined and workspace is defined" (project_removed.html never
+        # passes workspace) so the containers themselves are absent here
+        # too, matching Section 12's "removed-state containment". Checked
+        # against the actual container tag, not a bare substring - the
+        # appearance-menu script's own querySelector('.workspace-pane-
+        # toolbox') is harmless unconditional JS, not a containment leak.
+        self.assertNotIn('id="workspace-toolbox-panel"', body)
+        self.assertNotIn('id="chat-region"', body)
         self.assertNotIn("Sources (", body)
 
     def test_chat_posting_blocked(self):
@@ -289,7 +299,7 @@ class RemovedDocumentContainmentTests(_BaseTestCase):
         store.remove_source(workspace, source_id=source_id, actor="p40e2a_owner", actor_role="admin")
 
         client = self._client_as("p40e2a_owner", 1)
-        body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
+        body = client.get(f"/projects/{self.project_id}/workspace?view=overview").get_data(as_text=True)
         # the pre-existing Requirement citing the removed Source must
         # still be present and renderable, not silently dropped/broken
         self.assertIn("Some clause", body)

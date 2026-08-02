@@ -99,7 +99,7 @@ class EndToEndWorkflowTests(unittest.TestCase):
 
     def test_workspace_shows_unpromoted_requirement_items(self):
         self._create_case()
-        response = self.client.get(f"/projects/{self.project_id}/workspace")
+        response = self.client.get(f"/projects/{self.project_id}/workspace?view=overview")
         body = response.get_data(as_text=True)
         self.assertIn(self.item_a.text, body)
         self.assertIn(self.item_b.text, body)
@@ -130,7 +130,7 @@ class EndToEndWorkflowTests(unittest.TestCase):
             data={"source_id": source_id}, follow_redirects=True,
         )
 
-        response = self.client.get(f"/projects/{self.project_id}/workspace?case={case['id']}")
+        response = self.client.get(f"/projects/{self.project_id}/workspace?view=overview")
         body = response.get_data(as_text=True)
         # item_b is still unpromoted and still listed; item_a's own RequirementItem
         # id should no longer appear as an unpromoted candidate.
@@ -184,7 +184,7 @@ class EndToEndWorkflowTests(unittest.TestCase):
             follow_redirects=True,
         )
 
-        response = self.client.get(f"/projects/{self.project_id}/workspace?case={case['id']}")
+        response = self.client.get(f"/projects/{self.project_id}/workspace?view=overview")
         body = response.get_data(as_text=True)
         self.assertIn("Satisfied", body)
 
@@ -192,7 +192,7 @@ class EndToEndWorkflowTests(unittest.TestCase):
 
     def test_governance_history_visible_in_workspace(self):
         case = self._create_case()
-        response = self.client.get(f"/projects/{self.project_id}/workspace?case={case['id']}")
+        response = self.client.get(f"/projects/{self.project_id}/workspace?view=overview")
         body = response.get_data(as_text=True)
         self.assertIn("case created", body)  # event_type "case_created", humanized by the template
 
@@ -203,7 +203,7 @@ class EndToEndWorkflowTests(unittest.TestCase):
             f"/projects/{self.project_id}/workspace/cases/{case['id']}/requirement-items/{self.item_a.id}/promote",
             data={"source_id": source_id}, follow_redirects=True,
         )
-        response = self.client.get(f"/projects/{self.project_id}/workspace?case={case['id']}")
+        response = self.client.get(f"/projects/{self.project_id}/workspace?view=overview")
         body = response.get_data(as_text=True)
         self.assertIn("requirement item promoted", body)
 

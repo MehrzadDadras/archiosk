@@ -275,7 +275,7 @@ class GoNoGoRouteTests(_BaseWorkspaceTestCase):
 
     def test_navigation_reflects_capability_resolution_for_go_no_go(self):
         document = self._ingest(b"content", "a.txt", CLIENT_OWNER, "GNG Nav")
-        page = self.client.get(f"/projects/{document.project_id}/workspace")
+        page = self.client.get(f"/projects/{document.project_id}/workspace?view=overview")
         self.assertIn(b"Record a Go/No-Go decision", page.data)
         # Client-side stage vocabulary is offered, Proponent-only stages are not.
         self.assertIn(b'value="release_rfp"', page.data)
@@ -324,7 +324,7 @@ class GoNoGoRouteTests(_BaseWorkspaceTestCase):
         document = self._ingest(b"content", "a.txt", CLIENT_OWNER, "GNG RO Form Hidden")
         reader_client = self._read_only_client(document.project_id, "cap_admin")
 
-        page = reader_client.get(f"/projects/{document.project_id}/workspace")
+        page = reader_client.get(f"/projects/{document.project_id}/workspace?view=overview")
         self.assertNotIn(b"Record a Go/No-Go decision", page.data)
         self.assertIn(b"Only an admin can record a Go", page.data)
 

@@ -301,14 +301,14 @@ class ProjectBriefingRouteTests(unittest.TestCase):
             sess["username"] = "owner1"
             sess["role"] = "admin"
         self.store = CaseWorkspaceStore(self.tmp_dir)
-        self.client.get(f"/projects/{self.project_id}/workspace")
+        self.client.get(f"/projects/{self.project_id}/workspace?view=overview")
         self.store.set_project_owner(self.store.get(self.project_id), owner="owner1", actor="owner1")
 
     def tearDown(self):
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
 
     def _page(self):
-        return self.client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
+        return self.client.get(f"/projects/{self.project_id}/workspace?view=overview").get_data(as_text=True)
 
     def test_briefing_is_the_first_substantial_content_on_project_home(self):
         body = self._page()
@@ -447,14 +447,14 @@ class ProjectBriefingLifecycleTests(unittest.TestCase):
             sess["username"] = "owner1"
             sess["role"] = "admin"
         self.store = CaseWorkspaceStore(self.tmp_dir)
-        self.client.get(f"/projects/{self.project_id}/workspace")
+        self.client.get(f"/projects/{self.project_id}/workspace?view=overview")
         self.store.set_project_owner(self.store.get(self.project_id), owner="owner1", actor="owner1")
 
     def tearDown(self):
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
 
     def _page(self):
-        return self.client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
+        return self.client.get(f"/projects/{self.project_id}/workspace?view=overview").get_data(as_text=True)
 
     def _activate_baseline(self, decision):
         from services.security_governance import CONTROL_SOURCE_ARCHIOSK_DEFAULT, SecurityGovernanceStore
@@ -743,14 +743,14 @@ class ProjectBriefingPageHierarchyTests(unittest.TestCase):
             sess["username"] = "owner1"
             sess["role"] = "admin"
         self.store = CaseWorkspaceStore(self.tmp_dir)
-        self.client.get(f"/projects/{self.project_id}/workspace")
+        self.client.get(f"/projects/{self.project_id}/workspace?view=overview")
         self.store.set_project_owner(self.store.get(self.project_id), owner="owner1", actor="owner1")
 
     def tearDown(self):
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
 
     def _page(self):
-        return self.client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
+        return self.client.get(f"/projects/{self.project_id}/workspace?view=overview").get_data(as_text=True)
 
     def test_technical_preview_is_capped_at_five_with_a_total_count(self):
         body = self._page()

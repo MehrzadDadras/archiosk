@@ -46,11 +46,13 @@
        shared/collaborative, archived read-only, derived) via data, not
        four duplicated files - the reference example other families
        should match, not a gap. Its geometry is also explicitly
-       space-driven, not just state-driven - see .case-workspace below:
-       named grid areas keep the reference/navigation pane last in
-       priority at every width, instead of a single "collapse to one
-       column" breakpoint dumping eight accordions above the actual
-       conversation.
+       space-driven, not just state-driven - see .app-shell-body/
+       .display-divisions below (CLAUDE-P40-E3A: this used to be a named-
+       grid-area .case-workspace, now a flex row of Lists|Display|Toolbox
+       plus a dynamic-count Display grid inside it): panel-dividers keep
+       the reference/navigation panes collapsible at every width, instead
+       of a single "collapse to one column" breakpoint dumping eight
+       accordions above the actual conversation.
      - Hub (case_workspace.html, no case open / "Project Home"):
        single column, conversational composer, light disclosure.
    Deliberately NOT templated: the legacy dashboard (dashboard.html)
@@ -156,6 +158,54 @@ a:focus-visible, button:focus-visible, input:focus-visible {
     top: 0;
     height: 100vh;
 }
+/* CLAUDE-P40-E3A, Section 9: Chat is now a full-width row beneath Lists/
+   Display/Toolbox (not confined to the Display column the way the old
+   .case-workspace-scoped dock was) - on a Workspace page (.chat-region
+   present) Lists' own sticky-fill height must stop above the sticky
+   Chat bar, or the two would visually overlap at the bottom of the
+   viewport while scrolled. 220px matches case_workspace.js's own
+   COMPACT_HEIGHT default so there's no flash between this CSS fallback
+   and the JS-applied value on load. Non-Workspace pages have no
+   .chat-region at all, so the base 100vh rule above stands unchanged
+   there. */
+.app-shell:has(> .chat-region) .launcher-panel {
+    height: calc(100vh - var(--chat-height, 220px));
+}
+
+/* CLAUDE-P40-E3A, Section 7: the panel-dividing lines themselves are the
+   Lists/Toolbox collapse controls (base.html's own script), replacing
+   the old top-bar toggle buttons - a thin, full-height clickable seam
+   between panels, not a labeled button. */
+.panel-divider {
+    flex-shrink: 0;
+    width: 9px;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    background: transparent;
+    position: relative;
+}
+.panel-divider::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 4px;
+    width: 1px;
+    background: var(--border);
+}
+.panel-divider:hover::before,
+.panel-divider:focus-visible::before {
+    background: var(--machine-blue);
+    width: 2px;
+    left: 3.5px;
+}
+.panel-divider[aria-expanded="false"] {
+    width: 14px;
+}
+.panel-divider[aria-expanded="false"]::before {
+    left: 6px;
+}
 /* CLAUDE-P40-E2B1, Section B: one show/hide control (the top bar's
    "Lists" button), a reviewer-wide localStorage preference (not
    per-Project like the old per-Workspace Lists toggle it replaces -
@@ -197,6 +247,78 @@ html.launcher-hidden .launcher-panel { display: none; }
 .launcher-link:hover { background: var(--surface-hover); color: var(--text-primary); text-decoration: none; }
 .launcher-link.active { background: var(--surface-selected); color: var(--text-primary); }
 .launcher-new-project { color: var(--machine-blue); }
+
+/* CLAUDE-P40-E3A, Section 4: the recursive Lists hierarchy. .tree-toggle
+   (a <button>, for parents) and .tree-leaf (an <a>, for leaves) both
+   also carry .launcher-heading/.launcher-link respectively for their
+   text styling (color/padding/hover/active, above) - this block only
+   adds what's specific to the tree structure itself: reset, nesting
+   indentation, the hover-reveal/pin-open expand indicator, and the
+   count badge. Indentation is recursive and open-ended (each nested
+   .tree-children adds its own left padding) rather than hardcoded per
+   level, since the hierarchy's depth is not fixed. */
+.tree, .tree-children {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+.tree-children {
+    padding-left: 0.75rem;
+}
+.tree-children:not([data-tree-open]) {
+    display: none;
+}
+.tree-node { margin: 0; }
+.tree-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    background: none;
+    border: none;
+    cursor: pointer;
+    font: inherit;
+    text-align: left;
+}
+.tree-toggle .tree-label {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.tree-toggle .tree-label::before {
+    content: "";
+    flex-shrink: 0;
+    width: 0.5em;
+    height: 0.5em;
+    border-right: 1.5px solid currentColor;
+    border-bottom: 1.5px solid currentColor;
+    transform: rotate(-45deg);
+    transition: transform 0.12s ease;
+    opacity: 0.6;
+}
+.tree-toggle[aria-expanded="true"] .tree-label::before {
+    transform: rotate(45deg);
+}
+.launcher-count {
+    font-variant-numeric: tabular-nums;
+    font-size: 0.72rem;
+    color: var(--text-metadata);
+    font-weight: 400;
+    text-transform: none;
+    letter-spacing: normal;
+}
+.tree-leaf.launcher-new-project { color: var(--machine-blue); }
+
+/* Appearance menu (Section 10): the existing plain/tinted presentation
+   choice, applied independently per region - --surface-secondary
+   (Limestone) is the token main.css's own header comment already
+   reserves for "nav surfaces, grouped controls", so this reuses an
+   existing meaning rather than introducing a new color. */
+.launcher-panel.appearance-tinted { background: var(--surface-secondary); }
 .launcher-identity {
     padding: 0.6rem 0.7rem 1rem;
     border-top: 1px solid var(--border);
@@ -905,17 +1027,22 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
     color: var(--text-primary);
     border-color: var(--border-strong);
 }
-/* The two dropdown menus (Display Layout, overflow) are real
-   interactive control surfaces, not decorative Display background -
-   the same exemption Section E already grants the composer/focus
+/* The top-bar dropdown menus (Display Layout, Appearance, Account) are
+   real interactive control surfaces, not decorative Display background
+   - the same exemption Section E already grants the composer/focus
    states/warnings; a bordered popover here is functional chrome, not
-   the thing Section E asks to de-tint. */
+   the thing Section E asks to de-tint. CLAUDE-P40-E3A: generalized from
+   the old two-menu (.workspace-layout-menu/.workspace-topbar-overflow)
+   set to three (.workspace-layout-menu/.workspace-appearance-menu/
+   .workspace-user-menu), all sharing the same popover idiom. */
 .workspace-layout-menu,
-.workspace-topbar-overflow {
+.workspace-appearance-menu,
+.workspace-user-menu {
     position: relative;
 }
 .workspace-layout-options,
-.workspace-overflow-options {
+.workspace-appearance-options,
+.workspace-user-options {
     position: absolute;
     top: calc(100% + 0.3rem);
     right: 0;
@@ -952,145 +1079,186 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
     color: var(--machine-blue);
     font-weight: 600;
 }
+.workspace-user-name {
+    font-weight: 600;
+    margin-right: 0.2rem;
+}
+
+/* Display Layout menu internals (CLAUDE-P40-E3A, Section 6): orientation
+   choice, a numeric stepper (never a bare text field), Apply - nothing
+   here re-renders on every keystroke, only on the explicit Apply click.
+   The same three controls are reused inside the per-division right-click
+   context menu (#display-context-menu) below. */
+.workspace-layout-orientation {
+    display: flex;
+    gap: 0.3rem;
+    margin-bottom: 0.3rem;
+}
+.workspace-layout-orientation .workspace-layout-option {
+    flex: 1;
+    text-align: center;
+}
+.workspace-layout-quantity {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.6rem;
+    padding: 0.3rem 0;
+}
+.workspace-layout-stepper {
+    font-family: var(--font-body);
+    font-size: 0.95rem;
+    width: 1.8rem;
+    height: 1.8rem;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    background: var(--surface-primary);
+    color: var(--text-primary);
+    cursor: pointer;
+}
+.workspace-layout-stepper:hover { background: var(--surface-hover); border-color: var(--border-strong); }
+.workspace-layout-quantity-value {
+    font-family: var(--font-body);
+    font-variant-numeric: tabular-nums;
+    font-size: 0.9rem;
+    min-width: 1.2rem;
+    text-align: center;
+}
+.workspace-layout-apply {
+    font-family: var(--font-body);
+    font-size: 0.82rem;
+    width: 100%;
+    padding: 0.4rem 0.5rem;
+    margin-top: 0.2rem;
+    border: 1px solid var(--border-strong);
+    border-radius: 3px;
+    background: transparent;
+    color: var(--text-primary);
+    cursor: pointer;
+}
+.workspace-layout-apply:hover { background: var(--surface-hover); }
+
+/* Appearance menu (Section 10): plain checkbox rows, one per region -
+   applies the SAME existing plain/tinted presentation choice
+   independently to Lists/Display/Toolbox/Chat, never a new color. */
+.workspace-appearance-option {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-family: var(--font-body);
+    font-size: 0.82rem;
+    color: var(--text-primary);
+    padding: 0.3rem 0.5rem;
+    cursor: pointer;
+}
 
 @media (max-width: 640px) {
     .workspace-topbar-context { max-width: 40vw; }
 }
 
 /* ============================================================
-   Workspace — Display | Toolbox, Chat beneath Display only
+   Workspace — Lists | Display | Toolbox, Chat full-width beneath
    ============================================================ */
-/* CLAUDE-P40-E2B1: the Lists column is eliminated (Section E) - the
-   application-wide launcher panel (base.html) is now the one left
-   panel, and project-wide reference material previously here lives
-   inside Display's own Project Home view instead (case_workspace.html).
-   This grid is now two columns: DISPLAY = the active work (an open
-   Investigation, a launcher-projected directory, a selected Document,
-   or Project Home). CHAT (#conversation-dock) sits beneath DISPLAY
-   only, in its own row - never beneath Toolbox. TOOLBOX spans both
-   rows, staying beside Display AND Chat the whole time (a named grid
-   area occupying the same column across two consecutive
-   template-areas rows forms one continuous grid item spanning both,
-   per the CSS Grid spec - no extra markup needed for this).
+/* CLAUDE-P40-E3A: the old .case-workspace grid (Display|Toolbox columns,
+   Chat confined beneath Display only) is retired. Lists, Display and
+   Toolbox are now three flex siblings inside base.html's own
+   .app-shell-body row (.launcher-panel/.app-main/.workspace-pane-toolbox
+   - see that rule above); Chat is a fourth, full-width flex row
+   beneath .app-shell-body, inside .app-shell itself (Section 9). Flexbox
+   rather than a named-area grid was chosen specifically because it makes
+   "closing a Display causes the remaining Displays to expand" (Section
+   6) and "Toolbox collapsing lets Display expand into the released
+   space" (Section 7) automatic consequences of flex:1 on .app-main and
+   display:none on a hidden sibling, rather than something that needs a
+   grid-template-areas rewrite on every state change.
 
-   grid-template-rows: the first row is "auto" (Display's own natural
-   content height - Toolbox simply ends up exactly that tall too, since
-   it spans into it); the second is --chat-height, a CSS custom
-   property static/js/case_workspace.js sets inline (Section C's
-   resizable Chat - drag handle or Compact/Expanded presets), clamped
-   in JS to a sensible min/max before it's ever written.
-
-   Geometry reasoned from CSS Grid's specified behavior, not confirmed
-   against a real rendered browser - no browser/screenshot tool exists
-   in this environment. Treat as reasoned, not proven, until someone
-   resizes a real window through each state. */
-.case-workspace {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(260px, 340px);
-    grid-template-rows: auto var(--chat-height, 260px);
-    grid-template-areas:
-        "display toolbox"
-        "chat    toolbox";
-    gap: 1rem;
-    padding: 1rem 0 2rem;
-    align-items: start;
-}
-/* CLAUDE-P40-E2B1, Section G: Toolbox still hides/shows via a plain
-   class toggle - never DOM removal, which preserves every form/draft/
-   scroll-position inside it for free. The state class lives on <html>
-   (documentElement), not .case-workspace itself, applied by a
-   before-first-paint inline script in case_workspace.html's own
-   extra_head block - the same "avoid a flash of the wrong layout on
-   load" pattern base.html's own launcher-hidden script uses.
-   display:none on the panel itself also satisfies "not
-   keyboard-focusable when hidden" for free - nothing inside a
-   display:none subtree is ever in the tab order. */
-html.toolbox-hidden .case-workspace {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-areas:
-        "display"
-        "chat";
-}
+   Geometry reasoned from CSS's specified behavior, not confirmed against
+   a real rendered browser - no browser/screenshot tool exists in this
+   environment. Treat as reasoned, not proven, until someone resizes a
+   real window through each state (see this stage's own completion
+   report for the browser-validation limitation this carries forward). */
 html.toolbox-hidden .workspace-pane-toolbox {
     display: none;
 }
-/* CLAUDE-P40-E2B: DISPLAY - wraps exactly what .workspace-column used
-   to wrap alongside Lists (the active-Investigation/selected-Document/
-   Project-Home branch), now on its own.
-   Section E: an explicit plain/neutral surface (--surface-primary,
-   near-white), deliberately NOT the app's own warmer --canvas
-   background (html/body's "Sand Cotton") - so an embedded Document's
-   own natural white page background (Section E: "preserve the
-   Document's natural page background") sits flush against Display
-   without a visible color seam. No border/shadow/radius here - a
-   plain fill only, the de-boxed treatment already established
-   elsewhere in this Workspace. */
+/* CLAUDE-P40-E2B, Section E, carried forward: an explicit plain/neutral
+   surface (--surface-primary, near-white), deliberately NOT the app's
+   own warmer --canvas background - so an embedded Document's own
+   natural white page background sits flush against Display without a
+   visible color seam. No border/shadow/radius here - a plain fill only.
+   CLAUDE-P40-E3A, Section 10: this IS "Default Display is plain white" -
+   nothing to change here, --surface-primary already was and remains the
+   untinted default; .appearance-tinted (below) is the only thing that
+   ever swaps it. */
 .workspace-pane-display {
-    grid-area: display;
     min-width: 0;
     background: var(--surface-primary);
 }
+.app-main.appearance-tinted .workspace-pane-display {
+    background: var(--surface-secondary);
+}
 
-/* CLAUDE-P40-E2B, Section D: Display Layout. Division 0 (the server-
-   rendered active Investigation/Document/Project Home) always renders;
-   [data-layout] on .display-divisions controls how many of divisions
-   1-3 are visible and how they're arranged - every option produces a
-   real, different geometry (never a decorative no-op), per Section D's
-   own "do not render a dead or decorative layout icon". Divisions are
-   separated only by a restrained divider line or plain gap (Section E
-   - "no cards, shadows, rounded containers"), never a bordered/
-   shadowed box per division. */
+/* CLAUDE-P40-E3A, Section 6: dynamic multi-Display geometry - an
+   orientation (vertical = side-by-side columns, horizontal = stacked
+   rows) and a quantity (1-6, [data-count]) applied via Apply, not a
+   fixed preset menu (the old [data-layout="single/side-by-side/stacked/
+   grid"] system this replaces). Mobile-first: the base rule below
+   always stacks divisions in one column regardless of the chosen
+   orientation/count - the multi-column/multi-row geometry only applies
+   above the 900px breakpoint further down, where there's room for it
+   (Section 11: Display remains usable, never forced into unreadably
+   narrow slices). Divisions are separated only by a restrained divider
+   line (Section 5 - "no cards, shadows, rounded containers"), never a
+   bordered/shadowed box per division. */
 .display-divisions {
     display: grid;
     grid-template-columns: 1fr;
-    gap: 1.25rem;
+    grid-auto-flow: row;
 }
-.display-division { min-width: 0; }
-/* single (default): only division 0 shows - 1/2/3 stay in the DOM
-   (their state/pickers are never lost) but are not displayed. */
-.display-divisions[data-layout="single"] .display-division:not(.display-division-primary) {
-    display: none;
+.display-division { min-width: 0; min-height: 0; }
+.display-division:not(:first-child) {
+    border-top: 1px solid var(--border);
+    padding-top: 1.25rem;
+    margin-top: 1.25rem;
 }
-/* side-by-side: division 0 and 1, two columns, a vertical divider
-   line between them (not a box around either). */
-.display-divisions[data-layout="side-by-side"] {
-    grid-template-columns: 1fr 1fr;
-}
-.display-divisions[data-layout="side-by-side"] [data-division="0"] {
-    border-right: 1px solid var(--border);
-    padding-right: 1.25rem;
-}
-.display-divisions[data-layout="side-by-side"] [data-division="2"],
-.display-divisions[data-layout="side-by-side"] [data-division="3"] {
-    display: none;
-}
-/* stacked: division 0 and 1, one column, a horizontal divider between
-   them. */
-.display-divisions[data-layout="stacked"] {
-    grid-template-columns: 1fr;
-}
-.display-divisions[data-layout="stacked"] [data-division="0"] {
-    border-bottom: 1px solid var(--border);
-    padding-bottom: 1.25rem;
-}
-.display-divisions[data-layout="stacked"] [data-division="2"],
-.display-divisions[data-layout="stacked"] [data-division="3"] {
-    display: none;
-}
-/* grid: all four divisions, 2x2. */
-.display-divisions[data-layout="grid"] {
-    grid-template-columns: 1fr 1fr;
-    grid-template-rows: auto auto;
-}
-.display-divisions[data-layout="grid"] [data-division="0"],
-.display-divisions[data-layout="grid"] [data-division="1"] {
-    border-bottom: 1px solid var(--border);
-    padding-bottom: 1.25rem;
-}
-.display-divisions[data-layout="grid"] [data-division="0"],
-.display-divisions[data-layout="grid"] [data-division="2"] {
-    border-right: 1px solid var(--border);
-    padding-right: 1.25rem;
+/* Only the first [data-count] divisions (always 0..count-1, in document
+   order) are ever shown - divisions beyond the applied count stay in
+   the DOM (their picker/content state is never lost) but are not
+   displayed, same as the old [data-layout="single"] behaviour. */
+.display-divisions[data-count="1"] [data-division]:not([data-division="0"]) { display: none; }
+.display-divisions[data-count="2"] [data-division="2"],
+.display-divisions[data-count="2"] [data-division="3"],
+.display-divisions[data-count="2"] [data-division="4"],
+.display-divisions[data-count="2"] [data-division="5"] { display: none; }
+.display-divisions[data-count="3"] [data-division="3"],
+.display-divisions[data-count="3"] [data-division="4"],
+.display-divisions[data-count="3"] [data-division="5"] { display: none; }
+.display-divisions[data-count="4"] [data-division="4"],
+.display-divisions[data-count="4"] [data-division="5"] { display: none; }
+.display-divisions[data-count="5"] [data-division="5"] { display: none; }
+
+@media (min-width: 900px) {
+    .display-divisions[data-orientation="vertical"] { grid-auto-flow: column; grid-template-rows: 1fr; }
+    .display-divisions[data-orientation="horizontal"] { grid-auto-flow: row; grid-template-columns: 1fr; }
+    .display-divisions[data-orientation="vertical"][data-count="1"] { grid-template-columns: repeat(1, 1fr); }
+    .display-divisions[data-orientation="vertical"][data-count="2"] { grid-template-columns: repeat(2, 1fr); }
+    .display-divisions[data-orientation="vertical"][data-count="3"] { grid-template-columns: repeat(3, 1fr); }
+    .display-divisions[data-orientation="vertical"][data-count="4"] { grid-template-columns: repeat(4, 1fr); }
+    .display-divisions[data-orientation="vertical"][data-count="5"] { grid-template-columns: repeat(5, 1fr); }
+    .display-divisions[data-orientation="vertical"][data-count="6"] { grid-template-columns: repeat(6, 1fr); }
+    .display-divisions[data-orientation="horizontal"][data-count="1"] { grid-template-rows: repeat(1, 1fr); }
+    .display-divisions[data-orientation="horizontal"][data-count="2"] { grid-template-rows: repeat(2, 1fr); }
+    .display-divisions[data-orientation="horizontal"][data-count="3"] { grid-template-rows: repeat(3, 1fr); }
+    .display-divisions[data-orientation="horizontal"][data-count="4"] { grid-template-rows: repeat(4, 1fr); }
+    .display-divisions[data-orientation="horizontal"][data-count="5"] { grid-template-rows: repeat(5, 1fr); }
+    .display-divisions[data-orientation="horizontal"][data-count="6"] { grid-template-rows: repeat(6, 1fr); }
+    .display-divisions[data-orientation="vertical"] .display-division:not(:first-child) {
+        border-top: none;
+        padding-top: 0;
+        margin-top: 0;
+        border-left: 1px solid var(--border);
+        padding-left: 1.25rem;
+        margin-left: 1.25rem;
+    }
 }
 
 .display-division-header {
@@ -1106,7 +1274,16 @@ html.toolbox-hidden .workspace-pane-toolbox {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    cursor: pointer;
+}
+/* CLAUDE-P40-E3A, Section 6: "one Display is always the active target" -
+   a dashed outline (functional state, not decorative framing - the same
+   exemption already granted to focus rings/selected nav rows elsewhere
+   in this file) marks which division the next Lists Document click will
+   populate. Division 0 has no such outline: it's the default target and
+   is never ambiguous about that. */
+.display-division.active:not(.display-division-primary) {
+    outline: 1px dashed var(--machine-blue);
+    outline-offset: 4px;
 }
 .display-division.active .display-division-header-name {
     color: var(--machine-blue);
@@ -1114,44 +1291,51 @@ html.toolbox-hidden .workspace-pane-toolbox {
 }
 .display-division-close {
     font-family: var(--font-body);
-    font-size: 0.75rem;
+    font-size: 0.9rem;
     color: var(--text-secondary);
     background: none;
     border: none;
     cursor: pointer;
     flex-shrink: 0;
+    line-height: 1;
 }
 .display-division-close:hover { color: var(--failure-red); }
 
-/* CLAUDE-P40-E2B1A: the recursive-projection level-2 surface for an open
-   Project's own branch (Documents/Investigations/Chats/Overview) - a
-   restrained inline link row inside Display, never a boxed/bordered
-   "second panel" (Section E's own no-cards rule applies here too). A
-   plain bottom-border divider separates it from whatever content
-   follows, the same restrained-divider language every other Display
-   section already uses. */
-.display-branch-nav {
+/* CLAUDE-P40-E3A, Section 6: the shared right-click context menu -
+   repositioned (left/top set inline by JS) to whichever division was
+   clicked, the same popover idiom as the top-bar menus above. */
+.display-context-menu {
+    position: fixed;
+    background: var(--surface-primary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.4rem;
     display: flex;
-    flex-wrap: wrap;
-    gap: 1.2rem;
-    padding-bottom: 0.8rem;
-    margin-bottom: 1.2rem;
-    border-bottom: 1px solid var(--border);
+    flex-direction: column;
+    gap: 0.15rem;
+    z-index: 40;
+    min-width: 190px;
 }
-.display-branch-link {
+.display-context-item {
     font-family: var(--font-body);
-    font-size: 0.85rem;
-    color: var(--text-secondary);
-    padding: 0.15rem 0;
-    border-bottom: 2px solid transparent;
-}
-.display-branch-link:hover { color: var(--text-primary); text-decoration: none; }
-.display-branch-link.active {
+    font-size: 0.82rem;
     color: var(--text-primary);
-    font-weight: 600;
-    border-bottom-color: var(--machine-blue);
+    background: none;
+    border: none;
+    text-align: left;
+    padding: 0.35rem 0.5rem;
+    border-radius: 3px;
+    cursor: pointer;
+    display: block;
+    width: 100%;
 }
-.display-branch-count { color: var(--text-metadata); font-size: 0.76rem; margin-left: 0.15rem; }
+.display-context-item:hover { background: var(--surface-hover); }
+.display-context-divide {
+    padding: 0.3rem 0.5rem;
+    border-top: 1px solid var(--border);
+    margin-top: 0.2rem;
+    padding-top: 0.5rem;
+}
 
 .display-division-empty {
     padding: 1.5rem 0;
@@ -1175,15 +1359,23 @@ html.toolbox-hidden .workspace-pane-toolbox {
 /* CLAUDE-P40-E2: the Toolbox itself - a flex stack of .workspace-pane
    sections (Investigation/Document/Project tools, contextual; Removed
    Items and admin-only Project Data Management, always visible - see
-   case_workspace.html), not a single pane of its own. */
+   case_workspace.html), not a single pane of its own.
+   CLAUDE-P40-E3A: no longer a grid-area (the .case-workspace grid it
+   belonged to is retired) - a plain flex sibling of .app-main inside
+   base.html's own .app-shell-body row, fixed width, natural (non-
+   stretched, non-sticky) height so it scrolls away with the page
+   exactly as it did before, never forced to match Display's own
+   (possibly much taller) content height. */
 .workspace-pane-toolbox {
-    grid-area: toolbox;
+    width: min(340px, 30vw);
+    flex-shrink: 0;
+    align-self: flex-start;
     display: flex;
     flex-direction: column;
     gap: 1rem;
     min-width: 0;
-    align-self: start;
 }
+.workspace-pane-toolbox.appearance-tinted { background: var(--surface-secondary); }
 .workspace-pane-toolbox > h2 {
     font-family: var(--font-display);
     font-size: 0.95rem;
@@ -1191,48 +1383,19 @@ html.toolbox-hidden .workspace-pane-toolbox {
     color: var(--text-primary);
 }
 
-/* Medium: Toolbox becomes collapsible (Section G already covers this
-   via the same show/hide control the wide layout uses - no separate
-   mechanism needed) but Display stays primary; Lists and Toolbox
-   collapse to full-width rows rather than competing for the first
-   screenful when shown. Narrow: Toolbox (and, app-wide, the Launcher
-   panel - see base.html's own media query) becomes a drawer (see the
-   .workspace-pane-toolbox rule below) - Display remains the one thing
-   always on screen. */
-@media (max-width: 1080px) {
-    .case-workspace {
-        grid-template-columns: 1fr;
-        grid-template-areas:
-            "display"
-            "chat"
-            "toolbox";
-    }
-    .display-divisions[data-layout="side-by-side"],
-    .display-divisions[data-layout="grid"] {
-        grid-template-columns: 1fr;
-    }
-    .display-divisions[data-layout="side-by-side"] [data-division="0"],
-    .display-divisions[data-layout="grid"] [data-division="0"],
-    .display-divisions[data-layout="grid"] [data-division="1"] {
-        border-right: none;
-        padding-right: 0;
-        border-bottom: 1px solid var(--border);
-        padding-bottom: 1.25rem;
-    }
-}
-
 /* Narrow: Toolbox becomes a real overlay drawer rather than a
-   full-width in-flow row - Display is the one thing always on screen
-   without having to scroll past it. The same toolbox-toggle-btn and
-   html.toolbox-hidden class drives this (Section G) - a drawer is just
-   what "shown" looks like at this width, not a second mechanism.
-   Closing is via the same toggle button (already reachable, already
-   keyboard-operable) or Escape (static/js/case_workspace.js) -
+   permanent column competing with Display for width - Display is the
+   one thing always on screen without having to scroll past it. The
+   same toolbox-divider/html.toolbox-hidden class drives this (Section
+   7) - a drawer is just what "shown" looks like at this width, not a
+   second mechanism. Closing is via the same divider (already reachable,
+   already keyboard-operable) or Escape (base.html's own script) -
    deliberately no separate click-outside-to-close backdrop element,
    which would need its own focus-trap/hit-testing machinery this pass
    doesn't otherwise need. The Launcher panel's own equivalent narrow-
-   screen drawer now lives in base.html's own media query, alongside
-   the panel itself. */
+   screen drawer lives in base.html's own media query, alongside the
+   panel itself - "only one overlay should obstruct Display at a time"
+   (Section 11) is enforced in that script, not here. */
 @media (max-width: 640px) {
     .workspace-pane-toolbox {
         position: fixed;
@@ -1428,8 +1591,9 @@ html.toolbox-hidden .workspace-pane-toolbox {
 }
 .workspace-form button:hover { background: var(--surface-hover); }
 
-/* -- the ONE physical conversation dock, beneath Display only (CLAUDE-
-   P40-E2B, Section C - was CLAUDE-P40-E1A, Section A) -----------------
+/* -- the ONE physical conversation dock, now full application width
+   (CLAUDE-P40-E3A, Section 9 - was CLAUDE-P40-E2B, Section C, before
+   that CLAUDE-P40-E1A, Section A) ---------------------------------------
    #conversation-dock is the single html_id macros.conversation_dock
    always renders, whether it's targeting the Project conversation or
    an open Investigation's own - the two are mutually exclusive Jinja
@@ -1437,41 +1601,49 @@ html.toolbox-hidden .workspace-pane-toolbox {
    one set of rules is genuinely one dock, not a shared style applied
    to two different elements.
 
-   CLAUDE-P40-E2B: no longer grid-column: 1/-1 (full row) - grid-area:
-   chat confines it to the Display column's own width, in its own row
-   beneath Display, never beneath Lists or Toolbox (see the
-   .case-workspace comment above). height: 100% fills exactly the
-   --chat-height row track that grid-template-rows defines - a flex
-   column internally, so the resize handle/header/note stay a fixed
-   size, .conversation-thread (history) takes the remaining space and
-   scrolls internally, and the composer stays pinned at the panel's
-   OWN bottom edge via flex (never needs position:sticky for that -
-   flex already keeps it there regardless of the panel's own height).
-
-   CLAUDE-P40-E2B-QA-CLOSE: position: sticky/bottom: 0 on the PANEL
-   itself is still needed, and was wrongly dropped in the first P40-
-   E2B pass on the (incorrect) reasoning that "the panel already lives
-   at a fixed position in the grid". It doesn't - Lists/Toolbox span
-   BOTH grid rows, so when Display's own row (auto height) is taller
-   than the viewport, the whole .case-workspace grid is taller than
-   the viewport too, and Chat's row sits at the bottom of that tall
-   grid - scrolled well out of view while reading the top of a long
-   Document/Investigation unless it stays sticky, exactly the same
-   "remains reachable while scrolling" behavior the pre-P40-E2B full-
-   row dock already had (CLAUDE-P40-E1A) and Section C's own "Chat
-   remains reachable" still requires. Confined to the chat grid-area's
-   own column width now (not the full row), same as before this fix. */
+   CLAUDE-P40-E3A: Chat is no longer grid-area: chat inside the retired
+   .case-workspace grid, confined to the Display column - it's now
+   base.html's own .chat-region, a full-width flex row beneath
+   .app-shell-body (Lists|Display|Toolbox), sticky at the viewport
+   bottom itself (see .chat-region below) so THIS panel no longer needs
+   its own position:sticky/bottom/z-index - one sticky ancestor is
+   enough, and stacking two independently sticky boxes here would only
+   reintroduce the exact Lists/Chat overlap problem .launcher-panel's
+   own :has(> .chat-region) rule above was written to avoid. height:
+   100% fills .chat-region's own --chat-height; a flex column
+   internally, so the resize handle/header/note stay a fixed size,
+   .conversation-thread (history) takes the remaining space and scrolls
+   internally, and the composer stays pinned at the panel's OWN bottom
+   edge via flex. */
 .conversation-dock-panel {
-    grid-area: chat;
     height: 100%;
-    position: sticky;
-    bottom: 0;
-    z-index: 10;
     display: flex;
     flex-direction: column;
     overflow: hidden;
     background: var(--surface-primary);
     min-height: 0;
+}
+/* CLAUDE-P40-E3A, Section 9: the shell-level full-width Chat row itself
+   - "spans the entire application width beneath Lists, Display and
+   Toolbox... remains at the bottom... can be raised or lowered" (the
+   existing resize handle/presets, unchanged internally). Sticky at the
+   viewport bottom so it "remains reachable" while scrolling a long
+   Document/Investigation in Display, exactly the guarantee the old
+   .conversation-dock-panel sticky rule provided before Chat became
+   full-width. 220px matches case_workspace.js's own COMPACT_HEIGHT
+   default (see .launcher-panel's own note above on why). */
+.chat-region {
+    flex-shrink: 0;
+    position: sticky;
+    bottom: 0;
+    z-index: 10;
+    height: var(--chat-height, 220px);
+    background: var(--surface-primary);
+    border-top: 1px solid var(--border);
+}
+.chat-region.appearance-tinted,
+.chat-region.appearance-tinted .conversation-dock-panel {
+    background: var(--surface-secondary);
 }
 /* CLAUDE-P40-E2B: the drag/keyboard-operable divider between Display
    and Chat - a real ARIA separator (draggable via
@@ -1701,9 +1873,9 @@ html.toolbox-hidden .workspace-pane-toolbox {
 .collapse-all-btn:hover { color: var(--text-primary); border-color: var(--border-strong); }
 
 /* -- Project Home (calm, single-purpose project entry - Prompt 3) --------- */
-/* CLAUDE-P40-E2B: rendered inside .workspace-pane-display now (grid-
-   area: display assigned to that wrapper, not to this element directly
-   - see the .case-workspace comment above). */
+/* CLAUDE-P40-E2B: rendered inside .workspace-pane-display now (that
+   wrapper carries the plain/neutral Display surface - see its own
+   comment above), inside division 0's own .display-division-content. */
 .project-home { max-width: 760px; padding: 0.25rem 0 1.5rem; }
 .project-home-back { font-size: 0.88rem; color: var(--text-secondary); margin: 0 0 0.6rem; }
 .project-home-back a { color: var(--text-secondary); }

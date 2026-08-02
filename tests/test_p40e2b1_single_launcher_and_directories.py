@@ -7,10 +7,24 @@ panels rendering simultaneously (base.html's global side rail AND
 case_workspace.html's own Workspace-local Lists panel), confirmed by the
 P40-E2B-QA-CLOSE audit. This stage eliminates the second column
 entirely - there is now exactly one left panel (the launcher panel,
-base.html, application-shell level), restrained to high-level
-orientation and direct launchers (Projects/Documents/Investigations/
-Chats/New Project/identity), never a full listing. Clicking a launcher
-projects the corresponding directory into Display instead.
+base.html, application-shell level).
+
+SUPERSEDED (CLAUDE-P40-E3A, Section 2): the "restrained to high-level
+orientation and direct launchers only, never a full listing - clicking a
+launcher projects the corresponding directory into Display instead"
+design this file's docstring originally described was itself a product
+decision, and the product owner has since reversed it twice: P40-E2B1A
+made the panel pure-root-launcher-only (auditing out an accidental
+listing regression), then P40-E3A explicitly re-authorized a full
+recursive hierarchy in the ONE panel ("P40-E2B1 and P40-E2B1A were never
+accepted... this is a deliberate design change, not an accidental
+regression") and retired the ?view=documents/investigations/chats
+Display-projected directory bodies entirely (Section 4: those names now
+live only in Lists' own recursive tree; Section 5: Display never
+duplicates what Lists already lists). Tests below that asserted the
+now-retired directory-body behavior have been updated in place to assert
+the current (P40-E3A) contract instead; the "exactly one panel" tests
+this file also covers remain correct as originally written.
 
 No browser/rendering tool exists in this environment - these tests
 verify what IS provable without one: server-rendered HTML/attributes,
@@ -163,14 +177,18 @@ class TopBarSpansShellTests(_BaseTestCase):
         self.assertLess(topbar_pos, body_wrapper_pos)
 
     def test_display_layout_and_toolbox_toggle_only_appear_within_a_workspace(self):
+        # CLAUDE-P40-E3A, Section 7: the old #toolbox-toggle-btn top-bar
+        # button is retired - the Toolbox/Display panel-divider line
+        # (#toolbox-divider) is the collapse control now, still gated to
+        # only exist within an open Workspace (project_id is defined).
         client = self._client_as("p40e2b1_owner", 1)
         workspace_body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
         self.assertIn('id="workspace-layout-menu"', workspace_body)
-        self.assertIn('id="toolbox-toggle-btn"', workspace_body)
+        self.assertIn('id="toolbox-divider"', workspace_body)
 
         home_body = client.get("/").get_data(as_text=True)
         self.assertNotIn('id="workspace-layout-menu"', home_body)
-        self.assertNotIn('id="toolbox-toggle-btn"', home_body)
+        self.assertNotIn('id="toolbox-divider"', home_body)
 
 
 # ---------------------------------------------------------------------------
@@ -179,56 +197,78 @@ class TopBarSpansShellTests(_BaseTestCase):
 
 class ProjectNamesOnlyUnderProjectsTests(_BaseTestCase):
     def test_other_project_names_do_not_leak_into_an_open_workspace(self):
-        # CLAUDE-P40-E2B1A: the launcher panel is a root launcher, not an
-        # expandable tree (Section H's interaction rule) - Project names
-        # are never listed inline in the panel at all anymore, on any
-        # page. They exist ONLY as the Projects root launcher's own
-        # projected children, on /projects itself.
+        # SUPERSEDED (CLAUDE-P40-E3A, Section 2): the product owner has
+        # since re-authorized a recursive Lists hierarchy that DOES list
+        # every authorized Project as a sibling leaf under "Projects",
+        # on every page including an open Workspace - only the ACTIVE
+        # project's own name is not duplicated a second time as a plain
+        # leaf (it becomes the expandable branch instead). The thing
+        # that must never happen is a Project name appearing a SECOND
+        # time in Display (Section 4's own no-duplication rule) - that
+        # part of this test's original intent is preserved below.
         other = self._ingest(owner="p40e2b1_owner", project_name="A Distinct Other Project Name")
         client = self._client_as("p40e2b1_owner", 1)
         workspace_body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
-        self.assertNotIn("A Distinct Other Project Name", workspace_body)
+        # Exactly once (inside Lists), never a second time (Display).
+        self.assertEqual(workspace_body.count("A Distinct Other Project Name"), 1)
+        panel_start = workspace_body.index('id="launcher-panel"')
+        panel_end = workspace_body.index('id="lists-divider"')
+        name_pos = workspace_body.index("A Distinct Other Project Name")
+        self.assertTrue(panel_start < name_pos < panel_end, "other Project name must render inside Lists, not Display")
 
         directory_body = client.get("/projects").get_data(as_text=True)
         self.assertIn("A Distinct Other Project Name", directory_body)
 
 
 # ---------------------------------------------------------------------------
-# 5-6: Documents/Investigations launchers open their directories in Display
+# 5-6: Documents/Investigations names are reachable ONLY through Lists now
+# (CLAUDE-P40-E3A, Section 4) - the ?view=documents/?view=investigations
+# Display-projected directory bodies this class originally tested are
+# retired outright (Section 4's own "no second navigation directory in
+# Display" rule). Rewritten to assert the current contract: real
+# authorized names appear as Lists tree children of the active Project,
+# and the retired ?view= values degrade to a blank Display rather than
+# reproducing the old directory listing.
 # ---------------------------------------------------------------------------
 
 class DirectoryLauncherTests(_BaseTestCase):
     def test_documents_launcher_link_targets_the_documents_directory(self):
+        # "Documents" is now a Lists tree-toggle (a <button>, not an <a>
+        # with an href) whose children are the real Document leaves,
+        # each carrying its own ?source= link - there is no separate
+        # ?view=documents URL to target anymore.
         client = self._client_as("p40e2b1_owner", 1)
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
-        self.assertIn(f'href="/projects/{self.project_id}/workspace?view=documents"', body)
+        self.assertIn("Documents", body)
+        self.assertIn(f'href="/projects/{self.project_id}/workspace?source=', body)
+        self.assertNotIn(f'href="/projects/{self.project_id}/workspace?view=documents"', body)
 
     def test_documents_directory_lists_sources_and_supports_adding_one(self):
         client = self._client_as("p40e2b1_owner", 1)
-        body = client.get(f"/projects/{self.project_id}/workspace?view=documents").get_data(as_text=True)
+        body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
         self.assertIn("rfp.txt", body)
-        self.assertIn('action="/projects/{}/workspace/sources/document"'.format(self.project_id), body)
-        self.assertIn("display-division-header-name", body)
-        self.assertIn("Documents", body)
+        add_body = client.get(f"/projects/{self.project_id}/workspace?source=" + self._store().get(self.project_id).sources[0]["id"]).get_data(as_text=True)
+        self.assertIn('action="/projects/{}/workspace/sources/document"'.format(self.project_id), add_body)
 
     def test_investigations_launcher_link_targets_the_investigations_directory(self):
         client = self._client_as("p40e2b1_owner", 1)
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
-        self.assertIn(f'href="/projects/{self.project_id}/workspace?view=investigations"', body)
+        self.assertIn("Investigations", body)
+        self.assertNotIn(f'href="/projects/{self.project_id}/workspace?view=investigations"', body)
 
     def test_investigations_directory_lists_every_authorized_investigation(self):
         client = self._client_as("p40e2b1_owner", 1)
         client.post(f"/projects/{self.project_id}/workspace/cases", data={"title": "Schedule Conflict Review", "objective": ""})
-        body = client.get(f"/projects/{self.project_id}/workspace?view=investigations").get_data(as_text=True)
+        body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
         self.assertIn("Schedule Conflict Review", body)
-        self.assertIn('class="case-item', body)
+        self.assertIn('data-tree-owns="case"', body)
 
-    def test_documents_and_investigations_directories_are_mutually_exclusive_with_project_home(self):
+    def test_retired_directory_views_degrade_to_a_blank_display_not_a_directory_listing(self):
         client = self._client_as("p40e2b1_owner", 1)
-        docs_body = client.get(f"/projects/{self.project_id}/workspace?view=documents").get_data(as_text=True)
-        self.assertNotIn('class="project-home"', docs_body)
-        inv_body = client.get(f"/projects/{self.project_id}/workspace?view=investigations").get_data(as_text=True)
-        self.assertNotIn('class="project-home"', inv_body)
+        for view in ("documents", "investigations", "chats"):
+            body = client.get(f"/projects/{self.project_id}/workspace?view={view}").get_data(as_text=True)
+            self.assertNotIn('class="project-home"', body, view)
+            self.assertNotIn('id="project-overview"', body, view)
 
 
 # ---------------------------------------------------------------------------
@@ -247,14 +287,17 @@ class NewInvestigationAppearsImmediatelyTests(_BaseTestCase):
         self.assertIn("Newly Created Investigation", after)
 
     def test_launcher_investigation_count_updates_immediately(self):
+        # CLAUDE-P40-E3A: the Investigation count now lives on the Lists
+        # tree-toggle itself (.launcher-count), not a retired
+        # .display-branch-count badge in a Display directory body.
         client = self._client_as("p40e2b1_owner", 1)
         before = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
-        self.assertIn('Investigations <span class="display-branch-count">0</span>', before)
+        self.assertIn('Investigations <span class="launcher-count">0</span>', before)
 
         client.post(f"/projects/{self.project_id}/workspace/cases", data={"title": "Count Check", "objective": ""})
 
         after = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
-        self.assertIn('Investigations <span class="display-branch-count">1</span>', after)
+        self.assertIn('Investigations <span class="launcher-count">1</span>', after)
 
 
 # ---------------------------------------------------------------------------
@@ -295,11 +338,18 @@ class StableDirectoryUrlTests(_BaseTestCase):
             self.assertEqual(first.get_data(as_text=True).count("display-division-header-name"),
                               second.get_data(as_text=True).count("display-division-header-name"))
 
-    def test_unknown_view_value_degrades_to_project_home_not_an_error(self):
+    def test_unknown_view_value_degrades_to_a_blank_display_not_an_error(self):
+        # SUPERSEDED (CLAUDE-P40-E3A, Section 5): "Display must be blank"
+        # for anything that isn't a real selected leaf - an unrecognized
+        # ?view= no longer falls back to Project Home content, it falls
+        # back to nothing, the same honest degrade ?source=/?case= with
+        # an unrecognized id already use.
         client = self._client_as("p40e2b1_owner", 1)
         resp = client.get(f"/projects/{self.project_id}/workspace?view=not-a-real-view")
         self.assertEqual(resp.status_code, 200)
-        self.assertIn("Project Home", resp.get_data(as_text=True))
+        body = resp.get_data(as_text=True)
+        self.assertNotIn('class="project-home"', body)
+        self.assertNotIn('id="project-overview"', body)
 
 
 # ---------------------------------------------------------------------------
@@ -379,10 +429,13 @@ class ExactlyOneOfEachTests(_BaseTestCase):
 
 class PanelBehaviorIntactTests(_BaseTestCase):
     def test_launcher_toggle_and_toolbox_toggle_both_present_and_independent(self):
+        # CLAUDE-P40-E3A, Section 7: the panel-dividing lines are the
+        # collapse controls now, replacing the old top-bar toggle
+        # buttons - #lists-divider/#toolbox-divider.
         client = self._client_as("p40e2b1_owner", 1)
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
-        self.assertIn('id="launcher-toggle-btn"', body)
-        self.assertIn('id="toolbox-toggle-btn"', body)
+        self.assertIn('id="lists-divider"', body)
+        self.assertIn('id="toolbox-divider"', body)
         self.assertIn("beehive:panel:launcher", body)
         self.assertIn(f"beehive:panel:toolbox:{self.project_id}", body)
 

@@ -215,7 +215,7 @@ class CaseOutcomeRouteAndRenderTests(unittest.TestCase):
             sess["username"] = "owner1"
             sess["role"] = "admin"
         self.store = CaseWorkspaceStore(self.tmp_dir)
-        self.client.get(f"/projects/{self.project_id}/workspace")
+        self.client.get(f"/projects/{self.project_id}/workspace?view=overview")
 
     def tearDown(self):
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
@@ -232,7 +232,7 @@ class CaseOutcomeRouteAndRenderTests(unittest.TestCase):
         )
         self.assertEqual(resp.status_code, 302)
 
-        page = self.client.get(f"/projects/{self.project_id}/workspace")
+        page = self.client.get(f"/projects/{self.project_id}/workspace?view=overview")
         body = page.get_data(as_text=True)
         self.assertIn(CASE_OUTCOME_DEFEATED, body)
 
@@ -277,7 +277,7 @@ class CaseOutcomeRouteAndRenderTests(unittest.TestCase):
             data={"outcome": CASE_OUTCOME_IRRELEVANT, "reasoning": "Never should have flagged this."},
         )
 
-        page = self.client.get(f"/projects/{self.project_id}/workspace")
+        page = self.client.get(f"/projects/{self.project_id}/workspace?view=overview")
         body = page.get_data(as_text=True)
         self.assertIn("Investigation Quality", body)
         self.assertIn("requirement-anchored, human-accepted (1)", body)

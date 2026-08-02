@@ -204,7 +204,7 @@ def _load_workspace_or_404(project_id: str, allow_removed: bool = False):
 
     if workspace.removed_at and not allow_removed:
         flash("This Project has been removed. Restore it to resume work.", "error")
-        abort(redirect(url_for("workspace.show_workspace", project_id=project_id)))
+        abort(redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview")))
 
     return document, store, workspace
 
@@ -348,7 +348,7 @@ def _require_export_allowed(workspace, project_id: str):
         f"({decision.reason}). Decision: {decision.decision.replace('_', ' ')}.",
         "error",
     )
-    return redirect(url_for("workspace.show_workspace", project_id=project_id))
+    return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
 
 
 # -- Approval Gate ---------------------------------------------------------------
@@ -430,20 +430,34 @@ def show_workspace(project_id):
         (s for s in workspace.sources if s["id"] == selected_source_id), None,
     ) if selected_source_id else None
 
-    # CLAUDE-P40-E2B1, Section C: launcher-projected directory views
-    # (Documents / Investigations / Chats) reuse this same GET route and
-    # query-string vocabulary rather than adding new routes or any
-    # client-side routing - the identical "no client build step" pattern
-    # ?source=/?case= already establish. A real ?case=/?source= selection
-    # always wins over a bare directory view (selecting something from a
-    # directory is itself just a normal navigation to ?case=<id> or
-    # ?source=<id>, so by the time content is actually open, "view" is no
-    # longer the relevant query param). Unknown values degrade to no
-    # directory (Project Home), the same "stale/guessed link" convention
-    # selected_source/active_case already use.
+    # CLAUDE-P40-E3A, Section 5: "Overview" is now the one remaining leaf
+    # that projects real content into Display via this ?view= query-string
+    # vocabulary - Documents/Investigations/RFIs/Chats used to be separate
+    # ?view= directory bodies here too (CLAUDE-P40-E2B1) but are removed
+    # outright now that their names live only in Lists' own recursive
+    # hierarchy (base.html) - showing them here as well would be the "second
+    # navigation directory in Display" Section 4 explicitly forbids. A real
+    # ?case=/?source= selection always wins over ?view=overview (Display
+    # must show whichever leaf was actually clicked). Unknown/stale values
+    # (including the three retired ones, for any old bookmark/link) degrade
+    # to no directory - Display renders genuinely blank, matching Section
+    # 5's own "if no leaf or action is selected" rule, the same honest
+    # degrade convention selected_source/active_case already use.
     directory_view = request.args.get("view")
-    if directory_view not in ("documents", "investigations", "chats"):
+    if directory_view not in ("overview",):
         directory_view = None
+
+    # CLAUDE-P40-E3A follow-through: every Project-level (non-case/source-
+    # scoped) POST handler in this module that used to redirect back to a
+    # bare show_workspace(project_id=...) - which, before this stage,
+    # landed on Project Home by default - now explicitly passes
+    # view="overview" instead, so the reviewer actually sees the result of
+    # the action they just took (the updated Sources list, the new star
+    # state, the saved instructions, ...) rather than the new blank
+    # default. This is a required consequence of Section 5's "blank
+    # unless a leaf is selected" rule, not a new feature: without it, a
+    # completed action would silently redirect into a blank Display with
+    # no visible confirmation beyond the flash message.
 
     # Prompt 8/9: Project Open -> temporal reconciliation, now called
     # through the explicitly named open_project() operation rather than
@@ -1238,7 +1252,7 @@ def create_case(project_id):
     objective = (request.form.get("objective") or "").strip()
     if not title:
         flash("A Case needs a title.", "error")
-        return redirect(url_for("workspace.show_workspace", project_id=project_id))
+        return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
 
     case = store.create_case(workspace, title=title, objective=objective, created_by=_reviewer())
 
@@ -1262,7 +1276,7 @@ def toggle_star(project_id):
     governance meaning, no GovernanceLog event (Prompt 3 #3)."""
     _, store, workspace = _load_workspace_or_404(project_id)
     store.set_starred(workspace, not workspace.starred)
-    return redirect(url_for("workspace.show_workspace", project_id=project_id))
+    return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
 
 
 def _project_briefing_ai_status(workspace) -> tuple[str, object]:
@@ -1319,21 +1333,21 @@ def generate_project_briefing_route(project_id):
             f"this project's security policy (controlling layer: {decision.controlling_layer}).",
             "error",
         )
-        return redirect(url_for("workspace.show_workspace", project_id=project_id))
+        return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
     if status == "require_approval" and (request.form.get("confirm") or "").strip() != "once":
         flash(
             f"AI Project Briefing awaits approval (controlling layer: {decision.controlling_layer}) "
             f"- {decision.reason} Use the approval action to proceed.",
             "error",
         )
-        return redirect(url_for("workspace.show_workspace", project_id=project_id))
+        return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
 
     # CLAUDE-P38-D2: duplicate-call/idempotency guard - a refresh, a
     # second reviewer, or the interstitial's own auto-submit firing
     # twice must never start a second real, billed call while one is
     # already in flight.
     if store.generation_in_progress_for(workspace):
-        return redirect(url_for("workspace.show_workspace", project_id=project_id))
+        return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
 
     store.start_project_briefing_generation(workspace, actor=_reviewer())
 
@@ -1358,7 +1372,7 @@ def generate_project_briefing_route(project_id):
         # timed out after 30s.") for no added information.
         workspace = store.get(project_id)
         store.record_project_briefing_failure(workspace, reason=result.skipped_reason or "Unknown failure.")
-        return redirect(url_for("workspace.show_workspace", project_id=project_id))
+        return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
 
     from dataclasses import asdict
 
@@ -1368,7 +1382,7 @@ def generate_project_briefing_route(project_id):
         actor=_reviewer(), governance_log=_log(),
     )
     flash("Project briefing generated.", "success")
-    return redirect(url_for("workspace.show_workspace", project_id=project_id))
+    return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
 
 
 @workspace_bp.route("/projects/<project_id>/workspace/briefing/preparing")
@@ -1419,7 +1433,7 @@ def preparing_project_briefing(project_id):
         or not has_evidence
         or workspace.project_briefing_last_failure_reason is not None
     ):
-        return redirect(url_for("workspace.show_workspace", project_id=project_id))
+        return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
 
     return render_template("preparing_project_briefing.html", project_id=project_id, document=document)
 
@@ -1448,7 +1462,7 @@ def edit_project_details(project_id):
         reject_if_display_name_taken(current_app, effective_name, exclude_project_id=project_id)
     except UploadError as exc:
         flash(str(exc), "error")
-        return redirect(url_for("workspace.show_workspace", project_id=project_id))
+        return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
 
     store.set_project_details(
         workspace,
@@ -1458,7 +1472,7 @@ def edit_project_details(project_id):
         governance_log=_log(),
     )
     flash("Project details updated.", "success")
-    return redirect(url_for("workspace.show_workspace", project_id=project_id))
+    return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
 
 
 @workspace_bp.route("/projects/<project_id>/workspace/instructions", methods=["POST"])
@@ -1476,7 +1490,7 @@ def edit_operating_instructions(project_id):
         actor_role=session.get("role"),
     )
     flash("Project Operating Instructions updated.", "success")
-    return redirect(url_for("workspace.show_workspace", project_id=project_id))
+    return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
 
 
 @workspace_bp.route("/projects/<project_id>/workspace/classify-environment", methods=["POST"])
@@ -1502,7 +1516,7 @@ def classify_operating_environment(project_id):
     operating_environment = (request.form.get("operating_environment") or "").strip()
     if not is_valid_operating_environment(operating_environment):
         flash("Select a valid project operating environment.", "error")
-        return redirect(url_for("workspace.show_workspace", project_id=project_id))
+        return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
 
     try:
         store.set_operating_environment(
@@ -1510,13 +1524,13 @@ def classify_operating_environment(project_id):
         )
     except OperatingEnvironmentAlreadySetError as exc:
         flash(str(exc), "error")
-        return redirect(url_for("workspace.show_workspace", project_id=project_id))
+        return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
 
     flash(
         f"Project operating environment established: "
         f"{OPERATING_ENVIRONMENT_LABELS[operating_environment]}.", "success",
     )
-    return redirect(url_for("workspace.show_workspace", project_id=project_id))
+    return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
 
 
 @workspace_bp.route("/projects/<project_id>/workspace/access/owner", methods=["POST"])
@@ -1538,14 +1552,14 @@ def set_project_owner_route(project_id):
     new_owner = (request.form.get("owner") or "").strip()
     if not new_owner:
         flash("A username is required to set the project owner.", "error")
-        return redirect(url_for("workspace.show_workspace", project_id=project_id))
+        return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
     if new_owner not in {u.username for u in User.query.all()}:
         flash(f"{new_owner!r} is not a registered account.", "error")
-        return redirect(url_for("workspace.show_workspace", project_id=project_id))
+        return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
 
     store.set_project_owner(workspace, owner=new_owner, actor=_reviewer(), governance_log=_log())
     flash(f"Project owner set to {new_owner!r}.", "success")
-    return redirect(url_for("workspace.show_workspace", project_id=project_id))
+    return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
 
 
 @workspace_bp.route("/projects/<project_id>/workspace/access/grant", methods=["POST"])
@@ -1563,7 +1577,7 @@ def grant_project_access_route(project_id):
     username = (request.form.get("username") or "").strip()
     if username and username not in {u.username for u in User.query.all()}:
         flash(f"{username!r} is not a registered account.", "error")
-        return redirect(url_for("workspace.show_workspace", project_id=project_id))
+        return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
 
     try:
         store.grant_project_access(
@@ -1573,7 +1587,7 @@ def grant_project_access_route(project_id):
         flash(f"Access granted to {username!r}.", "success")
     except CaseWorkspaceError as exc:
         flash(str(exc), "error")
-    return redirect(url_for("workspace.show_workspace", project_id=project_id))
+    return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
 
 
 @workspace_bp.route("/projects/<project_id>/workspace/access/revoke", methods=["POST"])
@@ -1590,7 +1604,7 @@ def revoke_project_access_route(project_id):
         flash(f"Access revoked for {username!r}.", "success")
     except CaseWorkspaceError as exc:
         flash(str(exc), "error")
-    return redirect(url_for("workspace.show_workspace", project_id=project_id))
+    return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
 
 
 # -- CLAUDE-P40-E2: recoverable removal (Document/Project), not deletion ----
@@ -1629,7 +1643,7 @@ def remove_document_route(project_id, source_id):
         flash(f'"{source["name"]}" removed - restore it any time from Removed Items.', "success")
     except CaseWorkspaceError as exc:
         flash(str(exc), "error")
-    return redirect(url_for("workspace.show_workspace", project_id=project_id))
+    return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
 
 
 @workspace_bp.route("/projects/<project_id>/workspace/sources/<source_id>/restore", methods=["POST"])
@@ -1659,7 +1673,7 @@ def remove_project_route(project_id):
     confirm = request.form.get("confirm")
     if confirm == "no":
         flash("Cancelled - the Project was not removed.", "success")
-        return redirect(url_for("workspace.show_workspace", project_id=project_id))
+        return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
     if confirm != "yes":
         return render_template(
             "confirm_remove_project.html",
@@ -1675,7 +1689,7 @@ def remove_project_route(project_id):
         flash("Project removed - restore it any time from Removed Projects.", "success")
     except CaseWorkspaceError as exc:
         flash(str(exc), "error")
-        return redirect(url_for("workspace.show_workspace", project_id=project_id))
+        return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
     return redirect(url_for("portal.projects_list"))
 
 
@@ -1690,7 +1704,7 @@ def restore_project_route(project_id):
         flash("Project restored.", "success")
     except CaseWorkspaceError as exc:
         flash(str(exc), "error")
-    return redirect(url_for("workspace.show_workspace", project_id=project_id))
+    return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
 
 
 @workspace_bp.route("/projects/<project_id>/workspace/sources/document", methods=["POST"])
@@ -1700,18 +1714,26 @@ def add_document_source(project_id):
     Project Sources + -> Add Documents (Prompt 3 #8). Project-scoped, not
     Case-scoped: CaseWorkspaceStore.add_source itself takes no case_id -
     a Case draws on Sources, it does not own them.
+
+    CLAUDE-P40-E3A: this form and its two siblings below now live in
+    Toolbox (relocated from the retired ?view=documents Display body -
+    Section 4/8), so every redirect here goes back to the bare Workspace
+    URL - Display renders blank (Section 5, nothing selected) while
+    Toolbox still shows the same Add-a-Document tool right where the
+    reviewer just used it, not a stale directory listing that no longer
+    exists.
     """
     _, store, workspace = _load_workspace_or_404(project_id)
 
     file_storage = request.files.get("document")
     if file_storage is None or not file_storage.filename:
         flash("Choose a document to add as a Project Source.", "error")
-        return redirect(url_for("workspace.show_workspace", project_id=project_id, view="documents"))
+        return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
 
     ext = Path(file_storage.filename).suffix.lower()
     if ext not in ALLOWED_DOCUMENT_EXTENSIONS:
         flash(f"Unsupported document format '{ext}'.", "error")
-        return redirect(url_for("workspace.show_workspace", project_id=project_id, view="documents"))
+        return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
 
     sources_dir = Path(current_app.config["REGISTRY_STORE_PATH"]) / "workspace_sources" / project_id
     sources_dir.mkdir(parents=True, exist_ok=True)
@@ -1728,7 +1750,7 @@ def add_document_source(project_id):
         governance_log=_log(),
     )
     flash("Document added as a Project Source.", "success")
-    return redirect(url_for("workspace.show_workspace", project_id=project_id, view="documents"))
+    return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
 
 
 @workspace_bp.route("/projects/<project_id>/workspace/sources/text-record", methods=["POST"])
@@ -1746,7 +1768,7 @@ def add_text_record_source(project_id):
     content = (request.form.get("content") or "").strip()
     if not title or not content:
         flash("A Text Record needs both a title and content.", "error")
-        return redirect(url_for("workspace.show_workspace", project_id=project_id, view="documents"))
+        return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
 
     sources_dir = Path(current_app.config["REGISTRY_STORE_PATH"]) / "workspace_sources" / project_id
     sources_dir.mkdir(parents=True, exist_ok=True)
@@ -1763,7 +1785,7 @@ def add_text_record_source(project_id):
         governance_log=_log(),
     )
     flash("Text Record added as a Project Source.", "success")
-    return redirect(url_for("workspace.show_workspace", project_id=project_id, view="documents"))
+    return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
 
 
 @workspace_bp.route("/projects/<project_id>/workspace/snapshots", methods=["POST"])
@@ -1777,7 +1799,7 @@ def create_project_snapshot(project_id):
     label = (request.form.get("label") or "").strip()
     if not label:
         flash("A Snapshot needs a label.", "error")
-        return redirect(url_for("workspace.show_workspace", project_id=project_id))
+        return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
 
     store.create_snapshot(
         workspace,
@@ -1787,7 +1809,7 @@ def create_project_snapshot(project_id):
         governance_log=_log(),
     )
     flash("Snapshot created.", "success")
-    return redirect(url_for("workspace.show_workspace", project_id=project_id))
+    return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
 
 
 @workspace_bp.route("/projects/<project_id>/workspace/cases/<case_id>/share", methods=["POST"])
@@ -2254,7 +2276,7 @@ def add_drawing_source(project_id, case_id):
         store.attach_source_to_case(workspace, case_id, source["id"])
     except CaseWorkspaceError as exc:
         flash(str(exc), "error")
-        return redirect(url_for("workspace.show_workspace", project_id=project_id))
+        return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
 
     return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
 
@@ -2534,7 +2556,7 @@ def quick_start(project_id):
     text = (request.form.get("text") or "").strip()
     if not text:
         flash("Describe what you want to work on to start.", "error")
-        return redirect(url_for("workspace.show_workspace", project_id=project_id))
+        return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
 
     anchor_type = (request.form.get("anchor_type") or "").strip()
     anchor_id = (request.form.get("anchor_id") or "").strip()
@@ -2583,7 +2605,7 @@ def discuss_object(project_id):
 
     text = (request.form.get("text") or "").strip()
     if not text:
-        return redirect(url_for("workspace.show_workspace", project_id=project_id))
+        return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
 
     anchor_type = (request.form.get("anchor_type") or "").strip()
     anchor_id = (request.form.get("anchor_id") or "").strip()
@@ -2804,7 +2826,7 @@ def register_requirement_route(project_id):
 
     if not source_id or not original_requirement_identifier or not text_reference:
         flash("A registered Requirement needs a Source, a clause/identifier, and its text.", "error")
-        return redirect(url_for("workspace.show_workspace", project_id=project_id))
+        return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
 
     try:
         store.register_requirement(
@@ -2818,10 +2840,10 @@ def register_requirement_route(project_id):
         )
     except CaseWorkspaceError as exc:
         flash(str(exc), "error")
-        return redirect(url_for("workspace.show_workspace", project_id=project_id))
+        return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
 
     flash("Requirement registered.", "success")
-    return redirect(url_for("workspace.show_workspace", project_id=project_id))
+    return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
 
 
 @workspace_bp.route("/projects/<project_id>/workspace/requirements/<requirement_id>/adjudicate", methods=["POST"])
@@ -2879,7 +2901,7 @@ def revise_requirement_route(project_id, requirement_id):
     authority_class = (request.form.get("authority_class") or "").strip() or None
     if not text_reference or not reason:
         flash("A revision needs the new text and a reason (e.g. which Addendum).", "error")
-        return redirect(url_for("workspace.show_workspace", project_id=project_id))
+        return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
 
     try:
         store.revise_requirement(
@@ -2889,7 +2911,7 @@ def revise_requirement_route(project_id, requirement_id):
         )
     except CaseWorkspaceError as exc:
         flash(str(exc), "error")
-    return redirect(url_for("workspace.show_workspace", project_id=project_id))
+    return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
 
 
 @workspace_bp.route("/projects/<project_id>/workspace/participants", methods=["POST"])
@@ -2904,7 +2926,7 @@ def register_participant_route(project_id):
     note = (request.form.get("note") or "").strip() or None
     if not name or not role_type:
         flash("A Participant needs a name and a role.", "error")
-        return redirect(url_for("workspace.show_workspace", project_id=project_id))
+        return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
 
     # CLAUDE-P29: server-side enforcement of the same gating the
     # participant_role_options passed to the template already reflects
@@ -2917,7 +2939,7 @@ def register_participant_route(project_id):
             f"{OPERATING_ENVIRONMENT_LABELS.get(workspace.operating_environment, 'locked')} environment.",
             "error",
         )
-        return redirect(url_for("workspace.show_workspace", project_id=project_id))
+        return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
 
     try:
         store.record_participant(
@@ -2926,7 +2948,7 @@ def register_participant_route(project_id):
         )
     except CaseWorkspaceError as exc:
         flash(str(exc), "error")
-    return redirect(url_for("workspace.show_workspace", project_id=project_id))
+    return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
 
 
 @workspace_bp.route("/projects/<project_id>/workspace/go-no-go", methods=["POST"])
@@ -2962,7 +2984,7 @@ def record_go_no_go(project_id):
             "this project's Conversation so it's on record for whoever does.",
             "error",
         )
-        return redirect(url_for("workspace.show_workspace", project_id=project_id))
+        return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
 
     decision_stage = (request.form.get("decision_stage") or "").strip()
     decision = (request.form.get("decision") or "").strip()
@@ -2977,10 +2999,10 @@ def record_go_no_go(project_id):
         )
     except CaseWorkspaceError as exc:
         flash(str(exc), "error")
-        return redirect(url_for("workspace.show_workspace", project_id=project_id))
+        return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
 
     flash("Go/No-Go decision recorded.", "success")
-    return redirect(url_for("workspace.show_workspace", project_id=project_id))
+    return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
 
 
 @workspace_bp.route("/projects/<project_id>/workspace/represented-party", methods=["POST"])
@@ -3001,7 +3023,7 @@ def set_represented_party_route(project_id):
         store.set_represented_party(workspace, reviewer=_reviewer(), participant_id=participant_id)
     except CaseWorkspaceError as exc:
         flash(str(exc), "error")
-    return redirect(url_for("workspace.show_workspace", project_id=project_id))
+    return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
 
 
 @workspace_bp.route("/projects/<project_id>/workspace/requirements/<requirement_id>/perspective", methods=["POST"])
@@ -3019,7 +3041,7 @@ def record_perspective_assessment_route(project_id, requirement_id):
     represented_party = store.represented_party_for(workspace, _reviewer())
     if represented_party is None:
         flash("Set who you represent in this Project before marking a perspective.", "error")
-        return redirect(url_for("workspace.show_workspace", project_id=project_id))
+        return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
 
     polarity = (request.form.get("polarity") or "").strip()
     reasoning = (request.form.get("reasoning") or "").strip()
@@ -3037,7 +3059,7 @@ def record_perspective_assessment_route(project_id, requirement_id):
         )
     except CaseWorkspaceError as exc:
         flash(str(exc), "error")
-    return redirect(url_for("workspace.show_workspace", project_id=project_id))
+    return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
 
 
 @workspace_bp.route("/projects/<project_id>/workspace/cases/<case_id>/apply", methods=["POST"])
@@ -3383,7 +3405,7 @@ def export_rfi(project_id):
         buffer = build_rfi_docx(document, operating_environment_label=environment_label)
     except RFIExportError as exc:
         flash(str(exc), "error")
-        return redirect(url_for("workspace.show_workspace", project_id=project_id))
+        return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
 
     return send_file(
         buffer,

@@ -42,7 +42,7 @@ class RequirementRevisionWiringTests(unittest.TestCase):
             sess["user_id"] = 1
             sess["username"] = "owner1"
             sess["role"] = "admin"
-        self.client.get(f"/projects/{self.project_id}/workspace")
+        self.client.get(f"/projects/{self.project_id}/workspace?view=overview")
         self.store = CaseWorkspaceStore(self.tmp_dir)
         source = self.store.add_source(
             self.store.get(self.project_id), name="RFP.md", file_path="/tmp/rfp.md",
@@ -79,7 +79,7 @@ class RequirementRevisionWiringTests(unittest.TestCase):
 
     def test_superseded_requirement_no_longer_shown_as_a_separate_current_entry(self):
         self._revise()
-        resp = self.client.get(f"/projects/{self.project_id}/workspace")
+        resp = self.client.get(f"/projects/{self.project_id}/workspace?view=overview")
         body = resp.get_data(as_text=True)
         self.assertIn("Revised wording", body)
         # "Original wording" legitimately still appears once, inside the
@@ -91,7 +91,7 @@ class RequirementRevisionWiringTests(unittest.TestCase):
 
     def test_revision_history_shows_the_prior_text_and_reason(self):
         self._revise()
-        resp = self.client.get(f"/projects/{self.project_id}/workspace")
+        resp = self.client.get(f"/projects/{self.project_id}/workspace?view=overview")
         body = resp.get_data(as_text=True)
         self.assertIn("Revision history (1)", body)
         # only visible once the disclosure is opened, but the content is

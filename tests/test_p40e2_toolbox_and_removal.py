@@ -175,10 +175,11 @@ class DocumentRemovalTests(_BaseP40E2TestCase):
         source_id = self._first_source_id()
         client.post(f"/projects/{self.project_id}/workspace/sources/{source_id}/remove", data={"confirm": "yes"})
 
-        # CLAUDE-P40-E2B1: Sources/Documents moved out of Project Home
-        # into their own launcher-projected Documents directory.
-        body = client.get(f"/projects/{self.project_id}/workspace?view=documents").get_data(as_text=True)
-        self.assertIn("Sources (0)", body)
+        # SUPERSEDED (CLAUDE-P40-E3A): the retired "Sources (N)" Display
+        # heading is gone - Document names/counts now live only in
+        # Lists' own recursive hierarchy (Section 4).
+        body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
+        self.assertIn('Documents <span class="launcher-count">0</span>', body)
 
     def test_restore_reactivates_same_id_no_reingestion(self):
         client = self._client_as("p40e2_owner", 1)

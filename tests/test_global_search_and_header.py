@@ -202,14 +202,20 @@ class ProjectsTreeTests(unittest.TestCase):
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
 
     def test_projects_heading_is_a_real_link_to_the_projects_directory(self):
-        # CLAUDE-P40-E2B1, Section C: "Projects heading opens the
-        # authorized Project directory in Display" - unlike the old
-        # expand-only tree summary, this heading must navigate.
+        # SUPERSEDED (CLAUDE-P40-E3A, Section 2/4): "Projects" is now the
+        # recursive tree's own root PARENT (a <button>, expand/collapse
+        # toggle - the same pattern every other parent in the hierarchy,
+        # e.g. "Documents"/"Investigations", already uses), not a
+        # navigating <a>. The authorized Project directory itself remains
+        # genuinely reachable elsewhere (index.html's own "Open Project"
+        # hero, case_workspace.html's Project Home "<- Projects" link,
+        # etc.) - just no longer duplicated as a second navigation
+        # affordance on the Lists heading itself.
         body = self.client.get("/").get_data(as_text=True)
         import re
-        match = re.search(r'<a class="launcher-heading[^"]*" href="([^"]+)">Projects</a>', body)
+        match = re.search(r'<button type="button" class="tree-toggle launcher-heading[^"]*"[^>]*>\s*<span class="tree-label">Projects</span>', body)
         self.assertIsNotNone(match)
-        self.assertEqual(match.group(1), "/projects")
+        self.assertIn('href="/projects"', body)
 
     def test_individual_projects_are_real_links_into_their_workspace(self):
         # CLAUDE-P40-E2B1A: Project names are the Projects root
@@ -228,9 +234,13 @@ class ProjectsTreeTests(unittest.TestCase):
         # the "Projects" root launcher itself stays active for as long
         # as any Project/Workspace subtree is open, and the in-Display
         # branch-nav's own "Overview" entry is the level-2 highlight.
+        # SUPERSEDED (CLAUDE-P40-E3A): "Overview" is the level-2 highlight
+        # now (the retired .display-branch-nav's own "Overview" entry no
+        # longer exists) - checked against the active Project's own
+        # expanded Lists branch instead.
         body = self.client.get("/projects/alpha/workspace").get_data(as_text=True)
         self.assertIn('launcher-heading active', body)
-        self.assertIn('display-branch-link active', body)
+        self.assertIn('tree-leaf launcher-link active', body)
         self.assertNotIn("launcher-project-item", body)
         # The old standalone "Current Project" orientation block is gone.
         self.assertNotIn('side-rail-context-label">Current Project<', body)

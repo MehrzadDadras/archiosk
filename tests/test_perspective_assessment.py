@@ -214,7 +214,7 @@ class PerspectiveRouteAndRenderTests(unittest.TestCase):
             sess["username"] = "owner1"
             sess["role"] = "admin"
         self.store = CaseWorkspaceStore(self.tmp_dir)
-        self.client.get(f"/projects/{self.project_id}/workspace")
+        self.client.get(f"/projects/{self.project_id}/workspace?view=overview")
 
     def tearDown(self):
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
@@ -256,7 +256,7 @@ class PerspectiveRouteAndRenderTests(unittest.TestCase):
             data={"polarity": PERSPECTIVE_POLARITY_RISK, "reasoning": "This falls on us if conditions differ."},
         )
 
-        page = self.client.get(f"/projects/{self.project_id}/workspace")
+        page = self.client.get(f"/projects/{self.project_id}/workspace?view=overview")
         body = page.get_data(as_text=True)
         self.assertIn("Cedar Harbour DB JV", body)
         self.assertIn("This falls on us if conditions differ.", body)
@@ -267,7 +267,7 @@ class PerspectiveRouteAndRenderTests(unittest.TestCase):
         # a login for someone else - this project party directory entry
         # must clearly state it is not one, and never changes who a
         # governed action is attributed to.
-        page = self.client.get(f"/projects/{self.project_id}/workspace")
+        page = self.client.get(f"/projects/{self.project_id}/workspace?view=overview")
         body = page.get_data(as_text=True)
         self.assertIn("Add a Project Party", body)
         self.assertIn("not a login", body)
@@ -380,7 +380,7 @@ class NavigationMembraneLayerTests(unittest.TestCase):
             sess["username"] = "owner1"
             sess["role"] = "admin"
         self.store = CaseWorkspaceStore(self.tmp_dir)
-        self.client.get(f"/projects/{self.project_id}/workspace")
+        self.client.get(f"/projects/{self.project_id}/workspace?view=overview")
 
     def tearDown(self):
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
@@ -395,12 +395,12 @@ class NavigationMembraneLayerTests(unittest.TestCase):
         )
 
     def test_layer_toggle_control_always_renders(self):
-        resp = self.client.get(f"/projects/{self.project_id}/workspace")
+        resp = self.client.get(f"/projects/{self.project_id}/workspace?view=overview")
         self.assertIn('id="layer-risk-toggle"', resp.get_data(as_text=True))
 
     def test_no_badge_when_nothing_recorded(self):
         self._register_requirement()
-        resp = self.client.get(f"/projects/{self.project_id}/workspace")
+        resp = self.client.get(f"/projects/{self.project_id}/workspace?view=overview")
         self.assertNotIn('data-layer="risk"', resp.get_data(as_text=True))
 
     def test_badge_appears_with_correct_polarity_once_marked(self):
@@ -418,7 +418,7 @@ class NavigationMembraneLayerTests(unittest.TestCase):
             f"/projects/{self.project_id}/workspace/requirements/{requirement['id']}/perspective",
             data={"polarity": PERSPECTIVE_POLARITY_OPPORTUNITY, "reasoning": "Favorable to us."},
         )
-        body = self.client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
+        body = self.client.get(f"/projects/{self.project_id}/workspace?view=overview").get_data(as_text=True)
         self.assertIn('data-layer="risk"', body)
         self.assertIn(f'review-state-{PERSPECTIVE_POLARITY_OPPORTUNITY}', body)
 
@@ -444,7 +444,7 @@ class NavigationMembraneLayerTests(unittest.TestCase):
             participant_id=participant["id"], polarity=PERSPECTIVE_POLARITY_RISK,
             origin=PERSPECTIVE_ORIGIN_MACHINE, reasoning="Machine side.", confidence=0.6,
         )
-        body = self.client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
+        body = self.client.get(f"/projects/{self.project_id}/workspace?view=overview").get_data(as_text=True)
         self.assertIn("disagreement", body)
 
 

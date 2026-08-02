@@ -47,7 +47,7 @@ class SinceLastVisitTests(unittest.TestCase):
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
 
     def test_first_ever_visit_shows_no_since_last_visit_note(self):
-        resp = self.client.get(f"/projects/{self.project_id}/workspace")
+        resp = self.client.get(f"/projects/{self.project_id}/workspace?view=overview")
         body = resp.get_data(as_text=True)
         self.assertNotIn("since your last visit", body)
         # but the marker is now recorded for next time
@@ -55,22 +55,22 @@ class SinceLastVisitTests(unittest.TestCase):
         self.assertIn("owner1", workspace.last_viewed_by)
 
     def test_second_visit_reports_events_since_the_first(self):
-        self.client.get(f"/projects/{self.project_id}/workspace")  # records the first-visit marker
+        self.client.get(f"/projects/{self.project_id}/workspace?view=overview")  # records the first-visit marker
         self.client.post(
             f"/projects/{self.project_id}/workspace/cases", data={"title": "New Investigation", "objective": "x"},
         )
-        resp = self.client.get(f"/projects/{self.project_id}/workspace")
+        resp = self.client.get(f"/projects/{self.project_id}/workspace?view=overview")
         body = resp.get_data(as_text=True)
         self.assertIn("1 update since your last visit", body)
 
     def test_no_new_events_reports_nothing_new(self):
-        self.client.get(f"/projects/{self.project_id}/workspace")
-        resp = self.client.get(f"/projects/{self.project_id}/workspace")
+        self.client.get(f"/projects/{self.project_id}/workspace?view=overview")
+        resp = self.client.get(f"/projects/{self.project_id}/workspace?view=overview")
         body = resp.get_data(as_text=True)
         self.assertIn("Nothing new since your last visit", body)
 
     def test_marker_is_per_reviewer_not_shared(self):
-        self.client.get(f"/projects/{self.project_id}/workspace")
+        self.client.get(f"/projects/{self.project_id}/workspace?view=overview")
         self.client.post(
             f"/projects/{self.project_id}/workspace/cases", data={"title": "New Investigation", "objective": "x"},
         )
@@ -80,11 +80,11 @@ class SinceLastVisitTests(unittest.TestCase):
             sess["username"] = "owner2"
             sess["role"] = "admin"
         # owner2 has never visited - no note at all, not "N since never"
-        resp = other_client.get(f"/projects/{self.project_id}/workspace")
+        resp = other_client.get(f"/projects/{self.project_id}/workspace?view=overview")
         self.assertNotIn("since your last visit", resp.get_data(as_text=True))
 
     def test_not_shown_inside_an_open_case(self):
-        self.client.get(f"/projects/{self.project_id}/workspace")
+        self.client.get(f"/projects/{self.project_id}/workspace?view=overview")
         self.client.post(
             f"/projects/{self.project_id}/workspace/cases", data={"title": "Case A", "objective": "x"},
         )

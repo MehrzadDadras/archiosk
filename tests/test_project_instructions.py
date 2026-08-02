@@ -68,14 +68,14 @@ class ProjectInstructionsRoleTests(unittest.TestCase):
             f"/projects/{self.project_id}/workspace/instructions",
             data={"instructions": "Use metric units throughout."},
         )
-        page = self.client.get(f"/projects/{self.project_id}/workspace")
+        page = self.client.get(f"/projects/{self.project_id}/workspace?view=overview")
         body = page.get_data(as_text=True)
         self.assertIn("Last updated by admin1 (admin)", body)
 
     def test_explanation_is_not_permanently_visible(self):
         # Collapsed behind a disclosure control, not printed as static
         # always-rendered text ahead of the real instruction.
-        page = self.client.get(f"/projects/{self.project_id}/workspace")
+        page = self.client.get(f"/projects/{self.project_id}/workspace?view=overview")
         body = page.get_data(as_text=True)
         self.assertIn("What are Project Instructions?", body)
 

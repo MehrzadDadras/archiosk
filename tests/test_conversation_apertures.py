@@ -54,7 +54,7 @@ class ConversationApertureRouteTests(unittest.TestCase):
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
 
     def _register_requirement(self):
-        self.client.get(f"/projects/{self.project_id}/workspace")  # registers the auto document Source
+        self.client.get(f"/projects/{self.project_id}/workspace?view=overview")  # registers the auto document Source
         workspace = self.store.get(self.project_id)
         source_id = workspace.sources[0]["id"]
         requirement = self.store.register_requirement(
@@ -131,7 +131,7 @@ class ConversationApertureRouteTests(unittest.TestCase):
                 "anchor_description": "Section 3.1",
             },
         )
-        resp = self.client.get(f"/projects/{self.project_id}/workspace")
+        resp = self.client.get(f"/projects/{self.project_id}/workspace?view=overview")
         body = resp.get_data(as_text=True)
         self.assertIn("Project Conversation (2)", body)
         self.assertIn("Any update?", body)
@@ -251,7 +251,7 @@ class ApertureEscalationTests(unittest.TestCase):
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
 
     def _register_requirement(self):
-        self.client.get(f"/projects/{self.project_id}/workspace")
+        self.client.get(f"/projects/{self.project_id}/workspace?view=overview")
         workspace = self.store.get(self.project_id)
         source_id = workspace.sources[0]["id"]
         return self.store.register_requirement(
@@ -274,7 +274,7 @@ class ApertureEscalationTests(unittest.TestCase):
                 "anchor_description": "Section 3.1",
             },
         )
-        resp = self.client.get(f"/projects/{self.project_id}/workspace")
+        resp = self.client.get(f"/projects/{self.project_id}/workspace?view=overview")
         self.assertIn("Start an Investigation from this", resp.get_data(as_text=True))
 
     def test_ordinary_unmatched_question_does_not_offer_it(self):
@@ -288,7 +288,7 @@ class ApertureEscalationTests(unittest.TestCase):
                 "anchor_description": "Section 3.1",
             },
         )
-        resp = self.client.get(f"/projects/{self.project_id}/workspace")
+        resp = self.client.get(f"/projects/{self.project_id}/workspace?view=overview")
         self.assertNotIn("Start an Investigation from this", resp.get_data(as_text=True))
 
     def test_accepting_creates_a_case_titled_from_the_anchor_and_reruns_the_text(self):
@@ -342,7 +342,7 @@ class ApertureEscalationTests(unittest.TestCase):
             f"/projects/{self.project_id}/workspace/discuss",
             data={"text": "never mind, something else entirely"},
         )
-        resp = self.client.get(f"/projects/{self.project_id}/workspace")
+        resp = self.client.get(f"/projects/{self.project_id}/workspace?view=overview")
         self.assertNotIn("Start an Investigation from this", resp.get_data(as_text=True))
 
 
@@ -377,7 +377,7 @@ class RecentFocusTests(unittest.TestCase):
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
 
     def _register_requirement(self, client, identifier="Section 3.1"):
-        client.get(f"/projects/{self.project_id}/workspace")  # registers the auto document Source
+        client.get(f"/projects/{self.project_id}/workspace?view=overview")  # registers the auto document Source
         workspace = self.store.get(self.project_id)
         source_id = workspace.sources[0]["id"]
         return self.store.register_requirement(
@@ -404,7 +404,7 @@ class RecentFocusTests(unittest.TestCase):
         requirement = self._register_requirement(self.client)
         self._discuss(self.client, requirement)
 
-        resp = self.client.get(f"/projects/{self.project_id}/workspace")
+        resp = self.client.get(f"/projects/{self.project_id}/workspace?view=overview")
         body = resp.get_data(as_text=True)
         self.assertIn("Recent Focus (1)", body)
         self.assertIn("Contractor shall provide as-built drawings.", body)
@@ -419,7 +419,7 @@ class RecentFocusTests(unittest.TestCase):
             sess["username"] = "owner2"
             sess["role"] = "admin"
 
-        resp = other_client.get(f"/projects/{self.project_id}/workspace")
+        resp = other_client.get(f"/projects/{self.project_id}/workspace?view=overview")
         body = resp.get_data(as_text=True)
         self.assertIn("Recent Focus (0)", body)
         # owner2 can still see the message itself in Project Conversation -
@@ -431,7 +431,7 @@ class RecentFocusTests(unittest.TestCase):
         self._discuss(self.client, requirement, text="first pass")
         self._discuss(self.client, requirement, text="second pass, still current?")
 
-        resp = self.client.get(f"/projects/{self.project_id}/workspace")
+        resp = self.client.get(f"/projects/{self.project_id}/workspace?view=overview")
         body = resp.get_data(as_text=True)
         self.assertIn("Recent Focus (1)", body)
 
@@ -444,12 +444,12 @@ class RecentFocusTests(unittest.TestCase):
             data={"outcome": "Satisfied", "reasoning": "As-built set received.", "case_id": ""},
         )
 
-        resp = self.client.get(f"/projects/{self.project_id}/workspace")
+        resp = self.client.get(f"/projects/{self.project_id}/workspace?view=overview")
         body = resp.get_data(as_text=True)
         self.assertIn("changed since you looked", body)
 
     def test_recent_focus_empty_state(self):
-        resp = self.client.get(f"/projects/{self.project_id}/workspace")
+        resp = self.client.get(f"/projects/{self.project_id}/workspace?view=overview")
         body = resp.get_data(as_text=True)
         self.assertIn("Recent Focus (0)", body)
         self.assertIn("anchored conversation", body)

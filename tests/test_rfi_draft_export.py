@@ -163,7 +163,7 @@ class RFIDraftExportTests(unittest.TestCase):
     # -- project-wide RFI register (CLAUDE-P38 OBS-08) --------------------
 
     def test_no_rfi_state_does_not_imply_only_contradictions_produce_one(self):
-        response = self.owner_client.get(f"/projects/{self.project_id}/workspace")
+        response = self.owner_client.get(f"/projects/{self.project_id}/workspace?view=overview")
         body = response.get_data(as_text=True)
         self.assertIn("No RFIs yet", body)
         self.assertIn("not only a flagged contradiction", body)
@@ -172,7 +172,7 @@ class RFIDraftExportTests(unittest.TestCase):
         draft = self._create_draft(self.owner_client, self.case["id"], self.finding_id, question_text="Please confirm beam size.")
         # Fetched from Project Home (no ?case=) - the register must be
         # visible project-wide, not only from inside the drafting Case.
-        response = self.owner_client.get(f"/projects/{self.project_id}/workspace")
+        response = self.owner_client.get(f"/projects/{self.project_id}/workspace?view=overview")
         body = response.get_data(as_text=True)
         self.assertIn("Please confirm beam size.", body)
         self.assertIn(self.case["title"], body)
@@ -184,7 +184,7 @@ class RFIDraftExportTests(unittest.TestCase):
             f"/projects/{self.project_id}/workspace/rfi-drafts/{draft['id']}/issue",
             data={"confirm": "once"},
         )
-        response = self.owner_client.get(f"/projects/{self.project_id}/workspace")
+        response = self.owner_client.get(f"/projects/{self.project_id}/workspace?view=overview")
         self.assertIn(">issued<", response.get_data(as_text=True))
 
     def test_rfi_from_a_case_the_viewer_cannot_see_is_not_leaked_in_the_register(self):
@@ -194,7 +194,7 @@ class RFIDraftExportTests(unittest.TestCase):
         # matching the exact discipline the Findings section already
         # applies to Case titles.
         self._create_draft(self.owner_client, self.case["id"], self.finding_id, question_text="Private-case RFI text.")
-        response = self.other_client.get(f"/projects/{self.project_id}/workspace")
+        response = self.other_client.get(f"/projects/{self.project_id}/workspace?view=overview")
         self.assertEqual(response.status_code, 200)
         body = response.get_data(as_text=True)
         self.assertNotIn("Private-case RFI text.", body)
@@ -251,7 +251,7 @@ class RFIDraftExportTests(unittest.TestCase):
         RequirementsRegistry(self.tmp_dir).save(
             ParsedDocument(project_id=other_project_id, filename="other.md", ingested_at="2026-01-01T00:00:00+00:00")
         )
-        self.owner_client.get(f"/projects/{other_project_id}/workspace")  # seed the workspace file
+        self.owner_client.get(f"/projects/{other_project_id}/workspace?view=overview")  # seed the workspace file
 
         draft = self._create_draft(self.owner_client, self.case["id"], self.finding_id)
         response = self.owner_client.get(f"/projects/{other_project_id}/workspace/rfi-drafts/{draft['id']}/export")

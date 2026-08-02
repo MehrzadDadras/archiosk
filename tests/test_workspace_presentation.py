@@ -52,7 +52,10 @@ class WorkspacePresentationTests(unittest.TestCase):
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
 
     def _page(self):
-        return self.client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
+        # CLAUDE-P40-E3A, Section 5: the bare workspace URL is blank by
+        # default now - this Overview-scoped content (Accepted Knowledge,
+        # History, Lifecycle, ...) needs the explicit ?view=overview leaf.
+        return self.client.get(f"/projects/{self.project_id}/workspace?view=overview").get_data(as_text=True)
 
     # -- OBS-02: Accepted Knowledge compact empty state ----------------------
 
@@ -79,12 +82,15 @@ class WorkspacePresentationTests(unittest.TestCase):
     # -- OBS-06: Sources card shows upload date -------------------------------
 
     def test_source_card_shows_added_date(self):
-        # CLAUDE-P40-E2B1: the Sources list lives in the Documents
-        # directory (?view=documents), not bare Project Home.
-        body = self.client.get(f"/projects/{self.project_id}/workspace?view=documents").get_data(as_text=True)
+        # SUPERSEDED (CLAUDE-P40-E3A): the retired ?view=documents
+        # directory (which used to show an inline "added {date}" line)
+        # is gone - Document names now live only in Lists' recursive
+        # tree, which carries the same added-date as a title tooltip
+        # instead (provenance preserved, not a second visible directory).
+        body = self.client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
         workspace = self.store.get(self.project_id)
         source = next(s for s in workspace.sources if s["kind"] == "rfq_rfp_document")
-        self.assertIn(f"added {source['added_at']}", body)
+        self.assertIn(f'title="Added {source["added_at"]}"', body)
 
     # -- OBS-12: History summary/full toggle ----------------------------------
 
