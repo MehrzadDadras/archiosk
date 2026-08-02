@@ -25,6 +25,15 @@
                 document.documentElement.classList.add('toolbox-hidden');
             }
             {% endif %}
+            {# CLAUDE-P40-VW7A: reviewer-wide (not per-Project) - the toggle
+               lives in the Menu bar's Account menu, present on every
+               authenticated page, and [data-ref] elements exist on Menu
+               controls even outside an open Project. Applied pre-paint so
+               a reviewer who left this on doesn't see an unbadged flash
+               before it kicks in. #}
+            if (window.localStorage.getItem('beehive:ui-reference-mode') === 'on') {
+                document.documentElement.classList.add('ui-reference-mode-active');
+            }
         } catch (e) { /* localStorage unavailable - default to shown */ }
     </script>
     {% block extra_head %}{% endblock %}
@@ -43,9 +52,9 @@
         {% if authenticated %}
         <div class="workspace-topbar">
             <div class="workspace-topbar-identity">
-                <a class="workspace-topbar-brand" href="{{ url_for('portal.index') }}">Archiosk</a>
+                <a class="workspace-topbar-brand" data-ref="menu.brand" href="{{ url_for('portal.index') }}">Archiosk</a>
                 {% if project_id is defined and workspace is defined %}
-                <span class="workspace-topbar-context">
+                <span class="workspace-topbar-context" data-ref="menu.context">
                     <span class="workspace-topbar-project">{{ workspace.display_title or document.filename }}</span>
                     {% if active_case %}
                     <span class="workspace-topbar-sep" aria-hidden="true">/</span>
@@ -82,7 +91,7 @@
                    room to usefully read an architectural drawing or
                    document - a real usability floor, not a decorative
                    round number. #}
-                <details class="workspace-layout-menu" id="workspace-layout-menu">
+                <details class="workspace-layout-menu" id="workspace-layout-menu" data-ref="menu.display-layout">
                     <summary class="workspace-topbar-btn workspace-layout-summary">Display Layout</summary>
                     <div class="workspace-layout-options" role="group" aria-label="Display Layout">
                         <div class="workspace-layout-quantity" role="group" aria-label="Vertical divisions">
@@ -115,7 +124,7 @@
                    the page's own visual hierarchy: Menu (top), then Lists/
                    Display/Toolbox left-to-right (middle), then Chat
                    (bottom). #}
-                <details class="workspace-appearance-menu" id="workspace-appearance-menu">
+                <details class="workspace-appearance-menu" id="workspace-appearance-menu" data-ref="menu.appearance">
                     <summary class="workspace-topbar-btn">Appearance</summary>
                     <div class="workspace-appearance-options" role="group" aria-label="Appearance">
                         <table class="appearance-matrix">
@@ -151,12 +160,29 @@
                    Username + Sign out (its child) live here now, not the
                    Lists panel's own identity block - Security stays in
                    Lists per the explicit instruction not to move it. #}
-                <details class="workspace-user-menu" id="workspace-user-menu">
+                <details class="workspace-user-menu" id="workspace-user-menu" data-ref="menu.account">
                     <summary class="workspace-topbar-btn workspace-user-summary" aria-label="Account menu">
                         {% if current_username %}<span class="workspace-user-name">{{ current_username }}</span>{% endif %}
                         <span aria-hidden="true">&hellip;</span>
                     </summary>
                     <div class="workspace-user-options" role="group" aria-label="Account">
+                        {# CLAUDE-P40-VW7A: a developer/QA-facing toggle, not a
+                           product-owner-facing feature - same localStorage +
+                           html-level-class pattern as the risk-layer/history-
+                           full toggles (case_workspace.js), applied reviewer-
+                           wide (base.html's own inline script below) since
+                           [data-ref] elements exist on every authenticated
+                           page's Menu bar, not only inside an open Workspace.
+                           When on, every [data-ref] element gets a small
+                           attr(data-ref) badge via CSS - see main.css's own
+                           .ui-reference-mode-active rule - so a reviewer (or
+                           this stage's own browser verification) can read
+                           off a control's stable reference id directly from
+                           the rendered page. #}
+                        <label class="workspace-overflow-item workspace-overflow-checkbox">
+                            <input type="checkbox" id="ui-reference-mode-toggle">
+                            UI Reference Mode
+                        </label>
                         <a class="workspace-overflow-item" href="{{ url_for('portal.logout') }}">Sign out</a>
                     </div>
                 </details>
@@ -188,7 +214,7 @@
                 {% set projects_open = project_id is defined or request.path == url_for('portal.projects_list') %}
                 <ul class="tree" data-tree-root>
                     <li class="tree-node" data-tree-node>
-                        <button type="button" class="tree-toggle launcher-heading{% if projects_open %} active{% endif %}" data-tree-parent aria-expanded="{{ 'true' if projects_open else 'false' }}">
+                        <button type="button" class="tree-toggle launcher-heading{% if projects_open %} active{% endif %}" data-tree-parent data-ref="lists.projects" aria-expanded="{{ 'true' if projects_open else 'false' }}">
                             <span class="tree-label">Projects</span>
                         </button>
                         <ul class="tree-children"{% if projects_open %} data-tree-open{% endif %}>
@@ -196,13 +222,13 @@
                             {% if project_id is defined and project_id == p.project_id %}
                             {# ---------------- The active Project's own real branch ------------- #}
                             <li class="tree-node" data-tree-node>
-                                <a class="tree-leaf launcher-link active" href="{{ url_for('workspace.show_workspace', project_id=p.project_id) }}">{{ p.display_name }}</a>
+                                <a class="tree-leaf launcher-link active" data-ref="lists.project.self" href="{{ url_for('workspace.show_workspace', project_id=p.project_id) }}">{{ p.display_name }}</a>
                                 <ul class="tree-children" data-tree-open>
                                     <li class="tree-node" data-tree-node>
-                                        <a class="tree-leaf launcher-link{% if directory_view == 'overview' %} active{% endif %}" href="{{ url_for('workspace.show_workspace', project_id=project_id, view='overview') }}">Overview</a>
+                                        <a class="tree-leaf launcher-link{% if directory_view == 'overview' %} active{% endif %}" data-ref="lists.project.overview" href="{{ url_for('workspace.show_workspace', project_id=project_id, view='overview') }}">Overview</a>
                                     </li>
                                     <li class="tree-node" data-tree-node>
-                                        <button type="button" class="tree-toggle launcher-link" data-tree-parent data-tree-owns="source" aria-expanded="{{ 'true' if selected_source else 'false' }}">
+                                        <button type="button" class="tree-toggle launcher-link" data-tree-parent data-tree-owns="source" data-ref="lists.project.documents" aria-expanded="{{ 'true' if selected_source else 'false' }}">
                                             <span class="tree-label">Documents <span class="launcher-count">{{ active_sources|length }}</span></span>
                                         </button>
                                         <ul class="tree-children"{% if selected_source %} data-tree-open{% endif %}>
@@ -213,19 +239,19 @@
                                                    that as a second visible directory in Display, but the provenance
                                                    detail itself (Section 12: "current source-document provenance")
                                                    is preserved here as a title tooltip rather than dropped outright. #}
-                                                <a class="tree-leaf launcher-link{% if selected_source and selected_source.id == s.id %} active{% endif %}" href="{{ url_for('workspace.show_workspace', project_id=project_id, source=s.id) }}" data-source-id="{{ s.id }}" title="Added {{ s.added_at }}">{{ s.name }}</a>
+                                                <a class="tree-leaf launcher-link{% if selected_source and selected_source.id == s.id %} active{% endif %}" data-ref="lists.project.documents.leaf" href="{{ url_for('workspace.show_workspace', project_id=project_id, source=s.id) }}" data-source-id="{{ s.id }}" title="Added {{ s.added_at }}">{{ s.name }}</a>
                                             </li>
                                             {% endfor %}
                                         </ul>
                                     </li>
                                     <li class="tree-node" data-tree-node>
-                                        <button type="button" class="tree-toggle launcher-link" data-tree-parent data-tree-owns="case" aria-expanded="{{ 'true' if active_case else 'false' }}">
+                                        <button type="button" class="tree-toggle launcher-link" data-tree-parent data-tree-owns="case" data-ref="lists.project.investigations" aria-expanded="{{ 'true' if active_case else 'false' }}">
                                             <span class="tree-label">Investigations <span class="launcher-count">{{ visible_cases|length }}</span></span>
                                         </button>
                                         <ul class="tree-children"{% if active_case %} data-tree-open{% endif %}>
                                             {% for c in visible_cases %}
                                             <li class="tree-node" data-tree-node>
-                                                <a class="tree-leaf launcher-link{% if active_case and active_case.id == c.id %} active{% endif %}" href="{{ url_for('workspace.show_workspace', project_id=project_id, case=c.id) }}">{{ c.title }}</a>
+                                                <a class="tree-leaf launcher-link{% if active_case and active_case.id == c.id %} active{% endif %}" data-ref="lists.project.investigations.leaf" href="{{ url_for('workspace.show_workspace', project_id=project_id, case=c.id) }}">{{ c.title }}</a>
                                             </li>
                                             {% endfor %}
                                         </ul>
@@ -238,7 +264,7 @@
                                        (0)" like every other branch. Matches the sibling pattern
                                        now: always present, count reflects reality. #}
                                     <li class="tree-node" data-tree-node>
-                                        <button type="button" class="tree-toggle launcher-link" data-tree-parent aria-expanded="false">
+                                        <button type="button" class="tree-toggle launcher-link" data-tree-parent data-ref="lists.project.rfis" aria-expanded="false">
                                             <span class="tree-label">RFIs <span class="launcher-count">{{ rfi_drafts_view|length }}</span></span>
                                         </button>
                                         <ul class="tree-children">
@@ -250,7 +276,7 @@
                                                doesn't exist. #}
                                             {% for row in rfi_drafts_view %}
                                             <li class="tree-node" data-tree-node>
-                                                <a class="tree-leaf launcher-link" href="{{ url_for('workspace.show_workspace', project_id=project_id, case=row.draft.case_id) }}">{{ row.draft.question_text[:60] }}{% if row.draft.question_text|length > 60 %}&hellip;{% endif %}</a>
+                                                <a class="tree-leaf launcher-link" data-ref="lists.project.rfis.leaf" href="{{ url_for('workspace.show_workspace', project_id=project_id, case=row.draft.case_id) }}">{{ row.draft.question_text[:60] }}{% if row.draft.question_text|length > 60 %}&hellip;{% endif %}</a>
                                             </li>
                                             {% endfor %}
                                         </ul>
@@ -260,7 +286,7 @@
                                        Section 4's own "only if an honest existing listing exists"
                                        instruction; confirmed absent during CLAUDE-P40-E3-PLAN). #}
                                     <li class="tree-node" data-tree-node>
-                                        <a class="tree-leaf launcher-link{% if directory_view is none and not active_case and not selected_source %} active{% endif %}" href="{{ url_for('workspace.show_workspace', project_id=project_id) }}">Chats</a>
+                                        <a class="tree-leaf launcher-link{% if directory_view is none and not active_case and not selected_source %} active{% endif %}" data-ref="lists.project.chats" href="{{ url_for('workspace.show_workspace', project_id=project_id) }}">Chats</a>
                                     </li>
                                     {# ---------------- Tasks (CLAUDE-P40-VW7) --------------------------
                                        Real, persisted project Tasks created via "Make Task" on a
@@ -279,23 +305,23 @@
                                        while Complete/Reopen (plain forms below) stay classic
                                        redirects. #}
                                     <li class="tree-node" data-tree-node id="lists-tasks-branch">
-                                        <button type="button" class="tree-toggle launcher-link" data-tree-parent aria-expanded="false">
+                                        <button type="button" class="tree-toggle launcher-link" data-tree-parent data-ref="lists.project.tasks" aria-expanded="false">
                                             <span class="tree-label">Tasks <span class="launcher-count" id="lists-tasks-count">{{ tasks_view|length }}</span></span>
                                         </button>
                                         <ul class="tree-children">
                                             <li class="tree-node-group">
-                                                <p class="launcher-subheading">Open <span class="launcher-count" id="lists-tasks-open-count">{{ tasks_open_view|length }}</span></p>
+                                                <p class="launcher-subheading" data-ref="lists.project.tasks.open">Open <span class="launcher-count" id="lists-tasks-open-count">{{ tasks_open_view|length }}</span></p>
                                                 <ul class="tree-children" data-tree-open id="lists-tasks-open-list">
                                                     {% for task in tasks_open_view %}
                                                     <li class="tree-node" data-tree-node data-task-id="{{ task.id }}">
                                                         <div class="launcher-task-row">
                                                             {% if task.source_available %}
-                                                            <a class="tree-leaf launcher-link" href="{{ task.source_url }}">{{ task.title }}</a>
+                                                            <a class="tree-leaf launcher-link" data-ref="lists.project.tasks.leaf" href="{{ task.source_url }}">{{ task.title }}</a>
                                                             {% else %}
-                                                            <span class="tree-leaf launcher-link launcher-link-unavailable">{{ task.title }} <small>(Source unavailable)</small></span>
+                                                            <span class="tree-leaf launcher-link launcher-link-unavailable" data-ref="lists.project.tasks.leaf">{{ task.title }} <small>(Source unavailable)</small></span>
                                                             {% endif %}
                                                             <form method="post" action="{{ url_for('workspace.complete_task_route', project_id=project_id, task_id=task.id) }}">
-                                                                <button type="submit" class="link-button">Mark complete</button>
+                                                                <button type="submit" class="link-button" data-ref="lists.project.tasks.complete">Mark complete</button>
                                                             </form>
                                                         </div>
                                                     </li>
@@ -305,18 +331,18 @@
                                                 </ul>
                                             </li>
                                             <li class="tree-node-group">
-                                                <p class="launcher-subheading">Completed <span class="launcher-count" id="lists-tasks-completed-count">{{ tasks_completed_view|length }}</span></p>
+                                                <p class="launcher-subheading" data-ref="lists.project.tasks.completed">Completed <span class="launcher-count" id="lists-tasks-completed-count">{{ tasks_completed_view|length }}</span></p>
                                                 <ul class="tree-children" id="lists-tasks-completed-list">
                                                     {% for task in tasks_completed_view %}
                                                     <li class="tree-node" data-tree-node data-task-id="{{ task.id }}">
                                                         <div class="launcher-task-row">
                                                             {% if task.source_available %}
-                                                            <a class="tree-leaf launcher-link launcher-task-completed" href="{{ task.source_url }}">{{ task.title }}</a>
+                                                            <a class="tree-leaf launcher-link launcher-task-completed" data-ref="lists.project.tasks.leaf" href="{{ task.source_url }}">{{ task.title }}</a>
                                                             {% else %}
-                                                            <span class="tree-leaf launcher-link launcher-link-unavailable">{{ task.title }} <small>(Source unavailable)</small></span>
+                                                            <span class="tree-leaf launcher-link launcher-link-unavailable" data-ref="lists.project.tasks.leaf">{{ task.title }} <small>(Source unavailable)</small></span>
                                                             {% endif %}
                                                             <form method="post" action="{{ url_for('workspace.reopen_task_route', project_id=project_id, task_id=task.id) }}">
-                                                                <button type="submit" class="link-button">Reopen</button>
+                                                                <button type="submit" class="link-button" data-ref="lists.project.tasks.reopen">Reopen</button>
                                                             </form>
                                                         </div>
                                                     </li>
@@ -337,13 +363,13 @@
                                        immediately via fetch() - Section 7's own explicit
                                        requirement - never a full reload. #}
                                     <li class="tree-node" data-tree-node id="lists-tags-branch">
-                                        <button type="button" class="tree-toggle launcher-link" data-tree-parent aria-expanded="false">
+                                        <button type="button" class="tree-toggle launcher-link" data-tree-parent data-ref="lists.project.tags" aria-expanded="false">
                                             <span class="tree-label">Tags <span class="launcher-count" id="lists-tags-count">{{ tag_occurrences_total }}</span></span>
                                         </button>
                                         <ul class="tree-children" id="lists-tags-groups">
                                             {% for group in tag_groups_view %}
                                             <li class="tree-node-group" data-tag-group="{{ group.tag.id }}">
-                                                <p class="launcher-subheading">
+                                                <p class="launcher-subheading" data-ref="lists.project.tags.group">
                                                     <span class="launcher-tag-swatch conv-tag-color-{{ group.tag.color }}" aria-hidden="true"></span>
                                                     {{ group.tag.name }} <span class="launcher-count" data-tag-group-count>{{ group.occurrences|length }}</span>
                                                 </p>
@@ -352,12 +378,12 @@
                                                     <li class="tree-node" data-tree-node data-tag-occurrence-id="{{ occ.id }}">
                                                         <div class="launcher-task-row">
                                                             {% if occ.source_available %}
-                                                            <a class="tree-leaf launcher-link" href="{{ occ.source_url }}">&ldquo;{{ occ.quote[:60] }}{% if occ.quote|length > 60 %}&hellip;{% endif %}&rdquo;</a>
+                                                            <a class="tree-leaf launcher-link" data-ref="lists.project.tags.leaf" href="{{ occ.source_url }}">&ldquo;{{ occ.quote[:60] }}{% if occ.quote|length > 60 %}&hellip;{% endif %}&rdquo;</a>
                                                             {% else %}
-                                                            <span class="tree-leaf launcher-link launcher-link-unavailable">&ldquo;{{ occ.quote[:60] }}{% if occ.quote|length > 60 %}&hellip;{% endif %}&rdquo; <small>(Source unavailable)</small></span>
+                                                            <span class="tree-leaf launcher-link launcher-link-unavailable" data-ref="lists.project.tags.leaf">&ldquo;{{ occ.quote[:60] }}{% if occ.quote|length > 60 %}&hellip;{% endif %}&rdquo; <small>(Source unavailable)</small></span>
                                                             {% endif %}
                                                             <form method="post" action="{{ url_for('workspace.remove_tag_occurrence_route', project_id=project_id, occurrence_id=occ.id) }}" data-tag-remove-form data-occurrence-id="{{ occ.id }}">
-                                                                <button type="submit" class="link-button">Remove</button>
+                                                                <button type="submit" class="link-button" data-ref="lists.project.tags.remove">Remove</button>
                                                             </form>
                                                         </div>
                                                     </li>
@@ -384,32 +410,32 @@
                                        tree-toggle hover/pin/collapse mechanism as every sibling
                                        branch above, not a second navigation tree. #}
                                     <li class="tree-node" data-tree-node>
-                                        <button type="button" class="tree-toggle launcher-link" data-tree-parent aria-expanded="false">
+                                        <button type="button" class="tree-toggle launcher-link" data-tree-parent data-ref="lists.project.tools" aria-expanded="false">
                                             <span class="tree-label">Project Tools</span>
                                         </button>
                                         <ul class="tree-children">
                                             <li class="tree-node launcher-project-tools">
                                                 {% if is_project_owner or is_admin %}
                                                 <form method="post" action="{{ url_for('workspace.remove_project_route', project_id=project_id) }}">
-                                                    <button type="submit" class="btn btn-ghost">Remove Project</button>
+                                                    <button type="submit" class="btn btn-ghost" data-ref="lists.project.tools.remove-project">Remove Project</button>
                                                 </form>
                                                 {% endif %}
 
                                                 {% call macros.subdisclosure('+ Add Documents', html_id='project-sources-add-document') %}
-                                                    <form class="workspace-form" method="post" enctype="multipart/form-data" action="{{ url_for('workspace.add_document_source', project_id=project_id) }}">
+                                                    <form class="workspace-form" method="post" enctype="multipart/form-data" action="{{ url_for('workspace.add_document_source', project_id=project_id) }}" data-ref="lists.project.tools.add-document">
                                                         <input type="file" name="document" accept=".pdf,.docx,.txt,.csv,.md" required>
                                                         <button type="submit">Add Document</button>
                                                     </form>
                                                 {% endcall %}
                                                 {% call macros.subdisclosure('+ Add Text Record') %}
-                                                    <form class="workspace-form" method="post" action="{{ url_for('workspace.add_text_record_source', project_id=project_id) }}">
+                                                    <form class="workspace-form" method="post" action="{{ url_for('workspace.add_text_record_source', project_id=project_id) }}" data-ref="lists.project.tools.add-text-record">
                                                         <input type="text" name="title" placeholder="Title (e.g. Site visit note &mdash; May 3)" required>
                                                         <textarea name="content" placeholder="Content" required></textarea>
                                                         <button type="submit">Add Record</button>
                                                     </form>
                                                 {% endcall %}
                                                 {% call macros.subdisclosure('+ Add External Source') %}
-                                                    <p style="font-size:0.85rem;color:var(--text-secondary);">
+                                                    <p style="font-size:0.85rem;color:var(--text-secondary);" data-ref="lists.project.tools.add-external-source">
                                                         Not yet available &mdash; no external source connector is configured for this deployment.
                                                     </p>
                                                 {% endcall %}
@@ -420,26 +446,26 @@
                                                    DOCUMENTS within THIS Project. #}
                                                 {% call macros.subdisclosure('Removed Items (' ~ removed_sources|length ~ ')', html_id='project-removed-items') %}
                                                     {% if removed_sources %}
-                                                    <ul class="source-list">
+                                                    <ul class="source-list" data-ref="lists.project.tools.removed-items">
                                                         {% for source in removed_sources %}
                                                         <li class="source-item">
                                                             {{ source.name }}
                                                             <br><small class="text-muted">Removed {{ source.removed_at }}{% if source.removed_by %} by {{ source.removed_by }}{% endif %}</small>
                                                             <form method="post" action="{{ url_for('workspace.restore_document_route', project_id=project_id, source_id=source.id) }}">
-                                                                <button type="submit" class="link-button">Restore Document</button>
+                                                                <button type="submit" class="link-button" data-ref="lists.project.tools.removed-items.restore">Restore Document</button>
                                                             </form>
                                                         </li>
                                                         {% endfor %}
                                                     </ul>
                                                     {% else %}
-                                                    <p class="pane-note">No removed Documents in this Project.</p>
+                                                    <p class="pane-note" data-ref="lists.project.tools.removed-items">No removed Documents in this Project.</p>
                                                     {% endif %}
                                                 {% endcall %}
 
                                                 {% if is_admin %}
                                                 {% call macros.subdisclosure('Project Data Management', html_id='project-data-management') %}
                                                     <p class="pane-note">Administrator only.</p>
-                                                    <a class="btn btn-ghost workspace-link" href="{{ url_for('portal.reset_project_data') }}">Reset Project Data&hellip;</a>
+                                                    <a class="btn btn-ghost workspace-link" data-ref="lists.project.tools.data-management" href="{{ url_for('portal.reset_project_data') }}">Reset Project Data&hellip;</a>
                                                 {% endcall %}
                                                 {% endif %}
                                             </li>
@@ -449,7 +475,7 @@
                             </li>
                             {% else %}
                             <li class="tree-node" data-tree-node>
-                                <a class="tree-leaf launcher-link" href="{{ url_for('workspace.show_workspace', project_id=p.project_id) }}">{{ p.display_name }}</a>
+                                <a class="tree-leaf launcher-link" data-ref="lists.projects.leaf" href="{{ url_for('workspace.show_workspace', project_id=p.project_id) }}">{{ p.display_name }}</a>
                             </li>
                             {% endif %}
                             {% endfor %}
@@ -460,7 +486,7 @@
                        never render for a non-admin reviewer (Section 4: "unauthorized...
                        branches must never render"). #}
                     <li class="tree-node" data-tree-node>
-                        <a class="tree-leaf launcher-link launcher-new-project" href="{{ url_for('portal.upload') }}">+ New Project</a>
+                        <a class="tree-leaf launcher-link launcher-new-project" data-ref="lists.new-project" href="{{ url_for('portal.upload') }}">+ New Project</a>
                     </li>
                     {% endif %}
                     {# Global "Chats" root (cross-Project) omitted outright - no
@@ -468,17 +494,17 @@
                        codebase; only per-Project conversation does (see the
                        Project branch above). Nothing honest to list here. #}
                     <li class="tree-node" data-tree-node>
-                        <a class="tree-leaf launcher-link" href="{{ url_for('portal.removed_projects') }}">Removed Projects</a>
+                        <a class="tree-leaf launcher-link" data-ref="lists.removed-projects" href="{{ url_for('portal.removed_projects') }}">Removed Projects</a>
                     </li>
                     {% if is_admin %}
                     <li class="tree-node" data-tree-node>
-                        <a class="tree-leaf launcher-link" href="{{ url_for('security.department_home') }}">Security</a>
+                        <a class="tree-leaf launcher-link" data-ref="lists.security" href="{{ url_for('security.department_home') }}">Security</a>
                     </li>
                     {% endif %}
                 </ul>
             </div>
         </nav>
-        <button type="button" class="panel-divider panel-divider-lists" id="lists-divider" aria-expanded="true" aria-controls="launcher-panel" aria-label="Collapse Lists panel"></button>
+        <button type="button" class="panel-divider panel-divider-lists" id="lists-divider" data-ref="shell.lists-divider" aria-expanded="true" aria-controls="launcher-panel" aria-label="Collapse Lists panel"></button>
         {% else %}
         <!-- True zero state (State 0 - Unauthenticated): the authenticated
              shell (Lists panel, top bar, project/workspace controls) is not
@@ -506,7 +532,7 @@
         </div>
 
         {% if project_id is defined and workspace is defined %}
-        <button type="button" class="panel-divider panel-divider-toolbox" id="toolbox-divider" aria-expanded="true" aria-controls="workspace-toolbox-panel" aria-label="Collapse Toolbox"></button>
+        <button type="button" class="panel-divider panel-divider-toolbox" id="toolbox-divider" data-ref="shell.toolbox-divider" aria-expanded="true" aria-controls="workspace-toolbox-panel" aria-label="Collapse Toolbox"></button>
         {# ---------------- The one right Toolbox (CLAUDE-P40-E3A, Section 8) --------
            Shell-owned markup (one definition, one place), but only actually
            present within an open, ACTIVE Workspace - "workspace is defined"
@@ -518,7 +544,7 @@
            correctly stays absent there too, not just on the dashboard/
            Security/uploads pages. Content comes from {% block toolbox %},
            filled in only by case_workspace.html. #}
-        <aside class="workspace-pane-toolbox" id="workspace-toolbox-panel">
+        <aside class="workspace-pane-toolbox" id="workspace-toolbox-panel" data-ref="toolbox.panel">
             {% block toolbox %}{% endblock %}
         </aside>
         {% endif %}
@@ -533,7 +559,7 @@
            on the dashboard/Security/uploads pages OR a removed-Project
            tombstone, none of which have real conversation context). Content
            comes from {% block chat %}, filled in only by case_workspace.html. #}
-        <div class="chat-region" id="chat-region">
+        <div class="chat-region" id="chat-region" data-ref="chat.dock">
             {% block chat %}{% endblock %}
         </div>
         {% endif %}
@@ -597,6 +623,24 @@
                 if (listsDivider && !html.classList.contains('launcher-hidden')) setListsHidden(true);
                 if (toolboxDivider && setToolboxHidden && !html.classList.contains('toolbox-hidden')) setToolboxHidden(true);
             });
+
+            // CLAUDE-P40-VW7A: UI Reference Mode - same shape as the two
+            // dividers above (localStorage + one html-level class), so a
+            // reviewer/QA session can turn on a small attr(data-ref) badge
+            // (main.css's own .ui-reference-mode-active rule) over every
+            // instrumented control during inspection or browser
+            // verification, then turn it back off. Off by default; never
+            // read by anything except this toggle and that CSS rule -
+            // purely a presentation aid, not a Project-record write.
+            var refModeToggle = document.getElementById('ui-reference-mode-toggle');
+            if (refModeToggle) {
+                var refModeKey = 'beehive:ui-reference-mode';
+                refModeToggle.checked = html.classList.contains('ui-reference-mode-active');
+                refModeToggle.addEventListener('change', function () {
+                    html.classList.toggle('ui-reference-mode-active', refModeToggle.checked);
+                    try { window.localStorage.setItem(refModeKey, refModeToggle.checked ? 'on' : 'off'); } catch (e) { /* ignore */ }
+                });
+            }
         })();
     </script>
     <script>

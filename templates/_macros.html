@@ -120,7 +120,7 @@
         <button type="button" class="conversation-size-toggle" id="conversation-size-toggle" aria-pressed="false">Expand</button>
     </div>
     {{ caller() }}
-    <form class="conversation-input-form conversation-dock-composer" method="post" action="{{ post_url }}">
+    <form class="conversation-input-form conversation-dock-composer" method="post" action="{{ post_url }}" data-ref="chat.composer">
         {% if include_anchor_fields %}
         <input type="hidden" name="anchor_type" id="dock-composer-anchor-type" value="">
         <input type="hidden" name="anchor_id" id="dock-composer-anchor-id" value="">

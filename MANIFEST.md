@@ -12,7 +12,12 @@ excluded — see `.gitignore`. Individual `tests/*.py` files and
 tests have no separate index (there are 65+ of them; read the test
 file itself), and `governance/` is its own system with its own index
 (`governance/STATUS.md`, `governance/history-mapping.md`) per
-`CLAUDE.md`'s "does not contain" list.
+`CLAUDE.md`'s "does not contain" list. Likewise, this manifest doesn't
+self-catalog `CLAUDE.md`/`CONTINUATION_CHECKPOINT.md`/its own file —
+add `UI_REFERENCE_MAP.md` (CLAUDE-P40-VW7A) to that same group: a
+top-level durable record with its own index (every `data-ref` id used
+across `templates/base.html`/`case_workspace.html`/`_macros.html`),
+not a file-layout entry this document's own rows describe.
 
 **Known gap, not yet fixed:** this manifest predates the multi-user
 `User`/`PasswordResetToken` auth system (`models.py`,
