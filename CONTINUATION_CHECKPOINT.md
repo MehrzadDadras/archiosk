@@ -1,5 +1,113 @@
 # Continuation checkpoint
 
+## 2026-08-02 — CLAUDE-P40-VW6: corrected Light, Dark, and Tinted panel rendering
+
+**Commit:** `8abbd0d`. Full suite: 1690 passed, 0 failed (was 1650; 40
+new). Starting state was `0021251` (the P40-VW5 checkpoint) - HEAD and
+`origin/main` verified equal, tree clean except the pre-existing
+untracked `tests/fixtures/nreocrc/_lab_instance_scratch_002/`. **No
+product-owner acceptance seal recorded** - explicitly not requested
+this stage; subject to another visual walkthrough.
+
+**Product-owner browser observations**: Light panels showed untreated
+portions; Dark panels weren't genuinely black, the Appearance popup
+let underlying text show through, the workspace/Chat divider
+disappeared; Tinted panels were inconsistently beige/gold rather than
+a uniform light navy-blue.
+
+**PRIMARY ROOT CAUSE**: `tokens.css`'s own VW3-authored Dark-mode
+comment block ended with a stray Jinja-style `#}` instead of CSS's
+own `*/` - a copy-paste artifact, present since the very first VW3
+commit (`e4b241d`). CSS comments only end at the FIRST real `*/` -
+`#}` is just more comment text - so the `:root {` meant to open the
+`--dark-*` token block was itself swallowed inside the still-open
+comment, and every `--dark-*` declaration that followed was a bare,
+rule-less custom-property declaration: invalid CSS, silently dropped
+by every browser. Every `var(--dark-canvas)`/etc. reference in
+`.appearance-dark` therefore resolved against tokens that were NEVER
+ACTUALLY DEFINED, collapsing `--canvas`/`--surface-primary`/
+`--text-primary` to their inherited/initial value inside that scope -
+explaining "not genuinely black" and "some text and internal panel
+layers do not receive the Dark treatment" far more completely than
+any single component gap could. Every VW3/VW4/VW5-era test that
+appeared to verify Dark mode's tokens passed anyway, because they all
+read `tokens.css` as plain text via regex, which cannot distinguish a
+real declaration from dead text inside a broken comment - why this
+went undetected across three prior stages. **Fixed with a one-
+character change** (`#}` → `*/`); the new `BrokenCommentGuardTests`
+strips real CSS comments before checking anything, closing that
+specific blind spot for good.
+
+**Separate, genuine defects found and fixed independently of the
+comment bug**:
+- VW3's Tinted mode never redefined the surface's token SCOPE the way
+  Dark was meant to - it only swapped ONE element's own background per
+  surface to `--surface-secondary` (Limestone/beige, a real, correct,
+  UNRELATED token, never a dedicated Tinted palette). Fixed: Tinted
+  now uses its own `--tint-*` family, redefining the full standard
+  token set in the same combined selector `.appearance-dark` already
+  used. `--tint-surface-primary` is `#D8E2F0` directly (the product
+  owner's own specified navy, used as the actual painted panel fill).
+- `--dark-canvas`/`--dark-surface-primary` were a dark warm brown
+  (`#1A1814`/`#25221D`) in the source text - now literal `#000000`,
+  `--dark-text-primary` literal `#FFFFFF`, every token recomputed and
+  re-verified against pure black via `tools/check_contrast.py` (ALL
+  PAIRINGS PASS, same for the new tint family).
+- Browsers never theme a bare `<select>`/`<input>`/`<textarea>`/
+  `<button>` from surrounding page CSS - the existing font-family
+  backstop rule never had a color equivalent. Extended with
+  `background-color`/`color`/`border-color` (tokens) - fixes the
+  VW1/VW4 Document-picker dropdown and every other unstyled form
+  control centrally.
+- The workspace/Chat divider used `--border` (mode-scoped, always
+  matching whichever mode Chat itself was in) - two adjacent Dark
+  surfaces produced two very-low-contrast dark-on-dark lines,
+  technically present, not perceptible. Fixed with a new
+  `--divider-strong` token, deliberately never redefined by either
+  scope, verified ≥3:1 against light/dark/tint backgrounds all at once
+  (5.04:1 / 4.00:1 / 4.02:1).
+- The Appearance popup's z-index (20) sat below the Display context
+  menu's (40) with no real margin - raised to 60, now the highest
+  z-index in `main.css`. Its background was always a solid token
+  color, never rgba - confirmed, not changed for its own sake.
+
+**Test-infrastructure note**: updated 1 pre-existing test
+(`test_p40vw3_appearance_matrix.py`) whose assertion checked for the
+OLD single-property Tinted rule this stage deliberately replaces - not
+weakened, checking the new combined-selector mechanism instead.
+
+**Tests**: added `tests/test_p40vw6_theme_correction.py` (40 tests) -
+the comment-bug guard, full Dark/Tinted palette coverage (including
+two real, non-simulated `tools/check_contrast.py` subprocess runs),
+popup opacity/stacking, the divider token's measured contrast against
+all three backgrounds, the global form-control backstop, independent
+mixed-mode wiring and persistence/legacy-compat (VW3 preserved), VW4
+Display Layout control readability, VW5 Sign-in/Gateway shell
+boundaries (confirmed untouched), and confirmation no CSS filter/
+blend-mode exists that could recolor actual document content.
+Confirmed load-bearing by reverting both CSS files and observing
+20/40 fail (including all 3 comment-guard tests correctly catching the
+original bug), then restoring them. Directly affected suites re-run
+explicitly (229 tests) - all passing. Full suite run to termination:
+1690 passed, 0 failed.
+
+**Browser evidence and its limitation, stated honestly**: no browser-
+automation tool was actually connected in this session (checked
+directly via tool search, twice, consistent with every prior VW
+stage). Verification rests on structural CSS/JS/HTML source assertions
+and real (non-simulated) contrast-tool runs, not visual inspection or
+real computed-style reads. **The product owner should visually verify
+all five rows Light, all five Dark, all five Tinted, at least three
+mixed-mode combinations, the Appearance popup open in each Menu mode,
+the Chat divider under contrasting adjacent modes, and both wide and
+narrow viewports** during the continued walkthrough.
+
+Preserves VW1-VW5 behaviour (re-confirmed by this stage's own tests),
+routing/Sign-in/Gateway isolation, Display division behaviour, and all
+real Project/Document/Investigation/RFI/conversation data - none were
+touched. P40-E3B remains closed as DEFER; the conversation Tasks/Tags
+work and P41 were not started.
+
 ## 2026-08-02 — CLAUDE-P40-VW5: standalone Sign-in and Project Gateway shell isolation
 
 **Commit:** `a02425c`. Full suite: 1650 passed, 0 failed (was 1613; 36
