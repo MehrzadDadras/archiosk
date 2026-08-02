@@ -1,5 +1,54 @@
 # Continuation checkpoint
 
+## 2026-08-02 — CLAUDE-P40-E3A-F1: StableUrlRestoration flake root-caused and fixed
+
+**Commit:** `97e51f9`. Full suite: 1507 passed (unchanged count - test-only
+fix, no new tests added, one existing test corrected). Starting state
+was `1c56999` (the P40-E3A-QA-CLOSE conditional acceptance seal).
+
+Independently investigated the flake recorded as a residual in the
+P40-E3A-QA-CLOSE seal:
+`StableUrlRestorationTests::test_navigating_away_and_back_via_fresh_requests_restores_identical_state`
+(2 of 5 full-suite runs, always passed isolated). Ruled out an
+import-order/module-side-effect cause (running with every test module
+imported but only this one executed passed 3/3). A fast, isolated
+400-iteration reproduction script (session-scratchpad, not committed)
+reproduced the failure 3 times in under 2 minutes and captured real
+diffs each time.
+
+**Root cause, confirmed by direct evidence**: all 3 captured mismatches
+differed in exactly one place - the `<meta name="csrf-token">` tag,
+and only in its timestamp/signature segment (the encoded secret before
+the first "." was byte-identical every time). Flask-WTF's
+`generate_csrf()` re-signs the session's stable CSRF secret with a
+fresh `itsdangerous` timestamp on every call, by design - it does not
+cache the fully-signed string across requests. Two requests landing in
+different wall-clock seconds get a different signed token even though
+nothing about session or page state changed; full-suite-scale GC/IO
+pressure occasionally widens the gap between the test's two requests
+enough to cross a second boundary. **This is expected, correct CSRF
+behavior, not a product defect** - a pure test-correctness defect in
+this one test's own prior (and, per that test's own comment, explicitly
+asserted but wrong) assumption that the raw HTTP body would be
+byte-stable across two different requests.
+
+**Repair** (one test file, no application code): the CSRF meta tag is
+normalized to a placeholder before the strict body comparison; a
+companion assertion now checks the CSRF *secret* segment itself stays
+identical across the two requests - real regression coverage in its
+own right (unexpected per-request CSRF-identity rotation would be a
+genuine security regression). No retries/sleeps/skips/weakened
+assertions/forced ordering used. Verified: the same 400-iteration
+reproduction with the fix applied - 0 mismatches (was 3). Confirmed via
+grep this exposure was unique to this one test; nothing else in the
+suite does a full-body equality comparison across two separate page
+renders.
+
+Preserves the P40-E3A-QA-CLOSE seal, the accepted layout, all
+authorization/persistence boundaries, and every real record - no
+template/CSS/JS/schema/governance file touched. P40-E3B and P41 not
+started.
+
 ## 2026-08-02 — CLAUDE-P40-E3A-QA-CLOSE: conditional acceptance seal
 
 **Seal commit:** (this checkpoint commit itself). Starting state was
