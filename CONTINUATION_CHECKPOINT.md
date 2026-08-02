@@ -1,5 +1,91 @@
 # Continuation checkpoint
 
+## 2026-08-02 — CLAUDE-P40-VW4: independent Vertical/Horizontal Display division controls
+
+**Commit:** `0919b54`. Full suite: 1613 passed, 0 failed (was 1568; 45
+new). Starting state was `34143c2` (the P40-VW3 checkpoint) - HEAD and
+`origin/main` verified equal, tree clean except the pre-existing
+untracked `tests/fixtures/nreocrc/_lab_instance_scratch_002/`. **No
+product-owner acceptance seal recorded** - explicitly not requested
+this stage; the result remains subject to the next walkthrough.
+
+**Product-owner walkthrough correction**: the Display Layout panel
+treated Vertical and Horizontal as an either/or choice sharing one
+quantity. Replaced with two fully independent numbers - Vertical
+divisions (side-by-side columns) and Horizontal divisions (stacked
+rows), both permanently visible simultaneously - resulting Display
+count is their PRODUCT, capped at the existing ceiling of 6 (14 valid
+combinations).
+
+**Existing model examined before changing it**: a single `quantity`
+(1-6) + `orientation` pair, persisted as `{quantity, orientation}` in
+localStorage, driving a static `[data-orientation][data-count]` CSS
+attribute-selector table. Extended (not replaced) the same mechanism:
+`vertical`/`horizontal` are the new source-of-truth numbers;
+`quantity` is now a derived value (`vertical * horizontal`), so the
+existing six-Display show/hide table and active-target bounds logic
+are unchanged. Since 14 V×H≤6 combinations can't be enumerated as
+static attribute selectors the way the single-axis version was,
+`grid-template-columns`/`rows` now read `--display-v`/`--display-h`
+custom properties set inline by `applyLayout` per Apply.
+
+**Compatibility mapping** (this stage's own required rule, in
+`normalizeStoredLayout`): a stored `{quantity, orientation}` shape
+maps quantity 1 (either orientation) to Vertical 1/Horizontal 1; a
+"vertical" quantity N to Vertical N/Horizontal 1; a "horizontal"
+quantity N to Vertical 1/Horizontal N. The new `{vertical, horizontal}`
+shape passes through unchanged (idempotent).
+
+**Interaction**: both steppers fully independent; minimum 1 each; the
+relevant increment button disabled (not silently refused) the moment
+applying it would exceed 6, with a static "Maximum 6 Displays total"
+note in both menus; Apply commits both values atomically; closing/
+reopening either menu without Apply reseeds the pending display from
+the actually-applied state. "Close this Display" shrinks whichever
+axis is currently larger by one - the smallest reduction that still
+yields a full, never-ragged rectangle (a true grid can't shrink by
+exactly one cell).
+
+**Divider mechanism replaced**: the old per-orientation border-swap
+didn't generalize to two axes - a 1px `gap` the same color as
+`--border`, with each division painting its own `--surface-primary`
+over it, gives a real hairline on both axes at once, using only
+existing tokens (VW3 appearance-mode compatible - verified no
+hardcoded hex in any touched rule).
+
+**Test-infrastructure note**: updated 4 pre-existing test files whose
+assertions were tied to the retired single-axis model - not weakened,
+same coverage against the new, deliberately different mechanism.
+
+**Tests**: added `tests/test_p40vw4_independent_display_axes.py` (45
+tests) covering default state, independent axis wiring, minimum/
+ceiling enforcement, Apply-gating and dismiss-without-apply reseeding,
+2x3/3x2 arrangement semantics, right-click vs top-bar mechanism
+parity, legacy-state compatibility, Stable URL Restoration and
+active-target/projection preservation, VW3 appearance-token
+compliance, and keyboard/focus. Confirmed load-bearing by reverting
+all four changed source files and observing 32/45 fail, then restoring
+them. Directly affected suites re-run explicitly - all passing. Full
+suite run to termination: 1613 passed, 0 failed.
+
+**Browser evidence and its limitation, stated honestly**: no browser-
+automation tool was actually connected in this session (checked
+directly - `ToolSearch` for claude-in-chrome/MCP browser tools
+returned nothing), consistent with every prior VW stage. A throwaway
+local admin account was seeded directly into the dev SQLite DB in
+anticipation of live verification, found unusable once the tool's
+absence was confirmed, and removed again rather than left behind.
+Verification rests entirely on structural HTML/CSS/JS source
+assertions. **The product owner should confirm the controls visually
+and functionally in a real browser, including the illustrated 2x3/3x2
+arrangements**, during the continued walkthrough.
+
+Preserves layout/panel ownership, VW1's context-menu correction, VW2's
+relocated Project Tools, VW3's appearance matrix, active-target
+routing, document projection, project isolation/authorization, and
+project/document data - none were touched. P40-E3B remains closed as
+DEFER; the conversation Tasks/Tags work and P41 were not started.
+
 ## 2026-08-02 — CLAUDE-P40-VW3: per-surface Light/Dark/Tinted appearance matrix
 
 **Commit:** `e4b241d`. Full suite: 1568 passed, 0 failed (was 1544; 24
