@@ -1,5 +1,76 @@
 # Continuation checkpoint
 
+## 2026-08-02 — CLAUDE-P40-VW2: relocated project-level controls from Toolbox to Lists
+
+**Commit:** `17cbdaa`. Full suite: 1544 passed, 0 failed (was 1522; 22
+net new). Starting state was `5468c0b` (the P40-VW1 checkpoint) - HEAD
+and `origin/main` verified equal, tree clean except the pre-existing
+untracked `tests/fixtures/nreocrc/_lab_instance_scratch_002/`.
+
+**Product-owner walkthrough correction**: the right Toolbox's no-
+selection state showed a project-level panel - explanatory text,
+Remove Project, the three Add-a-Source forms, Removed Items, admin-
+only Project Data Management. This belonged in the left Lists panel's
+active-Project hierarchy, not the contextual right Toolbox (which is
+meant to hold only Document/Investigation-specific tools).
+
+**Root ownership, diagnosed before moving any markup**: these controls
+lived entirely inside `case_workspace.html`'s `{% block toolbox %}`
+no-selection branch, filled into the `<aside id="workspace-toolbox-
+panel">` `base.html`'s shell always owns.
+
+**Relocation**: the exact same markup (forms, routes, CSRF via the
+app-wide auto-injection, `confirm=yes` gates, owner/admin
+authorization `{% if %}`s, `macros.subdisclosure` calls, unique ids)
+moved wholesale into `base.html`'s own Lists panel, as a new "Project
+Tools" branch sibling to Overview/Documents/Investigations/RFIs/Chats
+inside the active Project's tree - collapsed by default, using the
+same existing tree-toggle hover/pin/collapse mechanism as every
+sibling branch, not a second navigation tree or column. `base.html`
+gained its own `{% import "_macros.html" as macros %}` (a child
+template's own import does not propagate to the parent's directly-
+written markup). No route in `routes/workspace.py` was touched - a
+pure template-layer relocation. Toolbox's no-selection branch is now a
+concise neutral empty state only.
+
+**Test-change note**: three pre-existing tests (in
+`test_p40e2_toolbox_and_removal.py`, `test_p40e2b1_single_launcher_and_
+directories.py`, `test_p40e3a_qa_reconciliation.py`) asserted these
+controls were entirely absent from the whole page body outside the
+no-selection state - a premise this relocation deliberately supersedes
+(Lists' Project Tools branch, like its Documents/Investigations
+siblings, is always part of the rendered hierarchy, just collapsed).
+Rescoped to check the Toolbox region specifically
+(`workspace-toolbox-panel`), which is what they actually meant to
+verify; nothing was weakened.
+
+**Tests**: added `tests/test_p40vw2_project_tools_relocation.py` (21
+tests) - relocation ownership, absence from Toolbox in every state, no
+duplication/unique ids, owner/admin-vs-granted-reviewer authorization,
+intact Document/Investigation contextual Toolbox content, and
+end-to-end functional proof (add document, add text record, remove +
+restore document, remove project) through the relocated forms against
+the unchanged routes. Confirmed load-bearing by reverting the template
+changes locally and observing the new tests fail, then restoring them.
+Directly affected suites re-run explicitly (Display-layout, Stable URL
+Restoration, VW1 context-menu, Toolbox/removal, project home,
+containment/restoration) - all passing. Full suite run to termination:
+1544 passed, 0 failed.
+
+**Browser evidence and its limitation, stated honestly**: no browser/
+pointer tool exists in this environment. Verification rests on
+structural HTML assertions (region scoping, id/action counts,
+authorization-gated presence/absence) and end-to-end route-level
+functional proof, not a real click. **The product owner should confirm
+the visual placement and collapse/expand feel of the new Project Tools
+branch with a real look during the continued walkthrough.**
+
+Preserves the recursive Project hierarchy, collapse/pin behaviour,
+active Project indication, Display geometry, Chat dock, stable URLs,
+authorization filtering, project/document data, and the VW1 context-
+menu correction - none were touched. P40-E3B remains closed as DEFER;
+P41 was not started.
+
 ## 2026-08-02 — CLAUDE-P40-VW1: fixed the permanently-visible Display context menu
 
 **Commit:** `7b83e82`. Full suite: 1522 passed, 0 failed (was 1507; 15
