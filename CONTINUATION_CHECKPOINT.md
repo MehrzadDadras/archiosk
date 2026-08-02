@@ -2,8 +2,8 @@
 
 ## 2026-08-02 — CLAUDE-P40-VW7: project-scoped conversation Tags and Tasks
 
-**Commits:** `3457c9f` (implementation), `a2715fe` (tests). Starting
-state was `a0c0552` (the P40-E3A-F1-QA-CLOSE checkpoint acceptance
+**Commits:** `3457c9f` (implementation), `a2715fe` (tests), `0651c91`
+(this entry). Starting state was `ad2cc23` (the P40-VW6 checkpoint
 commit) - HEAD and `origin/main` verified equal beforehand, tree clean
 except the pre-existing untracked
 `tests/fixtures/nreocrc/_lab_instance_scratch_002/`. Full suite: 1745
