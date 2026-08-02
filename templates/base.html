@@ -1,3 +1,4 @@
+{% import "_macros.html" as macros %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -223,6 +224,82 @@
                                        instruction; confirmed absent during CLAUDE-P40-E3-PLAN). #}
                                     <li class="tree-node" data-tree-node>
                                         <a class="tree-leaf launcher-link{% if directory_view is none and not active_case and not selected_source %} active{% endif %}" href="{{ url_for('workspace.show_workspace', project_id=project_id) }}">Chats</a>
+                                    </li>
+                                    {# ---------------- Project Tools (CLAUDE-P40-VW2) -----------------
+                                       Product-owner walkthrough correction: these project-level
+                                       controls (Remove Project, the three Add-a-Source forms,
+                                       Removed Items, admin-only Project Data Management) used to
+                                       render in the right Toolbox's no-selection state - moved
+                                       here wholesale (same forms/routes/CSRF/confirmation/
+                                       authorization/macros.subdisclosure idiom, nothing rebuilt),
+                                       so Toolbox stays reserved for Document/Investigation
+                                       context and these controls live where the rest of the
+                                       Project's own hierarchy already lives. Closed by default
+                                       (unlike Documents/Investigations, nothing here has a
+                                       "currently selected" state to auto-open) - the same
+                                       tree-toggle hover/pin/collapse mechanism as every sibling
+                                       branch above, not a second navigation tree. #}
+                                    <li class="tree-node" data-tree-node>
+                                        <button type="button" class="tree-toggle launcher-link" data-tree-parent aria-expanded="false">
+                                            <span class="tree-label">Project Tools</span>
+                                        </button>
+                                        <ul class="tree-children">
+                                            <li class="tree-node launcher-project-tools">
+                                                {% if is_project_owner or is_admin %}
+                                                <form method="post" action="{{ url_for('workspace.remove_project_route', project_id=project_id) }}">
+                                                    <button type="submit" class="btn btn-ghost">Remove Project</button>
+                                                </form>
+                                                {% endif %}
+
+                                                {% call macros.subdisclosure('+ Add Documents', html_id='project-sources-add-document') %}
+                                                    <form class="workspace-form" method="post" enctype="multipart/form-data" action="{{ url_for('workspace.add_document_source', project_id=project_id) }}">
+                                                        <input type="file" name="document" accept=".pdf,.docx,.txt,.csv,.md" required>
+                                                        <button type="submit">Add Document</button>
+                                                    </form>
+                                                {% endcall %}
+                                                {% call macros.subdisclosure('+ Add Text Record') %}
+                                                    <form class="workspace-form" method="post" action="{{ url_for('workspace.add_text_record_source', project_id=project_id) }}">
+                                                        <input type="text" name="title" placeholder="Title (e.g. Site visit note &mdash; May 3)" required>
+                                                        <textarea name="content" placeholder="Content" required></textarea>
+                                                        <button type="submit">Add Record</button>
+                                                    </form>
+                                                {% endcall %}
+                                                {% call macros.subdisclosure('+ Add External Source') %}
+                                                    <p style="font-size:0.85rem;color:var(--text-secondary);">
+                                                        Not yet available &mdash; no external source connector is configured for this deployment.
+                                                    </p>
+                                                {% endcall %}
+
+                                                {# CLAUDE-P40-E3A, Section 8's own note preserved: "Removed
+                                                   Projects" cross-link stays a separate leaf elsewhere in
+                                                   this same panel (see below) - this owns only removed
+                                                   DOCUMENTS within THIS Project. #}
+                                                {% call macros.subdisclosure('Removed Items (' ~ removed_sources|length ~ ')', html_id='project-removed-items') %}
+                                                    {% if removed_sources %}
+                                                    <ul class="source-list">
+                                                        {% for source in removed_sources %}
+                                                        <li class="source-item">
+                                                            {{ source.name }}
+                                                            <br><small class="text-muted">Removed {{ source.removed_at }}{% if source.removed_by %} by {{ source.removed_by }}{% endif %}</small>
+                                                            <form method="post" action="{{ url_for('workspace.restore_document_route', project_id=project_id, source_id=source.id) }}">
+                                                                <button type="submit" class="link-button">Restore Document</button>
+                                                            </form>
+                                                        </li>
+                                                        {% endfor %}
+                                                    </ul>
+                                                    {% else %}
+                                                    <p class="pane-note">No removed Documents in this Project.</p>
+                                                    {% endif %}
+                                                {% endcall %}
+
+                                                {% if is_admin %}
+                                                {% call macros.subdisclosure('Project Data Management', html_id='project-data-management') %}
+                                                    <p class="pane-note">Administrator only.</p>
+                                                    <a class="btn btn-ghost workspace-link" href="{{ url_for('portal.reset_project_data') }}">Reset Project Data&hellip;</a>
+                                                {% endcall %}
+                                                {% endif %}
+                                            </li>
+                                        </ul>
                                     </li>
                                 </ul>
                             </li>

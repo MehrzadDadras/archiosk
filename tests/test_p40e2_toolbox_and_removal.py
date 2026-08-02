@@ -126,13 +126,20 @@ class ContextualToolboxTests(_BaseP40E2TestCase):
         self.assertNotIn('id="findings"', body)
 
     def test_investigation_open_shows_findings_tool(self):
+        # CLAUDE-P40-VW2: "Remove Project" now lives in Lists' own
+        # Project Tools branch (always part of the active Project's
+        # rendered hierarchy, not Toolbox-contextual) - this assertion
+        # is scoped to the Toolbox region specifically, the thing this
+        # test actually means to check, rather than the whole body.
         client = self._client_as("p40e2_owner", 1)
         client.post(f"/projects/{self.project_id}/workspace/cases", data={"title": "Drawing Review", "objective": ""})
         case_id = self._store().get(self.project_id).cases[0]["id"]
         body = client.get(f"/projects/{self.project_id}/workspace?case={case_id}").get_data(as_text=True)
         self.assertIn("workspace-pane-toolbox", body)
         self.assertIn("Findings (0)", body)
-        self.assertNotIn("Remove Project", body)
+        toolbox_start = body.index('id="workspace-toolbox-panel"')
+        toolbox = body[toolbox_start:body.index("</aside>", toolbox_start)]
+        self.assertNotIn("Remove Project", toolbox)
 
     def test_document_selected_shows_document_tools(self):
         client = self._client_as("p40e2_owner", 1)

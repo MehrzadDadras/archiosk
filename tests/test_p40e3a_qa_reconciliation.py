@@ -200,30 +200,65 @@ class ChatSizeToggleTests(_BaseTestCase):
 
 # ---------------------------------------------------------------------------
 # Toolbox contextual scoping (Section 9)
+#
+# CLAUDE-P40-VW2 superseded this class's original premise: "Add a
+# Document"/"Removed Items"/"Project Data Management" used to live IN
+# Toolbox and only render there in the no-selection state. They have
+# since been relocated wholesale to Lists' own "Project Tools" branch
+# (base.html), which - like its Documents/Investigations/RFIs/Chats
+# siblings - is always part of the active Project's rendered hierarchy
+# regardless of what's currently selected (collapsed by default, not
+# absent). These tests now scope their assertions to the Toolbox
+# region specifically (workspace-toolbox-panel), the thing that
+# actually changed, rather than the whole page body.
 # ---------------------------------------------------------------------------
 
 class ToolboxContextualScopingTests(_BaseTestCase):
-    def test_project_level_sections_present_when_nothing_selected(self):
+    def _toolbox_html(self, body: str) -> str:
+        start = body.index('id="workspace-toolbox-panel"')
+        return body[start:body.index("</aside>", start)]
+
+    def test_project_level_sections_absent_from_toolbox_when_nothing_selected(self):
         client = self._client_as("e3aqa_owner", 1)
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
-        self.assertIn("Add a Document", body)
-        self.assertIn("Removed Items", body)
+        toolbox = self._toolbox_html(body)
+        self.assertNotIn("Add a Document", toolbox)
+        self.assertNotIn("Removed Items", toolbox)
+        self.assertNotIn("Remove Project", toolbox)
 
-    def test_project_level_sections_absent_when_a_document_is_selected(self):
+    def test_project_level_sections_absent_from_toolbox_when_a_document_is_selected(self):
         client = self._client_as("e3aqa_owner", 1)
         source_id = self._store().get(self.project_id).sources[0]["id"]
         body = client.get(f"/projects/{self.project_id}/workspace?source={source_id}").get_data(as_text=True)
-        self.assertNotIn("Add a Document", body)
-        self.assertNotIn("Removed Items", body)
+        toolbox = self._toolbox_html(body)
+        self.assertNotIn("Add a Document", toolbox)
+        self.assertNotIn("Removed Items", toolbox)
 
-    def test_project_level_sections_absent_when_an_investigation_is_selected(self):
+    def test_project_level_sections_absent_from_toolbox_when_an_investigation_is_selected(self):
         client = self._client_as("e3aqa_owner", 1)
         client.post(f"/projects/{self.project_id}/workspace/cases", data={"title": "Load Path Review", "objective": ""})
         case_id = self._store().get(self.project_id).cases[0]["id"]
         body = client.get(f"/projects/{self.project_id}/workspace?case={case_id}").get_data(as_text=True)
-        self.assertNotIn("Add a Document", body)
-        self.assertNotIn("Removed Items", body)
-        self.assertIn("Investigation", body)
+        toolbox = self._toolbox_html(body)
+        self.assertNotIn("Add a Document", toolbox)
+        self.assertNotIn("Removed Items", toolbox)
+        self.assertIn("Investigation", toolbox)
+
+    def test_project_level_sections_present_in_lists_panel_regardless_of_selection(self):
+        # CLAUDE-P40-VW2: unlike the old Toolbox placement, Lists'
+        # Project Tools branch is part of the always-rendered active-
+        # Project hierarchy - present whether or not a Document/
+        # Investigation happens to be selected, exactly like its
+        # Documents/Investigations siblings.
+        client = self._client_as("e3aqa_owner", 1)
+        source_id = self._store().get(self.project_id).sources[0]["id"]
+        for url in (
+            f"/projects/{self.project_id}/workspace",
+            f"/projects/{self.project_id}/workspace?source={source_id}",
+        ):
+            body = client.get(url).get_data(as_text=True)
+            self.assertIn('id="project-sources-add-document"', body, url)
+            self.assertIn('id="project-removed-items"', body, url)
 
 
 # ---------------------------------------------------------------------------

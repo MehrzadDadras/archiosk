@@ -244,7 +244,17 @@ class DirectoryLauncherTests(_BaseTestCase):
         self.assertNotIn(f'href="/projects/{self.project_id}/workspace?view=documents"', body)
 
     def test_documents_directory_lists_sources_and_supports_adding_one(self):
-        # SUPERSEDED IN PART (CLAUDE-P40-E3A-QA, Section 9): "Add a
+        # SUPERSEDED AGAIN (CLAUDE-P40-VW2): the E3A-QA note below still
+        # explains the Toolbox-scoping history, but "Add a Document" has
+        # since been relocated wholesale out of Toolbox entirely, into
+        # Lists' own always-rendered Project Tools branch (product-owner
+        # walkthrough correction - Toolbox stays reserved for contextual
+        # Document/Investigation tools only). It is now present
+        # regardless of what's selected (same as its Documents/
+        # Investigations siblings in Lists), and absent from Toolbox in
+        # every state, not just when something is selected.
+        #
+        # Original SUPERSEDED IN PART (CLAUDE-P40-E3A-QA, Section 9): "Add a
         # Document" used to render unconditionally in Toolbox regardless
         # of what was selected - product-owner browser observation named
         # the Toolbox "visually heavy... project-level controls" bleeding
@@ -258,7 +268,9 @@ class DirectoryLauncherTests(_BaseTestCase):
         self.assertIn("rfp.txt", body)
         self.assertIn('action="/projects/{}/workspace/sources/document"'.format(self.project_id), body)
         add_body = client.get(f"/projects/{self.project_id}/workspace?source=" + self._store().get(self.project_id).sources[0]["id"]).get_data(as_text=True)
-        self.assertNotIn('action="/projects/{}/workspace/sources/document"'.format(self.project_id), add_body)
+        toolbox_start = add_body.index('id="workspace-toolbox-panel"')
+        toolbox = add_body[toolbox_start:add_body.index("</aside>", toolbox_start)]
+        self.assertNotIn('action="/projects/{}/workspace/sources/document"'.format(self.project_id), toolbox)
 
     def test_investigations_launcher_link_targets_the_investigations_directory(self):
         client = self._client_as("p40e2b1_owner", 1)

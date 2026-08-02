@@ -1777,13 +1777,20 @@
    The <aside> element itself now lives in base.html (part of the
    application-wide shell, always present, empty on non-Workspace pages) -
    this block only fills its content. One right-side Toolbox, contextual
-   per the existing active_case > selected_source > project-home priority
-   order: Investigation selected -> Investigation tools (Findings);
-   Document selected -> Document tools; nothing selected -> restrained
-   Project tools. Removed Items, Add-a-Document, and (admin-only) Project
-   Data Management sit below the contextual block, always visible - this
-   stage relocates and preserves existing tools only (no drawing tools,
-   no chat tagging, no new persisted objects). #}
+   per the existing active_case > selected_source priority order:
+   Investigation selected -> Investigation tools (Findings); Document
+   selected -> Document tools; nothing selected -> a concise neutral
+   empty state only.
+
+   CLAUDE-P40-VW2: the project-level controls (Remove Project, the three
+   Add-a-Source forms, Removed Items, admin-only Project Data
+   Management) that used to render here in the no-selection branch have
+   been relocated to base.html's own Lists panel, inside the active
+   Project's own "Project Tools" branch - a product-owner walkthrough
+   correction, not a redesign: same forms, same routes, same CSRF/
+   confirmation/authorization, same macros.subdisclosure idiom, moved
+   wholesale rather than rebuilt. See base.html's own comment at that
+   branch for the other half of this relocation. #}
     <h2>Toolbox</h2>
 
     {% if active_case %}
@@ -2006,80 +2013,15 @@
         {% endif %}
     </section>
     {% else %}
+    {# CLAUDE-P40-VW2: concise neutral empty state only - the project-
+       level controls formerly here now live in Lists' own "Project
+       Tools" branch (base.html), not duplicated in both panels. #}
     <section class="workspace-pane">
         <p class="pane-note">
             No Investigation or Document is currently selected. Open one from Documents or
-            Investigations in Lists, or use the project-level tools below.
+            Investigations in Lists, or use Project Tools in Lists.
         </p>
-        {% if is_project_owner or is_admin %}
-        <form method="post" action="{{ url_for('workspace.remove_project_route', project_id=project_id) }}">
-            <button type="submit" class="btn btn-ghost">Remove Project</button>
-        </form>
-        {% endif %}
     </section>
-
-    {# CLAUDE-P40-E3A-QA, Section 9 fix: "Add a Document"/"Removed Items"/
-       "Project Data Management" used to render unconditionally below the
-       contextual section above - meaning opening an Investigation's
-       Findings, or a Document, ALSO always dragged in three project-level
-       sections underneath, regardless of relevance. Product-owner browser
-       observation: "visually heavy... contains lengthy explanatory text
-       and project-level controls." Section 9's own Expected-context table
-       lists these only under "no selected item: minimal Project-level
-       tools only" - Investigation/Document contexts list only their own
-       tools. Scoped here, inside the no-selection branch, to match. #}
-    <section class="workspace-pane">
-        <h3>Add a Document</h3>
-        {% call macros.subdisclosure('+ Add Documents', html_id='project-sources-add-document') %}
-            <form class="workspace-form" method="post" enctype="multipart/form-data" action="{{ url_for('workspace.add_document_source', project_id=project_id) }}">
-                <input type="file" name="document" accept=".pdf,.docx,.txt,.csv,.md" required>
-                <button type="submit">Add Document</button>
-            </form>
-        {% endcall %}
-        {% call macros.subdisclosure('+ Add Text Record') %}
-            <form class="workspace-form" method="post" action="{{ url_for('workspace.add_text_record_source', project_id=project_id) }}">
-                <input type="text" name="title" placeholder="Title (e.g. Site visit note &mdash; May 3)" required>
-                <textarea name="content" placeholder="Content" required></textarea>
-                <button type="submit">Add Record</button>
-            </form>
-        {% endcall %}
-        {% call macros.subdisclosure('+ Add External Source') %}
-            <p style="font-size:0.85rem;color:var(--text-secondary);">
-                Not yet available &mdash; no external source connector is configured for this deployment.
-            </p>
-        {% endcall %}
-    </section>
-
-    {# CLAUDE-P40-E3A, Section 8: "Removed Projects" cross-link removed -
-       it already lives in Lists (base.html), never duplicated here. This
-       section stays for what it alone owns: removed DOCUMENTS within
-       THIS Project. #}
-    <section class="workspace-pane">
-        <h3>Removed Items</h3>
-        {% if removed_sources %}
-        <ul class="source-list">
-            {% for source in removed_sources %}
-            <li class="source-item">
-                {{ source.name }}
-                <br><small class="text-muted">Removed {{ source.removed_at }}{% if source.removed_by %} by {{ source.removed_by }}{% endif %}</small>
-                <form method="post" action="{{ url_for('workspace.restore_document_route', project_id=project_id, source_id=source.id) }}">
-                    <button type="submit" class="link-button">Restore Document</button>
-                </form>
-            </li>
-            {% endfor %}
-        </ul>
-        {% else %}
-        <p class="pane-note">No removed Documents in this Project.</p>
-        {% endif %}
-    </section>
-
-    {% if is_admin %}
-    <section class="workspace-pane">
-        <h3>Project Data Management</h3>
-        <p class="pane-note">Administrator only.</p>
-        <a class="btn btn-ghost workspace-link" href="{{ url_for('portal.reset_project_data') }}">Reset Project Data&hellip;</a>
-    </section>
-    {% endif %}
     {% endif %}
 {% endblock %}
 
