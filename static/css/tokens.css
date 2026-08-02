@@ -203,32 +203,104 @@
    reversed. Every pairing below is verified via tools/check_contrast.py
    against the same required-pairing list this file's light tokens are
    held to (4.5:1 body text, 3:1 accent/badge text) - see that script's
-   own docstring for how to re-run it against a candidate file. #}
+   own docstring for how to re-run it against a candidate file. */
 :root {
-    --dark-canvas: #1A1814;
-    --dark-surface-primary: #25221D;
-    --dark-surface-secondary: #393328;
-    --dark-surface-hover: #494131;
-    --dark-surface-selected: #655534;
-    --dark-border: #685D45;
+    /* CLAUDE-P40-VW6: product-owner correction - "the page background is
+       not genuinely black... use a genuine black background for the
+       principal surface: #000000." Canvas AND surface-primary are both
+       literal black now (previously a dark warm brown, #1A1814/#25221D -
+       visibly not black, exactly the defect reported). Layering (surface-
+       secondary/hover/selected) still steps up in lightness from there so
+       nested/grouped content stays perceivable against true black -
+       verified via tools/check_contrast.py (see this stage's own
+       checkpoint entry for the exact run). */
+    --dark-canvas: #000000;
+    --dark-surface-primary: #000000;
+    --dark-surface-secondary: #252118;
+    --dark-surface-hover: #373125;
+    --dark-surface-selected: #50432B;
+    --dark-border: #6E6349;
     --dark-border-strong: #837454;
-    --dark-text-primary: #F0ECE6;
-    --dark-text-secondary: #D5CFC3;
-    --dark-text-metadata: #B9B1A2;
-    --dark-text-disabled: #918978;
+    --dark-text-primary: #FFFFFF;
+    --dark-text-secondary: #D8D3CA;
+    --dark-text-metadata: #B3AB9E;
+    --dark-text-disabled: #7F786C;
 
-    --dark-seal-red: #E2655A;
-    --dark-seal-red-tint: #4F2421;
-    --dark-machine-blue: #6FAECD;
-    --dark-machine-blue-tint: #293D47;
-    --dark-highlight-orange: #E2905A;
-    --dark-highlight-orange-tint: #4E3422;
-    --dark-accepted-green: #7CC08A;
-    --dark-accepted-green-tint: #2D4332;
-    --dark-attention-amber: #E2A95A;
-    --dark-attention-amber-tint: #513C1F;
-    --dark-failure-red: #D97063;
-    --dark-failure-red-tint: #4B2A25;
-    --dark-risk-red: #E0735C;
-    --dark-risk-red-tint: #4D2B23;
+    --dark-seal-red: #E5756C;
+    --dark-seal-red-tint: #3A1A18;
+    --dark-machine-blue: #7EB7D3;
+    --dark-machine-blue-tint: #1E2D34;
+    --dark-highlight-orange: #E59C6C;
+    --dark-highlight-orange-tint: #392519;
+    --dark-accepted-green: #8AC696;
+    --dark-accepted-green-tint: #213124;
+    --dark-attention-amber: #E5B26C;
+    --dark-attention-amber-tint: #3B2C16;
+    --dark-failure-red: #DD7F73;
+    --dark-failure-red-tint: #361E1B;
+    --dark-risk-red: #E4826D;
+    --dark-risk-red-tint: #381F19;
+}
+
+/* CLAUDE-P40-VW6: Tinted mode's own full token family - a light navy-
+   blue, not the beige/gold the VW3 implementation actually shipped
+   (VW3 only ever swapped ONE element's background per surface to the
+   existing --surface-secondary/Limestone token - never a dedicated
+   Tinted palette - so every OTHER element inside that surface using
+   --surface-primary/--border/--text-primary directly, e.g. finding
+   cards, blank states, form controls, kept rendering the untinted
+   Light values underneath: "some surfaces become tinted and others do
+   not" was that gap, not a bug in any one selector). #D8E2F0 is the
+   product owner's own specified light navy-blue reference, used
+   directly as --tint-surface-primary (the actual painted panel fill
+   every governed surface's root uses) rather than diluted toward
+   near-white - "every selected logical panel must visibly participate
+   in the light navy-blue treatment" requires the color to actually be
+   navy where it's seen, not lightened until it reads as off-white
+   again. Contrast verified via tools/check_contrast.py, same as the
+   dark family above. */
+:root {
+    --tint-canvas: #D8E2F0;
+    --tint-surface-primary: #D8E2F0;
+    --tint-surface-secondary: #B4C8E4;
+    --tint-surface-hover: #9DB7DD;
+    --tint-surface-selected: #7DA1D4;
+    --tint-border: #6B8DBD;
+    --tint-border-strong: #4972AB;
+    --tint-text-primary: #15263C;
+    --tint-text-secondary: #293E5B;
+    --tint-text-metadata: #405777;
+    --tint-text-disabled: #637B9C;
+
+    --tint-seal-red: #861C13;
+    --tint-seal-red-tint: #EDC3C0;
+    --tint-machine-blue: #275972;
+    --tint-machine-blue-tint: #C0DEED;
+    --tint-highlight-orange: #834116;
+    --tint-highlight-orange-tint: #EDD2C0;
+    --tint-accepted-green: #32673D;
+    --tint-accepted-green-tint: #C0EDC9;
+    --tint-attention-amber: #885611;
+    --tint-attention-amber-tint: #EDDAC0;
+    --tint-failure-red: #7B281E;
+    --tint-failure-red-tint: #EDC5C0;
+    --tint-risk-red: #812B18;
+    --tint-risk-red-tint: #EDC8C0;
+}
+
+/* CLAUDE-P40-VW6: ONE fixed, mode-invariant divider color - deliberately
+   NEVER redefined inside .appearance-dark/.appearance-tinted (unlike
+   every other token above, which each scope DOES redefine). The
+   workspace/Chat seam can have a different mode on each side (Dark
+   workspace above a Light Chat, Tinted above Dark, etc.) - "relying on
+   two backgrounds being different" to make that boundary visible fails
+   whenever they're not, so this token exists specifically to stay
+   legible against light/dark/tinted backgrounds AT ONCE, not to track
+   whichever surface happens to render it. Verified via the same
+   contrast script: 5.04:1 against the light surface, 4.00:1 against
+   pure black, 4.02:1 against the tint surface - comfortably visible in
+   every combination, not just the ones it happens to share a token
+   with. */
+:root {
+    --divider-strong: #756B57;
 }

@@ -64,15 +64,30 @@
    ============================================================ */
 * { box-sizing: border-box; }
 
-/* Browsers do NOT give form controls the page's font by default (they use
-   the OS UI font unless told otherwise) - every <button>/<input>/<select>/
-   <textarea> in this app has its own explicit font-family already, but
-   this is the backstop: any control that doesn't (now or in the future)
-   still reads as the same one UI typeface instead of silently falling
-   back to the platform default. */
+/* Browsers do NOT give form controls the page's font (or its colors)
+   by default - they use OS UI defaults unless told otherwise. The
+   font-family/font-size backstop below predates CLAUDE-P40-VW6; the
+   background-color/color/border-color lines are this stage's own
+   addition, for the identical reason applied to color: most buttons/
+   inputs already set their own explicit colors (and those rules still
+   win here on specificity - a class selector beats this bare-tag
+   one), but any control that doesn't - <select> most visibly, browsers
+   never theme a bare <select> from surrounding CSS at all - rendered
+   with the browser's own native white-background/black-text chrome
+   regardless of the page's chosen appearance mode. That is a large
+   share of what CLAUDE-P40-VW6's "portions of the panel do not
+   receive the Dark/Light/Tinted treatment" defect actually was:
+   www.display-division-picker (the VW1/VW4 "open a Document here"
+   dropdown) is exactly this case, and it is far from the only one.
+   Values are the standard tokens, so this backstop automatically
+   tracks whichever surface's Light/Dark/Tinted scope it renders
+   inside, the same as every other component rule in this file. */
 button, input, select, textarea {
     font-family: inherit;
     font-size: inherit;
+    background-color: var(--surface-primary);
+    color: var(--text-primary);
+    border-color: var(--border);
 }
 
 html, body {
@@ -322,29 +337,39 @@ html.launcher-hidden .launcher-panel { display: none; }
 
 /* Appearance menu (CLAUDE-P40-E3A Section 10; CLAUDE-P40-VW3 replaced
    the single plain/tinted checkbox with three independent modes per
-   surface - Light/Dark/Tinted). Light is the unmarked default -
-   identical to every rule in this file already, nothing added for it.
-   Tinted swaps just the surface's own background to --surface-secondary
-   (Limestone) - the token main.css's own header comment already
-   reserves for "nav surfaces, grouped controls", reusing an existing
-   meaning rather than introducing a new color. Dark REDEFINES the
-   standard token names locally on the surface's own root element (see
-   tokens.css's own comment on why scoping, not a file swap, is
-   required here) - every existing component rule in this file that
-   already reads var(--surface-primary)/var(--text-primary)/etc.
-   repaints correctly for free, no per-component change needed. Menu
-   (.workspace-topbar) is a newly configurable surface this stage - it
-   had no background of its own before (just a border-bottom sitting on
-   --canvas), so its own tinted rule sets one explicitly, unlike the
-   other four which already painted their own surface. The actual
-   .appearance-dark rule is defined further below (near .chat-region's
-   own rules) - deliberately AFTER every one of the five surfaces' own
-   base component rules, not here, so a test (or a future reader) doing
-   a plain textual "first rule whose selector contains .app-main" search
-   still finds each surface's real base rule, not this shared one that
-   also happens to name it as part of a compound selector. */
-.workspace-topbar.appearance-tinted { background: var(--surface-secondary); }
-.launcher-panel.appearance-tinted { background: var(--surface-secondary); }
+   surface - Light/Dark/Tinted; CLAUDE-P40-VW6 corrected both Dark and
+   Tinted's actual coverage). Light is the unmarked default - identical
+   to every rule in this file already, nothing added for it. Dark and
+   Tinted BOTH now REDEFINE the standard token names locally on the
+   surface's own root element (see tokens.css's own comment on why
+   scoping, not a file swap, is required here) - every existing
+   component rule in this file that already reads
+   var(--surface-primary)/var(--text-primary)/etc. repaints correctly
+   for free, no per-component change needed.
+
+   CLAUDE-P40-VW6 root cause: VW3's own Tinted implementation never did
+   this - it only ever swapped ONE element's own `background` per
+   surface to the existing --surface-secondary (Limestone/beige) token,
+   never redefined the surface's token SCOPE. Every other element
+   inside that surface reading --surface-primary/--border/--text-
+   primary directly (finding cards, blank states, form controls, ...)
+   kept rendering untinted Light values underneath - the product-owner
+   observation "some surfaces become tinted and others do not" was
+   exactly this coverage gap, and "the current tint is beige/gold" was
+   --surface-secondary's own real, correct, UNRELATED meaning (Limestone
+   - "nav surfaces, grouped controls") being reused as if it were a
+   dedicated Tinted palette, which it never was. Tinted now uses its own
+   --tint-* family (tokens.css - light navy-blue, #D8E2F0 as specified),
+   the exact same redefinition shape Dark already used correctly.
+
+   Menu (.workspace-topbar) is a configurable surface (CLAUDE-P40-VW3) -
+   it has no background of its own in its base rule (just a border-
+   bottom sitting on --canvas), so this combined rule (below, near
+   .chat-region's own rules - deliberately AFTER every one of the five
+   surfaces' own base component rules, so a test doing a plain textual
+   "first rule whose selector contains .app-main" search still finds
+   each surface's real base rule) sets one explicitly for Menu, same as
+   it already did for Dark. */
 .launcher-identity {
     padding: 0.6rem 0.7rem 1rem;
     border-top: 1px solid var(--border);
@@ -1094,6 +1119,15 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
     position: absolute;
     top: calc(100% + 0.3rem);
     right: 0;
+    /* CLAUDE-P40-VW6: a solid token color (never rgba/translucent) - the
+       "text beneath the Appearance popup remains visible through it"
+       report was, per this stage's own diagnosis, primarily the popup
+       sitting BELOW the Display context menu's z-index (40) with no
+       comfortable margin (was 20) rather than a transparency defect;
+       raised well above every other overlay in this file (see the
+       z-index audit note - nothing else on the page exceeds 40) so this
+       menu reliably paints over Toolbox/Display/Lists content
+       regardless of what else is open. */
     background: var(--surface-primary);
     border: 1px solid var(--border);
     border-radius: 4px;
@@ -1101,7 +1135,7 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
     display: flex;
     flex-direction: column;
     gap: 0.15rem;
-    z-index: 20;
+    z-index: 60;
     min-width: 170px;
 }
 /* CLAUDE-P40-VW3: the Light/Dark/Tinted-per-surface matrix - real
@@ -1300,9 +1334,7 @@ html.toolbox-hidden .workspace-pane-toolbox {
     min-width: 0;
     background: var(--surface-primary);
 }
-.app-main.appearance-tinted .workspace-pane-display {
-    background: var(--surface-secondary);
-}
+.app-main.appearance-tinted .workspace-pane-display,
 .app-main.appearance-dark .workspace-pane-display {
     background: var(--surface-primary);
     color: var(--text-primary);
@@ -1511,7 +1543,13 @@ html.toolbox-hidden .workspace-pane-toolbox {
        plain --surface-primary; Toolbox now matches them. */
     background: var(--surface-primary);
 }
-.workspace-pane-toolbox.appearance-tinted { background: var(--surface-secondary); }
+/* CLAUDE-P40-VW6: the old .workspace-pane-toolbox.appearance-tinted
+   single-property rule that used to live here is gone - Toolbox's own
+   root IS its painted surface (unlike Display/Chat, which paint a
+   descendant), so the combined .appearance-tinted/.appearance-dark
+   rule below (near .chat-region's own rules) already covers it
+   directly via its own background/color declarations, the same way
+   .appearance-dark always did. */
 .workspace-pane-toolbox > h2 {
     font-family: var(--font-display);
     font-size: 0.95rem;
@@ -1796,21 +1834,24 @@ html.toolbox-hidden .workspace-pane-toolbox {
    .conversation-dock-resize-handle's own (its ::before below is already
    documented, since CLAUDE-P40-E2B, as THE one visual divider handle
    reviewers see - "the handle IS the divider"). One line, not two. */
-/* CLAUDE-P40-VW3: the shared Dark-mode rule, positioned here
-   deliberately - AFTER every one of the five surfaces' own base
-   component rules (.launcher-panel, .app-main, .workspace-topbar,
-   .workspace-pane-toolbox, and .chat-region's own rule directly
-   above), so a plain textual "first rule whose selector contains
-   .app-main" search (an existing test-helper convention - see
+/* CLAUDE-P40-VW3/VW6: the shared Dark- and Tinted-mode rules,
+   positioned here deliberately - AFTER every one of the five surfaces'
+   own base component rules (.launcher-panel, .app-main,
+   .workspace-topbar, .workspace-pane-toolbox, and .chat-region's own
+   rule directly above), so a plain textual "first rule whose selector
+   contains .app-main" search (an existing test-helper convention - see
    tests/test_p40e2b_flexible_workspace_frame.py's own _rule_body)
    still finds each surface's real base rule first, not this one, even
    though this rule's own selector list also names each of them as
    part of a compound selector. See the Appearance-menu comment above
-   (near .workspace-topbar.appearance-tinted) for the full rationale -
-   REDEFINES the standard token names locally on whichever surface's
-   own root carries .appearance-dark, so every existing rule in this
-   file already written as var(--surface-primary)/var(--text-primary)/
-   etc. repaints correctly for free. */
+   (near .launcher-count) for the full VW6 rationale - BOTH rules
+   REDEFINE the standard token names locally on whichever surface's own
+   root carries the class, so every existing rule in this file already
+   written as var(--surface-primary)/var(--text-primary)/etc. repaints
+   correctly for free. Tinted uses its own --tint-* family (tokens.css)
+   - a real light navy-blue palette, not --surface-secondary borrowed
+   from its own unrelated "grouped content" meaning (VW3's own defect,
+   corrected here). */
 .workspace-topbar.appearance-dark,
 .launcher-panel.appearance-dark,
 .app-main.appearance-dark,
@@ -1844,10 +1885,41 @@ html.toolbox-hidden .workspace-pane-toolbox {
     background: var(--surface-primary);
     color: var(--text-primary);
 }
-.chat-region.appearance-tinted,
-.chat-region.appearance-tinted .conversation-dock-panel {
-    background: var(--surface-secondary);
+.workspace-topbar.appearance-tinted,
+.launcher-panel.appearance-tinted,
+.app-main.appearance-tinted,
+.workspace-pane-toolbox.appearance-tinted,
+.chat-region.appearance-tinted {
+    --canvas: var(--tint-canvas);
+    --surface-primary: var(--tint-surface-primary);
+    --surface-secondary: var(--tint-surface-secondary);
+    --surface-hover: var(--tint-surface-hover);
+    --surface-selected: var(--tint-surface-selected);
+    --border: var(--tint-border);
+    --border-strong: var(--tint-border-strong);
+    --text-primary: var(--tint-text-primary);
+    --text-secondary: var(--tint-text-secondary);
+    --text-metadata: var(--tint-text-metadata);
+    --text-disabled: var(--tint-text-disabled);
+    --seal-red: var(--tint-seal-red);
+    --seal-red-tint: var(--tint-seal-red-tint);
+    --machine-blue: var(--tint-machine-blue);
+    --machine-blue-tint: var(--tint-machine-blue-tint);
+    --highlight-orange: var(--tint-highlight-orange);
+    --highlight-orange-tint: var(--tint-highlight-orange-tint);
+    --accepted-green: var(--tint-accepted-green);
+    --accepted-green-tint: var(--tint-accepted-green-tint);
+    --attention-amber: var(--tint-attention-amber);
+    --attention-amber-tint: var(--tint-attention-amber-tint);
+    --failure-red: var(--tint-failure-red);
+    --failure-red-tint: var(--tint-failure-red-tint);
+    --risk-red: var(--tint-risk-red);
+    --risk-red-tint: var(--tint-risk-red-tint);
+    background: var(--surface-primary);
+    color: var(--text-primary);
 }
+.chat-region.appearance-tinted,
+.chat-region.appearance-tinted .conversation-dock-panel,
 .chat-region.appearance-dark,
 .chat-region.appearance-dark .conversation-dock-panel {
     background: var(--surface-primary);
@@ -1874,11 +1946,22 @@ html.toolbox-hidden .workspace-pane-toolbox {
     left: 0;
     right: 0;
     height: 1px;
-    background: var(--border);
+    /* CLAUDE-P40-VW6: --divider-strong (tokens.css), not --border - the
+       upper workspace and Chat are independently-themed surfaces (VW3),
+       so --border here would resolve to whichever mode CHAT ITSELF is
+       in, with no guarantee the workspace surface directly above is
+       different enough to still show a line (Dark workspace above Dark
+       Chat was exactly the reported "the divider... disappears" case -
+       two very-low-contrast dark-on-dark borders, technically present,
+       not perceptible). --divider-strong is fixed and never redefined
+       by .appearance-dark/.appearance-tinted, so it stays visible
+       against light, dark, AND tinted alike, on either side, in any
+       combination. */
+    background: var(--divider-strong);
 }
 .conversation-dock-resize-handle:hover::before,
 .conversation-dock-resize-handle:focus-visible::before {
-    background: var(--border-strong);
+    background: var(--machine-blue);
 }
 .conversation-dock-resize-handle:focus-visible {
     outline: 2px solid var(--machine-blue);

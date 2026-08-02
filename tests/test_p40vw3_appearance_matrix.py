@@ -294,7 +294,19 @@ class DarkTokenCssTests(unittest.TestCase):
             self.assertIn(f"{standard_token}: var(--dark-", body, standard_token)
 
     def test_menu_tinted_rule_added_this_stage(self):
-        self.assertIn(".workspace-topbar.appearance-tinted { background: var(--surface-secondary); }", self.main_css)
+        # SUPERSEDED (CLAUDE-P40-VW6): the single-property rule this test
+        # originally checked for was VW3's own defect, not the fix - it
+        # swapped only .workspace-topbar's OWN background to
+        # --surface-secondary (Limestone/beige) without redefining the
+        # surface's token scope, so nothing else inside Menu actually
+        # tinted. VW6 replaced it with a full token-scope redefinition
+        # (the same combined selector .appearance-dark already used) -
+        # checked here as membership in that combined selector list,
+        # using the new dedicated --tint-* family, not --surface-secondary.
+        self.assertIn(".workspace-topbar.appearance-tinted,", self.main_css)
+        rule_match = re.search(r"\.workspace-topbar\.appearance-tinted,[^{]*\{([^}]*)\}", self.main_css, re.S)
+        self.assertIsNotNone(rule_match, "no combined .appearance-tinted rule found")
+        self.assertIn("--surface-primary: var(--tint-surface-primary);", rule_match.group(1))
 
     def test_display_and_chat_inner_surfaces_have_dark_companions(self):
         self.assertIn(".app-main.appearance-dark .workspace-pane-display", self.main_css)
