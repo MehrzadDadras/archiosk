@@ -1,5 +1,106 @@
 # Continuation checkpoint
 
+## 2026-08-02 — CLAUDE-P40-VW7B: left Lists root system and active-Display projection cleanup
+
+**Commits:** `9a5c11b` (implementation), `a61a7b8` (tests). Starting
+state was `16df46d` (the P40-VW7A checkpoint commit) - HEAD and
+`origin/main` verified equal beforehand, tree clean except the
+pre-existing untracked
+`tests/fixtures/nreocrc/_lab_instance_scratch_002/`. Full suite: 1792
+passed, 0 failed (was 1768; 24 net new - 25 in the new
+`tests/test_p40vw7b_root_system_and_projection.py`, minus one removed
+as genuinely dead-code coverage, see below). **No product-owner
+acceptance seal recorded** - not requested, and this stage's own
+Section 19 explicitly said not to issue one.
+
+**Premise correction before starting**: this stage's own prompt
+assumed a "CLAUDE-P40-VW7A UI-reference registry" already existed as a
+prior, separate stage. It did not - verified directly (`git log
+--all`, a repo-wide search) before touching anything, surfaced the
+discrepancy, and built VW7A for real as its own bounded, committed
+stage first (see that entry, immediately below this one) before
+starting VW7B against it, per product-owner instruction.
+
+**What VW7B actually built** - the core, most literal reading of "a
+leaf selection should ordinarily project into the currently active
+Display": the active-Display-targeting mechanism, until now Documents
+only (a real file, embedded via a plain `<iframe src=file_url>`/
+`<img>`), now also covers Investigations and Overview. Mechanism: a
+new `panel_only` flag (`?panel=1`) on the EXISTING `show_workspace`
+route (no new route, no duplicated authorization - an unauthorized
+`?panel=1` request fails at the identical `_load_workspace_or_404`
+call every other view of the same data already goes through) and
+`templates/panel_shell.html` (new): a minimal standalone document
+`case_workspace.html` extends instead of `base.html` when that flag is
+set, so Division 0's own content renders without Menu/Lists/Toolbox/
+Chat chrome, safe to embed in an `<iframe>`. Division 0 itself keeps
+real navigation unconditionally (VW4's own precedent, unchanged -
+Stable URL Restoration untouched). `static/js/case_workspace.js`'s
+`populateDivision`/`clearDivision`/`saveOpenDivisions` generalized from
+a bare source id to `{kind, id, displayName}`, backward-compatible
+with a session's sessionStorage saved before this stage. A new
+`syncListsActiveState` keeps Lists' own highlighting understandable
+across several simultaneously-open Displays (Section 7) without ever
+touching a leaf's own server-rendered `.active` state.
+
+**A real bug caught by the stage's own tests before shipping**: the
+first working version of `panel_shell.html` rendered `case_workspace.html`'s
+FULL `{% block content %}` unconditionally, including the 5 extra
+Display divisions and the right-click context menu - meaning a panel
+iframe recursively rendered its own empty 6-division grid inside
+itself, and (had a saved `sessionStorage` state existed) could have
+tried to populate ANOTHER panel iframe inside that one. Caught by
+`test_panel_suppresses_division_zero_header_and_overview_back_link`'s
+own assertion, not discovered live - fixed by wrapping that entire
+block in the same `{% if not panel_only %}` pattern already used for
+Division 0's own header.
+
+**Root-system correction, evidence-based**: "Project Data Management"
+(Reset Project Data) was nested inside the active Project's own
+"Project Tools" branch. Reading `routes/portal.py`'s
+`reset_project_data` directly (not assumed) showed it resets the WHOLE
+`REGISTRY_STORE_PATH` - every Project in the deployment ("returns the
+app to a clean, no-project state") - not the one Project whose tools
+branch it sat in. Relocated to a new top-level `lists.system-data-management`
+leaf, same route/gate/`html_id`, recorded as a retired reference in
+`UI_REFERENCE_MAP.md` rather than a silent id reuse.
+
+**Smaller, evidenced cleanups**: coherent empty states added to
+Documents/Investigations/RFIs (they were missing the "No X yet."
+pattern Tasks/Tags already established); RFI leaves gained
+active-state and the same `data-case-id`/`data-case-title` attributes
+as Investigation leaves, so an RFI participates in active-Display
+projection identically (targeting its owning Investigation, exactly
+matching what its real-navigation href already did); `promoteDivision`
+removed as dead code (confirmed zero callers anywhere, via search,
+before deleting - one pre-existing test that only checked its source
+text was present, never that it ran, was removed rather than
+weakened).
+
+**Deliberately not done, with reasons recorded inline**: the
+empty-division `<select>` picker (`display.division.picker`) stays
+Documents-only - the Lists-leaf-click path is what this stage's own
+prompt asked for, extending the picker too is a considered, deferred
+enhancement, not scope creep into it. Tasks/Tags stay routed to the
+persistent Chat surface, not Display - Section 10's own explicit
+"document any justified exception" allowance, since fragmenting
+conversation context into a Display division would be a worse design
+than keeping it together. No VW8 Project-switching/safe-switching
+behavior, no cross-Project discovery, no Welcome/Hafez, no P41 -
+none started.
+
+**Remaining/uncertain**: no real-browser walkthrough performed (no
+browser-automation tool connected in this environment, consistent with
+every VW stage before this one) - the 15-step journey this stage's own
+Section 17 describes is verified here only via structural HTML/route/
+JSON/regex assertions against the JS/template source, not pixel-level
+Display-division layout, actual iframe rendering, or Light/Dark/Tinted
+visual correctness inside a panel iframe specifically (the CSS/JS
+mechanism for it is in place and structurally tested, but never
+visually confirmed). `STATIC_VERSION` bumped to 37 in `.env`
+(git-ignored) and the dev-server reloader chain (4 accumulated
+processes) killed and restarted; verified serving `main.css?v=37`.
+
 ## 2026-08-02 — CLAUDE-P40-VW7A: left Lists/Menu/Display/Toolbox/Chat UI reference registry
 
 **Commits:** `fd9044e` (implementation), `cbccadf` (tests). Starting
