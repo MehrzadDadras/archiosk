@@ -1,5 +1,78 @@
 # Continuation checkpoint
 
+## 2026-08-01 — CLAUDE-P40-E3A: numbered prototype layout transfer and interface reconciliation
+
+**Commit:** `484a171`. Full suite: 1491 passed (was 1465). Not yet
+product-owner accepted. Starting state was `b34d420` (P40-E2B1A's own
+checkpoint commit).
+
+Product owner explicitly resolved the P40-E2B1A conflict in favour of a
+newer numbered layout prototype (a live reference this agent could not
+actually access - no URL was ever supplied, stated honestly rather than
+pretending to have inspected it; implementation worked from the
+prompt's own detailed written layout contract instead): **P40-E2B1's
+pure-root-launcher rule and P40-E2B1A's audit against it are both
+superseded, deliberately, not by accident.** One physical Lists panel
+now holds a real recursive hierarchy - hover reveals temporarily, click
+pins/collapses, collapsing an active branch clears Display, a leaf
+projects into Display and clicking it again clears Display. Display
+never re-lists what Lists already lists: the P40-E2B1/E2B1A-era
+`?view=documents/investigations/chats` directory bodies and
+`.display-branch-nav` are removed outright, replaced by one
+consolidated "Overview" leaf (what P40-E2B called Project Home). This
+is a real, flagged behavior change from P40-E2B's own invariant that
+that material stayed visible even while an Investigation was open -
+Overview and an open Investigation are now mutually exclusive leaves,
+per this stage's own leaf-exclusivity rule.
+
+Shell rework: `base.html` now owns the full-width top bar (brand/
+breadcrumb/Display-layout menu/Appearance menu/user three-dot menu),
+the Lists hierarchy, and - gated on both `project_id` and `workspace`
+being defined, not bare `authenticated` - the Toolbox/Chat block
+containers, so neither leaks empty reserved width/a phantom sticky
+chat bar onto the dashboard, Security, or other non-Workspace pages.
+Lists | Display | Toolbox are flex siblings; Chat is a full-width
+sticky row beneath. The old `.case-workspace` named-grid-area layout is
+retired for flex specifically so "closing a Display expands the rest"
+and "collapsing Toolbox releases space to Display" are free
+consequences of `flex:1`/`display:none`, not something needing a
+grid-template rewrite per state.
+
+Display: 6 total divisions (0 always real-navigation-bound; 1-5
+client-side slots - `MAX_DISPLAY_DIVISIONS`), a genuine dynamic
+orientation+quantity+Apply control replacing the old fixed single/
+side-by-side/stacked/grid presets, one active-target division routing
+the next Lists Document click via a new `window.ArchioskDisplay`
+bridge, and a per-division right-click context menu (Close/Divide/
+direction/quantity/Apply only). Multi-Display geometry is reviewer/
+device presentation state only (localStorage/sessionStorage) - never a
+Project/Document/authorization/evidence/governance-log write.
+
+Test reconciliation (delegated to a forked agent, reviewed before
+commit) surfaced real bugs beyond stale assertions, all fixed: every
+bare Project-level POST redirect in `routes/workspace.py` now passes
+`view=overview` so a completed action is actually visible instead of
+landing on the new blank default; `case_workspace.html`'s Toolbox/Chat
+blocks recompute `drawing_sources` locally (Jinja blocks don't inherit
+a sibling block's `{% set %}`); New Project gated on `is_admin`
+(`portal.upload` is `@admin_required`); the Projects heading now
+highlights on the directory page itself, not only inside an open
+Workspace. ~135 pre-existing tests updated to assert the new,
+authorized behavior; new `tests/test_p40e3a_layout_reconciliation.py`
+covers this stage's own contract. No conflict found with the
+preservation list (P32 authorization, auth-page isolation, legacy-
+record compatibility, Reset/Restore safety, RFI authorization/
+directionality, GET-never-mutates-beyond-`last_viewed_by`) or the
+exclusion list (archive, lessons learned, cross-Project refs,
+SharePoint, autosave, drawing/markup persistence, chat tags, ...).
+
+No real browser/screenshot tool exists in this environment - geometry
+was reasoned about (CSS Grid/flex spec behavior) and verified via
+hermetic server-rendered-HTML tests, not a rendered window; stated
+honestly rather than claimed. STATIC_VERSION 27 -> 28 (`main.css` and
+`case_workspace.js` both changed); dev-server chain restarted and
+reverified serving the new value. P40-E3B and P41 not started.
+
 ## 2026-08-01 — CLAUDE-P40-E2B1A: recursive projection conformance audit
 
 **Commit:** `53bb458`. Full suite: 1465 passed (was 1448). Not yet
