@@ -413,16 +413,40 @@ class PopupOpacityAndStackingTests(unittest.TestCase):
         self.assertIn("background: var(--surface-primary);", body)
         self.assertNotIn("rgba(", body)
 
-    def test_popup_z_index_is_the_highest_in_the_file(self):
-        all_z = [int(m) for m in re.findall(r"z-index:\s*(-?\d+)", self.main_css)]
+    def test_popup_z_index_is_above_the_display_context_menu(self):
+        # CLAUDE-P40-VW7: the popup is no longer the file's single highest
+        # z-index - the new Add Tag/Make Task selection toolbar (70) and
+        # dialogs (80) legitimately need to paint over it too (a dialog
+        # opened while the Appearance popup happens to be open must not
+        # render underneath it), following this same rule's own stated
+        # reasoning ("raised well above every other overlay ... so this
+        # menu reliably paints over ... content regardless of what else
+        # is open") one step further. What this test actually protects -
+        # the popup staying strictly above the Display context menu (VW1)
+        # - still holds and is asserted directly.
         popup_z = int(re.search(r"\.workspace-layout-options,.*?z-index:\s*(\d+)", self.main_css, re.S).group(1))
-        self.assertEqual(popup_z, max(all_z), f"popup z-index {popup_z} is not the highest in the file (max={max(all_z)})")
         self.assertGreater(popup_z, 40)  # strictly above the Display context menu (VW1)
 
     def test_display_context_menu_still_below_the_popup(self):
         context_menu_z = int(re.search(r"\.display-context-menu\s*\{[^}]*z-index:\s*(\d+)", self.main_css, re.S).group(1))
         popup_z = int(re.search(r"\.workspace-layout-options,.*?z-index:\s*(\d+)", self.main_css, re.S).group(1))
         self.assertLess(context_menu_z, popup_z)
+
+    def test_conv_selection_toolbar_and_dialog_are_the_new_top_overlays(self):
+        # CLAUDE-P40-VW7's own two new overlay layers - the selection
+        # toolbar and the Add Tag/Make Task dialogs - are now the file's
+        # actual highest z-indices, each strictly above the layer below
+        # it (dialog > toolbar > Appearance popup > Display context
+        # menu), mirroring this file's own established "explicit,
+        # comfortable margin" stacking discipline rather than reusing an
+        # existing tier.
+        all_z = [int(m) for m in re.findall(r"z-index:\s*(-?\d+)", self.main_css)]
+        popup_z = int(re.search(r"\.workspace-layout-options,.*?z-index:\s*(\d+)", self.main_css, re.S).group(1))
+        toolbar_z = int(re.search(r"\.conv-selection-toolbar\s*\{[^}]*z-index:\s*(\d+)", self.main_css, re.S).group(1))
+        dialog_z = int(re.search(r"\.conv-dialog\s*\{[^}]*z-index:\s*(\d+)", self.main_css, re.S).group(1))
+        self.assertGreater(toolbar_z, popup_z)
+        self.assertGreater(dialog_z, toolbar_z)
+        self.assertEqual(dialog_z, max(all_z), f"conv-dialog z-index {dialog_z} is not the highest in the file (max={max(all_z)})")
 
 
 # ---------------------------------------------------------------------------
