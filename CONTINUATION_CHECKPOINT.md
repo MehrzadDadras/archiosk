@@ -1,5 +1,89 @@
 # Continuation checkpoint
 
+## 2026-08-02 — CLAUDE-P40-VW3: per-surface Light/Dark/Tinted appearance matrix
+
+**Commit:** `e4b241d`. Full suite: 1568 passed, 0 failed (was 1544; 24
+new). Starting state was `076683c` (the P40-VW2 checkpoint) - HEAD and
+`origin/main` verified equal, tree clean except the pre-existing
+untracked `tests/fixtures/nreocrc/_lab_instance_scratch_002/`.
+
+**Product-owner walkthrough correction**: the Appearance menu offered
+one checkbox per surface (Lists/Display/Toolbox/Chat) - a binary
+plain-vs-tinted choice - and the top Menu bar was not configurable at
+all. Replaced with a real matrix: five surfaces (Menu, Lists, Display,
+Toolbox, Chat) x three mutually exclusive modes (Light, Dark, Tinted),
+real `<input type=radio>` groups (one per row, not checkboxes), rows
+ordered Menu/Lists/Display/Toolbox/Chat to match the page's own visual
+hierarchy.
+
+**Previous appearance-state model**: one localStorage key per surface
+(`beehive:appearance:{lists,display,toolbox,chat}`), value `'tinted'`
+or `'plain'`/absent. **Compatibility mapping** (honest, lossless):
+`'tinted'` carries over unchanged; `'plain'` or missing maps to
+`'light'`, the new default, which renders identically to the old plain
+state - no reviewer's prior choice is reinterpreted as something they
+didn't pick. Menu has no prior key and defaults to `'light'`, matching
+its previous unconfigurable appearance.
+
+**Dark mode, new this stage**: `static/css/tokens.css` gained a
+`--dark-*` token set (same hue family as the light palette, lightness
+inverted - not an unrelated palette), contrast-verified against every
+one of `tools/check_contrast.py`'s own required pairings (all pass).
+`static/css/main.css` gained one shared `.appearance-dark` rule that
+REDEFINES the standard token names locally on whichever surface's own
+root carries that class - every existing component rule already
+written as `var(--surface-primary)`/`var(--text-primary)`/etc.
+throughout the file repaints correctly for free. Scoped CSS custom
+properties (not a second linked stylesheet, which could only ever
+apply page-wide) were required because the five surfaces must mix
+independently (e.g. Dark Display with Light Lists and Tinted Toolbox) -
+the five surfaces are DOM siblings, so this cannot cross-contaminate.
+
+**Test-infrastructure note**: fixed two pre-existing tests in
+`test_p40e2b_flexible_workspace_frame.py` whose own `_rule_body` helper
+does a plain "first rule containing this selector as a token" search -
+the new shared compound-selector rule legitimately matched that
+definition earlier in the file than the real base rule it meant to
+find. Fixed by relocating the shared rule to after all five surfaces'
+own base rules (not by modifying the helper or weakening any
+assertion) - restores its intended semantics for all five surfaces,
+not just the two the existing suite happened to exercise.
+
+**Tests**: added `tests/test_p40vw3_appearance_matrix.py` (24 tests) -
+matrix structure (5x3, unique radio groups, no leftover checkboxes,
+row order, accessible labels), preservation (menu still workspace-
+gated, Menu's target element renders everywhere), dark-token CSS
+(defined, scoped to `.appearance-dark` not `:root`, contrast-verified
+by actually invoking `tools/check_contrast.py` as a subprocess against
+a scratch tokens file), and JS wiring (all five targets, compatibility
+mapping, independent per-surface persistence). Confirmed load-bearing
+by reverting the three changed files and observing 22/24 new tests
+fail, then restoring them. Directly affected suites re-run explicitly
+(Display-layout, Stable URL Restoration, VW1 context-menu, VW2
+relocation, flexible-frame, global search/header, visual-deboxing) -
+all passing. Full suite run to termination: 1568 passed, 0 failed
+(unusually long wall-clock time this run - ~33 minutes - noted per
+CLAUDE.md's own "treat pass/fail as the signal, not wall-clock time"
+guidance, not investigated further as unrelated to this change).
+
+**Browser evidence and its limitation, stated honestly**: no browser/
+pointer tool exists in this environment. Verification rests on
+structural HTML/CSS/JS source assertions and a real, non-simulated
+invocation of the repository's own contrast-checking tool - not a real
+click or a visual comparison of any mixed-mode combination. **The
+product owner should confirm representative mixed-mode combinations
+(e.g. Dark Display with Light Lists and Tinted Toolbox) with a real
+look during the continued walkthrough**, including that document
+viewers embedded via `<iframe>` (PDF/Office rendering) cannot be
+dark-mode-styled from this application's own CSS - an honest, inherent
+limitation of embedding third-party document rendering, not a gap in
+this stage's own work.
+
+Preserves layout/panel ownership, VW1's context-menu correction, VW2's
+relocated Project Tools, Display-splitting behaviour, persistence
+schemas, authorization, and project/document data - none were touched.
+P40-E3B remains closed as DEFER; P41 was not started.
+
 ## 2026-08-02 — CLAUDE-P40-VW2: relocated project-level controls from Toolbox to Lists
 
 **Commit:** `17cbdaa`. Full suite: 1544 passed, 0 failed (was 1522; 22
