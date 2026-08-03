@@ -4,6 +4,7 @@ HTML pages: marketing home, upload form, and the Agility Engine dashboard.
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import os
 import shutil
@@ -14,6 +15,7 @@ from pathlib import Path
 from typing import Optional
 
 from flask import Blueprint, abort, current_app, flash, jsonify, redirect, render_template, request, session, url_for
+from werkzeug.datastructures import FileStorage
 
 from services.auth import admin_required, check_credentials, is_admin, is_authenticated, log_in, log_out, login_required
 from services.rate_limit import limiter
@@ -21,6 +23,9 @@ from services.case_workspace import CaseWorkspaceStore
 from services.environment_capabilities import OPERATING_ENVIRONMENT_LABELS
 from services.governance import GovernanceError
 from services.ingestion import UploadError, get_governance_log, get_registry, ingest_upload
+from services.drawing_intake import (
+    CANDIDATE_FIELDS, FIELD_LABELS, PendingUploadStore, STATUS_CONFIRMED, STATUS_CORRECTED, analyze_upload,
+)
 from services.password_reset import (
     complete_password_reset, get_valid_reset_token, is_dev_fallback_active, request_password_reset,
 )
@@ -1518,6 +1523,10 @@ def global_search():
     return jsonify(results=results)
 
 
+def _pending_upload_store() -> PendingUploadStore:
+    return PendingUploadStore(current_app.config["REGISTRY_STORE_PATH"])
+
+
 @portal_bp.route('/upload', methods=['GET', 'POST'])
 @admin_required
 @limiter.limit("20 per hour", methods=["POST"])
@@ -1535,34 +1544,186 @@ def upload():
             operating_environments=OPERATING_ENVIRONMENT_LABELS,
         )
 
-    try:
-        document = ingest_upload(
-            request.files.get('file'),
-            current_app,
-            operating_environment=request.form.get('operating_environment', ''),
-            # CLAUDE-P32: the real, already-authenticated session identity
-            # (this route is @admin_required) -- never request.form.get
-            # ('actor'), which is free text a caller could type anything
-            # into (see ingest_upload's own docstring for why the two
-            # must stay separate).
-            owner=session.get('username', ''),
-            actor=request.form.get('actor'),
-            role=request.form.get('role'),
-            project_name=request.form.get('project_name'),
-        )
-    except (UploadError, GovernanceError) as exc:
+    file_storage = request.files.get('file')
+    if file_storage is None or not file_storage.filename:
         return render_template(
-            'upload.html', max_upload_mb=max_upload_mb, error=str(exc),
+            'upload.html', max_upload_mb=max_upload_mb, error="No file was provided.",
             selected_environment=request.form.get('operating_environment'),
             operating_environments=OPERATING_ENVIRONMENT_LABELS,
         ), 400
 
-    # CLAUDE-P38-D2: routes through the "Preparing your Project
-    # Briefing..." interstitial rather than straight to the workspace -
-    # that route itself redirects straight through when there's nothing
-    # to prepare (AI not allowed/already approval-gated/no Sources), so
-    # this is always safe to do unconditionally here.
+    # CLAUDE-P40-VW8-QA-R2A: staging-time analysis ONLY (native-text/
+    # candidate extraction - see services/drawing_intake.py's own
+    # header for exactly what this does and doesn't do; no external
+    # call of any kind happens here). A plain RFP/RFQ with no drawing-
+    # like candidates and real native text behaves EXACTLY as before -
+    # straight to ingest_upload, no new step in the way. Only a request
+    # with something genuinely worth confirming (a candidate found, or
+    # an image-only PDF that needs an honest capability report) is
+    # routed through the new confirm step.
+    filename = file_storage.filename
+    raw_bytes = file_storage.read()
+    file_storage.stream.seek(0)
+    intake = analyze_upload(raw_bytes, filename)
+
+    entered_project_name = request.form.get('project_name')
+    if not intake.candidates and intake.text_extraction_status == "extracted":
+        try:
+            document = ingest_upload(
+                file_storage,
+                current_app,
+                operating_environment=request.form.get('operating_environment', ''),
+                # CLAUDE-P32: the real, already-authenticated session identity
+                # (this route is @admin_required) -- never request.form.get
+                # ('actor'), which is free text a caller could type anything
+                # into (see ingest_upload's own docstring for why the two
+                # must stay separate).
+                owner=session.get('username', ''),
+                actor=request.form.get('actor'),
+                role=request.form.get('role'),
+                project_name=entered_project_name,
+            )
+        except (UploadError, GovernanceError) as exc:
+            return render_template(
+                'upload.html', max_upload_mb=max_upload_mb, error=str(exc),
+                selected_environment=request.form.get('operating_environment'),
+                operating_environments=OPERATING_ENVIRONMENT_LABELS,
+            ), 400
+
+        # CLAUDE-P38-D2: routes through the "Preparing your Project
+        # Briefing..." interstitial rather than straight to the workspace -
+        # that route itself redirects straight through when there's nothing
+        # to prepare (AI not allowed/already approval-gated/no Sources), so
+        # this is always safe to do unconditionally here.
+        return redirect(url_for('workspace.preparing_project_briefing', project_id=document.project_id))
+
+    operating_environment = request.form.get('operating_environment', '')
+    staging_id = _pending_upload_store().create(
+        raw_bytes=raw_bytes, filename=filename, candidates=intake.candidates,
+        text_extraction_status=intake.text_extraction_status,
+        operating_environment=operating_environment, owner=session.get('username', ''),
+        actor=request.form.get('actor'), role=request.form.get('role'),
+        entered_project_name=entered_project_name,
+    )
+    return redirect(url_for('portal.upload_confirm', staging_id=staging_id))
+
+
+@portal_bp.route('/upload/confirm/<staging_id>', methods=['GET', 'POST'])
+@admin_required
+def upload_confirm(staging_id):
+    store = _pending_upload_store()
+    manifest = store.get(staging_id)
+    if manifest is None:
+        abort(404)
+    # A staged upload is a per-reviewer scratch area, not a shared
+    # authorization surface - the same admin who started it (or any
+    # other admin, matching this route's own @admin_required, the
+    # identical gate /upload already uses) can confirm/discard it, but
+    # nothing about it is exposed to a non-admin session at all.
+
+    candidates_by_field = {c["field"]: c for c in manifest["candidates"]}
+    name_conflict = (
+        manifest.get("entered_project_name")
+        and candidates_by_field.get("project_name")
+        and manifest["entered_project_name"].strip() != candidates_by_field["project_name"]["value"].strip()
+    )
+
+    if request.method == 'GET':
+        return render_template(
+            'upload_confirm.html', manifest=manifest, staging_id=staging_id,
+            candidate_fields=CANDIDATE_FIELDS, field_labels=FIELD_LABELS,
+            candidates_by_field=candidates_by_field, name_conflict=name_conflict,
+        )
+
+    # POST: build the confirmed/corrected field set from the submitted
+    # form. Every field the reviewer sees is editable (a machine
+    # candidate is a PROPOSAL, never authoritative on its own - Section
+    # 5's "machine proposes, human confirms or corrects") - status is
+    # "confirmed" when the submitted value matches the original
+    # candidate exactly, "corrected" when the reviewer changed it.
+    confirmed_fields = []
+    for field_name in CANDIDATE_FIELDS:
+        submitted = (request.form.get(f"field_{field_name}") or "").strip()
+        if not submitted:
+            continue
+        original = candidates_by_field.get(field_name)
+        status = STATUS_CONFIRMED if original and original["value"].strip() == submitted else STATUS_CORRECTED
+        confirmed_fields.append({
+            "field": field_name, "value": submitted, "status": status,
+            "original_candidate": original,
+        })
+
+    if name_conflict:
+        choice = request.form.get('project_name_choice', '')
+        if choice == 'entered':
+            final_project_name = manifest["entered_project_name"]
+        elif choice == 'candidate':
+            final_project_name = candidates_by_field["project_name"]["value"]
+        elif choice == 'custom':
+            final_project_name = (request.form.get('project_name_custom') or '').strip()
+        else:
+            return render_template(
+                'upload_confirm.html', manifest=manifest, staging_id=staging_id,
+                candidate_fields=CANDIDATE_FIELDS, field_labels=FIELD_LABELS,
+                candidates_by_field=candidates_by_field, name_conflict=name_conflict,
+                error="Choose which Project name to use before continuing.",
+            ), 400
+    else:
+        final_project_name = next(
+            (f["value"] for f in confirmed_fields if f["field"] == "project_name"),
+            manifest.get("entered_project_name"),
+        )
+
+    raw_bytes = store.get_raw_bytes(staging_id)
+    if raw_bytes is None:
+        abort(404)
+
+    file_storage = FileStorage(stream=io.BytesIO(raw_bytes), filename=manifest["filename"])
+
+    try:
+        document = ingest_upload(
+            file_storage, current_app,
+            operating_environment=manifest["operating_environment"],
+            owner=manifest["owner"], actor=manifest.get("actor"), role=manifest.get("role"),
+            project_name=final_project_name,
+        )
+    except (UploadError, GovernanceError) as exc:
+        return render_template(
+            'upload_confirm.html', manifest=manifest, staging_id=staging_id,
+            candidate_fields=CANDIDATE_FIELDS, field_labels=FIELD_LABELS,
+            candidates_by_field=candidates_by_field, name_conflict=name_conflict,
+            error=str(exc),
+        ), 400
+
+    # CLAUDE-P40-VW8-QA-R2A Section 4/5: "Archiosk records the evidence
+    # and decision" - every candidate's original machine-proposed value
+    # alongside what the reviewer actually confirmed/corrected, and
+    # (when applicable) which of the two conflicting Project names was
+    # chosen. A NEW governance_log event, not a mutation of
+    # document_ingested's own existing payload - append-only, matching
+    # every other governance event in this codebase.
+    governance_log = get_governance_log(current_app)
+    governance_log.append(
+        project_id=document.project_id, event_type="drawing_metadata_candidates_confirmed",
+        actor=manifest.get("actor") or "system", role=manifest.get("role") or "system",
+        payload={
+            "text_extraction_status": manifest["text_extraction_status"],
+            "candidates_offered": manifest["candidates"],
+            "fields_confirmed": confirmed_fields,
+            "project_name_conflict": bool(name_conflict),
+            "project_name_choice": request.form.get('project_name_choice') if name_conflict else None,
+        },
+    )
+
+    store.discard(staging_id)
     return redirect(url_for('workspace.preparing_project_briefing', project_id=document.project_id))
+
+
+@portal_bp.route('/upload/confirm/<staging_id>/discard', methods=['POST'])
+@admin_required
+def upload_confirm_discard(staging_id):
+    _pending_upload_store().discard(staging_id)
+    return redirect(url_for('portal.upload'))
 
 
 @portal_bp.route('/dashboard')

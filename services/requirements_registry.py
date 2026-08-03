@@ -47,6 +47,7 @@ class RequirementsRegistry:
             original_file_path=data.get("original_file_path"),
             original_file_hash=data.get("original_file_hash"),
             parser_version=data.get("parser_version"),
+            text_extraction_status=data.get("text_extraction_status", "extracted"),
         )
         return doc
 

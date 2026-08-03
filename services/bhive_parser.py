@@ -223,6 +223,14 @@ class ParsedDocument:
     # document (the field didn't exist yet) or the caller genuinely
     # doesn't know; never fabricated to look more current than it is.
     parser_version: str | None = None
+    # CLAUDE-P40-VW8-QA-R2A: "extracted" (real, non-empty text was found
+    # and processed - true for every document this codebase has ever
+    # successfully ingested before this field existed, so that's the
+    # honest backward-compatible default, not a guess) vs
+    # "no_native_text" (a structurally valid .pdf with no embedded text
+    # layer - an image-only/scanned drawing - see `parse`'s own comment
+    # above). Never a third silently-fabricated value.
+    text_extraction_status: str = "extracted"
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -238,6 +246,7 @@ class ParsedDocument:
             "original_file_path": self.original_file_path,
             "original_file_hash": self.original_file_hash,
             "parser_version": self.parser_version,
+            "text_extraction_status": self.text_extraction_status,
         }
 
 
@@ -458,7 +467,35 @@ class BHiveParser:
     # -- public entrypoint -------------------------------------------------
     def parse(self, raw_bytes: bytes, filename: str) -> ParsedDocument:
         text = self._extract(raw_bytes, filename)
+        ext = Path(filename).suffix.lower()
+
+        # CLAUDE-P40-VW8-QA-R2A: a structurally valid, image-only/scanned
+        # PDF (a rasterized site plan or drawing sheet with no embedded
+        # text layer) previously hard-failed the WHOLE upload here -
+        # pypdf's own extract_text() correctly returns "" per page for
+        # one (that's not a parse error, it's an honest "no text layer
+        # exists"), but this function then raised ParserError
+        # unconditionally on any empty result, which routes/portal.py's
+        # upload() surfaces as a rejected upload with nothing preserved.
+        # Scoped to .pdf specifically (the real, repository-evidenced
+        # case) - an empty .txt/.docx/.csv/.md genuinely has nothing in
+        # it, not an "image-only drawing" equivalent, so those keep the
+        # original strict behavior. No requirements/milestones/tables
+        # exist to extract from zero text, so this returns a real,
+        # successfully-created ParsedDocument with all three empty and
+        # text_extraction_status="no_native_text" - never a fabricated
+        # value, and never the upload failing outright (Section 6 of
+        # this stage's own addendum: "Do not report the entire upload
+        # as failed").
         if not text.strip():
+            if ext == ".pdf":
+                return ParsedDocument(
+                    project_id=str(uuid.uuid4()),
+                    filename=filename,
+                    ingested_at=datetime.now(timezone.utc).isoformat(),
+                    parser_version=BHIVE_PARSER_VERSION,
+                    text_extraction_status="no_native_text",
+                )
             raise ParserError(f"No extractable text found in '{filename}'.")
 
         chunks, tables, end_line_map = self._segment(text)
@@ -533,13 +570,24 @@ class BHiveParser:
 
     @staticmethod
     def _extract_pdf(raw_bytes: bytes) -> str:
+        return "\n".join(BHiveParser.extract_pdf_pages(raw_bytes))
+
+    @staticmethod
+    def extract_pdf_pages(raw_bytes: bytes) -> list[str]:
+        """CLAUDE-P40-VW8-QA-R2A: per-page text, not the single joined
+        blob `_extract_pdf` returns - services/drawing_intake.py needs
+        to know WHICH page a candidate title-block value came from
+        (Section 4's "page or sheet" evidence requirement). Kept as the
+        one real pypdf call site; `_extract_pdf` above is now a thin
+        wrapper so every existing caller/test of that method is
+        unaffected."""
         try:
             from pypdf import PdfReader
         except ImportError as exc:
             raise ParserError("pypdf is required to parse .pdf files.") from exc
 
         reader = PdfReader(io.BytesIO(raw_bytes))
-        return "\n".join((page.extract_text() or "") for page in reader.pages)
+        return [(page.extract_text() or "") for page in reader.pages]
 
     # -- stage 2: segment ----------------------------------------------------
     def _segment(self, text: str) -> tuple[list[tuple[int, str]], list[dict], dict[int, int]]:

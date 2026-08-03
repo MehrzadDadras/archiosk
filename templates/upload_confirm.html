@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+
+{% block title %}Confirm Project details &mdash; Archiosk{% endblock %}
+
+{% block content %}
+<section class="hero">
+    <h1>Confirm Project details</h1>
+    <p class="hero-copy">
+        Archiosk read <strong>{{ manifest.filename }}</strong> and proposed the details
+        below where evidence was actually found. Nothing is created until you confirm or
+        correct them &mdash; a proposed value is never treated as authoritative on its own.
+    </p>
+</section>
+
+{% if manifest.text_extraction_status == "no_native_text" %}
+<p class="mono form-error" data-ui-ref="upload.confirm.no-native-text-notice" role="status">
+    This appears to be an image-only or scanned PDF &mdash; Archiosk could not automatically
+    read any text from it in this environment (local OCR is not currently available here).
+    The original file is preserved either way. You can still create this Project by filling
+    in the details yourself below.
+</p>
+{% elif not manifest.candidates %}
+<p class="pane-note" data-ui-ref="upload.confirm.no-candidates-notice">
+    No title-block-style fields were automatically detected in this file. You can still
+    fill in any of the details below, or leave them blank.
+</p>
+{% endif %}
+
+{% if error %}
+<p class="mono form-error" data-ui-ref="upload.confirm.error">{{ error }}</p>
+{% endif %}
+
+<form method="post" action="{{ url_for('portal.upload_confirm', staging_id=staging_id) }}" class="upload-form" id="upload-confirm-form">
+    {% if name_conflict %}
+    <fieldset class="operating-environment-fieldset" data-ui-ref="upload.confirm.name-conflict">
+        <legend>Project name &mdash; conflicting values found <span class="mono">(required)</span></legend>
+        <p class="pane-note">
+            You entered one Project name, but Archiosk detected a different one printed on
+            the drawing itself. Choose which one to use, or enter a different name.
+        </p>
+        <label class="operating-environment-option">
+            <input type="radio" name="project_name_choice" value="entered" required data-ui-ref="upload.confirm.name-conflict.entered">
+            Use what you entered: <strong>{{ manifest.entered_project_name }}</strong>
+        </label>
+        <label class="operating-environment-option">
+            <input type="radio" name="project_name_choice" value="candidate" required data-ui-ref="upload.confirm.name-conflict.candidate">
+            Use the drawing-derived name: <strong>{{ candidates_by_field.project_name.value }}</strong>
+            <br><small class="text-muted">Detected on page {{ candidates_by_field.project_name.source_page }}: &ldquo;{{ candidates_by_field.project_name.evidence_snippet }}&rdquo;</small>
+        </label>
+        <label class="operating-environment-option">
+            <input type="radio" name="project_name_choice" value="custom" required data-ui-ref="upload.confirm.name-conflict.custom">
+            Use a different name:
+            <input type="text" name="project_name_custom" class="text-input" data-ui-ref="upload.confirm.name-conflict.custom-input" placeholder="Project name">
+        </label>
+    </fieldset>
+    {% endif %}
+
+    <fieldset class="operating-environment-fieldset" data-ui-ref="upload.confirm.fields">
+        <legend>Drawing-derived details</legend>
+        <p class="pane-note">
+            Every field below is editable. A field with no detected value is not an error
+            &mdash; leave it blank if it doesn't apply.
+        </p>
+        {% for field_name in candidate_fields %}
+        {% if not (field_name == "project_name" and name_conflict) %}
+        {% set candidate = candidates_by_field.get(field_name) %}
+        <div class="gateway-field" data-ui-ref="upload.confirm.field.{{ field_name }}">
+            <label for="field_{{ field_name }}">{{ field_labels[field_name] }}</label>
+            <input
+                type="text" id="field_{{ field_name }}" name="field_{{ field_name }}" class="text-input"
+                data-ui-ref="upload.confirm.field.{{ field_name }}.input"
+                value="{{ candidate.value if candidate else ((manifest.entered_project_name or '') if field_name == 'project_name' else '') }}">
+            {% if candidate %}
+            <small class="text-muted" data-ui-ref="upload.confirm.field.{{ field_name }}.evidence">
+                Detected ({{ candidate.confidence }} confidence, page {{ candidate.source_page or "not applicable" }},
+                {{ candidate.extraction_method }}): &ldquo;{{ candidate.evidence_snippet }}&rdquo;
+            </small>
+            {% endif %}
+        </div>
+        {% endif %}
+        {% endfor %}
+    </fieldset>
+
+    <p class="pane-note">
+        Project Operating Environment: <strong>{{ manifest.operating_environment }}</strong>
+        (chosen on the previous step; cannot be changed here or inferred from the drawing).
+    </p>
+
+    <button type="submit" class="btn btn-primary" data-ui-ref="upload.confirm.submit">Confirm and create Project</button>
+</form>
+<form method="post" action="{{ url_for('portal.upload_confirm_discard', staging_id=staging_id) }}" class="upload-form">
+    <button type="submit" class="btn btn-ghost" data-ui-ref="upload.confirm.discard">Discard and start over</button>
+</form>
+{% endblock %}
