@@ -51,6 +51,46 @@ REQUIRED_PAIRINGS = [
     ("--risk-red", "--canvas", 3.0, "risk-red accent/badge text"),
     ("--risk-red", "--surface-primary", 3.0, "risk-red on panels/cards"),
     ("--risk-red", "--risk-red-tint", 3.0, "risk-red on its own tint"),
+
+    # CLAUDE-P40-DTAB1: curated Document-tab organizational accents -
+    # checked as accent/badge text (3.0, same threshold as the other
+    # accent colors above) against each theme's own canvas AND
+    # surface-primary (a tab sits on the Display surface, not the raw
+    # canvas, but both are checked since the tab strip's own background
+    # may resolve to either depending on surrounding context).
+    ("--tabcolor-gold", "--canvas", 3.0, "tab color: gold (Light)"),
+    ("--tabcolor-gold", "--surface-primary", 3.0, "tab color: gold on panels (Light)"),
+    ("--tabcolor-turquoise", "--canvas", 3.0, "tab color: turquoise (Light)"),
+    ("--tabcolor-turquoise", "--surface-primary", 3.0, "tab color: turquoise on panels (Light)"),
+    ("--tabcolor-lapis", "--canvas", 3.0, "tab color: lapis (Light)"),
+    ("--tabcolor-lapis", "--surface-primary", 3.0, "tab color: lapis on panels (Light)"),
+    ("--tabcolor-terracotta", "--canvas", 3.0, "tab color: terracotta (Light)"),
+    ("--tabcolor-terracotta", "--surface-primary", 3.0, "tab color: terracotta on panels (Light)"),
+    ("--tabcolor-green", "--canvas", 3.0, "tab color: green (Light)"),
+    ("--tabcolor-green", "--surface-primary", 3.0, "tab color: green on panels (Light)"),
+    ("--tabcolor-purple", "--canvas", 3.0, "tab color: purple (Light)"),
+    ("--tabcolor-purple", "--surface-primary", 3.0, "tab color: purple on panels (Light)"),
+
+    ("--dark-tabcolor-gold", "--dark-canvas", 3.0, "tab color: gold (Black)"),
+    ("--dark-tabcolor-turquoise", "--dark-canvas", 3.0, "tab color: turquoise (Black)"),
+    ("--dark-tabcolor-lapis", "--dark-canvas", 3.0, "tab color: lapis (Black)"),
+    ("--dark-tabcolor-terracotta", "--dark-canvas", 3.0, "tab color: terracotta (Black)"),
+    ("--dark-tabcolor-green", "--dark-canvas", 3.0, "tab color: green (Black)"),
+    ("--dark-tabcolor-purple", "--dark-canvas", 3.0, "tab color: purple (Black)"),
+
+    ("--tint-tabcolor-gold", "--tint-canvas", 3.0, "tab color: gold (Midnight Blue)"),
+    ("--tint-tabcolor-turquoise", "--tint-canvas", 3.0, "tab color: turquoise (Midnight Blue)"),
+    ("--tint-tabcolor-lapis", "--tint-canvas", 3.0, "tab color: lapis (Midnight Blue)"),
+    ("--tint-tabcolor-terracotta", "--tint-canvas", 3.0, "tab color: terracotta (Midnight Blue)"),
+    ("--tint-tabcolor-green", "--tint-canvas", 3.0, "tab color: green (Midnight Blue)"),
+    ("--tint-tabcolor-purple", "--tint-canvas", 3.0, "tab color: purple (Midnight Blue)"),
+
+    ("--forest-tabcolor-gold", "--forest-canvas", 3.0, "tab color: gold (Deep Forest)"),
+    ("--forest-tabcolor-turquoise", "--forest-canvas", 3.0, "tab color: turquoise (Deep Forest)"),
+    ("--forest-tabcolor-lapis", "--forest-canvas", 3.0, "tab color: lapis (Deep Forest)"),
+    ("--forest-tabcolor-terracotta", "--forest-canvas", 3.0, "tab color: terracotta (Deep Forest)"),
+    ("--forest-tabcolor-green", "--forest-canvas", 3.0, "tab color: green (Deep Forest)"),
+    ("--forest-tabcolor-purple", "--forest-canvas", 3.0, "tab color: purple (Deep Forest)"),
 ]
 
 

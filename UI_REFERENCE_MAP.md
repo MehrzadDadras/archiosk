@@ -225,6 +225,40 @@ Nested inside the same `<nav id="launcher-panel">` as the Lists tree above (`lis
 | `lists.thumbnails-pane.maximize` | `<button aria-pressed>` | "Maximize" / "Restore" | Collapses Lists toward its header (keeping whatever proportion was active immediately before, on the toggle-back click) so Thumbnails takes most of the column; a manual toggle, not tied to drag state | Every authenticated page | active |
 | `lists.thumbnails-pane.list` | `<div role="list">` | (no visible label — `aria-label="Page thumbnails"`) | Contains one real, clickable `<button role="listitem">` per PDF page (`.thumbnail-row`, unregistered as an individual ref — a repeated pattern, not a fixed set of controls, same convention as `lists.project.documents.leaf` etc.); clicking one calls `goToPage(n)`; `aria-current="true"` follows the current page from ANY navigation source (toolbar, search, or a thumbnail click itself) | Every authenticated page | active |
 
+## Document Tabs (`templates/case_workspace.html`, CLAUDE-P40-DTAB1)
+
+Documents only (never Investigations/RFIs/Chats/Tasks/Tags/Toolbox/Eye)
+— a compact tab strip immediately above the active Document content,
+Division-0-only. All server-rendered markup below is deliberately
+empty/`[hidden]`; `static/js/document_tabs.js` builds every tab from
+`#workspace-active-sources-data` (the same authorized, Project-scoped
+JSON island `menu.document-controls`'s own populateDivision already
+reads) cross-referenced against this browser's own `localStorage`
+(pinned/hidden tabs, per-user per-Project) and `sessionStorage` (the
+one replaceable preview tab). A tab is a real `<a href="?source=<id>">`
+— activating one is a genuine page navigation, never client-side
+routing, so stable URLs and Back/Forward are unaffected. Individual
+`.document-tab` elements are a repeated pattern (one per open Document),
+not a fixed set of controls — left without their own `data-ui-ref`,
+the same convention already established for `.thumbnail-row` (CLAUDE-
+P40-VW7A-QA2) and `lists.project.documents.leaf`.
+
+| Reference | Element | Label | Current behavior | Auth notes | Status |
+|---|---|---|---|---|---|
+| `display.document-tabs` | `<div>` | — | The whole tab strip; `[hidden]` server-side, revealed by JS once at least one real tab (pinned or preview) exists | Only rendered when `project_id`/`workspace` are defined and not `panel_only` | active |
+| `display.document-tabs.all-tabs` | `<details>` | "▾" (aria-label "All Tabs") | Contains "Close All Tabs" and the Hidden Tabs list (below) | Same as `display.document-tabs` | active |
+| `display.document-tabs.all-tabs.summary` | `<summary>` | "▾" | The `<details>` disclosure trigger | Same as `display.document-tabs` | active |
+
+**Per-tab pattern (JS-generated, one instance per open Document, no individual `data-ui-ref`):**
+
+| Pattern | Element | Current behavior |
+|---|---|---|
+| `.document-tab` | `<a role="tab" href="?source=<id>">` | The tab itself — real navigation on click/Enter/Space; `aria-selected` reflects the current Document; roving `tabindex` (0 on the focused/active tab, -1 on the rest, Left/Right/Home/End move focus); `aria-label` communicates an alias plus the original Document name (never just the alias — Section 12's own "do not replace the actual Document accessible name"); `data-tab-color` drives the curated accent stripe; `.document-tab-preview` marks the one replaceable preview tab (italic label + dashed active-underline, never color alone) |
+| `.document-tab-menu-btn` | `<button>` (per tab) | "⋯" — opens the per-tab context menu (Keep Open/Rename/Restore Original Name/Tab Color/Default Color/Hide/Close/Close Others/Show Original Document Name), only the state-applicable subset shown |
+| `.document-tab-close` | `<button>` (per tab) | "×" — closes that one tab's workspace state only, never the Document |
+| `.document-tab-rename-input` | `<input>` (transient) | Real inline rename field (never `window.prompt()`), commits on Enter/blur, cancels on Escape; empty/whitespace and duplicate-alias input is rejected with an inline message |
+| `.document-hidden-tab-item` | `<button>` (inside `display.document-tabs.all-tabs`) | One row per hidden tab — shows alias + original name, selecting restores it to the visible strip and activates it (real navigation) |
+
 ## Display (`templates/case_workspace.html`)
 
 **CLAUDE-P40-VW7B, the `panel_only`/`panel_shell.html` mechanism:**

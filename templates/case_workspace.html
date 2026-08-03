@@ -37,6 +37,32 @@
                 {% if active_case %}{{ active_case.title }}{% elif selected_source %}{{ selected_source.name }}{% elif directory_view == 'overview' %}Overview{% elif show_new_case_form %}New Investigation{% endif %}
             </span>
         </div>
+        {# ---------------- Document tab strip (CLAUDE-P40-DTAB1) --------------------
+           Documents only (Section 2's own explicit scope - never Investigations/
+           RFIs/Chats/Tasks/Tags/Toolbox/Eye). Deliberately empty server-rendered
+           markup, filled entirely by static/js/document_tabs.js from two sources:
+           #workspace-active-sources-data (already authorized/Project-scoped, the
+           SAME JSON island populateDivision already reads - never a raw/guessed
+           id) and this browser's own localStorage/sessionStorage (pinned/hidden/
+           preview tab state, a workspace preference never sent to or read from
+           the server). A tab is a real <a href="?source=<id>"> - activating one is
+           a genuine page navigation, not client-side routing, so stable URLs and
+           Back/Forward keep working exactly as they already did before this
+           stage (Section 11's own explicit requirement). Division-0-only
+           (suppressed inside a panel, same gate as the header above it) - a
+           non-zero Display division's own <iframe> content is a read-only
+           projection, not a place tabs make sense. Present regardless of
+           whether the CURRENT selection is actually a Document (Overview/an
+           open Investigation still show it, so the reviewer can always jump
+           back to an open Document tab) - only the ACTIVE-tab highlighting is
+           Document-specific. #}
+        <div class="document-tab-strip" id="document-tab-strip" data-ui-ref="display.document-tabs" data-project-id="{{ project_id }}" data-selected-source-id="{{ selected_source.id if selected_source else '' }}" data-base-url="{{ url_for('workspace.show_workspace', project_id=project_id) }}" hidden>
+            <div class="document-tab-list" id="document-tab-list" role="tablist" aria-label="Open Documents"></div>
+            <details class="document-tabs-overflow" id="document-tabs-overflow" data-ui-ref="display.document-tabs.all-tabs">
+                <summary class="document-tabs-overflow-summary" aria-label="All Tabs" title="All Tabs" data-ui-ref="display.document-tabs.all-tabs.summary">&#9662;</summary>
+                <div class="document-tabs-overflow-panel" id="document-tabs-overflow-panel" role="group" aria-label="All Tabs"></div>
+            </details>
+        </div>
         {% endif %}
 
     {# ---------------- Project overview (CLAUDE-P40-E3A, Section 5) -----------
@@ -1208,7 +1234,7 @@
            mount fills it with a <canvas> - no fallback content is
            needed here since that script runs on every page that
            reaches this branch. #}
-        <div class="document-viewer-canvas-container" id="document-viewer-pdf-canvas" data-ui-ref="display.document.pdf-canvas" data-pdf-url="{{ url_for('workspace.source_file', project_id=project_id, source_id=selected_source.id) }}" data-pdf-filename="{{ selected_source.name }}"></div>
+        <div class="document-viewer-canvas-container" id="document-viewer-pdf-canvas" data-ui-ref="display.document.pdf-canvas" data-pdf-url="{{ url_for('workspace.source_file', project_id=project_id, source_id=selected_source.id) }}" data-pdf-filename="{{ selected_source.name }}" data-source-id="{{ selected_source.id }}"></div>
         {% else %}
         <iframe class="document-viewer-frame"
                 src="{{ url_for('workspace.source_file', project_id=project_id, source_id=selected_source.id) }}"
@@ -2426,6 +2452,9 @@
 {% endblock %}
 
 {% block extra_scripts %}
+{% if not panel_only %}
+<script src="{{ url_for('static', filename='js/document_tabs.js') }}?v={{ static_version }}"></script>
+{% endif %}
 <script src="{{ url_for('static', filename='js/pdf_viewer.js') }}?v={{ static_version }}"></script>
 <script src="{{ url_for('static', filename='js/case_workspace.js') }}?v={{ static_version }}"></script>
 {% endblock %}

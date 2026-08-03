@@ -1,5 +1,171 @@
 # Continuation checkpoint
 
+## 2026-08-03 — CLAUDE-P40-DTAB1: Preview, Pinned, Colored, Renamed, and Hidden Document Display Tabs
+
+**Started from a verified clean state:** `HEAD == origin/main` (`3098b6c`)
+confirmed before any edit, working tree clean apart from the
+pre-existing, unrelated `tests/fixtures/nreocrc/_lab_instance_scratch_002/`
+scratch fixture. No prior unpushed work existed to mix in - the
+earlier-queued top-left brand-mark request had no code changes yet and
+was set aside cleanly, to resume after this stage per the product
+owner's own explicit priority signal.
+
+**Repository-grounded design review (Section 1), findings:**
+
+1. **Full-page-reload app, no client router** (`routes/workspace.py`'s
+   `show_workspace`) - a tab is therefore a real `<a href="?source=
+   <id>">`, never client-side routing invented for this stage. Stable
+   URLs, direct links, and browser Back/Forward all keep working
+   exactly as before, for free.
+2. **Per-tab PDF viewer state can't live in a persistent in-memory
+   instance** (there isn't one - every tab switch is a real page
+   reload) - it has to be persisted (`localStorage`) and restored on
+   the NEXT `mount()` for that same Document, keyed by source id.
+3. **Tab metadata (pinned/hidden/alias/color) is a pure client-side
+   workspace preference** - never a backend/schema change. Scoped by
+   BOTH username (`session.get('username')`, already exposed via
+   `current_username`) AND Project id - the first genuinely per-account
+   preference this app has built, so this is a real, new requirement
+   (existing per-project keys like `beehive:panel:toolbox:<id>` never
+   needed a username segment, since they were reviewer-agnostic by
+   original design).
+4. **Server-side authorization revalidation reuses the EXISTING
+   `#workspace-active-sources-data` JSON island** - the SAME authorized,
+   Project-scoped data `populateDivision` already reads. Client JS
+   cross-references every persisted tab entry against it on load and
+   drops anything stale/unauthorized. Zero new backend endpoints.
+5. **Toolbox/Thumbnails already follow whichever `?source=` the current
+   page reflects** (server-rendered per-request) - no extra wiring
+   needed there beyond tab links pointing at the correct URL.
+
+No genuine architectural, authorization, destructive-migration, or
+data-integrity conflict found - proceeded per Section 1's own "stop
+only if a conflict is discovered" instruction.
+
+**What was built:**
+
+- **Tab strip** (`templates/case_workspace.html`, Division-0-only,
+  suppressed inside a `panel_only` render): `#document-tab-strip`
+  (`role="tablist"`), server-rendered `[hidden]` and entirely empty -
+  `static/js/document_tabs.js` builds every tab client-side. An "All
+  Tabs" `<details>` overflow control (Close All Tabs + a Hidden Tabs
+  list) sits at the strip's own trailing edge.
+- **Preview tab** (Section 4): single-clicking an unopened Document in
+  Lists becomes the ONE replaceable preview tab (`sessionStorage`,
+  cleared on session end unless converted). Selecting another unopened
+  Document replaces it; selecting an already-pinned Document activates
+  that tab instead, never touching the preview. Visually distinguished
+  without color alone (italic label + dashed active-underline).
+- **Pinned tabs** (Section 5): double-click, "Keep Open" menu action, or
+  applying a rename/color all convert a preview to pinned
+  (`localStorage`, keyed by username+Project). Never replaced by later
+  preview navigation. Revalidated against `active_sources` on every
+  load - a stale/removed/unauthorized entry is silently dropped, never
+  exposed.
+- **Per-tab PDF viewer state** (Section 6, `static/js/pdf_viewer.js`):
+  page/zoom/rotation/scroll position/search query text persisted
+  (`localStorage`, keyed by username+Project+source id) and restored on
+  `mount()` instead of always resetting to page 1/100%/0°. Debounced
+  writes (400ms) plus a synchronous `pagehide` flush so a fast tab
+  click right after a change can't lose it. The restored search QUERY
+  TEXT is repopulated but deliberately NOT auto-re-run - re-running it
+  would jump to its first match and could silently override the
+  just-restored page, the unsafe half of "where safe and appropriate."
+- **Rename/alias** (Section 7): a real inline `<input>` (never `window.
+  prompt()`, matching this app's own established convention), rejects
+  empty/whitespace-only and case-insensitive duplicate aliases within
+  the same user's Project tab workspace with an inline message. Restore
+  Original Name clears the alias only - never touches the Document.
+  Accessible name always includes the original Document name even when
+  aliased ("*alias*, originally *name*"), plus a `title` tooltip and a
+  "Show Original Document Name" menu action.
+- **Curated color** (Section 8): 7 organizational accents (Gold/
+  Turquoise/Lapis/Terracotta/Green/Purple/Default) as a thin top-border
+  stripe only, never a fill - the active tab's own weight/background/
+  underline are the real, non-color state cue. New `--tabcolor-*` token
+  family in `static/css/tokens.css` (light values + one shared dark
+  value reused across Black/Midnight Blue/Deep Forest, the same pattern
+  every other accent color in that file already follows), verified via
+  `tools/check_contrast.py` (extended with 38 new pairings, all real
+  margin above the 3:1 accent-text floor - not eyeballed).
+- **Hide/unhide** (Section 9): hiding a pinned tab preserves its alias/
+  color/pin state, removes it from the visible strip only. If the
+  hidden tab was active, falls back to the most-recently-used visible
+  tab, then the preview, then a clear empty Display state (a real
+  navigation to the bare workspace URL). Unhide (from the Hidden Tabs
+  list) restores it to the strip and activates it.
+- **Tab action menu** (Section 10): a real popover per tab, only the
+  state-applicable actions shown (e.g. "Keep Open" only on a preview,
+  "Restore Original Name"/"Default Color" only when set, "Hide Tab" not
+  offered on a preview). Close removes only that tab's workspace state -
+  never the Document, never a `fetch()`/`XMLHttpRequest` call, no
+  invented dirty-state warning (there is no mutable state to lose).
+  Close Others keeps exactly the one tab.
+- **Identity/navigation** (Section 11): one stable tab entry per source
+  id - activating an already-open Document updates that SAME entry
+  (`lastActiveAt`) rather than creating a duplicate. Alias/color/
+  visibility/pin/view-state never become identity. Individual `.
+  document-tab` elements are a repeated pattern, left without their own
+  `data-ui-ref` (the same convention `.thumbnail-row` and `lists.
+  project.documents.leaf` already establish) - no UUID exposure risk.
+- **Accessibility** (Section 12): real `tablist`/`tab` roles, roving
+  `tabindex` (0 on the focused/active tab, -1 on the rest), Left/Right/
+  Home/End move focus, Enter (native `<a>`) and an explicit Space
+  handler both activate, Escape closes any open menu, every menu/color/
+  rename/hidden-tab-restore control is keyboard-reachable.
+
+**Not built this stage, per Section 10's own explicit deferral:** tab
+reordering, tab groups, split Display panes, cross-Project tabs -
+recorded here as future possibilities, not started.
+
+**Tests:** new `tests/test_p40dtab1_document_tabs.py` (62 tests -
+markup/CSS/JS-source coverage for every section above, contrast
+verification via the real tool, existing-behavior preservation, no-
+fetch/no-prompt/no-false-dirty-warning guards). Fixed a real anchor
+bug discovered in the immediately-prior EYE1 scrollbar-theming test
+file (`tests/test_p40eye1_scrollbar_theming.py`): its own unanchored
+regex searches for the FIRST `::-webkit-scrollbar-thumb`-family rule in
+the file started silently matching this stage's own NEW `.document-
+tab-list` scrollbar rules instead of the original 8-container combined
+block once this stage's CSS was inserted earlier in the file - one of
+the three affected assertions actually failed (caught immediately);
+the other two happened to still pass by coincidence (asserting a
+substring, like `var(--machine-blue)`, that both the old and
+wrongly-matched new rule equally contain) - a "passing for the wrong
+reason" case, fixed alongside the one that visibly failed, not left as
+a latent gap. Full suite: see this stage's own commit message for the
+exact count.
+
+**Real-browser verification:** not available in this environment -
+every claim above is grounded in template/CSS/JS source inspection,
+rendered-HTML structural tests, and `tools/check_contrast.py`'s own
+real numeric output, not a claimed rendered check. Product-owner
+verification checklist: (1) single-click preview, replace-only-the-
+preview, double-click-to-pin, no duplicate tab for one Document; (2)
+pinning multiple Documents and switching between them restores each
+one's own page/zoom/rotation/scroll independently; (3) rename a tab,
+confirm the Document's real name in Lists is unchanged, confirm the
+tooltip/menu still surfaces the original name; (4) apply every curated
+color across Black/Midnight Blue/Deep Forest/Light, confirm the active
+tab is still identifiable with color removed (e.g. grayscale
+screenshot); (5) hide/unhide both an active and an inactive tab,
+confirm the active-hidden fallback lands somewhere sensible; (6)
+reload and confirm restoration (pinned tabs return, preview does not
+unless it was the active navigation target); (7) switch Projects and
+confirm zero tab leakage either direction; (8) log in as a second
+account in the same browser and confirm zero tab-name leakage; (9)
+exercise the tab-strip overflow at a narrow viewport; (10) keyboard-
+only tab navigation (Left/Right/Home/End/Enter/Space, menu, rename,
+hidden-tab restore); (11) confirm PDF controls and Thumbnails still
+follow the active tab; (12) confirm no white default gutters/
+scrollbars/menus anywhere in the new tab strip.
+
+**Note on theme names:** this stage's prompt referred to "Black, Deep
+Blue, Deep Purple, and Soft Light" - this repo's actual approved theme
+set (CLAUDE-P40-VW8-QA) is Black, Midnight Blue, Deep Forest, and
+Light, consistent with the same note on the two entries below. All
+reasoning above uses the real names.
+
 ## 2026-08-03 — CLAUDE-P40-EYE1 (browser correction): Remaining Unthemed Toolbox Scrollbar
 
 A real-browser screenshot found one nested scroll container inside the

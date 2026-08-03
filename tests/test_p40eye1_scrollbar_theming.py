@@ -104,7 +104,13 @@ class WebkitScrollbarPseudoElementTests(unittest.TestCase):
         self.assertIn("var(--surface-primary)", corner_rule.group(1))
 
     def test_thumb_uses_theme_token_not_default_gray(self):
-        thumb_rule = re.search(r"::-webkit-scrollbar-thumb\s*\{([^}]*)\}", self.css)
+        # Anchored to start searching from this stage's own combined
+        # block (.lists-pane is its first selector) - CLAUDE-P40-DTAB1
+        # later added a SECOND, differently-scoped ::-webkit-scrollbar-
+        # thumb rule (.document-tab-list's own) earlier in the file, so
+        # an unanchored search would otherwise match that one instead.
+        anchor = self.css.index(".lists-pane::-webkit-scrollbar-thumb,")
+        thumb_rule = re.search(r"::-webkit-scrollbar-thumb\s*\{([^}]*)\}", self.css[anchor:])
         self.assertIsNotNone(thumb_rule)
         self.assertIn("var(--border-strong)", thumb_rule.group(1))
         self.assertNotRegex(thumb_rule.group(1), r"#[0-9a-fA-F]{3,8}")
@@ -112,9 +118,13 @@ class WebkitScrollbarPseudoElementTests(unittest.TestCase):
     def test_thumb_hover_and_active_states_present(self):
         self.assertIn("::-webkit-scrollbar-thumb:hover,", self.css)
         self.assertIn("::-webkit-scrollbar-thumb:active,", self.css)
+        # Anchored past CLAUDE-P40-DTAB1's own .document-tab-list hover/
+        # active rule (same shape, appears earlier in the file) - see
+        # test_thumb_uses_theme_token_not_default_gray's own comment.
+        anchor = self.css.index(".lists-pane::-webkit-scrollbar-thumb,")
         hover_active_rule = re.search(
             r"::-webkit-scrollbar-thumb:hover,[\s\S]*?::-webkit-scrollbar-thumb:active\s*\{([^}]*)\}",
-            self.css,
+            self.css[anchor:],
         )
         self.assertIsNotNone(hover_active_rule)
         self.assertIn("var(--machine-blue)", hover_active_rule.group(1))
@@ -123,8 +133,10 @@ class WebkitScrollbarPseudoElementTests(unittest.TestCase):
         # background-clip:padding-box + a transparent border is what
         # keeps the thumb visually inset from the track edges while
         # still using the browser's own real, proportional thumb-length
-        # calculation (never faked/hardcoded).
-        thumb_rule = re.search(r"::-webkit-scrollbar-thumb\s*\{([^}]*)\}", self.css)
+        # calculation (never faked/hardcoded). Anchored the same way as
+        # test_thumb_uses_theme_token_not_default_gray above.
+        anchor = self.css.index(".lists-pane::-webkit-scrollbar-thumb,")
+        thumb_rule = re.search(r"::-webkit-scrollbar-thumb\s*\{([^}]*)\}", self.css[anchor:])
         self.assertIn("background-clip: padding-box", thumb_rule.group(1))
         self.assertIn("border: 2px solid transparent", thumb_rule.group(1))
 

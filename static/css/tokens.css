@@ -119,6 +119,26 @@
     --risk-red: #A6371F;
     --risk-red-tint: #F5DCCF;
 
+    /* CLAUDE-P40-DTAB1: curated Document-tab organizational accents -
+       deliberately an ACCENT-only palette (a tab's own color never means
+       anything by itself - Section 8's own "not the sole indication of
+       active/selected/pinned/hidden/dirty/warning/authorization state"),
+       so these are named for the color itself, not a meaning, unlike
+       --seal-red/--failure-red/etc. above. Chosen with enough hue/
+       lightness distance from --highlight-orange/--attention-amber/
+       --failure-red/--risk-red that a tab accent is never mistakable for
+       a warning/error state at a glance - verified in tools/
+       check_contrast.py alongside every other accent pairing here, same
+       "readability is the floor" discipline. No "neutral/default" token
+       - Default Color means no tab-color styling applied at all, not a
+       7th color. */
+    --tabcolor-gold: #8A6D1F;
+    --tabcolor-turquoise: #1B7A72;
+    --tabcolor-lapis: #1F3F7A;
+    --tabcolor-terracotta: #A34A26;
+    --tabcolor-green: #3D6B2C;
+    --tabcolor-purple: #6B3F7A;
+
     --font-display: "Arial Nova Cond", "Arial Narrow", Arial, sans-serif;
     --font-body: "Arial Nova Cond", "Arial Narrow", Arial, sans-serif;
     --font-mono: "IBM Plex Mono", monospace;
@@ -282,6 +302,17 @@
     --dark-failure-red-tint: #361E1B;
     --dark-risk-red: #E4826D;
     --dark-risk-red-tint: #381F19;
+
+    /* CLAUDE-P40-DTAB1: same rationale as the light-mode block above -
+       identical values across all three dark themes (Black/Midnight
+       Blue/Deep Forest), the same convention every other accent color
+       in this file already follows. */
+    --dark-tabcolor-gold: #D4AF37;
+    --dark-tabcolor-turquoise: #4ECDC4;
+    --dark-tabcolor-lapis: #6C9BF5;
+    --dark-tabcolor-terracotta: #E08350;
+    --dark-tabcolor-green: #7FBF6A;
+    --dark-tabcolor-purple: #C08FE0;
 }
 
 /* "Midnight Blue" (CLAUDE-P40-VW8-QA, Approved Theme Set) - the
@@ -351,6 +382,17 @@
     --tint-failure-red-tint: #361E1B;
     --tint-risk-red: #E4826D;
     --tint-risk-red-tint: #381F19;
+
+    /* CLAUDE-P40-DTAB1: same rationale as the light-mode block above -
+       identical values across all three dark themes (Black/Midnight
+       Blue/Deep Forest), the same convention every other accent color
+       in this file already follows. */
+    --tint-tabcolor-gold: #D4AF37;
+    --tint-tabcolor-turquoise: #4ECDC4;
+    --tint-tabcolor-lapis: #6C9BF5;
+    --tint-tabcolor-terracotta: #E08350;
+    --tint-tabcolor-green: #7FBF6A;
+    --tint-tabcolor-purple: #C08FE0;
 }
 
 /* "Deep Forest" (CLAUDE-P40-VW8-QA, Approved Theme Set) - the third
@@ -400,6 +442,17 @@
     --forest-failure-red-tint: #361E1B;
     --forest-risk-red: #E4826D;
     --forest-risk-red-tint: #381F19;
+
+    /* CLAUDE-P40-DTAB1: same rationale as the light-mode block above -
+       identical values across all three dark themes (Black/Midnight
+       Blue/Deep Forest), the same convention every other accent color
+       in this file already follows. */
+    --forest-tabcolor-gold: #D4AF37;
+    --forest-tabcolor-turquoise: #4ECDC4;
+    --forest-tabcolor-lapis: #6C9BF5;
+    --forest-tabcolor-terracotta: #E08350;
+    --forest-tabcolor-green: #7FBF6A;
+    --forest-tabcolor-purple: #C08FE0;
 }
 
 /* CLAUDE-P40-VW6: ONE fixed, mode-invariant divider color - deliberately

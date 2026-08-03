@@ -104,6 +104,55 @@
     var overlayCanvas = null;
     var pageWrap = null;
     var currentViewport = null;
+    var currentSourceId = null;
+    var currentCanvasContainer = null;
+    var viewStateSaveTimer = null;
+
+    // -------- Per-tab viewer state persistence (CLAUDE-P40-DTAB1,
+    // Section 6) - "where the existing viewer architecture supports it
+    // safely, preserve state independently for each open Document tab."
+    // This is a full-page-reload app (no live SPA instance to hold state
+    // in memory across a tab switch - see static/js/document_tabs.js's
+    // own header comment) - persisted to localStorage keyed by username
+    // + Project + source id, restored on the NEXT mount() for that same
+    // Document instead of always starting at page 1/100%/0deg. Username-
+    // scoped for the same cross-account-leakage reason document_tabs.js
+    // already establishes. ------------------------------------------
+    function viewStateKey(sourceId) {
+        var usernameEl = document.querySelector('.workspace-user-name');
+        var username = usernameEl ? usernameEl.textContent.trim() : 'anonymous';
+        var stripEl = document.getElementById('document-tab-strip');
+        var projectId = stripEl ? stripEl.getAttribute('data-project-id') : '';
+        return 'beehive:docview:' + username + ':' + projectId + ':' + sourceId;
+    }
+
+    function loadViewState(sourceId) {
+        if (!sourceId) return null;
+        try {
+            var raw = window.localStorage.getItem(viewStateKey(sourceId));
+            return raw ? JSON.parse(raw) : null;
+        } catch (e) {
+            return null;
+        }
+    }
+
+    function saveViewStateNow() {
+        if (!currentSourceId) return;
+        var state = {
+            page: currentPage,
+            zoom: currentZoom,
+            rotation: currentRotation,
+            scrollLeft: currentCanvasContainer ? currentCanvasContainer.scrollLeft : 0,
+            scrollTop: currentCanvasContainer ? currentCanvasContainer.scrollTop : 0,
+            searchQuery: searchInput ? searchInput.value : ''
+        };
+        try { window.localStorage.setItem(viewStateKey(currentSourceId), JSON.stringify(state)); } catch (e) { /* ignore */ }
+    }
+
+    function saveViewStateSoon() {
+        window.clearTimeout(viewStateSaveTimer);
+        viewStateSaveTimer = window.setTimeout(saveViewStateNow, 400);
+    }
 
     function showControls() { container.hidden = false; }
     function hideControls() { container.hidden = true; }
@@ -237,11 +286,13 @@
         selectedAnnotation = null;
         updateAnnotationUi();
         renderPage();
+        saveViewStateSoon();
     }
 
     function setZoom(z) {
         currentZoom = Math.max(0.25, Math.min(4, z));
         renderPage();
+        saveViewStateSoon();
     }
 
     function fitWidth() {
@@ -267,6 +318,7 @@
     function rotate() {
         currentRotation = (currentRotation + 90) % 360;
         renderPage();
+        saveViewStateSoon();
     }
 
     // -------- Search (Section: "search... where applicable") -----------
@@ -321,6 +373,7 @@
                 goToPage(searchMatches[0].page);
             }
             updateSearchUi();
+            saveViewStateSoon();
         });
     }
 
@@ -658,7 +711,9 @@
         if (window.console) console.error('PDF viewer failed to load', err);
     }
 
-    function mount(url, canvasContainer, downloadFilename) {
+    function mount(url, canvasContainer, downloadFilename, sourceId) {
+        currentSourceId = sourceId || null;
+        currentCanvasContainer = canvasContainer;
         return loadPdfJs().then(function () {
             canvas = document.createElement('canvas');
             canvas.className = 'document-viewer-canvas';
@@ -674,16 +729,26 @@
             overlayCanvas.addEventListener('pointerup', onOverlayPointerUp);
             canvasContainer.textContent = '';
             canvasContainer.appendChild(pageWrap);
+            canvasContainer.addEventListener('scroll', saveViewStateSoon);
             return pdfjsLib.getDocument(url).promise;
         }).then(function (doc) {
             pdfDoc = doc;
-            currentPage = 1;
-            currentZoom = 1.0;
-            currentRotation = 0;
+            var saved = loadViewState(currentSourceId);
+            var hasSavedPage = saved && typeof saved.page === 'number' && saved.page >= 1 && saved.page <= doc.numPages;
+            currentPage = hasSavedPage ? saved.page : 1;
+            currentRotation = (saved && typeof saved.rotation === 'number') ? saved.rotation : 0;
             pageTextCache = {};
             searchMatches = [];
             searchMatchIndex = -1;
-            searchInput.value = '';
+            // Section 6: "search position/query where safe and
+            // appropriate" - the QUERY TEXT is restored (visibly, in the
+            // field) but a saved query is deliberately NOT auto-re-run
+            // here: runSearch() jumps to its first match, which could
+            // silently override the just-restored page/scroll position
+            // if the reviewer had since scrolled past that match - the
+            // unsafe half of "safe and appropriate." Re-running search
+            // remains one click/Enter away, with the query already typed.
+            searchInput.value = (saved && saved.searchQuery) || '';
             pageTotal.textContent = String(pdfDoc.numPages);
             downloadLink.href = url;
             if (downloadFilename) downloadLink.setAttribute('download', downloadFilename);
@@ -691,6 +756,15 @@
             showControls();
             resetAnnotationState();
             buildThumbnails();
+            if (saved && saved.zoom) {
+                currentZoom = Math.max(0.25, Math.min(4, saved.zoom));
+                return renderPage().then(function () {
+                    if (saved.scrollLeft || saved.scrollTop) {
+                        canvasContainer.scrollLeft = saved.scrollLeft || 0;
+                        canvasContainer.scrollTop = saved.scrollTop || 0;
+                    }
+                });
+            }
             return fitWidth();
         }).catch(function (err) {
             hideControls();
@@ -701,11 +775,15 @@
     }
 
     function unmount() {
+        saveViewStateNow();
+        if (currentCanvasContainer) currentCanvasContainer.removeEventListener('scroll', saveViewStateSoon);
         pdfDoc = null;
         canvas = null;
         overlayCanvas = null;
         pageWrap = null;
         currentViewport = null;
+        currentSourceId = null;
+        currentCanvasContainer = null;
         hideControls();
         clearThumbnails();
         resetAnnotationState();
@@ -746,6 +824,13 @@
 
     window.ArchioskPdfViewer = { mount: mount, unmount: unmount };
 
+    // CLAUDE-P40-DTAB1, Section 6: the debounced saveViewStateSoon()
+    // (400ms) is enough for ordinary use, but a fast tab click right
+    // after a zoom/rotate/page change could otherwise navigate away
+    // before that timer fires - flush synchronously on the way out so
+    // no state is silently lost on a quick tab switch.
+    window.addEventListener('pagehide', saveViewStateNow);
+
     // -------- Auto-mount ---------------------------------------------
     // Self-contained, like every other IIFE in this app's static/js/
     // files (case_workspace.js's own setUpConversationTagsAndTasks etc.
@@ -760,6 +845,6 @@
     // which always re-runs this exact check fresh.
     var autoMountEl = document.getElementById('document-viewer-pdf-canvas');
     if (autoMountEl && autoMountEl.dataset.pdfUrl) {
-        mount(autoMountEl.dataset.pdfUrl, autoMountEl, autoMountEl.dataset.pdfFilename || '');
+        mount(autoMountEl.dataset.pdfUrl, autoMountEl, autoMountEl.dataset.pdfFilename || '', autoMountEl.dataset.sourceId || '');
     }
 })();

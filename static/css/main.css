@@ -2129,6 +2129,248 @@ html.toolbox-hidden .workspace-right-column {
 }
 .display-division-close:hover { color: var(--failure-red); }
 
+/* CLAUDE-P40-DTAB1: the Document tab strip - Documents only (Section 2's
+   own scope), Division-0-only, a persistent utility above whatever
+   content is currently in Display. Compact: no unnecessary height,
+   .document-tab-list is the one scroll region (horizontal overflow,
+   never wraps/shrinks labels below a readable width), .document-tabs-
+   overflow (the "All Tabs" control) stays fixed at the strip's own
+   trailing edge regardless of scroll position. */
+.document-tab-strip {
+    display: flex;
+    align-items: flex-end;
+    gap: 0.3rem;
+    margin-bottom: 0.6rem;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+    min-width: 0;
+}
+.document-tab-strip[hidden] { display: none; }
+.document-tab-list {
+    display: flex;
+    align-items: flex-end;
+    gap: 0.2rem;
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-color: var(--border-strong) var(--surface-primary);
+}
+.document-tab-list::-webkit-scrollbar { height: 8px; }
+.document-tab-list::-webkit-scrollbar-track { background: var(--surface-primary); }
+.document-tab-list::-webkit-scrollbar-thumb {
+    background-color: var(--border-strong);
+    border-radius: 6px;
+    border: 1px solid transparent;
+    background-clip: padding-box;
+}
+.document-tab-list::-webkit-scrollbar-thumb:hover,
+.document-tab-list::-webkit-scrollbar-thumb:active {
+    background-color: var(--machine-blue);
+    background-clip: padding-box;
+}
+/* CLAUDE-P40-DTAB1, Section 3/13: a real, keyboard-operable tab, never a
+   decorative div - color (data-tab-color, below) is an accent stripe
+   only; the ACTIVE tab's own non-color cues (background, bottom-border
+   weight/color, font-weight) are what Section 8 requires ("must also
+   use shape/underline/border/weight... not color alone"). */
+.document-tab {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    max-width: 190px;
+    min-width: 96px;
+    padding: 0.4rem 0.55rem;
+    border: 1px solid transparent;
+    border-bottom: none;
+    border-radius: 4px 4px 0 0;
+    background: none;
+    color: var(--text-secondary);
+    font-family: var(--font-body);
+    font-size: 0.8rem;
+    text-decoration: none;
+    cursor: pointer;
+    flex-shrink: 0;
+    position: relative;
+    /* the curated color accent - a 3px top stripe, present only when
+       data-tab-color is set (the CSS var is undefined -> no visible
+       border otherwise, no JS branching needed to omit it). */
+    border-top: 3px solid var(--document-tab-accent, transparent);
+}
+.document-tab:hover {
+    background: var(--surface-hover);
+    color: var(--text-primary);
+    text-decoration: none;
+}
+.document-tab:focus-visible {
+    outline: 2px solid var(--machine-blue);
+    outline-offset: -2px;
+}
+.document-tab[aria-selected="true"] {
+    background: var(--surface-primary);
+    color: var(--text-primary);
+    font-weight: 600;
+    border-color: var(--border);
+    border-bottom: 2px solid var(--machine-blue);
+    margin-bottom: -1px;
+}
+.document-tab[data-tab-color="gold"] { --document-tab-accent: var(--tabcolor-gold); }
+.document-tab[data-tab-color="turquoise"] { --document-tab-accent: var(--tabcolor-turquoise); }
+.document-tab[data-tab-color="lapis"] { --document-tab-accent: var(--tabcolor-lapis); }
+.document-tab[data-tab-color="terracotta"] { --document-tab-accent: var(--tabcolor-terracotta); }
+.document-tab[data-tab-color="green"] { --document-tab-accent: var(--tabcolor-green); }
+.document-tab[data-tab-color="purple"] { --document-tab-accent: var(--tabcolor-purple); }
+.document-tab-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+/* CLAUDE-P40-DTAB1, Section 4: "distinguish the temporary preview tab
+   visually without relying on color alone" - italic label text + a
+   dashed (not solid) selected-state underline together, neither of
+   which is a color cue. */
+.document-tab.document-tab-preview .document-tab-label { font-style: italic; }
+.document-tab.document-tab-preview[aria-selected="true"] { border-bottom-style: dashed; }
+.document-tab-close {
+    flex-shrink: 0;
+    background: none;
+    border: none;
+    color: var(--text-metadata);
+    cursor: pointer;
+    font-size: 0.85rem;
+    line-height: 1;
+    padding: 0.15rem 0.3rem;
+    border-radius: 3px;
+}
+.document-tab-close:hover { background: var(--surface-hover); color: var(--failure-red); }
+.document-tab-close:focus-visible {
+    outline: 2px solid var(--machine-blue);
+    outline-offset: 1px;
+}
+.document-tab-menu-btn {
+    flex-shrink: 0;
+    background: none;
+    border: none;
+    color: var(--text-metadata);
+    cursor: pointer;
+    font-size: 0.7rem;
+    line-height: 1;
+    padding: 0.15rem 0.2rem;
+    border-radius: 3px;
+}
+.document-tab-menu-btn:hover { background: var(--surface-hover); color: var(--text-primary); }
+.document-tab-menu-btn:focus-visible {
+    outline: 2px solid var(--machine-blue);
+    outline-offset: 1px;
+}
+/* The per-tab context menu and the All-Tabs/Hidden-Tabs overflow panel
+   share the same restrained popover idiom the top-bar menus already
+   established (.workspace-layout-options etc.) - a bordered, real
+   interactive control surface, not decorative Display background. */
+.document-tab-menu,
+.document-tabs-overflow-panel {
+    position: absolute;
+    z-index: 40;
+    background: var(--surface-primary);
+    border: 1px solid var(--border-strong);
+    border-radius: 6px;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.22);
+    padding: 0.4rem;
+    min-width: 180px;
+    font-size: 0.82rem;
+}
+.document-tab-menu-item,
+.document-tab-color-option,
+.document-hidden-tab-item {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    width: 100%;
+    text-align: left;
+    background: none;
+    border: none;
+    color: var(--text-primary);
+    font-family: var(--font-body);
+    font-size: 0.82rem;
+    padding: 0.35rem 0.5rem;
+    border-radius: 4px;
+    cursor: pointer;
+}
+.document-tab-menu-item:hover,
+.document-tab-color-option:hover,
+.document-hidden-tab-item:hover,
+.document-tab-menu-item:focus-visible,
+.document-tab-color-option:focus-visible,
+.document-hidden-tab-item:focus-visible {
+    background: var(--surface-hover);
+}
+.document-tab-color-swatch {
+    display: inline-block;
+    width: 0.75rem;
+    height: 0.75rem;
+    border-radius: 50%;
+    border: 1px solid var(--border-strong);
+    flex-shrink: 0;
+}
+.document-tab-color-swatch[data-tab-color="gold"] { background: var(--tabcolor-gold); }
+.document-tab-color-swatch[data-tab-color="turquoise"] { background: var(--tabcolor-turquoise); }
+.document-tab-color-swatch[data-tab-color="lapis"] { background: var(--tabcolor-lapis); }
+.document-tab-color-swatch[data-tab-color="terracotta"] { background: var(--tabcolor-terracotta); }
+.document-tab-color-swatch[data-tab-color="green"] { background: var(--tabcolor-green); }
+.document-tab-color-swatch[data-tab-color="purple"] { background: var(--tabcolor-purple); }
+.document-tab-color-swatch[data-tab-color="none"] { background: transparent; }
+.document-tab-menu-divider {
+    height: 1px;
+    background: var(--border);
+    margin: 0.3rem 0.2rem;
+}
+.document-tabs-overflow { position: relative; }
+.document-tabs-overflow-summary {
+    list-style: none;
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 0.3rem 0.45rem;
+    flex-shrink: 0;
+    font-size: 0.75rem;
+}
+.document-tabs-overflow-summary::-webkit-details-marker { display: none; }
+.document-tabs-overflow-summary:hover,
+.document-tabs-overflow[open] .document-tabs-overflow-summary {
+    color: var(--text-primary);
+    border-color: var(--border-strong);
+}
+.document-tabs-overflow-panel {
+    top: calc(100% + 0.3rem);
+    right: 0;
+    max-height: 60vh;
+    overflow-y: auto;
+    scrollbar-color: var(--border-strong) var(--surface-primary);
+}
+.document-hidden-tabs-heading {
+    font-family: var(--font-body);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-size: 0.7rem;
+    color: var(--text-metadata);
+    padding: 0.3rem 0.5rem 0.1rem;
+}
+.document-hidden-tab-item-original-name {
+    color: var(--text-metadata);
+    font-size: 0.72rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.document-tabs-empty-note {
+    color: var(--text-metadata);
+    font-size: 0.78rem;
+    padding: 0.35rem 0.5rem;
+}
+
 /* CLAUDE-P40-E3A, Section 6: the shared right-click context menu -
    repositioned (left/top set inline by JS) to whichever division was
    clicked, the same popover idiom as the top-bar menus above. */
