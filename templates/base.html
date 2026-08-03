@@ -115,6 +115,28 @@
                     <span class="doc-controls-divider" aria-hidden="true"></span>
                     <a class="doc-control-btn" id="doc-download" data-ui-ref="menu.document-controls.download" aria-label="Download" title="Download" download>&#8595;</a>
                     <button type="button" class="doc-control-btn" id="doc-print" data-ui-ref="menu.document-controls.print" aria-label="Print" title="Print">&#128438;</button>
+                    {# CLAUDE-P40-VW7A-QA2, Section 4: real, functional annotation
+                       tools - text/highlight/freehand ink, select+delete, undo/
+                       redo, one-active-tool-at-a-time (aria-pressed, radio-group
+                       behavior in static/js/pdf_viewer.js). Deliberately NO
+                       Save/Export control here - this stage's own honest scope
+                       boundary (see that file's own comment on the annotation
+                       module): no PDF-writing library is vendored in this repo
+                       and none was added as part of this stage, so there is no
+                       reliable way to bake these into a real derived PDF file.
+                       #doc-annotation-status (below) is the "clearly indicate
+                       unsaved changes" surface instead of a nonfunctional save
+                       button - stating the boundary in the control surface
+                       itself, not only in a completion report. #}
+                    <span class="doc-controls-divider" aria-hidden="true"></span>
+                    <button type="button" class="doc-control-btn doc-annotation-tool" id="doc-annotate-text" data-ui-ref="menu.document-controls.annotate-text" data-tool="text" aria-pressed="false" aria-label="Text annotation tool" title="Text annotation">T</button>
+                    <button type="button" class="doc-control-btn doc-annotation-tool" id="doc-annotate-highlight" data-ui-ref="menu.document-controls.annotate-highlight" data-tool="highlight" aria-pressed="false" aria-label="Highlight tool" title="Highlight">&#9645;</button>
+                    <button type="button" class="doc-control-btn doc-annotation-tool" id="doc-annotate-ink" data-ui-ref="menu.document-controls.annotate-ink" data-tool="ink" aria-pressed="false" aria-label="Draw (freehand) tool" title="Draw">&#9998;</button>
+                    <button type="button" class="doc-control-btn doc-annotation-tool" id="doc-annotate-select" data-ui-ref="menu.document-controls.annotate-select" data-tool="select" aria-pressed="false" aria-label="Select/delete annotation tool" title="Select">&#8598;</button>
+                    <button type="button" class="doc-control-btn" id="doc-annotate-delete" data-ui-ref="menu.document-controls.annotate-delete" aria-label="Delete selected annotation" title="Delete selected" disabled>&#10005;</button>
+                    <button type="button" class="doc-control-btn" id="doc-annotate-undo" data-ui-ref="menu.document-controls.annotate-undo" aria-label="Undo annotation change" title="Undo" disabled>&#8630;</button>
+                    <button type="button" class="doc-control-btn" id="doc-annotate-redo" data-ui-ref="menu.document-controls.annotate-redo" aria-label="Redo annotation change" title="Redo" disabled>&#8631;</button>
+                    <span class="doc-annotation-status" id="doc-annotation-status" data-ui-ref="menu.document-controls.annotation-status" aria-live="polite"></span>
                 </div>
                 <details class="doc-controls-overflow" id="doc-controls-overflow" data-ui-ref="menu.document-controls.overflow">
                     <summary class="doc-control-btn doc-controls-overflow-summary" aria-label="More document controls" title="More document controls">&hellip;</summary>
@@ -303,6 +325,23 @@
            own module docstring) does not support - see this stage's
            completion report for the reasoning in full. #}
         <nav class="launcher-panel" id="launcher-panel" aria-label="Primary">
+            {# CLAUDE-P40-VW7A-QA2: the left column now divides vertically -
+               Lists (this existing content, untouched, just re-homed one
+               level deeper into .lists-pane so it can be an independent
+               flex/scroll region) above a new PDF Thumbnails pane below,
+               with a draggable divider between them. .launcher-panel
+               itself keeps its existing id/aria-label/width/collapse
+               behavior (html.launcher-hidden .launcher-panel, unchanged) -
+               hiding "Lists" still hides this whole column, Thumbnails
+               included, exactly like before this stage. The divider and
+               Thumbnails pane are both [hidden] by default and only
+               revealed by static/js/pdf_viewer.js when the active
+               Document actually is a PDF (Section 3's own "only when the
+               active document supports thumbnails" - Lists silently
+               regains the full column height otherwise, since .lists-pane
+               is flex:1 by default and only yields space to Thumbnails
+               once .launcher-panel gets the has-thumbnails class). #}
+            <div class="lists-pane" id="lists-pane">
             <div class="launcher-panel-body">
                 {% set projects_open = project_id is defined or request.path == url_for('portal.projects_list') %}
                 <ul class="tree" data-tree-root>
@@ -680,6 +719,29 @@
                     {% endif %}
                 </ul>
             </div>
+            </div>
+            {# CLAUDE-P40-VW7A-QA2, Section 3: draggable horizontal divider
+               between Lists and PDF Thumbnails - same role="separator"/
+               pointer-drag/keyboard-step idiom as _macros.html's own
+               conversation-dock-resize-handle (static/js/case_workspace.js
+               setUpChatResize), reused rather than a new drag mechanism
+               invented from scratch. Percentage-based (not pixel, since
+               the available height varies by viewport/panel content)
+               min/max bounds give both "drag to near the top" and "drag
+               to near the bottom" a real collapse-toward-header effect
+               without a separate dedicated collapse control per pane.
+               [hidden] by default - shown only alongside the Thumbnails
+               pane itself, by static/js/pdf_viewer.js. #}
+            <div class="lists-thumbnails-divider" id="lists-thumbnails-divider" data-ui-ref="shell.lists-thumbnails-divider"
+                 role="separator" aria-orientation="horizontal" aria-label="Resize Lists/Thumbnails split"
+                 tabindex="0" aria-valuemin="12" aria-valuemax="88" hidden></div>
+            <div class="thumbnails-pane" id="thumbnails-pane" data-ui-ref="lists.thumbnails-pane" aria-label="Page thumbnails" hidden>
+                <div class="thumbnails-pane-header">
+                    <h2>Thumbnails</h2>
+                    <button type="button" class="thumbnails-maximize-btn" id="thumbnails-maximize-btn" data-ui-ref="lists.thumbnails-pane.maximize" aria-pressed="false" aria-label="Maximize the Thumbnails pane">Maximize</button>
+                </div>
+                <div class="thumbnails-list" id="thumbnails-list" role="list" aria-label="Page thumbnails" data-ui-ref="lists.thumbnails-pane.list"></div>
+            </div>
         </nav>
         {% if project_id is defined %}
         {# ---------------- Project-switching interruption dialog (CLAUDE-P40-VW8) ---
@@ -921,6 +983,132 @@
                     try { window.localStorage.setItem(refModeKey, refModeToggle.checked ? 'on' : 'off'); } catch (e) { /* ignore */ }
                 });
             }
+        })();
+    </script>
+    <script>
+        // CLAUDE-P40-VW7A-QA2, Section 3: draggable divider between Lists
+        // and the PDF Thumbnails pane - same pointerdown/pointermove/
+        // pointerup + CSS-custom-property + persistence pattern as
+        // static/js/case_workspace.js's own setUpChatResize, applied here
+        // at percentage granularity (--lists-height on .launcher-panel)
+        // since the available column height varies by viewport, unlike
+        // Chat's fixed-pixel row. Session-scoped persistence only
+        // (sessionStorage, not localStorage) - Section 3's own "proportion
+        // may persist per session," a deliberately weaker guarantee than
+        // the Lists/Toolbox show-hide preferences above.
+        (function () {
+            var panel = document.querySelector('.launcher-panel');
+            var divider = document.getElementById('lists-thumbnails-divider');
+            var thumbnailsPane = document.getElementById('thumbnails-pane');
+            var maximizeBtn = document.getElementById('thumbnails-maximize-btn');
+            if (!panel || !divider || !thumbnailsPane) return;
+
+            var MIN_PCT = 12;
+            var MAX_PCT = 88;
+            var DEFAULT_PCT = 60;
+            var heightKey = 'beehive:panel:lists-thumbnails-pct';
+            var preMaximizePct = null;
+
+            function clamp(pct) { return Math.max(MIN_PCT, Math.min(MAX_PCT, pct)); }
+
+            function applyPct(pct, persist) {
+                var clamped = clamp(pct);
+                panel.style.setProperty('--lists-height', clamped + '%');
+                divider.setAttribute('aria-valuenow', String(Math.round(clamped)));
+                if (persist !== false) {
+                    try { window.sessionStorage.setItem(heightKey, String(clamped)); } catch (e) { /* ignore */ }
+                }
+                return clamped;
+            }
+
+            var stored = null;
+            try { stored = window.sessionStorage.getItem(heightKey); } catch (e) { /* ignore */ }
+            applyPct(stored ? parseFloat(stored) : DEFAULT_PCT, false);
+
+            var dragStartY = null;
+            var dragStartPct = null;
+            var dragTotalHeight = null;
+            function onPointerMove(e) {
+                if (dragStartY === null || !dragTotalHeight) return;
+                var deltaPx = e.clientY - dragStartY;
+                var deltaPct = (deltaPx / dragTotalHeight) * 100;
+                applyPct(dragStartPct + deltaPct);
+            }
+            function onPointerUp() {
+                dragStartY = null;
+                dragStartPct = null;
+                // CLAUDE-P40-VW7A-QA2, Section 6: same "active accent only
+                // while dragging" reasoning as case_workspace.js's own
+                // setUpChatResize - :hover alone would drop the accent the
+                // moment the pointer strays off this thin line mid-drag.
+                divider.classList.remove('dragging');
+                document.removeEventListener('pointermove', onPointerMove);
+                document.removeEventListener('pointerup', onPointerUp);
+            }
+            divider.addEventListener('pointerdown', function (e) {
+                dragStartY = e.clientY;
+                dragTotalHeight = panel.clientHeight || 1;
+                dragStartPct = parseFloat(getComputedStyle(panel).getPropertyValue('--lists-height')) || DEFAULT_PCT;
+                divider.classList.add('dragging');
+                document.addEventListener('pointermove', onPointerMove);
+                document.addEventListener('pointerup', onPointerUp);
+                e.preventDefault();
+            });
+            // Section 3: "Double-click the divider restores the default
+            // proportion."
+            divider.addEventListener('dblclick', function () { applyPct(DEFAULT_PCT); });
+
+            var KEY_STEP = 4;
+            divider.addEventListener('keydown', function (e) {
+                var current = parseFloat(divider.getAttribute('aria-valuenow')) || DEFAULT_PCT;
+                if (e.key === 'ArrowUp') { applyPct(current - KEY_STEP); e.preventDefault(); }
+                else if (e.key === 'ArrowDown') { applyPct(current + KEY_STEP); e.preventDefault(); }
+                else if (e.key === 'Home') { applyPct(MIN_PCT); e.preventDefault(); }
+                else if (e.key === 'End') { applyPct(MAX_PCT); e.preventDefault(); }
+            });
+
+            // Section 3: "Thumbnails may maximize within the left column" -
+            // collapses Lists toward its header (MIN_PCT) and restores
+            // whatever proportion was active immediately beforehand on a
+            // second click, rather than always snapping back to DEFAULT_PCT
+            // (a manual drag adjustment right before maximizing should not
+            // be silently discarded).
+            if (maximizeBtn) {
+                maximizeBtn.addEventListener('click', function () {
+                    var isMaximized = maximizeBtn.getAttribute('aria-pressed') === 'true';
+                    if (isMaximized) {
+                        applyPct(preMaximizePct != null ? preMaximizePct : DEFAULT_PCT);
+                        maximizeBtn.setAttribute('aria-pressed', 'false');
+                        maximizeBtn.textContent = 'Maximize';
+                        maximizeBtn.setAttribute('aria-label', 'Maximize the Thumbnails pane');
+                    } else {
+                        preMaximizePct = parseFloat(getComputedStyle(panel).getPropertyValue('--lists-height')) || DEFAULT_PCT;
+                        applyPct(MIN_PCT);
+                        maximizeBtn.setAttribute('aria-pressed', 'true');
+                        maximizeBtn.textContent = 'Restore';
+                        maximizeBtn.setAttribute('aria-label', 'Restore the Lists/Thumbnails split');
+                    }
+                });
+            }
+
+            // Exposed for static/js/pdf_viewer.js - the ONLY thing that
+            // knows whether the active Document actually is a PDF with
+            // thumbnails available (Section 3's own "only when the active
+            // document supports thumbnails"). This script owns the
+            // divider's drag mechanics; pdf_viewer.js owns the decision of
+            // when the pane should exist at all.
+            window.ArchioskListsThumbnailsSplit = {
+                show: function () {
+                    thumbnailsPane.hidden = false;
+                    divider.hidden = false;
+                    panel.classList.add('has-thumbnails');
+                },
+                hide: function () {
+                    thumbnailsPane.hidden = true;
+                    divider.hidden = true;
+                    panel.classList.remove('has-thumbnails');
+                }
+            };
         })();
     </script>
     <script>

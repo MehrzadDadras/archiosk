@@ -187,12 +187,20 @@ document.addEventListener('DOMContentLoaded', () => {
         function onPointerUp() {
             dragStartY = null;
             dragStartHeight = null;
+            // CLAUDE-P40-VW7A-QA2, Section 6: "active accent only while
+            // dragging" - :hover alone isn't enough, since a drag
+            // legitimately continues (via the document-level listeners
+            // above) even once the pointer strays off this handle's own
+            // thin hit target; an explicit class is what keeps the accent
+            // lit for the whole drag regardless of exact pointer position.
+            handle.classList.remove('dragging');
             document.removeEventListener('pointermove', onPointerMove);
             document.removeEventListener('pointerup', onPointerUp);
         }
         handle.addEventListener('pointerdown', (e) => {
             dragStartY = e.clientY;
             dragStartHeight = parseInt(getComputedStyle(grid).getPropertyValue('--chat-height'), 10) || COMPACT_HEIGHT;
+            handle.classList.add('dragging');
             document.addEventListener('pointermove', onPointerMove);
             document.addEventListener('pointerup', onPointerUp);
             e.preventDefault();

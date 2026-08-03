@@ -209,9 +209,14 @@ a:focus-visible, button:focus-visible, input:focus-visible {
     flex-shrink: 0;
     display: flex;
     flex-direction: column;
-    justify-content: space-between;
     background: var(--surface-primary);
-    overflow-y: auto;
+    /* CLAUDE-P40-VW7A-QA2: overflow-y:auto used to live directly on this
+       element (the nav scrolled as one region) - now that .lists-pane/
+       .thumbnails-pane are two independently-scrolling sub-regions
+       (Section 3's own "efficient rendering, independent scroll"), this
+       level only clips so the draggable divider's drag range never
+       spills outside the column; each pane below owns its own scroll. */
+    overflow: hidden;
     /* CLAUDE-P40-VW8-QA: was height:100vh + position:sticky/top:0 - a
        workaround for the page itself scrolling (see html/body's own
        comment). Now that .app-shell is height-locked and .app-shell-
@@ -219,6 +224,132 @@ a:focus-visible, button:focus-visible, input:focus-visible {
        (already well-defined) height is correct and sticky positioning
        has nothing left to stick against - simplified accordingly. */
     height: 100%;
+}
+/* CLAUDE-P40-VW7A-QA2, Section 3: Lists fills the whole column by
+   default (flex:1 1 auto, no thumbnails sibling taking space) - the
+   moment .launcher-panel gets .has-thumbnails (set by static/js/
+   pdf_viewer.js only while the active Document is a PDF), it instead
+   takes the persisted/default percentage and yields the rest to
+   Thumbnails. This is what makes "Lists silently regains full height
+   when Thumbnails is unavailable" true without any JS having to touch
+   .lists-pane directly when a non-PDF or no Document is active. */
+.lists-pane {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+}
+.launcher-panel.has-thumbnails .lists-pane {
+    flex: 0 0 var(--lists-height, 60%);
+}
+.lists-thumbnails-divider {
+    flex-shrink: 0;
+    width: 100%;
+    height: 9px;
+    border: none;
+    padding: 0;
+    cursor: row-resize;
+    background: transparent;
+    position: relative;
+    z-index: 1;
+}
+.lists-thumbnails-divider::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 4px;
+    height: 1px;
+    background: var(--border);
+}
+.lists-thumbnails-divider:hover::before,
+.lists-thumbnails-divider:focus-visible::before,
+.lists-thumbnails-divider.dragging::before {
+    background: var(--machine-blue);
+    height: 2px;
+    top: 3.5px;
+}
+.lists-thumbnails-divider[hidden] { display: none; }
+.thumbnails-pane {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+    border-top: 1px solid var(--border);
+}
+.thumbnails-pane[hidden] { display: none; }
+.thumbnails-pane-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem 0.7rem;
+    flex-shrink: 0;
+}
+.thumbnails-pane-header h2 {
+    font-family: var(--font-body);
+    font-weight: 600;
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-metadata);
+    margin: 0;
+}
+.thumbnails-maximize-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--text-secondary);
+    font-family: var(--font-body);
+    font-size: 0.72rem;
+    padding: 0.2rem 0.4rem;
+    border-radius: 4px;
+}
+.thumbnails-maximize-btn:hover, .thumbnails-maximize-btn:focus-visible {
+    background: var(--surface-hover);
+    color: var(--text-primary);
+}
+.thumbnails-maximize-btn[aria-pressed="true"] { color: var(--machine-blue); }
+.thumbnails-list {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 0.6rem;
+}
+/* CLAUDE-P40-VW7A-QA2, Section 3: one real page per row - a <button>
+   (not a decorative <div>) so click-to-navigate is a real activate-able
+   control, aria-current="true" on whichever row matches the current
+   page (kept in sync by static/js/pdf_viewer.js on every page change,
+   regardless of whether that change came from scrolling, the top-menu
+   controls, or a thumbnail click itself). */
+.thumbnail-row {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.3rem;
+    cursor: pointer;
+    border: 2px solid transparent;
+    border-radius: 4px;
+    padding: 0.3rem;
+    background: none;
+    width: 100%;
+    font-family: var(--font-body);
+}
+.thumbnail-row:hover { background: var(--surface-hover); }
+.thumbnail-row:focus-visible { outline: 2px solid var(--machine-blue); outline-offset: 1px; }
+.thumbnail-row canvas { display: block; max-width: 100%; box-shadow: 0 0 0 1px var(--border); }
+.thumbnail-row[aria-current="true"] {
+    border-color: var(--machine-blue);
+    background: var(--surface-selected);
+}
+.thumbnail-row-label {
+    font-size: 0.7rem;
+    color: var(--text-metadata);
+    font-variant-numeric: tabular-nums;
 }
 /* CLAUDE-P40-E3A, Section 9 (Chat is a full-width row beneath Lists/
    Display/Toolbox, sibling to .app-shell-body, not confined to the
@@ -2160,6 +2291,55 @@ html.toolbox-hidden .workspace-pane-toolbox {
     align-items: flex-start;
 }
 .document-viewer-canvas { display: block; }
+.document-viewer-load-error {
+    margin: auto;
+    padding: 1rem;
+    max-width: 28rem;
+    text-align: center;
+    color: var(--failure-red);
+    font-size: 0.85rem;
+}
+/* CLAUDE-P40-VW7A-QA2, Section 4: the page canvas and its transparent
+   annotation overlay are stacked in one positioning wrapper - the wrap
+   sizes to the page canvas (the only child in normal flow; the overlay
+   is position:absolute and contributes no size of its own), so this
+   never changes the rendered box size .document-viewer-canvas-container
+   already centers/scrolls, only adds a second painted layer on top. */
+.document-viewer-page-wrap {
+    position: relative;
+    display: inline-block;
+}
+.document-viewer-annotation-layer {
+    position: absolute;
+    top: 0;
+    left: 0;
+}
+/* CLAUDE-P40-VW7A-QA2, Section 4: the one text-annotation input surface -
+   a real, focusable <input> positioned at the click point (static/js/
+   pdf_viewer.js's own openTextAnnotationInput), not a canvas-drawn fake
+   text box - so typing, IME, and screen readers all work exactly like
+   any other form field, right up until Enter/blur commits it into the
+   canvas-drawn annotation and removes this element. */
+.document-viewer-annotation-text-input {
+    position: absolute;
+    z-index: 5;
+    font-size: 13px;
+    padding: 2px 4px;
+    border: 1px solid var(--machine-blue);
+    border-radius: 2px;
+    background: var(--surface-primary);
+    color: var(--text-primary);
+    min-width: 120px;
+}
+.doc-annotation-tool[aria-pressed="true"] {
+    background: var(--surface-selected);
+    color: var(--machine-blue);
+}
+.doc-annotation-status {
+    font-size: 0.72rem;
+    color: var(--text-metadata);
+    white-space: nowrap;
+}
 
 /* -- shared text utilities ------------------------------------------------
    Consolidates inline style="" patterns that had drifted into
@@ -2347,6 +2527,29 @@ html.toolbox-hidden .workspace-pane-toolbox {
     z-index: 10;
     height: var(--chat-height, 220px);
     background: var(--surface-primary);
+    /* CLAUDE-P40-VW7A-QA2, Section 3: a real-browser check reported Chat
+       extending underneath the full-height Lists/Thumbnails column - true
+       of the CLAUDE-P40-E3A, Section 9 "full application width" rule
+       above, which this deliberately narrows (a disclosed reversal of
+       that specific detail, not the whole full-width-row design: Chat
+       still spans the Display+Toolbox width, just not underneath Lists).
+       margin-left, not a DOM/flex restructuring, since .chat-region is a
+       sibling of .app-shell-body (not nested inside it) specifically so
+       it can stay one continuous sticky-bottom bar rather than being
+       split per Display/Toolbox column - matches .launcher-panel's own
+       fixed 240px (Thumbnails splits it vertically only, never changes
+       its width), and collapses to 0 the moment html.launcher-hidden
+       hides Lists entirely (the SAME class the Lists divider already
+       toggles - no new state to keep in sync). */
+    margin-left: 240px;
+}
+html.launcher-hidden .chat-region { margin-left: 0; }
+@media (max-width: 640px) {
+    /* Narrow viewport: Lists becomes a position:fixed overlay drawer
+       (see .launcher-panel's own @media (max-width: 640px) rule above),
+       no longer part of the row Chat needs to avoid - the 240px offset
+       would just be dead space here. */
+    .chat-region { margin-left: 0; }
 }
 /* CLAUDE-P40-E3A-QA, Section 10 fix: no border-top here - product-owner
    browser observation named "visually heavy separators", and this rule
@@ -2521,7 +2724,8 @@ html.toolbox-hidden .workspace-pane-toolbox {
     background: var(--divider-strong);
 }
 .conversation-dock-resize-handle:hover::before,
-.conversation-dock-resize-handle:focus-visible::before {
+.conversation-dock-resize-handle:focus-visible::before,
+.conversation-dock-resize-handle.dragging::before {
     background: var(--machine-blue);
 }
 .conversation-dock-resize-handle:focus-visible {

@@ -141,19 +141,32 @@ class TopBarContractTests(_BaseTestCase):
         # CLAUDE-P40-VW8-QA (reversibility correction) later added a
         # REAL, functional Undo control (#conv-selection-undo) - reverses
         # a just-removed Tag/Highlight/Important/Question occurrence via
-        # the same add-Tag route, not a decorative placeholder. This
-        # test's own underlying constraint ("no NONFUNCTIONAL Undo") is
-        # still satisfied; only the blanket "the substring 'Undo' must
-        # never appear anywhere" check needed narrowing to exclude that
-        # one, specific, real control. Redo/drawing-tool/paint-bucket/
+        # the same add-Tag route, not a decorative placeholder.
+        #
+        # CLAUDE-P40-VW7A-QA2 later added REAL, functional PDF annotation
+        # Undo/Redo (#doc-annotate-undo/#doc-annotate-redo - genuine undo/
+        # redo stacks over annotation add/delete operations, see
+        # static/js/pdf_viewer.js's own undo()/redo()) and a real
+        # freehand-drawing ("ink") annotation tool (#doc-annotate-ink) -
+        # this test's own underlying constraint ("no NONFUNCTIONAL Undo/
+        # Redo control") is still satisfied by all of them; only the
+        # blanket substring checks needed narrowing to exclude these
+        # specific, real controls, the same precedent the VW8-QA
+        # correction above already established. paint-bucket/
         # color-palette/chat-tag remain genuinely out of scope and still
-        # checked.
+        # checked as-is; "drawing-tool" only ever referred to a literal
+        # forbidden id/class of that exact name, which #doc-annotate-ink
+        # does not use, so it needed no narrowing.
         client = self._client_as("e3a_owner", 1)
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
         self.assertIn('id="conv-selection-undo"', body)  # the one real, functional Undo control
-        body_without_real_undo_control = re.sub(r'<button[^>]*id="conv-selection-undo"[^>]*>[^<]*</button>', "", body)
+        self.assertIn('id="doc-annotate-undo"', body)  # real annotation Undo
+        self.assertIn('id="doc-annotate-redo"', body)  # real annotation Redo
+        body_without_real_controls = re.sub(r'<button[^>]*id="conv-selection-undo"[^>]*>[^<]*</button>', "", body)
+        body_without_real_controls = re.sub(r'<button[^>]*id="doc-annotate-undo"[^>]*>[^<]*</button>', "", body_without_real_controls)
+        body_without_real_controls = re.sub(r'<button[^>]*id="doc-annotate-redo"[^>]*>[^<]*</button>', "", body_without_real_controls)
         for token in ("Undo", "Redo", "drawing-tool", "paint-bucket", "color-palette", "chat-tag"):
-            self.assertNotIn(token, body_without_real_undo_control, token)
+            self.assertNotIn(token, body_without_real_controls, token)
 
 
 # ---------------------------------------------------------------------------

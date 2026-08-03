@@ -1,5 +1,160 @@
 # Continuation checkpoint
 
+## 2026-08-03 — CLAUDE-P40-VW7A-QA2: Complete the PDF Viewer Controls, Thumbnails and Collapsible Panel Geometry
+
+**Reported defect (real-browser check of CLAUDE-P40-VW7A-QA, below):**
+the old white browser-native toolbar was gone (correct), but the
+replacement top-menu document controls did not visibly appear; page/
+zoom/fit/rotate/search/print/download controls were absent from the
+rendered interface; thumbnails and annotation capability were required
+but missing; and hiding Toolbox left a large empty right-side column
+instead of releasing its width.
+
+**Diagnosis performed (static analysis only — no real browser tool
+exists in this environment, stated honestly rather than fabricated):**
+curl-based HTML/header inspection, CSS-cascade specificity scripts, and
+a Node.js DOM-stub harness executing the actual `pdf_viewer.js` setup
+code found no 100%-provable single root cause for the controls not
+connecting. The single most plausible, well-reasoned, low-risk
+candidate was applied: **vendored PDF.js was switched from the modern
+`build/` distribution to `legacy/build/`** (broader browser/JS-engine
+compatibility — PDF.js's own README: "for usage with older browsers/
+environments... please see the `legacy/` folder"), re-extracted from
+the same already-downloaded tarball, byte-verified via sha256sum. A
+silent module-parse failure on an unsupported engine would exactly
+match "renders but nothing connects," with no visible symptom to
+confirm or rule it out — so `pdf_viewer.js`'s `mount()` also gained a
+permanent diagnostic improvement regardless of whether this was the
+real cause: any future load failure now shows a real, visible
+`.document-viewer-load-error` message in the canvas container instead
+of only a silent `console.error`.
+
+The Toolbox-hidden-width report (`html.toolbox-hidden
+.workspace-pane-toolbox { display: none; }` plus `base.html`'s own
+`setUpDivider`) was re-investigated with the same rigor: CSS
+specificity math, absence of conflicting/duplicate/stale selectors,
+correct JS class-toggling both pre-paint and at runtime, absence of any
+inline-style-setting resize code. No definitive code-level bug was
+found — documented honestly rather than making unfounded speculative
+changes. Re-confirmed unaffected by this stage's own new CSS (which is
+entirely scoped to `.launcher-panel`'s own descendants).
+
+**What was built:**
+- **Lists/Thumbnails split** (`templates/base.html`'s own `<nav
+  id="launcher-panel">`): the existing Lists content is now wrapped in
+  a `.lists-pane` sibling of a new, `[hidden]`-by-default
+  `#thumbnails-pane`, with a draggable `#lists-thumbnails-divider`
+  between them — reusing `static/js/case_workspace.js`'s own
+  `setUpChatResize` pointer-drag idiom (percentage-based, not pixel,
+  since the available height varies by viewport) rather than inventing
+  a new drag mechanism. Session-scoped persistence only
+  (`sessionStorage`, not `localStorage` — a deliberately weaker
+  guarantee than the Lists/Toolbox show/hide preferences). Double-click
+  restores the default 60/40 split; a Maximize toggle on the
+  Thumbnails header collapses Lists toward its own header and restores
+  the prior proportion on a second click. `.launcher-panel.
+  has-thumbnails .lists-pane` is what lets Lists silently regain the
+  full column height the moment Thumbnails is hidden — no JS needs to
+  touch `.lists-pane` directly for that to happen.
+- **Real PDF thumbnails** (`static/js/pdf_viewer.js`): one real
+  `<button role="listitem">` per page inside `#thumbnails-list`,
+  rendered lazily via `IntersectionObserver` (not every page up front),
+  clicking one calls the existing `goToPage(n)`. The current-page
+  thumbnail is kept in sync (`aria-current="true"`, scrolled into view)
+  from every `goToPage()` call regardless of trigger — toolbar,
+  search-result jump, or a thumbnail click itself — via one shared
+  `updateNavState() -> updateThumbnailCurrent()` path. Scope, stated
+  honestly: this viewer shows one page at a time on a single
+  `<canvas>` (unchanged from VW7A-QA), not a continuous multi-page
+  scroll surface, so "follows page changes from scrolling" has nothing
+  additional to listen for beyond what already drives the sync above.
+- **`.chat-region` left-edge fix**: CLAUDE-P40-E3A, Section 9's own
+  "Chat spans the entire application width" rule is narrowed
+  (disclosed, not silently reversed) via `margin-left: 240px` — Chat
+  now begins at the centre (Display) column's left edge, never
+  underneath the full-height Lists/Thumbnails column, while still
+  spanning Display+Toolbox. Collapses to `margin-left: 0` the instant
+  `html.launcher-hidden` or a narrow (≤640px) viewport removes Lists
+  from the row layout — reusing the SAME class the Lists divider
+  already toggles, no new state to keep in sync.
+- **Real client-side PDF annotation tools** (`static/js/pdf_viewer.js`
+  + new `#doc-annotate-*` controls in `templates/base.html`'s
+  `#workspace-document-controls`): text, highlight (rectangle drag),
+  freehand ink, select+delete, undo/redo, one-active-tool-at-a-time
+  (`aria-pressed`). Coordinates are stored in PDF page space
+  (`PageViewport.convertToPdfPoint`/`convertToViewportPoint` —
+  confirmed present in the vendored build via direct grep of
+  `pdf.min.mjs`), not raw canvas pixels, so annotations stay correctly
+  placed across zoom/rotation changes; drawn on a transparent overlay
+  `<canvas>` stacked over the page canvas
+  (`.document-viewer-page-wrap`), never touching the original file.
+  **Disclosed scope boundary, per this stage's own explicit permission
+  to stop rather than ship a fake control:** no PDF-writing library is
+  vendored in this repo (only PDF.js's rendering half), and adding one
+  is a real new-dependency decision (`tools/dependency_fit.py`) this
+  stage does not make silently — so there is deliberately **no Save/
+  Export control**. `#doc-annotation-status` ("Unsaved annotations
+  (draft only — not saved to the Document)") plus a `beforeunload`
+  warning are how "clearly indicate unsaved changes... warn before
+  discarding" is satisfied instead of a nonfunctional save button.
+  Annotations are real, interactive, and undoable for the current
+  browser session; nothing in the code claims they persist beyond it.
+- **Splitter appearance consistency** (Section 6): the new
+  Lists/Thumbnails divider follows the same visual grammar as the
+  existing `.panel-divider` (Lists/Toolbox — already one shared class,
+  confirmed no per-modifier styling drift) and `.conversation-dock-
+  resize-handle` (Chat) — quiet resting line, `--machine-blue` accent
+  on hover/focus, transparent hit-target (no white/beige gutter in any
+  theme, all colors are `var(--token)`). "Active accent only while
+  dragging" is now a real `.dragging` class (not just `:hover`, which
+  would drop the accent the moment the pointer strays off the thin
+  line mid-drag, since the drag itself continues via document-level
+  listeners) — added to both the Chat handle and the new divider.
+
+**Not built this stage (explicit scope boundary from the prompt,
+respected):** Internal Development Terminal, Terminal Eye, cross-
+Project access, P41.
+
+**UI references:** `UI_REFERENCE_MAP.md` updated — new `shell.
+lists-thumbnails-divider` row, a new "Lists — PDF Thumbnails pane"
+section (`lists.thumbnails-pane`, `.maximize`, `.list`), and a new
+"Annotation tools" subsection under Document controls (`menu.
+document-controls.annotate-text/-highlight/-ink/-select/-delete/-undo/
+-redo`, `.annotation-status`). Individual `.thumbnail-row` buttons are
+JS-generated per page (a repeated pattern, not a fixed control set) —
+deliberately left unregistered, same convention as `lists.project.
+documents.leaf` etc. `tests/test_p40vw7a_qa_document_controls.py`'s
+own `test_no_decorative_controls_for_features_that_do_not_exist` had
+"annotation" on its forbidden-word list from the prior stage (when
+annotations genuinely didn't exist) — updated, not reverted, now that
+this stage builds real ones.
+
+**Tests:** new `tests/test_p40vw7a_qa2_thumbnails_annotations_layout.py`
+(41 tests — structure, CSS, JS-source, and rendered-HTML checks for the
+split/divider/thumbnails/annotations/Chat-offset/dragging-accent, plus
+the legacy-PDF.js-build and visible-load-error changes). Full suite run
+after these changes.
+
+**Real-browser verification:** still NOT available in this environment
+— every claim above is grounded in template/CSS/JS source inspection
+and rendered-HTML structural tests, not an actual browser session.
+Product-owner verification checklist (what a real browser check should
+confirm): (1) header document controls now visibly render and connect
+for an open PDF; (2) page/zoom/fit/rotate/search/print/download all
+perform their real action; (3) Thumbnails pane appears only for a PDF,
+thumbnails render progressively while scrolling the list, clicking one
+navigates and highlights correctly; (4) the Lists/Thumbnails divider
+drags, double-click restores default, Maximize toggles and restores;
+(5) annotation tools draw/select/delete/undo/redo correctly and
+`#doc-annotation-status` reads "Unsaved..." only when annotations
+exist, clears when the last one is undone/deleted; (6) the original PDF
+file is unchanged after annotating (re-open the Document fresh); (7)
+hiding Toolbox now visibly releases its column width to Display/Chat;
+(8) Chat's own left edge lines up with Display's, never extending under
+Lists, at both a normal and a Lists-hidden/narrow-viewport state; (9)
+all four Appearance themes on every new element (no white/beige
+gutters); (10) UI Reference Mode badges show the new refs correctly.
+
 ## 2026-08-03 — CLAUDE-P40-VW7A-QA: Move Document Controls into the Top Application Menu
 
 **Grounding finding, before any implementation:** the reported "white

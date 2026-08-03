@@ -121,12 +121,22 @@ still renders, unchanged, for those formats).
 | `menu.document-controls.overflow` | `<details>` | "…" | Only shown (CSS `.doc-controls-overflow-active`, JS-toggled) below a 900px viewport; `static/js/pdf_viewer.js` re-parents the SAME secondary-control DOM nodes into it, never a cloned duplicate | Same as workspace access | active |
 | `display.document.pdf-canvas` | `<div>` (Display) | (no visible label) | Empty container `static/js/pdf_viewer.js` fills with a `<canvas>` on mount — replaces the old plain `<iframe src=raw-file-url>` for a PDF Source specifically (drawings/DOCX/TXT keep their existing `<img>`/`<iframe>`, unchanged) | Same as workspace access | active |
 
+**Annotation tools (CLAUDE-P40-VW7A-QA2 — new, added to the same `menu.document-controls` region, inside `doc-controls-secondary` so they share its existing responsive overflow behavior; no prior identifiers to retire):** real, client-side-only PDF annotation tools — text/highlight/freehand ink, select+delete, undo/redo. One active tool at a time (`aria-pressed`, toggled by `static/js/pdf_viewer.js`'s `setActiveTool`). Coordinates are stored in PDF page space (`PageViewport.convertToPdfPoint`/`convertToViewportPoint`), not raw canvas pixels, so annotations stay correctly placed across zoom/rotation changes. Deliberately **no** Save/Export ref exists — the disclosed scope boundary: no PDF-writing library is vendored in this repo (only PDF.js's rendering half — `static/js/vendor/pdfjs/README.md`), so there is no reliable way to bake these into a real derived PDF file this stage. `menu.document-controls.annotation-status` is how "unsaved changes" is surfaced instead.
+
+| Reference | Element | Label/summary | Current behavior | Auth notes | Status |
+|---|---|---|---|---|---|
+| `menu.document-controls.annotate-text`, `menu.document-controls.annotate-highlight`, `menu.document-controls.annotate-ink`, `menu.document-controls.annotate-select` | `<button>` (one-of-four, `aria-pressed`) | T / ▭ / ✎ / ↖ | Selects the active annotation tool; clicking the already-active one deselects it (no tool = clicks on the canvas do nothing) | Same as workspace access | active |
+| `menu.document-controls.annotate-delete` | `<button>` | ✕ | Removes the currently-selected annotation (Select tool); disabled with no selection | Same as workspace access | active |
+| `menu.document-controls.annotate-undo`, `menu.document-controls.annotate-redo` | `<button>` | ↶ / ↷ | Real undo/redo stacks over annotation add/delete operations for the current browser session only; disabled when the respective stack is empty | Same as workspace access | active |
+| `menu.document-controls.annotation-status` | `<span aria-live="polite">` | (no visible label at rest) | Reads "Unsaved annotations (draft only — not saved to the Document)" whenever any page has at least one annotation, empty otherwise; a `beforeunload` prompt backs this up on tab close/navigation | Same as workspace access | active |
+
 ## Shell (structural chrome — `templates/base.html`)
 
 | Reference | Element | Label | Current behavior | Auth notes | Status |
 |---|---|---|---|---|---|
 | `shell.lists-divider` | `<button>` | (unlabeled divider) | Collapses/shows the Lists panel; `localStorage`-persisted, reviewer-wide | Every authenticated page | active |
 | `shell.toolbox-divider` | `<button>` | (unlabeled divider) | Collapses/shows the Toolbox; `localStorage`-persisted, per-Project | Only rendered when `project_id`/`workspace` are defined | active |
+| `shell.lists-thumbnails-divider` | `<div role="separator">` (new, CLAUDE-P40-VW7A-QA2) | (unlabeled divider) | Draggable (pointer + arrow-key) horizontal split between the new `lists.thumbnails-pane` and Lists above it; percentage-based, `sessionStorage`-persisted (deliberately weaker than the `localStorage` panel-show/hide prefs above — Section 3's own "may persist per session"); double-click restores the default 60/40 split. `[hidden]` unless `lists.thumbnails-pane` is also shown | Every authenticated page | active |
 
 ## Lists — cross-Project (`templates/base.html`, reviewer-wide)
 
@@ -204,6 +214,16 @@ continuation of that group.
 | `lists.project.tools.add-external-source` | `<p>` inside a subdisclosure | "+ Add External Source" | **Not implemented** — static "not yet available" text, no form | Same as workspace access | active |
 | `lists.project.tools.removed-items` | `<ul>`/`<p>` inside a subdisclosure | "Removed Items (`<count>`)" | Lists removed Documents in this Project (or "No removed Documents…") | Same as workspace access | active |
 | `lists.project.tools.removed-items.restore` | `<button>` in a `<form>` (pattern) | "Restore Document" | POST to `restore_document_route` | Same as workspace access | active |
+
+## Lists — PDF Thumbnails pane (`templates/base.html`, new, CLAUDE-P40-VW7A-QA2)
+
+Nested inside the same `<nav id="launcher-panel">` as the Lists tree above (`lists.thumbnails-pane` is `lists.project.self`'s own new sibling region, not a second panel) — `[hidden]` unless the active Display target is a PDF, shown/hidden by `static/js/pdf_viewer.js` via `window.ArchioskListsThumbnailsSplit.show()`/`.hide()`. When hidden, Lists silently regains the full column height (`.launcher-panel.has-thumbnails .lists-pane` CSS rule, only applied while this pane is shown). Thumbnails are rendered lazily (`IntersectionObserver`) as real per-page `<canvas>` images, not placeholders.
+
+| Reference | Element | Label | Current behavior | Auth notes | Status |
+|---|---|---|---|---|---|
+| `lists.thumbnails-pane` | `<div>` | "Thumbnails" (header text) | The whole pane; contains the maximize toggle and the thumbnail list | Every authenticated page | active |
+| `lists.thumbnails-pane.maximize` | `<button aria-pressed>` | "Maximize" / "Restore" | Collapses Lists toward its header (keeping whatever proportion was active immediately before, on the toggle-back click) so Thumbnails takes most of the column; a manual toggle, not tied to drag state | Every authenticated page | active |
+| `lists.thumbnails-pane.list` | `<div role="list">` | (no visible label — `aria-label="Page thumbnails"`) | Contains one real, clickable `<button role="listitem">` per PDF page (`.thumbnail-row`, unregistered as an individual ref — a repeated pattern, not a fixed set of controls, same convention as `lists.project.documents.leaf` etc.); clicking one calls `goToPage(n)`; `aria-current="true"` follows the current page from ANY navigation source (toolbar, search, or a thumbnail click itself) | Every authenticated page | active |
 
 ## Display (`templates/case_workspace.html`)
 

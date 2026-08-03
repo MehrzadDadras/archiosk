@@ -195,12 +195,20 @@ class TopMenuControlsMarkupTests(unittest.TestCase):
             self.assertIn(f'data-ui-ref="{ref}"', self.html, ref)
 
     def test_no_decorative_controls_for_features_that_do_not_exist(self):
-        # Sidebar/thumbnail/annotation were never built - must not appear
-        # as dead buttons merely to look complete.
+        # SUPERSEDED IN PART (CLAUDE-P40-VW7A-QA2): annotation tools are
+        # now real (see tests/test_p40vw7a_qa2_thumbnails_annotations_
+        # layout.py's own AnnotationToolsMarkupTests/AnnotationJsTests),
+        # so "annotation" no longer belongs on this forbidden list -
+        # removed, not silently ignored. Sidebar/outline still were
+        # never built. Thumbnail controls were also built in that same
+        # stage, but deliberately live in the Lists column (a new
+        # #thumbnails-pane), never inside this specific top-menu region
+        # - "thumbnail" staying forbidden HERE is still an accurate,
+        # narrower claim about this one region, not a stale one.
         region_start = self.html.index('id="workspace-document-controls"')
         region_end = self.html.index("</div>\n            <div class=\"workspace-topbar-controls\">", region_start)
         region = self.html[region_start:region_end]
-        for forbidden in ("sidebar", "thumbnail", "annotation", "outline"):
+        for forbidden in ("sidebar", "thumbnail", "outline"):
             self.assertNotIn(forbidden, region.lower())
 
     def test_accessible_names_present_on_every_icon_only_button(self):

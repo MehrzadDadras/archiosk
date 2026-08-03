@@ -11,9 +11,23 @@ transform step.
 - **Version:** 6.2.108
 - **License:** Apache-2.0 (see `LICENSE` in this directory, copied
   verbatim from the package)
-- **Files taken:** `build/pdf.min.mjs` (the core library) and
-  `build/pdf.worker.min.mjs` (the parsing/rendering worker script PDF.js
-  requires to run off the main thread) — nothing else from the package.
+- **Files taken:** `legacy/build/pdf.min.mjs` (the core library) and
+  `legacy/build/pdf.worker.min.mjs` (the parsing/rendering worker script
+  PDF.js requires to run off the main thread) — nothing else from the
+  package. **CLAUDE-P40-VW7A-QA2:** switched from the plain `build/`
+  distribution to `legacy/build/` after a real-browser check reported
+  the header controls never appearing at all — the modern `build/`
+  files target only very recent browsers/JS engines (PDF.js's own
+  README: "for usage with older browsers/environments... please see
+  the `legacy/` folder"), and a silent module-parse failure there would
+  exactly match "renders but nothing connects" with no visible error.
+  `legacy/build/` is a strict compatibility superset (works in every
+  browser the modern build does, plus older ones) with the identical
+  public API this repo's own `static/js/pdf_viewer.js` calls - not a
+  functional change, a compatibility one. If this does NOT turn out to
+  be the actual root cause, `static/js/pdf_viewer.js`'s own new visible
+  error state (see that file's own comment) is what surfaces the real
+  one on the next check.
   Deliberately NOT vendored: `pdf_viewer.mjs`/`pdf_viewer.css` (PDF.js's
   own pre-built UI/toolbar) — CLAUDE-P40-VW7A-QA's own explicit
   requirement is that the CONTROLS live in Archiosk's own top menu, not
