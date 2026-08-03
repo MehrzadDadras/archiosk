@@ -1,5 +1,314 @@
 # Continuation checkpoint
 
+## 2026-08-02 — CLAUDE-P40-VW8-QA: New Investigation Action in Lists
+
+**Commits:** `a78e8c8`. Product-owner walkthrough evidence: the
+Investigations root in Lists had a disclosure chevron and count, but no
+visible way to start one from inside that family — the only path was
+the Overview page's own buried "+ Start Investigation" subdisclosure.
+
+**Fix:** a real "+ New Investigation" action row, always first inside
+the expanded family, present even at zero Investigations (never gated
+on `visible_cases` being non-empty) — a plain `<a>` action row,
+deliberately never an HTML radio (radios represent mutually-exclusive
+choices; this is a command). Reuses `routes/workspace.py:create_case`
+and `CaseWorkspaceStore.create_case` completely unchanged — no parallel
+Investigation-creation implementation.
+
+**Projection:** selecting it projects the exact same create-form
+experience the pre-existing Overview subdisclosure already offered
+into the active Display — a new `?view=new-case` route branch,
+deliberately kept as its own `show_new_case_form` flag, separate from
+the existing `?view=` "directory" vocabulary (`directory_view`) — a
+CREATE FORM is not a browsable directory, and E3A's own prior comment
+explicitly reasoned about never adding a second directory to that
+vocabulary; this doesn't. Uses the same `panel_shell.html` iframe/
+`populateDivision` mechanism Documents/Investigations/Overview already
+use (`static/js/case_workspace.js`: `buildPanelUrl`/`populateDivision`/
+`syncListsActiveState` extended for a new `'new-case'` kind). Division 0
+gets real, bookmarkable navigation to the same URL, exactly like every
+other leaf.
+
+**Create/Cancel:** explicit actions on the form. A validation failure
+(empty title) re-projects the SAME focused form with the flashed
+error, rather than the pre-existing Overview-page redirect
+`create_case` used before this stage (a small, backward-compatible
+improvement for that older entry point too — landing back on the form
+you were just filling in is strictly more direct than being bounced to
+Overview). Success redirects to `?case=<id>` (preserving `&panel=1`
+when the request was projected), matching "select the new Investigation
+according to existing repository behavior" exactly — zero new
+selection logic.
+
+**Accident-proofing:** clicking the action row cannot accidentally
+collapse the family — the toggle's own click listener is bound
+directly to the `<button data-tree-parent>` element, never a delegated
+listener that could also catch the sibling action row's click
+(confirmed by reading the exact binding, not assumed).
+
+**Audit of other expandable families (as required):** Documents/RFIs/
+Tasks/Tags/Project Tools have no equivalent "+ New X" action of their
+own inside their expanded family today — Documents/RFIs are populated
+only via ingestion/RFI-draft workflows elsewhere, not a Lists-driven
+create action; Tasks/Tags already have their own creation surfaces
+inside Chat's selection toolbar, not Lists. The one pre-existing
+precedent is `lists.new-project` ("+ New Project", admin-only, at the
+top level) — same `.tree-leaf.launcher-new-project`
+color-accent styling this stage's own `.tree-leaf-action` modifier now
+mirrors for Investigations. No inconsistency requiring a fix was found
+beyond the one this stage closes; not expanded into unrelated new
+business capabilities per this stage's own explicit scope boundary.
+
+**Tests:** `tests/test_p40vw8qa_new_investigation_action.py` (28
+tests) — zero-count availability, projection (standalone and
+panel-only), successful creation with count/leaf update, cancel and
+validation-failure paths, no duplicate creation, authorization
+(unauthenticated and a stranger without project access both rejected),
+and the JS structural guarantees above.
+
+**Real-browser verification:** no interactive browser-automation tool
+is connected in this environment. Keyboard activation, focus movement
+into the projected form, and focus-return after Cancel are reasoned
+from the structural JS/template evidence above (the toggle's isolated
+click listener, real `<a href>` elements throughout — all keyboard-
+operable by construction, being real focusable, activatable anchor/
+button elements, never a `<div onclick>` or similar), not observed
+live; that remains the product owner's own walkthrough to perform.
+
+## 2026-08-02 — CLAUDE-P40-VW8-QA-R2A: Smart Drawing-First Project Qualification
+
+**Repository-grounded capability audit** (full writeup in
+`services/drawing_intake.py`'s own module docstring): native PDF text/
+metadata extraction (`pypdf`) and native DOCX text extraction
+(`python-docx`) are real, already-installed dependencies. PDF-page
+RENDERING (page -> raster image) is NOT available — no PDF-to-image
+library (`pypdfium2`/`PyMuPDF`/`pdf2image`+poppler) is installed. Local
+OCR is NOT available — no OCR Python package is installed, AND the
+underlying `tesseract` OS binary is confirmed absent from this machine
+(`where tesseract` finds nothing) — installing it would be a system-
+level infrastructure change, not a bounded code addition, so it was
+treated as out of this stage's safely-addable scope rather than
+attempted. External-AI vision: `services/bhive_parser.py` already calls
+the Anthropic API, but only ever with extracted TEXT, never an image,
+and always behind the existing `ACTION_EXTERNAL_AI_REQUEST` security-
+policy gate — this stage adds NO new external-AI call of any kind;
+sending a drawing's image content to a vision model would be a new
+confidentiality-relevant decision requiring its own explicit, opt-in,
+separately-authorized stage, not something to wire into an automatic
+pipeline step, so it's recorded as a future capability, never attempted
+silently.
+
+**Conclusion — the smallest safe, evidenced pipeline actually built:**
+native-text-based candidate extraction (LABEL: VALUE pattern matching,
+same technique as `bhive_parser.py`'s own pre-existing
+`_DOCUMENT_METADATA_LABEL_PATTERN`, a genuinely different drawing-
+title-block vocabulary) with full evidence/confidence per candidate,
+honest degradation when no native text exists at all (an image-only/
+scanned PDF), and a genuine two-request "machine proposes, human
+confirms or corrects" flow — no chunked/background processing, matching
+this repository's existing synchronous, flat-JSON architecture.
+
+**A real, pre-existing defect found and fixed as a direct prerequisite:**
+`BHiveParser.parse()` unconditionally raised `ParserError` (surfaced as
+a fully rejected upload) whenever extracted text was empty — the exact
+failure mode for a genuine image-only/scanned-PDF site plan, and
+squarely the product owner's own original complaint ("Archiosk merely
+stores an image-based site plan as an unintelligent attachment"). Now
+scoped specifically to `.pdf` (other extensions keep the original
+strict behavior — an empty `.txt`/`.docx` genuinely has nothing in it,
+not an image-only-drawing equivalent): a structurally valid PDF with no
+extractable text now returns a real, successfully-created
+`ParsedDocument` with `text_extraction_status="no_native_text"` instead
+of failing outright.
+
+**Pipeline (Section 2's 9 steps, as actually implemented):** original
+bytes preserved immediately (unchanged, pre-existing); native PDF/DOCX
+text inspected at STAGING time only (`services/drawing_intake.py:
+analyze_upload` — deliberately NOT the full parse/segment/classify/
+consistency pipeline, so the Anthropic-calling stages never run before
+a reviewer has even confirmed proceeding); candidate Project/drawing
+metadata extracted with evidence (source page, exact matched line,
+extraction method, confidence tier); presented on a new confirmation
+page (`templates/upload_confirm.html`, `routes/portal.py:
+upload_confirm`) for explicit confirm-or-correct; the Project is
+created only from confirmed information, via the SAME, unchanged
+`ingest_upload` every other path already uses; the original drawing is
+attached with its provenance and extraction status exactly as before.
+A plain RFP/RFQ with real native text and zero drawing-like candidates
+is completely unaffected — routes straight to ingestion exactly as
+before this stage, zero new friction for the common case.
+
+**Evidence and confidence (Section 4):** every `CandidateField` retains
+`source_page`, `evidence_snippet` (the exact matched line),
+`extraction_method`, `confidence` (`high` for an explicit `LABEL:
+VALUE` line, `medium` for a weaker/inferred match — e.g. discipline
+inferred from a sheet-number prefix like `A-101` -> Architectural, only
+when no explicit `discipline:` label was found), and a `status` the
+route layer sets to `confirmed`/`corrected` once the reviewer actually
+acts — never mutated by extraction itself. A conflicting user-entered
+vs. drawing-derived Project name shows BOTH explicitly and requires an
+explicit radio choice (entered / candidate / a third typed value) —
+submitting without one is rejected (400), never silently resolved
+either way. Every candidate offered, the reviewer's actual confirmed/
+corrected values, and (when applicable) which name was chosen are
+recorded as a new `drawing_metadata_candidates_confirmed` governance-
+log event — append-only, alongside the existing `document_ingested`
+event, never a mutation of it.
+
+**Qualification rule (Section 5):** Project Operating Environment is
+never a candidate field at all (structurally impossible to infer from
+a drawing — `CANDIDATE_FIELDS` simply doesn't include it) and is
+carried through unchanged from the initial upload form to Project
+creation, never re-collected or re-derived on the confirm page. An
+image-only PDF with zero candidates still allows Project creation from
+confirmed user input alone — incomplete/absent OCR never blocks
+creation. Project-name uniqueness is still enforced at confirm time
+(reuses the existing `UploadError`/`_reject_if_name_taken` check
+unchanged).
+
+**Honest capability degradation (Section 6):** an image-only PDF
+preserves the original file, still allows Project creation, and states
+in plain language on the confirmation page that no text could be
+automatically read and local OCR is not currently available — never a
+fabricated candidate value, never the whole upload reported as failed.
+
+**A real bug caught by this stage's own tests before shipping:** the
+staging-time `analyze_upload` step initially crashed (`BadZipFile`/an
+unhandled pypdf exception) on a malformed/garbage PDF or DOCX — caught
+by `test_p40vw8qa_upload_capacity.py`'s own pre-existing fake-file
+tests (which post non-PDF/DOCX byte content with a `.pdf`/`.docx`
+filename, previously safe because the OLD code path only ever reached
+the mocked `BHiveParser.parse`). Fixed by having `analyze_upload`
+degrade to zero candidates on any parsing exception, deliberately never
+a second place a bad-file error can originate from — the real,
+authoritative parse (and its own established error handling) still
+runs unchanged at confirm time.
+
+**Tests:** `tests/test_p40vw8qa_r2a_drawing_intake.py` (new, 31 tests)
+— native-text/partial-title-block/image-only drawings, Project-name
+conflict (all three resolution choices), confidence tiers, confirmed-
+vs-corrected tracking, provenance preservation in the governance log,
+no invented metadata for a plain RFP, no external-AI call during
+staging (verified by making `BHiveParser._classify`/
+`_check_consistency` raise if called at all, then confirming staging
+still succeeds — not just source inspection), Project-name uniqueness,
+Operating-Environment immutability, discard, authorization, and a real
+DOCX cover-sheet case. Every test that reaches the confirm-time
+`ingest_upload` mocks `BHiveParser.parse` (this codebase's established
+hermetic-test convention) — a manual smoke test during this stage's own
+development that mocked only `extract_pdf_pages` and not `parse`
+genuinely triggered two real Anthropic API calls, a direct, first-hand
+confirmation that CLAUDE.md's own hermetic-test warning is not
+theoretical.
+
+**Report (per this addendum's own required 6-point structure):**
+1. *Extract now:* project_name/number/address, owner/client, drawing
+   title, sheet number, discipline (explicit or sheet-number-inferred),
+   consultant, issue date, revision, scale — from native PDF/DOCX text
+   only.
+2. *What's local:* everything — `pypdf`/`python-docx` text extraction
+   and the regex-based candidate matching, zero network calls.
+3. *Requires governed external AI (not built this stage):* true visual/
+   OCR understanding of an image-only drawing — recorded as a future,
+   separately-authorized capability, never attempted silently.
+4. *Still unavailable:* PDF-page rendering (no image preview of the
+   drawing itself is shown) and local OCR (the `tesseract` binary is
+   not installed in this environment) — both explicitly reported to the
+   reviewer on the confirm page for an image-only PDF, never silently
+   dropped.
+5. *User must confirm:* every proposed field (all are editable, none
+   pre-authoritative), and explicitly which Project name to use
+   whenever the entered and drawing-derived names disagree.
+6. *Verified vs. structurally inferred:* the full pipeline (staging,
+   candidate extraction, confirm/correct, Project creation, governance-
+   log provenance, discard, authorization) is verified end-to-end via
+   the automated suite against real route/template/service code paths
+   — no interactive browser-automation tool is connected in this
+   environment, so the actual confirm-page LAYOUT/visual presentation
+   is reasoned from template source, not seen rendered; that remains
+   the product owner's own walkthrough to perform.
+
+## 2026-08-02 — CLAUDE-P40-VW8-QA-R3: restore distinct Dark/Tinted/Light Appearance modes (real bug, root-caused and fixed)
+
+**Symptom (product-owner walkthrough):** `All -> Dark` selected, every
+individual Menu/Lists/Display/Toolbox/Chat row also showed Dark
+selected, but the application remained visually Light/Tinted - Dark and
+Tinted appeared the same.
+
+**Root cause, found by direct investigation, not guessed:** a CSS
+comment cannot contain the literal two-character sequence `*/`
+ANYWHERE in its own text, including ordinary prose - every real CSS
+parser (not just a naive one) treats the FIRST `*/` after a `/*` as
+that comment's end, full stop, no nesting. The earlier Theme Foreground
+Contrast Addendum added a comment to `static/css/tokens.css` reading
+"...the `--text-*/--canvas/--surface-primary` names it reads are the
+Light..." - the wildcard-notation `--text-*` immediately followed by
+`/--canvas` accidentally forms a literal `*/`, silently truncating a
+much longer intended comment mid-sentence. Everything after that point
+- including the real `:root { --dark-canvas: #000000; ... }` block a
+few lines later - became un-parseable "selector" text to a real
+browser, which discards it as one invalid rule per CSS's own error-
+recovery rules. Net effect: `--dark-canvas`/`--dark-surface-primary`/
+`--dark-text-primary`/etc. were never actually defined in the browser's
+custom-property registry at all; `var(--dark-canvas)` inside
+`.app-main.appearance-dark` (and the other four owned surfaces)
+resolved to nothing, and `background`/`color` fell back to their
+initial values (transparent/inherited), letting the Light canvas
+underneath show through - exactly the reported symptom. A second,
+pre-existing instance of the identical defect (predating this session)
+was found and fixed at the same time: `--review-state-*/--evidence-*`
+in the file's own "visual pressure" comment, which was silently
+truncating that comment and everything up to the next real `/*` too.
+
+**Investigation method (recorded since it's reusable):** the JS toggle
+logic was ruled out first by actually EXECUTING the real script
+(extracted verbatim from `templates/base.html`) against a hand-built,
+faithful DOM/localStorage simulation in Node.js - it correctly applied
+`.appearance-dark` to all five target elements and synced every radio,
+proving the bug was not there. CSS selector specificity and cascade
+order were checked next (no `!important`, no higher-specificity
+override found). The actual root cause was found by writing a small
+Python CSS custom-property cascade resolver against the real shipped
+files, which reported `--dark-surface-primary`/`--dark-text-primary`
+as `UNRESOLVED` - impossible if the `:root` block defining them were
+really being parsed, which led directly to checking comment boundaries
+character-by-character and finding the accidental `*/`.
+
+**Fix:** inserted a space between the wildcard `*` and the following
+`/` in both comments (`--text-* / --canvas` / `--review-state-* /
+--evidence-*`) - wording only, zero effect on any token VALUE.
+Verified via the same cascade resolver: Dark now correctly computes to
+`#000000` background / `#FFFFFF` foreground on all five owned surfaces,
+genuinely distinct from Tinted's `#E9EEF6` / `#1B2A40` and Light's own
+values.
+
+**Regression guard added:**
+`tests/test_p40vw8qa_r3_appearance_mode_integrity.py` (new) - a
+structural comment-boundary integrity check (simulates the same real,
+non-nested-comment CSS scanning algorithm a browser uses; fails if any
+comment is terminated early by a stray `*/`) for both stylesheets, plus
+a full computed-value cascade check proving Light/Dark/Tinted resolve
+to three genuinely distinct background/foreground pairs on every one
+of the five owned surfaces - not merely that the correct radio ends up
+checked, which was never the actual bug and which the addendum's own
+prompt explicitly said not to accept as sufficient proof. Also pins
+down (via source inspection) that the JS toggle mechanism has exactly
+one real `applyMode` call site, the "All" handler applies to all five
+surfaces, and no `filter: invert`/recolor rule ever touches the
+embedded-document viewer chrome (Display's own container follows the
+theme; an uploaded PDF/drawing/image's authentic colors are never
+altered).
+
+**Real-browser verification:** no interactive browser-automation tool
+is connected in this environment. The fix is proven via the CSS
+cascade resolver's computed-value output (mechanically equivalent to
+what a browser actually computes for `var()` substitution and rule
+matching, verified against the real shipped files) and via the JS
+executed live in Node against a faithful DOM simulation - genuinely
+strong evidence, but final pixel verification (does it *look* right)
+remains the product owner's own visual comparison to do, stated
+honestly rather than fabricated.
+
 ## 2026-08-02 — CLAUDE-P40-VW8 / CLAUDE-P40-VW8-QA: Reference Mode completion, Appearance/theme correction, Lists/Display/Menu structural fixes, Add Tag visible consequence, focused Project chooser, Project-switching dialog, and three follow-up addenda (foreground contrast, site-wide visual consistency, upload capacity)
 
 **Commits:** `4043784` (implementation), `639d84f` (tests). Full suite:
