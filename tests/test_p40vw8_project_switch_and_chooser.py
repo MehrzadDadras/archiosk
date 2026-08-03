@@ -1,14 +1,24 @@
 """
 CLAUDE-P40-VW8 / CLAUDE-P40-VW8-QA - Project-switching interruption
-dialog and the focused existing-Project chooser (routes/portal.py's
-`choose_project`, templates/project_chooser.html).
+dialog (RETIRED, CLAUDE-P40-VW7B - see DialogRetirementTests below) and
+the focused existing-Project chooser (routes/portal.py's
+`choose_project`, templates/project_chooser.html - still current, now
+also VW7B's own Project Vestibule; see that stage's own test file for
+its "Current Project" extension).
+
+The interruption dialog's only trigger was activating a DIFFERENT
+Project's own `lists.projects.leaf` row while a Project was already
+open - CLAUDE-P40-VW7B removed that whole portfolio branch from the
+opened-Project Lists panel (Section 3), so the dialog's markup/JS
+(#project-switch-dialog, the `a[data-project-id]` click-interceptor)
+were dead code and removed outright rather than left unreachable. The
+five DialogGatingTests/DialogScriptWiringTests classes that used to
+cover it are gone; DialogRetirementTests below is the explicit
+regression guard against reintroducing it.
 
 No browser-automation tool is connected in this environment (consistent
 with every prior VW stage) - coverage here is structural HTML/route/JS-
-source assertions, not pixel/interaction-level. Client-side branching
-(Stay/Switch/Open-in-New-Tab, Escape/outside-click) is verified by
-asserting the exact conditions the inline script depends on (gating
-selector, handler wiring), not by executing the script.
+source assertions, not pixel/interaction-level.
 """
 from __future__ import annotations
 
@@ -87,51 +97,35 @@ class _BaseTestCase(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# Project-switching interruption dialog: markup gating.
+# Project-switching interruption dialog: retirement regression guard
+# (CLAUDE-P40-VW7B). The five classes that used to test this dialog's
+# markup gating and client-side wiring are gone - this is what replaces
+# them: an explicit assertion that the dialog and its interceptor do
+# NOT exist, not merely that some earlier test stopped checking them.
 # ---------------------------------------------------------------------------
 
-class DialogGatingTests(_BaseTestCase):
-    def test_dialog_markup_absent_on_bare_projects_listing(self):
+class DialogRetirementTests(_BaseTestCase):
+    def test_dialog_markup_does_not_render_anywhere(self):
         client = self._client_as("vw8_owner", 1)
-        body = client.get("/projects").get_data(as_text=True)
-        self.assertNotIn('<div class="project-switch-dialog"', body)
+        for url in ("/projects", f"/projects/{self.doc1.project_id}/workspace"):
+            body = client.get(url).get_data(as_text=True)
+            self.assertNotIn("project-switch-dialog", body, url)
 
-    def test_dialog_markup_present_inside_an_open_project(self):
-        client = self._client_as("vw8_owner", 1)
-        body = client.get(f"/projects/{self.doc1.project_id}/workspace").get_data(as_text=True)
-        self.assertIn('id="project-switch-dialog"', body)
-        self.assertIn('data-ui-ref="lists.project-switch-dialog"', body)
+    def test_interceptor_script_is_gone(self):
+        source = _BASE_HTML_PATH.read_text(encoding="utf-8")
+        self.assertNotIn("project-switch-dialog", source)
+        self.assertNotIn("a[data-project-id]", source)
 
-    def test_dialog_hidden_by_default(self):
+    def test_no_leaf_anywhere_carries_the_retired_switch_attribute(self):
         client = self._client_as("vw8_owner", 1)
-        body = client.get(f"/projects/{self.doc1.project_id}/workspace").get_data(as_text=True)
-        start = body.index('id="project-switch-dialog"')
-        # The `hidden` attribute must appear on the dialog's own opening
-        # tag, before the tag closes.
-        tag_end = body.index(">", start)
-        self.assertIn("hidden", body[start:tag_end])
-
-    def test_dialog_has_real_dialog_semantics(self):
-        client = self._client_as("vw8_owner", 1)
-        body = client.get(f"/projects/{self.doc1.project_id}/workspace").get_data(as_text=True)
-        start = body.index('id="project-switch-dialog"')
-        tag_end = body.index(">", start)
-        opening_tag = body[start:tag_end]
-        self.assertIn('role="dialog"', opening_tag)
-        self.assertIn('aria-modal="true"', opening_tag)
-        self.assertIn('aria-labelledby="project-switch-dialog-heading"', opening_tag)
-
-    def test_dialog_offers_all_three_choices_with_stable_refs(self):
-        client = self._client_as("vw8_owner", 1)
-        body = client.get(f"/projects/{self.doc1.project_id}/workspace").get_data(as_text=True)
-        self.assertIn('data-ui-ref="lists.project-switch-dialog.stay"', body)
-        self.assertIn('data-ui-ref="lists.project-switch-dialog.switch"', body)
-        self.assertIn('data-ui-ref="lists.project-switch-dialog.open-new-tab"', body)
+        for url in ("/projects", f"/projects/{self.doc1.project_id}/workspace"):
+            body = client.get(url).get_data(as_text=True)
+            self.assertIsNone(re.search(r'<a[^>]*data-project-id="', body), url)
 
 
 # ---------------------------------------------------------------------------
-# Project-switching interruption dialog: leaf attribute gating (the
-# mechanism the click-interceptor actually keys off).
+# lists.projects.leaf attribute checks that remain meaningful after the
+# dialog's retirement.
 # ---------------------------------------------------------------------------
 
 class LeafAttributeTests(_BaseTestCase):
@@ -147,29 +141,17 @@ class LeafAttributeTests(_BaseTestCase):
         self.assertNotIn("data-project-id", self_leaf_match.group(0))
         self.assertNotIn("data-project-name", self_leaf_match.group(0))
 
-    def test_other_open_projects_leaf_carries_correct_switch_attributes(self):
+    def test_other_projects_leaf_never_appears_inside_an_open_project(self):
+        # CLAUDE-P40-VW7B, Section 3: supersedes the original VW8
+        # "carries correct switch attributes" assertion - the whole
+        # data-project-id attribute (and the lists.projects.leaf row
+        # that used to carry it) is gone from this state entirely, not
+        # just missing its old attribute. "Beta Substation" (Project 2,
+        # not the one open here) must not appear at all.
         client = self._client_as("vw8_owner", 1)
         body = client.get(f"/projects/{self.doc1.project_id}/workspace").get_data(as_text=True)
-        # Deliberately no data-project-name assertion here - the name is
-        # read from the link's own visible text (see the JS wiring test
-        # below), never duplicated into an attribute value, so as not to
-        # reintroduce CLAUDE-P40-E2B1's "name appears twice" regression.
-        other_leaf_match = re.search(
-            r'<a[^>]*data-ui-ref="lists\.projects\.leaf"[^>]*data-project-id="([^"]+)"[^>]*>([^<]+)</a>',
-            body,
-        )
-        self.assertIsNotNone(other_leaf_match)
-        self.assertEqual(other_leaf_match.group(1), self.doc2.project_id)
-        self.assertEqual(other_leaf_match.group(2), "Beta Substation")
-
-    def test_other_projects_leaf_has_no_redundant_name_attribute(self):
-        # A project name appearing a second time as an attribute value
-        # (in addition to the leaf's own visible text) previously broke
-        # CLAUDE-P40-E2B1's "a Project name must never appear a second
-        # time" invariant - this pins that down as a regression test.
-        client = self._client_as("vw8_owner", 1)
-        body = client.get(f"/projects/{self.doc1.project_id}/workspace").get_data(as_text=True)
-        self.assertEqual(body.count("Beta Substation"), 1)
+        self.assertNotIn("Beta Substation", body)
+        self.assertIsNone(re.search(r'data-ui-ref="lists\.projects\.leaf"', body))
 
     def test_no_project_leaf_carries_switch_attributes_on_bare_listing(self):
         client = self._client_as("vw8_owner", 1)
@@ -180,52 +162,6 @@ class LeafAttributeTests(_BaseTestCase):
         client = self._client_as("vw8_owner", 1)
         body = client.get(f"/projects/{self.doc1.project_id}/workspace").get_data(as_text=True)
         self.assertNotIn(self.other_doc.project_id, body)
-
-
-# ---------------------------------------------------------------------------
-# Project-switching interruption dialog: client-side wiring (regex checks
-# against the inline script, matching this codebase's established
-# no-browser-tool testing pattern - see test_p40vw7b's own JS assertions).
-# ---------------------------------------------------------------------------
-
-class DialogScriptWiringTests(unittest.TestCase):
-    def setUp(self):
-        self.source = _BASE_HTML_PATH.read_text(encoding="utf-8")
-
-    def test_interceptor_gates_on_data_project_id_selector(self):
-        self.assertIn("a[data-project-id]", self.source)
-
-    def test_switch_reuses_existing_href_no_new_route(self):
-        # Switch/Open-in-New-Tab must navigate to the link's own real
-        # href (already-authorized workspace.show_workspace URL) - no
-        # separate client-side-constructed URL or new endpoint.
-        script_start = self.source.index("var dialog = document.getElementById('project-switch-dialog')")
-        script = self.source[script_start:script_start + 4000]
-        self.assertIn("link.getAttribute('href')", script)
-        self.assertIn("window.location.href = pendingUrl", script)
-        self.assertIn("window.open(pendingUrl", script)
-
-    def test_popup_blocked_handled_non_destructively(self):
-        script_start = self.source.index("var dialog = document.getElementById('project-switch-dialog')")
-        script = self.source[script_start:script_start + 4000]
-        self.assertIn("project-switch-popup-note", script)
-        self.assertIn("catch", script)
-
-    def test_escape_and_outside_click_close_the_dialog(self):
-        script_start = self.source.index("var dialog = document.getElementById('project-switch-dialog')")
-        script = self.source[script_start:script_start + 4000]
-        self.assertIn("Escape", script)
-        self.assertIn("closeDialog", script)
-
-    def test_names_rendered_via_textcontent_not_innerhtml(self):
-        script_start = self.source.index("var dialog = document.getElementById('project-switch-dialog')")
-        script = self.source[script_start:script_start + 4000]
-        self.assertIn("currentNameEl.textContent", script)
-        self.assertIn("targetNameEl.textContent", script)
-        # A code comment may explain the textContent-over-innerHTML choice;
-        # what must never appear is an actual assignment to .innerHTML.
-        self.assertNotIn(".innerHTML =", script)
-        self.assertNotIn(".innerHTML=", script)
 
 
 # ---------------------------------------------------------------------------

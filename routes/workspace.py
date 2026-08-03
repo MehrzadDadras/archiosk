@@ -1325,6 +1325,27 @@ def show_workspace(project_id):
             }
             for s in CaseWorkspaceStore.active_sources(workspace)
         ]),
+        # CLAUDE-P40-VW7B, Section 8: the Investigation Attention strip's
+        # own client-side data source - the SAME authorized/privacy-
+        # filtered `visible_cases` list already computed above (never a
+        # second, separately-trusted lookup of workspace.cases). Only
+        # the fields the strip and the capacity-interruption dialog
+        # actually need to render truthfully: no fabricated urgency or
+        # confidence signal (Section 8's own explicit prohibition) -
+        # "status" is the real CASE_STATUS_OPEN/CASE_STATUS_ARCHIVED
+        # value, "created_by" lets the client decide whether to offer
+        # the real archive_case action (still authorization-checked
+        # server-side regardless - a client-side guess is only ever a
+        # UX nicety here, never the actual boundary).
+        visible_cases_json=_json_script_safe([
+            {
+                "id": c["id"],
+                "title": c["title"],
+                "status": c["status"],
+                "created_by": c.get("created_by"),
+            }
+            for c in visible_cases
+        ]),
         panel_only=panel_only,
     )
 
@@ -1963,8 +1984,26 @@ def archive_case(project_id, case_id):
     real session role through so the store layer's owner-or-admin
     authority check (the narrowest existing legitimate pattern - no new
     role architecture) can recognize a Design Manager/admin override
-    without this route inventing its own separate authorization logic."""
+    without this route inventing its own separate authorization logic.
+
+    CLAUDE-P40-VW7B: optional `next_case` form field - when the
+    Attention-capacity dialog (Section 9) uses "Conclude" to free a
+    fifth position, the reviewer's real intent was to open a DIFFERENT
+    Investigation, not to land back on the one they just archived. No
+    prior caller passed this (grep confirms archive_case had no real UI
+    trigger anywhere before this stage), so its absence is fully
+    backward compatible - falls through to the original behavior.
+    Validated the same way every other Case reference on this route
+    already is (against this reviewer's own visible_cases, via
+    CaseWorkspaceStore.visible_cases_for) - never a raw, unchecked
+    redirect target."""
     _, store, workspace = _load_workspace_or_404(project_id)
+
+    next_case_id = request.form.get("next_case", "").strip()
+    if next_case_id:
+        visible_case_ids = {c["id"] for c in store.visible_cases_for(workspace, _reviewer())}
+        if next_case_id not in visible_case_ids:
+            next_case_id = ""
 
     try:
         store.archive_case(
@@ -1976,7 +2015,7 @@ def archive_case(project_id, case_id):
         return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
 
     flash("Case archived.", "success")
-    return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
+    return redirect(url_for("workspace.show_workspace", project_id=project_id, case=next_case_id or case_id))
 
 
 @workspace_bp.route("/projects/<project_id>/workspace/cases/<case_id>/derive", methods=["POST"])

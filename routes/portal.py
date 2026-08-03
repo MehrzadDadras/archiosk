@@ -433,6 +433,25 @@ def choose_project():
     "administrative management" destination (Section 12's own "may
     remain available through its proper separate route"), still
     reachable directly by URL.
+
+    CLAUDE-P40-VW7B: this same route/template is now also the Project
+    Vestibule (Section 4) - the least-disruptive repository-compatible
+    choice, since it already renders exactly what a Vestibule needs
+    (authorized-only, one row per Project, no Lists/Toolbox/Display/
+    Chat) and nothing else in this codebase comes closer. The one
+    addition is an OPTIONAL `?current=<project_id>` - set only by the
+    header's own "Switch Project" link (templates/base.html's
+    workspace-topbar-context) when a Foreground Project is actually
+    open, never a new piece of persisted state (this app has no
+    server-tracked "current project" concept - see that template's own
+    comment on why "Foreground Project" is deliberately just whichever
+    project_id the current URL names, nothing more). Resolved through
+    the SAME already-access-filtered `documents` list below, never a
+    second, separately-trusted lookup - an unauthorized, stale, or
+    unrelated `current` value simply fails to match anything and the
+    Vestibule falls back to its plain "no current Project" rendering,
+    exactly as if the parameter had been omitted (never a 404 - this is
+    a soft display hint, not an authorization boundary of its own).
     """
     registry = get_registry(current_app)
     store = CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"])
@@ -456,7 +475,14 @@ def choose_project():
         })
     projects.sort(key=lambda p: p["display_name"].lower())
 
-    return render_template('project_chooser.html', projects=projects, query=query)
+    current_project_id = request.args.get('current', '').strip()
+    current_project = next((p for p in projects if p["project_id"] == current_project_id), None) if current_project_id else None
+    if current_project is not None:
+        projects = [p for p in projects if p["project_id"] != current_project_id]
+
+    return render_template(
+        'project_chooser.html', projects=projects, query=query, current_project=current_project,
+    )
 
 
 @portal_bp.route('/removed-projects')

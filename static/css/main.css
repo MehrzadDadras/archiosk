@@ -645,14 +645,6 @@ html.launcher-hidden .launcher-panel { display: none; }
     display: none;
 }
 .tree-node { margin: 0; }
-/* CLAUDE-P40-VW7A-QA, Section 4: "add enough visual separation to show
-   that the current Project's own child group has ended and sibling
-   Projects have resumed, without introducing a heavy border" -
-   whitespace only (a top margin), on the ONE sibling row immediately
-   following the current Project's own closed child group
-   (templates/base.html's own sibling_separation namespace tracks
-   which single row that is) - no line/border of its own. */
-.tree-node.sibling-project-after-current { margin-top: 0.6rem; }
 .tree-toggle {
     display: flex;
     align-items: center;
@@ -1124,6 +1116,37 @@ main {
 .project-card-secondary:hover { color: var(--text-primary); }
 .projects-empty { color: var(--text-secondary); font-size: 0.9rem; padding: 1.5rem 0; }
 .projects-empty .btn { margin-top: 1rem; }
+
+/* CLAUDE-P40-VW7B, Section 4: Vestibule "Current Project" / "Available
+   Projects" section labels - same small-caps metadata treatment
+   .thumbnails-pane-header h2 already established for a quiet section
+   heading, reused rather than a new type style. */
+.gateway-vestibule-current-label,
+.gateway-vestibule-available-label {
+    font-family: var(--font-body);
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-metadata);
+    margin: 0 0 0.5rem;
+}
+.gateway-vestibule-current { margin-bottom: 1.2rem; }
+/* A real border-WIDTH change (1px -> 2px), not color alone, so "this is
+   the currently entered Project" reads even without color vision - the
+   "Currently entered" badge text itself is the primary, always-
+   sufficient cue (Section 13's "no color-only distinction"). */
+.project-card-current .project-card-link {
+    border-color: var(--machine-blue);
+    border-width: 2px;
+}
+.project-card-current-badge {
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--machine-blue);
+}
 
 @media (max-width: 640px) {
     .project-card-link { flex-direction: column; align-items: flex-start; }
@@ -1627,6 +1650,23 @@ main {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+/* CLAUDE-P40-VW7B, Section 5: the Foreground Project's own breadcrumb
+   segment is now a real link into the Project Vestibule (see the
+   template's own comment) - same color as the plain text it replaces
+   (inherits .workspace-topbar-context's --text-primary; a link here
+   must not read as a DIFFERENT, more/less important piece of text than
+   its neighbors), no underline at rest, real hover/focus-visible
+   affordance so it still reads as interactive on inspection. */
+.workspace-topbar-project {
+    color: inherit;
+    text-decoration: none;
+}
+.workspace-topbar-project:hover { text-decoration: underline; }
+.workspace-topbar-project:focus-visible {
+    outline: 2px solid var(--machine-blue);
+    outline-offset: 2px;
+    border-radius: 2px;
 }
 .workspace-topbar-sep { color: var(--text-secondary); margin: 0 0.3rem; }
 .workspace-topbar-doc { color: var(--text-secondary); }
@@ -2443,6 +2483,166 @@ html.toolbox-hidden .workspace-right-column {
     font-size: 0.78rem;
     padding: 0.35rem 0.5rem;
 }
+
+/* CLAUDE-P40-VW7B, Section 8: the Investigation Attention strip - same
+   compact, restrained tab-strip idiom as .document-tab-strip
+   immediately above (reused deliberately, "do not introduce a
+   separate visual language" - Section 13), a genuinely distinct
+   control family (Investigations, not Documents) rather than a shared
+   selector, since the two are never meant to merge or be
+   interchangeable. Hidden entirely when attention is empty - "compact,
+   visually restrained," never a permanent empty bar. */
+.attention-strip {
+    display: flex;
+    align-items: flex-end;
+    gap: 0.3rem;
+    margin-bottom: 0.6rem;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+    min-width: 0;
+}
+.attention-strip[hidden] { display: none; }
+.attention-strip-list {
+    display: flex;
+    align-items: flex-end;
+    gap: 0.2rem;
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-color: var(--border-strong) var(--surface-primary);
+}
+.attention-strip-list::-webkit-scrollbar { height: 8px; }
+.attention-strip-list::-webkit-scrollbar-track { background: var(--surface-primary); }
+.attention-strip-list::-webkit-scrollbar-thumb {
+    background-color: var(--border-strong);
+    border-radius: 6px;
+    border: 1px solid transparent;
+    background-clip: padding-box;
+}
+.attention-strip-list::-webkit-scrollbar-thumb:hover,
+.attention-strip-list::-webkit-scrollbar-thumb:active {
+    background-color: var(--machine-blue);
+    background-clip: padding-box;
+}
+/* Section 6: "selected-page indication that does not rely on color
+   alone" applied here too - the focused position's real, visible
+   "Focused" text tag (rendered by static/js/investigation_attention.js)
+   is the non-color cue; background/border-color below are the
+   additional, non-exclusive color cue on top of it. */
+.attention-position {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    max-width: 210px;
+    min-width: 110px;
+    padding: 0.4rem 0.55rem;
+    border: 1px solid transparent;
+    border-bottom: none;
+    border-radius: 4px 4px 0 0;
+    background: none;
+    color: var(--text-secondary);
+    font-family: var(--font-body);
+    font-size: 0.8rem;
+    text-decoration: none;
+    cursor: pointer;
+    flex-shrink: 0;
+    position: relative;
+}
+.attention-position:hover {
+    background: var(--surface-hover);
+    color: var(--text-primary);
+    text-decoration: none;
+}
+.attention-position:focus-visible {
+    outline: 2px solid var(--machine-blue);
+    outline-offset: -2px;
+}
+.attention-position-focused {
+    background: var(--surface-primary);
+    color: var(--text-primary);
+    font-weight: 600;
+    border-color: var(--border);
+    border-bottom: 2px solid var(--machine-blue);
+    margin-bottom: -1px;
+}
+.attention-position-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+.attention-position-focused-tag {
+    flex-shrink: 0;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--machine-blue);
+}
+/* Real text ("Archived"), not a color-only dot - a frozen Investigation
+   still held in attention must read as such without relying on the
+   reviewer noticing a color change. */
+.attention-position-archived-tag {
+    flex-shrink: 0;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-metadata);
+}
+.attention-position-release {
+    flex-shrink: 0;
+    background: none;
+    border: none;
+    color: var(--text-metadata);
+    cursor: pointer;
+    font-size: 0.85rem;
+    line-height: 1;
+    padding: 0.15rem 0.3rem;
+    border-radius: 3px;
+}
+.attention-position-release:hover { background: var(--surface-hover); color: var(--failure-red); }
+.attention-position-release:focus-visible {
+    outline: 2px solid var(--machine-blue);
+    outline-offset: 1px;
+}
+
+/* CLAUDE-P40-VW7B, Section 9: the fifth-Investigation capacity dialog's
+   own list of currently-attended positions - reuses the SAME
+   .attention-capacity-dialog* family (itself the renamed, reused
+   CLAUDE-P40-VW8 Project-switching dialog CSS - see that rule's own
+   comment) for the dialog shell; this is only the per-position row
+   inside .attention-capacity-dialog-list. */
+.attention-capacity-dialog-list {
+    list-style: none;
+    margin: 0 0 0.7rem;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    max-height: 40vh;
+    overflow-y: auto;
+}
+.attention-capacity-dialog-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.4rem 0.5rem;
+    background: var(--surface-secondary);
+    border-radius: 4px;
+}
+.attention-capacity-dialog-item-name {
+    font-size: var(--text-sm);
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+.attention-capacity-dialog-item .btn { padding: 0.3rem 0.6rem; font-size: 0.78rem; flex-shrink: 0; }
+.attention-capacity-conclude-form { display: none; }
 
 /* CLAUDE-P40-E3A, Section 6: the shared right-click context menu -
    repositioned (left/top set inline by JS) to whichever division was
@@ -3911,10 +4111,18 @@ main::-webkit-scrollbar-corner,
 }
 .conv-dialog-actions .btn { padding: 0.5rem 1rem; font-size: 0.82rem; }
 
-/* CLAUDE-P40-VW8: the Project-switching interruption dialog - same
-   fixed/centered/solid-background/high-z-index idiom .conv-dialog
-   already established (CLAUDE-P40-VW7), not a new pattern. */
-.project-switch-dialog {
+/* CLAUDE-P40-VW8, renamed and reused CLAUDE-P40-VW7B: the same fixed/
+   centered/solid-background/high-z-index dialog idiom .conv-dialog
+   already established (CLAUDE-P40-VW7) - this used to be the Project-
+   switching interruption dialog, retired in CLAUDE-P40-VW7B once its
+   only trigger (a different Project's own Lists row, clickable while
+   a Project was open) stopped existing at all (Section 3's own
+   removal of the portfolio from the opened workspace). Renamed rather
+   than deleted-then-recreated for the NEW fifth-Investigation capacity
+   dialog (Section 9) - "do not introduce a separate visual language"
+   (Section 13) - same markup shape (heading/body/actions/note),
+   different content and trigger. */
+.attention-capacity-dialog {
     position: fixed;
     top: 50%;
     left: 50%;
@@ -3929,25 +4137,25 @@ main::-webkit-scrollbar-corner,
     padding: 0.9rem;
     box-shadow: 0 4px 14px rgba(0, 0, 0, 0.22);
 }
-.project-switch-dialog-heading {
+.attention-capacity-dialog-heading {
     font-family: var(--font-body);
     font-weight: 600;
     font-size: 1rem;
     margin: 0 0 0.4rem;
     color: var(--text-primary);
 }
-.project-switch-dialog-body {
+.attention-capacity-dialog-body {
     font-size: var(--text-sm);
     color: var(--text-secondary);
     margin: 0 0 0.7rem;
 }
-.project-switch-dialog-actions {
+.attention-capacity-dialog-actions {
     display: flex;
     flex-wrap: wrap;
     gap: 0.5rem;
 }
-.project-switch-dialog-actions .btn { padding: 0.5rem 0.8rem; font-size: 0.82rem; }
-.project-switch-dialog-note {
+.attention-capacity-dialog-actions .btn { padding: 0.5rem 0.8rem; font-size: 0.82rem; }
+.attention-capacity-dialog-note {
     font-size: var(--text-xs);
     color: var(--attention-amber);
     margin: 0.6rem 0 0;

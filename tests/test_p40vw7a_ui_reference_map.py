@@ -281,13 +281,18 @@ class _BaseTestCase(unittest.TestCase):
 
 class RootFamilyReferencePresenceTests(_BaseTestCase):
     def test_root_family_refs_present_for_an_open_project(self):
+        # CLAUDE-P40-VW7B, Section 3: "lists.projects" (the portfolio
+        # root) and "lists.removed-projects" no longer render at all
+        # while a Project is open - removed from this list, not just
+        # left asserted-present incorrectly. See
+        # OpenedProjectPortfolioRemovalTests below for the explicit
+        # regression coverage of their absence.
         client = self._client_as("vw7a_owner", 1)
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
         for ref in (
-            "lists.projects", "lists.project.self", "lists.project.overview",
+            "lists.project.self", "lists.project.overview",
             "lists.project.documents", "lists.project.investigations", "lists.project.rfis",
             "lists.project.chats", "lists.project.tasks", "lists.project.tags", "lists.project.tools",
-            "lists.removed-projects",
         ):
             self.assertIn(f'data-ui-ref="{ref}"', body, ref)
 
@@ -344,9 +349,16 @@ class AuthorizationAwareReferenceTests(_BaseTestCase):
         self.assertNotIn('data-ui-ref="lists.system-data-management"', body)
 
     def test_admin_only_refs_present_for_admin(self):
+        # CLAUDE-P40-VW7B, Section 3: "lists.new-project" ("+ New
+        # Project") is one of the explicitly forbidden portfolio
+        # controls inside an opened Project workspace - removed here
+        # even for an admin, since Section 3 draws no admin exception.
+        # lists.security/lists.system-data-management are admin TOOLS,
+        # not portfolio Project-selection surfaces, and deliberately
+        # stay reachable regardless of whether a Project is open.
         client = self._client_as("vw7a_admin", 4, role="admin")
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
-        self.assertIn('data-ui-ref="lists.new-project"', body)
+        self.assertNotIn('data-ui-ref="lists.new-project"', body)
         self.assertIn('data-ui-ref="lists.security"', body)
         self.assertIn('data-ui-ref="lists.system-data-management"', body)
 

@@ -186,17 +186,19 @@ class ListsHierarchyContractTests(_BaseTestCase):
             self.assertNotIn(f">{prototype_artifact}<", body)
 
     def test_active_project_branch_pre_rendered_open_others_closed(self):
-        # Only the ACTIVE project's own leaf is immediately followed by a
-        # pinned-open child branch (Documents/Investigations/RFIs/Chats);
-        # every other project is a plain leaf with no children at all.
+        # CLAUDE-P40-VW7B, Section 3 superseded the "others render as a
+        # plain closed leaf" half of this test - another Project no
+        # longer renders AT ALL inside an open Project's Lists (not
+        # even as a closed leaf) - see OpenedProjectPortfolioRemovalTests
+        # in tests/test_p40vw7b_vestibule_and_attention.py for that
+        # explicit regression coverage. The still-valid half (the
+        # ACTIVE project's own branch pre-renders open) is preserved
+        # below.
         self._ingest(owner="e3a_owner", project_name="A Second Project Not Open")
         client = self._client_as("e3a_owner", 1)
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
 
-        other_pos = body.index("A Second Project Not Open")
-        other_tail = body[other_pos:other_pos + 200]
-        self.assertIn("</a>", other_tail)
-        self.assertNotIn('<ul class="tree-children" data-tree-open>', other_tail[:other_tail.index("</a>")])
+        self.assertNotIn("A Second Project Not Open", body)
 
         panel_start = body.index('<nav class="launcher-panel"')
         active_pos = body.index("Cedar Harbour E3A Workspace", panel_start)

@@ -495,10 +495,16 @@ class AccountIsolationTests(_BaseTestCase):
 
 class ExistingBehaviorPreservedTests(_BaseTestCase):
     def test_lists_hierarchy_still_present(self):
+        # CLAUDE-P40-VW7B: an open Project's own Lists hierarchy is now
+        # `lists.project.self` and its family branch directly - the
+        # portfolio-level `lists.projects` root no longer renders at all
+        # while a Project is open (Section 3's own removal of the
+        # portfolio from the opened workspace).
         doc = self._ingest("DTAB1 Preserve Project", "spec.pdf")
         client = self._client()
         body = client.get(f"/projects/{doc.project_id}/workspace").get_data(as_text=True)
-        self.assertIn('data-ui-ref="lists.projects"', body)
+        self.assertIn('data-ui-ref="lists.project.self"', body)
+        self.assertIn('data-ui-ref="lists.project.documents"', body)
 
     def test_lists_thumbnails_split_still_present(self):
         html = _BASE_HTML_PATH.read_text(encoding="utf-8")

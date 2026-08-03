@@ -158,10 +158,15 @@ class HomeNavigationShellTests(unittest.TestCase):
         # highlighting) - there is no literal "Current Project" label
         # anywhere, but the project's own identity is genuinely present
         # throughout.
+        # SUPERSEDED AGAIN (CLAUDE-P40-VW7B, Section 3): "launcher-
+        # heading" (the "Projects" root) no longer renders at all while
+        # a Project is open - the Foreground Project's own branch
+        # (current-project marker + aria-current="true") is what now
+        # communicates current-Project context.
         self.assertIn("rfp.md", body)
         self.assertIn(project_id, body)
-        self.assertIn("launcher-heading active", body)
-        self.assertIn("tree-leaf launcher-link active", body)
+        self.assertNotIn("launcher-heading", body)
+        self.assertIn('tree-leaf launcher-link current-project" data-ui-ref="lists.project.self" aria-current="true"', body)
 
     def test_non_admin_does_not_see_new_project_link(self):
         # BUCKET-B FIX (CLAUDE-P40-E3A): base.html's own recursive-tree

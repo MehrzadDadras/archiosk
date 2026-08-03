@@ -77,7 +77,8 @@ otherwise.
 | Reference | Element | Label/summary | Current behavior | Auth notes | Status |
 |---|---|---|---|---|---|
 | `menu.brand` | `<a>` | bottleneck mark (`archiosk_mark` macro, decorative/`aria-hidden`) + "Archiosk" | Navigates to `portal.index` (`/`); single accessible name `aria-label="Archiosk Home"` covers mark+text as one link/tab-stop (CLAUDE-P40-BRAND1 — was bare "Archiosk" text at `--text-metadata`/0.85rem; now icon+wordmark at `--brand-gold`(+per-appearance)/1.2rem·600, sized above `menu.context`'s breadcrumb to read as the application identity; the mark itself is two mirrored straight-line open angles with a non-touching central gap and one dot below it — a product-owner correction replaced an earlier two-parabola-leg version outright) | Every authenticated page | active |
-| `menu.context` | `<span>` | breadcrumb (Project / Investigation / Document / Overview) | Non-interactive, reflects current page state | Only rendered when `project_id`/`workspace` are defined | active |
+| `menu.context` | `<span>` | breadcrumb (Project / Investigation / Document / Overview) | Non-interactive container; its own first segment (`menu.context.switch-project`, below) is now interactive | Only rendered when `project_id`/`workspace` are defined | active |
+| `menu.context.switch-project` | `<a>` (new, CLAUDE-P40-VW7B) | the Foreground Project's own display name | Section 5's own required "deliberate access to Switch Project" — navigates to `portal.choose_project?current=<project_id>` (the Project Vestibule, extended for this stage). `aria-label`/`title` carry the real purpose ("Switch Project") since the visible text alone (just the Project's name) would not otherwise communicate that activating it navigates away. A real, already-authorized navigation — no interruption dialog (per-Project workspace state is already safely persisted; see the template's own note on the now-retired `lists.project-switch-dialog`, below) | Only rendered when `project_id`/`workspace` are defined | active |
 | `menu.display-layout` | `<details>` popup | "Display Layout" | Vertical/Horizontal steppers + Apply — sets `#display-divisions`' grid via `window.ArchioskDisplay`-adjacent client JS (`applyLayout` in `case_workspace.js`) | Only rendered when `project_id`/`workspace` are defined | active |
 | `menu.display-layout.vertical-decrement`, `menu.display-layout.vertical-increment`, `menu.display-layout.horizontal-decrement`, `menu.display-layout.horizontal-increment` | `<button>` (4 distinct, named controls) | −/+ steppers | Adjust the PENDING Vertical/Horizontal count (not yet applied) | Only rendered when `project_id`/`workspace` are defined | active |
 | `menu.display-layout.apply` | `<button>` | "Apply" | Commits the pending Vertical × Horizontal count to `#display-divisions` | Only rendered when `project_id`/`workspace` are defined | active |
@@ -148,10 +149,10 @@ still renders, unchanged, for those formats).
 | `lists.removed-projects` | tree-leaf `<a>` | "Removed Projects" | Navigates to `portal.removed_projects` | Every authenticated page | active |
 | `lists.security` | tree-leaf `<a>` | "Security" | Navigates to `security.department_home` | **Admin only** — `is_admin` | active |
 | `lists.system-data-management` | `<a>` inside a subdisclosure | "Reset Project Data…" | Navigates to `portal.reset_project_data`. **CLAUDE-P40-VW7B:** relocated here from the active Project's own "Project Tools" branch (`lists.project.tools.data-management`, retired — see below) — the route resets `REGISTRY_STORE_PATH` in full ("returns the app to a clean, no-project state"), every Project in the deployment, not the one whose tools branch it used to sit in | **Admin only** — `is_admin` | active |
-| `lists.project-switch-dialog` | `<div role="dialog">` | (dialog, no visible label — `aria-labelledby` its own heading) | **CLAUDE-P40-VW8:** interruption dialog shown when activating `lists.projects.leaf` for a Project other than the one currently open. Rendered only when `project_id is defined` (a Project is already open) | Same access scope as the page it renders on | active |
-| `lists.project-switch-dialog.stay` | `<button>` | "Stay in Current Project" | Closes the dialog; no navigation | Same as above | active |
-| `lists.project-switch-dialog.switch` | `<button>` | "Switch in This Tab" | Navigates the current tab to the pending target Project's own already-authorized `workspace.show_workspace` URL | Same as above | active |
-| `lists.project-switch-dialog.open-new-tab` | `<button>` | "Open in New Tab" | Opens the pending target Project's URL via `window.open`; shows `#project-switch-popup-note` if the browser blocks the popup, leaving the current tab untouched | Same as above | active |
+| `lists.project-switch-dialog` | *(retired — CLAUDE-P40-VW7B)* | (dialog, no visible label — `aria-labelledby` its own heading) | **CLAUDE-P40-VW8:** interruption dialog shown when activating `lists.projects.leaf` for a Project other than the one currently open. **CLAUDE-P40-VW7B:** its only trigger, `lists.projects.leaf`, no longer renders while a Project is open at all (Section 3's own removal of the portfolio from the opened Lists panel) — dead code, removed outright rather than left unreachable. Nothing renders this reference any more; retired rather than reused for a different control | — | retired |
+| `lists.project-switch-dialog.stay` | *(retired — CLAUDE-P40-VW7B)* | "Stay in Current Project" | Retired alongside its parent dialog, above | — | retired |
+| `lists.project-switch-dialog.switch` | *(retired — CLAUDE-P40-VW7B)* | "Switch in This Tab" | Retired alongside its parent dialog, above | — | retired |
+| `lists.project-switch-dialog.open-new-tab` | *(retired — CLAUDE-P40-VW7B)* | "Open in New Tab" | Retired alongside its parent dialog, above | — | retired |
 
 **Selection-state hierarchy correction (CLAUDE-P40-VW7A-QA, all identifiers above retained unchanged):**
 `lists.projects` (an expanded root), `lists.project.self` (the current
@@ -259,6 +260,45 @@ P40-VW7A-QA2) and `lists.project.documents.leaf`.
 | `.document-tab-close` | `<button>` (per tab) | "×" — closes that one tab's workspace state only, never the Document |
 | `.document-tab-rename-input` | `<input>` (transient) | Real inline rename field (never `window.prompt()`), commits on Enter/blur, cancels on Escape; empty/whitespace and duplicate-alias input is rejected with an inline message |
 | `.document-hidden-tab-item` | `<button>` (inside `display.document-tabs.all-tabs`) | One row per hidden tab — shows alias + original name, selecting restores it to the visible strip and activates it (real navigation) |
+
+## Investigation Attention Positions (`templates/case_workspace.html`, CLAUDE-P40-VW7B, new)
+
+Up to four Investigations held in attention, the same compact tab-strip
+idiom `display.document-tabs` above already established (deliberately
+reused — Section 13's own "do not introduce a separate visual
+language" — a genuinely distinct control family, never a shared
+selector with Document tabs). Division-0-only, present regardless of
+the current selection. Server-rendered markup is empty/`[hidden]`;
+`static/js/investigation_attention.js` builds every position from
+`#workspace-visible-cases-data` (the same authorized, privacy-filtered
+`visible_cases_for` list the Lists Investigations branch already
+reads) cross-referenced against this browser's own `localStorage`
+attention-set (per-user per-Project). "Focused" = whichever Investigation
+the current `?case=` already names (no separate persisted concept — the
+same reasoning `menu.context.switch-project`'s own note gives for
+"Foreground Project" needing no new state, one level down); the
+attention SET (which up to four are held, independent of which is
+focused) is the one genuinely new piece of client-side state. A
+position is a real `<a href="?case=<id>">` — activating one is a
+genuine page navigation, never client-side routing. Individual
+`.attention-position` elements are a repeated pattern (one per
+attended Investigation), left without their own `data-ui-ref`, the
+same convention `.document-tab`/`.thumbnail-row`/
+`lists.project.documents.leaf` already establish.
+
+| Reference | Element | Label | Current behavior | Auth notes | Status |
+|---|---|---|---|---|---|
+| `display.attention-positions` | `<div>` | — | The whole strip; `[hidden]` whenever the attention set is empty (Section 8's own "compact, visually restrained" — never a permanent empty bar) | Only rendered when `project_id`/`workspace` are defined and not `panel_only` | active |
+| `display.attention-positions.capacity-dialog` | `<div role="dialog">` (new) | "Attention is full" | Fifth-Investigation capacity interruption (Section 9) — shown by post-load reconciliation whenever `?case=` names an Investigation not already in the attention set while it's already at 4. Reuses the same dialog CSS family the retired `lists.project-switch-dialog` (below) used to, renamed rather than duplicated | Only rendered when `project_id`/`workspace` are defined and not `panel_only` | active |
+| `display.attention-positions.capacity-dialog.cancel` | `<button>` | "Cancel" | Navigates back to the bare workspace URL (Overview) — Section 9's own "cancel opening the new Investigation"; the page has already loaded showing the fifth Investigation's own content (post-load reconciliation, not a pre-click intercept — see that script's own header comment), so cancelling means leaving it, not merely closing the dialog | Same as above | active |
+
+**Per-position pattern (JS-generated, one instance per attended Investigation, no individual `data-ui-ref`):**
+
+| Pattern | Element | Current behavior |
+|---|---|---|
+| `.attention-position` | `<a role="tab" href="?case=<id>">` | The position itself — real navigation on click/Enter/Space; `aria-selected` reflects whether this is the focused Investigation; roving `tabindex`, Left/Right/Home/End move focus; a real "Focused" text tag (non-color cue, Section 6) on the focused position, an "Archived" text tag on a frozen one (`CASE_STATUS_ARCHIVED`) |
+| `.attention-position-release` | `<button>` (per position) | "×" — releases that Investigation from attention only (Section 8's own explicit "must not delete, close, resolve, archive, or otherwise falsify its real status"); never navigates, even when releasing the currently-focused position |
+| `.attention-capacity-dialog-item` | `<li>` (inside the capacity dialog, one per currently-attended position) | Shows the Investigation's title with two real actions: "Release" (pure attention-set change, immediate, no page reload) and "Conclude" (the real, already-existing, owner-or-admin-gated `workspace.archive_case` route — the genuine governed completion action Section 9 requires, not a fabricated "soft close"; no "move to Waiting/Parked" option is offered, since no such governed Case state exists in this repository's actual model — grounded, not omitted by oversight) |
 
 ## Display (`templates/case_workspace.html`)
 
@@ -423,8 +463,12 @@ references may ever start with `lists.`/`display.`/`toolbox.`/`chat.`/
 | `gateway.create-design-builder` | `<a>` | "Create Design-Builder / Proponent Project" | Navigates to `portal.upload?environment=design_builder_proponent` | **Admin only** — `is_admin` | active |
 | `gateway.open-existing` | `<a>` | "Open an existing project" | Navigates to `portal.choose_project` (the focused chooser, below) — **CLAUDE-P40-VW8-QA:** previously `portal.projects_list`, the full management directory; that page is unchanged and still reachable directly, just no longer Gateway's own first destination (Section 12) | Every authenticated page | active |
 | `gateway.chooser` | `<h2>` | "Open an existing project" | Section heading, non-interactive | Every authenticated page | active |
-| `gateway.chooser.search` | `<form>` | project search | `?q=` filter, server-side, same `_accessible_documents` matching `projects_list` uses | Every authenticated page (results scoped to `_accessible_documents`) | active |
+| `gateway.chooser.search` | `<form>` | project search | `?q=` filter, server-side, same `_accessible_documents` matching `projects_list` uses; preserves `?current=` (below) via a hidden field so searching never drops the Current Project context | Every authenticated page (results scoped to `_accessible_documents`) | active |
 | `gateway.chooser.leaf` | `<a>` (pattern) | a Project card | Navigates to `workspace.show_workspace` for that Project — the exact same authorized route every other Project-opening path uses | Filtered to `_accessible_documents` (already access-scoped) | active |
+| `gateway.chooser.current` | `<section>` (new, CLAUDE-P40-VW7B) | "Current Project" | This route/template is now also the Project Vestibule (Section 4) — only rendered when arriving with a valid, authorized `?current=<project_id>` (set by `menu.context.switch-project`, below); a soft display hint, never a new persisted "current project" concept or an authorization boundary of its own | Every authenticated page; `current` silently ignored if unauthorized/stale/omitted | active |
+| `gateway.chooser.current.leaf` | `<a>` | Current Project's own card, "Currently entered" badge | Re-enters the same already-open Project via `workspace.show_workspace` — a plain link, no confirmation (workspace state is safely persisted per-Project already; see `menu.context.switch-project`'s own note on why no interruption dialog guards this) | Same as `gateway.chooser.leaf` | active |
+| `gateway.chooser.available` | `<p>` (new, CLAUDE-P40-VW7B) | "Available Projects" | Section label shown only alongside `gateway.chooser.current` — the current Project is excluded from this list below it, never duplicated | Every authenticated page | active |
+| `gateway.chooser.removed-projects` | `<a>` (new, CLAUDE-P40-VW7B) | "Removed Projects" | Navigates to `portal.removed_projects` — Section 4's own "Archived or removed Projects... only if this is already a real governed concept," linked out to the real page rather than duplicated inline | Every authenticated page | active |
 | `gateway.chooser.back` | `<a>` | "← Back to Gateway" | Navigates to `portal.gateway` | Every authenticated page | active |
 
 ## Auth (`templates/auth_shell.html`, `login.html` — CLAUDE-P40-VW8-QA, new surface)

@@ -63,6 +63,48 @@
                 <div class="document-tabs-overflow-panel" id="document-tabs-overflow-panel" role="group" aria-label="All Tabs"></div>
             </details>
         </div>
+        {# ---------------- Investigation Attention strip (CLAUDE-P40-VW7B, Section 8) --
+           Up to four Investigation Attention Positions - the SAME idiom
+           as the Document tab strip immediately above (empty server-
+           rendered markup, filled by static/js/investigation_attention.js
+           from #workspace-visible-cases-data + this browser's own
+           localStorage attention-set - never a fifth position, Section
+           9's own capacity rule, enforced by that script). Division-0-
+           only, present regardless of the current selection (Overview/
+           a Document/an Investigation all show it), so a reviewer can
+           jump between attended Investigations without leaving
+           whatever they're currently looking at - matching the
+           Document tab strip's own "present regardless of the current
+           selection" reasoning exactly. data-active-case-id is the
+           SAME signal a Document's data-selected-source-id already is:
+           which Investigation (if any) is the one actually governing
+           Display/Toolbox/Chat/Findings right now. #}
+        <div class="attention-strip" id="attention-strip" data-ui-ref="display.attention-positions" data-project-id="{{ project_id }}" data-active-case-id="{{ active_case.id if active_case else '' }}" data-base-url="{{ url_for('workspace.show_workspace', project_id=project_id) }}" hidden>
+            <div class="attention-strip-list" id="attention-strip-list" role="tablist" aria-label="Investigation Attention Positions"></div>
+        </div>
+        {# ---------------- Fifth-Investigation capacity dialog (CLAUDE-P40-VW7B, Section 9) --
+           Same role="dialog"/aria-modal idiom as every other real
+           dialog in this app (CLAUDE-P40-VW7's .conv-dialog,
+           CLAUDE-P40-VW8's now-retired Project-switching dialog - see
+           static/css/main.css's own comment on why its CSS classes
+           were renamed and reused here rather than duplicated).
+           Content built entirely by static/js/investigation_attention.js
+           (which four Investigations are currently attended, and
+           whether "Conclude" is even offered per one - a real,
+           authorization-checked action, never fabricated). #}
+        <div class="attention-capacity-dialog" id="attention-capacity-dialog" data-ui-ref="display.attention-positions.capacity-dialog" role="dialog" aria-modal="true" aria-labelledby="attention-capacity-dialog-heading" hidden>
+            <p class="attention-capacity-dialog-heading" id="attention-capacity-dialog-heading">Attention is full</p>
+            <p class="attention-capacity-dialog-body">
+                Up to four Investigations can be held in attention at once. Release or conclude one to open <strong id="attention-capacity-target-name"></strong>, or cancel.
+            </p>
+            <ul class="attention-capacity-dialog-list" id="attention-capacity-dialog-list" role="list" aria-label="Currently attended Investigations"></ul>
+            <div class="attention-capacity-dialog-actions">
+                <button type="button" class="btn btn-ghost" id="attention-capacity-cancel" data-ui-ref="display.attention-positions.capacity-dialog.cancel">Cancel</button>
+            </div>
+            <form method="post" id="attention-capacity-conclude-form" class="attention-capacity-conclude-form" hidden>
+                <input type="hidden" name="next_case" id="attention-capacity-next-case" value="">
+            </form>
+        </div>
         {% endif %}
 
     {# ---------------- Project overview (CLAUDE-P40-E3A, Section 5) -----------
@@ -1903,6 +1945,15 @@
     <script type="application/json" id="workspace-active-sources-data">
         {{ active_sources_json | safe }}
     </script>
+    {# CLAUDE-P40-VW7B, Section 8: the Investigation Attention strip's
+       own data source - same reasoning as workspace-active-sources-data
+       immediately above (already authorized/privacy-filtered via
+       visible_cases_for, not secret - every title here already renders
+       in plain HTML in the Lists Investigations branch on this same
+       page). #}
+    <script type="application/json" id="workspace-visible-cases-data">
+        {{ visible_cases_json | safe }}
+    </script>
 {% endblock %}
 
 {% block toolbox %}
@@ -2454,6 +2505,7 @@
 {% block extra_scripts %}
 {% if not panel_only %}
 <script src="{{ url_for('static', filename='js/document_tabs.js') }}?v={{ static_version }}"></script>
+<script src="{{ url_for('static', filename='js/investigation_attention.js') }}?v={{ static_version }}"></script>
 {% endif %}
 <script src="{{ url_for('static', filename='js/pdf_viewer.js') }}?v={{ static_version }}"></script>
 <script src="{{ url_for('static', filename='js/case_workspace.js') }}?v={{ static_version }}"></script>

@@ -1,5 +1,331 @@
 # Continuation checkpoint
 
+## 2026-08-03 — CLAUDE-P40-VW7B: Foreground Project Vestibule and Four-Position Investigation Attention Model
+
+**Tag collision, flagged explicitly:** "CLAUDE-P40-VW7B" was already
+used once before this stage, for an unrelated, already-shipped stage
+(git `a61a7b8`/`9a5c11b`, "generalize active-Display projection;
+relocate a misplaced admin control"). This stage reuses the same tag
+because that is what its own governing prompt specified. Noted here,
+in `templates/base.html`'s own comment, and in the new test file's own
+module docstring so the collision is never silently ambiguous to a
+future reader of git history or this file.
+
+**Started from a verified clean state:** `HEAD == origin/main` at
+`ee5a92c` (the LTH1 stage) confirmed before any edit; working tree
+clean apart from the pre-existing, unrelated
+`tests/fixtures/nreocrc/_lab_instance_scratch_002/` scratch fixture.
+
+**Critique of the proposed hierarchy, grounded before building anything
+(Section 0's own explicit invitation to refine it):**
+1. **"Foreground Project" needs no new persisted state.** This is a
+   full-page-reload app (no client router) - it is already
+   structurally equivalent to "the `project_id` the current URL
+   names." The real defect was Lists RENDERING the portfolio even
+   while a Project was open, not a missing state-tracking mechanism.
+2. **The Vestibule already existed**, built in CLAUDE-P40-VW8-QA
+   Section 12: `portal.choose_project` / `templates/project_chooser.html`
+   (extends the Lists-free `gateway_base.html`, already reuses the
+   correctly access-filtered, one-row-per-Project `_accessible_documents`).
+   Extended in place rather than rebuilt (Section 4's own "least
+   disruptive repository-compatible" instruction).
+3. **Per-Project workspace restoration is already ~90% correct by
+   construction.** DTAB1's Document tabs, LTH1's Lists/Thumbnails
+   split, and EYE1's Toolbox/Eye split are all already persisted in
+   `localStorage` keyed by username+`project_id` - returning to a
+   different Project's URL already restores that Project's own state
+   for free, with no cross-Project bleed risk (the keys are
+   namespaced). Verified, not rebuilt (`PerProjectRestorationGroundingTests`).
+4. **Investigation status already has a real two-state lifecycle**
+   (`CASE_STATUS_OPEN`/`CASE_STATUS_ARCHIVED`, `services/case_workspace.py`)
+   with a real, existing, previously-**unused-by-any-UI** governed
+   completion route (`workspace.archive_case`, owner-or-admin gated -
+   confirmed via `grep`, no prior caller anywhere). No "Waiting/Parked"
+   governed state exists anywhere in the domain model, so Section 2's
+   "use those terms only where those meanings already exist" rules out
+   offering a third capacity-dialog option - only Release (pure
+   attention-set change) and Conclude (the real `archive_case` action).
+5. **"Four Investigation Attention Positions" is the one genuinely new
+   concept**, with DTAB1's own Document-tab architecture as the direct
+   template: client-side-only, `localStorage`-persisted, username+
+   Project-scoped, revalidated on every load against a new LTH1-style
+   JSON island (`#workspace-visible-cases-data`) - never a new backend
+   endpoint or schema field.
+6. **New Investigation creation already redirects straight into
+   `?case=<new-id>`** (a prior, deliberate design decision - "opening a
+   Project no longer auto-jumps into its first Case... a Case is only
+   ever entered through an explicit `?case=`"). A newly created
+   Investigation therefore correctly becomes the newly-focused
+   attention position immediately - but if attention is already full,
+   this exact page load is one of the "governing transitions" Section
+   9 requires catching, alongside a bookmarked `?case=` URL, Back/
+   Forward, and refresh - all handled uniformly by post-load
+   reconciliation (see below), not a pre-click interceptor alone.
+
+**Workspace-state vs. business-state:** enforced throughout by
+construction, not by convention alone - `releaseFromAttention()`
+(static/js/investigation_attention.js) only ever touches a local
+`attention` array + `localStorage`, never a network request; the ONLY
+code path that can change a Case's real status is the existing,
+unmodified-in-behavior `archive_case` route, reached exclusively
+through its own explicit "Conclude" button. Switching the Foreground
+Project never writes anything server-side either - it is a plain GET
+navigation.
+
+**Opened-Project Lists correction (Section 3):** `templates/base.html`'s
+Lists tree now branches on `project_id is defined and workspace is
+defined` (the SAME gate Toolbox/Eye/Chat already use - needed because
+a removed Project's tombstone render, `project_removed.html`, has
+`project_id` in scope but never `workspace`/`document`, discovered via
+a real crash while testing). When true: renders ONLY the Foreground
+Project's own family branch (Overview/Documents/Investigations/RFIs/
+Chats/Tasks/Tags/Project Tools), driven directly by `workspace`/
+`document` rather than by finding this Project inside
+`nav_recent_projects` (that list is capped at the 15 most-recently-
+INGESTED projects - app.py's own documented, unfixed limitation - so
+an older Project's own branch previously would not render AT ALL once
+it aged out of that cap; a real latent defect this restructuring also
+closes as a natural consequence). When false: the ORIGINAL portfolio
+"Projects" root/`+ New Project`/`Removed Projects` render exactly as
+before, unchanged - this stage's own scope is the OPENED workspace,
+not portfolio browsing itself. Security/Project Data Management
+(admin TOOLS, not portfolio Project-selection surfaces or "Project
+records") deliberately stay reachable regardless of whether a Project
+is open - Section 3's forbidden list names the PROJECTS root, other
+Project names, `+ New Project`, and Removed Projects specifically, not
+these. The old per-sibling-row "visual continuation" whitespace class
+(`sibling-project-after-current`, CLAUDE-P40-VW7A-QA) is retired
+outright - its trigger condition can no longer occur once the current
+Project's own branch never renders inside the portfolio loop at all.
+
+**Dead-code removal, a direct consequence of Section 3:** the
+CLAUDE-P40-VW8 Project-switching interruption dialog
+(`#project-switch-dialog`) and its click-interceptor are removed
+entirely - its only trigger, `lists.projects.leaf` for a Project other
+than the one open, never renders inside an open Project's Lists
+anymore. Also no longer the RIGHT behavior even where reachable
+(Section 6's own "do not show a confirmation merely because the user
+changes Projects when state is safely persisted" - see point 3 above).
+Its CSS classes (`.project-switch-dialog*`) were renamed and reused
+(`.attention-capacity-dialog*`) for the new fifth-Investigation dialog
+rather than duplicated - Section 13's own "do not introduce a separate
+visual language."
+
+**Project Vestibule (Section 4):** `routes/portal.py`'s `choose_project`
+gained an optional `?current=<project_id>`, resolved through the SAME
+already-access-filtered project list every other part of that route
+already computes (never a second, separately-trusted lookup) - an
+unauthorized, stale, or omitted value simply renders no "Current
+Project" section, never a 404 (a soft display hint, not an
+authorization boundary of its own; no new persisted "current project"
+concept anywhere). `templates/project_chooser.html` gained a "Current
+Project" section (excluded from "Available Projects" below it, never
+duplicated) with a real, non-color "Currently entered" badge (text,
+plus a border-width change, not color alone), and a link out to the
+real, already-governed `portal.removed_projects` page (Section 4's own
+"only if this is already a real governed repository concept" - it is,
+linked rather than reinvented). Deliberately selection-only throughout
+- no Documents/Findings/conversation content of any Project appears
+here (verified: no `#launcher-panel`, no "Finding" text, no `conv-`
+class prefix on this page).
+
+**Header Switch-Project access (Section 5):** the Foreground Project's
+own breadcrumb segment (`menu.context`'s first child) is now a real
+`<a>` into the Vestibule (`portal.choose_project?current=<project_id>`),
+carrying `aria-label="... — Switch Project"` since the bare visible
+text (just the Project's own name) would not otherwise communicate
+that activating it navigates away. Plain navigation, no interruption
+dialog - per point 3 above, nothing is actually at risk.
+
+**Project switching (Section 6) / per-Project restoration (Section
+7):** no new mechanism built - verified the existing one instead (see
+critique points 1/3/6 above). `PerProjectRestorationGroundingTests`
+pins the exact `localStorage` key shapes for DTAB1/LTH1/EYE1/this
+stage's own new attention-set, confirming all four are namespaced by
+username+`project_id`.
+
+**Four Investigation Attention Positions (Section 8):** new
+`static/js/investigation_attention.js`, architecturally mirroring
+`document_tabs.js` closely (a compact `role="tablist"` strip, real
+`<a href="?case=<id>">` positions, roving-tabindex keyboard nav,
+`[hidden]` entirely when attention is empty - "compact, visually
+restrained," never a permanent empty bar). "Focused" is the URL-driven
+`?case=` selection (no separate tracked concept, per critique point 1);
+the ATTENTION SET (up to four Case ids, independent of which is
+focused) is `localStorage`-persisted, keyed by username+`project_id`,
+revalidated on every load against `#workspace-visible-cases-data` (new
+JSON island, `routes/workspace.py`'s `show_workspace`, exposing only
+`id`/`title`/`status`/`created_by` - real fields only, no fabricated
+urgency/confidence signal, Section 8's own explicit prohibition). Each
+position shows the Investigation's real title plus a real "Focused" or
+"Archived" text tag (non-color cue, Section 6) alongside the existing
+color treatment - never color alone. A `.attention-position-release`
+button ("×") removes a position from attention WITHOUT navigating and
+WITHOUT touching business status (Section 8's own explicit "must not
+delete, close, resolve, archive, or otherwise falsify its real
+status") - a pure `localStorage` membership change, even when
+releasing the currently-focused position.
+
+**Fifth-Investigation capacity (Section 9):** deliberately enforced via
+POST-LOAD reconciliation on every workspace page render, not a
+pre-click interceptor - `base.html` already runs a separate, unrelated
+click-interceptor for Display-division routing (from the OTHER,
+earlier "CLAUDE-P40-VW7B" stage - see the tag-collision note above);
+entangling a second one with it risked both. Post-load reconciliation
+uniformly covers every real entry path (an ordinary click, a
+bookmark, Back/Forward, a refresh, or `create_case`'s own redirect)
+rather than only the common one - genuinely the "governing transition"
+Section 9 asks for, not a weaker substitute. When `?case=` names an
+Investigation not already in the attention set while it's already at
+4, `#attention-capacity-dialog` opens (real `role="dialog"`/
+`aria-modal="true"`, reusing the renamed `.attention-capacity-dialog*`
+CSS - see the dead-code note above) listing the four current positions,
+each with real Release (immediate, client-side, closes the dialog and
+completes the swap in place - no page reload needed, since the fifth
+Investigation is already displayed) and Conclude (the real
+`workspace.archive_case` route, extended with an optional `next_case`
+form field - validated server-side against this reviewer's own
+`visible_cases_for`, never a raw unchecked redirect target - so
+concluding lands back on the Investigation the reviewer actually meant
+to open, not the one just archived) actions, plus Cancel (navigates
+back to the bare workspace URL/Overview - the page has already loaded
+showing the fifth Investigation's own content, so "cancel" means
+leaving it, not merely closing the dialog).
+
+**Focused-Investigation behavior (Section 10):** unchanged from
+existing behavior - `active_case` already drives Toolbox/Chat/Findings/
+Eye exactly as before; this stage adds no new projection logic. DTAB1's
+Document tabs remain completely independent of the four-position rule
+(Section 10's own explicit "the four-position rule governs Investigation
+subjects, not supporting Documents") - confirmed via the regression
+suite (DTAB1's own 63 tests, re-run unmodified, all still passing).
+
+**Isolation (Section 11):** `#workspace-visible-cases-data` is scoped
+to the current Project only (same `visible_cases_for` privacy filter
+the Lists Investigations branch already uses) - a foreign Project's
+Case structurally cannot appear in the attention strip, since it never
+appears in that JSON island at all. The Vestibule excludes unauthorized
+Projects (reuses `_accessible_documents`, unchanged). Direct-URL access
+to an unauthorized Project still 404s (unchanged - `_load_workspace_or_404`).
+No UUID/project_id appears in any visible label (the header link's own
+accessible name uses the display title, never the raw id).
+`archive_case`'s `next_case` extension is authorization-checked the
+same way every other Case reference on that route already is.
+
+**Accessibility/responsive/Appearance (Section 13):** the new header
+link and attention positions both gained real `:focus-visible` outlines
+(a genuine, previously-nonexistent gap for the header link, since it
+used to be a plain, non-interactive `<span>`). The capacity dialog has
+real dialog semantics (`role`/`aria-modal`/`aria-labelledby`), matching
+the retired Project-switch dialog's own established pattern exactly.
+No new narrow-viewport mechanism was built - the attention strip
+scrolls horizontally via the SAME `.document-tab-list`-established
+`overflow-x: auto` idiom Document tabs already use. All new CSS is
+token-driven (`var(--machine-blue)`, `var(--text-*)`, etc.), so every
+established Appearance mode repaints it for free via the SAME combined
+per-surface redefinition mechanism every other token-driven rule in
+`main.css` already participates in - no new per-Appearance override
+rule needed anywhere in this stage.
+
+**UI-reference changes:** new — `menu.context.switch-project`,
+`gateway.chooser.current`, `gateway.chooser.current.leaf`,
+`gateway.chooser.available`, `gateway.chooser.removed-projects`,
+`display.attention-positions`, `display.attention-positions.capacity-dialog`,
+`display.attention-positions.capacity-dialog.cancel`. Retired —
+`lists.project-switch-dialog`, `.stay`, `.switch`, `.open-new-tab`
+(marked `retired` in `UI_REFERENCE_MAP.md`, never reused for a
+different control). Retained unchanged — every `lists.project.*`/
+`lists.projects*` id (only their recorded conditions/behavior
+corrected to describe the new opened-vs-portfolio branching). Nothing
+renumbered for tidiness. `tests/test_p40vw7a_ui_reference_map.py`'s own
+registry-vs-template self-consistency check (the "registry" IS
+`UI_REFERENCE_MAP.md` itself, parsed via regex - there is no separate
+machine-readable registry file in this repository) passes.
+
+**Tests:** new `tests/test_p40vw7b_vestibule_and_attention.py` (56
+tests) covering every Section 15 item this stage's own scope reaches.
+Updated 11 pre-existing test files in place for assertions that
+targeted the now-corrected portfolio-in-open-Lists/interruption-dialog
+behavior - 5 found and fixed BEFORE the first full-suite run (focused
+runs against the specific files each change touched):
+`test_p40dtab1_document_tabs.py`, `test_p40e2b1a_recursive_projection.py`,
+`test_p40vw7a_qa_lists_hierarchy_selection_state.py`,
+`test_p40vw7a_ui_reference_map.py`,
+`test_p40vw8_project_switch_and_chooser.py` (retired its own five
+dialog-specific test classes down to one explicit
+`DialogRetirementTests` regression guard) - and 6 MORE surfaced only
+by the first complete-suite run itself (files this stage's own changes
+touch but that a targeted-file sweep didn't happen to include):
+`test_global_search_and_header.py`, `test_home_navigation_shell.py`,
+`test_p40e2b1_single_launcher_and_directories.py` (all three asserted
+the "Projects" root stays rendered/highlighted inside an open
+Project - now updated to assert the Foreground Project's own
+`current-project` marker instead, since that root no longer renders
+there at all), `test_p40e2b1a_recursive_projection.py` again (a
+SECOND, different test in the same file - the header's own new
+Switch-Project link legitimately adds a third occurrence of the
+Project name to its own page, once as visible text and once in its
+`aria-label`, not a visible duplication a sighted reviewer would ever
+see), and `test_p40e3a_layout_reconciliation.py` (asserted another
+Project rendered as a closed sibling leaf - now asserts it does not
+render at all, the stronger, now-true guarantee). Each fix carries its
+own comment explaining why. This is the concrete reason this
+repository's own established convention is "run the complete suite
+once, not just the files a change seems to touch" - a purely file-
+scoped sweep would have shipped these six regressions.
+
+One genuinely new, this-stage-introduced defect was also caught only
+by the complete suite: two new CSS rules
+(`.attention-position-focused-tag`/`-archived-tag`) were set at
+`0.65rem` (10.4px), below this repository's own established, tested
+11px minimum font-size floor (`test_global_search_and_header.py::
+TypographyCorrectionTests::test_no_font_size_below_11px_floor`) -
+raised to `0.7rem` (11.2px), the same size already used for
+comparably-scaled labels elsewhere in this file (e.g.
+`.document-tab-menu-btn`).
+
+Along the way, also caught and fixed real "unanchored search matches
+the wrong occurrence" / "assertion trips on its own explanatory
+comment" bugs in this stage's OWN new test code (the same bug classes
+this repo has hit before) - a `render();` search matching an earlier
+occurrence than the one intended, and a forbidden-word check tripping
+on the source's own prose explaining why that word doesn't apply -
+fixed before being reported as passing, not left as latent gaps.
+
+Also re-ran the complete pre-existing DTAB1/LTH1/EYE1/BRAND1/archive-
+related test files (230+127 tests) unmodified as an explicit
+regression gate before the first full-suite run - all passed, and the
+full suite itself (run twice - once before, once after the six
+additional fixes above) confirms no other regression exists anywhere
+in the codebase. Full suite: 2500 passed, 0 failed.
+
+**Real-browser verification:** not available in this environment -
+every claim above is grounded in template/CSS/JS source inspection and
+rendered-HTML structural tests, not a claimed rendered check.
+Product-owner verification checklist: (1) sign in, confirm the
+Gateway/Vestibule flow; (2) enter a Project, confirm Lists shows ONLY
+that Project's own families, no other Project name, no `+ New
+Project`, no `Removed Projects`; (3) click the Project name in the
+header, confirm it opens the Vestibule with "Current Project" shown
+and "Currently entered"; (4) create/open up to four Investigations,
+confirm the attention strip fills with real, distinguishable positions;
+(5) attempt a fifth, confirm the capacity dialog offers Release/
+Conclude/Cancel truthfully, with no fabricated urgency; (6) Release one
+and confirm the released Investigation is NOT deleted/archived
+(reopen it from Lists to confirm); (7) Conclude one and confirm it
+lands you back on the Investigation you actually meant to open, and
+the concluded one shows "Archived" if it's still in attention
+elsewhere; (8) switch Projects via the Vestibule, confirm the departed
+Project's Lists/attention/Chat/Toolbox/Eye state is completely gone
+from the rendered page and the entered Project's own state restores
+independently; (9) refresh, Back/Forward, and a direct/bookmarked
+`?case=` URL for a 5th Investigation, confirming the capacity dialog
+still catches it; (10) log in as a second account and confirm zero
+attention/Vestibule leakage; (11) Light/Black/Midnight Blue/Deep Forest
+Appearance modes; (12) narrow viewport; (13) UI Reference Mode on/off,
+confirming no badge overlaps the new header link or attention
+positions.
+
 ## 2026-08-03 — CLAUDE-P40-LTH1: Persistent Left Lists and Page-Thumbnails Split
 
 **Started from a verified clean state:** `HEAD == origin/main` at `6273f4f`

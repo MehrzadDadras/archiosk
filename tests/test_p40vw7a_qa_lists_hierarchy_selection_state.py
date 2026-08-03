@@ -129,16 +129,18 @@ class SelectionTierSeparationTests(_BaseTestCase):
         self.assertEqual(len(active_leaves), 1, active_leaves)
         self.assertIn('data-ui-ref="lists.project.chats"', active_leaves[0])
 
-    def test_projects_root_active_class_present_but_no_longer_styled_as_selected(self):
+    def test_projects_root_no_longer_renders_at_all_while_a_project_is_open(self):
+        # CLAUDE-P40-VW7B, Section 3: the portfolio-level PROJECTS root
+        # (and every other Project's own name) is removed from the
+        # opened-Project Lists panel entirely, not merely re-styled as
+        # unselected - this supersedes the original VW7A-QA assertion
+        # that it still rendered (expanded, de-emphasized) alongside the
+        # current Project's own branch.
         doc = self._ingest("Nipigon Ramp", "rfp.txt")
         client = self._client()
         body = client.get(f"/projects/{doc.project_id}/workspace").get_data(as_text=True)
         lists_html = self._lists_html(body)
-        self.assertIn('data-ui-ref="lists.projects"', lists_html)
-        idx = lists_html.index('data-ui-ref="lists.projects"')
-        tag = lists_html[lists_html.rindex("<button", 0, idx):lists_html.index(">", idx)]
-        self.assertIn("launcher-heading", tag)
-        self.assertIn('aria-expanded="true"', tag)
+        self.assertNotIn('data-ui-ref="lists.projects"', lists_html)
 
     def test_selecting_a_different_child_moves_the_active_class_there(self):
         doc = self._ingest("Nipigon Ramp", "rfp.txt")
@@ -182,50 +184,30 @@ class AccessibilityStateTests(_BaseTestCase):
         self.assertEqual(lists_html.count('aria-current="page"'), 1)
         self.assertEqual(lists_html.count('aria-current="true"'), 1)
 
-    def test_projects_root_uses_aria_expanded_not_aria_current(self):
+    def test_projects_root_absent_so_no_aria_current_confusion_possible(self):
+        # CLAUDE-P40-VW7B, Section 3: supersedes the original VW7A-QA
+        # assertion (the PROJECTS root used aria-expanded, never
+        # aria-current, while ALSO rendering next to the current
+        # Project's own branch) - now the root doesn't render in this
+        # state at all, so there is no longer a second element in this
+        # region that could even be mistaken for carrying aria-current.
         doc = self._ingest("Nipigon Ramp", "rfp.txt")
         client = self._client()
         body = client.get(f"/projects/{doc.project_id}/workspace").get_data(as_text=True)
         lists_html = self._lists_html(body)
-        idx = lists_html.index('data-ui-ref="lists.projects"')
-        tag = lists_html[lists_html.rindex("<button", 0, idx):lists_html.index(">", idx)]
-        self.assertIn("aria-expanded", tag)
-        self.assertNotIn("aria-current", tag)
+        self.assertNotIn('data-ui-ref="lists.projects"', lists_html)
 
 
-class SiblingSeparationTests(_BaseTestCase):
-    """nav_recent_projects (app.py) sorts by ingested_at, most-recently-
-    INGESTED first - so the render order is the REVERSE of ingestion
-    order. Verified empirically against a real render before writing
-    these, not assumed."""
-
-    def test_sibling_immediately_after_current_project_gets_separation_class(self):
-        self._ingest("Oldest Project", "a.txt")
-        current = self._ingest("Nipigon Ramp", "b.txt")
-        self._ingest("Newest Project", "c.txt")
-        # Render order (most-recent-ingested first): Newest Project,
-        # Nipigon Ramp, Oldest Project - "Oldest Project" is the one
-        # that actually renders immediately after the current Project's
-        # own closed child group.
-        client = self._client()
-        body = client.get(f"/projects/{current.project_id}/workspace").get_data(as_text=True)
-        lists_html = self._lists_html(body)
-        self.assertEqual(lists_html.count("sibling-project-after-current"), 1)
-        idx = lists_html.index("sibling-project-after-current")
-        row_end = lists_html.index("</li>", idx)
-        self.assertIn("Oldest Project", lists_html[idx:row_end])
-        self.assertNotIn("Newest Project", lists_html[idx:row_end])
-
-    def test_no_separation_class_when_current_project_renders_last(self):
-        # Ingesting the current Project FIRST (oldest of the two) means
-        # it renders LAST (most-recent-first order) - "Newest Project"
-        # renders BEFORE it, and nothing renders after it at all.
-        current = self._ingest("Nipigon Ramp", "a.txt")
-        self._ingest("Newest Project", "b.txt")
-        client = self._client()
-        body = client.get(f"/projects/{current.project_id}/workspace").get_data(as_text=True)
-        lists_html = self._lists_html(body)
-        self.assertNotIn("sibling-project-after-current", lists_html)
+# CLAUDE-P40-VW7B: SiblingSeparationTests (two tests) retired outright,
+# not just updated - the mechanism it tested (a whitespace-only class
+# marking whichever sibling Project row rendered immediately after the
+# current Project's own closed child group) no longer has anything to
+# apply to: the current Project's own branch never renders inside the
+# nav_recent_projects loop anymore (Section 3's own removal of the
+# portfolio from the opened-Project Lists panel), so there is no longer
+# a "sibling immediately after it" to distinguish. See main.css's own
+# comment where .tree-node.sibling-project-after-current used to be
+# defined for the CSS half of this same retirement.
 
 
 class CssTierTreatmentTests(unittest.TestCase):
@@ -264,15 +246,14 @@ class CssTierTreatmentTests(unittest.TestCase):
         body = self._rule_body(".tree-children {\n    padding-left")
         self.assertIn("border-left: 1px solid var(--border)", body)
 
-    def test_sibling_separation_is_whitespace_only_no_border(self):
-        body = self._rule_body(".tree-node.sibling-project-after-current {")
-        self.assertIn("margin-top", body)
-        self.assertNotIn("border", body)
+    # CLAUDE-P40-VW7B: test_sibling_separation_is_whitespace_only_no_border
+    # retired along with .tree-node.sibling-project-after-current itself -
+    # see SelectionTierSeparationTests' own retirement comment above.
 
     def test_no_gradients_glow_or_backdrop_filter_introduced(self):
         for selector in (
             ".launcher-heading {", ".launcher-link.current-project {",
-            ".tree-children {\n    padding-left", ".tree-node.sibling-project-after-current {",
+            ".tree-children {\n    padding-left",
         ):
             body = self._rule_body(selector)
             self.assertNotIn("gradient", body)

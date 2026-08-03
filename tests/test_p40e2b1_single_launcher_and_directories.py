@@ -197,24 +197,22 @@ class TopBarSpansShellTests(_BaseTestCase):
 
 class ProjectNamesOnlyUnderProjectsTests(_BaseTestCase):
     def test_other_project_names_do_not_leak_into_an_open_workspace(self):
-        # SUPERSEDED (CLAUDE-P40-E3A, Section 2): the product owner has
-        # since re-authorized a recursive Lists hierarchy that DOES list
-        # every authorized Project as a sibling leaf under "Projects",
-        # on every page including an open Workspace - only the ACTIVE
-        # project's own name is not duplicated a second time as a plain
-        # leaf (it becomes the expandable branch instead). The thing
-        # that must never happen is a Project name appearing a SECOND
-        # time in Display (Section 4's own no-duplication rule) - that
-        # part of this test's original intent is preserved below.
+        # SUPERSEDED twice now:
+        # - CLAUDE-P40-E3A, Section 2 first re-authorized a recursive
+        #   Lists hierarchy listing every authorized Project as a
+        #   sibling leaf under "Projects," on every page including an
+        #   open Workspace.
+        # - CLAUDE-P40-VW7B, Section 3 then removed that portfolio
+        #   branch from the OPENED-Project Lists panel entirely (this
+        #   test's own original title, "do not leak into an open
+        #   workspace," is now true in the strongest possible sense -
+        #   zero occurrences, not "exactly once, safely inside Lists").
+        #   The bare /projects directory (no Project open) is
+        #   unaffected and still lists every accessible Project, below.
         other = self._ingest(owner="p40e2b1_owner", project_name="A Distinct Other Project Name")
         client = self._client_as("p40e2b1_owner", 1)
         workspace_body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
-        # Exactly once (inside Lists), never a second time (Display).
-        self.assertEqual(workspace_body.count("A Distinct Other Project Name"), 1)
-        panel_start = workspace_body.index('id="launcher-panel"')
-        panel_end = workspace_body.index('id="lists-divider"')
-        name_pos = workspace_body.index("A Distinct Other Project Name")
-        self.assertTrue(panel_start < name_pos < panel_end, "other Project name must render inside Lists, not Display")
+        self.assertEqual(workspace_body.count("A Distinct Other Project Name"), 0)
 
         directory_body = client.get("/projects").get_data(as_text=True)
         self.assertIn("A Distinct Other Project Name", directory_body)

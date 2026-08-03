@@ -1,5 +1,8 @@
 {# ============================================================
    CLAUDE-P40-VW8-QA, Section 12: focused existing-Project chooser.
+   CLAUDE-P40-VW7B, Section 4: this is now also the Project Vestibule -
+   see routes/portal.py's choose_project docstring for why this route/
+   template was extended rather than a new one built.
 
    Extends gateway_base.html (the same minimal shell/card family
    gateway.html itself uses - brand lockup, "Project Gateway" section
@@ -10,19 +13,49 @@
    .projects-empty from projects.html's own existing CSS - a lighter
    subset of the SAME visual family, not a new one, minus counts/badges/
    Delete forms/sort that belong to that page's own "administrative
-   management" purpose (still reachable, unchanged, at /projects). #}
+   management" purpose (still reachable, unchanged, at /projects).
+   Deliberately selection-only (Section 4's own "do not turn it into a
+   second working dashboard") - a name, a last-activity date, and an
+   entry action; no Documents/Findings/conversation content of any
+   Project appears here. #}
 {% extends "gateway_base.html" %}
 
 {% block gateway_title %}Open a Project &mdash; Archiosk{% endblock %}
 {% block gateway_subtitle %}<p class="gateway-subtitle">Choose the Project you want to open</p>{% endblock %}
 {% block gateway_section_heading %}<h2 data-ui-ref="gateway.chooser">Open an existing project</h2>{% endblock %}
 {% block gateway_body %}
+{% if current_project %}
+{# ---------------- Current Project (CLAUDE-P40-VW7B, Section 4) --------------
+   Only rendered when arriving with a valid, authorized `?current=` -
+   the header's "Switch Project" link (templates/base.html) always
+   supplies this whenever a Foreground Project is genuinely open. A
+   plain re-entry link, not a second copy of Display/Toolbox/Chat - the
+   Vestibule stays selection-only even for the Project you're already
+   in. #}
+<section class="gateway-vestibule-current" data-ui-ref="gateway.chooser.current">
+    <p class="gateway-vestibule-current-label">Current Project</p>
+    <div class="project-card project-card-current">
+        <a class="project-card-link" data-ui-ref="gateway.chooser.current.leaf" href="{{ url_for('workspace.show_workspace', project_id=current_project.project_id) }}">
+            <div class="project-card-main">
+                <span class="project-card-name">{{ current_project.display_name }}</span>
+                <span class="project-card-current-badge">Currently entered</span>
+            </div>
+            <div class="project-card-meta">
+                <span>Updated {{ current_project.last_activity | humanize }}</span>
+            </div>
+        </a>
+    </div>
+</section>
+{% endif %}
+
 <form class="projects-controls" method="get" action="{{ url_for('portal.choose_project') }}" data-ui-ref="gateway.chooser.search">
+    {% if current_project %}<input type="hidden" name="current" value="{{ current_project.project_id }}">{% endif %}
     <input
         type="search" name="q" value="{{ query }}"
         placeholder="Search your projects" class="text-input projects-search" aria-label="Search your projects">
 </form>
 
+{% if current_project %}<p class="gateway-vestibule-available-label" data-ui-ref="gateway.chooser.available">Available Projects</p>{% endif %}
 {% if projects %}
 <ul class="project-card-list">
     {% for p in projects %}
@@ -42,13 +75,26 @@
 <div class="projects-empty">
     {% if query %}
     <p>No projects match &ldquo;{{ query }}&rdquo;.</p>
+    {% elif current_project %}
+    <p>No other projects yet.</p>
     {% else %}
     <p>No projects yet.</p>
     {% endif %}
 </div>
 {% endif %}
 
+{# CLAUDE-P40-VW7B, Section 4: "Archived or removed Projects... only if
+   this is already a real governed repository concept" - Removed
+   Projects (CLAUDE-P40-E2) already is one (a real, recoverable
+   business-lifecycle state, routes/portal.py's own removed_projects),
+   so it's linked here rather than reinvented - never duplicated inline
+   (Section 4's own "do not turn this into a second working
+   dashboard"), the same "link out to the real page" pattern
+   gateway.html's own footer already uses for Removed Projects
+   elsewhere in this family. #}
 <p class="gateway-chooser-back">
+    <a href="{{ url_for('portal.removed_projects') }}" data-ui-ref="gateway.chooser.removed-projects">Removed Projects</a>
+    &nbsp;&middot;&nbsp;
     <a href="{{ url_for('portal.gateway') }}" data-ui-ref="gateway.chooser.back">&larr; Back to Gateway</a>
 </p>
 {% endblock %}

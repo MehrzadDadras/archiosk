@@ -261,9 +261,18 @@ class ProjectsTreeTests(unittest.TestCase):
         # now (the retired .display-branch-nav's own "Overview" entry no
         # longer exists) - checked against the active Project's own
         # expanded Lists branch instead.
+        # SUPERSEDED AGAIN (CLAUDE-P40-VW7B, Section 3): the "Projects"
+        # root launcher (.launcher-heading) no longer renders at all
+        # while a Project is open (removed from the opened-Project
+        # Lists entirely) - there is nothing left to "stay highlighted."
+        # The Foreground Project's own branch is what now communicates
+        # "which Project is current" - its own current-project marker
+        # class + aria-current="true" (see .current-project's own CSS
+        # comment for the restrained edge-marker treatment it gets
+        # instead of a background fill).
         body = self.client.get("/projects/alpha/workspace").get_data(as_text=True)
-        self.assertIn('launcher-heading active', body)
-        self.assertIn('tree-leaf launcher-link active', body)
+        self.assertNotIn("launcher-heading", body)
+        self.assertIn('tree-leaf launcher-link current-project" data-ui-ref="lists.project.self" aria-current="true"', body)
         self.assertNotIn("launcher-project-item", body)
         # The old standalone "Current Project" orientation block is gone.
         self.assertNotIn('side-rail-context-label">Current Project<', body)
