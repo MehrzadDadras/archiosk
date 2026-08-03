@@ -27,6 +27,16 @@
  * real, client-side-only PDF annotation overlay (text/highlight/ink,
  * select+delete, undo/redo) - see each section's own comment below for
  * the reasoning, including the disclosed no-Save/Export scope boundary.
+ *
+ * CLAUDE-P40-LTH1 addition (Persistent Left Lists and Page-Thumbnails
+ * Split): the Page Thumbnails pane is now a permanent structural
+ * surface (templates/base.html's own comment on .lists-pane) rather
+ * than something this file showed/hid via a cross-script API - see
+ * "Remembered Document context" below for the one genuinely new piece
+ * of behavior, a client-side-only memory of the last-viewed PDF Source
+ * per Project+reviewer, used ONLY to populate thumbnails on a page
+ * with no Document of its own selected (an Investigation, Chat, or
+ * Overview) - never a new backend endpoint, never a database change.
  */
 (function () {
     'use strict';
@@ -107,6 +117,14 @@
     var currentSourceId = null;
     var currentCanvasContainer = null;
     var viewStateSaveTimer = null;
+    // CLAUDE-P40-LTH1: true only while the currently-built thumbnail
+    // list belongs to a REMEMBERED Document (Section 3) rather than the
+    // one actually mounted on THIS page (no #document-viewer-pdf-canvas
+    // exists at all in that case) - changes only how a thumbnail click
+    // behaves (see buildThumbnails' own click handler and
+    // navigateToDocumentPage below): a real page navigation instead of
+    // goToPage(), since there is no live canvas here to render into.
+    var thumbnailsOnlyMode = false;
 
     // -------- Per-tab viewer state persistence (CLAUDE-P40-DTAB1,
     // Section 6) - "where the existing viewer architecture supports it
@@ -149,6 +167,100 @@
         try { window.localStorage.setItem(viewStateKey(currentSourceId), JSON.stringify(state)); } catch (e) { /* ignore */ }
     }
 
+    // -------- Remembered Document context (CLAUDE-P40-LTH1, Section 3) --
+    // This is a full-page-reload app - "remember" means client-side
+    // persistence + revalidation on the NEXT load, not an in-memory
+    // carry-over from one page to the next. Same key shape as
+    // viewStateKey above (username + Project, matching document_tabs.js's
+    // own established cross-account-leakage guard) so switching accounts
+    // or Projects never leaks another workspace's last-viewed Document.
+    function lastPdfSourceKey() {
+        var usernameEl = document.querySelector('.workspace-user-name');
+        var username = usernameEl ? usernameEl.textContent.trim() : 'anonymous';
+        var stripEl = document.getElementById('document-tab-strip');
+        var projectId = stripEl ? stripEl.getAttribute('data-project-id') : '';
+        return 'beehive:panel:last-pdf-source:' + username + ':' + projectId;
+    }
+
+    function rememberLastPdfSource(sourceId) {
+        if (!sourceId) return;
+        try { window.localStorage.setItem(lastPdfSourceKey(), sourceId); } catch (e) { /* ignore */ }
+    }
+
+    // The SAME authorized, Project-scoped JSON island every other
+    // client-side feature in this shell already trusts (document_tabs.js,
+    // case_workspace.js's populateDivision) - never a second, separately-
+    // trusted source of truth about which Sources exist, are removed, or
+    // belong to this Project.
+    function activeSourcesFromJson() {
+        var el = document.getElementById('workspace-active-sources-data');
+        if (!el) return [];
+        try {
+            var parsed = JSON.parse(el.textContent);
+            return Array.isArray(parsed) ? parsed : [];
+        } catch (e) {
+            return [];
+        }
+    }
+
+    // Only ever called when THIS page has no Document of its own
+    // selected (see the auto-mount section at the bottom of this file) -
+    // never overrides an actually-active Document's own thumbnails, and
+    // never picks a Document on its own (Section 3's explicit "do not
+    // arbitrarily choose a Document merely because the Project contains
+    // one or more Documents") - only the literal last-viewed one,
+    // revalidated fresh against activeSourcesFromJson() every time. A
+    // stale, removed, or unauthorized remembered id clears itself and
+    // falls through to the pane's own default empty state - never a
+    // broken reference, never another Project's data (the key itself is
+    // Project-scoped, so a foreign Project's id could not even be
+    // looked up from here).
+    function mountRememberedThumbnailsIfAny() {
+        var remembered = null;
+        try { remembered = window.localStorage.getItem(lastPdfSourceKey()); } catch (e) { remembered = null; }
+        if (!remembered) return;
+        var sources = activeSourcesFromJson();
+        var match = null;
+        for (var i = 0; i < sources.length; i++) {
+            if (sources[i].id === remembered && sources[i].is_pdf) { match = sources[i]; break; }
+        }
+        if (!match) {
+            try { window.localStorage.removeItem(lastPdfSourceKey()); } catch (e) { /* ignore */ }
+            return;
+        }
+        thumbnailsOnlyMode = true;
+        loadPdfJs().then(function () {
+            return pdfjsLib.getDocument(match.file_url).promise;
+        }).then(function (doc) {
+            pdfDoc = doc;
+            currentSourceId = match.id;
+            var saved = loadViewState(match.id);
+            currentPage = (saved && typeof saved.page === 'number' && saved.page >= 1 && saved.page <= doc.numPages) ? saved.page : 1;
+            buildThumbnails();
+        }).catch(function () {
+            // Section 7: fails closed to the empty state, never a
+            // partially-built or broken thumbnail list.
+            thumbnailsOnlyMode = false;
+            pdfDoc = null;
+        });
+    }
+
+    // A thumbnail click in thumbnailsOnlyMode has no live canvas to
+    // render into (no Document is actually open on this page) - a real
+    // navigation to the Document route instead, landing directly on the
+    // clicked page by writing it into the SAME view-state store mount()
+    // already reads on load (loadViewState above), not a new mechanism.
+    function navigateToDocumentPage(n) {
+        if (!currentSourceId) return;
+        var stripEl = document.getElementById('document-tab-strip');
+        var baseUrl = stripEl ? stripEl.getAttribute('data-base-url') : null;
+        if (!baseUrl) return;
+        var existing = loadViewState(currentSourceId) || {};
+        existing.page = n;
+        try { window.localStorage.setItem(viewStateKey(currentSourceId), JSON.stringify(existing)); } catch (e) { /* ignore */ }
+        window.location.href = baseUrl + '?source=' + encodeURIComponent(currentSourceId);
+    }
+
     function saveViewStateSoon() {
         window.clearTimeout(viewStateSaveTimer);
         viewStateSaveTimer = window.setTimeout(saveViewStateNow, 400);
@@ -188,6 +300,7 @@
     // below, so the highlighted thumbnail and the rendered page can never
     // drift out of sync regardless of which control changed the page.
     var thumbnailsList = document.getElementById('thumbnails-list');
+    var thumbnailsEmptyState = document.getElementById('thumbnails-empty-state');
     var thumbnailRows = [];
     var thumbnailObserver = null;
     var THUMBNAIL_WIDTH = 140;
@@ -211,12 +324,17 @@
         if (thumbnailObserver) { thumbnailObserver.disconnect(); thumbnailObserver = null; }
         thumbnailRows = [];
         if (thumbnailsList) thumbnailsList.textContent = '';
-        if (window.ArchioskListsThumbnailsSplit) window.ArchioskListsThumbnailsSplit.hide();
+        // CLAUDE-P40-LTH1: the pane itself is a permanent structural
+        // surface now (see templates/base.html's own comment on
+        // .lists-pane) - "nothing to show" is communicated by this
+        // empty-state message reappearing, not by hiding the pane.
+        if (thumbnailsEmptyState) thumbnailsEmptyState.hidden = false;
     }
 
     function buildThumbnails() {
         clearThumbnails();
         if (!thumbnailsList || !pdfDoc) return;
+        if (thumbnailsEmptyState) thumbnailsEmptyState.hidden = true;
         var supportsObserver = typeof window.IntersectionObserver === 'function';
         if (supportsObserver) {
             thumbnailObserver = new window.IntersectionObserver(function (entries) {
@@ -238,13 +356,18 @@
             label.className = 'thumbnail-row-label';
             label.textContent = String(n);
             row.appendChild(label);
-            row.addEventListener('click', function () { goToPage(parseInt(this.dataset.page, 10)); });
+            // CLAUDE-P40-LTH1: a remembered Document (thumbnailsOnlyMode)
+            // has no live canvas on THIS page to render into - a real
+            // navigation to the Document route instead of goToPage().
+            row.addEventListener('click', function () {
+                var n = parseInt(this.dataset.page, 10);
+                if (thumbnailsOnlyMode) { navigateToDocumentPage(n); } else { goToPage(n); }
+            });
             thumbnailsList.appendChild(row);
             thumbnailRows.push(row);
             if (thumbnailObserver) thumbnailObserver.observe(row);
             else renderThumbnail(n);
         }
-        if (window.ArchioskListsThumbnailsSplit) window.ArchioskListsThumbnailsSplit.show();
     }
 
     function updateThumbnailCurrent() {
@@ -733,6 +856,14 @@
             return pdfjsLib.getDocument(url).promise;
         }).then(function (doc) {
             pdfDoc = doc;
+            thumbnailsOnlyMode = false;
+            // CLAUDE-P40-LTH1: a REAL Document is actually mounted here -
+            // this becomes the new "last governed Document context" for
+            // this Project, read back by mountRememberedThumbnailsIfAny()
+            // the next time this reviewer lands on a page with no
+            // Document of its own selected (Overview, an Investigation,
+            // Chat, ...).
+            rememberLastPdfSource(currentSourceId);
             var saved = loadViewState(currentSourceId);
             var hasSavedPage = saved && typeof saved.page === 'number' && saved.page >= 1 && saved.page <= doc.numPages;
             currentPage = hasSavedPage ? saved.page : 1;
@@ -784,6 +915,7 @@
         currentViewport = null;
         currentSourceId = null;
         currentCanvasContainer = null;
+        thumbnailsOnlyMode = false;
         hideControls();
         clearThumbnails();
         resetAnnotationState();
@@ -846,5 +978,22 @@
     var autoMountEl = document.getElementById('document-viewer-pdf-canvas');
     if (autoMountEl && autoMountEl.dataset.pdfUrl) {
         mount(autoMountEl.dataset.pdfUrl, autoMountEl, autoMountEl.dataset.pdfFilename || '', autoMountEl.dataset.sourceId || '');
+    } else {
+        // CLAUDE-P40-LTH1: no PDF is mounted on THIS page. If a Document
+        // of SOME kind is still the active Display selection (a drawing/
+        // DOCX/TXT Source - #document-tab-strip's own data-selected-
+        // source-id, the same signal document_tabs.js already reads),
+        // that Document genuinely has no pages of its own - the pane's
+        // default empty state is correct and stays as-is, and the
+        // remembered PDF (if any) is deliberately left untouched rather
+        // than shown, since it no longer describes what is actually on
+        // screen. Only with NO Document selected at all (Overview, an
+        // Investigation, Chat, or no Project open) does a remembered
+        // Document genuinely apply.
+        var stripElForThumbnails = document.getElementById('document-tab-strip');
+        var hasActiveDocumentSelection = !!(stripElForThumbnails && stripElForThumbnails.getAttribute('data-selected-source-id'));
+        if (!hasActiveDocumentSelection) {
+            mountRememberedThumbnailsIfAny();
+        }
     }
 })();

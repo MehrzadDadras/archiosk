@@ -1306,12 +1306,22 @@ def show_workspace(project_id):
         # client-side data source - see _json_script_safe's own
         # docstring. file_url is already resolved through the SAME
         # authorized source_file route every ?source= view uses.
+        # CLAUDE-P40-LTH1: "is_pdf" added (same file_path.lower().
+        # endswith('.pdf') test templates/case_workspace.html's own
+        # Display branch already uses to decide whether to render the
+        # PDF canvas) so static/js/pdf_viewer.js can validate a
+        # remembered "last-viewed Document" against this SAME
+        # authorized/Project-scoped list before attempting to load its
+        # thumbnails on a page with no active Document selection - never
+        # a second, separately-trusted source of truth about which
+        # Sources exist or are a PDF.
         active_sources_json=_json_script_safe([
             {
                 "id": s["id"],
                 "name": s["name"],
                 "kind": s["kind"],
                 "file_url": url_for("workspace.source_file", project_id=project_id, source_id=s["id"]),
+                "is_pdf": bool(s.get("file_path") and s["file_path"].lower().endswith(".pdf")),
             }
             for s in CaseWorkspaceStore.active_sources(workspace)
         ]),

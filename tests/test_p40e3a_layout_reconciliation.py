@@ -250,14 +250,23 @@ class ListsHierarchyContractTests(_BaseTestCase):
 
 class DisplayBlankByDefaultTests(_BaseTestCase):
     def test_blank_when_nothing_selected(self):
+        # CLAUDE-P40-LTH1: scoped to the Display region itself (this
+        # test's own actual subject - "Display blank by default") rather
+        # than the whole page body. Lists' own permanent Page Thumbnails
+        # pane (CLAUDE-P40-VW7A-QA2, corrected CLAUDE-P40-LTH1) now
+        # always renders a real, legitimate #thumbnails-empty-state
+        # element on every page, including this one - an unrelated,
+        # correct use of the substring "empty-state" that a whole-body
+        # search would incorrectly flag.
         client = self._client_as("e3a_owner", 1)
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
+        display = body[body.index('id="workspace-display-panel"'):body.index("</main>")]
         for forbidden in (
             "project-card", "UUID", "search box", "onboarding",
             "select a Project", "empty-state", "project-home",
         ):
-            self.assertNotIn(forbidden, body, forbidden)
-        self.assertNotIn('id="project-overview"', body)
+            self.assertNotIn(forbidden, display, forbidden)
+        self.assertNotIn('id="project-overview"', display)
 
     def test_overview_leaf_shows_consolidated_content(self):
         client = self._client_as("e3a_owner", 1)

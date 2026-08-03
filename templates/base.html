@@ -336,22 +336,37 @@
            own module docstring) does not support - see this stage's
            completion report for the reasoning in full. #}
         <nav class="launcher-panel" id="launcher-panel" aria-label="Primary">
-            {# CLAUDE-P40-VW7A-QA2: the left column now divides vertically -
+            {# CLAUDE-P40-VW7A-QA2: the left column divides vertically -
                Lists (this existing content, untouched, just re-homed one
                level deeper into .lists-pane so it can be an independent
-               flex/scroll region) above a new PDF Thumbnails pane below,
+               flex/scroll region) above a Page Thumbnails pane below,
                with a draggable divider between them. .launcher-panel
                itself keeps its existing id/aria-label/width/collapse
                behavior (html.launcher-hidden .launcher-panel, unchanged) -
                hiding "Lists" still hides this whole column, Thumbnails
-               included, exactly like before this stage. The divider and
-               Thumbnails pane are both [hidden] by default and only
-               revealed by static/js/pdf_viewer.js when the active
-               Document actually is a PDF (Section 3's own "only when the
-               active document supports thumbnails" - Lists silently
-               regains the full column height otherwise, since .lists-pane
-               is flex:1 by default and only yields space to Thumbnails
-               once .launcher-panel gets the has-thumbnails class). #}
+               included, exactly like before this stage.
+               CLAUDE-P40-LTH1 (correction): the divider and Thumbnails
+               pane used to be [hidden] by default, revealed only once
+               static/js/pdf_viewer.js decided the active Document was a
+               PDF - a product-owner browser review found this meant
+               Lists silently filled the WHOLE column (no visible split
+               at all) on every Overview/Investigation/Chat/non-PDF-
+               Document page, and even briefly on a real PDF Document's
+               own page during the async PDF.js load. Thumbnails is now
+               a PERMANENT structural pane - never [hidden] - the exact
+               same correction CLAUDE-P40-EYE1 already made for Eye
+               relative to Toolbox (see .workspace-right-column's own
+               comment: "unlike Lists/Thumbnails, Eye is never hidden/
+               shown independently... a permanent pane"); Thumbnails now
+               follows that same rule instead of being the one
+               exception to it. Content, not visibility, now carries the
+               "nothing to show" case - static/js/pdf_viewer.js toggles
+               #thumbnails-empty-state instead of the pane itself (see
+               that file's own comment), including a "remembered last
+               Document" fallback when the current page has no Document
+               of its own selected at all (Section 3's own "do not clear
+               thumbnails merely because the user moved into a related
+               Investigation or conversation"). #}
             <div class="lists-pane" id="lists-pane">
             <div class="launcher-panel-body">
                 {% set projects_open = project_id is defined or request.path == url_for('portal.projects_list') %}
@@ -732,7 +747,7 @@
             </div>
             </div>
             {# CLAUDE-P40-VW7A-QA2, Section 3: draggable horizontal divider
-               between Lists and PDF Thumbnails - same role="separator"/
+               between Lists and Page Thumbnails - same role="separator"/
                pointer-drag/keyboard-step idiom as _macros.html's own
                conversation-dock-resize-handle (static/js/case_workspace.js
                setUpChatResize), reused rather than a new drag mechanism
@@ -741,16 +756,26 @@
                min/max bounds give both "drag to near the top" and "drag
                to near the bottom" a real collapse-toward-header effect
                without a separate dedicated collapse control per pane.
-               [hidden] by default - shown only alongside the Thumbnails
-               pane itself, by static/js/pdf_viewer.js. #}
+               CLAUDE-P40-LTH1: no longer [hidden] by default - see
+               .lists-pane's own comment above for why; this divider is
+               now a PERMANENT fixture, matching .toolbox-eye-divider's
+               own "never [hidden]" treatment exactly. #}
             <div class="lists-thumbnails-divider" id="lists-thumbnails-divider" data-ui-ref="shell.lists-thumbnails-divider"
                  role="separator" aria-orientation="horizontal" aria-label="Resize Lists/Thumbnails split"
-                 tabindex="0" aria-valuemin="12" aria-valuemax="88" hidden></div>
-            <div class="thumbnails-pane" id="thumbnails-pane" data-ui-ref="lists.thumbnails-pane" aria-label="Page thumbnails" hidden>
+                 tabindex="0" aria-valuemin="12" aria-valuemax="88"></div>
+            {# CLAUDE-P40-LTH1: "Page Thumbnails" pane - see .lists-pane's
+               own comment above for the full correction story. Server-
+               rendered content is deliberately minimal (an empty
+               #thumbnails-list, a visible-by-default empty-state
+               message) - static/js/pdf_viewer.js fills it in, exactly
+               the same "no client-build, script owns the dynamic part"
+               split every other pane in this shell already follows. #}
+            <div class="thumbnails-pane" id="thumbnails-pane" data-ui-ref="lists.thumbnails-pane" aria-label="Page thumbnails">
                 <div class="thumbnails-pane-header">
                     <h2>Thumbnails</h2>
                     <button type="button" class="thumbnails-maximize-btn" id="thumbnails-maximize-btn" data-ui-ref="lists.thumbnails-pane.maximize" aria-pressed="false" aria-label="Maximize the Thumbnails pane">Maximize</button>
                 </div>
+                <p class="thumbnails-empty-state" id="thumbnails-empty-state" data-ui-ref="lists.thumbnails-pane.empty">Open a Document to view its pages.</p>
                 <div class="thumbnails-list" id="thumbnails-list" role="list" aria-label="Page thumbnails" data-ui-ref="lists.thumbnails-pane.list"></div>
             </div>
         </nav>
@@ -1138,7 +1163,7 @@
     </script>
     <script>
         // CLAUDE-P40-VW7A-QA2, Section 3: draggable divider between Lists
-        // and the PDF Thumbnails pane - same pointerdown/pointermove/
+        // and the Page Thumbnails pane - same pointerdown/pointermove/
         // pointerup + CSS-custom-property + persistence pattern as
         // static/js/case_workspace.js's own setUpChatResize, applied here
         // at percentage granularity (--lists-height on .launcher-panel)
@@ -1146,7 +1171,18 @@
         // Chat's fixed-pixel row. Session-scoped persistence only
         // (sessionStorage, not localStorage) - Section 3's own "proportion
         // may persist per session," a deliberately weaker guarantee than
-        // the Lists/Toolbox show-hide preferences above.
+        // the Lists/Toolbox show-hide preferences above; still survives
+        // an ordinary page refresh (sessionStorage's own scope is the
+        // browser tab, not a single load), which is all CLAUDE-P40-LTH1's
+        // own "restore safely after refresh" requires.
+        // CLAUDE-P40-LTH1: the old global show/hide API this script used
+        // to expose for pdf_viewer.js is gone - Thumbnails is a
+        // permanent pane now (see .lists-pane's own template comment),
+        // so there is nothing left for pdf_viewer.js to show or hide at
+        // the PANE level; it toggles its own #thumbnails-empty-state
+        // element directly
+        // instead. This script keeps owning only the divider's drag/
+        // resize mechanics, same as before.
         (function () {
             var panel = document.querySelector('.launcher-panel');
             var divider = document.getElementById('lists-thumbnails-divider');
@@ -1242,24 +1278,6 @@
                 });
             }
 
-            // Exposed for static/js/pdf_viewer.js - the ONLY thing that
-            // knows whether the active Document actually is a PDF with
-            // thumbnails available (Section 3's own "only when the active
-            // document supports thumbnails"). This script owns the
-            // divider's drag mechanics; pdf_viewer.js owns the decision of
-            // when the pane should exist at all.
-            window.ArchioskListsThumbnailsSplit = {
-                show: function () {
-                    thumbnailsPane.hidden = false;
-                    divider.hidden = false;
-                    panel.classList.add('has-thumbnails');
-                },
-                hide: function () {
-                    thumbnailsPane.hidden = true;
-                    divider.hidden = true;
-                    panel.classList.remove('has-thumbnails');
-                }
-            };
         })();
     </script>
     {% if project_id is defined and workspace is defined %}

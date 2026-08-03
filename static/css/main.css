@@ -270,16 +270,21 @@ a:focus-visible, button:focus-visible, input:focus-visible {
        has nothing left to stick against - simplified accordingly. */
     height: 100%;
 }
-/* CLAUDE-P40-VW7A-QA2, Section 3: Lists fills the whole column by
-   default (flex:1 1 auto, no thumbnails sibling taking space) - the
-   moment .launcher-panel gets .has-thumbnails (set by static/js/
-   pdf_viewer.js only while the active Document is a PDF), it instead
-   takes the persisted/default percentage and yields the rest to
-   Thumbnails. This is what makes "Lists silently regains full height
-   when Thumbnails is unavailable" true without any JS having to touch
-   .lists-pane directly when a non-PDF or no Document is active. */
+/* CLAUDE-P40-LTH1 (correction): used to be flex:1 1 auto by default,
+   only taking the persisted/default percentage once .launcher-panel
+   got a .has-thumbnails class that static/js/pdf_viewer.js added
+   solely while the active Document was a PDF - meaning Lists silently
+   filled the WHOLE column, with no visible split at all, on every
+   Overview/Investigation/Chat/non-PDF-Document page (a real
+   product-owner-reported screenshot defect: "Project/List records
+   continuing uninterrupted to the bottom edge"). Thumbnails is now a
+   PERMANENT structural pane (see the template's own comment on
+   .lists-pane), so this rule is unconditional - the exact same
+   "outer column owns sizing" split .workspace-pane-toolbox already
+   uses relative to Eye, applied here instead of the old class-gated
+   version. */
 .lists-pane {
-    flex: 1 1 auto;
+    flex: 0 0 var(--lists-height, 60%);
     min-height: 0;
     overflow-y: auto;
     display: flex;
@@ -293,9 +298,6 @@ a:focus-visible, button:focus-visible, input:focus-visible {
        possible for. Both values are tokens, so all four Appearance
        modes repaint this for free like everything else in this file. */
     scrollbar-color: var(--border-strong) var(--surface-primary);
-}
-.launcher-panel.has-thumbnails .lists-pane {
-    flex: 0 0 var(--lists-height, 60%);
 }
 .lists-thumbnails-divider {
     flex-shrink: 0;
@@ -332,7 +334,15 @@ a:focus-visible, button:focus-visible, input:focus-visible {
     height: 2px;
     top: 3.5px;
 }
-.lists-thumbnails-divider[hidden] { display: none; }
+/* CLAUDE-P40-LTH1, Section 6 ("visible focus"): a real focus-visible
+   outline on the divider ITSELF - the ::before accent line above only
+   changes color/thickness, which is not the same as a genuine focus
+   indicator for a keyboard user tabbing through the shell. Same
+   treatment .toolbox-eye-divider already has. */
+.lists-thumbnails-divider:focus-visible {
+    outline: 2px solid var(--machine-blue);
+    outline-offset: 1px;
+}
 .thumbnails-pane {
     display: flex;
     flex-direction: column;
@@ -341,7 +351,6 @@ a:focus-visible, button:focus-visible, input:focus-visible {
     overflow: hidden;
     border-top: 1px solid var(--border);
 }
-.thumbnails-pane[hidden] { display: none; }
 .thumbnails-pane-header {
     display: flex;
     align-items: center;
@@ -373,6 +382,22 @@ a:focus-visible, button:focus-visible, input:focus-visible {
     color: var(--text-primary);
 }
 .thumbnails-maximize-btn[aria-pressed="true"] { color: var(--machine-blue); }
+/* CLAUDE-P40-LTH1, Section 4: the pane's own "nothing to show" state -
+   quiet and compact (Section 4's own explicit "do not fill the pane
+   with unrelated Project records"), visible by default in the
+   server-rendered markup, hidden by static/js/pdf_viewer.js the
+   moment real thumbnails are built (see that file's own comment on
+   buildThumbnails/clearThumbnails). Deliberately its own small rule
+   rather than reusing .pane-note directly - that class' own negative
+   top margin is tuned for sitting directly under a Lists tree heading,
+   not this pane's padded flex layout. */
+.thumbnails-empty-state {
+    font-size: var(--text-sm);
+    color: var(--text-secondary);
+    padding: 0.6rem;
+    margin: 0;
+    text-align: center;
+}
 .thumbnails-list {
     flex: 1 1 auto;
     min-height: 0;
@@ -407,12 +432,23 @@ a:focus-visible, button:focus-visible, input:focus-visible {
 .thumbnail-row canvas { display: block; max-width: 100%; box-shadow: 0 0 0 1px var(--border); }
 .thumbnail-row[aria-current="true"] {
     border-color: var(--machine-blue);
+    border-width: 3px;
     background: var(--surface-selected);
 }
 .thumbnail-row-label {
     font-size: 0.7rem;
     color: var(--text-metadata);
     font-variant-numeric: tabular-nums;
+}
+/* CLAUDE-P40-LTH1, Section 6: "selected-page indication that does not
+   rely on color alone" - border-color/background above are still the
+   primary cue, but border-WIDTH (2px -> 3px) and the label's own
+   weight/underline are real geometry/shape cues, not color, so the
+   current page still reads correctly in grayscale or for a color-
+   vision-deficient reviewer. */
+.thumbnail-row[aria-current="true"] .thumbnail-row-label {
+    font-weight: 700;
+    text-decoration: underline;
 }
 /* CLAUDE-P40-E3A, Section 9 (Chat is a full-width row beneath Lists/
    Display/Toolbox, sibling to .app-shell-body, not confined to the

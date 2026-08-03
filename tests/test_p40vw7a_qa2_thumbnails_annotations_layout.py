@@ -153,16 +153,38 @@ class ListsThumbnailsSplitStructureTests(_BaseTestCase):
         self.assertIn('id="thumbnails-list"', body)
         self.assertIn('id="thumbnails-maximize-btn"', body)
 
-    def test_thumbnails_pane_and_divider_hidden_by_default(self):
+    def test_thumbnails_pane_and_divider_are_never_hidden(self):
+        # CLAUDE-P40-LTH1 (correction): used to be [hidden] by default,
+        # revealed only once pdf_viewer.js decided the active Document
+        # was a PDF - a product-owner browser review found this meant
+        # NO visible split existed at all on every Overview/Investigation/
+        # Chat/non-PDF-Document page (Lists silently filled the whole
+        # column). Thumbnails is now a permanent structural pane, the
+        # same "never [hidden]" treatment CLAUDE-P40-EYE1 already gave
+        # Eye relative to Toolbox - see that stage's own test for the
+        # analogous assertion.
         doc = self._ingest("VW7A2 Project 2", "spec.pdf")
         client = self._client()
         body = client.get(f"/projects/{doc.project_id}/workspace").get_data(as_text=True)
         idx = body.index('id="thumbnails-pane"')
         tag = body[body.rindex("<div", 0, idx):body.index(">", idx)]
-        self.assertIn("hidden", tag)
+        self.assertNotIn("hidden", tag)
         idx2 = body.index('id="lists-thumbnails-divider"')
         tag2 = body[body.rindex("<div", 0, idx2):body.index(">", idx2)]
-        self.assertIn("hidden", tag2)
+        self.assertNotIn("hidden", tag2)
+
+    def test_thumbnails_pane_and_divider_render_even_with_no_document_selected(self):
+        # CLAUDE-P40-LTH1, Section 1: "a real structural pane... not
+        # thumbnails appended to the bottom of the Lists scroll
+        # container" - present on Overview too, not just a Document page.
+        doc = self._ingest("VW7A2 Project 2b", "spec.pdf")
+        client = self._client()
+        body = client.get(f"/projects/{doc.project_id}/workspace?view=overview").get_data(as_text=True)
+        self.assertIn('id="thumbnails-pane"', body)
+        self.assertIn('id="lists-thumbnails-divider"', body)
+        idx = body.index('id="thumbnails-pane"')
+        tag = body[body.rindex("<div", 0, idx):body.index(">", idx)]
+        self.assertNotIn("hidden", tag)
 
     def test_divider_has_separator_role_and_orientation(self):
         doc = self._ingest("VW7A2 Project 3", "spec.pdf")
@@ -196,19 +218,38 @@ class ListsThumbnailsSplitCssTests(unittest.TestCase):
     def setUp(self):
         self.css = _MAIN_CSS_PATH.read_text(encoding="utf-8")
 
-    def test_lists_pane_fills_column_by_default(self):
+    def test_lists_pane_takes_the_persisted_split_percentage_unconditionally(self):
+        # CLAUDE-P40-LTH1 (correction): used to be flex:1 1 auto by
+        # default, only taking var(--lists-height) once a JS-added
+        # .has-thumbnails class appeared - now unconditional, the same
+        # "outer column owns sizing" split .workspace-pane-toolbox
+        # already uses relative to Eye (never class-gated).
         body = _rule_body(self.css, ".lists-pane")
-        self.assertIn("flex: 1 1 auto", body)
+        self.assertIn("flex: 0 0 var(--lists-height", body)
 
-    def test_has_thumbnails_class_yields_the_column_to_thumbnails(self):
-        body = _rule_body(self.css, ".launcher-panel.has-thumbnails .lists-pane")
-        self.assertIn("var(--lists-height", body)
+    def test_has_thumbnails_class_gating_is_gone(self):
+        self.assertNotIn(".launcher-panel.has-thumbnails", self.css)
 
-    def test_thumbnails_pane_hidden_rule_is_display_none(self):
-        self.assertIn("display: none", _rule_body(self.css, ".thumbnails-pane[hidden]"))
+    def test_thumbnails_pane_and_divider_hidden_rules_are_gone(self):
+        # CLAUDE-P40-LTH1: dead CSS once neither element is ever
+        # [hidden] again - a regression guard against reintroducing the
+        # old show/hide gating instead of removing it outright.
+        self.assertNotIn(".thumbnails-pane[hidden]", self.css)
+        self.assertNotIn(".lists-thumbnails-divider[hidden]", self.css)
 
-    def test_divider_hidden_rule_is_display_none(self):
-        self.assertIn("display: none", _rule_body(self.css, ".lists-thumbnails-divider[hidden]"))
+    def test_divider_has_a_real_focus_visible_outline(self):
+        # CLAUDE-P40-LTH1, Section 6: "visible focus" - the ::before
+        # accent line only changes color/thickness, which alone is not
+        # a real focus indicator for a keyboard user. Located via the
+        # literal "{" rather than _rule_body's own selector search -
+        # ".lists-thumbnails-divider:focus-visible" is also a substring
+        # of the EARLIER ".lists-thumbnails-divider:focus-visible::before"
+        # compound selector, which _rule_body's generic lookahead does
+        # not exclude (a ":" continuation is not blocked), so it would
+        # otherwise match that unrelated rule instead.
+        start = self.css.index(".lists-thumbnails-divider:focus-visible {")
+        body = self.css[start:self.css.index("}", start)]
+        self.assertIn("outline:", body)
 
     def test_divider_uses_border_token_at_rest_and_machine_blue_while_active(self):
         rest = _rule_body(self.css, ".lists-thumbnails-divider::before")
@@ -309,15 +350,33 @@ class ThumbnailRenderingJsTests(unittest.TestCase):
     def test_thumbnails_use_lazy_intersection_observer(self):
         self.assertIn("IntersectionObserver", self.js)
 
-    def test_thumbnail_click_navigates_via_real_go_to_page(self):
-        self.assertIn("goToPage(parseInt(this.dataset.page, 10))", self.js)
+    def test_thumbnail_click_navigates_via_real_go_to_page_when_a_document_is_mounted(self):
+        click_handler = self.js[self.js.index("row.addEventListener('click'"):self.js.index("row.addEventListener('click'") + 250]
+        self.assertIn("goToPage(n)", click_handler)
+
+    def test_thumbnail_click_navigates_to_the_document_route_in_remembered_only_mode(self):
+        # CLAUDE-P40-LTH1: a remembered Document has no live canvas on
+        # THIS page - clicking its thumbnail must be a real navigation
+        # (navigateToDocumentPage), not goToPage (which would silently
+        # no-op against a null canvas).
+        click_handler = self.js[self.js.index("row.addEventListener('click'"):self.js.index("row.addEventListener('click'") + 250]
+        self.assertIn("thumbnailsOnlyMode", click_handler)
+        self.assertIn("navigateToDocumentPage(n)", click_handler)
 
     def test_current_page_thumbnail_gets_aria_current(self):
         self.assertIn("row.setAttribute('aria-current'", self.js)
 
-    def test_build_thumbnails_shows_the_split_and_clear_hides_it(self):
-        self.assertIn("window.ArchioskListsThumbnailsSplit) window.ArchioskListsThumbnailsSplit.show()", self.js)
-        self.assertIn("window.ArchioskListsThumbnailsSplit) window.ArchioskListsThumbnailsSplit.hide()", self.js)
+    def test_build_thumbnails_hides_empty_state_and_clear_shows_it(self):
+        # CLAUDE-P40-LTH1 (correction): the old cross-script show()/
+        # hide() API on the whole PANE is gone (see templates/base.html's
+        # own comment) - this file now toggles its own #thumbnails-
+        # empty-state element directly, since the pane itself is always
+        # visible.
+        self.assertNotIn("ArchioskListsThumbnailsSplit", self.js)
+        build_fn = self.js[self.js.index("function buildThumbnails("):self.js.index("function updateThumbnailCurrent(")]
+        self.assertIn("thumbnailsEmptyState) thumbnailsEmptyState.hidden = true", build_fn)
+        clear_fn = self.js[self.js.index("function clearThumbnails("):self.js.index("function buildThumbnails(")]
+        self.assertIn("thumbnailsEmptyState) thumbnailsEmptyState.hidden = false", clear_fn)
 
     def test_update_nav_state_keeps_thumbnails_in_sync_on_every_page_change(self):
         # Section 3: "thumbnail list follows page changes... from
@@ -333,10 +392,15 @@ class ListsThumbnailsDividerJsTests(unittest.TestCase):
     def setUp(self):
         self.html = _BASE_HTML_PATH.read_text(encoding="utf-8")
 
-    def test_divider_exposes_show_hide_api_for_pdf_viewer(self):
-        self.assertIn("window.ArchioskListsThumbnailsSplit = {", self.html)
-        self.assertIn("show: function ()", self.html)
-        self.assertIn("hide: function ()", self.html)
+    def test_show_hide_api_is_gone_now_that_thumbnails_is_permanent(self):
+        # CLAUDE-P40-LTH1 (correction): the divider script used to
+        # expose window.ArchioskListsThumbnailsSplit.show()/.hide() for
+        # pdf_viewer.js to toggle the whole pane's visibility - gone now
+        # that the pane is a permanent structural surface (the same
+        # "never independently hidden" treatment Eye already has
+        # relative to Toolbox); this script now owns ONLY the divider's
+        # drag/resize mechanics.
+        self.assertNotIn("window.ArchioskListsThumbnailsSplit", self.html)
 
     def test_divider_persistence_is_session_scoped_not_permanent(self):
         # Section 3: "proportion may persist per session" - a

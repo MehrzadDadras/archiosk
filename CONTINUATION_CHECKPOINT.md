@@ -1,5 +1,191 @@
 # Continuation checkpoint
 
+## 2026-08-03 — CLAUDE-P40-LTH1: Persistent Left Lists and Page-Thumbnails Split
+
+**Started from a verified clean state:** `HEAD == origin/main` at `6273f4f`
+(the CLAUDE-P40-BRAND1 mark-geometry correction) confirmed before any
+edit; working tree clean apart from the pre-existing, unrelated
+`tests/fixtures/nreocrc/_lab_instance_scratch_002/` scratch fixture.
+
+**Cause of the missing split:** a real Lists/Thumbnails split already
+existed (CLAUDE-P40-VW7A-QA2) - `.lists-pane`/`.thumbnails-pane`/
+`#lists-thumbnails-divider` in `templates/base.html`. The Thumbnails
+pane and its divider were both `[hidden]` by default, revealed only
+once `static/js/pdf_viewer.js` decided the active Document was a PDF
+(a `window.ArchioskListsThumbnailsSplit.show()`/`.hide()` API,
+toggling a `.launcher-panel.has-thumbnails` class that `.lists-pane`'s
+own CSS depended on to yield any height at all). That meant NO visible
+split existed on Overview/Investigation/Chat/non-PDF-Document pages -
+`.lists-pane`'s default `flex: 1 1 auto` filled the WHOLE column,
+exactly matching the reported defect ("Project/List records continuing
+uninterrupted to the bottom edge"). CLAUDE-P40-EYE1 had already solved
+this identical problem for Eye relative to Toolbox by making Eye "a
+permanent structural surface... never `[hidden]`" - Thumbnails was the
+one remaining exception to that pattern; this stage brings it into
+line, not a new mechanism.
+
+**Structural implementation:** `.thumbnails-pane`/`#lists-thumbnails-
+divider` are never `[hidden]` again; `.lists-pane` unconditionally
+takes `flex: 0 0 var(--lists-height, 60%)` (the `.has-thumbnails`
+class-gate removed entirely). Content, not visibility, now carries the
+"nothing to show" case - a new `<p id="thumbnails-empty-state"
+data-ui-ref="lists.thumbnails-pane.empty">Open a Document to view its
+pages.</p>`, visible by default, toggled by `pdf_viewer.js`'s
+`buildThumbnails()`/`clearThumbnails()` directly (the old cross-script
+show/hide API is gone - nothing left to show/hide at the PANE level).
+
+**Divider:** drag/keyboard mechanics (pointer drag, Arrow/Home/End,
+double-click restore, Maximize toggle, `sessionStorage` persistence,
+12–88% clamp) were already correct and are unchanged. Added: a real
+`:focus-visible` outline (`outline: 2px solid var(--machine-blue)`) -
+the pre-existing `::before` accent-line color/thickness change alone
+was not a genuine focus indicator for a keyboard user, a real Section 6
+gap closed here. `sessionStorage` already survives an ordinary page
+refresh (its own scope is the browser tab, not a single load), so no
+persistence-mechanism change was needed for "restore safely after
+refresh."
+
+**Document-context rules (the one genuinely new mechanism):** this is
+a full-page-reload app, so "remembered Document context" means
+client-side persistence + revalidation on the next load, not an
+in-memory carry-over. `pdf_viewer.js` gained `mountRememberedThumbnailsIfAny()`,
+run only when the current page has no Document of its own selected at
+all (`#document-tab-strip`'s own `data-selected-source-id` is empty -
+Overview, an Investigation, Chat, or no Project open). It reads a
+`localStorage` key scoped by username+Project
+(`beehive:panel:last-pdf-source:<username>:<projectId>`, matching
+`document_tabs.js`'s own established key shape), revalidates the
+remembered id against `#workspace-active-sources-data` (the SAME
+authorized, Project-scoped JSON island every other client-side feature
+in this shell already trusts - extended with one new boolean field,
+`is_pdf`, computed server-side in `routes/workspace.py` via the exact
+same `file_path.lower().endswith(".pdf")` test `case_workspace.html`'s
+own Display branch already uses), and only then loads that PDF via
+PDF.js purely to build its thumbnail list (no live canvas, no full
+`mount()`). A stale/removed/unauthorized remembered id clears itself
+(`localStorage.removeItem`) and falls through to the empty state -
+never a broken reference. `mount()` itself now calls
+`rememberLastPdfSource(currentSourceId)` on every REAL successful PDF
+load, so the pointer always reflects the last Document actually
+viewed - never an arbitrary "first Document in the Project" guess
+(Section 3's explicit prohibition; grounded via source inspection, not
+assumed). A thumbnail click in this remembered-only mode
+(`thumbnailsOnlyMode`) is a real navigation to the Document route
+(landing on the clicked page, via the SAME `localStorage` view-state
+store `mount()` already reads on load) rather than `goToPage()`, since
+there is no live canvas on the current page to render into. Switching
+to a DIFFERENT, non-PDF Document deliberately does NOT surface the
+remembered PDF's thumbnails - a newly-selected Document (of any kind)
+is itself now "the" active Document context, and a non-PDF one
+honestly has no pages, so the pane's default empty state is correct
+there, not a stale unrelated PDF's thumbnails.
+
+**Empty-state behavior:** quiet, compact, token-styled text - no
+Project/List records rendered inside the pane at any point. Never
+auto-selects a first Document (verified both by source inspection - no
+`sources[0]`-style shortcut anywhere in the remembered-context code -
+and a dedicated test class).
+
+**Responsive:** no new narrow-viewport mechanism - `.launcher-panel`
+already becomes a real overlay drawer at `max-width: 640px`
+(CLAUDE-P40-E2B1); Thumbnails, now a permanent CHILD of that panel,
+reflows inside the drawer automatically, the same way Toolbox+Eye
+already reflow together as one column-becomes-drawer unit at that
+width (CLAUDE-P40-EYE1). The vertical Lists/Thumbnails split is
+height-based, orthogonal to the drawer's own width change, so nothing
+further was needed - grounded in the existing rule, not invented.
+
+**Accessibility:** divider keeps its existing `aria-label`/`role=
+"separator"`/keyboard stepping, now with a real focus outline (above).
+Closed a genuine pre-existing gap in Section 6's own "selected-page
+indication that does not rely on color alone" requirement: the current
+thumbnail used to be border-COLOR + background-color only; now also
+`border-width: 3px` (a real 2px→3px geometry change) plus
+`font-weight: 700`/`text-decoration: underline` on its page-number
+label - both non-color cues, alongside the existing color ones, not
+replacing them.
+
+**Isolation:** `lastPdfSourceKey()` is scoped by BOTH username and
+Project id (matches `document_tabs.js`'s own established cross-account
+guard) - a foreign Project's remembered pointer can never even be
+looked up from a different Project's page load, and two reviewers on
+the same shared browser never see each other's remembered Document.
+`activeSourcesFromJson()` reads the SAME server-computed, already-
+authorization-filtered JSON island every other feature in this shell
+trusts (confirmed via the pre-existing `DivisionAuthorizationTests` in
+`tests/test_p40e2b_flexible_workspace_frame.py`, re-run unmodified) -
+a removed/unauthorized Source never appears in it at all, so a
+remembered id pointing at one always fails the revalidation and falls
+to the empty state. No route touched by this stage accepts anything
+but GET, and no test observed any Project/Document data change merely
+from viewing a page.
+
+**UI-reference changes:** `lists.thumbnails-pane.empty` (new). Every
+other id in this region (`shell.lists-thumbnails-divider`,
+`lists.thumbnails-pane`, `lists.thumbnails-pane.maximize`,
+`lists.thumbnails-pane.list`) retained unchanged - only their recorded
+*behavior* in `UI_REFERENCE_MAP.md` was corrected to describe the
+permanent-pane treatment instead of the old show/hide gating. Nothing
+renumbered or reparented elsewhere in the map.
+
+**Tests:** new `tests/test_p40lth1_persistent_lists_thumbnails.py` (38
+tests) covering structural panes, the empty state, the remembered-
+context mechanism and its isolation properties, the `is_pdf` field,
+divider accessibility, the non-color current-page cue, narrow-viewport
+reasoning, Appearance coverage, and a regression spot-check against
+EYE1/BRAND1/Chat/Document navigation. Updated
+`tests/test_p40vw7a_qa2_thumbnails_annotations_layout.py` in place for
+every assertion that targeted the now-corrected hidden-by-default
+behavior (renamed/rewritten, not deleted) - along the way, caught and
+fixed two real "unanchored search matches the wrong, earlier
+occurrence" bugs in this stage's OWN new test/comment text (the same
+bug class this repo has hit before): a `_rule_body` lookup for
+`.lists-thumbnails-divider:focus-visible` initially matched the
+earlier `:focus-visible::before` compound selector instead, and a
+`assertNotIn("window.ArchioskListsThumbnailsSplit", ...)` guard
+initially tripped on this stage's OWN explanatory comment mentioning
+that literal string in prose - both fixed before being reported as
+passing. Also re-ran the complete pre-existing DTAB1/EYE1/document-
+controls/workspace-frame test files (175 tests) unmodified as an
+explicit regression gate - all passed.
+
+One genuinely pre-existing test broke for an honest reason, not a bug
+in this stage's own code: `tests/test_p40e3a_layout_reconciliation.py`
+`DisplayBlankByDefaultTests::test_blank_when_nothing_selected` searched
+the WHOLE page body for the substring "empty-state" to guard against
+Display's own blank state accidentally rendering something wrong - it
+never anticipated a legitimate, unrelated `#thumbnails-empty-state`
+element existing elsewhere on the SAME page (Lists' own permanent
+Thumbnails pane, always rendered now). Fixed by scoping that test's
+check to the Display region itself (`#workspace-display-panel`
+through `</main>`) - its own actual subject - rather than the whole
+body; not weakened, still forbids everything it originally forbade,
+just where it always meant to look.
+
+Full suite: 2455 passed, 0 failed.
+
+**Real-browser verification:** not available in this environment -
+every claim above is grounded in template/CSS/JS source inspection and
+rendered-HTML structural tests, not a claimed rendered check.
+Product-owner verification checklist: (1) open a Project workspace
+with no Document selected - Thumbnails shows the empty state, visibly
+divided from Lists; (2) open a PDF Document - thumbnails appear,
+current page indicated with both color AND shape/weight cues; (3)
+select several thumbnails, confirm Display/current-page sync both
+ways; (4) drag AND keyboard-resize the divider, confirm a visible
+focus outline while doing so; (5) refresh and confirm the split
+proportion restores; (6) navigate from an open PDF Document into a
+related Investigation or Chat within the same Project - thumbnails
+should remain, not clear; (7) open a DIFFERENT, non-PDF Document -
+thumbnails should show the empty state, not the previous PDF's pages;
+(8) switch Projects and confirm zero thumbnail/remembered-context
+leakage either direction; (9) log in as a second account in the same
+browser and confirm zero leakage; (10) Light/Black/Midnight Blue/Deep
+Forest Appearance modes; (11) a narrow viewport - confirm the Lists
+drawer still reaches both regions without covering Display/Chat/
+Toolbox/Eye; (12) UI Reference Mode on/off, confirm the new
+`lists.thumbnails-pane.empty` badge doesn't overlap the message text.
+
 ## 2026-08-03 — CLAUDE-P40-BRAND1 (correction): Replace the parabola mark with a deterministic straight-line "bottleneck" mark
 
 Product-owner correction to the mark's own geometry - everything else
