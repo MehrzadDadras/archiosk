@@ -784,6 +784,31 @@
         </div>
         {% endif %}
 
+        {# CLAUDE-P40-VW7A-QA2 (product-owner browser correction): a
+           real-browser check found a light, unpainted rectangle beneath
+           Lists in dark Appearance modes - root cause was .chat-region
+           being a SIBLING of .app-shell-body (spanning the full app
+           width as its own row below it), while Lists (.launcher-panel)
+           only ever spanned .app-shell-body's OWN row height. Once
+           .chat-region's own left edge was offset (this stage's earlier
+           "Chat must not extend underneath the full-height Lists/
+           Thumbnail column" fix), the strip directly beneath Lists, for
+           Chat's own row height, was no longer painted by ANYTHING -
+           falling through to the page's own background.
+           .workspace-main-column now wraps BOTH the Display/Toolbox row
+           AND Chat as ONE flex column, itself a sibling of Lists inside
+           .app-shell-body - so Lists' own height:100% now spans the
+           SAME full vertical extent this column occupies (header to
+           workspace bottom), covering the Chat row too, with its own
+           already-themed background (Appearance `All`'s
+           --surface-primary, unchanged). This also makes the earlier
+           .chat-region margin-left hack unnecessary - removed below,
+           since Chat's box now starts at the correct horizontal
+           position automatically, as a genuine descendant of this
+           column rather than a full-width row needing an artificial
+           offset. #}
+        <div class="workspace-main-column">
+        <div class="workspace-content-row">
         <div class="app-main">
             <main>
                 {% with flashed = get_flashed_messages(with_categories=true) %}
@@ -820,17 +845,23 @@
 
         {% if project_id is defined and workspace is defined %}
         {# ---------------- The one Chat region (CLAUDE-P40-E3A, Section 9) ----------
-           Full application width, beneath Lists/Display/Toolbox, the bottom
-           row of the shell - present only within an open, ACTIVE Workspace
-           (same "workspace is defined" reasoning as Toolbox above - a
-           sticky, height-bearing bar has no honest reason to occupy space
-           on the dashboard/Security/uploads pages OR a removed-Project
-           tombstone, none of which have real conversation context). Content
-           comes from {% block chat %}, filled in only by case_workspace.html. #}
+           Full width of THIS column (Display+Toolbox - CLAUDE-P40-VW7A-QA2
+           moved this inside .workspace-main-column, a sibling of Lists
+           rather than of .app-shell-body itself, so Lists' own full-height
+           background covers this row too - see that stage's own comment
+           on .workspace-main-column above), beneath Display/Toolbox, the
+           bottom row of this column - present only within an open, ACTIVE
+           Workspace (same "workspace is defined" reasoning as Toolbox
+           above - a sticky, height-bearing bar has no honest reason to
+           occupy space on the dashboard/Security/uploads pages OR a
+           removed-Project tombstone, none of which have real conversation
+           context). Content comes from {% block chat %}, filled in only
+           by case_workspace.html. #}
         <div class="chat-region" id="chat-region" data-ui-ref="chat.dock">
             {% block chat %}{% endblock %}
         </div>
         {% endif %}
+        </div>
     </div>
 
     <script>
@@ -903,7 +934,28 @@
                 if (!el) return;
                 var stored = null;
                 try { stored = window.localStorage.getItem('beehive:appearance:' + key); } catch (e) { /* ignore */ }
-                window.__applyStoredAppearanceMode(el, window.__resolveStoredAppearanceMode(stored));
+                var mode = window.__resolveStoredAppearanceMode(stored);
+                window.__applyStoredAppearanceMode(el, mode);
+                // CLAUDE-P40-VW7A-QA2 (product-owner browser correction):
+                // shell CHROME that sits between surfaces (panel dividers/
+                // splitters, none of which are a descendant of any of the
+                // 5 surfaces above) never inherited any of their
+                // --surface-primary redefinitions, so it stayed on the
+                // unthemed :root light default even in a dark mode - "the
+                // white splitter tracks... incorrect in the dark theme."
+                // Piggybacked on Menu specifically (not a new, separate
+                // preference) - the one surface that is always visible and
+                // always has a defined mode, applied to .app-shell itself
+                // (an ancestor of every surface AND every divider) before
+                // first paint, same "avoid a flash of the wrong layout"
+                // discipline as the 5 real surfaces above. A themed
+                // surface nested inside .app-shell still wins locally via
+                // ordinary CSS custom-property cascade (closer ancestor),
+                // so per-surface Appearance independence is unaffected.
+                if (key === 'menu') {
+                    var shellEl = document.querySelector('.app-shell');
+                    if (shellEl) window.__applyStoredAppearanceMode(shellEl, mode);
+                }
             });
         })();
     </script>
@@ -1426,6 +1478,16 @@
                 var el = targets[key];
                 currentMode[key] = mode;
                 if (el) applyMode(el, mode);
+                // CLAUDE-P40-VW7A-QA2: keep .app-shell's own piggybacked
+                // class (base.html's early pre-paint script, above) in
+                // sync on every LIVE Menu change too, not just first
+                // paint - so shell chrome (panel dividers/splitters)
+                // updates immediately when Menu's own mode changes,
+                // whether from its own radio or from the "All" row.
+                if (key === 'menu') {
+                    var shellEl = document.querySelector('.app-shell');
+                    if (shellEl) applyMode(shellEl, mode);
+                }
                 var radios = document.querySelectorAll('[data-appearance-target="' + key + '"]');
                 radios.forEach(function (radio) {
                     radio.checked = (radio.getAttribute('data-appearance-mode') === mode);

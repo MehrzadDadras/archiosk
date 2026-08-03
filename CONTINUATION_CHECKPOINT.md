@@ -1,5 +1,91 @@
 # Continuation checkpoint
 
+## 2026-08-03 — CLAUDE-P40-VW7A-QA2 (browser corrections): Left-Column Full-Height Background, Appearance-Controlled Splitters, Chat Composer Margin
+
+Two real-browser checks of the VW7A-QA2 entry below reported three
+further defects, all fixed within the same stage (no new scope).
+
+**1. Light rectangle beneath Lists in dark Appearance modes.** Root
+cause: the VW7A-QA2 entry's own `.chat-region` fix (`margin-left: 240px`
+so Chat wouldn't render underneath Lists) offset Chat's box without
+changing what painted the space *behind* it — leaving the strip
+directly beneath Lists, for the height of Chat's own row, painted by
+nothing at all (Chat no longer reached it; Lists never had reached it,
+since `.chat-region` was always a full-width sibling of
+`.app-shell-body`, a separate row below Lists' own row). **Fix, this
+time structural rather than an offset:** `templates/base.html` now
+nests `.chat-region` inside a new `.workspace-main-column` (containing
+`.workspace-content-row` — Display+Toolbox — stacked above Chat),
+itself a sibling of Lists inside `.app-shell-body`. Lists' own
+`height: 100%` now genuinely spans the same vertical extent Chat's row
+occupies, so its already-themed background (`Appearance All`'s
+`--surface-primary`, unchanged) covers it with no gap. The margin-left
+hack and its `html.launcher-hidden`/narrow-viewport overrides are
+removed — no longer needed, since Chat's box now starts at the correct
+horizontal position automatically as a real descendant. Also added:
+`scrollbar-color` (Firefox-supported token pair) on `.lists-pane`/
+`.thumbnails-list` — stated honestly as the ceiling of what plain CSS
+can do here, since WebKit/Chromium has no equivalent property.
+
+**2. "White splitter tracks... in the dark theme."** Root cause: panel
+dividers/splitters (`.panel-divider` — Lists/Display and Display/
+Toolbox — and `.lists-thumbnails-divider`) are shell CHROME, siblings
+of the 5 Appearance-themed surfaces rather than descendants of any one
+of them, so they never inherited a surface's own `--surface-primary`
+redefinition and stayed on the unthemed `:root` light default
+regardless of the active theme. **Fix:** `.app-shell` now gets a 6th,
+piggybacked appearance class (both in `base.html`'s early pre-paint
+script and its main Appearance-menu wiring script) sourced from the
+Menu surface's own resolved mode — not a new, separately-configurable
+preference, reusing existing state — giving every un-surfaced element
+a theme-correct fallback via ordinary CSS custom-property inheritance.
+A themed surface nested inside `.app-shell` still wins locally (closer
+ancestor in the cascade), so per-surface Appearance independence
+(mixed-mode) is unaffected. Every divider element then got a real,
+non-transparent `background: var(--surface-primary)` — `.panel-divider`
+now resolves through the new shell-level fallback; `.lists-thumbnails-
+divider` and `.conversation-dock-resize-handle` are genuine descendants
+of Lists/Chat respectively, so they already pick up THEIR OWN surface's
+theme directly, no shell fallback needed. Hover/focus-visible/`.dragging`
+accent states (`var(--machine-blue)`) are unchanged — only the resting
+background moved off `transparent`. No opacity-based parent tricks used
+anywhere in this fix.
+
+**3. Chat composer touching the viewport edge.** `.conversation-input-
+form` had `padding-left`/`padding-right` (via the shared
+`--conversation-inset` token) but no bottom padding at all, since it is
+the last child of `.conversation-dock-panel`/`.chat-region`
+(`position: sticky; bottom: 0`). Added `padding-bottom: var(
+--conversation-inset)` — the SAME token as left/right, for a balanced,
+consistent inset — real flex-item padding, not page overflow or an
+external strip, so it survives every `--chat-height` value and the
+narrow-viewport layout unchanged.
+
+**Tests:** `tests/test_p40vw7a_qa2_thumbnails_annotations_layout.py`
+grew from 41 to 54 tests (new `ChatRegionNestingTests`,
+`LeftColumnFullHeightBackgroundTests`, `AppearanceControlledSplitterTests`,
+`ChatComposerBottomMarginTests`; the old margin-left-based
+`ChatRegionLeftEdgeTests` checks were replaced, not left stale, once
+the margin-left approach itself was superseded). Full suite green.
+
+**Real-browser verification:** still not available in this
+environment — every claim above is grounded in template/CSS/JS source
+and rendered-HTML structural inspection. Product-owner checklist for
+this correction specifically: (1) no light/unpainted rectangle beneath
+Lists in Black, Midnight Blue, Deep Forest, or Light — full column
+height, edge to edge, down to the workspace bottom; (2) every divider
+(Lists/Display, Display/Toolbox, Lists/Thumbnails, Chat resize handle)
+merges with its surrounding theme at rest, with a clearly visible
+accent on hover/focus/drag, in all four themes; (3) the Chat composer
+has a clearly visible, balanced bottom margin at every `--chat-height`
+(compact/expanded/dragged) and at a narrow viewport.
+
+**Note on theme names:** the browser-correction messages referred to
+"Black, Deep Blue, Deep Purple, and Soft Light" — this repo's actual
+approved theme set (CLAUDE-P40-VW8-QA) is Black, Midnight Blue, Deep
+Forest, and Light. Flagged directly rather than silently substituted;
+all reasoning above uses the real names.
+
 ## 2026-08-03 — CLAUDE-P40-VW7A-QA2: Complete the PDF Viewer Controls, Thumbnails and Collapsible Panel Geometry
 
 **Reported defect (real-browser check of CLAUDE-P40-VW7A-QA, below):**

@@ -184,8 +184,50 @@ a:focus-visible, button:focus-visible, input:focus-visible {
        exactly; every panel below scrolls internally instead. */
     height: 100vh;
     overflow: hidden;
+    /* CLAUDE-P40-VW7A-QA2 (product-owner browser correction): a base
+       canvas for anything that is shell CHROME rather than one of the 5
+       independently-themed surfaces (Menu/Lists/Display/Toolbox/Chat) -
+       principally the panel dividers/splitters, which sit as siblings
+       of those surfaces, not descendants, and so never inherited any
+       surface's own --surface-primary redefinition ("white splitter
+       tracks... in the dark theme" - the actual root cause). .app-shell
+       itself gets a 6th appearance class below (base.html's own inline
+       scripts - piggybacked on the Menu surface's resolved mode, the
+       one always-visible, always-defined surface, not a new separate
+       preference), so --surface-primary here already resolves to the
+       correct theme by the time any var() below reads it - this
+       declaration is what actually paints it. A themed surface nested
+       inside .app-shell still wins locally via normal CSS custom-
+       property cascade (closer ancestor), so per-surface Appearance
+       independence (Section 5's own "mixed" state) is unaffected. */
+    background: var(--surface-primary);
 }
 .app-shell-body {
+    display: flex;
+    align-items: stretch;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+}
+/* CLAUDE-P40-VW7A-QA2 (product-owner browser correction): Lists
+   (.launcher-panel) and .workspace-main-column are now the only two
+   real children sharing .app-shell-body's row (Display/Toolbox/Chat
+   are all nested inside the column below) - this is what makes Lists'
+   own height:100% actually cover the SAME vertical extent as Chat's
+   row, closing the "light rectangle beneath Lists in dark modes" gap
+   that existed while Chat was a full-width sibling of .app-shell-body
+   itself. .workspace-content-row is exactly what .app-shell-body used
+   to be before Lists moved out of its row (Display + Toolbox side by
+   side); .workspace-main-column stacks that row above Chat. */
+.workspace-main-column {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+}
+.workspace-content-row {
     display: flex;
     align-items: stretch;
     flex: 1;
@@ -239,6 +281,15 @@ a:focus-visible, button:focus-visible, input:focus-visible {
     overflow-y: auto;
     display: flex;
     flex-direction: column;
+    /* CLAUDE-P40-VW7A-QA2 (product-owner browser correction): "Appearance
+       All must govern... the scrollbar track" - a Firefox-supported
+       token pair (thumb, track); WebKit/Chromium has no CSS scrollbar-
+       color equivalent that reaches this level of control, so this is
+       the honest ceiling of what a plain-CSS, no-client-build app can
+       do here, not a partial implementation of something more is
+       possible for. Both values are tokens, so all four Appearance
+       modes repaint this for free like everything else in this file. */
+    scrollbar-color: var(--border-strong) var(--surface-primary);
 }
 .launcher-panel.has-thumbnails .lists-pane {
     flex: 0 0 var(--lists-height, 60%);
@@ -250,7 +301,15 @@ a:focus-visible, button:focus-visible, input:focus-visible {
     border: none;
     padding: 0;
     cursor: row-resize;
-    background: transparent;
+    /* CLAUDE-P40-VW7A-QA2 (product-owner browser correction): was
+       transparent - unlike .panel-divider (a sibling of the 5 themed
+       surfaces), this element IS a descendant of .launcher-panel, so it
+       already inherits Lists' own --surface-primary redefinition
+       directly; a real background here (rather than falling through to
+       whatever's behind .launcher-panel) is what actually paints it,
+       merging with Lists' own theme specifically, never the shell
+       fallback. */
+    background: var(--surface-primary);
     position: relative;
     z-index: 1;
 }
@@ -319,6 +378,7 @@ a:focus-visible, button:focus-visible, input:focus-visible {
     flex-direction: column;
     gap: 0.5rem;
     padding: 0.6rem;
+    scrollbar-color: var(--border-strong) var(--surface-primary);
 }
 /* CLAUDE-P40-VW7A-QA2, Section 3: one real page per row - a <button>
    (not a decorative <div>) so click-to-navigate is a real activate-able
@@ -375,7 +435,14 @@ a:focus-visible, button:focus-visible, input:focus-visible {
     border: none;
     padding: 0;
     cursor: pointer;
-    background: transparent;
+    /* CLAUDE-P40-VW7A-QA2 (product-owner browser correction): was
+       transparent - a sibling of the 5 themed surfaces (never a
+       descendant of any of them), so "transparent" fell through to
+       .app-shell's OWN background, which now correctly resolves via
+       the shell-level appearance class (see .app-shell's own comment)
+       instead of the unthemed :root light default this used to expose
+       as a literal white channel in every dark mode. */
+    background: var(--surface-primary);
     position: relative;
     /* CLAUDE-P40-E3A-QA, Section 7: explicit low z-index (rather than
        relying on implicit stacking order) so this line can never paint
@@ -2511,15 +2578,28 @@ html.toolbox-hidden .workspace-pane-toolbox {
     margin-top: 0;
     padding-top: 0;
 }
-/* CLAUDE-P40-E3A, Section 9: the shell-level full-width Chat row itself
-   - "spans the entire application width beneath Lists, Display and
-   Toolbox... remains at the bottom... can be raised or lowered" (the
-   existing resize handle/presets, unchanged internally). Sticky at the
-   viewport bottom so it "remains reachable" while scrolling a long
-   Document/Investigation in Display, exactly the guarantee the old
-   .conversation-dock-panel sticky rule provided before Chat became
-   full-width. 220px matches case_workspace.js's own COMPACT_HEIGHT
-   default (see .launcher-panel's own note above on why). */
+/* CLAUDE-P40-E3A, Section 9: the shell-level Chat row itself - "remains
+   at the bottom... can be raised or lowered" (the existing resize
+   handle/presets, unchanged internally). Sticky at the viewport bottom
+   so it "remains reachable" while scrolling a long Document/
+   Investigation in Display, exactly the guarantee the old
+   .conversation-dock-panel sticky rule provided before Chat became a
+   full-width row. 220px matches case_workspace.js's own
+   COMPACT_HEIGHT default (see .launcher-panel's own note above on why).
+   CLAUDE-P40-VW7A-QA2 (product-owner browser correction): this no
+   longer spans the entire application width - a real-browser check
+   found Chat extending underneath the full-height Lists column, and an
+   earlier fix attempt (margin-left, since reverted) offsetting Chat's
+   own box instead of moving it left a strip beneath Lists unpainted by
+   anything, reading as a light rectangle in dark Appearance modes. The
+   actual, structural fix: .chat-region is now nested inside
+   templates/base.html's own .workspace-main-column, alongside
+   .workspace-content-row (Display+Toolbox), both children of a column
+   that is itself Lists' own sibling inside .app-shell-body - so Chat's
+   box starts at the correct horizontal position automatically (never
+   needing a margin-left kept in sync with Lists' own width/collapsed
+   state), while Lists' own height:100% now genuinely covers the same
+   vertical extent Chat's row occupies. */
 .chat-region {
     flex-shrink: 0;
     position: sticky;
@@ -2527,29 +2607,6 @@ html.toolbox-hidden .workspace-pane-toolbox {
     z-index: 10;
     height: var(--chat-height, 220px);
     background: var(--surface-primary);
-    /* CLAUDE-P40-VW7A-QA2, Section 3: a real-browser check reported Chat
-       extending underneath the full-height Lists/Thumbnails column - true
-       of the CLAUDE-P40-E3A, Section 9 "full application width" rule
-       above, which this deliberately narrows (a disclosed reversal of
-       that specific detail, not the whole full-width-row design: Chat
-       still spans the Display+Toolbox width, just not underneath Lists).
-       margin-left, not a DOM/flex restructuring, since .chat-region is a
-       sibling of .app-shell-body (not nested inside it) specifically so
-       it can stay one continuous sticky-bottom bar rather than being
-       split per Display/Toolbox column - matches .launcher-panel's own
-       fixed 240px (Thumbnails splits it vertically only, never changes
-       its width), and collapses to 0 the moment html.launcher-hidden
-       hides Lists entirely (the SAME class the Lists divider already
-       toggles - no new state to keep in sync). */
-    margin-left: 240px;
-}
-html.launcher-hidden .chat-region { margin-left: 0; }
-@media (max-width: 640px) {
-    /* Narrow viewport: Lists becomes a position:fixed overlay drawer
-       (see .launcher-panel's own @media (max-width: 640px) rule above),
-       no longer part of the row Chat needs to avoid - the 240px offset
-       would just be dead space here. */
-    .chat-region { margin-left: 0; }
 }
 /* CLAUDE-P40-E3A-QA, Section 10 fix: no border-top here - product-owner
    browser observation named "visually heavy separators", and this rule
@@ -2702,6 +2759,13 @@ html.launcher-hidden .chat-region { margin-left: 0; }
     margin: -0.6rem 0 0.2rem;
     cursor: ns-resize;
     position: relative;
+    /* CLAUDE-P40-VW7A-QA2 (product-owner browser correction): was
+       unset/transparent - a descendant of .chat-region, so a real
+       background here (rather than relying on whatever shows through)
+       merges this splitter's own channel with Chat's own theme, the
+       same "Appearance All must govern... the surrounding channel"
+       requirement every other divider now satisfies. */
+    background: var(--surface-primary);
 }
 .conversation-dock-resize-handle::before {
     content: "";
@@ -2849,6 +2913,19 @@ html.launcher-hidden .chat-region { margin-left: 0; }
     flex-shrink: 0;
     padding-left: var(--conversation-inset);
     padding-right: var(--conversation-inset);
+    /* CLAUDE-P40-VW7A-QA2 (product-owner browser correction): a real-
+       browser check found the composer row (input + Send) touching the
+       application frame/viewport edge - this element had left/right
+       inset (above) but no bottom spacing at all, since it is the last
+       child of .conversation-dock-panel, itself the last child of
+       .chat-region (position:sticky; bottom:0). The SAME
+       --conversation-inset token used for left/right, reused rather
+       than a new one-off value, so left/right/bottom read as one
+       consistent, balanced inset - not page overflow or an external
+       blank strip, just intrinsic padding on a flex-shrink:0 item, so
+       it survives every --chat-height value (resize/collapse/expand)
+       and the narrow-viewport layout unchanged. */
+    padding-bottom: var(--conversation-inset);
 }
 /* CLAUDE-P40-E1: the "Re: <anchored object>" badge a "Discuss this X"
    click (macros.aperture) sets on the ONE dock composer - flex-basis

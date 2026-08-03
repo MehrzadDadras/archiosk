@@ -19,11 +19,27 @@ Lists column, and no annotation tools existed. This stage:
   IntersectionObserver) and keeps the current-page thumbnail in sync
   with every goToPage() call regardless of which control triggered it.
 - .chat-region (CLAUDE-P40-E3A, Section 9's own "full application
-  width" row) now stops at the Lists column's own width via
-  margin-left, a disclosed, deliberate narrowing of that earlier rule,
-  not a silent reversal - it still spans Display+Toolbox, and collapses
-  to 0 the moment html.launcher-hidden or a narrow viewport removes
-  Lists from the layout.
+  width" row) is now nested inside a new .workspace-main-column,
+  itself Lists' own sibling inside .app-shell-body, instead of being a
+  full-width sibling of .app-shell-body itself - a disclosed,
+  deliberate narrowing of that earlier rule, not a silent reversal
+  (Chat still spans Display+Toolbox). An initial margin-left-based
+  attempt at this same fix left an unpainted strip beneath Lists in
+  dark Appearance modes (a real-browser follow-up correction) - the
+  DOM restructuring above is what actually closed that gap, since
+  Lists' own height:100% now covers the same vertical extent Chat's
+  row does.
+- Shell chrome that sits between the 5 themed surfaces (panel
+  dividers/splitters) is not a descendant of any of them and so never
+  inherited a surface's own --surface-primary redefinition - "white
+  splitter tracks... in the dark theme," a second real-browser
+  correction. .app-shell now gets its own appearance class, piggybacked
+  on the Menu surface's resolved mode (not a new, separate preference),
+  and every divider element has an explicit background instead of
+  transparent. .conversation-input-form (the Chat composer) also gained
+  padding-bottom (reusing the same --conversation-inset token as its
+  own left/right padding) after a real-browser check found it touching
+  the viewport edge.
 - Real, interactive client-side PDF annotation tools (text/highlight/
   ink, select+delete, undo/redo) were added, with an explicit,
   documented scope boundary: no PDF-writing library is vendored in this
@@ -210,22 +226,70 @@ class ChatRegionLeftEdgeTests(unittest.TestCase):
     def setUp(self):
         self.css = _MAIN_CSS_PATH.read_text(encoding="utf-8")
 
-    def test_chat_region_offsets_past_the_lists_column(self):
+    # SUPERSEDED (CLAUDE-P40-VW7A-QA2, product-owner browser correction):
+    # the original fix for "Chat extends underneath Lists" was
+    # .chat-region { margin-left: 240px }, offsetting Chat's own box
+    # while leaving it a full-width sibling of .app-shell-body. A
+    # follow-up real-browser check found this left a strip beneath
+    # Lists, for Chat's own row height, painted by NOTHING - reading as
+    # a light rectangle in dark Appearance modes, since neither Lists
+    # nor the (now-offset) Chat covered it. The real fix nests
+    # .chat-region inside a new .workspace-main-column, itself Lists'
+    # sibling, so Lists' own height:100% now covers the same vertical
+    # extent Chat's row does - no margin-left needed at all, checked
+    # below via the tests that replaced this class's old ones.
+    def test_chat_region_no_longer_uses_the_superseded_margin_left_hack(self):
         body = _rule_body(self.css, ".chat-region")
-        self.assertIn("margin-left: 240px", body)
+        self.assertNotIn("margin-left", body)
+        self.assertNotIn("html.launcher-hidden .chat-region", self.css)
 
-    def test_chat_region_offset_collapses_when_lists_hidden(self):
-        body = _rule_body(self.css, "html.launcher-hidden .chat-region")
-        self.assertIn("margin-left: 0", body)
+    def test_workspace_main_column_and_content_row_rules_exist(self):
+        main_column = _rule_body(self.css, ".workspace-main-column")
+        self.assertIn("flex-direction: column", main_column)
+        content_row = _rule_body(self.css, ".workspace-content-row")
+        self.assertIn("display: flex", content_row)
 
-    def test_chat_region_offset_collapses_on_narrow_viewport(self):
-        media_idx = self.css.index("@media (max-width: 640px)")
-        # There are two such blocks (.launcher-panel's own, above, and
-        # this stage's new .chat-region one) - just confirm a
-        # .chat-region rule with margin-left: 0 exists somewhere after
-        # the first narrow-viewport breakpoint.
-        tail = self.css[media_idx:]
-        self.assertIn(".chat-region { margin-left: 0; }", tail)
+
+class ChatRegionNestingTests(unittest.TestCase):
+    """The structural fix itself, verified against the template SOURCE
+    (precise div-nesting is awkward to prove from rendered HTML with a
+    plain regex, and this repo's own convention is source/structure
+    inspection over a live DOM anyway - see this file's own module
+    docstring). Confirms the literal nesting templates/base.html now
+    has: .workspace-main-column > [.workspace-content-row > (.app-main,
+    toolbox), .chat-region] - Chat is a DESCENDANT of the column that is
+    itself Lists' own sibling, not a sibling of .app-shell-body reaching
+    edge-to-edge on its own row (the prior, superseded margin-left
+    approach)."""
+
+    def setUp(self):
+        self.html = _BASE_HTML_PATH.read_text(encoding="utf-8")
+
+    def test_workspace_main_column_opens_before_content_row_and_chat(self):
+        main_column_idx = self.html.index('<div class="workspace-main-column">')
+        content_row_idx = self.html.index('<div class="workspace-content-row">')
+        app_main_idx = self.html.index('<div class="app-main">')
+        chat_idx = self.html.index('<div class="chat-region"')
+        self.assertLess(main_column_idx, content_row_idx)
+        self.assertLess(content_row_idx, app_main_idx)
+        self.assertLess(app_main_idx, chat_idx)
+
+    def test_chat_region_is_the_last_real_child_before_the_column_closes(self):
+        # Between chat-region's own closing {% endif %} and the next
+        # <script> tag, there must be exactly two more </div> closes
+        # (workspace-main-column, then app-shell-body) - not one (would
+        # mean chat-region escaped back out to being app-shell-body's
+        # own sibling again) and not three+ (an extra, unmatched wrapper).
+        chat_block_end = self.html.index("{% endif %}", self.html.index('<div class="chat-region"'))
+        next_script_idx = self.html.index("<script>", chat_block_end)
+        tail = self.html[chat_block_end:next_script_idx]
+        self.assertEqual(tail.count("</div>"), 2)
+
+    def test_no_stray_margin_left_hack_remains_in_the_template(self):
+        # A guard against reintroducing the superseded fix instead of
+        # relying on the real structural one.
+        chat_region_tag_idx = self.html.index('<div class="chat-region"')
+        self.assertNotIn("margin-left", self.html[chat_region_tag_idx:chat_region_tag_idx + 200])
 
 
 class ThumbnailRenderingJsTests(unittest.TestCase):
@@ -404,6 +468,110 @@ class PdfJsLegacyBuildTests(unittest.TestCase):
         js = _PDF_VIEWER_JS_PATH.read_text(encoding="utf-8")
         self.assertIn("function showLoadError(", js)
         self.assertIn("could not be opened in the viewer", js)
+
+
+class LeftColumnFullHeightBackgroundTests(unittest.TestCase):
+    """Product-owner browser correction: a light rectangle was visible
+    beneath Lists in dark Appearance modes. Root cause was .chat-region
+    being a full-width sibling of .app-shell-body (its own row, below
+    Lists' own row) - fixed by nesting Chat inside .workspace-main-column,
+    itself Lists' sibling, so Lists' height:100% now covers Chat's row
+    too. See ChatRegionNestingTests above for the DOM-structure half of
+    this; this class covers the CSS/scrollbar half."""
+
+    def setUp(self):
+        self.css = _MAIN_CSS_PATH.read_text(encoding="utf-8")
+
+    def test_app_shell_has_a_real_background(self):
+        body = _rule_body(self.css, ".app-shell")
+        self.assertIn("var(--surface-primary)", body)
+
+    def test_lists_and_thumbnails_scroll_regions_have_themed_scrollbar_color(self):
+        for selector in (".lists-pane", ".thumbnails-list"):
+            body = _rule_body(self.css, selector)
+            self.assertIn("scrollbar-color:", body)
+            self.assertIn("var(--border-strong)", body)
+            self.assertIn("var(--surface-primary)", body)
+
+
+class AppearanceControlledSplitterTests(unittest.TestCase):
+    """Product-owner browser correction: "white splitter tracks... in
+    the dark theme." Dividers/gutters are shell chrome (siblings of the
+    5 themed surfaces, not descendants of any one), so they never picked
+    up a surface's own --surface-primary redefinition. Fixed via a 6th,
+    piggybacked appearance class on .app-shell itself (sourced from the
+    Menu surface's own resolved mode, not a new separate preference)
+    plus a real (non-transparent) background on every divider element."""
+
+    def setUp(self):
+        self.css = _MAIN_CSS_PATH.read_text(encoding="utf-8")
+        self.html = _BASE_HTML_PATH.read_text(encoding="utf-8")
+
+    def test_panel_divider_background_is_a_token_not_transparent(self):
+        body = _rule_body(self.css, ".panel-divider")
+        self.assertIn("var(--surface-primary)", body)
+        declaration = re.search(r"background:\s*[^;]+;", body).group(0)
+        self.assertNotIn("transparent", declaration)
+
+    def test_lists_thumbnails_divider_background_is_a_token_not_transparent(self):
+        body = _rule_body(self.css, ".lists-thumbnails-divider")
+        self.assertIn("var(--surface-primary)", body)
+        declaration = re.search(r"background:\s*[^;]+;", body).group(0)
+        self.assertNotIn("transparent", declaration)
+
+    def test_conversation_dock_resize_handle_has_a_real_background(self):
+        body = _rule_body(self.css, ".conversation-dock-resize-handle")
+        self.assertIn("var(--surface-primary)", body)
+
+    def test_no_opacity_based_parent_trick_used_for_any_divider(self):
+        for selector in (".panel-divider", ".lists-thumbnails-divider", ".conversation-dock-resize-handle", ".app-shell"):
+            body = _rule_body(self.css, selector)
+            self.assertNotIn("opacity", body, selector)
+
+    def test_app_shell_gets_a_piggybacked_appearance_class_early(self):
+        # The pre-paint script (avoids a flash of the wrong shell color).
+        early_script = self.html[self.html.index("window.__resolveStoredAppearanceMode"):self.html.index("</script>", self.html.index("window.__resolveStoredAppearanceMode"))]
+        self.assertIn("document.querySelector('.app-shell')", early_script)
+        self.assertIn("if (key === 'menu')", early_script)
+
+    def test_app_shell_class_stays_in_sync_on_live_menu_changes(self):
+        # The main Appearance-menu wiring script, not just first paint -
+        # switching Menu's own mode (individually or via "All") later.
+        self.assertIn("function setSurfaceMode(key, mode, persist)", self.html)
+        set_surface_mode_fn = self.html[self.html.index("function setSurfaceMode(key, mode, persist)"):]
+        set_surface_mode_fn = set_surface_mode_fn[:set_surface_mode_fn.index("var radios = document.querySelectorAll")]
+        self.assertIn("if (key === 'menu')", set_surface_mode_fn)
+        self.assertIn("document.querySelector('.app-shell')", set_surface_mode_fn)
+
+    def test_dividers_still_have_a_distinct_accent_only_on_hover_focus_or_drag(self):
+        # The base background fix must not have swallowed the existing
+        # discoverability accent - :hover/:focus-visible/.dragging still
+        # need to paint var(--machine-blue) on the accent line itself.
+        for selector in (".panel-divider:hover::before", ".panel-divider:focus-visible::before"):
+            body = _rule_body(self.css, selector)
+            self.assertIn("var(--machine-blue)", body)
+
+
+class ChatComposerBottomMarginTests(unittest.TestCase):
+    """Product-owner browser correction: the composer row (input + Send)
+    touched the viewport/application-frame edge - no bottom spacing
+    existed at all, only left/right."""
+
+    def setUp(self):
+        self.css = _MAIN_CSS_PATH.read_text(encoding="utf-8")
+
+    def test_composer_form_has_bottom_padding_matching_its_own_horizontal_inset(self):
+        body = _rule_body(self.css, ".conversation-input-form")
+        self.assertIn("padding-bottom: var(--conversation-inset)", body)
+        self.assertIn("padding-left: var(--conversation-inset)", body)
+        self.assertIn("padding-right: var(--conversation-inset)", body)
+
+    def test_bottom_padding_is_not_scoped_to_a_single_viewport_or_chat_height(self):
+        # Real, unconditional padding on the flex item itself - not
+        # something a narrow-viewport override or a specific
+        # --chat-height value could silently undo.
+        rule_start = self.css.index(".conversation-input-form {")
+        self.assertNotIn("@media", self.css[max(0, rule_start - 400):rule_start])
 
 
 if __name__ == "__main__":
