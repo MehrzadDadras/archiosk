@@ -118,6 +118,7 @@ otherwise.
 | `lists.project.overview` | tree-leaf `<a>`, `data-view="overview"` | "Overview" | **Division 0 is the active target (default):** real navigation to `?view=overview`. **A non-zero Display is the active target (CLAUDE-P40-VW7B):** client-side-intercepted, no navigation — projects into that division via `window.ArchioskDisplay.populateDivision(target, 'overview', '', 'Overview')`, an `<iframe src="...?view=overview&panel=1">`. Either way the content is `display.overview`, below | Same as workspace access | active |
 | `lists.project.documents` | tree-toggle `<button>` | "Documents (`<count>`)" | Expands/collapses; count = `active_sources\|length`; "No Documents yet." empty state (CLAUDE-P40-VW7B) | Same as workspace access | active |
 | `lists.project.documents.leaf` | tree-leaf `<a>`, `data-source-id` (pattern) | Document name | **Division 0 active target:** real navigation to `?source=<id>`. **Non-zero Display active target:** client-side `populateDivision(target, 'source', sourceId, name)` — unchanged since VW7A, a real file embedded via `<iframe src=file_url>`/`<img>`, never the `&panel=1` mechanism. Syncs Toolbox to `toolbox.document` | Same as workspace access | active |
+| `lists.project.documents.empty` | `<span>` | "No Documents yet." | Empty-state message (CLAUDE-P40-VW7B — untagged until CLAUDE-P40-VW8-QA's Complete Root and Subfolder UI Reference Tagging stage) | Same as workspace access | active |
 | `lists.project.investigations` | tree-toggle `<button>` | "Investigations (`<count>`)" | Expands/collapses; count = `visible_cases\|length`; "No Investigations yet." empty state (CLAUDE-P40-VW7B) | Same as workspace access, further filtered to `visible_cases` (Case-privacy-aware) | active |
 | `lists.project.investigations.leaf` | tree-leaf `<a>`, `data-case-id`/`data-case-title` (pattern) | Investigation title | **Division 0 active target:** real navigation to `?case=<id>`. **Non-zero Display active target (CLAUDE-P40-VW7B, new):** client-side, no navigation — `populateDivision(target, 'case', caseId, title)`, an `<iframe src="...?case=<id>&panel=1">` rendering the exact same content Division 0 would have shown, wrapped in `panel_shell.html` instead of the full shell. Syncs Toolbox to `toolbox.investigation-findings` only when it's Division 0 (a non-zero division's iframe has no Toolbox of its own — see `templates/panel_shell.html`) | Same as `visible_cases` | active |
 | `lists.project.investigations.new` | tree-leaf `<a>` (action row, `data-new-case`), always first inside the expanded family, present even at zero Investigations | "+ New Investigation" | **Division 0 active target:** real navigation to the focused `?view=new-case` create-form page. **Non-zero Display active target (CLAUDE-P40-VW8-QA, new):** projects the same focused form via `populateDivision(target, 'new-case', '', 'New Investigation')` — `?view=new-case&panel=1`, same iframe/`panel_shell.html` mechanism as an Investigation/Overview leaf. Not a radio — a command, always available, never creates a record merely by expanding the family | Same as workspace access | active |
@@ -129,17 +130,21 @@ otherwise.
 | `lists.project.investigations.new.validation-error` | `<div>` (flash message) | (validation error text) | Rendered only when `workspace.create_case` rejects an empty title — the SAME focused form re-appears (not the Overview page) so the reviewer's next attempt starts from where they were | Same as above | active |
 | `lists.project.rfis` | tree-toggle `<button>` | "RFIs (`<count>`)" | Expands/collapses; count = `rfi_drafts_view\|length`; "No RFIs yet." empty state (CLAUDE-P40-VW7B) | Same as workspace access | active |
 | `lists.project.rfis.leaf` | tree-leaf `<a>`, `data-case-id`/`data-case-title` (pattern) | RFI question text (truncated) | Targets the **owning Investigation**, exactly like `lists.project.investigations.leaf` above — an RFI draft has no standalone page (deliberate, documented since CLAUDE-P40-E3A). CLAUDE-P40-VW7B: now also carries `active`-state (when its owning Investigation is `active_case`) and the same `data-case-id`/`data-case-title` attributes, so it participates in active-Display projection identically to an Investigations leaf | Same as workspace access | active |
-| `lists.project.chats` | tree-leaf `<a>` | "Chats" | Navigates to the bare workspace URL (no `?source=`/`?case=`) — renders Project Conversation (`chat.thread`, project scope) | Same as workspace access | active |
+| `lists.project.rfis.empty` | `<span>` | "No RFIs yet." | Empty-state message (CLAUDE-P40-VW7B — untagged until CLAUDE-P40-VW8-QA's Complete Root and Subfolder UI Reference Tagging stage) | Same as workspace access | active |
+| `lists.project.chats` | tree-leaf `<a>` | "Chats N" (CLAUDE-P40-VW7A-QA added the `<span class="launcher-count">` — the Project's own conversation message count, `project_conversation_count` in `routes/workspace.py`) | Navigates to the bare workspace URL (no `?source=`/`?case=`) — renders Project Conversation (`chat.thread`, project scope) | Same as workspace access | active |
 | `lists.project.tasks` | tree-toggle `<button>` | "Tasks (`<total>`)" | Expands/collapses; contains `lists.project.tasks.open`/`.completed` sub-groups | Same as workspace access | active |
 | `lists.project.tasks.open` | sub-heading `<p>` | "Open (`<count>`)" | Not a toggle — plain grouping label | — | active |
 | `lists.project.tasks.completed` | sub-heading `<p>` | "Completed (`<count>`)" | Not a toggle — plain grouping label | — | active |
 | `lists.project.tasks.leaf` | tree-leaf `<a>`/`<span>` (pattern) | Task title | Navigates to `#conv-source-<message_id or guidance>` on the correct workspace URL (`_conversation_source_url`) — scrolls/flashes the source passage. Renders as an unavailable `<span>` (no link) when the source anchor no longer resolves | Same as workspace access | active |
 | `lists.project.tasks.complete` | `<button>` in a `<form>` (pattern) | "Mark complete" | POST to `complete_task_route`, classic redirect | Same as workspace access | active |
 | `lists.project.tasks.reopen` | `<button>` in a `<form>` (pattern) | "Reopen" | POST to `reopen_task_route`, classic redirect | Same as workspace access | active |
+| `lists.project.tasks.open.empty` | `<span>` | "No open Tasks." | Empty-state message beneath `lists.project.tasks.open`'s own sub-heading (untagged until CLAUDE-P40-VW8-QA's Complete Root and Subfolder UI Reference Tagging stage) | Same as workspace access | active |
+| `lists.project.tasks.completed.empty` | `<span>` | "No completed Tasks." | Empty-state message beneath `lists.project.tasks.completed`'s own sub-heading | Same as workspace access | active |
 | `lists.project.tags` | tree-toggle `<button>` | "Tags (`<total occurrences>`)" | Expands/collapses; contains one `lists.project.tags.group` per tag in use | Same as workspace access | active |
 | `lists.project.tags.group` | sub-heading `<p>` (pattern) | tag name + color swatch + occurrence count | Not a toggle — plain grouping label; always expanded (`data-tree-open`) | — | active |
 | `lists.project.tags.leaf` | tree-leaf `<a>`/`<span>` (pattern) | quoted passage (truncated) | Navigates to `#conv-source-<...>` — same scroll/flash mechanism as Tasks. Renders unavailable when the anchor no longer resolves | Same as workspace access | active |
 | `lists.project.tags.remove` | `<button>` in a `<form>` (pattern) | "Remove" | `fetch()` POST to `remove_tag_occurrence_route`, live-patches counts/DOM without reload | Same as workspace access | active |
+| `lists.project.tags.empty` | `<span>` | "No Tags yet." | Empty-state message (untagged until CLAUDE-P40-VW8-QA's Complete Root and Subfolder UI Reference Tagging stage) | Same as workspace access | active |
 | `lists.project.tools` | tree-toggle `<button>` | "Project Tools" | Expands/collapses; contains every control below. **CLAUDE-P40-VW7B:** no longer contains Reset Project Data — see `lists.system-data-management` above and "Retired references" below | Same as workspace access (individual controls below carry their own, narrower gates) | active |
 | `lists.project.tools.remove-project` | `<button>` in a `<form>` | "Remove Project" | POST to `remove_project_route` (Approval-Gate `confirm=yes\|no` vocabulary) | **Owner or admin** — `is_project_owner or is_admin` | active |
 | `lists.project.tools.add-document` | `<form>` inside a subdisclosure | "+ Add Documents" | POST (multipart) to `add_document_source` | Same as workspace access | active |
@@ -205,13 +210,58 @@ assertion before ever shipping, not discovered live.
 | `chat.dock` | `#chat-region` (`templates/base.html`) | The whole Chat surface (dock header, resize handle, thread, composer) — full application width, bottom row of the shell | Only rendered when `project_id`/`workspace` are defined | active |
 | `chat.thread` | `.conversation-thread` (pattern — case-scoped and project-scoped share this same reference) | The scrollable message list; case-scoped when an Investigation is open, project-scoped otherwise (mutually exclusive) | Same as workspace access | active |
 | `chat.composer` | `<form>` | Posts a new message — to `post_message` (case-scoped) or `quick_start` (project-scoped) | Same as workspace access | active |
-| `chat.selection-toolbar` | `#conv-selection-toolbar` (CLAUDE-P40-VW7) | The OneNote-style contextual toolbar on a meaningful text selection — Add Tag/Make Task/Highlight/Important/Question/Copy | Same as workspace access (server-side re-checked on every mutation) | active |
+| `chat.selection-toolbar` | `#conv-selection-toolbar` (CLAUDE-P40-VW7; moved/reparented CLAUDE-P40-VW8-QA — see note below) | The contextual toolbar on a meaningful text selection — Add Tag/Make Task/Highlight/Important/Question/Copy. Positioned beside the live selection, vertical (one action per row), hidden whenever nothing meaningful is selected | Same as workspace access (server-side re-checked on every mutation) | active |
 | `chat.selection-toolbar.tag`, `chat.selection-toolbar.task`, `chat.selection-toolbar.highlight`, `chat.selection-toolbar.important`, `chat.selection-toolbar.question`, `chat.selection-toolbar.copy` | `<button>` (6 distinct, named actions) | toolbar action buttons | See `chat.selection-toolbar`'s own row — one reference per action | Same as workspace access | active |
+| `chat.selection-toolbar.remove-tag` | `<button>` (CLAUDE-P40-VW8-QA, reversibility correction) | "Remove Tag (N)" — hidden unless 1+ non-built-in Tag occurrences overlap the selection; opens `chat.remove-tag-dialog` | Same as workspace access | active |
+| `chat.selection-toolbar.remove-highlight`, `chat.selection-toolbar.unmark-important`, `chat.selection-toolbar.unmark-question` | `<button>` (JS-toggled state — CLAUDE-P40-VW8-QA) | The SAME physical `.highlight`/`.important`/`.question` buttons, with `data-conv-action`/`data-ui-ref`/label swapped to this "remove" identity only while that built-in Tag is currently applied to the selection (`applyAppliedTagState` in `static/js/case_workspace.js`) — never both identities on the same element at once, and never inherited from the add/apply reference (a distinct id per state, per the correction's own explicit requirement) | Same as workspace access | active (rendered conditionally, by JS, not statically in template source — not picked up by the static template scan, hence not in this file's own automated consistency test) |
+| `chat.selection-toolbar.undo` | `#conv-selection-undo` (CLAUDE-P40-VW8-QA) | Short-lived (8s) Undo for the most recent Tag/Highlight/Important/Question removal — re-POSTs the same add-Tag route with the removed occurrence's own tag id + anchor fields | Same as workspace access | active |
+| `chat.remove-tag-dialog` | `#conv-remove-tag-dialog` (CLAUDE-P40-VW8-QA) | "Remove Tag" dialog — lists every currently-applied custom Tag on the selection (name + swatch, never color alone), each with its own Remove | Same as workspace access | active |
+| `chat.selection-toolbar.applied-tags-list` | `#conv-remove-tag-list` (CLAUDE-P40-VW8-QA) | The list itself, inside `chat.remove-tag-dialog` | Same as workspace access | active |
 | `chat.tag-dialog` | `#conv-tag-dialog` (CLAUDE-P40-VW7) | "Add Tag" dialog — existing/custom tag + color picker | Same as workspace access | active |
 | `chat.task-dialog` | `#conv-task-dialog` (CLAUDE-P40-VW7) | "Make Task" dialog — editable title | Same as workspace access | active |
 | `chat.composer.input` | `<input>` | the ONE conversation composer's text field | Posts to `post_message`/`quick_start` on submit | Same as workspace access | active |
 | `chat.composer.send` | `<button>` | "Send" | Submits `chat.composer.input`'s form | Same as workspace access | active |
-| `chat.tag-highlight` | `<mark class="tag-highlight-inline">` (pattern, CLAUDE-P40-VW8-QA, Section 11) | inline tagged-text treatment | Rendered by `app.py`'s own `hotlinks` filter around the exact tagged substring of a persisted message — the corrected "Add Tag has no visible consequence" defect. `data-tag-occurrence-id` disambiguates which occurrence | Same as workspace access (never rendered for a message the reviewer can't already see) | active |
+| `chat.tag-highlight` | `<mark class="tag-highlight-inline">` (pattern, CLAUDE-P40-VW8-QA, Section 11) | inline tagged-text treatment | Rendered by `app.py`'s own `hotlinks` filter around the exact tagged substring of a persisted message — the corrected "Add Tag has no visible consequence" defect. `data-tag-occurrence-id` disambiguates which occurrence; `data-tag-id`/`data-tag-name` added (CLAUDE-P40-VW8-QA, reversibility correction) for client-side applied-state detection | Same as workspace access (never rendered for a message the reviewer can't already see) | active |
+| `chat.dock.label` | *(retired — CLAUDE-P40-VW7A-QA)* | A compact "Chat (N)" `<label>` briefly lived beside the composer input (moved down from the old top-of-panel heading) — the immediate product-owner follow-up rejected it as a duplicate of the Lists panel's own "Chats" row (which now carries the count instead, via `lists.project.chats` — see Lists section below). Nothing renders this reference any more; retired rather than reused for a different control | — | retired |
+
+**`chat.selection-toolbar*` — moved/reparented, not replaced (CLAUDE-P40-VW8-QA):**
+the HTML (`#conv-selection-toolbar`, its `hidden` attribute) and the
+JS (`static/js/case_workspace.js` selection-tracking, anchor
+computation, viewport-clamped positioning, per-action availability,
+Escape/outside-click/selection-clear close handling, real Tag/Task
+dialog + built-in-tag POST wiring for Highlight/Important/Question,
+clipboard Copy) were already correct — audited end to end, none of
+the 6 actions were decorative or inert. The one real defect was
+`static/css/main.css`'s `.conv-selection-toolbar` rule having no
+`[hidden]` override, so the class's `display: flex` beat the `hidden`
+attribute at equal cascade specificity and the toolbar rendered
+permanently regardless of what the JS correctly set — the same bug
+CLASS as the R3 tokens.css comment-boundary regression. Fixed by
+adding `.conv-selection-toolbar[hidden] { display: none; }` and
+changing the layout to `flex-direction: column` (one action per row,
+per product-owner request) with `text-align: left` on
+`.conv-selection-btn`. All six `chat.selection-toolbar*` identifiers
+above are retained unchanged — their meaning did not change, only
+their visibility bug and row/column arrangement did.
+
+**Native-popup-overlap correction (same identifiers, no new ones):**
+a browser/OS-owned text-selection popup (most identifiably Microsoft
+Edge's own "mini menu on text selection," `edge://settings/appearance`
+→ "Show mini menu when I select text," or the enterprise
+`QuickSearchShowMiniMenu` policy) is not created by, mergeable into, or
+controllable from this page — no `contextmenu` listener exists in this
+toolbar's own setup (confirmed by reading `static/js/case_workspace.js`
+in full; the file's one `contextmenu` listener is the unrelated
+Display-division picker). `positionToolbar` now prefers BELOW the
+selection first (was: above first) specifically to sit on the opposite
+side from where that native popup conventionally appears, and a new
+`repositionOrHideOnViewportChange` (bound to `window`'s `scroll`,
+capture phase, and `resize`) keeps the toolbar correctly placed — or
+hides it — if the containing panel scrolls or the viewport resizes
+while a selection is held, which nothing previously handled. Copy was
+already, and remains, fully self-sufficient (copies the complete
+captured selection text), so a reviewer never needs the native popup
+for ordinary copying.
 
 ## Gateway (`templates/gateway_shell.html`, `gateway.html`, `project_chooser.html` — CLAUDE-P40-VW8-QA, new surface)
 
@@ -273,6 +323,56 @@ browser preference, unaffected by sign-out), never sets one.
 | `upload.confirm.field.project_name.evidence`, `upload.confirm.field.project_number.evidence`, `upload.confirm.field.project_address.evidence`, `upload.confirm.field.owner_client.evidence`, `upload.confirm.field.drawing_title.evidence`, `upload.confirm.field.sheet_number.evidence`, `upload.confirm.field.discipline.evidence`, `upload.confirm.field.consultant.evidence`, `upload.confirm.field.issue_date.evidence`, `upload.confirm.field.revision.evidence`, `upload.confirm.field.scale.evidence` | `<small>` | (evidence text) | Shows confidence, source page, extraction method, and the exact matched line — only rendered when a candidate was actually found for that field | Same as above | active |
 | `upload.confirm.submit` | `<button>` | "Confirm and create Project" | Submits the confirm form — creates the Project from confirmed/corrected values via the same `ingest_upload` every other upload path uses | Same as above | active |
 | `upload.confirm.discard` | `<button>` | "Discard and start over" | Discards the staged upload (raw bytes + candidates) and returns to `/upload` | Same as above | active |
+
+---
+
+## Security Department (`templates/security_department.html` — CLAUDE-P40-VW8-QA, Complete Root and Subfolder UI Reference Tagging)
+
+An "equivalent root/subfolder on an administrative page" per this stage's own explicit scope — reached via `lists.security` (admin only). Each top-level accordion is a real, distinct governed record family (mirrors the Lists tree's own "one toggle per family" shape, via `templates/_macros.html`'s `accordion`/`subdisclosure` macros, both extended this stage with an optional `ui_ref` parameter — backward-compatible; every pre-existing caller that omits it, including every Overview-page accordion in `case_workspace.html`, is unaffected and deliberately left untagged, consolidated under `display.overview` per CLAUDE-P40-E3A). Refs are macro CALL ARGUMENTS (`ui_ref='security.floor'`) — the literal `data-ui-ref="..."` attribute text only exists inside the macro body itself, not in this template's own source.
+
+| Reference | Element | Label | Current behavior | Auth notes | Status |
+|---|---|---|---|---|---|
+| `security.floor` | `<details class="accordion-section">` | "Mandatory ARCHIOSK Security Floor" | Always expanded by default; read-only — no configurable action can weaken it | **Admin only** — `security.department_home` route | active |
+| `security.claims` | `<details class="accordion-section">` | "Security Claims Registry" | What this deployment can/cannot truthfully promise | Same as above | active |
+| `security.baselines` | `<details class="accordion-section">` | "Organization Security Baseline" | Draft/activate/withdraw baselines; add per-action control decisions | Same as above | active |
+| `security.policies` | `<details class="accordion-section">` | "Source Policies" | Lists ingested policies; each may record a policy statement | Same as above | active |
+| `security.policies.add` | `<details class="add-source-details">` (nested inside `security.policies`) | "+ Ingest a source policy" | POST (multipart) to `security.record_source_policy` | Same as above | active |
+| `security.controls` | `<details class="accordion-section">` | "Proposed Controls" | Lists proposed control decisions | Same as above | active |
+| `security.controls.add` | `<details class="add-source-details">` (nested inside `security.controls`) | "+ Propose a control" | POST to `security.propose_control` | Same as above | active |
+| `security.qa` | `<details class="accordion-section">` | "Governed Q&A" | Lists recorded Q&A entries; provisional ones may be approved | Same as above | active |
+| `security.qa.add` | `<details class="add-source-details">` (nested inside `security.qa`) | "+ Record a Q&A entry" | POST to `security.record_qa_entry` | Same as above | active |
+| `security.exceptions` | `<details class="accordion-section">` | "Exceptions" | Lists active/expired exceptions; active ones may be revoked | Same as above | active |
+| `security.exceptions.add` | `<details class="add-source-details">` (nested inside `security.exceptions`) | "+ Grant an exception" | POST to `security.grant_exception` | Same as above | active |
+| `security.projects` | `<details class="accordion-section">` | "Projects" | Per-Project security-profile classification | Same as above | active |
+| `security.learning` | `<details class="accordion-section">` | "Learning Contribution Requests" | Records governed intent only — no shared-learning pipeline exists in this deployment | Same as above | active |
+| `security.learning.add` | `<details class="add-source-details">` (nested inside `security.learning`) | "+ Request a learning contribution review" | POST to `security.create_learning_request` | Same as above | active |
+| `security.assurance-activity` | `<details class="accordion-section">` | "Assurance — Activity" | Read-only governance-event activity log (actor/project/action/decision only — no project content) | Same as above | active |
+| `security.self-check` | `<details class="accordion-section">` | "Assurance — Self-Check" | Read-only automated consistency findings | Same as above | active |
+
+## Projects Directory (`templates/projects.html` — CLAUDE-P40-VW8-QA, Complete Root and Subfolder UI Reference Tagging)
+
+The full administrative Project-management page (`portal.projects_list`) — distinct from `gateway.chooser` (the focused picker) and from `lists.projects`/`lists.projects.leaf` (the Lists-tree root); reachable directly by URL and via `removed-projects.back-link`. A different top-level prefix (`projects-directory`, not `projects`) deliberately avoids reading as a sub-family of `lists.projects`, which it isn't.
+
+| Reference | Element | Label | Current behavior | Auth notes | Status |
+|---|---|---|---|---|---|
+| `projects-directory.removed-link` | `<a>` | "Removed Projects" | Navigates to `portal.removed_projects` | Every authenticated page | active |
+| `projects-directory.search` | `<form>` | project search | `?q=` filter | Every authenticated page | active |
+| `projects-directory.list` | `<ul>` | the Project card list | Wraps every `projects-directory.leaf` row | Filtered to `_accessible_documents` (already access-scoped) | active |
+| `projects-directory.leaf` | `<a>` (pattern) | a Project card | Navigates to `workspace.show_workspace` for that Project | Same as above | active |
+| `projects-directory.leaf.delete` | `<button>` in a `<form>` (pattern) | "Delete" | POST to `portal.delete_project` | **Admin only** — `is_admin` | active |
+| `projects-directory.empty` | `<div>` | "No projects yet." / "No projects match…" | Empty/no-results state; admin-only "Create New Project" link when genuinely empty | Every authenticated page | active |
+
+## Removed Projects (`templates/removed_projects.html` — CLAUDE-P40-VW8-QA, Complete Root and Subfolder UI Reference Tagging)
+
+Reached via `lists.removed-projects`. A different top-level prefix from `lists.removed-projects` itself (that ref is the Lists-tree LINK to this page, not the page's own content).
+
+| Reference | Element | Label | Current behavior | Auth notes | Status |
+|---|---|---|---|---|---|
+| `removed-projects.back-link` | `<a>` | "← Back to Projects" | Navigates to `portal.projects_list` | Every authenticated page | active |
+| `removed-projects.list` | `<ul>` | the removed-Project card list | Wraps every `removed-projects.leaf` row | Every authenticated page | active |
+| `removed-projects.leaf` | `<li>` (pattern — not a link; a removed Project has no workspace to navigate to) | a removed Project card | Non-interactive except its own Restore button | Every authenticated page | active |
+| `removed-projects.leaf.restore` | `<button>` in a `<form>` (pattern) | "Restore" | POST to `workspace.restore_project_route` | Every authenticated page | active |
+| `removed-projects.empty` | `<div>` | "No removed Projects." | Empty state | Every authenticated page | active |
 
 ---
 

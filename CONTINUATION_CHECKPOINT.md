@@ -1,6 +1,185 @@
 # Continuation checkpoint
 
-## 2026-08-02 — CLAUDE-P40-VW8-QA-R6: Natural-Language, Evidence-Guided Quantitative Investigation
+## 2026-08-03 — CLAUDE-P40-VW8-QA: UI-Tagging completion, Selection-Toolbar Corrections, Panel-Border Hierarchy, Approved Theme Set, Chat Composer Corrections, Tag Reversibility
+
+A single long stage covering a rapid sequence of product-owner
+corrections, each addressed as its own bounded change with its own
+tests. Summarized by area, not chronologically (several areas were
+themselves revised more than once within this stage — the final state
+is what's described; superseded intermediate states are noted only
+where relevant to future readers).
+
+**UI-tagging completion (root/subfolder reference tagging):** extended
+`data-ui-ref` coverage to previously-untagged empty-state rows
+(Documents/RFIs/Tasks/Tags), Security Department's 11 accordions + 5
+subdisclosures (via a new optional `ui_ref=` parameter on
+`templates/_macros.html`'s `accordion`/`subdisclosure` macros), and the
+Projects Directory/Removed Projects pages. `tests/test_p40vw7a_ui_
+reference_map.py`'s own `_all_template_refs()` scanner extended with a
+second regex for macro-call-argument-style refs (`ui_ref='x.y'`, which
+never appear as a literal `data-ui-ref="..."` in the calling template's
+own source — only inside the macro body). Deliberately did NOT tag
+Overview's ~30 internal accordions — CLAUDE-P40-E3A's own prior "one
+consolidated `display.overview` leaf, no second navigation directory in
+Display" decision governs there, not an oversight.
+
+**Selection toolbar — three corrections, same root architecture:**
+1. *Permanently visible / horizontal layout* (product-owner report):
+   root-caused to `static/css/main.css`'s `.conv-selection-toolbar`
+   rule having no `[hidden]` override — the class's own `display: flex`
+   beat the `hidden` attribute at equal cascade specificity, the exact
+   same bug CLASS as the R3 tokens.css comment-boundary regression
+   (logic correct, a cascade detail made it invisible in effect). Fixed
+   with `.conv-selection-toolbar[hidden] { display: none; }` +
+   `flex-direction: column` (one action per row). Audited the full JS
+   end to end first: all 6 actions (Tag/Task/Highlight/Important/
+   Question/Copy) were already genuinely wired to real dialogs/routes/
+   clipboard — nothing was decorative.
+2. *Overlap with the browser/OS's own selection popup* (most
+   identifiably Edge's "mini menu on text selection" —
+   `edge://settings/appearance`, or the `QuickSearchShowMiniMenu`
+   enterprise policy): confirmed no `contextmenu` suppression exists
+   anywhere near this toolbar (already compliant). `positionToolbar`
+   now prefers BELOW the selection first (was: above first, the direct
+   spatial collision), and a new `repositionOrHideOnViewportChange`
+   (bound to `window`'s `scroll`/capture-phase and `resize`) keeps the
+   toolbar correctly placed — or hides it — if the containing panel
+   scrolls or the viewport resizes while a selection is held, which
+   nothing previously handled.
+3. *No inverse actions* ("anything the user can tag/classify/highlight
+   must have a clear way to remove that later"): NO new backend data
+   model — Highlight/Important/Question are already just built-in Tags
+   (`BUILT_IN_TAGS`), and `remove_tag_occurrence` already removes only
+   the one occurrence record, never the Tag definition or any other
+   occurrence of it. The one genuinely new backend surface is
+   `routes/workspace.py`'s `tag_occurrences_for_selection_route` (GET,
+   read-only) — needed because `app.py`'s own `hotlinks` filter only
+   ever draws ONE inline `<mark>` per position when Tag occurrences
+   overlap ("first-starting wins"), so a live selection can span an
+   occurrence with no visible `<mark>` at all; this endpoint is the
+   only reliable way the client can know "multiple Tags are attached
+   here" in that case. Client: a new "Remove Tag (N)" button (hidden
+   unless 1+ custom Tag occurrences overlap the selection) opens a
+   dialog listing each by name (text, never color alone) with its own
+   Remove; Highlight/Important/Question's own buttons swap between
+   their add/remove identities (`data-conv-action`/`data-ui-ref`/label
+   all change together — new refs `.remove-highlight`/`.unmark-
+   important`/`.unmark-question`/`.remove-tag`/`.undo`, never inheriting
+   the add/apply ones). A short-lived (8s) Undo re-POSTs the same
+   add-Tag route with the removed occurrence's own tag id + anchor
+   fields. `app.py`'s `hotlinks` filter gained `data-tag-id`/`data-
+   tag-name` on the rendered `<mark>` for robust client-side reads.
+
+**Panel-border hierarchy correction:** Chat's own existing treatment
+(no `border-top` on `.chat-region` itself — one line via
+`.conversation-dock-resize-handle::before`, using the fixed, mode-
+invariant `--divider-strong` token) named as the approved reference.
+Two concrete fixes: `.launcher-panel`'s desktop rule no longer draws
+its own `border-right` (the adjacent `.panel-divider::before` already
+drew a second, parallel line ~4-5px away — a real doubled boundary);
+`.workspace-topbar`'s full-width bottom border switched from
+`var(--border)` to `var(--divider-strong)` (same reasoning as Chat's
+own divider — a token proven to read calmly at every theme's own
+background, not one that gets locally redefined per mode). Audited and
+left unchanged: the Display-to-Toolbox boundary (already a single quiet
+line, no redundant second border), `.panel-divider` itself (already
+quiet-at-rest/accent-on-hover-or-focus).
+
+**Approved Theme Set — Black / Midnight Blue / Deep Forest / Light**
+(replacing Light/Dark/Tinted): went through TWO real corrections within
+this same stage, both preserved honestly in `tokens.css`'s own
+comments rather than silently overwritten.
+- *First pass:* renamed Dark→"Graphite" (#0E1116, neutral near-black)
+  and Tinted→"Midnight Blue" (turning it from a light navy-grey
+  daylight variant into a dark theme, #0B1B2B), added Deep Forest
+  (#10231E, new). Shared warm off-white text (#E8E4DC) across all
+  three. Surface/border ramps derived by reprojecting the existing
+  `#000000`-based lightness progression onto each new hue.
+- *Second, corrective pass* (explicit product-owner follow-up:
+  "Restore the original true-black appearance... Do not use
+  Graphite... must appear flat and matte"): Black restored to literal
+  `#000000` (VW6's own original value) — the `--dark-*` token PREFIX
+  and `.appearance-dark` CLASS NAME never changed through either
+  revision, only the label and values (a `data-ui-ref` naming
+  discipline extended to internal token names too: relabeling doesn't
+  require renumbering). Midnight Blue deepened to `#001426`, Deep
+  Forest to `#001A12` (both "visibly deep, saturated, and solid").
+  Warm off-white text KEPT (the one part of the Graphite revision the
+  follow-up explicitly preserved). Derivation method upgraded from raw-
+  lightness reprojection to LUMINANCE-matching (`tools/derive_theme_
+  palettes.py`, new) — required once saturation varies significantly:
+  a fully saturated green reaches a given relative luminance at a much
+  lower raw HSL lightness than blue does (WCAG's 0.7152 G-channel
+  weight), so naive reprojection had genuinely failed contrast for Deep
+  Forest (text-metadata dropped to 2.58:1) until this was fixed.
+  Border/border-strong use reduced saturation (0.55/0.60) versus the
+  surface steps so ordinary panel boundaries stay quiet even against a
+  vividly saturated theme background — coordinated with the panel-
+  border-hierarchy correction above. Migration: `dark`/`graphite` →
+  `black`, `tinted` → `midnight-blue`, `midnight-blue`/`deep-forest`/
+  `light` pass through unchanged, anything else (including no stored
+  value at all — new default) → `black`. A new early script block
+  (right after `.chat-region`'s own markup, before the ~300 lines of
+  later panel-divider/menu/dialog wiring) applies the resolved
+  per-surface classes as early as this plain-script architecture
+  allows, specifically to remove the "new user sees a Light flash
+  before Black initializes" window. UI refs: `light`/`dark`/`tinted`
+  ref suffixes retained unchanged through both label revisions;
+  `deep-forest` is the one genuinely new suffix.
+
+**Chat composer — two corrections, same underlying area:**
+1. *Heavy heading removed:* "PROJECT CONVERSATION" (and the
+   explanatory guidance sentence beneath it) removed from the top of
+   the Chat panel. The guidance paragraph's own DOM element
+   (`#project-conversation-guidance`) is KEPT, emptied of its text —
+   it is a real, already-wired anchor target for guidance-scope Tag/
+   Task occurrences and navigate-to-source, not decorative; deleting it
+   outright would have orphaned already-persisted data. A first attempt
+   moved a compact "Chat (N)" label down to the composer row — the
+   immediate follow-up rejected that too as a duplicate of the Lists
+   panel's own "Chats" row, which now carries the count instead
+   (`routes/workspace.py`'s new `project_conversation_count`). The
+   composer input keeps a real accessible name via `aria-label=
+   "Message"`, never placeholder-text-only.
+2. *Inconsistent horizontal alignment:* the old per-role asymmetric
+   message margins (`.conversation-message.human` indented left only,
+   `.system` indented right only — two different left edges) replaced
+   by ONE shared `--conversation-inset` custom property, declared once
+   on `.conversation-dock-panel` and applied as left+right padding on
+   both `.conversation-thread` and `.conversation-input-form` — every
+   message, role label, and the composer now share the same left AND
+   right edges. The composer input's own internal padding reverted to
+   plain symmetric (the earlier VW8-QA fix that gave it an asymmetric
+   1.5rem-left compensation is superseded, not layered on top of, this
+   container-level inset). The resize-handle divider stays deliberately
+   full-width, unaffected.
+
+**Test regressions from the above, all fixed (not silently weakened —
+each fix updates the assertion's own expected value/selector to match
+the now-correct behavior, per this repo's own established discipline):**
+`test_projects_directory_redesign.py` (a fragile regex assumed the
+`<ul class="project-card-list">` tag had no other attributes — broken
+by this stage's own earlier UI-tagging `data-ui-ref` addition to that
+same element), `test_p40vw3_appearance_matrix.py`/`test_p40vw6_theme_
+correction.py`/`test_p40vw8qa_r3_appearance_mode_integrity.py`/
+`test_p40vw8qa_theme_foreground_contrast.py` (pinned the old 3-mode/
+white-text/light-Tinted values — updated to 4-mode/warm-off-white/
+dark-Tinted), `test_conversation_apertures.py` (pinned the removed
+"Project Conversation (N)" heading text — updated to the new "Chats N"
+Lists-row text), `test_p40e3a_layout_reconciliation.py` (a blanket "no
+literal 'Undo' anywhere" check from a much earlier stage, before the
+new genuinely-functional Undo control existed — narrowed to exclude
+that one real control while still guarding against decorative ones).
+
+**Commits:** see `git log` for the exact bounded sequence (implementation
++ tests were staged and committed in scoped groups matching the areas
+above, not one mega-commit).
+
+**Real-browser verification:** NOT available in this environment (no
+browser-automation tool connected) — every visual/interaction claim
+above is grounded in template/CSS/JS source inspection and the
+project's own existing contrast-verification tooling, stated honestly
+as a limitation per this repo's established convention, not fabricated.
 
 **Reported defect:** inside an active Investigation, the reviewer
 wrote "Those numbers are geodetic elevations from ground floor to the
