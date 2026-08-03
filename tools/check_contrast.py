@@ -91,6 +91,16 @@ REQUIRED_PAIRINGS = [
     ("--forest-tabcolor-terracotta", "--forest-canvas", 3.0, "tab color: terracotta (Deep Forest)"),
     ("--forest-tabcolor-green", "--forest-canvas", 3.0, "tab color: green (Deep Forest)"),
     ("--forest-tabcolor-purple", "--forest-canvas", 3.0, "tab color: purple (Deep Forest)"),
+
+    # CLAUDE-P40-BRAND1: the header brand mark/wordmark - held to the
+    # STRICTER 4.5:1 normal-text floor (not the 3.0 accent/badge one
+    # above), since "Archiosk" is small, always-visible prose-adjacent
+    # text, not an occasional badge - the same threshold --text-primary/
+    # --text-secondary are held to elsewhere in this file.
+    ("--brand-gold", "--canvas", 4.5, "brand mark/wordmark (Light)"),
+    ("--dark-brand-gold", "--dark-canvas", 4.5, "brand mark/wordmark (Black)"),
+    ("--tint-brand-gold", "--tint-canvas", 4.5, "brand mark/wordmark (Midnight Blue)"),
+    ("--forest-brand-gold", "--forest-canvas", 4.5, "brand mark/wordmark (Deep Forest)"),
 ]
 
 

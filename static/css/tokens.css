@@ -139,6 +139,21 @@
     --tabcolor-green: #3D6B2C;
     --tabcolor-purple: #6B3F7A;
 
+    /* CLAUDE-P40-BRAND1: the Archiosk header brand mark/wordmark color -
+       a separate token from --tabcolor-gold above despite both being
+       "gold," since they mean different things (brand identity vs. a
+       Document-tab organizational accent) and this file names tokens
+       for meaning, not raw appearance. Strong bronze/dark, readable
+       directly as a foreground stroke/text color against --canvas -
+       --bee-yellow (the existing BEEHIVE identity-mark color, gateway-
+       logo's own solid-fill badge) was considered and ruled out: it is
+       already reserved for icon-level FILL use only (tokens.css's own
+       header), and as a bright, highly-saturated yellow it would likely
+       fail contrast used as a thin foreground line/text color directly
+       on a light canvas - a different, incompatible role from a solid
+       fill with dark text on top. */
+    --brand-gold: #6B4E14;
+
     --font-display: "Arial Nova Cond", "Arial Narrow", Arial, sans-serif;
     --font-body: "Arial Nova Cond", "Arial Narrow", Arial, sans-serif;
     --font-mono: "IBM Plex Mono", monospace;
@@ -313,6 +328,11 @@
     --dark-tabcolor-terracotta: #E08350;
     --dark-tabcolor-green: #7FBF6A;
     --dark-tabcolor-purple: #C08FE0;
+
+    /* CLAUDE-P40-BRAND1: same rationale as the light-mode block above -
+       identical across all three dark themes, the convention every
+       other accent color in this file already follows. */
+    --dark-brand-gold: #E3BA52;
 }
 
 /* "Midnight Blue" (CLAUDE-P40-VW8-QA, Approved Theme Set) - the
@@ -393,6 +413,7 @@
     --tint-tabcolor-terracotta: #E08350;
     --tint-tabcolor-green: #7FBF6A;
     --tint-tabcolor-purple: #C08FE0;
+    --tint-brand-gold: #E3BA52;
 }
 
 /* "Deep Forest" (CLAUDE-P40-VW8-QA, Approved Theme Set) - the third
@@ -453,6 +474,7 @@
     --forest-tabcolor-terracotta: #E08350;
     --forest-tabcolor-green: #7FBF6A;
     --forest-tabcolor-purple: #C08FE0;
+    --forest-brand-gold: #E3BA52;
 }
 
 /* CLAUDE-P40-VW6: ONE fixed, mode-invariant divider color - deliberately

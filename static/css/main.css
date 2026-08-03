@@ -1539,15 +1539,52 @@ main {
     min-width: 0;
     overflow: hidden;
 }
+/* CLAUDE-P40-BRAND1 (product-owner correction): "Archiosk" used to be
+   0.85rem/--text-metadata (a MUTED, secondary color) - smaller and
+   dimmer than menu.context's own breadcrumb (0.88rem/--text-primary,
+   below), so the application's own identity read as LESS prominent
+   than a Project/Document breadcrumb, backwards from what identity
+   branding should be. Now a real flex row (mark + wordmark, sharing
+   ONE link/tab-stop/accessible-name - see the template's own comment)
+   at 1.2rem/600 ("Archiosk", within the suggested 18-20px semibold
+   range) - genuinely larger and richer than menu.context, which keeps
+   its own EXISTING 0.88rem/normal-weight unchanged (already within the
+   suggested 14-16px/normal-weight secondary range - real repository
+   evidence, not a value invented for this correction). */
 .workspace-topbar-brand {
-    font-family: var(--font-display);
-    font-size: 0.85rem;
-    font-weight: 600;
-    color: var(--text-metadata);
+    display: flex;
+    align-items: baseline;
+    gap: 0.4rem;
+    color: var(--brand-gold);
     flex-shrink: 0;
     text-decoration: none;
 }
-.workspace-topbar-brand:hover { color: var(--text-primary); text-decoration: none; }
+.workspace-topbar-brand:hover { text-decoration: underline; }
+.workspace-topbar-brand:focus-visible {
+    outline: 2px solid var(--machine-blue);
+    outline-offset: 2px;
+    border-radius: 3px;
+}
+.workspace-topbar-brand-text {
+    font-family: var(--font-display);
+    font-size: 1.2rem;
+    font-weight: 600;
+}
+/* The mark is an inline SVG (stroke="currentColor"), so it inherits
+   this SAME --brand-gold color for free - one declaration drives both
+   the icon and the wordmark, no separate color rule needed for either. */
+.archiosk-mark {
+    flex-shrink: 0;
+    align-self: center;
+}
+/* CLAUDE-P40-BRAND1: no per-Appearance override rule here on purpose -
+   .workspace-topbar is already one of the combined "owned surface
+   roots" further down this file that locally redefines the standard
+   token names per Appearance (the same block --text-primary/the
+   semantic accents already live in); --brand-gold is redefined there
+   too, so this rule's own `color: var(--brand-gold)` above already
+   repaints correctly per Appearance for free, the same way every
+   other token-driven rule in this file does. */
 .workspace-topbar-context {
     font-size: 0.88rem;
     color: var(--text-primary);
@@ -3298,6 +3335,7 @@ main::-webkit-scrollbar-corner,
     --failure-red-tint: var(--dark-failure-red-tint);
     --risk-red: var(--dark-risk-red);
     --risk-red-tint: var(--dark-risk-red-tint);
+    --brand-gold: var(--dark-brand-gold);
     background: var(--surface-primary);
     color: var(--text-primary);
 }
@@ -3332,6 +3370,7 @@ main::-webkit-scrollbar-corner,
     --failure-red-tint: var(--tint-failure-red-tint);
     --risk-red: var(--tint-risk-red);
     --risk-red-tint: var(--tint-risk-red-tint);
+    --brand-gold: var(--tint-brand-gold);
     background: var(--surface-primary);
     color: var(--text-primary);
 }
@@ -3372,6 +3411,7 @@ main::-webkit-scrollbar-corner,
     --failure-red-tint: var(--forest-failure-red-tint);
     --risk-red: var(--forest-risk-red);
     --risk-red-tint: var(--forest-risk-red-tint);
+    --brand-gold: var(--forest-brand-gold);
     background: var(--surface-primary);
     color: var(--text-primary);
 }

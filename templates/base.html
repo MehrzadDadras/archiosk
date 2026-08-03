@@ -52,7 +52,18 @@
         {% if authenticated %}
         <div class="workspace-topbar">
             <div class="workspace-topbar-identity">
-                <a class="workspace-topbar-brand" data-ui-ref="menu.brand" href="{{ url_for('portal.index') }}">Archiosk</a>
+                {# CLAUDE-P40-BRAND1: the mark sits directly before the
+                   wordmark inside this SAME link (never a second,
+                   adjacent element) so there is exactly one tab stop and
+                   one accessible control here, not two competing ones.
+                   aria-label="Archiosk Home" is the link's own real
+                   accessible name (the mark stays aria-hidden, so
+                   without this the computed name would just be
+                   "Archiosk", not communicating that it navigates home) -
+                   the existing href/data-ui-ref/navigation behavior is
+                   completely unchanged, only the visible content and
+                   accessible name are new. #}
+                <a class="workspace-topbar-brand" data-ui-ref="menu.brand" href="{{ url_for('portal.index') }}" aria-label="Archiosk Home">{{ macros.archiosk_mark(size=24) }}<span class="workspace-topbar-brand-text">Archiosk</span></a>
                 {% if project_id is defined and workspace is defined %}
                 <span class="workspace-topbar-context" data-ui-ref="menu.context">
                     <span class="workspace-topbar-project">{{ workspace.display_title or document.filename }}</span>

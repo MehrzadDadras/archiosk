@@ -1,5 +1,137 @@
 # Continuation checkpoint
 
+## 2026-08-03 — CLAUDE-P40-BRAND1: Top-Left ARCHIOSK Brand Treatment
+
+**Grounding, before any code:** searched the whole repository for an
+existing mark/medallion/icon to reuse (`svg`, `parabola`, `medallion`) -
+none exists (no `.svg` file, no inline `<svg>` beyond the annotation-
+toolbar glyphs, no favicon). "Reuse the same mark" wasn't literally
+possible; reported this honestly and designed one new mark instead,
+built as the single shared source the request actually asked for.
+
+**The mark** (`archiosk_mark` macro, `templates/_macros.html`): two
+real parabola legs, not a freehand approximation of one - SVG's
+quadratic-Bezier `Q` command traces a literal parabola segment, so
+`M 14 90 Q 22 42 50 12` (left leg) and its mirror `M 86 90 Q 78 42 50
+12` (right leg, sharing the same apex) are mathematically true
+parabolas by construction. Crossbar (`M 22 58 L 78 58`) placed by
+solving where the left leg's own Bezier curve crosses y=58
+(`9u²+30u-23=0` → `u≈0.643` → `x≈22.3`, mirrored to `≈77.7`), not
+eyeballed. `stroke="currentColor"` means the ONE macro definition
+already repaints correctly across every Appearance with zero color
+logic inside the SVG - a future circular "medallion" badge treatment
+(not built this stage, nothing to reuse yet) would call this same
+macro rather than drawing a second copy. Always `aria-hidden="true"`/
+`focusable="false"` - decorative in this stage's one use.
+
+**Wired into the header** (`templates/base.html`'s `menu.brand` link):
+icon and "Archiosk" now share the SAME `<a>` (one tab-stop, one
+accessible name - `aria-label="Archiosk Home"`, since the SVG stays
+hidden from the accessibility tree). `href`/`data-ui-ref="menu.brand"`/
+navigation target completely unchanged - only the visible content and
+accessible name are new.
+
+**Type hierarchy correction** (`static/css/main.css`): "Archiosk" used
+to be 0.85rem/`--text-metadata` (muted, secondary) - smaller and dimmer
+than `menu.context`'s own breadcrumb (0.88rem/`--text-primary`),
+backwards from identity branding. Now 1.2rem/600 via a real flex row
+(`.workspace-topbar-brand-text`), genuinely larger/richer than the
+breadcrumb. Checked `.workspace-topbar-context`'s ACTUAL current values
+before touching anything - already 0.88rem/normal-weight, already
+within the suggested 14-16px/normal-weight secondary range - left
+deliberately unchanged rather than making an unneeded edit.
+`.workspace-topbar`'s own `padding: 0.6rem 0` untouched, so header
+height is not increased.
+
+**Color:** new `--brand-gold` token family in `static/css/tokens.css`
+(light value independently tuned + one shared dark value reused across
+Black/Midnight Blue/Deep Forest, the same convention `--tabcolor-*`
+already established) - kept separate from `--tabcolor-gold` despite
+both being "gold," since this file's own discipline names tokens for
+MEANING (brand identity vs. Document-tab accent), not raw appearance.
+Considered and ruled out reusing `--bee-yellow` (documented as
+icon-level-fill-only, and a bright saturated yellow unsuited as a thin
+foreground/stroke color on light canvas - its current role is a
+background fill with dark text on top, a different contrast case).
+Verified via `tools/check_contrast.py`, extended with 4 new pairings at
+the STRICTER 4.5:1 normal-text floor (not the 3.0 accent/badge floor
+used for tab colors) - "Archiosk" is small, always-visible identity
+text, not an occasional badge. All 4 pass with real margin (6.78:1 to
+11.41:1 - see the tool's own output, not eyeballed).
+
+**Per-Appearance wiring, and a real bug caught by an existing test:**
+`.workspace-topbar` is already one of the combined "owned surface
+roots" (`main.css`, alongside `.app-shell`/`.launcher-panel`/`.app-main`/
+`.workspace-right-column`/`.chat-region`) that locally redefines the
+standard token names per Appearance so every existing `var(...)` rule
+repaints for free. First attempt instead added three standalone
+`.workspace-topbar.appearance-dark .workspace-topbar-brand { color:
+var(--dark-brand-gold); }`-style rules - which broke `tests/
+test_p40vw8qa_theme_foreground_contrast.py`'s
+`PerSurfaceScopingCompletenessTests`: that new selector is a literal
+string-prefix of the real combined block's own selector, placed earlier
+in the file, so the test's unanchored `.index()` search for
+`.workspace-topbar.appearance-dark` started matching the new small rule
+instead - the exact "unanchored search matches the wrong, newly-
+inserted occurrence" bug class this repo has hit before (see the DTAB1
+entry below). Root-cause fixed properly rather than patched around:
+removed the three standalone rules and instead added `--brand-gold:
+var(--dark-brand-gold)` (and `--tint-`/`--forest-`) directly inside the
+three existing combined redefinition blocks, so `.workspace-topbar-
+brand`'s own `color: var(--brand-gold)` now repaints per Appearance the
+same way every other token-driven rule in the file already does - no
+separate override rule needed at all. Also had to rephrase this fix's
+own explanatory CSS comment once, since its first draft's prose
+happened to contain the literal shadowing selector string and
+re-triggered the same collision.
+
+**UI-reference badge non-overlap:** `.ui-reference-mode-active
+[data-ui-ref]::after` renders its label via `transform: translateY(
+-100%)`, entirely ABOVE the referenced element's own box - independent
+of that element's height, so the icon/text becoming taller doesn't
+change this. `data-ui-ref="menu.brand"` stays on the SAME outer `<a>`
+(not duplicated onto the inner `<svg>`/`<span>`) - the badge mechanism
+is otherwise completely unmodified by this stage. `.workspace-topbar-
+identity`'s own `overflow: hidden` is a pre-existing property, shared
+identically by `menu.context` right next to it in the same container -
+not something this stage introduces or worsens.
+
+**Narrow-viewport reasoning:** `.workspace-topbar` already has
+`flex-wrap: wrap`; `.workspace-topbar-identity` already has `min-width:
+0`/`overflow: hidden`. This stage doesn't change either - only the
+brand link's own intrinsic content width grew slightly (24px icon +
+0.4rem gap + larger text). No real browser tool exists in this
+environment to visually confirm the reflow; this is a structural read
+of the existing, pre-established responsive mechanism, not a claimed
+walkthrough.
+
+**Pre-auth zero-state explicitly not touched:** `.gateway-logo`/
+`.entry-shell-mark` (a separate, deliberately minimal `<div
+class="gateway-logo">A</div>` brand block in `auth_shell.html`/
+`gateway_base.html`) is out of scope - the request's own wording is
+"the application's top-left menu/header," the AUTHENTICATED shell.
+
+**Tests:** new `tests/test_p40brand1_brand_mark.py` (32 tests) -
+macro geometry (two `Q` legs, shared apex, crossbar, `currentColor`,
+decorative attributes, default size in the suggested 22-26px range),
+header markup (single anchor/tab-stop, accessible name, `data-ui-ref`
+preserved and not duplicated), rendered-HTML checks across `/`,
+`/projects`, `/upload`, CSS (flex row, type-scale values, breadcrumb
+left untouched, `--brand-gold` redefined in the shared owned-surface
+scoping blocks, a guard against reintroducing the shadowing descendant
+rule, header padding unchanged), token-family checks (all 4 Appearance
+variants defined, dark/tint/forest share one value), and a real
+contrast-ratio check against `tools/check_contrast.py`'s own live
+numbers (not re-derived math). Also updated one pre-existing test
+(`tests/test_global_search_and_header.py::HeaderAndBrandTests::
+test_brand_lockup_reads_archiosk_only`) whose selector assumed the
+brand link's visible text sat directly after `href="/">` with no
+markup between - true before this stage's icon, now updated to a
+plain-substring check (the SVG spans multiple lines, so a single-line
+regex doesn't fit) that still pins down the actual, unchanged intent:
+the visible wordmark text reads "Archiosk" only, nothing appended.
+Full suite: 2407 passed, 0 failed.
+
 ## 2026-08-03 — CLAUDE-P40-DTAB1: Preview, Pinned, Colored, Renamed, and Hidden Document Display Tabs
 
 **Started from a verified clean state:** `HEAD == origin/main` (`3098b6c`)

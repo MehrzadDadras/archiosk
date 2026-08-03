@@ -76,7 +76,7 @@ otherwise.
 
 | Reference | Element | Label/summary | Current behavior | Auth notes | Status |
 |---|---|---|---|---|---|
-| `menu.brand` | `<a>` | "Archiosk" | Navigates to `portal.index` (`/`) | Every authenticated page | active |
+| `menu.brand` | `<a>` | two-parabola "A" mark (`archiosk_mark` macro, decorative/`aria-hidden`) + "Archiosk" | Navigates to `portal.index` (`/`); single accessible name `aria-label="Archiosk Home"` covers mark+text as one link/tab-stop (CLAUDE-P40-BRAND1 — was bare "Archiosk" text at `--text-metadata`/0.85rem; now icon+wordmark at `--brand-gold`(+per-appearance)/1.2rem·600, sized above `menu.context`'s breadcrumb to read as the application identity) | Every authenticated page | active |
 | `menu.context` | `<span>` | breadcrumb (Project / Investigation / Document / Overview) | Non-interactive, reflects current page state | Only rendered when `project_id`/`workspace` are defined | active |
 | `menu.display-layout` | `<details>` popup | "Display Layout" | Vertical/Horizontal steppers + Apply — sets `#display-divisions`' grid via `window.ArchioskDisplay`-adjacent client JS (`applyLayout` in `case_workspace.js`) | Only rendered when `project_id`/`workspace` are defined | active |
 | `menu.display-layout.vertical-decrement`, `menu.display-layout.vertical-increment`, `menu.display-layout.horizontal-decrement`, `menu.display-layout.horizontal-increment` | `<button>` (4 distinct, named controls) | −/+ steppers | Adjust the PENDING Vertical/Horizontal count (not yet applied) | Only rendered when `project_id`/`workspace` are defined | active |
