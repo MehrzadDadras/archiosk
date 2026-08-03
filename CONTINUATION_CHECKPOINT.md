@@ -1,5 +1,73 @@
 # Continuation checkpoint
 
+## 2026-08-03 — CLAUDE-P40-EYE1 (browser correction): Remaining Unthemed Toolbox Scrollbar
+
+A real-browser screenshot found one nested scroll container inside the
+upper-right Toolbox/Findings region still rendering the browser's own
+default white-track/gray-thumb scrollbar, despite `.workspace-pane-
+toolbox` already carrying a `scrollbar-color` declaration from the
+prior EYE1 build.
+
+**Root cause, found by inspecting what property was actually set,
+not by guessing at an unattached screenshot's contents:**
+`scrollbar-color` is the newer, standards-track CSS property - Firefox
+has always supported it, but Chromium/Edge only gained support in v121
+(January 2024). On any Chromium build older than that, the property is
+silently ignored entirely and the browser falls back to its own
+default rendering - exactly matching "still white," even though the
+CSS was technically correct per spec.
+
+**Fix:** added the older, far more broadly-supported WebKit/Chromium
+`::-webkit-scrollbar` pseudo-element API (`-track`/`-thumb`/
+`-thumb:hover`/`-thumb:active`/`-corner`) ALONGSIDE the existing
+`scrollbar-color` on every real scroll container in the app, not just
+the one specifically reported (Section 8 of that message's own "check
+all nested... scroll containers" instruction): `.lists-pane`,
+`.thumbnails-list`, `.workspace-pane-toolbox`, `.eye-pane-body`,
+`.eye-canvas-viewport`, `main` (Display's primary scroll region),
+`.document-viewer-canvas-container` (the PDF viewer), and
+`.conversation-thread` (Chat's message history) - the last four of
+which turned out to have NEITHER property at all yet, a genuine
+pre-existing gap the audit also caught. Track/corner use
+`var(--surface-primary)`; thumb uses `var(--border-strong)` at rest and
+`var(--machine-blue)` on hover/active (WebKit's own equivalent of
+"visible hover/active scrolling states" - there is no dedicated
+`:focus` pseudo-class for scrollbar parts, so the container's own
+`:focus-visible` outline, already present on the keyboard-focusable
+ones, covers focus instead). `background-clip: padding-box` + a
+transparent border keeps the thumb visually inset from the track edges
+while still using the browser's own real, proportional thumb-length
+calculation - never a faked/hardcoded thumb size. Scroll mechanics
+(`overflow`) on every container are completely unchanged - this
+correction only ever adds scrollbar PAINTING.
+
+Explicitly NOT touched, per this message's own boundary: no conversion
+of this or any other scroll region into the "dual-axis medallion" -
+that remains a separately-verified, not-yet-built pilot concept.
+
+**Tests:** new `tests/test_p40eye1_scrollbar_theming.py` (9 tests -
+`scrollbar-color` present on all 8 real scroll containers,
+`::-webkit-scrollbar` pseudo-elements present and theme-token-based
+(not hardcoded white/gray) on all 8, hover/active thumb states,
+proportional-thumb construction, `overflow` mechanics unchanged, no
+opacity used). Full suite: see this stage's own commit message for the
+exact count.
+
+**Real-browser verification:** still not available in this
+environment - no screenshot was actually attached to this message
+either, only a text description; the root-cause diagnosis above is
+grounded in checking which CSS property was actually declared and
+researching its real, versioned browser support, not in guessing at
+image contents. Product-owner verification checklist: (1) every
+scrollbar in the app (Lists, Thumbnails, Toolbox/Findings, Eye's body
+and its image canvas, Display's main content area, the PDF viewer, and
+Chat's message thread) shows a themed track/thumb/corner, not the
+browser default, in Black, Midnight Blue, Deep Forest, and Light; (2)
+the thumb visibly changes color on hover and while actively being
+dragged; (3) scroll behavior (wheel, drag, keyboard, touch) is
+unchanged from before this correction; (4) narrow viewports show the
+same themed treatment.
+
 ## 2026-08-03 — CLAUDE-P40-EYE1 (browser corrections): Horizontal Expansion, Two-Dimensional Maximize, Scalable Canvas, and a Real Shell-Theming Bug Fix
 
 Two real-browser checks of the EYE1 entry below reported further gaps,

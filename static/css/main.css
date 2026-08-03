@@ -867,6 +867,7 @@ main {
     max-width: 1180px;
     margin: 0 auto;
     width: 100%;
+    scrollbar-color: var(--border-strong) var(--surface-primary);
 }
 
 @media (max-width: 720px) {
@@ -2559,6 +2560,7 @@ html.toolbox-hidden .workspace-right-column {
     justify-content: center;
     background: var(--surface-primary);
     border-radius: 4px;
+    scrollbar-color: var(--border-strong) var(--surface-primary);
 }
 .eye-canvas-viewport:focus-visible {
     outline: 2px solid var(--machine-blue);
@@ -2567,6 +2569,91 @@ html.toolbox-hidden .workspace-right-column {
 .eye-canvas-image {
     display: block;
     flex-shrink: 0;
+}
+
+/* CLAUDE-P40-EYE1 (product-owner browser correction): "one nested
+   scrollbar in the upper-right Toolbox/Findings region remains
+   unthemed" - every scroll container above already had `scrollbar-
+   color` (the standards-track property, Firefox always, Chromium only
+   since v121/Jan-2024) but NOTHING using the older, still very widely
+   deployed WebKit/Chromium `::-webkit-scrollbar` pseudo-element API -
+   on any Chromium build older than 121, `scrollbar-color` is silently
+   ignored entirely and the browser falls back to its own default
+   white-track/gray-thumb rendering, exactly matching the report. Both
+   are now declared together on every real scroll container this app
+   has (Lists, Thumbnails, Toolbox, Eye's own body AND its image-canvas
+   viewport, Display's <main> AND its PDF canvas container, Chat's
+   message thread) - not just the one specifically reported, per this
+   correction's own "check all nested... scroll containers" instruction.
+   background-clip:padding-box + a transparent border is what gives the
+   thumb its visible inset from the track edges without a hard-coded
+   pixel gap. :hover/:active on the thumb are WebKit's own equivalent of
+   "visible hover/active scrolling states" - :focus has no dedicated
+   scrollbar-part pseudo-class, so the CONTAINER's own :focus-visible
+   outline (already present on the keyboard-focusable ones, e.g.
+   .eye-canvas-viewport) is what covers focus instead. */
+.lists-pane::-webkit-scrollbar,
+.thumbnails-list::-webkit-scrollbar,
+.workspace-pane-toolbox::-webkit-scrollbar,
+.eye-pane-body::-webkit-scrollbar,
+.eye-canvas-viewport::-webkit-scrollbar,
+main::-webkit-scrollbar,
+.document-viewer-canvas-container::-webkit-scrollbar,
+.conversation-thread::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+.lists-pane::-webkit-scrollbar-track,
+.thumbnails-list::-webkit-scrollbar-track,
+.workspace-pane-toolbox::-webkit-scrollbar-track,
+.eye-pane-body::-webkit-scrollbar-track,
+.eye-canvas-viewport::-webkit-scrollbar-track,
+main::-webkit-scrollbar-track,
+.document-viewer-canvas-container::-webkit-scrollbar-track,
+.conversation-thread::-webkit-scrollbar-track {
+    background: var(--surface-primary);
+}
+.lists-pane::-webkit-scrollbar-thumb,
+.thumbnails-list::-webkit-scrollbar-thumb,
+.workspace-pane-toolbox::-webkit-scrollbar-thumb,
+.eye-pane-body::-webkit-scrollbar-thumb,
+.eye-canvas-viewport::-webkit-scrollbar-thumb,
+main::-webkit-scrollbar-thumb,
+.document-viewer-canvas-container::-webkit-scrollbar-thumb,
+.conversation-thread::-webkit-scrollbar-thumb {
+    background-color: var(--border-strong);
+    border-radius: 6px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+}
+.lists-pane::-webkit-scrollbar-thumb:hover,
+.thumbnails-list::-webkit-scrollbar-thumb:hover,
+.workspace-pane-toolbox::-webkit-scrollbar-thumb:hover,
+.eye-pane-body::-webkit-scrollbar-thumb:hover,
+.eye-canvas-viewport::-webkit-scrollbar-thumb:hover,
+main::-webkit-scrollbar-thumb:hover,
+.document-viewer-canvas-container::-webkit-scrollbar-thumb:hover,
+.conversation-thread::-webkit-scrollbar-thumb:hover,
+.lists-pane::-webkit-scrollbar-thumb:active,
+.thumbnails-list::-webkit-scrollbar-thumb:active,
+.workspace-pane-toolbox::-webkit-scrollbar-thumb:active,
+.eye-pane-body::-webkit-scrollbar-thumb:active,
+.eye-canvas-viewport::-webkit-scrollbar-thumb:active,
+main::-webkit-scrollbar-thumb:active,
+.document-viewer-canvas-container::-webkit-scrollbar-thumb:active,
+.conversation-thread::-webkit-scrollbar-thumb:active {
+    background-color: var(--machine-blue);
+    background-clip: padding-box;
+}
+.lists-pane::-webkit-scrollbar-corner,
+.thumbnails-list::-webkit-scrollbar-corner,
+.workspace-pane-toolbox::-webkit-scrollbar-corner,
+.eye-pane-body::-webkit-scrollbar-corner,
+.eye-canvas-viewport::-webkit-scrollbar-corner,
+main::-webkit-scrollbar-corner,
+.document-viewer-canvas-container::-webkit-scrollbar-corner,
+.conversation-thread::-webkit-scrollbar-corner {
+    background: var(--surface-primary);
 }
 
 /* CLAUDE-P40-E1A-VISUAL: was a filled/bordered/rounded "card"
@@ -2658,6 +2745,7 @@ html.toolbox-hidden .workspace-right-column {
     display: flex;
     justify-content: center;
     align-items: flex-start;
+    scrollbar-color: var(--border-strong) var(--surface-primary);
 }
 .document-viewer-canvas { display: block; }
 .document-viewer-load-error {
@@ -3153,6 +3241,7 @@ html.toolbox-hidden .workspace-right-column {
     min-height: 0;
     overflow-y: auto;
     margin-bottom: 1rem;
+    scrollbar-color: var(--border-strong) var(--surface-primary);
     /* CLAUDE-P40-VW7A-QA: the shared --conversation-inset (declared on
        .conversation-dock-panel above) on both sides, superseding the
        old right-only 0.3rem scrollbar-clearance padding - comfortably
