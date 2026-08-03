@@ -113,33 +113,55 @@
 
                 {# ---------------- Appearance menu (CLAUDE-P40-E3A, Section 10;
                    CLAUDE-P40-VW3 replaced the single plain/tinted checkbox
-                   per surface with a real Light/Dark/Tinted matrix) --------
+                   per surface with a real Light/Dark/Tinted matrix;
+                   CLAUDE-P40-VW8-QA's Approved Theme Set renamed Dark to
+                   Black (a brief interim "Graphite" label was corrected
+                   back to Black - true #000000 - per explicit product-
+                   owner follow-up: "Do not use Graphite... must appear
+                   flat and matte"), Tinted to Midnight Blue, and added
+                   Deep Forest as a fourth choice) --------
                    Five independently configurable surfaces (Menu - this bar
-                   itself, plus Lists/Display/Toolbox/Chat), three mutually
-                   exclusive modes each - real radio semantics (one <input
+                   itself, plus Lists/Display/Toolbox/Chat), four mutually
+                   exclusive choices each - real radio semantics (one <input
                    type=radio> group per row), never a checkbox pretending to
-                   be tri-state. Reviewer/device presentation state only
-                   (localStorage, keyed per surface - see this stage's own
-                   JS below), never a Project-record write. Rows ordered by
-                   the page's own visual hierarchy: Menu (top), then Lists/
-                   Display/Toolbox left-to-right (middle), then Chat
-                   (bottom). #}
+                   be tri-state (now quad-state). Reviewer/device
+                   presentation state only (localStorage, keyed per surface -
+                   see this stage's own JS below), never a Project-record
+                   write. Rows ordered by the page's own visual hierarchy:
+                   Menu (top), then Lists/Display/Toolbox left-to-right
+                   (middle), then Chat (bottom).
+
+                   The (mode_value, mode_label, ref_suffix) triples below
+                   deliberately decouple the STORED/applied value (new
+                   vocabulary: light/black/midnight-blue/deep-forest)
+                   from the UI-reference suffix (light/dark/tinted/
+                   deep-forest) - light/dark/tinted are the pre-existing,
+                   RETAINED identifiers (a label or palette revision does
+                   not require renumbering a control that still means the
+                   same choice - see tokens.css's own comment on the same
+                   point; the neutral-dark control's ref_suffix stayed
+                   'dark' through BOTH the Dark->Graphite and the
+                   Graphite->Black relabeling, since its underlying
+                   purpose - "select the neutral dark theme" - never
+                   changed), deep-forest is the one genuinely NEW
+                   identifier this stage adds. #}
                 <details class="workspace-appearance-menu" id="workspace-appearance-menu" data-ui-ref="menu.appearance">
                     <summary class="workspace-topbar-btn">Appearance</summary>
                     <div class="workspace-appearance-options" role="group" aria-label="Appearance">
                         <table class="appearance-matrix">
-                            <caption class="visually-hidden">Per-surface appearance - choose Light, Dark, or Tinted for each surface, or All to set every surface at once</caption>
+                            <caption class="visually-hidden">Per-surface appearance - choose Light, Black, Midnight Blue, or Deep Forest for each surface, or All to set every surface at once</caption>
                             <thead>
                                 <tr>
                                     <th scope="col"><span class="visually-hidden">Surface</span></th>
                                     <th scope="col">Light</th>
-                                    <th scope="col">Dark</th>
-                                    <th scope="col">Tinted</th>
+                                    <th scope="col">Black</th>
+                                    <th scope="col">Midnight Blue</th>
+                                    <th scope="col">Deep Forest</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {# CLAUDE-P40-VW8-QA, Section 5: All is a CONTROL that applies an
-                                   existing mode to every surface at once, never a fourth theme
+                                   existing mode to every surface at once, never a fifth theme
                                    of its own - unchecked (never fabricated as "selected") the
                                    moment the five surfaces disagree, per the JS wiring below,
                                    which is also what decides whether it should show checked in
@@ -147,11 +169,11 @@
                                    state. */ #}
                                 <tr class="appearance-matrix-all-row" data-ui-ref="menu.appearance.all">
                                     <th scope="row">All</th>
-                                    {% for mode_key, mode_label in [('light', 'Light'), ('dark', 'Dark'), ('tinted', 'Tinted')] %}
+                                    {% for mode_value, mode_label, ref_suffix in [('light', 'Light', 'light'), ('black', 'Black', 'dark'), ('midnight-blue', 'Midnight Blue', 'tinted'), ('deep-forest', 'Deep Forest', 'deep-forest')] %}
                                     <td>
-                                        <input type="radio" name="appearance-all" id="appearance-all-{{ mode_key }}"
-                                               data-appearance-all-mode="{{ mode_key }}"
-                                               data-ui-ref="menu.appearance.all.{{ mode_key }}"
+                                        <input type="radio" name="appearance-all" id="appearance-all-{{ ref_suffix }}"
+                                               data-appearance-all-mode="{{ mode_value }}"
+                                               data-ui-ref="menu.appearance.all.{{ ref_suffix }}"
                                                aria-label="All surfaces appearance: {{ mode_label }}">
                                     </td>
                                     {% endfor %}
@@ -159,11 +181,11 @@
                                 {% for surface_key, surface_label in [('menu', 'Menu'), ('lists', 'Lists'), ('display', 'Display'), ('toolbox', 'Toolbox'), ('chat', 'Chat')] %}
                                 <tr data-ui-ref="menu.appearance.{{ surface_key }}">
                                     <th scope="row">{{ surface_label }}</th>
-                                    {% for mode_key, mode_label in [('light', 'Light'), ('dark', 'Dark'), ('tinted', 'Tinted')] %}
+                                    {% for mode_value, mode_label, ref_suffix in [('light', 'Light', 'light'), ('black', 'Black', 'dark'), ('midnight-blue', 'Midnight Blue', 'tinted'), ('deep-forest', 'Deep Forest', 'deep-forest')] %}
                                     <td>
-                                        <input type="radio" name="appearance-{{ surface_key }}" id="appearance-{{ surface_key }}-{{ mode_key }}"
-                                               data-appearance-target="{{ surface_key }}" data-appearance-mode="{{ mode_key }}"
-                                               data-ui-ref="menu.appearance.{{ surface_key }}.{{ mode_key }}"
+                                        <input type="radio" name="appearance-{{ surface_key }}" id="appearance-{{ surface_key }}-{{ ref_suffix }}"
+                                               data-appearance-target="{{ surface_key }}" data-appearance-mode="{{ mode_value }}"
+                                               data-ui-ref="menu.appearance.{{ surface_key }}.{{ ref_suffix }}"
                                                aria-label="{{ surface_label }} appearance: {{ mode_label }}">
                                     </td>
                                     {% endfor %}
@@ -267,7 +289,7 @@
                                                established (Section 5's own "coherent empty state"
                                                requirement) - Investigations/RFIs below get the same
                                                treatment. #}
-                                            <li class="tree-node-empty"><span class="pane-note">No Documents yet.</span></li>
+                                            <li class="tree-node-empty"><span class="pane-note" data-ui-ref="lists.project.documents.empty">No Documents yet.</span></li>
                                             {% endfor %}
                                         </ul>
                                     </li>
@@ -321,7 +343,7 @@
                                                 <a class="tree-leaf launcher-link{% if active_case and active_case.id == row.draft.case_id %} active{% endif %}" data-ui-ref="lists.project.rfis.leaf" data-case-id="{{ row.draft.case_id }}" data-case-title="{{ row.case_title }}" href="{{ url_for('workspace.show_workspace', project_id=project_id, case=row.draft.case_id) }}">{{ row.draft.question_text[:60] }}{% if row.draft.question_text|length > 60 %}&hellip;{% endif %}</a>
                                             </li>
                                             {% else %}
-                                            <li class="tree-node-empty"><span class="pane-note">No RFIs yet.</span></li>
+                                            <li class="tree-node-empty"><span class="pane-note" data-ui-ref="lists.project.rfis.empty">No RFIs yet.</span></li>
                                             {% endfor %}
                                         </ul>
                                     </li>
@@ -329,8 +351,14 @@
                                        exists anywhere in this codebase to show (CLAUDE-P40-E3A,
                                        Section 4's own "only if an honest existing listing exists"
                                        instruction; confirmed absent during CLAUDE-P40-E3-PLAN). #}
+                                    {# CLAUDE-P40-VW7A-QA: the message count that used to sit in a
+                                       "Chat (N)" label beside the composer moved here instead - this
+                                       row already identifies "Chats," so showing the count next to it
+                                       (matching Documents/Investigations/Tasks/Tags's own
+                                       <span class="launcher-count"> convention) is the ONE place it
+                                       appears now, not duplicated near the composer too. #}
                                     <li class="tree-node" data-tree-node>
-                                        <a class="tree-leaf launcher-link{% if directory_view is none and not active_case and not selected_source %} active{% endif %}" data-ui-ref="lists.project.chats" href="{{ url_for('workspace.show_workspace', project_id=project_id) }}">Chats</a>
+                                        <a class="tree-leaf launcher-link{% if directory_view is none and not active_case and not selected_source %} active{% endif %}" data-ui-ref="lists.project.chats" href="{{ url_for('workspace.show_workspace', project_id=project_id) }}">Chats <span class="launcher-count">{{ project_conversation_count }}</span></a>
                                     </li>
                                     {# ---------------- Tasks (CLAUDE-P40-VW7) --------------------------
                                        Real, persisted project Tasks created via "Make Task" on a
@@ -370,7 +398,7 @@
                                                         </div>
                                                     </li>
                                                     {% else %}
-                                                    <li class="tree-node-empty"><span class="pane-note">No open Tasks.</span></li>
+                                                    <li class="tree-node-empty"><span class="pane-note" data-ui-ref="lists.project.tasks.open.empty">No open Tasks.</span></li>
                                                     {% endfor %}
                                                 </ul>
                                             </li>
@@ -391,7 +419,7 @@
                                                         </div>
                                                     </li>
                                                     {% else %}
-                                                    <li class="tree-node-empty"><span class="pane-note">No completed Tasks.</span></li>
+                                                    <li class="tree-node-empty"><span class="pane-note" data-ui-ref="lists.project.tasks.completed.empty">No completed Tasks.</span></li>
                                                     {% endfor %}
                                                 </ul>
                                             </li>
@@ -435,7 +463,7 @@
                                                 </ul>
                                             </li>
                                             {% else %}
-                                            <li class="tree-node-empty"><span class="pane-note">No Tags yet.</span></li>
+                                            <li class="tree-node-empty"><span class="pane-note" data-ui-ref="lists.project.tags.empty">No Tags yet.</span></li>
                                             {% endfor %}
                                         </ul>
                                     </li>
@@ -664,6 +692,80 @@
         {% endif %}
     </div>
 
+    <script>
+        // CLAUDE-P40-VW8-QA (Approved Theme Set): resolves and applies
+        // each surface's appearance class as early as this app's plain-
+        // script, no-build architecture allows - immediately after the
+        // last of the 5 possible surface elements (.chat-region, just
+        // above) exists in the DOM, rather than waiting for the much
+        // later script block (further below) that also wires up the
+        // Appearance menu's own radios/event listeners. This is the
+        // earliest point synchronous parsing reaches every target
+        // element; it is not a guaranteed pre-paint hook the way the
+        // <head> localStorage reads above are for launcher-hidden/
+        // toolbox-hidden/ui-reference-mode (those apply to <html>, which
+        // exists before <body> parses at all - these 5 surfaces don't
+        // exist until here), but it removes ~300 lines of unrelated
+        // script execution that used to sit between "these elements
+        // exist" and "their appearance class gets applied," which is
+        // the actual, measurable flash window this correction targets -
+        // most concretely, "Black is now the default for a new browser/
+        // user with no stored preference" (previously: no stored
+        // preference silently meant Light, and appeared exactly as
+        // Light on first paint since nothing overrode it here).
+        // resolveStoredAppearanceMode is defined on window so the later
+        // script block (radio wiring, All-row sync, persistence-on-
+        // change) can reuse the identical migration rule rather than a
+        // second, potentially-drifting copy of it.
+        //
+        // CLAUDE-P40-VW8-QA (Approved Theme Set, second correction): a
+        // brief interim version of this stage stored 'graphite' as the
+        // new-vocabulary neutral-dark value - the product owner's own
+        // immediate follow-up rejected the Graphite palette itself
+        // ("Restore the original true-black appearance... Do not use
+        // Graphite") and renamed the choice "Black." The migration
+        // table below now also maps a stray already-stored 'graphite'
+        // value (anyone who loaded this app during that brief interim)
+        // losslessly onto 'black', the same "honest mapping, never
+        // reinterpreted as something the reviewer didn't choose"
+        // discipline VW3's own original comment established for plain
+        // -> light.
+        window.__resolveStoredAppearanceMode = function (stored) {
+            // dark/tinted are the pre-VW8-QA stored vocabulary; graphite
+            // is the brief interim vocabulary - map all of them
+            // losslessly onto the current one, exactly once.
+            if (stored === 'dark' || stored === 'graphite') return 'black';
+            if (stored === 'tinted') return 'midnight-blue';
+            if (stored === 'light' || stored === 'black' || stored === 'midnight-blue' || stored === 'deep-forest') {
+                return stored;
+            }
+            // No stored value (new browser/user) OR anything else
+            // unrecognized (e.g. the old 'plain') - Black is the
+            // default, not Light (product-owner spec).
+            return 'black';
+        };
+        window.__applyStoredAppearanceMode = function (el, mode) {
+            el.classList.toggle('appearance-dark', mode === 'black');
+            el.classList.toggle('appearance-tinted', mode === 'midnight-blue');
+            el.classList.toggle('appearance-deep-forest', mode === 'deep-forest');
+        };
+        (function () {
+            var earlyTargets = {
+                menu: document.querySelector('.workspace-topbar'),
+                lists: document.querySelector('.launcher-panel'),
+                display: document.querySelector('.app-main'),
+                toolbox: document.querySelector('.workspace-pane-toolbox'),
+                chat: document.querySelector('.chat-region'),
+            };
+            Object.keys(earlyTargets).forEach(function (key) {
+                var el = earlyTargets[key];
+                if (!el) return;
+                var stored = null;
+                try { stored = window.localStorage.getItem('beehive:appearance:' + key); } catch (e) { /* ignore */ }
+                window.__applyStoredAppearanceMode(el, window.__resolveStoredAppearanceMode(stored));
+            });
+        })();
+    </script>
     <script>
         // CLAUDE-P40-E3A, Section 7: the panel-dividing lines are the
         // collapse controls - a plain class toggle on <html>, never DOM
@@ -1008,25 +1110,23 @@
         })();
 
         // CLAUDE-P40-E3A, Section 10; CLAUDE-P40-VW3: Appearance menu -
-        // applies one of three modes (Light/Dark/Tinted) independently
-        // per surface, including the top Menu bar (new this stage).
+        // applies one of four choices (Light/Graphite/Midnight Blue/Deep
+        // Forest) independently per surface, including the top Menu bar.
         // Reviewer/device presentation state only (localStorage, one key
         // per surface, same key names as before), never a Project-record
         // write - same persistence boundary VW3's own prompt requires
         // preserving.
         //
-        // Compatibility mapping (VW3's own required "honest mapping"
-        // from the old checkbox state): the old model stored exactly
-        // 'tinted' or 'plain' per surface (Menu had no key at all - it
-        // wasn't configurable before). 'tinted' meant, and still means,
-        // exactly the same thing, so it carries over unchanged. 'plain'
-        // (or no stored value at all, including every existing Menu
-        // reader) meant the untinted default look, which is exactly
-        // what 'light' now IS - so both map to 'light', losslessly: no
-        // reviewer's prior preference is reinterpreted as something they
-        // didn't choose. A value already in the new vocabulary (light/
-        // dark/tinted, written by this stage's own code) passes through
-        // unchanged, making the mapping idempotent on re-application.
+        // CLAUDE-P40-VW8-QA (Approved Theme Set): resolveStoredMode/
+        // applyMode below now delegate to window.__resolveStoredAppearanceMode/
+        // __applyStoredAppearanceMode (defined in the earlier script
+        // block, right after .chat-region, so first paint doesn't wait
+        // for this whole block - see that block's own comment for why)
+        // rather than duplicating the migration rule a second time.
+        // VW3's own original "honest mapping" reasoning for 'plain'/
+        // missing -> 'light' no longer applies now that Graphite is the
+        // default - see the shared resolver's own comment for the
+        // current dark/tinted -> graphite/midnight-blue mapping.
         (function () {
             var targets = {
                 menu: document.querySelector('.workspace-topbar'),
@@ -1036,17 +1136,10 @@
                 chat: document.querySelector('.chat-region'),
             };
             var surfaceKeys = Object.keys(targets);
-            var currentMode = {}; // key -> 'light'|'dark'|'tinted', kept in sync below
+            var currentMode = {}; // key -> 'light'|'graphite'|'midnight-blue'|'deep-forest', kept in sync below
 
-            function resolveStoredMode(stored) {
-                if (stored === 'tinted' || stored === 'dark') return stored;
-                return 'light'; // covers 'plain', null/missing, and any unrecognized value
-            }
-
-            function applyMode(el, mode) {
-                el.classList.toggle('appearance-dark', mode === 'dark');
-                el.classList.toggle('appearance-tinted', mode === 'tinted');
-            }
+            var resolveStoredMode = window.__resolveStoredAppearanceMode;
+            var applyMode = window.__applyStoredAppearanceMode;
 
             // CLAUDE-P40-VW8-QA, Section 5: applies ONE surface's mode -
             // updates its DOM class, its own radio row, its localStorage

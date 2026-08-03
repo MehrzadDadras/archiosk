@@ -221,30 +221,40 @@ class ComputedValueDistinctnessTests(unittest.TestCase):
 
     _SURFACES = ("workspace-topbar", "launcher-panel", "app-main", "workspace-pane-toolbox", "chat-region")
 
-    def test_dark_mode_resolves_to_a_genuinely_dark_background_on_every_surface(self):
+    def test_dark_mode_resolves_to_the_approved_black_background_on_every_surface(self):
+        # CLAUDE-P40-VW8-QA (Approved Theme Set): .appearance-dark is
+        # "Black" - a brief interim "Graphite" (#0E1116, neutral near-
+        # black) was itself corrected back to true #000000 per explicit
+        # product-owner follow-up ("Do not use Graphite... must appear
+        # flat and matte"), restoring VW6's own original literal value.
         for surface in self._SURFACES:
             bg, _color = self._computed_background_color(surface, "appearance-dark")
             self.assertIsNotNone(bg, surface)
             self.assertNotIn("UNRESOLVED", bg, f"{surface}.appearance-dark background did not resolve: {bg}")
-            self.assertEqual(bg.upper(), "#000000", f"{surface}.appearance-dark background is {bg}, expected black")
+            self.assertEqual(bg.upper(), "#000000", f"{surface}.appearance-dark (Black) background is {bg}, expected #000000")
 
-    def test_dark_mode_resolves_to_a_genuinely_light_foreground_on_every_surface(self):
+    def test_dark_mode_resolves_to_the_approved_warm_off_white_foreground_on_every_surface(self):
+        # CLAUDE-P40-VW8-QA: primary dark-theme text is the shared warm
+        # off-white #E8E4DC (product-owner spec), not pure #FFFFFF - the
+        # one part of the interim Graphite revision the follow-up
+        # correction explicitly kept.
         for surface in self._SURFACES:
             _bg, color = self._computed_background_color(surface, "appearance-dark")
             self.assertIsNotNone(color, surface)
             self.assertNotIn("UNRESOLVED", color)
-            self.assertEqual(color.upper(), "#FFFFFF", f"{surface}.appearance-dark color is {color}, expected white")
+            self.assertEqual(color.upper(), "#E8E4DC", f"{surface}.appearance-dark (Black) color is {color}, expected #E8E4DC")
 
-    def test_tinted_mode_resolves_to_a_lighter_blue_grey_background_on_every_surface(self):
+    def test_tinted_mode_resolves_to_a_genuinely_dark_navy_background_on_every_surface(self):
+        # CLAUDE-P40-VW8-QA: .appearance-tinted is now "Midnight Blue" -
+        # a DEEP navy dark theme (#0B1B2B, product-owner spec), the
+        # opposite direction from the earlier VW6/VW8-QA light-navy
+        # "Tinted" this test used to pin (r > 180 / "genuinely light").
         for surface in self._SURFACES:
             bg, _color = self._computed_background_color(surface, "appearance-tinted")
             self.assertIsNotNone(bg, surface)
             self.assertNotIn("UNRESOLVED", bg)
-            # Genuinely light (high luminance) - not asserting the exact
-            # hex (that's tokens.css's own concern), just that it is
-            # nowhere near black.
             r = int(bg[1:3], 16)
-            self.assertGreater(r, 180, f"{surface}.appearance-tinted background {bg} is not light")
+            self.assertLess(r, 40, f"{surface}.appearance-tinted (Midnight Blue) background {bg} is not dark")
 
     def test_dark_and_tinted_backgrounds_are_never_the_same_value(self):
         for surface in self._SURFACES:
@@ -252,11 +262,21 @@ class ComputedValueDistinctnessTests(unittest.TestCase):
             tint_bg, _ = self._computed_background_color(surface, "appearance-tinted")
             self.assertNotEqual(dark_bg, tint_bg, f"{surface}: Dark and Tinted resolve to the identical background {dark_bg}")
 
-    def test_dark_and_tinted_foregrounds_are_never_the_same_value(self):
+    def test_dark_and_tinted_foregrounds_are_deliberately_the_same_shared_family(self):
+        # CLAUDE-P40-VW8-QA (Approved Theme Set) inverted this stage's
+        # own original invariant on purpose: "Continue using readable
+        # warm off-white foreground text on the dark themes" and "derive
+        # the complete supporting palette from shared tokens" together
+        # mean Black/Midnight Blue/Deep Forest share ONE text family
+        # (#E8E4DC and its derived tiers) by design, not three
+        # independently-tuned ones - distinctness between the three dark
+        # themes comes entirely from their BACKGROUNDS (see
+        # test_dark_and_tinted_backgrounds_are_never_the_same_value
+        # above, still real and still checked), never their foregrounds.
         for surface in self._SURFACES:
             _, dark_color = self._computed_background_color(surface, "appearance-dark")
             _, tint_color = self._computed_background_color(surface, "appearance-tinted")
-            self.assertNotEqual(dark_color, tint_color, f"{surface}: Dark and Tinted resolve to the identical foreground {dark_color}")
+            self.assertEqual(dark_color, tint_color, f"{surface}: Black and Midnight Blue must share the same warm off-white text family")
 
     def test_light_dark_and_tinted_are_three_genuinely_distinct_backgrounds(self):
         for surface in self._SURFACES:
@@ -289,10 +309,15 @@ class JavaScriptToggleLogicTests(unittest.TestCase):
         self.source = _BASE_HTML_PATH.read_text(encoding="utf-8")
 
     def test_apply_mode_toggles_dark_and_tinted_as_mutually_exclusive(self):
-        script_start = self.source.index("function applyMode(el, mode)")
-        script = self.source[script_start:script_start + 300]
-        self.assertIn("classList.toggle('appearance-dark', mode === 'dark')", script)
-        self.assertIn("classList.toggle('appearance-tinted', mode === 'tinted')", script)
+        # CLAUDE-P40-VW8-QA (Approved Theme Set): applyMode moved to
+        # window.__applyStoredAppearanceMode (an earlier script block,
+        # shared with the pre-paint pass) and now checks the current
+        # mode-value vocabulary (black/midnight-blue), not the old
+        # dark/tinted stored values.
+        script_start = self.source.index("window.__applyStoredAppearanceMode = function (el, mode)")
+        script = self.source[script_start:script_start + 400]
+        self.assertIn("classList.toggle('appearance-dark', mode === 'black')", script)
+        self.assertIn("classList.toggle('appearance-tinted', mode === 'midnight-blue')", script)
 
     def test_set_surface_mode_is_the_single_place_a_mode_is_ever_applied(self):
         # Exactly one CALL site of applyMode (the definition itself is

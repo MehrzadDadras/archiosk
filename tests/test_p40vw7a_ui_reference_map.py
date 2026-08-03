@@ -49,11 +49,25 @@ _LOGIN_HTML_PATH = _REPO_ROOT / "templates" / "login.html"
 _UPLOAD_HTML_PATH = _REPO_ROOT / "templates" / "upload.html"
 _UPLOAD_CONFIRM_HTML_PATH = _REPO_ROOT / "templates" / "upload_confirm.html"
 _ERROR_HTML_PATH = _REPO_ROOT / "templates" / "errors" / "error.html"
+_SECURITY_DEPARTMENT_HTML_PATH = _REPO_ROOT / "templates" / "security_department.html"
+_PROJECTS_HTML_PATH = _REPO_ROOT / "templates" / "projects.html"
+_REMOVED_PROJECTS_HTML_PATH = _REPO_ROOT / "templates" / "removed_projects.html"
 _APP_PY_PATH = _REPO_ROOT / "app.py"
 _MAIN_CSS_PATH = _REPO_ROOT / "static" / "css" / "main.css"
 _REFERENCE_MAP_PATH = _REPO_ROOT / "UI_REFERENCE_MAP.md"
 
 _DATA_REF_RE = re.compile(r'data-ui-ref="([a-z0-9._\-]+)"')
+# CLAUDE-P40-VW8-QA (Complete Root and Subfolder UI Reference Tagging):
+# security_department.html passes its references as macro CALL
+# ARGUMENTS (ui_ref='security.floor') - the actual data-ui-ref="..."
+# attribute text only ever exists inside _macros.html's own macro
+# bodies (accordion/subdisclosure), never literally in the calling
+# template's own source, so _DATA_REF_RE alone can never find these.
+# This second pattern catches the macro-argument shape directly (the
+# literal string genuinely IS present in source, just not as an HTML
+# attribute) - a real scan, not a hardcoded set like the Jinja-
+# variable-constructed refs above/below need.
+_MACRO_UI_REF_RE = re.compile(r"ui_ref=['\"]([a-z0-9._\-]+)['\"]")
 # CLAUDE-P40-VW8-QA: a row's own FIRST CELL may name more than one
 # data-ui-ref value (e.g. "`menu.appearance.all.light`,
 # `menu.appearance.all.dark`, `menu.appearance.all.tinted`") rather
@@ -127,9 +141,12 @@ def _all_template_refs() -> set[str]:
     for path in (
         _BASE_HTML_PATH, _CASE_WORKSPACE_HTML_PATH, _MACROS_HTML_PATH,
         _GATEWAY_HTML_PATH, _GATEWAY_SHELL_HTML_PATH, _PROJECT_CHOOSER_HTML_PATH,
-        _LOGIN_HTML_PATH, _UPLOAD_HTML_PATH, _UPLOAD_CONFIRM_HTML_PATH, _ERROR_HTML_PATH, _APP_PY_PATH,
+        _LOGIN_HTML_PATH, _UPLOAD_HTML_PATH, _UPLOAD_CONFIRM_HTML_PATH, _ERROR_HTML_PATH,
+        _SECURITY_DEPARTMENT_HTML_PATH, _PROJECTS_HTML_PATH, _REMOVED_PROJECTS_HTML_PATH, _APP_PY_PATH,
     ):
-        refs |= set(_DATA_REF_RE.findall(path.read_text(encoding="utf-8")))
+        text = path.read_text(encoding="utf-8")
+        refs |= set(_DATA_REF_RE.findall(text))
+        refs |= set(_MACRO_UI_REF_RE.findall(text))
     refs |= _APPEARANCE_DYNAMIC_REFS
     refs |= _ERROR_PAGE_DYNAMIC_REFS
     refs |= _UPLOAD_CONFIRM_DYNAMIC_REFS
@@ -186,7 +203,12 @@ class RegistryConsistencyTests(unittest.TestCase):
         # UI_REFERENCE_MAP.md's own Gateway/Auth sections and Section
         # 4's "must work on Sign-in, Gateway... too" requirement).
         for ref in _all_template_refs():
-            self.assertRegex(ref, r"^(menu|lists|display|toolbox|chat|shell|gateway|auth|upload|errors)\.[a-z0-9._\-]+$", ref)
+            self.assertRegex(
+                ref,
+                r"^(menu|lists|display|toolbox|chat|shell|gateway|auth|upload|errors|"
+                r"security|projects-directory|removed-projects)\.[a-z0-9._\-]+$",
+                ref,
+            )
 
     def test_ui_reference_mode_css_rule_exists(self):
         css = _MAIN_CSS_PATH.read_text(encoding="utf-8")

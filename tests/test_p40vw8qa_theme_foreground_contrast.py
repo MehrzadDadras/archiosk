@@ -94,15 +94,20 @@ class FullModeMatrixContrastTests(unittest.TestCase):
         ratio = contrast_ratio(tokens["text-primary"], tokens["surface-primary"])
         self.assertGreaterEqual(ratio, 7.0)
 
-    def test_tinted_mode_foreground_is_dark_charcoal_or_navy(self):
-        # Section requirement: Tinted needs a DARK foreground (not a mid-
-        # tone), coordinated with its light blue-grey background.
+    def test_tinted_mode_foreground_is_light_and_readable(self):
+        # CLAUDE-P40-VW8-QA (Approved Theme Set) inverted Tinted's own
+        # polarity on purpose: "Tinted" (now labeled "Midnight Blue") was
+        # a light navy-grey daylight variant when this test was first
+        # written (needing a DARK foreground) and is now one of the
+        # three DARK appearance choices (a solid, deeply saturated navy,
+        # #001426) - it needs a LIGHT foreground, the same shared warm
+        # off-white family Black/Deep Forest use, not a dark charcoal.
         tokens = self.modes["Tinted"]
         ratio = contrast_ratio(tokens["text-primary"], tokens["surface-primary"])
         self.assertGreaterEqual(ratio, 7.0)
-        # "dark" - luminance well below the mid-point, not just AA-passing.
+        # "light" - luminance well above the mid-point, not just AA-passing.
         from check_contrast import relative_luminance
-        self.assertLess(relative_luminance(tokens["text-primary"]), 0.15)
+        self.assertGreater(relative_luminance(tokens["text-primary"]), 0.5)
 
     def test_metadata_tier_still_visibly_dimmer_than_secondary_tier(self):
         # The two corrected values must not have been darkened/lightened

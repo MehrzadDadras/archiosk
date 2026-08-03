@@ -253,7 +253,11 @@ class BrokenCommentGuardTests(unittest.TestCase):
         tokens_css = _TOKENS_CSS_PATH.read_text(encoding="utf-8")
         stripped = self._strip_css_comments(tokens_css)
         self.assertIn("--dark-canvas: #000000;", stripped)
-        self.assertIn("--dark-text-primary: #FFFFFF;", stripped)
+        # CLAUDE-P40-VW8-QA (Approved Theme Set): warm off-white
+        # (#E8E4DC, product-owner spec), not pure #FFFFFF - "Continue
+        # using readable warm off-white foreground text on the dark
+        # themes" superseded VW6's own original white-text choice.
+        self.assertIn("--dark-text-primary: #E8E4DC;", stripped)
         # CLAUDE-P40-VW8-QA retuned --tint-surface-primary (see
         # TintedPaletteTests below for the live, non-hardcoded check) -
         # this test's own job is only "survives comment stripping as a
@@ -278,8 +282,12 @@ class DarkPaletteTests(unittest.TestCase):
     def test_dark_surface_primary_is_literal_black(self):
         self.assertRegex(self.tokens_css, r"--dark-surface-primary:\s*#000000\s*;")
 
-    def test_dark_text_primary_is_white(self):
-        self.assertRegex(self.tokens_css, r"--dark-text-primary:\s*#FFFFFF\s*;")
+    def test_dark_text_primary_is_warm_off_white(self):
+        # CLAUDE-P40-VW8-QA (Approved Theme Set) superseded this stage's
+        # own original pure-white choice with a warm off-white
+        # (#E8E4DC, product-owner spec, shared across Black/Midnight
+        # Blue/Deep Forest).
+        self.assertRegex(self.tokens_css, r"--dark-text-primary:\s*#E8E4DC\s*;")
 
     def test_no_leftover_warm_brown_dark_canvas(self):
         # The VW3 defect this stage fixes - the old "not genuinely black"
@@ -336,26 +344,27 @@ class TintedPaletteTests(unittest.TestCase):
         self.main_css = _MAIN_CSS_PATH.read_text(encoding="utf-8")
 
     def test_tint_surface_primary_is_the_specified_navy(self):
-        # CLAUDE-P40-VW8-QA: #D8E2F0 (this stage's own original value)
-        # was corrected to a considerably lighter, more desaturated blue-
-        # grey - "too strong/beige" in the walkthrough that authorized
-        # that stage - see tokens.css's own updated comment here for the
-        # full reasoning. Same navy HUE family, verified still genuinely
-        # blue (not grey/beige) via a real RGB channel comparison rather
-        # than a second hardcoded hex, so a future retune doesn't need to
-        # keep editing this exact literal.
+        # CLAUDE-P40-VW8-QA (Approved Theme Set): Tinted ("Midnight
+        # Blue") was turned from a LIGHT navy-grey daylight variant into
+        # one of the three DARK appearance choices - #001426 (product-
+        # owner spec), a solid, visibly saturated deep navy. This is a
+        # deliberate reversal of this stage's own original "considerably
+        # lighter" assertion (r > 200), not a regression - see tokens.css's
+        # own updated comment for the full reasoning. Still verified as
+        # genuinely blue (not grey/black) via a real RGB channel
+        # comparison rather than a second hardcoded hex.
         match = re.search(r"--tint-surface-primary:\s*#([0-9a-fA-F]{6})\s*;", self.tokens_css)
         self.assertIsNotNone(match)
         r, g, b = (int(match.group(1)[i:i + 2], 16) for i in (0, 2, 4))
-        self.assertGreater(b, r, "Tinted surface must read as blue, not beige (blue channel > red channel)")
-        self.assertGreater(r, 200, "Tinted surface must be considerably lighter, not a strong/deep navy")
+        self.assertGreater(b, r, "Tinted surface must read as blue, not warm/beige (blue channel > red channel)")
+        self.assertLess(r, 40, "Tinted surface must be a genuinely dark navy, not a light daylight variant")
 
     def test_tint_canvas_is_the_specified_navy(self):
         match = re.search(r"--tint-canvas:\s*#([0-9a-fA-F]{6})\s*;", self.tokens_css)
         self.assertIsNotNone(match)
         r, g, b = (int(match.group(1)[i:i + 2], 16) for i in (0, 2, 4))
-        self.assertGreater(b, r, "Tinted canvas must read as blue, not beige (blue channel > red channel)")
-        self.assertGreater(r, 200, "Tinted canvas must be considerably lighter, not a strong/deep navy")
+        self.assertGreater(b, r, "Tinted canvas must read as blue, not warm/beige (blue channel > red channel)")
+        self.assertLess(r, 40, "Tinted canvas must be a genuinely dark navy, not a light daylight variant")
 
     def test_all_five_surfaces_redefine_to_the_same_tint_family(self):
         rule_match = re.search(r"\.workspace-topbar\.appearance-tinted,[^{]*\{([^}]*)\}", self.main_css, re.S)
@@ -582,11 +591,17 @@ class IndependentModeTests(unittest.TestCase):
             self.assertIn(f"{surface}: document.querySelector(", js, surface)
         self.assertIn('document.querySelectorAll(\'[data-appearance-target="\' + key + \'"]\')', js)
 
-    def test_apply_mode_still_toggles_exactly_two_mutually_exclusive_classes(self):
-        start = self.html.index("CLAUDE-P40-E3A, Section 10; CLAUDE-P40-VW3: Appearance menu")
-        js = self.html[start:self.html.index("</script>", start)]
-        self.assertIn("el.classList.toggle('appearance-dark', mode === 'dark');", js)
-        self.assertIn("el.classList.toggle('appearance-tinted', mode === 'tinted');", js)
+    def test_apply_mode_still_toggles_the_mutually_exclusive_classes(self):
+        # CLAUDE-P40-VW8-QA (Approved Theme Set): applyMode moved to
+        # window.__applyStoredAppearanceMode (an earlier script block,
+        # shared with the pre-paint pass - see that function's own
+        # comment) and now toggles THREE classes (Deep Forest added a
+        # 3rd dark theme), keyed off the current mode-value vocabulary
+        # (black/midnight-blue/deep-forest, not the old dark/tinted).
+        self.assertIn("window.__applyStoredAppearanceMode = function (el, mode)", self.html)
+        self.assertIn("el.classList.toggle('appearance-dark', mode === 'black');", self.html)
+        self.assertIn("el.classList.toggle('appearance-tinted', mode === 'midnight-blue');", self.html)
+        self.assertIn("el.classList.toggle('appearance-deep-forest', mode === 'deep-forest');", self.html)
 
 
 # ---------------------------------------------------------------------------
@@ -599,10 +614,18 @@ class PersistenceAndLegacyCompatibilityTests(unittest.TestCase):
         start = self.html.index("CLAUDE-P40-E3A, Section 10; CLAUDE-P40-VW3: Appearance menu")
         self.js = self.html[start:self.html.index("</script>", start)]
 
-    def test_compat_mapping_unchanged(self):
-        self.assertIn("function resolveStoredMode(stored)", self.js)
-        self.assertIn("if (stored === 'tinted' || stored === 'dark') return stored;", self.js)
-        self.assertIn("return 'light';", self.js)
+    def test_compat_mapping_extended_not_broken(self):
+        # CLAUDE-P40-VW8-QA (Approved Theme Set): the resolver moved to
+        # window.__resolveStoredAppearanceMode (an earlier script block -
+        # see that function's own comment for why) and the vocabulary/
+        # default both changed (Black is now the default, not Light) -
+        # but every legacy stored value ('dark'/'tinted', and the brief
+        # interim 'graphite') still maps losslessly, the same guarantee
+        # this test originally protected.
+        self.assertIn("window.__resolveStoredAppearanceMode = function (stored)", self.html)
+        self.assertIn("if (stored === 'dark' || stored === 'graphite') return 'black';", self.html)
+        self.assertIn("if (stored === 'tinted') return 'midnight-blue';", self.html)
+        self.assertIn("return 'black';", self.html)
 
     def test_persists_to_the_same_per_surface_storage_key(self):
         # CLAUDE-P40-VW8-QA: the per-surface apply/persist logic was

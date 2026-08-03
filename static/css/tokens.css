@@ -182,31 +182,66 @@
     --pressure-quiet-text: var(--text-metadata);
 }
 
-/* -- dark mode (CLAUDE-P40-VW3) -----------------------------------------
+/* -- dark mode / "Black" (CLAUDE-P40-VW3; CLAUDE-P40-VW8-QA Approved
+   Theme Set) - the --dark-* token PREFIX and the .appearance-dark
+   CLASS NAME are deliberately left unchanged through TWO label
+   revisions now ("Dark" -> "Graphite" -> "Black"): they are internal
+   implementation names, not the user-facing label, and the product
+   owner's own instruction was explicit that "a label or palette
+   revision does not require renumbering when the control retains its
+   theme-selection meaning" - the same rule this stage applied to
+   keeping every underlying chat.selection-toolbar identifier in place
+   through its own correction. See the Appearance-matrix templates for
+   the actual "Black" label text.
    This file's own header above anticipated a dark theme as a SECOND
    FILE swapping the whole <link>, on the assumption a mode is global
    to the page. That assumption no longer holds: VW3 requires Menu,
-   Lists, Display, Toolbox, and Chat to each independently be Light,
-   Dark, or Tinted at the same time (e.g. Dark Display with Light
-   Lists). A page-wide file swap cannot express that; per-surface CSS
-   custom-property SCOPING can - see static/css/main.css's own
-   .appearance-dark rule, which redefines these same standard token
+   Lists, Display, Toolbox, and Chat to each independently carry any of
+   the four appearance choices at the same time (e.g. Black Display
+   with Light Lists). A page-wide file swap cannot express that; per-
+   surface CSS custom-property SCOPING can - see static/css/main.css's
+   own .appearance-dark rule, which redefines these same standard token
    names locally on whichever surface's own root element carries that
    class, so every existing component rule below (already written as
    var(--surface-primary) etc. throughout main.css) repaints correctly
    for free, with zero per-component changes.
 
-   Same hue family as the light palette above (~38-42deg warm neutral
-   for surfaces/borders, matching hues for the seven semantic accents)
-   with lightness inverted, not a different palette - "ink on paper"
-   becomes "paper-warm ink on dark ground," the same relationship
-   reversed. Every pairing below is verified via tools/check_contrast.py
-   against the same required-pairing list this file's light tokens are
-   held to (4.5:1 body text, 3:1 accent/badge text) - see that script's
-   own docstring for how to re-run it against a candidate file.
+   CLAUDE-P40-VW8-QA (Approved Theme Set, second correction): an
+   intermediate version of this stage briefly repointed the principal
+   background to #0E1116 ("Graphite" - neutral near-black, not pure
+   black) - the product owner's own immediate follow-up correction
+   explicitly rejected that: "Restore the original true-black
+   appearance... Do not use Graphite... must appear flat and matte -
+   not gray... or layered like glass." Canvas AND surface-primary are
+   literal #000000 again, matching CLAUDE-P40-VW6's own original
+   reasoning ("the page background is not genuinely black... use a
+   genuine black background"). Layering (surface-secondary/hover/
+   selected) and border steps are the SAME warm-toned values VW6
+   originally verified (#252118/#373125/#50432B/#6E6349/#837454,
+   unchanged) - explicitly named in the new spec as the reference every
+   other dark theme's OWN layering now luminance-matches against (see
+   tools/derive_theme_palettes.py), so Black stays the anchor, not one
+   of three independently-tuned ramps. Text tiers use the shared warm
+   off-white family (--dark-text-primary #E8E4DC, product-owner spec)
+   instead of pure #FFFFFF - the one part of the interim Graphite
+   revision that the follow-up correction explicitly KEPT ("Continue
+   using readable warm off-white foreground text on the dark themes") -
+   see this same value reused, unmodified, as --tint-text-primary/
+   --forest-text-primary below (ONE shared dark-theme text family
+   across all three dark choices, per spec, not three independently-
+   tuned ones). --dark-text-metadata's ratio against --dark-text-primary
+   is 0.77 (was 0.71 in the brief Graphite interim) specifically because
+   it is the tightest pairing in the whole matrix - text-metadata
+   against the ORIGINAL #50432B surface-selected, unchanged since VW6 -
+   and every luminance-matched theme inherits that same margin by
+   construction (see the tool's own docstring). text-disabled is
+   deliberately exempt from the 4.5:1 floor, matching the pre-existing
+   Light-mode precedent (WCAG does not require disabled/non-interactive
+   text to clear normal-text contrast; "dimmer than metadata, never
+   illegible" is the actual bar, unchanged from before this stage).
 
-   CLAUDE-P40-VW8-QA (Theme Foreground Contrast Addendum): tools/
-   check_contrast.py itself only ever checked LIGHT pairings (the
+   CLAUDE-P40-VW8-QA (Theme Foreground Contrast Addendum, prior stage):
+   tools/check_contrast.py itself only ever checked LIGHT pairings (the
    --text-* / --canvas / --surface-primary names it reads are the Light
    :root values; Dark/Tinted use differently-prefixed token names it
    never parsed). Auditing the full text-tier x surface-tier matrix
@@ -219,17 +254,8 @@
    text sitting on the deepest/most saturated layering step in each
    mode. Both darkened/lightened just enough to clear 4.5:1 with a
    small margin (still visibly the dimmest of the three text tiers -
-   see the full matrix in this stage's own checkpoint entry). */
+   see the full matrix in that stage's own checkpoint entry). */
 :root {
-    /* CLAUDE-P40-VW6: product-owner correction - "the page background is
-       not genuinely black... use a genuine black background for the
-       principal surface: #000000." Canvas AND surface-primary are both
-       literal black now (previously a dark warm brown, #1A1814/#25221D -
-       visibly not black, exactly the defect reported). Layering (surface-
-       secondary/hover/selected) still steps up in lightness from there so
-       nested/grouped content stays perceivable against true black -
-       verified via tools/check_contrast.py (see this stage's own
-       checkpoint entry for the exact run). */
     --dark-canvas: #000000;
     --dark-surface-primary: #000000;
     --dark-surface-secondary: #252118;
@@ -237,10 +263,10 @@
     --dark-surface-selected: #50432B;
     --dark-border: #6E6349;
     --dark-border-strong: #837454;
-    --dark-text-primary: #FFFFFF;
-    --dark-text-secondary: #D8D3CA;
-    --dark-text-metadata: #BBB3A8;
-    --dark-text-disabled: #7F786C;
+    --dark-text-primary: #E8E4DC;
+    --dark-text-secondary: #C8BEAB;
+    --dark-text-metadata: #BFB49D;
+    --dark-text-disabled: #7E6F53;
 
     --dark-seal-red: #E5756C;
     --dark-seal-red-tint: #3A1A18;
@@ -258,53 +284,122 @@
     --dark-risk-red-tint: #381F19;
 }
 
-/* CLAUDE-P40-VW6: Tinted mode's own full token family - a light navy-
-   blue, not the beige/gold the VW3 implementation actually shipped
-   (VW3 only ever swapped ONE element's background per surface to the
-   existing --surface-secondary/Limestone token - never a dedicated
-   Tinted palette - so every OTHER element inside that surface using
-   --surface-primary/--border/--text-primary directly, e.g. finding
-   cards, blank states, form controls, kept rendering the untinted
-   Light values underneath: "some surfaces become tinted and others do
-   not" was that gap, not a bug in any one selector).
-
-   CLAUDE-P40-VW8-QA: #D8E2F0 (VW6's own value, the product owner's
-   FIRST specified reference) still read as "too strong/beige" in the
-   walkthrough that authorized this stage - not a hue problem (it IS
-   genuinely blue, not beige, by its own numbers), but a LIGHTNESS one:
-   at that saturation/depth, next to this app's warm sand-toned Light
-   default, it reads heavier and warmer than intended. Corrected to a
-   considerably lighter, more desaturated blue-grey family - the SAME
-   navy hue throughout (~215deg), just pulled markedly toward white -
-   re-verified via tools/check_contrast.py the same way (see that
-   script and this stage's own checkpoint entry for the exact run). */
+/* "Midnight Blue" (CLAUDE-P40-VW8-QA, Approved Theme Set) - the
+   --tint-* token prefix and .appearance-tinted class name are kept
+   unchanged for the same "label/palette revision, not a renumbering"
+   reason documented on the Black block above; only the values change.
+   This REPLACES Tinted's previous identity outright rather than
+   adjusting it: Tinted used to be a light, desaturated navy-grey (a
+   daylight-mode variant, canvas #E9EEF6 - see the retired comment this
+   replaces, kept in git history for whoever needs the prior design
+   reasoning) and is now one of the three DARK appearance choices, a
+   solid, visibly saturated deep navy (canvas #001426, product-owner
+   spec - a second, stronger correction after an interim #0B1B2B
+   attempt read as too close to neutral; "the blue and green must
+   remain visibly deep, saturated, and solid" was explicit) - distinct
+   in hue from Black's own warm-neutral base and Deep Forest's
+   blue-green one, not "three nearly identical black themes" (the
+   product owner's own explicit requirement). Surface/border steps are
+   LUMINANCE-MATCHED (not raw-lightness-reprojected) to Black's own
+   ramp at this theme's hue (tools/derive_theme_palettes.py's own
+   docstring has the full reasoning for why luminance-matching, not
+   lightness-matching, is required once saturation varies this much),
+   which is also what keeps every dark theme's contrast guarantees
+   identical by construction rather than independently re-verified per
+   theme. Border/border-strong use a LOWER saturation (0.55/0.60) than
+   the surface steps so an ordinary panel boundary stays quiet even
+   against a vividly saturated background - see the panel-border-
+   hierarchy correction this stage also made; "ensure divider colors do
+   not become distracting in Midnight Blue or Deep Forest" was explicit
+   there too. Text reuses the SAME shared warm-off-white family
+   (--dark-text-primary #E8E4DC and its derived tiers) rather than
+   inventing a second one - "derive the complete supporting palette
+   from shared tokens" per spec. Accent colors below are intentionally
+   the EXACT SAME values as Black's --dark-seal-red/etc. family (not
+   independently re-picked): status meaning should read identically
+   regardless of which dark appearance is active, and re-verification
+   confirmed every one of them still clears 3:1 against this theme's
+   own canvas. Duplicated here as literal values, not var()-aliased to
+   --dark-*, only because every other mode family in this file is
+   already self-contained the same way - a structural convention this
+   stage preserves rather than introduces a cross-family reference
+   pattern that doesn't exist anywhere else in this file. */
 :root {
-    --tint-canvas: #E9EEF6;
-    --tint-surface-primary: #E9EEF6;
-    --tint-surface-secondary: #D2DCEC;
-    --tint-surface-hover: #C2D0E6;
-    --tint-surface-selected: #AEC0DE;
-    --tint-border: #9AACC9;
-    --tint-border-strong: #7C93B8;
-    --tint-text-primary: #1B2A40;
-    --tint-text-secondary: #33465F;
-    --tint-text-metadata: #3D4D66;
-    --tint-text-disabled: #7488A6;
+    --tint-canvas: #001426;
+    --tint-surface-primary: #001426;
+    --tint-surface-secondary: #002242;
+    --tint-surface-hover: #003260;
+    --tint-surface-selected: #004583;
+    --tint-border: #2D679C;
+    --tint-border-strong: #2F79BC;
+    --tint-text-primary: #E8E4DC;
+    --tint-text-secondary: #C8BEAB;
+    --tint-text-metadata: #BFB49D;
+    --tint-text-disabled: #7E6F53;
 
-    --tint-seal-red: #861C13;
-    --tint-seal-red-tint: #EDC3C0;
-    --tint-machine-blue: #275972;
-    --tint-machine-blue-tint: #C0DEED;
-    --tint-highlight-orange: #834116;
-    --tint-highlight-orange-tint: #EDD2C0;
-    --tint-accepted-green: #32673D;
-    --tint-accepted-green-tint: #C0EDC9;
-    --tint-attention-amber: #885611;
-    --tint-attention-amber-tint: #EDDAC0;
-    --tint-failure-red: #7B281E;
-    --tint-failure-red-tint: #EDC5C0;
-    --tint-risk-red: #812B18;
-    --tint-risk-red-tint: #EDC8C0;
+    --tint-seal-red: #E5756C;
+    --tint-seal-red-tint: #3A1A18;
+    --tint-machine-blue: #7EB7D3;
+    --tint-machine-blue-tint: #1E2D34;
+    --tint-highlight-orange: #E59C6C;
+    --tint-highlight-orange-tint: #392519;
+    --tint-accepted-green: #8AC696;
+    --tint-accepted-green-tint: #213124;
+    --tint-attention-amber: #E5B26C;
+    --tint-attention-amber-tint: #3B2C16;
+    --tint-failure-red: #DD7F73;
+    --tint-failure-red-tint: #361E1B;
+    --tint-risk-red: #E4826D;
+    --tint-risk-red-tint: #381F19;
+}
+
+/* "Deep Forest" (CLAUDE-P40-VW8-QA, Approved Theme Set) - the third
+   dark appearance choice, new this stage (no prior identity to
+   preserve, unlike Black/Midnight Blue above). Canvas #001A12
+   (product-owner spec, a second, more saturated correction after an
+   interim #10231E attempt), a deep, visibly saturated blue-green - the
+   SAME luminance-matching derivation as Midnight Blue above
+   (tools/derive_theme_palettes.py), shared warm-off-white text family,
+   Black's accent-color values reused unmodified and re-verified at
+   3:1 against this canvas, border/border-strong at reduced saturation
+   for the same "quiet ordinary boundary" reason. Luminance-matching
+   specifically exists because of THIS theme: a fully saturated green
+   at the SAME raw HSL lightness as blue/neutral reaches a much higher
+   relative luminance (WCAG's luminance formula weights green 0.7152
+   vs blue's 0.0722), so naively reprojecting Black's raw lightness
+   steps onto Forest's own hue at high saturation caused real 4.5:1
+   failures (text-metadata dropped to 2.58:1 against the naive
+   surface-selected) - solving for the LIGHTNESS THAT REPRODUCES Black's
+   own luminance at each step, rather than reusing the lightness number
+   itself, fixed this structurally rather than by hand-tuning one more
+   special case (see the tool's own docstring for the full method). */
+:root {
+    --forest-canvas: #001A12;
+    --forest-surface-primary: #001A12;
+    --forest-surface-secondary: #00271B;
+    --forest-surface-hover: #003928;
+    --forest-surface-selected: #004F37;
+    --forest-border: #217158;
+    --forest-border-strong: #218466;
+    --forest-text-primary: #E8E4DC;
+    --forest-text-secondary: #C8BEAB;
+    --forest-text-metadata: #BFB49D;
+    --forest-text-disabled: #7E6F53;
+
+    --forest-seal-red: #E5756C;
+    --forest-seal-red-tint: #3A1A18;
+    --forest-machine-blue: #7EB7D3;
+    --forest-machine-blue-tint: #1E2D34;
+    --forest-highlight-orange: #E59C6C;
+    --forest-highlight-orange-tint: #392519;
+    --forest-accepted-green: #8AC696;
+    --forest-accepted-green-tint: #213124;
+    --forest-attention-amber: #E5B26C;
+    --forest-attention-amber-tint: #3B2C16;
+    --forest-failure-red: #DD7F73;
+    --forest-failure-red-tint: #361E1B;
+    --forest-risk-red: #E4826D;
+    --forest-risk-red-tint: #381F19;
 }
 
 /* CLAUDE-P40-VW6: ONE fixed, mode-invariant divider color - deliberately

@@ -64,7 +64,14 @@ _TOKENS_CSS_PATH = Path(__file__).resolve().parent.parent / "static" / "css" / "
 _MAIN_CSS_PATH = Path(__file__).resolve().parent.parent / "static" / "css" / "main.css"
 
 _SURFACES = ["menu", "lists", "display", "toolbox", "chat"]
-_MODES = ["light", "dark", "tinted"]
+# CLAUDE-P40-VW8-QA (Approved Theme Set): these are the UI-reference
+# SUFFIXES rendered into each radio's id="appearance-{surface}-{suffix}"
+# (light/dark/tinted retained unchanged through two label revisions -
+# Dark->Black, Tinted->Midnight Blue - deep-forest is the one genuinely
+# new suffix), not the stored mode VALUES (light/black/midnight-blue/
+# deep-forest) - see templates/base.html's own (mode_value, mode_label,
+# ref_suffix) comment for why these are deliberately different.
+_MODES = ["light", "dark", "tinted", "deep-forest"]
 
 
 def _fake_file(content: bytes, filename: str) -> FileStorage:
@@ -132,22 +139,22 @@ class MatrixStructureTests(_BaseTestCase):
             for mode in _MODES:
                 self.assertIn(f'id="appearance-{surface}-{mode}"', menu, f"{surface}/{mode}")
 
-    def test_exactly_fifteen_radio_inputs(self):
-        # CLAUDE-P40-VW8-QA added a 6th row ("All" - Light/Dark/Tinted,
-        # 3 more radios) applying one mode to all five surfaces at once
-        # (Section 5) - 5 surfaces x 3 modes (15) + 1 All row x 3 modes
-        # (3) = 18.
+    def test_exactly_twentyfour_radio_inputs(self):
+        # CLAUDE-P40-VW8-QA added a 6th row ("All") applying one mode to
+        # all five surfaces at once (Section 5), and the Approved Theme
+        # Set added a 4th mode (Deep Forest) - 5 surfaces x 4 modes (20)
+        # + 1 All row x 4 modes (4) = 24.
         client = self._client_as("vw3_owner", 1)
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
         menu = self._appearance_html(body)
-        self.assertEqual(menu.count('type="radio"'), 18)
+        self.assertEqual(menu.count('type="radio"'), 24)
 
     def test_each_surface_is_its_own_radio_group(self):
         client = self._client_as("vw3_owner", 1)
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
         menu = self._appearance_html(body)
         for surface in _SURFACES:
-            self.assertEqual(menu.count(f'name="appearance-{surface}"'), 3, surface)
+            self.assertEqual(menu.count(f'name="appearance-{surface}"'), 4, surface)
 
     def test_no_checkboxes_remain(self):
         client = self._client_as("vw3_owner", 1)
@@ -175,22 +182,29 @@ class MatrixStructureTests(_BaseTestCase):
         positions = [menu.index(f'id="appearance-{s}-light"') for s in _SURFACES]
         self.assertEqual(positions, sorted(positions))
 
-    def test_all_fifteen_options_have_accessible_labels(self):
-        # CLAUDE-P40-VW8-QA: 18 now (15 surface + 3 All) - see
-        # test_exactly_fifteen_radio_inputs's own comment.
+    def test_all_twentyfour_options_have_accessible_labels(self):
+        # CLAUDE-P40-VW8-QA: 24 now - see
+        # test_exactly_twentyfour_radio_inputs's own comment.
         client = self._client_as("vw3_owner", 1)
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
         menu = self._appearance_html(body)
         radio_aria_labels = re.findall(r'<input type="radio"[^>]*aria-label="[^"]+"', menu)
-        self.assertEqual(len(radio_aria_labels), 18)
+        self.assertEqual(len(radio_aria_labels), 24)
 
-    def test_column_headers_light_dark_tinted(self):
+    def test_column_headers_light_black_midnight_blue_deep_forest(self):
+        # CLAUDE-P40-VW8-QA (Approved Theme Set): Dark relabeled Black
+        # (a brief interim "Graphite" was itself corrected back to
+        # Black), Tinted relabeled Midnight Blue, Deep Forest added.
         client = self._client_as("vw3_owner", 1)
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
         menu = self._appearance_html(body)
         self.assertIn(">Light<", menu)
-        self.assertIn(">Dark<", menu)
-        self.assertIn(">Tinted<", menu)
+        self.assertIn(">Black<", menu)
+        self.assertIn(">Midnight Blue<", menu)
+        self.assertIn(">Deep Forest<", menu)
+        self.assertNotIn(">Dark<", menu)
+        self.assertNotIn(">Tinted<", menu)
+        self.assertNotIn(">Graphite<", menu)
 
 
 # ---------------------------------------------------------------------------
@@ -349,16 +363,32 @@ class AppearanceJsWiringTests(unittest.TestCase):
         js = self._appearance_script()
         self.assertIn("menu: document.querySelector('.workspace-topbar')", js)
 
-    def test_compat_mapping_tinted_and_dark_pass_through_else_light(self):
+    def test_compat_mapping_legacy_and_current_values_resolve_correctly(self):
+        # CLAUDE-P40-VW8-QA (Approved Theme Set): the resolver moved to
+        # window.__resolveStoredAppearanceMode, defined in an earlier
+        # script block (right after .chat-region - see that block's own
+        # comment for why) so this block now just references it rather
+        # than declaring it inline. Default fallback is 'black' now, not
+        # 'light' (Black is the new default for a missing/invalid
+        # preference).
+        self.assertIn("window.__resolveStoredAppearanceMode = function (stored)", self.html)
+        self.assertIn("if (stored === 'dark' || stored === 'graphite') return 'black';", self.html)
+        self.assertIn("if (stored === 'tinted') return 'midnight-blue';", self.html)
+        self.assertIn("return 'black';", self.html)
         js = self._appearance_script()
-        self.assertIn("function resolveStoredMode(stored)", js)
-        self.assertIn("if (stored === 'tinted' || stored === 'dark') return stored;", js)
-        self.assertIn("return 'light';", js)
+        self.assertIn("var resolveStoredMode = window.__resolveStoredAppearanceMode;", js)
 
-    def test_apply_mode_toggles_exactly_the_two_mutually_exclusive_classes(self):
+    def test_apply_mode_toggles_exactly_the_three_mutually_exclusive_classes(self):
+        # A 4th theme (Deep Forest) added a 3rd toggled class - "exactly
+        # two" became "exactly three," still mutually exclusive (each
+        # condition checks a different mode value, so at most one is
+        # ever true).
+        self.assertIn("window.__applyStoredAppearanceMode = function (el, mode)", self.html)
+        self.assertIn("el.classList.toggle('appearance-dark', mode === 'black');", self.html)
+        self.assertIn("el.classList.toggle('appearance-tinted', mode === 'midnight-blue');", self.html)
+        self.assertIn("el.classList.toggle('appearance-deep-forest', mode === 'deep-forest');", self.html)
         js = self._appearance_script()
-        self.assertIn("el.classList.toggle('appearance-dark', mode === 'dark');", js)
-        self.assertIn("el.classList.toggle('appearance-tinted', mode === 'tinted');", js)
+        self.assertIn("var applyMode = window.__applyStoredAppearanceMode;", js)
 
     def test_each_surface_wired_independently_by_its_own_data_attribute(self):
         js = self._appearance_script()
