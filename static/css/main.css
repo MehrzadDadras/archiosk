@@ -90,17 +90,43 @@ button, input, select, textarea {
     border-color: var(--border);
 }
 
+/* CLAUDE-P40-VW8-QA, Section 10: the page itself never scrolls - only
+   .app-shell's own children with a real bounded height do (each panel
+   independently, via its own overflow-y:auto below). This is what
+   makes the Menu bar "fixed" without a single position:fixed/sticky
+   rule of its own: it is simply never inside anything that scrolls.
+   Before this stage, html/body had no height/overflow constraint at
+   all, so any page whose content grew taller than the viewport (a
+   long Overview, a tall Investigation, many Project cards) scrolled
+   the WHOLE page - Menu included - out of view; the panel-level sticky/
+   scroll rules already on .launcher-panel/.chat-region only ever
+   worked by coincidence, when nothing else on the page was tall enough
+   to trigger page-level scroll first. */
 html, body {
     margin: 0;
     padding: 0;
+    height: 100%;
+    overflow: hidden;
     background: var(--canvas);
     color: var(--text-primary);
     font-family: var(--font-body);
-    /* Supplementary hint alongside the explicit "Cond" family names above -
-       harmless no-op if unsupported, picks up the condensed face directly
-       if the installed Arial Nova exposes width as a variable-font axis
-       rather than (or in addition to) separate named families. */
-    font-stretch: condensed;
+    /* CLAUDE-P40-VW8-QA (Site-Wide Visual-System Consistency Addendum):
+       font-stretch: condensed removed - it was never actually a no-op.
+       --font-body's own stack already names the condensed variants
+       explicitly ("Arial Nova Cond", "Arial Narrow") - font-family
+       matching alone already selects those correctly wherever they're
+       installed. The font-stretch declaration only had a real effect
+       on the FALLBACK tier (plain "Arial"/sans-serif, i.e. any system
+       without Arial Nova installed - not just Windows 11/365): browsers
+       synthesize a horizontal squish for a static font asked to stretch
+       to a width it doesn't have a real face for, which is exactly
+       "unjustified synthetic font stretching" - distorted, narrower-
+       than-designed text, and specifically on whichever system DIDN'T
+       have the intended font, the opposite of graceful degradation.
+       Removing it changes zero px of which FONT FAMILY loads (the
+       fallback chain itself is untouched, per this stage's own "do not
+       change the font family" instruction) - only stops the browser
+       from artificially distorting the fallback face. */
     line-height: 1.55;
 }
 
@@ -133,8 +159,8 @@ a:focus-visible, button:focus-visible, input:focus-visible {
     inset: 0;
     z-index: -1;
     background-image:
-        linear-gradient(#5995C0 1px, transparent 1px),
-        linear-gradient(90deg, #5995C0 1px, transparent 1px);
+        linear-gradient(var(--blueprint-grid-line) 1px, transparent 1px),
+        linear-gradient(90deg, var(--blueprint-grid-line) 1px, transparent 1px);
     background-size: 48px 48px;
     opacity: 0.3;
 }
@@ -152,13 +178,19 @@ a:focus-visible, button:focus-visible, input:focus-visible {
 .app-shell {
     display: flex;
     flex-direction: column;
-    min-height: 100vh;
+    /* CLAUDE-P40-VW8-QA: was min-height:100vh, letting .app-shell (Menu
+       included) grow taller than the viewport and scroll with the page
+       - see html/body's own comment above. Locked to the viewport
+       exactly; every panel below scrolls internally instead. */
+    height: 100vh;
+    overflow: hidden;
 }
 .app-shell-body {
     display: flex;
     align-items: stretch;
     flex: 1;
     min-height: 0;
+    overflow: hidden;
 }
 .launcher-panel {
     width: 240px;
@@ -169,23 +201,27 @@ a:focus-visible, button:focus-visible, input:focus-visible {
     border-right: 1px solid var(--border);
     background: var(--surface-primary);
     overflow-y: auto;
-    position: sticky;
-    top: 0;
-    height: 100vh;
+    /* CLAUDE-P40-VW8-QA: was height:100vh + position:sticky/top:0 - a
+       workaround for the page itself scrolling (see html/body's own
+       comment). Now that .app-shell is height-locked and .app-shell-
+       body no longer scrolls as a whole, 100% of .app-shell-body's own
+       (already well-defined) height is correct and sticky positioning
+       has nothing left to stick against - simplified accordingly. */
+    height: 100%;
 }
-/* CLAUDE-P40-E3A, Section 9: Chat is now a full-width row beneath Lists/
-   Display/Toolbox (not confined to the Display column the way the old
-   .case-workspace-scoped dock was) - on a Workspace page (.chat-region
-   present) Lists' own sticky-fill height must stop above the sticky
-   Chat bar, or the two would visually overlap at the bottom of the
-   viewport while scrolled. 220px matches case_workspace.js's own
-   COMPACT_HEIGHT default so there's no flash between this CSS fallback
-   and the JS-applied value on load. Non-Workspace pages have no
-   .chat-region at all, so the base 100vh rule above stands unchanged
-   there. */
-.app-shell:has(> .chat-region) .launcher-panel {
-    height: calc(100vh - var(--chat-height, 220px));
-}
+/* CLAUDE-P40-E3A, Section 9 (Chat is a full-width row beneath Lists/
+   Display/Toolbox, sibling to .app-shell-body, not confined to the
+   Display column) - CLAUDE-P40-VW8-QA: the explicit height-subtraction
+   rule this comment used to document (".launcher-panel's sticky-fill
+   height must stop above the sticky Chat bar") is gone, not just
+   updated - .launcher-panel's own height:100% (above) is 100% of
+   .app-shell-body's ACTUAL rendered height, which ordinary flexbox
+   distribution already computes as "100vh minus Menu's own height
+   minus .chat-region's own height" automatically (.chat-region is a
+   flex-shrink:0 sibling of .app-shell-body within .app-shell, so it
+   already claims its own space before .app-shell-body's flex:1 gets
+   whatever's left). A second, manual height:calc(...) subtracting
+   --chat-height AGAIN would double-subtract it. */
 
 /* CLAUDE-P40-E3A, Section 7: the panel-dividing lines themselves are the
    Lists/Toolbox collapse controls (base.html's own script), replacing
@@ -394,6 +430,34 @@ html.launcher-hidden .launcher-panel { display: none; }
 .conv-tag-color-blue { background: var(--tagcolor-blue); }
 .conv-tag-color-purple { background: var(--tagcolor-purple); }
 
+/* CLAUDE-P40-VW8-QA, Section 11: the inline tagged-text treatment - a
+   real, visible consequence of "Add Tag" on the source text itself
+   (app.py's own `hotlinks` filter wraps the exact tagged substring in
+   this <mark>). Deliberately does NOT reuse --tagcolor-* as a fill
+   background - those are raw, saturated swatch-dot colors, never
+   contrast-verified against text, and reusing one directly here could
+   easily fail legibility in at least one of Light/Dark/Tinted. Instead
+   the FILL reuses --surface-selected (already contrast-verified
+   against --text-primary in every mode, the same "selected/current"
+   treatment used elsewhere in this app) and the per-tag color comes
+   through as a border-bottom stripe only - a 2px line has no text-
+   contrast requirement the way a fill does, so the raw swatch color is
+   safe to use there directly. */
+.tag-highlight-inline {
+    background: var(--surface-selected);
+    border-bottom: 2px solid var(--tagcolor-yellow);
+    border-radius: 2px;
+    padding: 0.05em 0.1em;
+    box-decoration-break: clone;
+    -webkit-box-decoration-break: clone;
+}
+.tag-highlight-inline.conv-tag-color-yellow { border-bottom-color: var(--tagcolor-yellow); }
+.tag-highlight-inline.conv-tag-color-orange { border-bottom-color: var(--tagcolor-orange); }
+.tag-highlight-inline.conv-tag-color-red { border-bottom-color: var(--tagcolor-red); }
+.tag-highlight-inline.conv-tag-color-green { border-bottom-color: var(--tagcolor-green); }
+.tag-highlight-inline.conv-tag-color-blue { border-bottom-color: var(--tagcolor-blue); }
+.tag-highlight-inline.conv-tag-color-purple { border-bottom-color: var(--tagcolor-purple); }
+
 /* A small, quiet text-style action inside a Lists row (Mark complete /
    Reopen / Remove) - .btn's own padding (0.85rem 1.5rem) is sized for a
    standalone page action, far too large for an inline list row. */
@@ -434,8 +498,9 @@ html.launcher-hidden .launcher-panel { display: none; }
    --surface-secondary's own real, correct, UNRELATED meaning (Limestone
    - "nav surfaces, grouped controls") being reused as if it were a
    dedicated Tinted palette, which it never was. Tinted now uses its own
-   --tint-* family (tokens.css - light navy-blue, #D8E2F0 as specified),
-   the exact same redefinition shape Dark already used correctly.
+   --tint-* family (tokens.css - a light navy-blue, further lightened
+   by CLAUDE-P40-VW8-QA - see that file's own header comment), the
+   exact same redefinition shape Dark already used correctly.
 
    Menu (.workspace-topbar) is a configurable surface (CLAUDE-P40-VW3) -
    it has no background of its own in its base rule (just a border-
@@ -467,15 +532,50 @@ html.launcher-hidden .launcher-panel { display: none; }
 .app-main {
     flex: 1;
     min-width: 0;
+    min-height: 0;
     display: flex;
     flex-direction: column;
+    /* CLAUDE-P40-VW8-QA: a pure layout wrapper now - <main> below is the
+       one actual scroll region, so this never becomes a second
+       scrolling context of its own (no "duplicate page-level
+       scrollbars" - Section 10). */
+    overflow: hidden;
+}
+
+/* CLAUDE-P40-VW8-QA, Section 10: <main> is the ONE scroll region for
+   every page's actual content - Menu (outside .app-main entirely,
+   above it in .app-shell) never moves, because it is never an
+   ancestor OR a sibling of anything that scrolls; only this element
+   does. flex/min-height:0/column so a Workspace page's own
+   .workspace-pane-display can, in turn, stretch to fill whatever
+   height is actually available (see that rule's own comment) instead
+   of shrink-wrapping its content - the direct fix for the "shallow
+   white rectangle" Display-division defect, which shared this exact
+   root cause (nothing in the ancestor chain ever gave the Display
+   grid a real height to fill). Applies to every page sharing
+   base.html's shell, not just Workspace - deliberately: the "Menu
+   must stay visible while content scrolls" requirement is a property
+   of this ONE shared shell, not a Workspace-specific concern (Section
+   10's own "avoid... where panel-level scrolling is appropriate" -
+   one central rule here, not scattered per-page overrides). Placed
+   BEFORE the narrow-viewport padding override directly below, so that
+   override still wins on cascade order at <=720px - both are the same
+   selector specificity, and only source order decides between them. */
+main {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    padding: 0 3rem;
+    max-width: 1180px;
+    margin: 0 auto;
+    width: 100%;
 }
 
 @media (max-width: 720px) {
     main { padding: 0 1.2rem; }
 }
-
-main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
 
 /* -- true zero-state entry shell (pre-authentication) ---------------------
    Deliberately minimal - no launcher panel, no top bar, no workspace
@@ -1246,6 +1346,24 @@ main { padding: 0 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
     margin: 0;
     cursor: pointer;
 }
+/* CLAUDE-P40-VW8-QA, Section 5: the All row sits above the five
+   per-surface rows, set apart by a divider (not a fill/box - this
+   file's own "no cards/shadows" discipline) so it visibly reads as a
+   universal control, not a sixth surface. */
+.appearance-matrix-all-row th,
+.appearance-matrix-all-row td {
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 0.4rem;
+}
+.appearance-matrix tbody tr:nth-child(2) th,
+.appearance-matrix tbody tr:nth-child(2) td {
+    padding-top: 0.4rem;
+}
+.appearance-mixed-note {
+    font-size: var(--text-xs);
+    color: var(--text-metadata);
+    margin: 0.3rem 0 0;
+}
 /* Standard visually-hidden pattern: present to assistive tech and
    keyboard navigation, removed from normal visual flow only - never
    `display: none`, which would also remove it from the accessibility
@@ -1418,6 +1536,10 @@ html.toolbox-hidden .workspace-pane-toolbox {
    ever swaps it. */
 .workspace-pane-display {
     min-width: 0;
+    min-height: 100%;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
     background: var(--surface-primary);
 }
 .app-main.appearance-tinted .workspace-pane-display,
@@ -1452,13 +1574,29 @@ html.toolbox-hidden .workspace-pane-toolbox {
 .display-divisions {
     display: grid;
     grid-template-columns: 1fr;
+    /* CLAUDE-P40-VW8-QA: an explicit row template even at the base
+       (mobile-first, single-column) width, not just at the 900px+
+       breakpoint below - a 1fr row track only ever distributes real
+       space if the GRID CONTAINER itself has a defined height to
+       divide among them, which flex:1/min-height:100% (this rule)
+       plus .workspace-pane-display's own flex:1 (above) now provide.
+       Without a real height here, "1fr" silently degrades to
+       content's own natural size regardless of what the row template
+       says - the actual root cause of the "shallow white rectangle"/
+       "small patches" Display-division defects, not a missing grid
+       declaration on its own. */
+    grid-template-rows: repeat(var(--display-h, 1), 1fr);
     grid-auto-flow: row;
     gap: 1px;
     background: var(--border);
+    flex: 1;
+    min-height: 100%;
 }
 .display-division {
     min-width: 0;
     min-height: 0;
+    display: flex;
+    flex-direction: column;
     background: var(--surface-primary);
     /* Uniform on every division, including index 0 - a per-edge "no
        padding on whichever side touches the pane's own edge" rule
@@ -1505,6 +1643,12 @@ html.toolbox-hidden .workspace-pane-toolbox {
     margin-bottom: 0.5rem;
     font-size: 0.78rem;
     color: var(--text-metadata);
+    /* CLAUDE-P40-VW8-QA: .display-division is now a flex column (header
+       + empty-state/content) - the header keeps its own natural size,
+       never stretched or shrunk, so .display-division-content/.
+       display-division-empty (both flex:1 below) get the entire
+       remaining, real height to fill. */
+    flex-shrink: 0;
 }
 .display-division-header-name {
     overflow: hidden;
@@ -1583,7 +1727,19 @@ html.toolbox-hidden .workspace-pane-toolbox {
     padding-top: 0.5rem;
 }
 
+/* CLAUDE-P40-VW8-QA, Section 9: "empty-state content is positioned
+   coherently inside the division" - centered within the division's
+   own real, now-full-height area (flex:1 on the empty state itself,
+   inside .display-division's own flex column) rather than left
+   stranded at the top of a tall, mostly-blank box. */
 .display-division-empty {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    gap: 0.4rem;
     padding: 1.5rem 0;
     color: var(--text-secondary);
     font-size: 0.85rem;
@@ -1594,13 +1750,24 @@ html.toolbox-hidden .workspace-pane-toolbox {
     margin-top: 0.5rem;
 }
 .display-division.display-division-populated .display-division-empty { display: none; }
+/* CLAUDE-P40-VW8-QA: fills the division's real available height
+   (flex:1 within .display-division's own column) instead of shrink-
+   wrapping to nothing when empty, or a content-blind height:50vh
+   guess when populated - both were instances of the same "shallow
+   rectangle" root cause the container-level fix above addresses. */
+.display-division-content {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
 .display-division-content iframe,
 .display-division-content img {
     width: 100%;
     border: 1px solid var(--border);
 }
-.display-division-content iframe { height: 50vh; background: var(--surface-primary); }
-.display-division-content img { max-width: 100%; display: block; }
+.display-division-content iframe { flex: 1; min-height: 0; height: 100%; background: var(--surface-primary); }
+.display-division-content img { max-width: 100%; max-height: 100%; display: block; margin: 0 auto; object-fit: contain; }
 
 /* CLAUDE-P40-E2: the Toolbox itself - a flex stack of .workspace-pane
    sections (Investigation/Document/Project tools, contextual; Removed
@@ -1615,11 +1782,22 @@ html.toolbox-hidden .workspace-pane-toolbox {
 .workspace-pane-toolbox {
     width: min(340px, 30vw);
     flex-shrink: 0;
-    align-self: flex-start;
     display: flex;
     flex-direction: column;
     gap: 1rem;
     min-width: 0;
+    /* CLAUDE-P40-VW8-QA: was align-self:flex-start (natural content
+       height, never bounded) with no overflow rule of its own - safe
+       only under the OLD model where the whole PAGE scrolled to reveal
+       tall Toolbox content. Now that html/body/.app-shell are height-
+       locked and .app-shell-body no longer scrolls as a whole (see
+       those rules' own comments), an unbounded, unscrolled Toolbox
+       would have its own overflow silently clipped instead - a real
+       regression this fix prevents, not a cosmetic tweak. Stretches to
+       .app-shell-body's own height (align-items:stretch, that
+       container's existing default) and scrolls its own content
+       internally, exactly like .launcher-panel and <main> already do. */
+    overflow-y: auto;
     /* CLAUDE-P40-E3A-QA, Section 8 fix: never had a default background at
        all (a real gap from this stage's own rewrite, not a deliberate
        choice) - transparent let the page's own warm --canvas bleed
@@ -2339,6 +2517,48 @@ html.toolbox-hidden .workspace-pane-toolbox {
 }
 .conv-dialog-actions .btn { padding: 0.5rem 1rem; font-size: 0.82rem; }
 
+/* CLAUDE-P40-VW8: the Project-switching interruption dialog - same
+   fixed/centered/solid-background/high-z-index idiom .conv-dialog
+   already established (CLAUDE-P40-VW7), not a new pattern. */
+.project-switch-dialog {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 80;
+    width: min(380px, calc(100vw - 2rem));
+    max-height: calc(100vh - 2rem);
+    overflow-y: auto;
+    background: var(--surface-primary);
+    border: 1px solid var(--border-strong);
+    border-radius: 6px;
+    padding: 0.9rem;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.22);
+}
+.project-switch-dialog-heading {
+    font-family: var(--font-body);
+    font-weight: 600;
+    font-size: 1rem;
+    margin: 0 0 0.4rem;
+    color: var(--text-primary);
+}
+.project-switch-dialog-body {
+    font-size: var(--text-sm);
+    color: var(--text-secondary);
+    margin: 0 0 0.7rem;
+}
+.project-switch-dialog-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+.project-switch-dialog-actions .btn { padding: 0.5rem 0.8rem; font-size: 0.82rem; }
+.project-switch-dialog-note {
+    font-size: var(--text-xs);
+    color: var(--attention-amber);
+    margin: 0.6rem 0 0;
+}
+
 /* Navigate-to-source (Section 4): a temporary, animated flash - never a
    permanent border/fill (CLAUDE-P40-E1A-VISUAL's own "remove borders and
    filled cards around ordinary...messages" de-boxing rule above still
@@ -2805,8 +3025,8 @@ html.toolbox-hidden .workspace-pane-toolbox {
 
 /* CLAUDE-P40-VW7A: UI Reference Mode - a developer/QA overlay only (the
    "UI Reference Mode" checkbox in the Account menu), never rendered by
-   default. Every [data-ref] element gets a small monospace badge via
-   ::after and attr(data-ref) - zero JS beyond the toggle itself needed
+   default. Every [data-ui-ref] element gets a small monospace badge via
+   ::after and attr(data-ui-ref) - zero JS beyond the toggle itself needed
    to read the value, since CSS's own attr() function renders it
    directly. position:relative is scoped to when the mode is ACTIVE
    only (never applied at rest) so this has zero layout effect on the
@@ -2817,13 +3037,13 @@ html.toolbox-hidden .workspace-pane-toolbox {
    behind a popup/dialog while inspecting one. pointer-events:none so
    the badge itself is never a click target, and pre-wrap/monospace so
    a longer dot-path id never gets silently clipped. */
-.ui-reference-mode-active [data-ref] {
+.ui-reference-mode-active [data-ui-ref] {
     position: relative;
     outline: 1px dashed var(--machine-blue);
     outline-offset: 1px;
 }
-.ui-reference-mode-active [data-ref]::after {
-    content: attr(data-ref);
+.ui-reference-mode-active [data-ui-ref]::after {
+    content: attr(data-ui-ref);
     position: absolute;
     top: -0.05rem;
     left: -0.05rem;

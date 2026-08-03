@@ -27,7 +27,7 @@
             {% endif %}
             {# CLAUDE-P40-VW7A: reviewer-wide (not per-Project) - the toggle
                lives in the Menu bar's Account menu, present on every
-               authenticated page, and [data-ref] elements exist on Menu
+               authenticated page, and [data-ui-ref] elements exist on Menu
                controls even outside an open Project. Applied pre-paint so
                a reviewer who left this on doesn't see an unbadged flash
                before it kicks in. #}
@@ -52,9 +52,9 @@
         {% if authenticated %}
         <div class="workspace-topbar">
             <div class="workspace-topbar-identity">
-                <a class="workspace-topbar-brand" data-ref="menu.brand" href="{{ url_for('portal.index') }}">Archiosk</a>
+                <a class="workspace-topbar-brand" data-ui-ref="menu.brand" href="{{ url_for('portal.index') }}">Archiosk</a>
                 {% if project_id is defined and workspace is defined %}
-                <span class="workspace-topbar-context" data-ref="menu.context">
+                <span class="workspace-topbar-context" data-ui-ref="menu.context">
                     <span class="workspace-topbar-project">{{ workspace.display_title or document.filename }}</span>
                     {% if active_case %}
                     <span class="workspace-topbar-sep" aria-hidden="true">/</span>
@@ -91,23 +91,23 @@
                    room to usefully read an architectural drawing or
                    document - a real usability floor, not a decorative
                    round number. #}
-                <details class="workspace-layout-menu" id="workspace-layout-menu" data-ref="menu.display-layout">
+                <details class="workspace-layout-menu" id="workspace-layout-menu" data-ui-ref="menu.display-layout">
                     <summary class="workspace-topbar-btn workspace-layout-summary">Display Layout</summary>
                     <div class="workspace-layout-options" role="group" aria-label="Display Layout">
                         <div class="workspace-layout-quantity" role="group" aria-label="Vertical divisions">
                             <span class="workspace-layout-quantity-label">Vertical divisions</span>
-                            <button type="button" class="workspace-layout-stepper" id="display-vertical-decrement" aria-label="Decrease vertical divisions">&minus;</button>
+                            <button type="button" class="workspace-layout-stepper" id="display-vertical-decrement" data-ui-ref="menu.display-layout.vertical-decrement" aria-label="Decrease vertical divisions">&minus;</button>
                             <span class="workspace-layout-quantity-value" id="display-vertical-value" aria-live="polite">1</span>
-                            <button type="button" class="workspace-layout-stepper" id="display-vertical-increment" aria-label="Increase vertical divisions">+</button>
+                            <button type="button" class="workspace-layout-stepper" id="display-vertical-increment" data-ui-ref="menu.display-layout.vertical-increment" aria-label="Increase vertical divisions">+</button>
                         </div>
                         <div class="workspace-layout-quantity" role="group" aria-label="Horizontal divisions">
                             <span class="workspace-layout-quantity-label">Horizontal divisions</span>
-                            <button type="button" class="workspace-layout-stepper" id="display-horizontal-decrement" aria-label="Decrease horizontal divisions">&minus;</button>
+                            <button type="button" class="workspace-layout-stepper" id="display-horizontal-decrement" data-ui-ref="menu.display-layout.horizontal-decrement" aria-label="Decrease horizontal divisions">&minus;</button>
                             <span class="workspace-layout-quantity-value" id="display-horizontal-value" aria-live="polite">1</span>
-                            <button type="button" class="workspace-layout-stepper" id="display-horizontal-increment" aria-label="Increase horizontal divisions">+</button>
+                            <button type="button" class="workspace-layout-stepper" id="display-horizontal-increment" data-ui-ref="menu.display-layout.horizontal-increment" aria-label="Increase horizontal divisions">+</button>
                         </div>
                         <p class="workspace-layout-limit-note">Maximum 6 Displays total (Vertical &times; Horizontal).</p>
-                        <button type="button" class="workspace-layout-apply" id="display-layout-apply">Apply</button>
+                        <button type="button" class="workspace-layout-apply" id="display-layout-apply" data-ui-ref="menu.display-layout.apply">Apply</button>
                     </div>
                 </details>
 
@@ -124,11 +124,11 @@
                    the page's own visual hierarchy: Menu (top), then Lists/
                    Display/Toolbox left-to-right (middle), then Chat
                    (bottom). #}
-                <details class="workspace-appearance-menu" id="workspace-appearance-menu" data-ref="menu.appearance">
+                <details class="workspace-appearance-menu" id="workspace-appearance-menu" data-ui-ref="menu.appearance">
                     <summary class="workspace-topbar-btn">Appearance</summary>
                     <div class="workspace-appearance-options" role="group" aria-label="Appearance">
                         <table class="appearance-matrix">
-                            <caption class="visually-hidden">Per-surface appearance - choose Light, Dark, or Tinted for each surface</caption>
+                            <caption class="visually-hidden">Per-surface appearance - choose Light, Dark, or Tinted for each surface, or All to set every surface at once</caption>
                             <thead>
                                 <tr>
                                     <th scope="col"><span class="visually-hidden">Surface</span></th>
@@ -138,13 +138,32 @@
                                 </tr>
                             </thead>
                             <tbody>
+                                {# CLAUDE-P40-VW8-QA, Section 5: All is a CONTROL that applies an
+                                   existing mode to every surface at once, never a fourth theme
+                                   of its own - unchecked (never fabricated as "selected") the
+                                   moment the five surfaces disagree, per the JS wiring below,
+                                   which is also what decides whether it should show checked in
+                                   the first place; nothing here hardcodes an initial checked
+                                   state. */ #}
+                                <tr class="appearance-matrix-all-row" data-ui-ref="menu.appearance.all">
+                                    <th scope="row">All</th>
+                                    {% for mode_key, mode_label in [('light', 'Light'), ('dark', 'Dark'), ('tinted', 'Tinted')] %}
+                                    <td>
+                                        <input type="radio" name="appearance-all" id="appearance-all-{{ mode_key }}"
+                                               data-appearance-all-mode="{{ mode_key }}"
+                                               data-ui-ref="menu.appearance.all.{{ mode_key }}"
+                                               aria-label="All surfaces appearance: {{ mode_label }}">
+                                    </td>
+                                    {% endfor %}
+                                </tr>
                                 {% for surface_key, surface_label in [('menu', 'Menu'), ('lists', 'Lists'), ('display', 'Display'), ('toolbox', 'Toolbox'), ('chat', 'Chat')] %}
-                                <tr>
+                                <tr data-ui-ref="menu.appearance.{{ surface_key }}">
                                     <th scope="row">{{ surface_label }}</th>
                                     {% for mode_key, mode_label in [('light', 'Light'), ('dark', 'Dark'), ('tinted', 'Tinted')] %}
                                     <td>
                                         <input type="radio" name="appearance-{{ surface_key }}" id="appearance-{{ surface_key }}-{{ mode_key }}"
                                                data-appearance-target="{{ surface_key }}" data-appearance-mode="{{ mode_key }}"
+                                               data-ui-ref="menu.appearance.{{ surface_key }}.{{ mode_key }}"
                                                aria-label="{{ surface_label }} appearance: {{ mode_label }}">
                                     </td>
                                     {% endfor %}
@@ -152,6 +171,7 @@
                                 {% endfor %}
                             </tbody>
                         </table>
+                        <p class="appearance-mixed-note" id="appearance-mixed-note" role="status" aria-live="polite" hidden>Mixed &mdash; not every surface currently shares one mode.</p>
                     </div>
                 </details>
                 {% endif %}
@@ -160,7 +180,7 @@
                    Username + Sign out (its child) live here now, not the
                    Lists panel's own identity block - Security stays in
                    Lists per the explicit instruction not to move it. #}
-                <details class="workspace-user-menu" id="workspace-user-menu" data-ref="menu.account">
+                <details class="workspace-user-menu" id="workspace-user-menu" data-ui-ref="menu.account">
                     <summary class="workspace-topbar-btn workspace-user-summary" aria-label="Account menu">
                         {% if current_username %}<span class="workspace-user-name">{{ current_username }}</span>{% endif %}
                         <span aria-hidden="true">&hellip;</span>
@@ -171,10 +191,10 @@
                            html-level-class pattern as the risk-layer/history-
                            full toggles (case_workspace.js), applied reviewer-
                            wide (base.html's own inline script below) since
-                           [data-ref] elements exist on every authenticated
+                           [data-ui-ref] elements exist on every authenticated
                            page's Menu bar, not only inside an open Workspace.
-                           When on, every [data-ref] element gets a small
-                           attr(data-ref) badge via CSS - see main.css's own
+                           When on, every [data-ui-ref] element gets a small
+                           attr(data-ui-ref) badge via CSS - see main.css's own
                            .ui-reference-mode-active rule - so a reviewer (or
                            this stage's own browser verification) can read
                            off a control's stable reference id directly from
@@ -214,7 +234,7 @@
                 {% set projects_open = project_id is defined or request.path == url_for('portal.projects_list') %}
                 <ul class="tree" data-tree-root>
                     <li class="tree-node" data-tree-node>
-                        <button type="button" class="tree-toggle launcher-heading{% if projects_open %} active{% endif %}" data-tree-parent data-ref="lists.projects" aria-expanded="{{ 'true' if projects_open else 'false' }}">
+                        <button type="button" class="tree-toggle launcher-heading{% if projects_open %} active{% endif %}" data-tree-parent data-tree-no-clear data-ui-ref="lists.projects" aria-expanded="{{ 'true' if projects_open else 'false' }}">
                             <span class="tree-label">Projects</span>
                         </button>
                         <ul class="tree-children"{% if projects_open %} data-tree-open{% endif %}>
@@ -222,13 +242,13 @@
                             {% if project_id is defined and project_id == p.project_id %}
                             {# ---------------- The active Project's own real branch ------------- #}
                             <li class="tree-node" data-tree-node>
-                                <a class="tree-leaf launcher-link active" data-ref="lists.project.self" href="{{ url_for('workspace.show_workspace', project_id=p.project_id) }}">{{ p.display_name }}</a>
+                                <a class="tree-leaf launcher-link active" data-ui-ref="lists.project.self" href="{{ url_for('workspace.show_workspace', project_id=p.project_id) }}">{{ p.display_name }}</a>
                                 <ul class="tree-children" data-tree-open>
                                     <li class="tree-node" data-tree-node>
-                                        <a class="tree-leaf launcher-link{% if directory_view == 'overview' %} active{% endif %}" data-ref="lists.project.overview" data-view="overview" href="{{ url_for('workspace.show_workspace', project_id=project_id, view='overview') }}">Overview</a>
+                                        <a class="tree-leaf launcher-link{% if directory_view == 'overview' %} active{% endif %}" data-ui-ref="lists.project.overview" data-view="overview" href="{{ url_for('workspace.show_workspace', project_id=project_id, view='overview') }}">Overview</a>
                                     </li>
                                     <li class="tree-node" data-tree-node>
-                                        <button type="button" class="tree-toggle launcher-link" data-tree-parent data-tree-owns="source" data-ref="lists.project.documents" aria-expanded="{{ 'true' if selected_source else 'false' }}">
+                                        <button type="button" class="tree-toggle launcher-link" data-tree-parent data-tree-owns="source" data-ui-ref="lists.project.documents" aria-expanded="{{ 'true' if selected_source else 'false' }}">
                                             <span class="tree-label">Documents <span class="launcher-count">{{ active_sources|length }}</span></span>
                                         </button>
                                         <ul class="tree-children"{% if selected_source %} data-tree-open{% endif %}>
@@ -239,7 +259,7 @@
                                                    that as a second visible directory in Display, but the provenance
                                                    detail itself (Section 12: "current source-document provenance")
                                                    is preserved here as a title tooltip rather than dropped outright. #}
-                                                <a class="tree-leaf launcher-link{% if selected_source and selected_source.id == s.id %} active{% endif %}" data-ref="lists.project.documents.leaf" href="{{ url_for('workspace.show_workspace', project_id=project_id, source=s.id) }}" data-source-id="{{ s.id }}" title="Added {{ s.added_at }}">{{ s.name }}</a>
+                                                <a class="tree-leaf launcher-link{% if selected_source and selected_source.id == s.id %} active{% endif %}" data-ui-ref="lists.project.documents.leaf" href="{{ url_for('workspace.show_workspace', project_id=project_id, source=s.id) }}" data-source-id="{{ s.id }}" title="Added {{ s.added_at }}">{{ s.name }}</a>
                                             </li>
                                             {% else %}
                                             {# CLAUDE-P40-VW7B: a coherent empty state, matching the
@@ -252,13 +272,13 @@
                                         </ul>
                                     </li>
                                     <li class="tree-node" data-tree-node>
-                                        <button type="button" class="tree-toggle launcher-link" data-tree-parent data-tree-owns="case" data-ref="lists.project.investigations" aria-expanded="{{ 'true' if active_case else 'false' }}">
+                                        <button type="button" class="tree-toggle launcher-link" data-tree-parent data-tree-owns="case" data-ui-ref="lists.project.investigations" aria-expanded="{{ 'true' if active_case else 'false' }}">
                                             <span class="tree-label">Investigations <span class="launcher-count">{{ visible_cases|length }}</span></span>
                                         </button>
                                         <ul class="tree-children"{% if active_case %} data-tree-open{% endif %}>
                                             {% for c in visible_cases %}
                                             <li class="tree-node" data-tree-node>
-                                                <a class="tree-leaf launcher-link{% if active_case and active_case.id == c.id %} active{% endif %}" data-ref="lists.project.investigations.leaf" data-case-id="{{ c.id }}" data-case-title="{{ c.title }}" href="{{ url_for('workspace.show_workspace', project_id=project_id, case=c.id) }}">{{ c.title }}</a>
+                                                <a class="tree-leaf launcher-link{% if active_case and active_case.id == c.id %} active{% endif %}" data-ui-ref="lists.project.investigations.leaf" data-case-id="{{ c.id }}" data-case-title="{{ c.title }}" href="{{ url_for('workspace.show_workspace', project_id=project_id, case=c.id) }}">{{ c.title }}</a>
                                             </li>
                                             {% else %}
                                             <li class="tree-node-empty"><span class="pane-note">No Investigations yet.</span></li>
@@ -273,7 +293,7 @@
                                        (0)" like every other branch. Matches the sibling pattern
                                        now: always present, count reflects reality. #}
                                     <li class="tree-node" data-tree-node>
-                                        <button type="button" class="tree-toggle launcher-link" data-tree-parent data-ref="lists.project.rfis" aria-expanded="false">
+                                        <button type="button" class="tree-toggle launcher-link" data-tree-parent data-ui-ref="lists.project.rfis" aria-expanded="false">
                                             <span class="tree-label">RFIs <span class="launcher-count">{{ rfi_drafts_view|length }}</span></span>
                                         </button>
                                         <ul class="tree-children">
@@ -285,7 +305,7 @@
                                                doesn't exist. #}
                                             {% for row in rfi_drafts_view %}
                                             <li class="tree-node" data-tree-node>
-                                                <a class="tree-leaf launcher-link{% if active_case and active_case.id == row.draft.case_id %} active{% endif %}" data-ref="lists.project.rfis.leaf" data-case-id="{{ row.draft.case_id }}" data-case-title="{{ row.case_title }}" href="{{ url_for('workspace.show_workspace', project_id=project_id, case=row.draft.case_id) }}">{{ row.draft.question_text[:60] }}{% if row.draft.question_text|length > 60 %}&hellip;{% endif %}</a>
+                                                <a class="tree-leaf launcher-link{% if active_case and active_case.id == row.draft.case_id %} active{% endif %}" data-ui-ref="lists.project.rfis.leaf" data-case-id="{{ row.draft.case_id }}" data-case-title="{{ row.case_title }}" href="{{ url_for('workspace.show_workspace', project_id=project_id, case=row.draft.case_id) }}">{{ row.draft.question_text[:60] }}{% if row.draft.question_text|length > 60 %}&hellip;{% endif %}</a>
                                             </li>
                                             {% else %}
                                             <li class="tree-node-empty"><span class="pane-note">No RFIs yet.</span></li>
@@ -297,7 +317,7 @@
                                        Section 4's own "only if an honest existing listing exists"
                                        instruction; confirmed absent during CLAUDE-P40-E3-PLAN). #}
                                     <li class="tree-node" data-tree-node>
-                                        <a class="tree-leaf launcher-link{% if directory_view is none and not active_case and not selected_source %} active{% endif %}" data-ref="lists.project.chats" href="{{ url_for('workspace.show_workspace', project_id=project_id) }}">Chats</a>
+                                        <a class="tree-leaf launcher-link{% if directory_view is none and not active_case and not selected_source %} active{% endif %}" data-ui-ref="lists.project.chats" href="{{ url_for('workspace.show_workspace', project_id=project_id) }}">Chats</a>
                                     </li>
                                     {# ---------------- Tasks (CLAUDE-P40-VW7) --------------------------
                                        Real, persisted project Tasks created via "Make Task" on a
@@ -316,23 +336,23 @@
                                        while Complete/Reopen (plain forms below) stay classic
                                        redirects. #}
                                     <li class="tree-node" data-tree-node id="lists-tasks-branch">
-                                        <button type="button" class="tree-toggle launcher-link" data-tree-parent data-ref="lists.project.tasks" aria-expanded="false">
+                                        <button type="button" class="tree-toggle launcher-link" data-tree-parent data-ui-ref="lists.project.tasks" aria-expanded="false">
                                             <span class="tree-label">Tasks <span class="launcher-count" id="lists-tasks-count">{{ tasks_view|length }}</span></span>
                                         </button>
                                         <ul class="tree-children">
                                             <li class="tree-node-group">
-                                                <p class="launcher-subheading" data-ref="lists.project.tasks.open">Open <span class="launcher-count" id="lists-tasks-open-count">{{ tasks_open_view|length }}</span></p>
+                                                <p class="launcher-subheading" data-ui-ref="lists.project.tasks.open">Open <span class="launcher-count" id="lists-tasks-open-count">{{ tasks_open_view|length }}</span></p>
                                                 <ul class="tree-children" data-tree-open id="lists-tasks-open-list">
                                                     {% for task in tasks_open_view %}
                                                     <li class="tree-node" data-tree-node data-task-id="{{ task.id }}">
                                                         <div class="launcher-task-row">
                                                             {% if task.source_available %}
-                                                            <a class="tree-leaf launcher-link" data-ref="lists.project.tasks.leaf" href="{{ task.source_url }}">{{ task.title }}</a>
+                                                            <a class="tree-leaf launcher-link" data-ui-ref="lists.project.tasks.leaf" href="{{ task.source_url }}">{{ task.title }}</a>
                                                             {% else %}
-                                                            <span class="tree-leaf launcher-link launcher-link-unavailable" data-ref="lists.project.tasks.leaf">{{ task.title }} <small>(Source unavailable)</small></span>
+                                                            <span class="tree-leaf launcher-link launcher-link-unavailable" data-ui-ref="lists.project.tasks.leaf">{{ task.title }} <small>(Source unavailable)</small></span>
                                                             {% endif %}
                                                             <form method="post" action="{{ url_for('workspace.complete_task_route', project_id=project_id, task_id=task.id) }}">
-                                                                <button type="submit" class="link-button" data-ref="lists.project.tasks.complete">Mark complete</button>
+                                                                <button type="submit" class="link-button" data-ui-ref="lists.project.tasks.complete">Mark complete</button>
                                                             </form>
                                                         </div>
                                                     </li>
@@ -342,18 +362,18 @@
                                                 </ul>
                                             </li>
                                             <li class="tree-node-group">
-                                                <p class="launcher-subheading" data-ref="lists.project.tasks.completed">Completed <span class="launcher-count" id="lists-tasks-completed-count">{{ tasks_completed_view|length }}</span></p>
+                                                <p class="launcher-subheading" data-ui-ref="lists.project.tasks.completed">Completed <span class="launcher-count" id="lists-tasks-completed-count">{{ tasks_completed_view|length }}</span></p>
                                                 <ul class="tree-children" id="lists-tasks-completed-list">
                                                     {% for task in tasks_completed_view %}
                                                     <li class="tree-node" data-tree-node data-task-id="{{ task.id }}">
                                                         <div class="launcher-task-row">
                                                             {% if task.source_available %}
-                                                            <a class="tree-leaf launcher-link launcher-task-completed" data-ref="lists.project.tasks.leaf" href="{{ task.source_url }}">{{ task.title }}</a>
+                                                            <a class="tree-leaf launcher-link launcher-task-completed" data-ui-ref="lists.project.tasks.leaf" href="{{ task.source_url }}">{{ task.title }}</a>
                                                             {% else %}
-                                                            <span class="tree-leaf launcher-link launcher-link-unavailable" data-ref="lists.project.tasks.leaf">{{ task.title }} <small>(Source unavailable)</small></span>
+                                                            <span class="tree-leaf launcher-link launcher-link-unavailable" data-ui-ref="lists.project.tasks.leaf">{{ task.title }} <small>(Source unavailable)</small></span>
                                                             {% endif %}
                                                             <form method="post" action="{{ url_for('workspace.reopen_task_route', project_id=project_id, task_id=task.id) }}">
-                                                                <button type="submit" class="link-button" data-ref="lists.project.tasks.reopen">Reopen</button>
+                                                                <button type="submit" class="link-button" data-ui-ref="lists.project.tasks.reopen">Reopen</button>
                                                             </form>
                                                         </div>
                                                     </li>
@@ -374,13 +394,13 @@
                                        immediately via fetch() - Section 7's own explicit
                                        requirement - never a full reload. #}
                                     <li class="tree-node" data-tree-node id="lists-tags-branch">
-                                        <button type="button" class="tree-toggle launcher-link" data-tree-parent data-ref="lists.project.tags" aria-expanded="false">
+                                        <button type="button" class="tree-toggle launcher-link" data-tree-parent data-ui-ref="lists.project.tags" aria-expanded="false">
                                             <span class="tree-label">Tags <span class="launcher-count" id="lists-tags-count">{{ tag_occurrences_total }}</span></span>
                                         </button>
                                         <ul class="tree-children" id="lists-tags-groups">
                                             {% for group in tag_groups_view %}
                                             <li class="tree-node-group" data-tag-group="{{ group.tag.id }}">
-                                                <p class="launcher-subheading" data-ref="lists.project.tags.group">
+                                                <p class="launcher-subheading" data-ui-ref="lists.project.tags.group">
                                                     <span class="launcher-tag-swatch conv-tag-color-{{ group.tag.color }}" aria-hidden="true"></span>
                                                     {{ group.tag.name }} <span class="launcher-count" data-tag-group-count>{{ group.occurrences|length }}</span>
                                                 </p>
@@ -389,12 +409,12 @@
                                                     <li class="tree-node" data-tree-node data-tag-occurrence-id="{{ occ.id }}">
                                                         <div class="launcher-task-row">
                                                             {% if occ.source_available %}
-                                                            <a class="tree-leaf launcher-link" data-ref="lists.project.tags.leaf" href="{{ occ.source_url }}">&ldquo;{{ occ.quote[:60] }}{% if occ.quote|length > 60 %}&hellip;{% endif %}&rdquo;</a>
+                                                            <a class="tree-leaf launcher-link" data-ui-ref="lists.project.tags.leaf" href="{{ occ.source_url }}">&ldquo;{{ occ.quote[:60] }}{% if occ.quote|length > 60 %}&hellip;{% endif %}&rdquo;</a>
                                                             {% else %}
-                                                            <span class="tree-leaf launcher-link launcher-link-unavailable" data-ref="lists.project.tags.leaf">&ldquo;{{ occ.quote[:60] }}{% if occ.quote|length > 60 %}&hellip;{% endif %}&rdquo; <small>(Source unavailable)</small></span>
+                                                            <span class="tree-leaf launcher-link launcher-link-unavailable" data-ui-ref="lists.project.tags.leaf">&ldquo;{{ occ.quote[:60] }}{% if occ.quote|length > 60 %}&hellip;{% endif %}&rdquo; <small>(Source unavailable)</small></span>
                                                             {% endif %}
                                                             <form method="post" action="{{ url_for('workspace.remove_tag_occurrence_route', project_id=project_id, occurrence_id=occ.id) }}" data-tag-remove-form data-occurrence-id="{{ occ.id }}">
-                                                                <button type="submit" class="link-button" data-ref="lists.project.tags.remove">Remove</button>
+                                                                <button type="submit" class="link-button" data-ui-ref="lists.project.tags.remove">Remove</button>
                                                             </form>
                                                         </div>
                                                     </li>
@@ -421,32 +441,32 @@
                                        tree-toggle hover/pin/collapse mechanism as every sibling
                                        branch above, not a second navigation tree. #}
                                     <li class="tree-node" data-tree-node>
-                                        <button type="button" class="tree-toggle launcher-link" data-tree-parent data-ref="lists.project.tools" aria-expanded="false">
+                                        <button type="button" class="tree-toggle launcher-link" data-tree-parent data-ui-ref="lists.project.tools" aria-expanded="false">
                                             <span class="tree-label">Project Tools</span>
                                         </button>
                                         <ul class="tree-children">
                                             <li class="tree-node launcher-project-tools">
                                                 {% if is_project_owner or is_admin %}
                                                 <form method="post" action="{{ url_for('workspace.remove_project_route', project_id=project_id) }}">
-                                                    <button type="submit" class="btn btn-ghost" data-ref="lists.project.tools.remove-project">Remove Project</button>
+                                                    <button type="submit" class="btn btn-ghost" data-ui-ref="lists.project.tools.remove-project">Remove Project</button>
                                                 </form>
                                                 {% endif %}
 
                                                 {% call macros.subdisclosure('+ Add Documents', html_id='project-sources-add-document') %}
-                                                    <form class="workspace-form" method="post" enctype="multipart/form-data" action="{{ url_for('workspace.add_document_source', project_id=project_id) }}" data-ref="lists.project.tools.add-document">
+                                                    <form class="workspace-form" method="post" enctype="multipart/form-data" action="{{ url_for('workspace.add_document_source', project_id=project_id) }}" data-ui-ref="lists.project.tools.add-document">
                                                         <input type="file" name="document" accept=".pdf,.docx,.txt,.csv,.md" required>
                                                         <button type="submit">Add Document</button>
                                                     </form>
                                                 {% endcall %}
                                                 {% call macros.subdisclosure('+ Add Text Record') %}
-                                                    <form class="workspace-form" method="post" action="{{ url_for('workspace.add_text_record_source', project_id=project_id) }}" data-ref="lists.project.tools.add-text-record">
+                                                    <form class="workspace-form" method="post" action="{{ url_for('workspace.add_text_record_source', project_id=project_id) }}" data-ui-ref="lists.project.tools.add-text-record">
                                                         <input type="text" name="title" placeholder="Title (e.g. Site visit note &mdash; May 3)" required>
                                                         <textarea name="content" placeholder="Content" required></textarea>
                                                         <button type="submit">Add Record</button>
                                                     </form>
                                                 {% endcall %}
                                                 {% call macros.subdisclosure('+ Add External Source') %}
-                                                    <p style="font-size:0.85rem;color:var(--text-secondary);" data-ref="lists.project.tools.add-external-source">
+                                                    <p style="font-size:0.85rem;color:var(--text-secondary);" data-ui-ref="lists.project.tools.add-external-source">
                                                         Not yet available &mdash; no external source connector is configured for this deployment.
                                                     </p>
                                                 {% endcall %}
@@ -457,19 +477,19 @@
                                                    DOCUMENTS within THIS Project. #}
                                                 {% call macros.subdisclosure('Removed Items (' ~ removed_sources|length ~ ')', html_id='project-removed-items') %}
                                                     {% if removed_sources %}
-                                                    <ul class="source-list" data-ref="lists.project.tools.removed-items">
+                                                    <ul class="source-list" data-ui-ref="lists.project.tools.removed-items">
                                                         {% for source in removed_sources %}
                                                         <li class="source-item">
                                                             {{ source.name }}
                                                             <br><small class="text-muted">Removed {{ source.removed_at }}{% if source.removed_by %} by {{ source.removed_by }}{% endif %}</small>
                                                             <form method="post" action="{{ url_for('workspace.restore_document_route', project_id=project_id, source_id=source.id) }}">
-                                                                <button type="submit" class="link-button" data-ref="lists.project.tools.removed-items.restore">Restore Document</button>
+                                                                <button type="submit" class="link-button" data-ui-ref="lists.project.tools.removed-items.restore">Restore Document</button>
                                                             </form>
                                                         </li>
                                                         {% endfor %}
                                                     </ul>
                                                     {% else %}
-                                                    <p class="pane-note" data-ref="lists.project.tools.removed-items">No removed Documents in this Project.</p>
+                                                    <p class="pane-note" data-ui-ref="lists.project.tools.removed-items">No removed Documents in this Project.</p>
                                                     {% endif %}
                                                 {% endcall %}
                                             </li>
@@ -479,7 +499,23 @@
                             </li>
                             {% else %}
                             <li class="tree-node" data-tree-node>
-                                <a class="tree-leaf launcher-link" data-ref="lists.projects.leaf" href="{{ url_for('workspace.show_workspace', project_id=p.project_id) }}">{{ p.display_name }}</a>
+                                {# CLAUDE-P40-VW8: data-project-id only matters when a
+                                   DIFFERENT Project is already open (project_id is
+                                   defined) - that's exactly when activating this leaf
+                                   means "switch away from something", the case the
+                                   interruption dialog exists for. On a page with no
+                                   active Project (bare /projects, Security, ...) there
+                                   is nothing to interrupt, and the base.html click-
+                                   handler below never intercepts this link at all.
+                                   Deliberately no data-project-name attribute - the
+                                   link's own visible text IS the display name already;
+                                   duplicating it into an attribute value would violate
+                                   CLAUDE-P40-E2B1's "a Project name must never appear
+                                   a second time" invariant. The dialog's click-handler
+                                   reads the name from this link's textContent instead. #}
+                                <a class="tree-leaf launcher-link" data-ui-ref="lists.projects.leaf"
+                                   {% if project_id is defined %}data-project-id="{{ p.project_id }}"{% endif %}
+                                   href="{{ url_for('workspace.show_workspace', project_id=p.project_id) }}">{{ p.display_name }}</a>
                             </li>
                             {% endif %}
                             {% endfor %}
@@ -490,7 +526,7 @@
                        never render for a non-admin reviewer (Section 4: "unauthorized...
                        branches must never render"). #}
                     <li class="tree-node" data-tree-node>
-                        <a class="tree-leaf launcher-link launcher-new-project" data-ref="lists.new-project" href="{{ url_for('portal.upload') }}">+ New Project</a>
+                        <a class="tree-leaf launcher-link launcher-new-project" data-ui-ref="lists.new-project" href="{{ url_for('portal.upload') }}">+ New Project</a>
                     </li>
                     {% endif %}
                     {# Global "Chats" root (cross-Project) omitted outright - no
@@ -498,11 +534,11 @@
                        codebase; only per-Project conversation does (see the
                        Project branch above). Nothing honest to list here. #}
                     <li class="tree-node" data-tree-node>
-                        <a class="tree-leaf launcher-link" data-ref="lists.removed-projects" href="{{ url_for('portal.removed_projects') }}">Removed Projects</a>
+                        <a class="tree-leaf launcher-link" data-ui-ref="lists.removed-projects" href="{{ url_for('portal.removed_projects') }}">Removed Projects</a>
                     </li>
                     {% if is_admin %}
                     <li class="tree-node" data-tree-node>
-                        <a class="tree-leaf launcher-link" data-ref="lists.security" href="{{ url_for('security.department_home') }}">Security</a>
+                        <a class="tree-leaf launcher-link" data-ui-ref="lists.security" href="{{ url_for('security.department_home') }}">Security</a>
                     </li>
                     {# CLAUDE-P40-VW7B: relocated here from the active Project's own
                        "Project Tools" branch - routes/portal.py's reset_project_data
@@ -518,14 +554,43 @@
                     <li class="tree-node" data-tree-node>
                         {% call macros.subdisclosure('Project Data Management', html_id='project-data-management') %}
                             <p class="pane-note">Administrator only &mdash; resets every Project in this deployment, not just one.</p>
-                            <a class="btn btn-ghost workspace-link" data-ref="lists.system-data-management" href="{{ url_for('portal.reset_project_data') }}">Reset Project Data&hellip;</a>
+                            <a class="btn btn-ghost workspace-link" data-ui-ref="lists.system-data-management" href="{{ url_for('portal.reset_project_data') }}">Reset Project Data&hellip;</a>
                         {% endcall %}
                     </li>
                     {% endif %}
                 </ul>
             </div>
         </nav>
-        <button type="button" class="panel-divider panel-divider-lists" id="lists-divider" data-ref="shell.lists-divider" aria-expanded="true" aria-controls="launcher-panel" aria-label="Collapse Lists panel"></button>
+        {% if project_id is defined %}
+        {# ---------------- Project-switching interruption dialog (CLAUDE-P40-VW8) ---
+           Activating a Lists row for a Project OTHER than the one
+           currently open no longer silently replaces the workspace -
+           this dialog identifies both Projects and offers Stay/Switch
+           in This Tab/Open in New Tab (see the click-interceptor script
+           near the bottom of this file for the actual routing logic).
+           Only rendered when a Project is already open (project_id is
+           defined) - there is nothing to interrupt otherwise, and the
+           interceptor itself is equally gated. Fixed-position/hidden by
+           default, the same idiom CLAUDE-P40-VW7's own .conv-dialog
+           already established (solid background, high z-index, real
+           dialog semantics) - not a new pattern. #}
+        <div class="project-switch-dialog" id="project-switch-dialog" data-ui-ref="lists.project-switch-dialog" role="dialog" aria-modal="true" aria-labelledby="project-switch-dialog-heading" hidden>
+            <p class="project-switch-dialog-heading" id="project-switch-dialog-heading">Switch Project?</p>
+            <p class="project-switch-dialog-body">
+                You currently have <strong id="project-switch-current-name"></strong> open.
+                Open <strong id="project-switch-target-name"></strong> instead?
+            </p>
+            <div class="project-switch-dialog-actions">
+                <button type="button" class="btn btn-ghost" id="project-switch-stay" data-ui-ref="lists.project-switch-dialog.stay">Stay in Current Project</button>
+                <button type="button" class="btn btn-ghost" id="project-switch-new-tab" data-ui-ref="lists.project-switch-dialog.open-new-tab">Open in New Tab</button>
+                <button type="button" class="btn btn-primary" id="project-switch-switch" data-ui-ref="lists.project-switch-dialog.switch">Switch in This Tab</button>
+            </div>
+            <p class="project-switch-dialog-note" id="project-switch-popup-note" role="status" aria-live="polite" hidden>
+                Your browser blocked the new tab - allow popups for this site, or use "Switch in This Tab" instead.
+            </p>
+        </div>
+        {% endif %}
+        <button type="button" class="panel-divider panel-divider-lists" id="lists-divider" data-ui-ref="shell.lists-divider" aria-expanded="true" aria-controls="launcher-panel" aria-label="Collapse Lists panel"></button>
         {% else %}
         <!-- True zero state (State 0 - Unauthenticated): the authenticated
              shell (Lists panel, top bar, project/workspace controls) is not
@@ -553,7 +618,7 @@
         </div>
 
         {% if project_id is defined and workspace is defined %}
-        <button type="button" class="panel-divider panel-divider-toolbox" id="toolbox-divider" data-ref="shell.toolbox-divider" aria-expanded="true" aria-controls="workspace-toolbox-panel" aria-label="Collapse Toolbox"></button>
+        <button type="button" class="panel-divider panel-divider-toolbox" id="toolbox-divider" data-ui-ref="shell.toolbox-divider" aria-expanded="true" aria-controls="workspace-toolbox-panel" aria-label="Collapse Toolbox"></button>
         {# ---------------- The one right Toolbox (CLAUDE-P40-E3A, Section 8) --------
            Shell-owned markup (one definition, one place), but only actually
            present within an open, ACTIVE Workspace - "workspace is defined"
@@ -565,7 +630,7 @@
            correctly stays absent there too, not just on the dashboard/
            Security/uploads pages. Content comes from {% block toolbox %},
            filled in only by case_workspace.html. #}
-        <aside class="workspace-pane-toolbox" id="workspace-toolbox-panel" data-ref="toolbox.panel">
+        <aside class="workspace-pane-toolbox" id="workspace-toolbox-panel" data-ui-ref="toolbox.panel">
             {% block toolbox %}{% endblock %}
         </aside>
         {% endif %}
@@ -580,7 +645,7 @@
            on the dashboard/Security/uploads pages OR a removed-Project
            tombstone, none of which have real conversation context). Content
            comes from {% block chat %}, filled in only by case_workspace.html. #}
-        <div class="chat-region" id="chat-region" data-ref="chat.dock">
+        <div class="chat-region" id="chat-region" data-ui-ref="chat.dock">
             {% block chat %}{% endblock %}
         </div>
         {% endif %}
@@ -647,7 +712,7 @@
 
             // CLAUDE-P40-VW7A: UI Reference Mode - same shape as the two
             // dividers above (localStorage + one html-level class), so a
-            // reviewer/QA session can turn on a small attr(data-ref) badge
+            // reviewer/QA session can turn on a small attr(data-ui-ref) badge
             // (main.css's own .ui-reference-mode-active rule) over every
             // instrumented control during inspection or browser
             // verification, then turn it back off. Off by default; never
@@ -703,6 +768,22 @@
                 toggle.addEventListener('click', function () {
                     pinned = !pinned;
                     setOpen(pinned);
+                    // CLAUDE-P40-VW8-QA: data-tree-no-clear (the PROJECTS
+                    // root only) opts a toggle OUT of "collapsing clears
+                    // an active descendant from Display" entirely - that
+                    // rule exists for a branch that OWNS one specific
+                    // Display selection (Documents/Investigations, via
+                    // data-tree-owns), where collapsing it while its own
+                    // leaf is active honestly means "I'm done with this
+                    // Document/Investigation." PROJECTS is different: the
+                    // ACTIVE PROJECT'S OWN ROW always carries .active
+                    // while any Project is open, so isDescendantActive()
+                    // was ALWAYS true here - a second click meant to
+                    // simply collapse the tree was instead also stripping
+                    // ?case=/?source=/?view= and navigating away, exactly
+                    // the "confuses collapsing the root with switching
+                    // the active Project" defect this stage corrects.
+                    if (toggle.hasAttribute('data-tree-no-clear')) return;
                     if (!pinned && isDescendantActive(node)) {
                         var owns = toggle.getAttribute('data-tree-owns');
                         var url = new URL(window.location.href);
@@ -805,6 +886,103 @@
             });
         })();
 
+        // CLAUDE-P40-VW8: Project-switching interruption dialog.
+        // Activating a Lists row for a Project OTHER than the one
+        // currently open (data-project-id, only present on those rows
+        // - see the template's own comment at that attribute) no
+        // longer silently replaces the whole workspace. The already-
+        // active Project's own row never carries data-project-id at
+        // all, so it is structurally never intercepted - "activating
+        // the already-current Project does not open the dialog" holds
+        // by construction, not a runtime check. Switch/Open in New Tab
+        // both reuse the link's own real, already-authorized href
+        // (workspace.show_workspace) - no new route, no client-side
+        // authorization decision, so an unauthorized/stale target
+        // fails exactly like any other navigation to it (a 404 from
+        // the same server-side check every Project link already goes
+        // through). Unsent composer input is already continuously
+        // saved to sessionStorage on every keystroke (see this file's
+        // own draftInput handling, unchanged) - nothing extra needed
+        // for "Stay"/"Switch" to preserve it.
+        (function () {
+            var dialog = document.getElementById('project-switch-dialog');
+            if (!dialog) return; // no Project currently open - nothing to interrupt
+            var root = document.querySelector('[data-tree-root]');
+            if (!root) return;
+
+            var currentNameEl = document.getElementById('project-switch-current-name');
+            var targetNameEl = document.getElementById('project-switch-target-name');
+            var stayBtn = document.getElementById('project-switch-stay');
+            var switchBtn = document.getElementById('project-switch-switch');
+            var newTabBtn = document.getElementById('project-switch-new-tab');
+            var popupNote = document.getElementById('project-switch-popup-note');
+
+            var pendingUrl = null;
+            var triggerEl = null;
+
+            function currentProjectName() {
+                // Reads the SAME breadcrumb text already rendered for
+                // the Menu bar (menu.context) - no second source of
+                // truth for "what Project is currently open."
+                var el = document.querySelector('.workspace-topbar-project');
+                return el ? el.textContent.trim() : '';
+            }
+
+            function openDialog(link) {
+                triggerEl = link;
+                pendingUrl = link.getAttribute('href');
+                // textContent, never innerHTML - a Project display name
+                // is reviewer-entered free text (Section 12/VW8's own
+                // "Project names are escaped safely" requirement).
+                currentNameEl.textContent = currentProjectName();
+                targetNameEl.textContent = link.textContent.trim();
+                popupNote.hidden = true;
+                dialog.hidden = false;
+                stayBtn.focus();
+            }
+            function closeDialog() {
+                dialog.hidden = true;
+                pendingUrl = null;
+                if (triggerEl && document.body.contains(triggerEl)) triggerEl.focus();
+                triggerEl = null;
+            }
+
+            root.addEventListener('click', function (e) {
+                var link = e.target.closest('a[data-project-id]');
+                if (!link || !root.contains(link)) return;
+                e.preventDefault();
+                openDialog(link);
+            });
+
+            stayBtn.addEventListener('click', closeDialog);
+            switchBtn.addEventListener('click', function () {
+                if (!pendingUrl) return;
+                window.location.href = pendingUrl;
+            });
+            newTabBtn.addEventListener('click', function () {
+                if (!pendingUrl) return;
+                // A blocked popup returns null (or, in some browsers, a
+                // closed-immediately window) - handled non-destructively:
+                // the CURRENT tab is untouched either way, and the
+                // reviewer gets an explicit way forward instead of a
+                // silent no-op.
+                var opened = null;
+                try { opened = window.open(pendingUrl, '_blank'); } catch (e) { opened = null; }
+                if (!opened) {
+                    popupNote.hidden = false;
+                    return;
+                }
+                closeDialog();
+            });
+
+            document.addEventListener('keydown', function (e) {
+                if (e.key === 'Escape' && !dialog.hidden) closeDialog();
+            });
+            document.addEventListener('mousedown', function (e) {
+                if (!dialog.hidden && !dialog.contains(e.target)) closeDialog();
+            });
+        })();
+
         // CLAUDE-P40-E3A, Section 10; CLAUDE-P40-VW3: Appearance menu -
         // applies one of three modes (Light/Dark/Tinted) independently
         // per surface, including the top Menu bar (new this stage).
@@ -833,6 +1011,8 @@
                 toolbox: document.querySelector('.workspace-pane-toolbox'),
                 chat: document.querySelector('.chat-region'),
             };
+            var surfaceKeys = Object.keys(targets);
+            var currentMode = {}; // key -> 'light'|'dark'|'tinted', kept in sync below
 
             function resolveStoredMode(stored) {
                 if (stored === 'tinted' || stored === 'dark') return stored;
@@ -844,26 +1024,69 @@
                 el.classList.toggle('appearance-tinted', mode === 'tinted');
             }
 
-            Object.keys(targets).forEach(function (key) {
+            // CLAUDE-P40-VW8-QA, Section 5: applies ONE surface's mode -
+            // updates its DOM class, its own radio row, its localStorage
+            // key, and currentMode's own record of it (the single source
+            // syncAllRow reads to decide the All row's own state below).
+            // Shared by both an individual radio's own change handler AND
+            // the All row, so there is exactly one place a surface's mode
+            // is ever actually applied - never two divergent code paths.
+            function setSurfaceMode(key, mode, persist) {
                 var el = targets[key];
-                if (!el) return;
-                var storageKey = 'beehive:appearance:' + key;
-                var stored = null;
-                try { stored = window.localStorage.getItem(storageKey); } catch (e) { /* ignore */ }
-                var mode = resolveStoredMode(stored);
-                applyMode(el, mode);
-
+                currentMode[key] = mode;
+                if (el) applyMode(el, mode);
                 var radios = document.querySelectorAll('[data-appearance-target="' + key + '"]');
                 radios.forEach(function (radio) {
                     radio.checked = (radio.getAttribute('data-appearance-mode') === mode);
+                });
+                if (persist !== false) {
+                    try { window.localStorage.setItem('beehive:appearance:' + key, mode); } catch (e) { /* ignore */ }
+                }
+            }
+
+            // CLAUDE-P40-VW8-QA, Section 5: "If all five panels share one
+            // mode, the matching All choice reflects that state... no
+            // universal mode may falsely appear selected [when mixed];
+            // expose an accessible mixed-state description." Re-evaluated
+            // after EVERY individual or All-row change - never assumed,
+            // always freshly derived from currentMode.
+            var allRadios = document.querySelectorAll('[data-appearance-all-mode]');
+            var mixedNote = document.getElementById('appearance-mixed-note');
+            function syncAllRow() {
+                var first = currentMode[surfaceKeys[0]];
+                var uniform = surfaceKeys.every(function (key) { return currentMode[key] === first; });
+                allRadios.forEach(function (radio) {
+                    radio.checked = uniform && radio.getAttribute('data-appearance-all-mode') === first;
+                });
+                if (mixedNote) mixedNote.hidden = uniform;
+            }
+
+            surfaceKeys.forEach(function (key) {
+                var storageKey = 'beehive:appearance:' + key;
+                var stored = null;
+                try { stored = window.localStorage.getItem(storageKey); } catch (e) { /* ignore */ }
+                setSurfaceMode(key, resolveStoredMode(stored), false);
+
+                var radios = document.querySelectorAll('[data-appearance-target="' + key + '"]');
+                radios.forEach(function (radio) {
                     radio.addEventListener('change', function () {
                         if (!radio.checked) return;
-                        var newMode = radio.getAttribute('data-appearance-mode');
-                        applyMode(el, newMode);
-                        try { window.localStorage.setItem(storageKey, newMode); } catch (e) { /* ignore */ }
+                        setSurfaceMode(key, radio.getAttribute('data-appearance-mode'));
+                        syncAllRow();
                     });
                 });
             });
+
+            allRadios.forEach(function (radio) {
+                radio.addEventListener('change', function () {
+                    if (!radio.checked) return;
+                    var mode = radio.getAttribute('data-appearance-all-mode');
+                    surfaceKeys.forEach(function (key) { setSurfaceMode(key, mode); });
+                    syncAllRow();
+                });
+            });
+
+            syncAllRow();
         })();
     </script>
     <script>

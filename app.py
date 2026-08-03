@@ -408,10 +408,10 @@ def _register_error_handlers(app: Flask) -> None:
     # All three dead-end error pages (403/404/500) are the same shape - one
     # message, one way out, no ongoing state - so they're one parameterized
     # template (errors/error.html), not three near-identical files.
-    def _render_error(code, heading, message, action_url, action_label):
+    def _render_error(code, heading, message, action_url, action_label, ui_ref=None):
         return render_template(
             "errors/error.html", code=code, heading=heading, message=message,
-            action_url=action_url, action_label=action_label,
+            action_url=action_url, action_label=action_label, ui_ref=ui_ref,
         )
 
     @app.errorhandler(404)
@@ -441,6 +441,34 @@ def _register_error_handlers(app: Flask) -> None:
             403, "Access restricted", "Your account doesn't have permission to view this page.",
             url_for("portal.projects_list"), "Back to Projects",
         ), 403
+
+    @app.errorhandler(413)
+    def file_too_large(_err):
+        # CLAUDE-P40-VW8-QA (Project-Creation Upload-Capacity Correction):
+        # RequestEntityTooLarge is raised by Werkzeug's own form parser,
+        # BEFORE routes/portal.py:upload's view function ever runs - no
+        # Project/Document/workspace/temp file is ever created for a
+        # request that fails here (ingest_upload is never called), so
+        # there is nothing to roll back, only a clear message and a way
+        # back to the same form. routes/api.py's own blueprint-scoped
+        # RequestEntityTooLarge handler (JSON) still applies to /api/v1/*
+        # requests specifically - this app-level one is what every OTHER
+        # route (chiefly the real upload FORM) previously fell through to
+        # Werkzeug's raw, unstyled default page for.
+        if _wants_json():
+            return jsonify(error="file_too_large", message=_upload_too_large_message(app)), 413
+        return _render_error(
+            413, "File too large", _upload_too_large_message(app),
+            url_for("portal.upload"), "Choose a different file",
+            ui_ref="errors.upload-too-large",
+        ), 413
+
+    def _upload_too_large_message(app) -> str:
+        max_mb = app.config["MAX_CONTENT_LENGTH"] // (1024 * 1024)
+        return (
+            f"That file is larger than the current maximum of {max_mb}MB. "
+            "Choose a smaller file, or reduce its size, and try again."
+        )
 
     def _wants_json() -> bool:
         from flask import request
@@ -506,7 +534,7 @@ def _register_template_filters(app: Flask) -> None:
     app.jinja_env.filters["humanize"] = humanize_timestamp
 
     @app.template_filter("hotlinks")
-    def render_conversation_hotlinks(text, workspace, project_id):
+    def render_conversation_hotlinks(text, workspace, project_id, message_id=None, anchor_scope=None, anchor_case_id=None):
         """
         CLAUDE-P40-E, Section G: the template-facing half of
         services.case_workspace.resolve_conversation_hotlinks - that
@@ -517,6 +545,22 @@ def _register_template_filters(app: Flask) -> None:
         concerns. Every plain-text segment is still escaped exactly
         like {{ message.text }} always was - only a real, resolved
         Source match ever becomes a link.
+
+        CLAUDE-P40-VW8-QA, Section 11: `message_id`/`anchor_scope`/
+        `anchor_case_id` are optional (backward-compatible - a caller
+        that omits them gets exactly the pre-VW8-QA hotlinks-only
+        behavior) and, when given, additionally wrap any tagged
+        substring in a `<mark>` - "the selected text must receive an
+        identifiable, accessible tagged treatment", the corrected
+        behavior for CLAUDE-P40-VW7's own "Add Tag" action, which
+        previously had no visible consequence on the source text at
+        all. Composed in ONE pass against the raw text (never two
+        independent substring-wrapping passes stacked on each other's
+        already-escaped HTML output, which corrupts nesting) - hotlink
+        segment boundaries and tag-occurrence boundaries are merged
+        into one ordered boundary list first, then rendered outward-in
+        (<mark> wraps <a>, never the reverse) so both remain valid,
+        correctly-nested HTML regardless of how they overlap.
         """
         from flask import url_for
         from markupsafe import Markup, escape
@@ -524,13 +568,104 @@ def _register_template_filters(app: Flask) -> None:
         from services.case_workspace import resolve_conversation_hotlinks
 
         segments = resolve_conversation_hotlinks(text, workspace)
-        rendered = []
+
+        tag_ranges = []
+        if message_id and anchor_scope:
+            from services.case_workspace import BUILT_IN_TAGS
+
+            occurrences = [
+                occ for occ in workspace.tag_occurrences
+                if occ["source_anchor"].get("scope") == anchor_scope
+                and occ["source_anchor"].get("message_id") == message_id
+                and (anchor_scope != "case" or occ["source_anchor"].get("case_id") == anchor_case_id)
+            ]
+            occurrences.sort(key=lambda occ: occ["source_anchor"]["start_offset"])
+            occupied_until = 0
+            for occ in occurrences:
+                start = occ["source_anchor"]["start_offset"]
+                end = occ["source_anchor"]["end_offset"]
+                # Overlap resolution (Section 11 - "duplicate application
+                # must be handled coherently"): the earliest-starting
+                # occurrence at a given position wins the inline
+                # highlight; a later, overlapping one still persists,
+                # still counts in Lists/Tags, just isn't ALSO drawn as a
+                # second nested <mark> here (nested/overlapping <mark>
+                # ranges would require re-splitting already-drawn spans,
+                # not worth the complexity this stage's own scope calls
+                # for - see this comment, not a silent gap).
+                if start < occupied_until or start >= end or end > len(text):
+                    continue
+                tag = BUILT_IN_TAGS.get(occ["tag_id"])
+                if tag is None:
+                    tag = next((t for t in workspace.tags if t["id"] == occ["tag_id"]), None)
+                if tag is None:
+                    continue
+                tag_ranges.append((start, end, tag["color"], tag["name"], occ["id"]))
+                occupied_until = end
+
+        if not tag_ranges:
+            rendered = []
+            for segment in segments:
+                if segment["source_id"]:
+                    url = url_for("workspace.show_workspace", project_id=project_id, source=segment["source_id"])
+                    rendered.append(Markup('<a href="{}">{}</a>').format(url, segment["text"]))
+                else:
+                    rendered.append(escape(segment["text"]))
+            return Markup("").join(rendered)
+
+        # Merge hotlink-segment boundaries and tag-range boundaries into
+        # one ordered set of cut points, then render each atomic
+        # sub-span exactly once - this is what guarantees correct
+        # nesting even when a tagged range only partially overlaps a
+        # hotlinked filename (rare, but a naive two-pass wrap would
+        # produce unbalanced tags in exactly that case).
+        boundaries = {0, len(text)}
+        cursor = 0
+        segment_source_at = {}
         for segment in segments:
-            if segment["source_id"]:
-                url = url_for("workspace.show_workspace", project_id=project_id, source=segment["source_id"])
-                rendered.append(Markup('<a href="{}">{}</a>').format(url, segment["text"]))
-            else:
-                rendered.append(escape(segment["text"]))
+            seg_len = len(segment["text"])
+            boundaries.add(cursor)
+            boundaries.add(cursor + seg_len)
+            segment_source_at[cursor] = segment["source_id"]
+            cursor += seg_len
+        for start, end, _color, _name, _occ_id in tag_ranges:
+            boundaries.add(start)
+            boundaries.add(end)
+        cut_points = sorted(boundaries)
+
+        def _source_id_at(pos):
+            best = None
+            for seg_start in sorted(segment_source_at):
+                if seg_start > pos:
+                    break
+                best = segment_source_at[seg_start]
+            return best
+
+        def _tag_at(pos):
+            for start, end, color, name, occ_id in tag_ranges:
+                if start <= pos < end:
+                    return color, name, occ_id
+            return None
+
+        rendered = []
+        for i in range(len(cut_points) - 1):
+            start, end = cut_points[i], cut_points[i + 1]
+            if start >= end:
+                continue
+            chunk = escape(text[start:end])
+            source_id = _source_id_at(start)
+            if source_id:
+                url = url_for("workspace.show_workspace", project_id=project_id, source=source_id)
+                chunk = Markup('<a href="{}">{}</a>').format(url, chunk)
+            tag_here = _tag_at(start)
+            if tag_here:
+                color, name, occ_id = tag_here
+                chunk = Markup(
+                    '<mark class="tag-highlight-inline conv-tag-color-{}" '
+                    'data-tag-occurrence-id="{}" data-ui-ref="chat.tag-highlight" '
+                    'title="Tagged: {}">{}</mark>'
+                ).format(color, occ_id, name, chunk)
+            rendered.append(chunk)
         return Markup("").join(rendered)
 
 

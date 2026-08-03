@@ -5357,6 +5357,27 @@ class CaseWorkspaceStore:
     def tag_occurrences_for_project(self, workspace: ProjectWorkspace) -> list[dict]:
         return list(workspace.tag_occurrences)
 
+    def tag_occurrences_for_message(
+        self, workspace: ProjectWorkspace, scope: str, message_id: str, case_id: Optional[str] = None,
+    ) -> list[dict]:
+        """CLAUDE-P40-VW8-QA, Section 11: occurrences anchored to this
+        EXACT message - the read side of "the selected text must
+        receive an identifiable, accessible tagged treatment", rendered
+        inline by app.py's own `hotlinks` filter. Reuses the SAME
+        TagOccurrence.source_anchor already stored for Lists/navigation
+        - no second annotation mechanism, no new business object.
+        Sorted by start_offset so the caller can render left-to-right
+        and deterministically resolve overlaps (first-starting wins;
+        see that filter's own comment)."""
+        matches = [
+            occ for occ in workspace.tag_occurrences
+            if occ["source_anchor"].get("scope") == scope
+            and occ["source_anchor"].get("message_id") == message_id
+            and (scope != CONVERSATION_ANCHOR_SCOPE_CASE or occ["source_anchor"].get("case_id") == case_id)
+        ]
+        matches.sort(key=lambda occ: occ["source_anchor"]["start_offset"])
+        return matches
+
     def create_task(self, workspace: ProjectWorkspace, source_anchor: dict, title: str, actor: str) -> dict:
         stripped_title = re.sub(r"\s+", " ", (title or "")).strip()
         if not stripped_title:

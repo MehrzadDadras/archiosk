@@ -10,14 +10,14 @@
        two duplicated routes -- each deep-links with ?environment= to
        pre-select the radio there, but the server-side POST validates
        independently regardless of which entrance was used. #}
-    <a class="gateway-action gateway-action-primary" href="{{ url_for('portal.upload', environment='client_owner') }}">
+    <a class="gateway-action gateway-action-primary" data-ui-ref="gateway.create-client-owner" href="{{ url_for('portal.upload', environment='client_owner') }}">
         <span class="gateway-action-icon">+</span>
         <span>
             <strong>Create Client / Owner Project</strong>
             <small>New project in the Client / Owner environment &mdash; locked once created</small>
         </span>
     </a>
-    <a class="gateway-action gateway-action-primary" href="{{ url_for('portal.upload', environment='design_builder_proponent') }}">
+    <a class="gateway-action gateway-action-primary" data-ui-ref="gateway.create-design-builder" href="{{ url_for('portal.upload', environment='design_builder_proponent') }}">
         <span class="gateway-action-icon">+</span>
         <span>
             <strong>Create Design-Builder / Proponent Project</strong>
@@ -25,7 +25,13 @@
         </span>
     </a>
     {% endif %}
-    <a class="gateway-action" href="{{ url_for('portal.projects_list') }}">
+    {# CLAUDE-P40-VW8-QA, Section 12: was portal.projects_list - the
+       full management directory (search/sort/Delete, inside base.html's
+       own authenticated Lists shell). Now the focused chooser
+       (templates/project_chooser.html) - management stays reachable at
+       its own URL, just no longer the FIRST thing "Open an existing
+       project" leads to. #}
+    <a class="gateway-action" data-ui-ref="gateway.open-existing" href="{{ url_for('portal.choose_project') }}">
         <span class="gateway-action-icon">&#8963;</span>
         <span>
             <strong>Open an existing project</strong>

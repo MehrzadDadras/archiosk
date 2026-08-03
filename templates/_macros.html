@@ -120,15 +120,15 @@
         <button type="button" class="conversation-size-toggle" id="conversation-size-toggle" aria-pressed="false">Expand</button>
     </div>
     {{ caller() }}
-    <form class="conversation-input-form conversation-dock-composer" method="post" action="{{ post_url }}" data-ref="chat.composer">
+    <form class="conversation-input-form conversation-dock-composer" method="post" action="{{ post_url }}" data-ui-ref="chat.composer">
         {% if include_anchor_fields %}
         <input type="hidden" name="anchor_type" id="dock-composer-anchor-type" value="">
         <input type="hidden" name="anchor_id" id="dock-composer-anchor-id" value="">
         <input type="hidden" name="anchor_description" id="dock-composer-anchor-description" value="">
         <span class="dock-composer-anchor-label" id="dock-composer-anchor-label" hidden></span>
         {% endif %}
-        <input type="text" name="text" id="dock-composer-input" data-conversation-draft="{{ scope_key }}" placeholder="{{ placeholder }}" autocomplete="off" required>
-        <button type="submit">Send</button>
+        <input type="text" name="text" id="dock-composer-input" data-ui-ref="chat.composer.input" data-conversation-draft="{{ scope_key }}" placeholder="{{ placeholder }}" autocomplete="off" required>
+        <button type="submit" data-ui-ref="chat.composer.send">Send</button>
     </form>
 </div>
 {% endmacro %}

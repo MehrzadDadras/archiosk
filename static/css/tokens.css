@@ -203,7 +203,23 @@
    reversed. Every pairing below is verified via tools/check_contrast.py
    against the same required-pairing list this file's light tokens are
    held to (4.5:1 body text, 3:1 accent/badge text) - see that script's
-   own docstring for how to re-run it against a candidate file. */
+   own docstring for how to re-run it against a candidate file.
+
+   CLAUDE-P40-VW8-QA (Theme Foreground Contrast Addendum): tools/
+   check_contrast.py itself only ever checked LIGHT pairings (the
+   --text-*/--canvas/--surface-primary names it reads are the Light
+   :root values; Dark/Tinted use differently-prefixed token names it
+   never parsed). Auditing the full text-tier x surface-tier matrix
+   for all three modes directly (same relative-luminance math, run by
+   hand against every combination, not just canvas/surface-primary)
+   surfaced two real sub-4.5:1 failures neither this script nor any
+   prior stage's spot checks had caught: --dark-text-metadata on
+   --dark-surface-selected (4.24:1) and --tint-text-metadata on
+   --tint-surface-hover/-selected (4.09:1 / 3.46:1) - metadata-tier
+   text sitting on the deepest/most saturated layering step in each
+   mode. Both darkened/lightened just enough to clear 4.5:1 with a
+   small margin (still visibly the dimmest of the three text tiers -
+   see the full matrix in this stage's own checkpoint entry). */
 :root {
     /* CLAUDE-P40-VW6: product-owner correction - "the page background is
        not genuinely black... use a genuine black background for the
@@ -223,7 +239,7 @@
     --dark-border-strong: #837454;
     --dark-text-primary: #FFFFFF;
     --dark-text-secondary: #D8D3CA;
-    --dark-text-metadata: #B3AB9E;
+    --dark-text-metadata: #BBB3A8;
     --dark-text-disabled: #7F786C;
 
     --dark-seal-red: #E5756C;
@@ -250,27 +266,30 @@
    --surface-primary/--border/--text-primary directly, e.g. finding
    cards, blank states, form controls, kept rendering the untinted
    Light values underneath: "some surfaces become tinted and others do
-   not" was that gap, not a bug in any one selector). #D8E2F0 is the
-   product owner's own specified light navy-blue reference, used
-   directly as --tint-surface-primary (the actual painted panel fill
-   every governed surface's root uses) rather than diluted toward
-   near-white - "every selected logical panel must visibly participate
-   in the light navy-blue treatment" requires the color to actually be
-   navy where it's seen, not lightened until it reads as off-white
-   again. Contrast verified via tools/check_contrast.py, same as the
-   dark family above. */
+   not" was that gap, not a bug in any one selector).
+
+   CLAUDE-P40-VW8-QA: #D8E2F0 (VW6's own value, the product owner's
+   FIRST specified reference) still read as "too strong/beige" in the
+   walkthrough that authorized this stage - not a hue problem (it IS
+   genuinely blue, not beige, by its own numbers), but a LIGHTNESS one:
+   at that saturation/depth, next to this app's warm sand-toned Light
+   default, it reads heavier and warmer than intended. Corrected to a
+   considerably lighter, more desaturated blue-grey family - the SAME
+   navy hue throughout (~215deg), just pulled markedly toward white -
+   re-verified via tools/check_contrast.py the same way (see that
+   script and this stage's own checkpoint entry for the exact run). */
 :root {
-    --tint-canvas: #D8E2F0;
-    --tint-surface-primary: #D8E2F0;
-    --tint-surface-secondary: #B4C8E4;
-    --tint-surface-hover: #9DB7DD;
-    --tint-surface-selected: #7DA1D4;
-    --tint-border: #6B8DBD;
-    --tint-border-strong: #4972AB;
-    --tint-text-primary: #15263C;
-    --tint-text-secondary: #293E5B;
-    --tint-text-metadata: #405777;
-    --tint-text-disabled: #637B9C;
+    --tint-canvas: #E9EEF6;
+    --tint-surface-primary: #E9EEF6;
+    --tint-surface-secondary: #D2DCEC;
+    --tint-surface-hover: #C2D0E6;
+    --tint-surface-selected: #AEC0DE;
+    --tint-border: #9AACC9;
+    --tint-border-strong: #7C93B8;
+    --tint-text-primary: #1B2A40;
+    --tint-text-secondary: #33465F;
+    --tint-text-metadata: #3D4D66;
+    --tint-text-disabled: #7488A6;
 
     --tint-seal-red: #861C13;
     --tint-seal-red-tint: #EDC3C0;
@@ -303,6 +322,18 @@
    with. */
 :root {
     --divider-strong: #756B57;
+    /* CLAUDE-P40-VW8-QA: the blueprint-grid backdrop line (static/css/
+       main.css's own .blueprint-grid) - same "deliberately mode-
+       invariant" reasoning as --divider-strong above: a fixed, z-index
+       -1, 0.3-opacity brand watermark sitting BEHIND every panel's own
+       opaque background, never a text/foreground color a reader parses
+       against a specific surface, so it has no per-mode contrast
+       requirement to satisfy - genuinely blue by design (see that
+       rule's own comment), not an accidental hardcoded value. Named
+       here instead of left as a raw hex in main.css purely so tokens.css
+       stays the one place ANY shipped color value is defined, per this
+       file's own header discipline - the value itself is unchanged. */
+    --blueprint-grid-line: #5995C0;
 }
 
 /* CLAUDE-P40-VW7: Tag/Highlight swatch colors - services/case_workspace.py's

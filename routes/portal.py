@@ -409,6 +409,51 @@ def projects_list():
     return render_template('projects.html', projects=projects, query=query, sort=sort)
 
 
+@portal_bp.route('/projects/choose')
+@login_required
+def choose_project():
+    """CLAUDE-P40-VW8-QA, Section 12: a focused existing-Project chooser -
+    Gateway's own "Open an existing project" used to lead straight to
+    `projects_list` (the full management directory: search, sort,
+    per-project Delete forms, inside base.html's own full authenticated
+    Lists shell) instead of a simple "which Project did you mean"
+    picker. Reuses the exact same authorized data (_accessible_documents/
+    _project_summary, already access-scoped - no new authorization
+    surface) but renders inside gateway_shell.html (via
+    templates/project_chooser.html extending gateway_base.html, the
+    SAME minimal shell Gateway itself uses) - no Lists panel, no sort/
+    delete controls, no Removed-Projects link. Deliberately the smallest
+    coherent addition: one route, one template, reusing existing data -
+    `projects_list`/`projects.html` are UNCHANGED and remain the real
+    "administrative management" destination (Section 12's own "may
+    remain available through its proper separate route"), still
+    reachable directly by URL.
+    """
+    registry = get_registry(current_app)
+    store = CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"])
+
+    query = request.args.get('q', '').strip()
+    documents = _accessible_documents(registry, store)
+    if query:
+        needle = query.lower()
+        documents = [
+            d for d in documents
+            if needle in d.filename.lower() or needle in d.project_id.lower()
+        ]
+
+    projects = []
+    for document in documents:
+        workspace = _safe_workspace(store, document.project_id)
+        projects.append({
+            "project_id": document.project_id,
+            "display_name": (workspace.display_title if workspace else None) or document.filename,
+            "last_activity": document.ingested_at,
+        })
+    projects.sort(key=lambda p: p["display_name"].lower())
+
+    return render_template('project_chooser.html', projects=projects, query=query)
+
+
 @portal_bp.route('/removed-projects')
 @login_required
 def removed_projects():

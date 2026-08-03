@@ -26,6 +26,26 @@
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/tokens.css') }}?v={{ static_version }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v={{ static_version }}">
+    <script>
+        {# CLAUDE-P40-VW8-QA, Section 4: "must work on Sign-in, Gateway,
+           Project workspace, popups and dialogs" - a reviewer who
+           enabled UI Reference Mode while authenticated keeps that
+           localStorage preference across sign-out (it is a device/
+           browser preference, not session state), so a returning
+           Sign-in visit should still show badges on ITS OWN controls
+           (login.html's username/password/submit) rather than
+           silently losing the setting the moment the authenticated
+           shell isn't the one rendering. No toggle lives on this
+           standalone shell (nothing to turn it back off from here -
+           the Account menu the toggle lives in only exists once
+           authenticated) - this only ever reads the existing
+           preference, never sets one. #}
+        try {
+            if (window.localStorage.getItem('beehive:ui-reference-mode') === 'on') {
+                document.documentElement.classList.add('ui-reference-mode-active');
+            }
+        } catch (e) { /* localStorage unavailable - default to off */ }
+    </script>
 </head>
 <body>
     <div class="blueprint-grid"></div>

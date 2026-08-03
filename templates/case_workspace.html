@@ -21,9 +21,9 @@
 {# CLAUDE-P40-E3A: the full-width top bar and the Lists hierarchy both
    live in base.html now (application-shell level) - not here. See that
    template's own notes at .workspace-topbar and [data-tree-root]. #}
-<div class="workspace-pane-display" id="workspace-display-panel" data-project-id="{{ project_id }}" data-ref="display.divisions">
+<div class="workspace-pane-display" id="workspace-display-panel" data-project-id="{{ project_id }}" data-ui-ref="display.divisions">
     <div class="display-divisions" id="display-divisions" data-vertical="1" data-horizontal="1" data-count="1">
-    <div class="display-division display-division-primary active" data-division="0" id="display-division-0" data-ref="display.division">
+    <div class="display-division display-division-primary active" data-division="0" id="display-division-0" data-ui-ref="display.division">
         {# CLAUDE-P40-VW7B: suppressed inside a panel (panel_only) - the
            OUTER division that embeds this whole document via <iframe>
            already renders its own header/name/close button
@@ -60,7 +60,7 @@
        rule) - flagged explicitly in this stage's completion report, not
        decided silently. #}
     {% if directory_view == 'overview' %}
-        <div id="project-overview" data-ref="display.overview">
+        <div id="project-overview" data-ui-ref="display.overview">
         {# CLAUDE-P29: Project Operating Environment -- locked, never an
            edit control once set. Deliberately no form/button anywhere in
            this branch; see CaseWorkspaceStore.set_operating_environment's
@@ -1750,14 +1750,14 @@
        quantity / Apply), Section 6's own "local presentation menu",
        wired entirely client-side. #}
     {% for division_index in [1, 2, 3, 4, 5] %}
-    <div class="display-division" data-division="{{ division_index }}" id="display-division-{{ division_index }}" data-ref="display.division">
+    <div class="display-division" data-division="{{ division_index }}" id="display-division-{{ division_index }}" data-ui-ref="display.division">
         <div class="display-division-header">
             <span class="display-division-header-name">Division {{ division_index + 1 }}</span>
-            <button type="button" class="display-division-close" data-division-close="{{ division_index }}" data-ref="display.division.close" aria-label="Close this Display">&times;</button>
+            <button type="button" class="display-division-close" data-division-close="{{ division_index }}" data-ui-ref="display.division.close" aria-label="Close this Display">&times;</button>
         </div>
         <div class="display-division-empty">
             <p class="pane-note">Nothing open in this division.</p>
-            <select class="display-division-picker" data-division-picker="{{ division_index }}" data-ref="display.division.picker">
+            <select class="display-division-picker" data-division-picker="{{ division_index }}" data-ui-ref="display.division.picker">
                 <option value="" selected>Open a Document here&hellip;</option>
                 {% for s in active_sources %}
                 <option value="{{ s.id }}">{{ s.name }}</option>
@@ -1779,24 +1779,24 @@
        Escape (static/js/case_workspace.js). Only the capabilities honestly
        implemented this stage: Close/Divide/Vertical/Horizontal/Apply - no
        drawing "modes" (Section 6's own explicit exclusion). #}
-    <div class="display-context-menu" id="display-context-menu" role="menu" hidden>
-        <button type="button" class="display-context-item" id="display-context-close" role="menuitem">Close this Display</button>
+    <div class="display-context-menu" id="display-context-menu" data-ui-ref="display.context-menu" role="menu" hidden>
+        <button type="button" class="display-context-item" id="display-context-close" data-ui-ref="display.context-menu.close" role="menuitem">Close this Display</button>
         <div class="display-context-divide">
             <p class="workspace-pane-label">Divide this Display</p>
             <div class="workspace-layout-quantity" role="group" aria-label="Vertical divisions">
                 <span class="workspace-layout-quantity-label">Vertical divisions</span>
-                <button type="button" class="workspace-layout-stepper" id="display-context-vertical-decrement" aria-label="Decrease vertical divisions">&minus;</button>
+                <button type="button" class="workspace-layout-stepper" id="display-context-vertical-decrement" data-ui-ref="display.context-menu.vertical-decrement" aria-label="Decrease vertical divisions">&minus;</button>
                 <span class="workspace-layout-quantity-value" id="display-context-vertical-value" aria-live="polite">1</span>
-                <button type="button" class="workspace-layout-stepper" id="display-context-vertical-increment" aria-label="Increase vertical divisions">+</button>
+                <button type="button" class="workspace-layout-stepper" id="display-context-vertical-increment" data-ui-ref="display.context-menu.vertical-increment" aria-label="Increase vertical divisions">+</button>
             </div>
             <div class="workspace-layout-quantity" role="group" aria-label="Horizontal divisions">
                 <span class="workspace-layout-quantity-label">Horizontal divisions</span>
-                <button type="button" class="workspace-layout-stepper" id="display-context-horizontal-decrement" aria-label="Decrease horizontal divisions">&minus;</button>
+                <button type="button" class="workspace-layout-stepper" id="display-context-horizontal-decrement" data-ui-ref="display.context-menu.horizontal-decrement" aria-label="Decrease horizontal divisions">&minus;</button>
                 <span class="workspace-layout-quantity-value" id="display-context-horizontal-value" aria-live="polite">1</span>
-                <button type="button" class="workspace-layout-stepper" id="display-context-horizontal-increment" aria-label="Increase horizontal divisions">+</button>
+                <button type="button" class="workspace-layout-stepper" id="display-context-horizontal-increment" data-ui-ref="display.context-menu.horizontal-increment" aria-label="Increase horizontal divisions">+</button>
             </div>
             <p class="workspace-layout-limit-note">Maximum 6 Displays total (Vertical &times; Horizontal).</p>
-            <button type="button" class="workspace-layout-apply" id="display-context-apply" role="menuitem">Apply</button>
+            <button type="button" class="workspace-layout-apply" id="display-context-apply" data-ui-ref="display.context-menu.apply" role="menuitem">Apply</button>
         </div>
     </div>
     {% endif %}
@@ -1834,14 +1834,14 @@
    confirmation/authorization, same macros.subdisclosure idiom, moved
    wholesale rather than rebuilt. See base.html's own comment at that
    branch for the other half of this relocation. #}
-    <h2 data-ref="toolbox.heading">Toolbox</h2>
+    <h2 data-ui-ref="toolbox.heading">Toolbox</h2>
 
     {% if active_case %}
     {# CLAUDE-P40-E3A bucket-b fix: same cross-block {% set %} scoping
        issue as {% block chat %}'s own note below - drawing_sources must
        be recomputed here too, not inherited from {% block content %}. #}
     {% set drawing_sources = active_sources|selectattr("kind", "equalto", "drawing")|selectattr("id", "in", active_case.source_ids)|list %}
-    <section class="workspace-pane" data-ref="toolbox.investigation-findings">
+    <section class="workspace-pane" data-ui-ref="toolbox.investigation-findings">
         <h3>Investigation &middot; Findings</h3>
         {% call macros.accordion('Findings (' ~ findings_view|length ~ ')', status=(applied_count ~ ' applied' if applied_count else None), group='right', id='findings', open=True) %}
         <div class="finding-list">
@@ -2033,7 +2033,7 @@
         {% endcall %}
     </section>
     {% elif selected_source %}
-    <section class="workspace-pane" data-ref="toolbox.document">
+    <section class="workspace-pane" data-ui-ref="toolbox.document">
         <h3>Document</h3>
         <p class="workspace-pane-label">
             {{ selected_source.kind.replace('_', ' ') }}
@@ -2059,7 +2059,7 @@
     {# CLAUDE-P40-VW2: concise neutral empty state only - the project-
        level controls formerly here now live in Lists' own "Project
        Tools" branch (base.html), not duplicated in both panels. #}
-    <section class="workspace-pane" data-ref="toolbox.empty">
+    <section class="workspace-pane" data-ui-ref="toolbox.empty">
         <p class="pane-note">
             No Investigation or Document is currently selected. Open one from Documents or
             Investigations in Lists, or use Project Tools in Lists.
@@ -2095,7 +2095,7 @@
         'case-' ~ active_case.id,
         ('Analyze this drawing for datum inconsistencies…' if drawing_sources else 'Ask a question or investigate this Source…'),
     ) %}
-        <div class="conversation-thread" data-conversation-scope="case-{{ active_case.id }}" data-anchor-scope="case" data-anchor-case-id="{{ active_case.id }}" data-ref="chat.thread">
+        <div class="conversation-thread" data-conversation-scope="case-{{ active_case.id }}" data-anchor-scope="case" data-anchor-case-id="{{ active_case.id }}" data-ui-ref="chat.thread">
             {% for message in active_case.conversation %}
             <div class="conversation-message {{ message.role }}" id="message-{{ message.id }}" data-message-id="{{ message.id }}">
                 <span class="role-label">{{ "You" if message.role == "human" else "Archiosk" }}</span>
@@ -2107,7 +2107,7 @@
                    substrings in <a>, never changes textContent length) and
                    never a "You"/"Archiosk" label or grounding list text by
                    accident. #}
-                <span class="conv-message-text" data-message-text>{{ message.text|hotlinks(workspace, project_id) }}</span>
+                <span class="conv-message-text" data-message-text>{{ message.text|hotlinks(workspace, project_id, message.id, "case", active_case.id) }}</span>
                 {% if message.grounded_in %}
                 {% call macros.subdisclosure('Source grounding') %}
                     <ul class="source-list">{% for g in message.grounded_in %}<li class="source-item">{{ g }}</li>{% endfor %}</ul>
@@ -2192,14 +2192,14 @@
             &ldquo;Discuss this&hellip;&rdquo; link elsewhere on this page (each message below
             shows what it was about, if anything).
         </p>
-        <div class="conversation-thread" data-conversation-scope="project" data-anchor-scope="project" data-ref="chat.thread">
+        <div class="conversation-thread" data-conversation-scope="project" data-anchor-scope="project" data-ui-ref="chat.thread">
             {% for message in project_conversation_view %}
             <div class="conversation-message {{ message.role }}" id="message-{{ message.id }}" data-message-id="{{ message.id }}">
                 <span class="role-label">{{ "You" if message.role == "human" else "Archiosk" }}</span>
                 {% if message.anchor %}
                 <br><small class="text-muted">Re: {{ message.anchor.anchor_type.replace('_', ' ') }}{% if message.anchor.description %} &mdash; {{ message.anchor.description }}{% endif %}</small>
                 {% endif %}
-                <span class="conv-message-text" data-message-text>{{ message.text|hotlinks(workspace, project_id) }}</span>
+                <span class="conv-message-text" data-message-text>{{ message.text|hotlinks(workspace, project_id, message.id, "project") }}</span>
                 {% if message.grounded_in %}
                 {% call macros.subdisclosure('Source grounding') %}
                     <ul class="source-list">{% for g in message.grounded_in %}<li class="source-item">{{ g }}</li>{% endfor %}</ul>
@@ -2240,17 +2240,17 @@
        hidden csrf_token field exactly like every other form on this
        page - the fetch() calls in case_workspace.js read that same
        field's value rather than inventing a second CSRF mechanism. #}
-    <div class="conv-selection-toolbar" id="conv-selection-toolbar" data-ref="chat.selection-toolbar" role="toolbar" aria-label="Selected text actions" hidden>
-        <button type="button" class="conv-selection-btn" data-conv-action="tag">Add Tag</button>
-        <button type="button" class="conv-selection-btn" data-conv-action="task">Make Task</button>
-        <button type="button" class="conv-selection-btn" data-conv-action="highlight">Highlight</button>
-        <button type="button" class="conv-selection-btn" data-conv-action="important">Important</button>
-        <button type="button" class="conv-selection-btn" data-conv-action="question">Question</button>
-        <button type="button" class="conv-selection-btn" data-conv-action="copy">Copy</button>
+    <div class="conv-selection-toolbar" id="conv-selection-toolbar" data-ui-ref="chat.selection-toolbar" role="toolbar" aria-label="Selected text actions" hidden>
+        <button type="button" class="conv-selection-btn" data-conv-action="tag" data-ui-ref="chat.selection-toolbar.tag">Add Tag</button>
+        <button type="button" class="conv-selection-btn" data-conv-action="task" data-ui-ref="chat.selection-toolbar.task">Make Task</button>
+        <button type="button" class="conv-selection-btn" data-conv-action="highlight" data-ui-ref="chat.selection-toolbar.highlight">Highlight</button>
+        <button type="button" class="conv-selection-btn" data-conv-action="important" data-ui-ref="chat.selection-toolbar.important">Important</button>
+        <button type="button" class="conv-selection-btn" data-conv-action="question" data-ui-ref="chat.selection-toolbar.question">Question</button>
+        <button type="button" class="conv-selection-btn" data-conv-action="copy" data-ui-ref="chat.selection-toolbar.copy">Copy</button>
     </div>
     <p class="conv-selection-status" id="conv-selection-status" role="status" aria-live="polite" hidden></p>
 
-    <div class="conv-dialog" id="conv-tag-dialog" data-ref="chat.tag-dialog" role="dialog" aria-modal="true" aria-labelledby="conv-tag-dialog-heading" hidden>
+    <div class="conv-dialog" id="conv-tag-dialog" data-ui-ref="chat.tag-dialog" role="dialog" aria-modal="true" aria-labelledby="conv-tag-dialog-heading" hidden>
         <form method="post" action="{{ url_for('workspace.add_tag_occurrence_route', project_id=project_id) }}" id="conv-tag-form">
             <p class="conv-dialog-heading" id="conv-tag-dialog-heading">Add Tag</p>
             <p class="conv-dialog-error" data-conv-dialog-error role="alert" hidden></p>
@@ -2282,7 +2282,7 @@
         </form>
     </div>
 
-    <div class="conv-dialog" id="conv-task-dialog" data-ref="chat.task-dialog" role="dialog" aria-modal="true" aria-labelledby="conv-task-dialog-heading" hidden>
+    <div class="conv-dialog" id="conv-task-dialog" data-ui-ref="chat.task-dialog" role="dialog" aria-modal="true" aria-labelledby="conv-task-dialog-heading" hidden>
         <form method="post" action="{{ url_for('workspace.create_task_route', project_id=project_id) }}" id="conv-task-form">
             <p class="conv-dialog-heading" id="conv-task-dialog-heading">Make Task</p>
             <p class="conv-dialog-error" data-conv-dialog-error role="alert" hidden></p>

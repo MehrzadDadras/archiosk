@@ -27,7 +27,7 @@ its real scope.
 VW7A was purely additive and instrumentation-only: every control
 already existed before it; nothing was renamed, moved, or behaviorally
 changed to build this registry — `git diff` against the VW7A commit
-shows only `data-ref="..."` insertions (plus the new UI Reference Mode
+shows only `data-ui-ref="..."` insertions (plus the new UI Reference Mode
 toggle itself and its CSS/JS).
 
 VW7B is a real (if bounded) behavior/structure stage, exactly what
@@ -39,7 +39,7 @@ behavior as of VW7B, not VW7A — where VW7B changed something, the row
 says so; where it didn't, the row is unchanged from VW7A.
 
 **Turn on UI Reference Mode** (Account menu, top-right, "UI Reference
-Mode" checkbox) to see every instrumented control's own `data-ref`
+Mode" checkbox) to see every instrumented control's own `data-ui-ref`
 value rendered as a small badge directly on the page — the fastest way
 to cross-check this document against the live app. Off by default; a
 reviewer/device preference (`localStorage`), never a Project record.
@@ -53,14 +53,14 @@ Surfaces: `menu` (top bar), `lists` (left panel), `display` (main
 projection area), `toolbox` (right contextual panel), `chat` (bottom
 conversation dock), `shell` (structural chrome — panel dividers).
 
-**A `data-ref` value identifies a KIND of control, not one instance.**
+**A `data-ui-ref` value identifies a KIND of control, not one instance.**
 For a repeating pattern (a Document leaf, a Task row, a Project row),
-every rendered instance shares the same `data-ref` — the existing
+every rendered instance shares the same `data-ui-ref` — the existing
 per-instance attributes (`data-source-id`, `data-task-id`,
 `data-tag-occurrence-id`, the leaf's own `href`) still disambiguate
 which one, exactly as they did before this stage. This is a query
 selector convention, not an HTML `id` — uniqueness is not implied or
-required, and none of the code that reads `data-ref` (only the CSS
+required, and none of the code that reads `data-ui-ref` (only the CSS
 reference-mode badge and this stage's own consistency tests) assumes
 otherwise.
 
@@ -79,7 +79,13 @@ otherwise.
 | `menu.brand` | `<a>` | "Archiosk" | Navigates to `portal.index` (`/`) | Every authenticated page | active |
 | `menu.context` | `<span>` | breadcrumb (Project / Investigation / Document / Overview) | Non-interactive, reflects current page state | Only rendered when `project_id`/`workspace` are defined | active |
 | `menu.display-layout` | `<details>` popup | "Display Layout" | Vertical/Horizontal steppers + Apply — sets `#display-divisions`' grid via `window.ArchioskDisplay`-adjacent client JS (`applyLayout` in `case_workspace.js`) | Only rendered when `project_id`/`workspace` are defined | active |
-| `menu.appearance` | `<details>` popup | "Appearance" | Per-surface (Menu/Lists/Display/Toolbox/Chat) Light/Dark/Tinted radio matrix, `localStorage`-persisted | Only rendered when `project_id`/`workspace` are defined | active |
+| `menu.display-layout.vertical-decrement`, `menu.display-layout.vertical-increment`, `menu.display-layout.horizontal-decrement`, `menu.display-layout.horizontal-increment` | `<button>` (4 distinct, named controls) | −/+ steppers | Adjust the PENDING Vertical/Horizontal count (not yet applied) | Only rendered when `project_id`/`workspace` are defined | active |
+| `menu.display-layout.apply` | `<button>` | "Apply" | Commits the pending Vertical × Horizontal count to `#display-divisions` | Only rendered when `project_id`/`workspace` are defined | active |
+| `menu.appearance` | `<details>` popup | "Appearance" | Per-surface (All/Menu/Lists/Display/Toolbox/Chat) Light/Dark/Tinted radio matrix, `localStorage`-persisted | Only rendered when `project_id`/`workspace` are defined | active |
+| `menu.appearance.all` | `<tr>` | "All" row | **CLAUDE-P40-VW8-QA (new):** applies one mode to all 5 surfaces at once; reflects "checked" only when all 5 already share one mode, otherwise unchecked with `#appearance-mixed-note` shown (Section 5 — never a 4th theme, a control over the existing 3) | Only rendered when `project_id`/`workspace` are defined | active |
+| `menu.appearance.all.light`, `menu.appearance.all.dark`, `menu.appearance.all.tinted` | `<input type="radio">` (3 distinct values, constructed from a fixed `{% for %}` loop — see `UI_REFERENCE_MAP.md`'s own test-side `_APPEARANCE_DYNAMIC_REFS` enumeration) | "All surfaces appearance: `Light`/`Dark`/`Tinted`" | Sets every surface (Menu/Lists/Display/Toolbox/Chat) to that mode in one action | Only rendered when `project_id`/`workspace` are defined | active |
+| `menu.appearance.menu`, `menu.appearance.lists`, `menu.appearance.display`, `menu.appearance.toolbox`, `menu.appearance.chat` | `<tr>` (5 distinct values, one per real surface) | per-surface row | Groups that surface's own 3 radios | Only rendered when `project_id`/`workspace` are defined | active |
+| `menu.appearance.menu.light`, `menu.appearance.menu.dark`, `menu.appearance.menu.tinted`, `menu.appearance.lists.light`, `menu.appearance.lists.dark`, `menu.appearance.lists.tinted`, `menu.appearance.display.light`, `menu.appearance.display.dark`, `menu.appearance.display.tinted`, `menu.appearance.toolbox.light`, `menu.appearance.toolbox.dark`, `menu.appearance.toolbox.tinted`, `menu.appearance.chat.light`, `menu.appearance.chat.dark`, `menu.appearance.chat.tinted` | `<input type="radio">` (15 distinct values: 5 surfaces × 3 modes) | "`<Surface>` appearance: `<Mode>`" | Sets that ONE surface's mode; `beehive:appearance:<surface>` in `localStorage` | Only rendered when `project_id`/`workspace` are defined | active |
 | `menu.account` | `<details>` popup | "…" (username) | Contains UI Reference Mode toggle + Sign out | Every authenticated page | active |
 
 ## Shell (structural chrome — `templates/base.html`)
@@ -99,6 +105,10 @@ otherwise.
 | `lists.removed-projects` | tree-leaf `<a>` | "Removed Projects" | Navigates to `portal.removed_projects` | Every authenticated page | active |
 | `lists.security` | tree-leaf `<a>` | "Security" | Navigates to `security.department_home` | **Admin only** — `is_admin` | active |
 | `lists.system-data-management` | `<a>` inside a subdisclosure | "Reset Project Data…" | Navigates to `portal.reset_project_data`. **CLAUDE-P40-VW7B:** relocated here from the active Project's own "Project Tools" branch (`lists.project.tools.data-management`, retired — see below) — the route resets `REGISTRY_STORE_PATH` in full ("returns the app to a clean, no-project state"), every Project in the deployment, not the one whose tools branch it used to sit in | **Admin only** — `is_admin` | active |
+| `lists.project-switch-dialog` | `<div role="dialog">` | (dialog, no visible label — `aria-labelledby` its own heading) | **CLAUDE-P40-VW8:** interruption dialog shown when activating `lists.projects.leaf` for a Project other than the one currently open. Rendered only when `project_id is defined` (a Project is already open) | Same access scope as the page it renders on | active |
+| `lists.project-switch-dialog.stay` | `<button>` | "Stay in Current Project" | Closes the dialog; no navigation | Same as above | active |
+| `lists.project-switch-dialog.switch` | `<button>` | "Switch in This Tab" | Navigates the current tab to the pending target Project's own already-authorized `workspace.show_workspace` URL | Same as above | active |
+| `lists.project-switch-dialog.open-new-tab` | `<button>` | "Open in New Tab" | Opens the pending target Project's URL via `window.open`; shows `#project-switch-popup-note` if the browser blocks the popup, leaving the current tab untouched | Same as above | active |
 
 ## Lists — active Project branch (`templates/base.html`, only inside the currently open Project's own row)
 
@@ -166,6 +176,10 @@ assertion before ever shipping, not discovered live.
 | `display.division.picker` | `<select>` (pattern, divisions 1-5 only) | "Open a Document here…" — populates that division client-side via `window.ArchioskDisplay.populateDivision`. **Still Documents-only** — not extended to list Investigations this stage (a considered, deferred enhancement; the Lists-leaf-click path above is what VW7B's own prompt asked for, not this picker) | Options limited to `active_sources` | active |
 | `display.division.close` | `<button>` (pattern, divisions 1-5 only) | Clears that division (any kind — Document, Investigation, or Overview), shrinks the Vertical/Horizontal layout by one (VW4's deterministic shrink rule) | — | active |
 | `display.overview` | `#project-overview` | The Overview leaf's actual content: Operating Environment, Access/Settings, Needs Attention, Recent Focus, Investigation Quality, Participants, Go/No-Go, Accepted Knowledge, Instructions, Requirement Compliance, RFIs, Requirements, Key Dates, History — all consolidated under this one leaf (CLAUDE-P40-E3A, Section 5). Its own "← Projects" back-link is suppressed when rendered inside a panel (CLAUDE-P40-VW7B) | Same as workspace access | active |
+| `display.context-menu` | `#display-context-menu` (CLAUDE-P40-VW8-QA — formally registered; existed since CLAUDE-P40-E3A) | Right-click menu for the targeted division — Close/Divide | Hidden by default; opens via `contextmenu` on a `.display-division`, targets whichever one was clicked | Same as workspace access | active |
+| `display.context-menu.close` | `<button>` | "Close this Display" | Clears the targeted division, reflows remaining divisions (VW4's deterministic shrink rule) | Same as workspace access | active |
+| `display.context-menu.vertical-decrement`, `display.context-menu.vertical-increment`, `display.context-menu.horizontal-decrement`, `display.context-menu.horizontal-increment` | `<button>` (4 distinct, named controls) | −/+ steppers | Adjust the PENDING Vertical/Horizontal count for "Divide this Display" | Same as workspace access | active |
+| `display.context-menu.apply` | `<button>` | "Apply" | Commits the pending Vertical × Horizontal count | Same as workspace access | active |
 
 ## Toolbox (`templates/case_workspace.html`)
 
@@ -185,8 +199,61 @@ assertion before ever shipping, not discovered live.
 | `chat.thread` | `.conversation-thread` (pattern — case-scoped and project-scoped share this same reference) | The scrollable message list; case-scoped when an Investigation is open, project-scoped otherwise (mutually exclusive) | Same as workspace access | active |
 | `chat.composer` | `<form>` | Posts a new message — to `post_message` (case-scoped) or `quick_start` (project-scoped) | Same as workspace access | active |
 | `chat.selection-toolbar` | `#conv-selection-toolbar` (CLAUDE-P40-VW7) | The OneNote-style contextual toolbar on a meaningful text selection — Add Tag/Make Task/Highlight/Important/Question/Copy | Same as workspace access (server-side re-checked on every mutation) | active |
+| `chat.selection-toolbar.tag`, `chat.selection-toolbar.task`, `chat.selection-toolbar.highlight`, `chat.selection-toolbar.important`, `chat.selection-toolbar.question`, `chat.selection-toolbar.copy` | `<button>` (6 distinct, named actions) | toolbar action buttons | See `chat.selection-toolbar`'s own row — one reference per action | Same as workspace access | active |
 | `chat.tag-dialog` | `#conv-tag-dialog` (CLAUDE-P40-VW7) | "Add Tag" dialog — existing/custom tag + color picker | Same as workspace access | active |
 | `chat.task-dialog` | `#conv-task-dialog` (CLAUDE-P40-VW7) | "Make Task" dialog — editable title | Same as workspace access | active |
+| `chat.composer.input` | `<input>` | the ONE conversation composer's text field | Posts to `post_message`/`quick_start` on submit | Same as workspace access | active |
+| `chat.composer.send` | `<button>` | "Send" | Submits `chat.composer.input`'s form | Same as workspace access | active |
+| `chat.tag-highlight` | `<mark class="tag-highlight-inline">` (pattern, CLAUDE-P40-VW8-QA, Section 11) | inline tagged-text treatment | Rendered by `app.py`'s own `hotlinks` filter around the exact tagged substring of a persisted message — the corrected "Add Tag has no visible consequence" defect. `data-tag-occurrence-id` disambiguates which occurrence | Same as workspace access (never rendered for a message the reviewer can't already see) | active |
+
+## Gateway (`templates/gateway_shell.html`, `gateway.html`, `project_chooser.html` — CLAUDE-P40-VW8-QA, new surface)
+
+Gateway/the chooser render inside `gateway_shell.html`, never `base.html`
+— no Lists/Display/Toolbox/Chat exists here, and none of these
+references may ever start with `lists.`/`display.`/`toolbox.`/`chat.`/
+`menu.` (see `tests/test_p40vw7a_ui_reference_map.py`'s own
+`SignInGatewayIsolationTests`, which asserts exactly this).
+
+| Reference | Element | Label | Current behavior | Auth notes | Status |
+|---|---|---|---|---|---|
+| `gateway.account` | `<details>` popup | "…" (username) | Contains UI Reference Mode toggle, Removed Projects, admin-only Security, Sign out | Every authenticated page (this shell only renders post-login) | active |
+| `gateway.create-client-owner` | `<a>` | "Create Client / Owner Project" | Navigates to `portal.upload?environment=client_owner` | **Admin only** — `is_admin` | active |
+| `gateway.create-design-builder` | `<a>` | "Create Design-Builder / Proponent Project" | Navigates to `portal.upload?environment=design_builder_proponent` | **Admin only** — `is_admin` | active |
+| `gateway.open-existing` | `<a>` | "Open an existing project" | Navigates to `portal.choose_project` (the focused chooser, below) — **CLAUDE-P40-VW8-QA:** previously `portal.projects_list`, the full management directory; that page is unchanged and still reachable directly, just no longer Gateway's own first destination (Section 12) | Every authenticated page | active |
+| `gateway.chooser` | `<h2>` | "Open an existing project" | Section heading, non-interactive | Every authenticated page | active |
+| `gateway.chooser.search` | `<form>` | project search | `?q=` filter, server-side, same `_accessible_documents` matching `projects_list` uses | Every authenticated page (results scoped to `_accessible_documents`) | active |
+| `gateway.chooser.leaf` | `<a>` (pattern) | a Project card | Navigates to `workspace.show_workspace` for that Project — the exact same authorized route every other Project-opening path uses | Filtered to `_accessible_documents` (already access-scoped) | active |
+| `gateway.chooser.back` | `<a>` | "← Back to Gateway" | Navigates to `portal.gateway` | Every authenticated page | active |
+
+## Auth (`templates/auth_shell.html`, `login.html` — CLAUDE-P40-VW8-QA, new surface)
+
+Pre-authentication. `auth_shell.html` has no toggle of its own (the
+Account menu the toggle lives in only exists once authenticated) — it
+only ever HONORS an already-enabled `beehive:ui-reference-mode`
+preference set during a previous authenticated session (a device/
+browser preference, unaffected by sign-out), never sets one.
+
+| Reference | Element | Label | Current behavior | Auth notes | Status |
+|---|---|---|---|---|---|
+| `auth.signin.username` | `<input>` | "Username" | Sign-in form field | Pre-authentication | active |
+| `auth.signin.password` | `<input type="password">` | "Password" | Sign-in form field | Pre-authentication | active |
+| `auth.signin.submit` | `<button>` | "Sign in" | Submits the sign-in form | Pre-authentication | active |
+
+## Upload / Project creation (`templates/upload.html`, `templates/errors/error.html` — CLAUDE-P40-VW8-QA, Project-Creation Upload-Capacity Correction)
+
+| Reference | Element | Label | Current behavior | Auth notes | Status |
+|---|---|---|---|---|---|
+| `upload.limits` | `<p>` | (accepted formats/size copy) | States accepted formats, `MAX_CONTENT_LENGTH`-derived max size, and the scanned-drawing-package processing limitation, before any file is chosen | `portal.upload` — **admin only** | active |
+| `upload.error` | `<p>` | (server-side error text) | Renders `UploadError`/`GovernanceError` messages from a rejected POST | Same as above | active |
+| `upload.client-size-error` | `<p>` | (client-side size-check text) | Hidden until the chosen file exceeds the max; JS-populated, never server-rendered | Same as above | active |
+| `upload.operating-environment.client_owner` | `<input type="radio">` | "Client / Owner" | Selects the Client/Owner Project Operating Environment | Same as above | active |
+| `upload.operating-environment.design_builder_proponent` | `<input type="radio">` | "Design-Builder / Proponent" | Selects the Design-Builder/Proponent Project Operating Environment | Same as above | active |
+| `upload.project-name` | `<input>` | "Project name" | Optional display name; defaults to the filename | Same as above | active |
+| `upload.file` | `<input type="file">` | (file picker) | Carries `data-max-upload-bytes`/`data-max-upload-mb`, read by the client-side size-check script | Same as above | active |
+| `upload.actor` | `<input>` | "Your name" | Optional free-text audit-trail field | Same as above | active |
+| `upload.role` | `<input>` | "Your role" | Optional free-text audit-trail field | Same as above | active |
+| `upload.submit` | `<button>` | "Create project and parse document" | Submits the upload form | Same as above | active |
+| `errors.upload-too-large` | `<a>` | "Choose a different file" | The 413 error page's own return action, back to `portal.upload` — no Project/Document/workspace is ever created for a request that hits this handler (Werkzeug rejects it before the view function runs) | Every request path (413 can occur pre-authentication-check on a route, though `/upload` itself is admin-only) | active |
 
 ---
 
@@ -211,13 +278,13 @@ actually need to cite, not maximal coverage for its own sake.
 Future stages: when a control this map names is genuinely removed (not
 just renamed/reparented — see the ID scheme note above), move its row
 here with the stage that retired it and why, and never reuse the same
-`data-ref` value for a different control afterward.
+`data-ui-ref` value for a different control afterward.
 
 ## Known gap, not yet fixed
 
 This map is hand-maintained, like `MANIFEST.md` — nothing here is
 auto-synced from the templates. `tests/test_p40vw7a_ui_reference_map.py`
-enforces that every `data-ref` value actually present in
+enforces that every `data-ui-ref` value actually present in
 `templates/base.html`/`case_workspace.html`/`_macros.html` has a
 matching row here (and vice versa, for `active`-status rows), but that
 test cannot catch a row whose *description* has drifted from actual

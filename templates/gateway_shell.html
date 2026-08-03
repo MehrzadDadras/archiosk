@@ -33,6 +33,20 @@
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/tokens.css') }}?v={{ static_version }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v={{ static_version }}">
+    <script>
+        {# CLAUDE-P40-VW8-QA, Section 4: same reasoning as
+           auth_shell.html's own copy of this script - Gateway/the
+           existing-Project chooser render inside THIS shell, not
+           base.html, so they need their own copy to honor an
+           already-enabled preference. The toggle itself DOES exist
+           here (the Account menu below has one - see workspace-user-
+           options), wired the normal way further down this file. #}
+        try {
+            if (window.localStorage.getItem('beehive:ui-reference-mode') === 'on') {
+                document.documentElement.classList.add('ui-reference-mode-active');
+            }
+        } catch (e) { /* localStorage unavailable - default to off */ }
+    </script>
 </head>
 <body>
     <div class="blueprint-grid"></div>
@@ -42,12 +56,16 @@
                 <a class="workspace-topbar-brand" href="{{ url_for('portal.index') }}">Archiosk</a>
             </div>
             <div class="workspace-topbar-controls">
-                <details class="workspace-user-menu" id="workspace-user-menu">
+                <details class="workspace-user-menu" id="workspace-user-menu" data-ui-ref="gateway.account">
                     <summary class="workspace-topbar-btn workspace-user-summary" aria-label="Account menu">
                         {% if current_username %}<span class="workspace-user-name">{{ current_username }}</span>{% endif %}
                         <span aria-hidden="true">&hellip;</span>
                     </summary>
                     <div class="workspace-user-options" role="group" aria-label="Account">
+                        <label class="workspace-overflow-item workspace-overflow-checkbox">
+                            <input type="checkbox" id="ui-reference-mode-toggle">
+                            UI Reference Mode
+                        </label>
                         <a class="workspace-overflow-item" href="{{ url_for('portal.removed_projects') }}">Removed Projects</a>
                         {% if is_admin %}
                         <a class="workspace-overflow-item" href="{{ url_for('security.department_home') }}">Security</a>
@@ -86,6 +104,23 @@
                     var summary = menu.querySelector('summary');
                     if (summary) summary.focus();
                 }
+            });
+        })();
+
+        // CLAUDE-P40-VW8-QA: same toggle wiring as base.html's own copy
+        // (localStorage + one html-level class) - Gateway/the chooser
+        // are the one place outside the authenticated Workspace shell
+        // where a reviewer can actually turn Reference Mode ON, not
+        // only see it honored (auth_shell.html's own copy is read-only).
+        (function () {
+            var toggle = document.getElementById('ui-reference-mode-toggle');
+            if (!toggle) return;
+            var key = 'beehive:ui-reference-mode';
+            var html = document.documentElement;
+            toggle.checked = html.classList.contains('ui-reference-mode-active');
+            toggle.addEventListener('change', function () {
+                html.classList.toggle('ui-reference-mode-active', toggle.checked);
+                try { window.localStorage.setItem(key, toggle.checked ? 'on' : 'off'); } catch (e) { /* ignore */ }
             });
         })();
     </script>
