@@ -133,10 +133,14 @@ class MatrixStructureTests(_BaseTestCase):
                 self.assertIn(f'id="appearance-{surface}-{mode}"', menu, f"{surface}/{mode}")
 
     def test_exactly_fifteen_radio_inputs(self):
+        # CLAUDE-P40-VW8-QA added a 6th row ("All" - Light/Dark/Tinted,
+        # 3 more radios) applying one mode to all five surfaces at once
+        # (Section 5) - 5 surfaces x 3 modes (15) + 1 All row x 3 modes
+        # (3) = 18.
         client = self._client_as("vw3_owner", 1)
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
         menu = self._appearance_html(body)
-        self.assertEqual(menu.count('type="radio"'), 15)
+        self.assertEqual(menu.count('type="radio"'), 18)
 
     def test_each_surface_is_its_own_radio_group(self):
         client = self._client_as("vw3_owner", 1)
@@ -152,11 +156,17 @@ class MatrixStructureTests(_BaseTestCase):
         self.assertNotIn('type="checkbox"', menu)
 
     def test_menu_row_present_and_ordered_first(self):
+        # CLAUDE-P40-VW8-QA's new "All" row sits above the five real
+        # surfaces (Section 5 - a universal control, not a sixth
+        # surface) - "Menu" is still the first SURFACE row, just no
+        # longer the first scope="row" cell in the whole table.
         client = self._client_as("vw3_owner", 1)
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
         menu = self._appearance_html(body)
-        first_row_scope = menu.index('scope="row"')
-        self.assertIn(">Menu<", menu[first_row_scope:first_row_scope + 30])
+        row_scopes = [m.start() for m in re.finditer(r'scope="row"', menu)]
+        self.assertGreaterEqual(len(row_scopes), 2)
+        self.assertIn(">All<", menu[row_scopes[0]:row_scopes[0] + 30])
+        self.assertIn(">Menu<", menu[row_scopes[1]:row_scopes[1] + 30])
 
     def test_rows_ordered_menu_lists_display_toolbox_chat(self):
         client = self._client_as("vw3_owner", 1)
@@ -166,11 +176,13 @@ class MatrixStructureTests(_BaseTestCase):
         self.assertEqual(positions, sorted(positions))
 
     def test_all_fifteen_options_have_accessible_labels(self):
+        # CLAUDE-P40-VW8-QA: 18 now (15 surface + 3 All) - see
+        # test_exactly_fifteen_radio_inputs's own comment.
         client = self._client_as("vw3_owner", 1)
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
         menu = self._appearance_html(body)
         radio_aria_labels = re.findall(r'<input type="radio"[^>]*aria-label="[^"]+"', menu)
-        self.assertEqual(len(radio_aria_labels), 15)
+        self.assertEqual(len(radio_aria_labels), 18)
 
     def test_column_headers_light_dark_tinted(self):
         client = self._client_as("vw3_owner", 1)
@@ -353,9 +365,13 @@ class AppearanceJsWiringTests(unittest.TestCase):
         self.assertIn('document.querySelectorAll(\'[data-appearance-target="\' + key + \'"]\')', js)
 
     def test_change_handler_persists_to_the_same_per_surface_storage_key(self):
+        # CLAUDE-P40-VW8-QA refactored the per-surface apply/persist
+        # logic into one shared setSurfaceMode() function (so the new
+        # All row and each individual radio call the same code path) -
+        # the storage key FORMAT this test protects is unchanged.
         js = self._appearance_script()
-        self.assertIn("var storageKey = 'beehive:appearance:' + key;", js)
-        self.assertIn("window.localStorage.setItem(storageKey, newMode);", js)
+        self.assertIn("try { window.localStorage.setItem('beehive:appearance:' + key, mode); } catch (e) { /* ignore */ }", js)
+        self.assertIn("function setSurfaceMode(key, mode, persist)", js)
 
     def test_radio_checked_state_set_from_resolved_mode_not_hardcoded(self):
         js = self._appearance_script()

@@ -114,17 +114,22 @@ class _BaseTestCase(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 class ContextMenuHiddenOnRenderTests(_BaseTestCase):
+    # CLAUDE-P40-VW8-QA added data-ui-ref="display.context-menu" between
+    # id="display-context-menu" and the hidden attribute these tests
+    # look for - widened from a +60 to a +120 character window (still a
+    # bounded slice around the opening tag, not a full-tag parse) so it
+    # still reaches "hidden" with the extra attribute in between.
     def test_hidden_attribute_present_on_blank_main_display(self):
         client = self._client_as("vw1_owner", 1)
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
-        menu_tag = body[body.index('id="display-context-menu"') - 60:body.index('id="display-context-menu"') + 60]
+        menu_tag = body[body.index('id="display-context-menu"') - 60:body.index('id="display-context-menu"') + 120]
         self.assertIn("hidden", menu_tag)
 
     def test_hidden_attribute_present_on_populated_display(self):
         client = self._client_as("vw1_owner", 1)
         source_id = self._store().get(self.project_id).sources[0]["id"]
         body = client.get(f"/projects/{self.project_id}/workspace?source={source_id}").get_data(as_text=True)
-        menu_tag = body[body.index('id="display-context-menu"') - 60:body.index('id="display-context-menu"') + 60]
+        menu_tag = body[body.index('id="display-context-menu"') - 60:body.index('id="display-context-menu"') + 120]
         self.assertIn("hidden", menu_tag)
 
     def test_hidden_attribute_survives_a_second_fresh_request_unchanged(self):
@@ -136,7 +141,7 @@ class ContextMenuHiddenOnRenderTests(_BaseTestCase):
         first = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
         second = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
         for body in (first, second):
-            menu_tag = body[body.index('id="display-context-menu"') - 60:body.index('id="display-context-menu"') + 60]
+            menu_tag = body[body.index('id="display-context-menu"') - 60:body.index('id="display-context-menu"') + 120]
             self.assertIn("hidden", menu_tag)
 
 

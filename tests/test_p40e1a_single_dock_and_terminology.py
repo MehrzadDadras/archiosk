@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import io
 import json
+import re
 import shutil
 import tempfile
 import unittest
@@ -108,17 +109,20 @@ class _BaseDockTestCase(unittest.TestCase):
 
 class OneComposerPerContextTests(_BaseDockTestCase):
     def test_project_context_has_exactly_one_composer_and_one_send(self):
+        # CLAUDE-P40-VW8-QA added data-ui-ref="chat.composer.send" to
+        # this same button - the Send-button count check tolerates the
+        # extra attribute rather than asserting an exact, now-stale tag.
         client = self._client_as("p40e1a_owner", 1)
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
         self.assertEqual(body.count('class="conversation-input-form conversation-dock-composer"'), 1)
-        self.assertEqual(body.count("<button type=\"submit\">Send</button>"), 1)
+        self.assertEqual(len(re.findall(r'<button type="submit"[^>]*>Send</button>', body)), 1)
 
     def test_investigation_context_has_exactly_one_composer_and_one_send(self):
         client = self._client_as("p40e1a_owner", 1)
         case_id = self._create_investigation(client)
         body = client.get(f"/projects/{self.project_id}/workspace?case={case_id}").get_data(as_text=True)
         self.assertEqual(body.count('class="conversation-input-form conversation-dock-composer"'), 1)
-        self.assertEqual(body.count("<button type=\"submit\">Send</button>"), 1)
+        self.assertEqual(len(re.findall(r'<button type="submit"[^>]*>Send</button>', body)), 1)
 
 
 class OnePhysicalDockTests(_BaseDockTestCase):
@@ -255,7 +259,7 @@ class InvestigationListingTests(_BaseDockTestCase):
         # Investigation itself renders as the active Lists leaf inside
         # it - back in the ONE left panel (Section 2's reversal), not a
         # retired Display branch-nav entry.
-        # CLAUDE-P40-VW7A added data-ref="lists.project.investigations"/
+        # CLAUDE-P40-VW7A added data-ui-ref="lists.project.investigations"/
         # "...leaf" attributes to these same two elements
         # (UI_REFERENCE_MAP.md) - both selectors below tolerate
         # attributes appearing between the existing ones rather than

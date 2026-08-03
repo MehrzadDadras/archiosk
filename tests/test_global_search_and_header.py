@@ -132,7 +132,7 @@ class HeaderAndBrandTests(unittest.TestCase):
         # (.workspace-topbar-brand, base.html) - see that template's own
         # note on why identity now lives there instead of the launcher
         # panel.
-        # CLAUDE-P40-VW7A added a data-ref="menu.brand" attribute to this
+        # CLAUDE-P40-VW7A added a data-ui-ref="menu.brand" attribute to this
         # same element (UI_REFERENCE_MAP.md) - selector updated to allow
         # attributes between the class and href, not asserting their
         # absence (this test's own subject is the visible text, not the
@@ -297,14 +297,14 @@ class TypographyCorrectionTests(unittest.TestCase):
 
     def test_font_mono_reduced_to_exactly_the_three_technical_exceptions(self):
         # CLAUDE-P40-VW7A added a third: the UI Reference Mode badge
-        # (.ui-reference-mode-active [data-ref]::after) renders a
+        # (.ui-reference-mode-active [data-ui-ref]::after) renders a
         # dot-path identifier string - exactly the "technical register"
         # tokens.css's own header reserves --font-mono for (paths, ids,
         # logs), the same category .finding-provenance and
         # .region-status already were. Not a leak into ordinary UI text.
         self.assertEqual(self.css.count("font-family: var(--font-mono);"), 3)
         self.assertIn(".region-status { font-family: var(--font-mono); }", self.css)
-        self.assertIn(".ui-reference-mode-active [data-ref]::after {", self.css)
+        self.assertIn(".ui-reference-mode-active [data-ui-ref]::after {", self.css)
 
     def test_common_ui_elements_no_longer_reference_font_mono(self):
         # Spot-check a representative sample of exactly the element types

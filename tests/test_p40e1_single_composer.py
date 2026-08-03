@@ -34,6 +34,7 @@ Run via:
 from __future__ import annotations
 
 import io
+import re
 import shutil
 import tempfile
 import unittest
@@ -116,7 +117,10 @@ class ExactlyOneComposerTests(_BaseSingleComposerTestCase):
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
         # Only the dock composer's own Send button - the removed "Ask"/
         # "Send" buttons from the other two composers must not reappear.
-        self.assertEqual(body.count("<button type=\"submit\">Send</button>"), 1)
+        # CLAUDE-P40-VW8-QA added data-ui-ref="chat.composer.send" to
+        # this same button - selector tolerates the extra attribute
+        # rather than asserting an exact, now-stale ordering.
+        self.assertEqual(len(re.findall(r'<button type="submit"[^>]*>Send</button>', body)), 1)
         self.assertNotIn("<button type=\"submit\">Ask</button>", body)
 
     def test_old_composer_labels_are_gone(self):

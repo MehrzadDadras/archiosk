@@ -300,13 +300,22 @@ class GatewayFunctionalChoicesTests(_BaseTestCase):
         self.assertNotIn("/upload?environment=", body)
 
     def test_open_existing_project_action_present_and_functional(self):
+        # CLAUDE-P40-VW8-QA, Section 12: "Open an existing project" now
+        # leads to the focused chooser (/projects/choose), not the full
+        # management directory (/projects) - the latter is unchanged and
+        # still independently reachable/functional (asserted below), it
+        # is simply no longer Gateway's own first destination.
         client = self._client_as("vw5_admin", 1)
         body = client.get("/gateway").get_data(as_text=True)
         self.assertIn("Open an existing project", body)
-        self.assertIn(f'href="/projects"', body)
-        resp = client.get("/projects")
+        self.assertIn('href="/projects/choose"', body)
+        resp = client.get("/projects/choose")
         self.assertEqual(resp.status_code, 200)
         self.assertIn(_DISTINCTIVE_PROJECT_NAME, resp.get_data(as_text=True))
+        # The management directory itself is unchanged and still works.
+        management_resp = client.get("/projects")
+        self.assertEqual(management_resp.status_code, 200)
+        self.assertIn(_DISTINCTIVE_PROJECT_NAME, management_resp.get_data(as_text=True))
 
     def test_create_project_action_actually_reaches_the_admin_only_route(self):
         client = self._client_as("vw5_admin", 1)
@@ -397,10 +406,13 @@ class ShellTransitionTests(_BaseTestCase):
 
 class PriorStagePreservationTests(_BaseTestCase):
     def test_vw1_context_menu_still_hidden_by_default_in_workspace(self):
+        # CLAUDE-P40-VW8-QA added data-ui-ref="display.context-menu"
+        # between the id and hidden attributes - window widened to
+        # +120 to still reach it.
         client = self._client_as("vw5_admin", 1)
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
         start = body.index('id="display-context-menu"')
-        tag = body[start - 40:start + 60]
+        tag = body[start - 40:start + 120]
         self.assertIn("hidden", tag)
 
     def test_vw2_project_tools_still_relocated_to_lists(self):

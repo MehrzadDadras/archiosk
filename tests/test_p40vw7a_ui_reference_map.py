@@ -3,18 +3,18 @@ CLAUDE-P40-VW7A - Left Lists / Menu / Display / Toolbox / Chat UI
 Reference Registry.
 
 A purely additive, instrumentation-only stage: every control already
-existed before this stage - a stable data-ref="<id>" attribute was
+existed before this stage - a stable data-ui-ref="<id>" attribute was
 added directly on the existing element (never a new wrapper, never a
 behavioral change), plus one new reviewer/device-preference toggle
-("UI Reference Mode") that overlays each data-ref value as a small CSS
+("UI Reference Mode") that overlays each data-ui-ref value as a small CSS
 badge for inspection. UI_REFERENCE_MAP.md is the central registry this
 and future stages (starting with CLAUDE-P40-VW7B) read/update.
 
-Coverage: registry-vs-template consistency (every data-ref in the
+Coverage: registry-vs-template consistency (every data-ui-ref in the
 templates has a matching, non-duplicated, correctly-statused registry
 row and vice versa), authorization-aware rendering of referenced
 controls (admin-only/owner-only refs absent for an unauthorized
-viewer), Sign-in/Gateway isolation (VW5 preserved - zero data-ref
+viewer), Sign-in/Gateway isolation (VW5 preserved - zero data-ui-ref
 anywhere on either), the UI Reference Mode toggle and its CSS, and a
 light no-behavior-change spot check (existing routes/counts unchanged)
 - the full pre-existing suite is the real proof of that, not this
@@ -42,22 +42,73 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 _BASE_HTML_PATH = _REPO_ROOT / "templates" / "base.html"
 _CASE_WORKSPACE_HTML_PATH = _REPO_ROOT / "templates" / "case_workspace.html"
 _MACROS_HTML_PATH = _REPO_ROOT / "templates" / "_macros.html"
+_GATEWAY_HTML_PATH = _REPO_ROOT / "templates" / "gateway.html"
+_GATEWAY_SHELL_HTML_PATH = _REPO_ROOT / "templates" / "gateway_shell.html"
+_PROJECT_CHOOSER_HTML_PATH = _REPO_ROOT / "templates" / "project_chooser.html"
+_LOGIN_HTML_PATH = _REPO_ROOT / "templates" / "login.html"
+_UPLOAD_HTML_PATH = _REPO_ROOT / "templates" / "upload.html"
+_ERROR_HTML_PATH = _REPO_ROOT / "templates" / "errors" / "error.html"
+_APP_PY_PATH = _REPO_ROOT / "app.py"
 _MAIN_CSS_PATH = _REPO_ROOT / "static" / "css" / "main.css"
 _REFERENCE_MAP_PATH = _REPO_ROOT / "UI_REFERENCE_MAP.md"
 
-_DATA_REF_RE = re.compile(r'data-ref="([a-z0-9.\-]+)"')
-_REGISTRY_ROW_RE = re.compile(r"^\| `([a-z0-9.\-]+)` \|.*\| (active|retired) \|$", re.MULTILINE)
+_DATA_REF_RE = re.compile(r'data-ui-ref="([a-z0-9.\-]+)"')
+# CLAUDE-P40-VW8-QA: a row's own FIRST CELL may name more than one
+# data-ui-ref value (e.g. "`menu.appearance.all.light`,
+# `menu.appearance.all.dark`, `menu.appearance.all.tinted`") rather
+# than one row per combinatorial value - captures the whole cell now,
+# _registry_rows() below expands every backtick-quoted token inside it
+# against that one row's status, so a genuinely readable multi-value
+# row is still exactly as machine-checked as a single-value one.
+_REGISTRY_ROW_RE = re.compile(r"^\| (.+?) \|.*\| (active|retired) \|$", re.MULTILINE)
+_REF_TOKEN_RE = re.compile(r"`([a-z0-9.\-]+)`")
+
+# CLAUDE-P40-VW8-QA: the Appearance matrix constructs its own data-ui-ref
+# VALUES from a Jinja loop variable (data-ui-ref="menu.appearance.
+# {{ surface_key }}.{{ mode_key }}") - unlike every other pattern ref
+# (a literal, static string reused across repeated instances), a plain
+# regex over the template SOURCE can never recover the resolved values,
+# since the source never contains them literally. Enumerated here from
+# the exact same fixed (key, label) tuples base.html's own {% for %}
+# loops iterate over, so registry-vs-template drift (e.g. a surface
+# added to one but not the other) is still genuinely caught, not
+# silently exempted.
+_APPEARANCE_SURFACES = ("menu", "lists", "display", "toolbox", "chat")
+_APPEARANCE_MODES = ("light", "dark", "tinted")
+_APPEARANCE_DYNAMIC_REFS = {
+    f"menu.appearance.{surface}.{mode}" for surface in _APPEARANCE_SURFACES for mode in _APPEARANCE_MODES
+} | {f"menu.appearance.all.{mode}" for mode in _APPEARANCE_MODES} | {
+    f"menu.appearance.{surface}" for surface in _APPEARANCE_SURFACES
+}
+
+# CLAUDE-P40-VW8-QA (Project-Creation Upload-Capacity Correction):
+# errors/error.html's action link renders `data-ui-ref="{{ ui_ref }}"`
+# - a Jinja variable, not a literal string, so (like the Appearance
+# refs above) a plain regex over the template source can never recover
+# it. app.py's own 413 handler is the one real call site that ever
+# passes a non-None `ui_ref` - hardcoded here from that exact literal.
+_ERROR_PAGE_DYNAMIC_REFS = {"errors.upload-too-large"}
 
 
 def _all_template_refs() -> set[str]:
     refs: set[str] = set()
-    for path in (_BASE_HTML_PATH, _CASE_WORKSPACE_HTML_PATH, _MACROS_HTML_PATH):
+    for path in (
+        _BASE_HTML_PATH, _CASE_WORKSPACE_HTML_PATH, _MACROS_HTML_PATH,
+        _GATEWAY_HTML_PATH, _GATEWAY_SHELL_HTML_PATH, _PROJECT_CHOOSER_HTML_PATH,
+        _LOGIN_HTML_PATH, _UPLOAD_HTML_PATH, _ERROR_HTML_PATH, _APP_PY_PATH,
+    ):
         refs |= set(_DATA_REF_RE.findall(path.read_text(encoding="utf-8")))
+    refs |= _APPEARANCE_DYNAMIC_REFS
+    refs |= _ERROR_PAGE_DYNAMIC_REFS
     return refs
 
 
 def _registry_rows() -> list[tuple[str, str]]:
-    return _REGISTRY_ROW_RE.findall(_REFERENCE_MAP_PATH.read_text(encoding="utf-8"))
+    rows = []
+    for first_cell, status in _REGISTRY_ROW_RE.findall(_REFERENCE_MAP_PATH.read_text(encoding="utf-8")):
+        for ref in _REF_TOKEN_RE.findall(first_cell):
+            rows.append((ref, status))
+    return rows
 
 
 def _fake_file(content: bytes, filename: str) -> FileStorage:
@@ -77,7 +128,7 @@ class RegistryConsistencyTests(unittest.TestCase):
         template_refs = _all_template_refs()
         registry_refs = {ref for ref, _status in _registry_rows()}
         missing = template_refs - registry_refs
-        self.assertEqual(missing, set(), f"data-ref values with no UI_REFERENCE_MAP.md row: {missing}")
+        self.assertEqual(missing, set(), f"data-ui-ref values with no UI_REFERENCE_MAP.md row: {missing}")
 
     def test_every_active_registry_row_actually_exists_in_a_template(self):
         template_refs = _all_template_refs()
@@ -88,22 +139,25 @@ class RegistryConsistencyTests(unittest.TestCase):
     def test_no_duplicate_registry_rows(self):
         refs = [ref for ref, _status in _registry_rows()]
         duplicates = {ref for ref in refs if refs.count(ref) > 1}
-        self.assertEqual(duplicates, set(), f"data-ref documented more than once: {duplicates}")
+        self.assertEqual(duplicates, set(), f"data-ui-ref documented more than once: {duplicates}")
 
     def test_no_duplicate_data_ref_kind_definitions_across_templates(self):
         # Not a uniqueness-of-instance check (repeating leaf patterns are
-        # expected, by design - see UI_REFERENCE_MAP.md's own "a data-ref
+        # expected, by design - see UI_REFERENCE_MAP.md's own "a data-ui-ref
         # value identifies a KIND of control, not one instance" note).
         # This instead confirms every value found is well-formed
         # (matches the documented <surface>.<family>... scheme) rather
-        # than a stray typo'd id.
+        # than a stray typo'd id. CLAUDE-P40-VW8-QA added two new
+        # surfaces outside the original five (gateway/auth - see
+        # UI_REFERENCE_MAP.md's own Gateway/Auth sections and Section
+        # 4's "must work on Sign-in, Gateway... too" requirement).
         for ref in _all_template_refs():
-            self.assertRegex(ref, r"^(menu|lists|display|toolbox|chat|shell)\.[a-z0-9.\-]+$", ref)
+            self.assertRegex(ref, r"^(menu|lists|display|toolbox|chat|shell|gateway|auth|upload|errors)\.[a-z0-9.\-]+$", ref)
 
     def test_ui_reference_mode_css_rule_exists(self):
         css = _MAIN_CSS_PATH.read_text(encoding="utf-8")
-        self.assertIn(".ui-reference-mode-active [data-ref]", css)
-        self.assertIn("content: attr(data-ref);", css)
+        self.assertIn(".ui-reference-mode-active [data-ui-ref]", css)
+        self.assertIn("content: attr(data-ui-ref);", css)
 
 
 # ---------------------------------------------------------------------------
@@ -172,44 +226,44 @@ class RootFamilyReferencePresenceTests(_BaseTestCase):
             "lists.project.chats", "lists.project.tasks", "lists.project.tags", "lists.project.tools",
             "lists.removed-projects",
         ):
-            self.assertIn(f'data-ref="{ref}"', body, ref)
+            self.assertIn(f'data-ui-ref="{ref}"', body, ref)
 
     def test_menu_refs_present_on_every_authenticated_page(self):
         client = self._client_as("vw7a_owner", 1)
         body = client.get("/projects").get_data(as_text=True)
-        self.assertIn('data-ref="menu.brand"', body)
-        self.assertIn('data-ref="menu.account"', body)
+        self.assertIn('data-ui-ref="menu.brand"', body)
+        self.assertIn('data-ui-ref="menu.account"', body)
 
     def test_document_and_investigation_leaf_refs_present(self):
         client = self._client_as("vw7a_owner", 1)
         client.post(f"/projects/{self.project_id}/workspace/cases", data={"title": "Foundation Review", "objective": ""})
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
-        self.assertIn('data-ref="lists.project.documents.leaf"', body)
-        self.assertIn('data-ref="lists.project.investigations.leaf"', body)
+        self.assertIn('data-ui-ref="lists.project.documents.leaf"', body)
+        self.assertIn('data-ui-ref="lists.project.investigations.leaf"', body)
 
     def test_toolbox_and_display_refs_present_and_context_switches(self):
         client = self._client_as("vw7a_owner", 1)
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
-        self.assertIn('data-ref="toolbox.panel"', body)
-        self.assertIn('data-ref="toolbox.empty"', body)
-        self.assertIn('data-ref="display.divisions"', body)
-        self.assertIn('data-ref="display.division"', body)
+        self.assertIn('data-ui-ref="toolbox.panel"', body)
+        self.assertIn('data-ui-ref="toolbox.empty"', body)
+        self.assertIn('data-ui-ref="display.divisions"', body)
+        self.assertIn('data-ui-ref="display.division"', body)
 
         source_id = self._store().get(self.project_id).sources[0]["id"]
         body = client.get(f"/projects/{self.project_id}/workspace?source={source_id}").get_data(as_text=True)
-        self.assertIn('data-ref="toolbox.document"', body)
-        self.assertNotIn('data-ref="toolbox.empty"', body)
+        self.assertIn('data-ui-ref="toolbox.document"', body)
+        self.assertNotIn('data-ui-ref="toolbox.empty"', body)
 
     def test_overview_leaf_projects_display_overview_ref(self):
         client = self._client_as("vw7a_owner", 1)
         body = client.get(f"/projects/{self.project_id}/workspace?view=overview").get_data(as_text=True)
-        self.assertIn('data-ref="display.overview"', body)
+        self.assertIn('data-ui-ref="display.overview"', body)
 
     def test_chat_refs_present(self):
         client = self._client_as("vw7a_owner", 1)
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
         for ref in ("chat.dock", "chat.thread", "chat.composer", "chat.selection-toolbar", "chat.tag-dialog", "chat.task-dialog"):
-            self.assertIn(f'data-ref="{ref}"', body, ref)
+            self.assertIn(f'data-ui-ref="{ref}"', body, ref)
 
 
 class AuthorizationAwareReferenceTests(_BaseTestCase):
@@ -222,25 +276,25 @@ class AuthorizationAwareReferenceTests(_BaseTestCase):
         # entry and templates/base.html's relocation comment).
         client = self._client_as("vw7a_granted_reviewer", 3, role="read_only")
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
-        self.assertNotIn('data-ref="lists.new-project"', body)
-        self.assertNotIn('data-ref="lists.security"', body)
-        self.assertNotIn('data-ref="lists.system-data-management"', body)
+        self.assertNotIn('data-ui-ref="lists.new-project"', body)
+        self.assertNotIn('data-ui-ref="lists.security"', body)
+        self.assertNotIn('data-ui-ref="lists.system-data-management"', body)
 
     def test_admin_only_refs_present_for_admin(self):
         client = self._client_as("vw7a_admin", 4, role="admin")
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
-        self.assertIn('data-ref="lists.new-project"', body)
-        self.assertIn('data-ref="lists.security"', body)
-        self.assertIn('data-ref="lists.system-data-management"', body)
+        self.assertIn('data-ui-ref="lists.new-project"', body)
+        self.assertIn('data-ui-ref="lists.security"', body)
+        self.assertIn('data-ui-ref="lists.system-data-management"', body)
 
     def test_remove_project_ref_owner_or_admin_only(self):
         client = self._client_as("vw7a_granted_reviewer", 3, role="read_only")
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
-        self.assertNotIn('data-ref="lists.project.tools.remove-project"', body)
+        self.assertNotIn('data-ui-ref="lists.project.tools.remove-project"', body)
 
         owner_client = self._client_as("vw7a_owner", 1)
         owner_body = owner_client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
-        self.assertIn('data-ref="lists.project.tools.remove-project"', owner_body)
+        self.assertIn('data-ui-ref="lists.project.tools.remove-project"', owner_body)
 
     def test_outsider_gets_404_not_a_filtered_reference_map(self):
         from models import User, db
@@ -253,15 +307,36 @@ class AuthorizationAwareReferenceTests(_BaseTestCase):
 
 
 class SignInGatewayIsolationTests(_BaseTestCase):
-    def test_sign_in_page_has_no_data_ref_at_all(self):
+    # CLAUDE-P40-VW8-QA, Section 4: superseded the original "zero
+    # data-ui-ref anywhere on Sign-in/Gateway" invariant - that stage
+    # explicitly requires "Reference Mode... must work on Sign-in,
+    # Gateway... where those surfaces are rendered" and names "Sign-in,
+    # Gateway and existing-Project chooser" among the controls needing
+    # their own references. auth.html/gateway_shell.html now carry
+    # their own auth.*/gateway.* refs (see UI_REFERENCE_MAP.md's own
+    # Auth/Gateway sections). What VW5 actually protects - and what
+    # still holds, unchanged - is that neither page ever leaks any
+    # WORKSPACE-SHELL content (Lists/Display/Toolbox/Chat), which is
+    # what these two tests check for directly now.
+    def test_sign_in_page_has_no_workspace_shell_refs(self):
         client = self.flask_app.test_client()
         body = client.get("/login").get_data(as_text=True)
-        self.assertNotRegex(body, _DATA_REF_RE)
+        for ref in _DATA_REF_RE.findall(body):
+            self.assertFalse(
+                ref.startswith(("lists.", "display.", "toolbox.", "chat.", "menu.")),
+                f"Sign-in leaked a workspace-shell reference: {ref}",
+            )
+        self.assertIn("data-ui-ref=\"auth.signin.username\"", body)
 
-    def test_gateway_page_has_no_data_ref_at_all(self):
+    def test_gateway_page_has_no_workspace_shell_refs(self):
         client = self._client_as("vw7a_owner", 1)
         body = client.get("/gateway").get_data(as_text=True)
-        self.assertNotRegex(body, _DATA_REF_RE)
+        for ref in _DATA_REF_RE.findall(body):
+            self.assertFalse(
+                ref.startswith(("lists.", "display.", "toolbox.", "chat.", "menu.")),
+                f"Gateway leaked a workspace-shell reference: {ref}",
+            )
+        self.assertIn("data-ui-ref=\"gateway.open-existing\"", body)
 
 
 class UIReferenceModeToggleTests(_BaseTestCase):

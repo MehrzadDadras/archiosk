@@ -130,8 +130,8 @@ class HierarchyTests(_BaseTestCase):
         client = self._client_as("vw7b_admin", 4, role="admin")
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
         lists = self._lists_html(body)
-        self.assertIn('data-ref="lists.system-data-management"', lists)
-        self.assertNotIn('data-ref="lists.project.tools.data-management"', lists)
+        self.assertIn('data-ui-ref="lists.system-data-management"', lists)
+        self.assertNotIn('data-ui-ref="lists.project.tools.data-management"', lists)
         # Still exactly one html_id="project-data-management" anchor -
         # relocated, not duplicated.
         self.assertEqual(body.count('id="project-data-management"'), 1)
@@ -139,7 +139,7 @@ class HierarchyTests(_BaseTestCase):
     def test_reset_project_data_still_admin_only(self):
         client = self._client_as("vw7b_granted_reviewer", 3, role="read_only")
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
-        self.assertNotIn('data-ref="lists.system-data-management"', body)
+        self.assertNotIn('data-ui-ref="lists.system-data-management"', body)
         self.assertNotIn("Project Data Management", body)
 
     def test_rfi_leaf_carries_active_state_when_owning_investigation_is_open(self):
@@ -163,7 +163,7 @@ class HierarchyTests(_BaseTestCase):
         client = self._client_as("vw7b_owner", 1)
         body = client.get(f"/projects/{self.project_id}/workspace?case={self.case['id']}").get_data(as_text=True)
         lists = self._lists_html(body)
-        self.assertRegex(lists, r'<a class="tree-leaf launcher-link active"[^>]*data-ref="lists\.project\.rfis\.leaf"')
+        self.assertRegex(lists, r'<a class="tree-leaf launcher-link active"[^>]*data-ui-ref="lists\.project\.rfis\.leaf"')
 
 
 # ---------------------------------------------------------------------------
@@ -307,7 +307,7 @@ class PreservationSpotCheckTests(_BaseTestCase):
     def test_display_layout_menu_still_functional(self):
         client = self._client_as("vw7b_owner", 1)
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
-        self.assertIn('data-ref="menu.display-layout"', body)
+        self.assertIn('data-ui-ref="menu.display-layout"', body)
 
     def test_sign_in_and_gateway_still_have_no_lists_or_panel_leakage(self):
         client = self.flask_app.test_client()
@@ -329,13 +329,13 @@ class PreservationSpotCheckTests(_BaseTestCase):
         # not an error, not a leak.
         resp2 = client.get(f"/projects/{self.project_id}/workspace?case=not-a-real-case-id")
         self.assertEqual(resp2.status_code, 200)
-        self.assertNotIn(f'data-ref="lists.project.self" href="/projects/{self.project_id}/workspace" active', resp2.get_data(as_text=True))
+        self.assertNotIn(f'data-ui-ref="lists.project.self" href="/projects/{self.project_id}/workspace" active', resp2.get_data(as_text=True))
 
     def test_tags_and_tasks_lists_branches_still_present_and_functional(self):
         client = self._client_as("vw7b_owner", 1)
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
-        self.assertIn('data-ref="lists.project.tasks"', body)
-        self.assertIn('data-ref="lists.project.tags"', body)
+        self.assertIn('data-ui-ref="lists.project.tasks"', body)
+        self.assertIn('data-ui-ref="lists.project.tags"', body)
 
     def test_ui_reference_mode_toggle_still_present(self):
         client = self._client_as("vw7b_owner", 1)

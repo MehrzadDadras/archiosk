@@ -337,9 +337,12 @@ class ContextMenuAndTopLevelSameMechanismTests(unittest.TestCase):
         self.assertIn("openMenu(e.clientX, e.clientY, parseInt(division.dataset.division, 10));", self.js)
 
     def test_context_menu_still_hidden_by_default_vw1_preserved(self):
+        # CLAUDE-P40-VW8-QA added data-ui-ref="display.context-menu"
+        # between the id and hidden attributes - window widened to
+        # +120 to still reach it.
         html = _CASE_WORKSPACE_HTML_PATH.read_text(encoding="utf-8")
         start = html.index('id="display-context-menu"')
-        tag = html[start - 40:start + 60]
+        tag = html[start - 40:start + 120]
         self.assertIn("hidden", tag)
 
     def test_context_menu_hidden_css_override_still_present_vw1_preserved(self):
