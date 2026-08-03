@@ -9,30 +9,38 @@
    ============================================================ #}
 
 {# -- archiosk_mark ---------------------------------------------------------
-   CLAUDE-P40-BRAND1: the ONE shared source for the ARCHIOSK "A" mark -
-   a deterministic geometric glyph, not a hand-drawn icon. Both legs are
-   real parabolic arcs: SVG's quadratic-Bezier `Q` command traces an
-   actual parabola segment (not an approximation of one), so "two-
-   parabola A" is a literal, reproducible description of this path data,
-   not a name for a freehand shape. No prior mark/medallion/icon of any
-   kind existed anywhere in this repository before this stage (no `.svg`
-   file, no inline `<svg>` beyond the annotation-toolbar glyphs, no
-   favicon) - grounded by direct search, not assumed. Colored entirely
-   via `stroke="currentColor"`: callers control the mark's color purely
-   through ordinary CSS `color`, so this ONE definition already repaints
-   correctly across every Appearance mode with zero color logic living
-   in the SVG itself, and a future "dual-axis medallion" badge treatment
-   (a circular frame around this same mark - not built this stage, no
-   such treatment exists yet to reuse) would call this SAME macro rather
-   than drawing a second copy, satisfying "one shared source, no
-   visually drifting duplicates" by construction rather than by
-   discipline. Always `aria-hidden="true"` - decorative in every context
-   this stage uses it (the header brand link already has its own real
-   accessible name; see that caller's own comment for why the icon must
-   never become a second, competing name/tab-stop). #}
+   CLAUDE-P40-BRAND1 (correction): the ONE shared source for the
+   ARCHIOSK mark - a deterministic geometric glyph built from exactly
+   five visible elements, not a hand-drawn icon and not curves of any
+   kind (the earlier two-parabola-legs version this replaced is gone
+   entirely - see the checkpoint's own correction entry for why).
+   Two STRAIGHT-LINE open angles, each an asymmetrical "standing,
+   leaning" shape: a short arm rising up-and-outward, and a longer leg
+   descending down-and-outward from the same vertex (M17 9 L29 27 L12
+   57 - left; its exact horizontal mirror at M47 9 L35 27 L52 57 -
+   right). The two inner vertices (x=29 and x=35) deliberately do NOT
+   touch - that gap is the bottleneck. One small filled circle
+   (currentColor, not stroked) sits on the centreline immediately below
+   the gap - conceptually the one grain that has passed through.
+   Together this reads as a minimal pair of opposing angles / abstract
+   "A" without ever drawing a crossbar. No prior mark/medallion/icon of
+   any kind existed anywhere in this repository before this stage (no
+   `.svg` file, no inline `<svg>` beyond the annotation-toolbar glyphs,
+   no favicon) - grounded by direct search, not assumed. The two
+   angle-paths are colored via `stroke="currentColor"`, the dot via
+   `fill="currentColor"`: callers control the mark's color purely
+   through ordinary CSS `color`, so this ONE definition already
+   repaints correctly across every Appearance mode with zero color
+   logic living in the SVG itself. Always `aria-hidden="true"` -
+   decorative in every context this stage uses it (the header brand
+   link already has its own real accessible name; see that caller's
+   own comment for why the icon must never become a second, competing
+   name/tab-stop). #}
 {% macro archiosk_mark(size=24, css_class='') %}
-<svg class="archiosk-mark{% if css_class %} {{ css_class }}{% endif %}" width="{{ size }}" height="{{ size }}" viewBox="0 0 100 100" fill="none" stroke="currentColor" stroke-width="10" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
-    <path d="M 14 90 Q 22 42 50 12 M 86 90 Q 78 42 50 12 M 22 58 L 78 58"></path>
+<svg class="archiosk-mark{% if css_class %} {{ css_class }}{% endif %}" width="{{ size }}" height="{{ size }}" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+    <path d="M17 9 L29 27 L12 57"></path>
+    <path d="M47 9 L35 27 L52 57"></path>
+    <circle cx="32" cy="35.5" r="2.5" fill="currentColor" stroke="none"></circle>
 </svg>
 {% endmacro %}
 

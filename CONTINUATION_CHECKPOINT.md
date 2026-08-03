@@ -1,5 +1,62 @@
 # Continuation checkpoint
 
+## 2026-08-03 — CLAUDE-P40-BRAND1 (correction): Replace the parabola mark with a deterministic straight-line "bottleneck" mark
+
+Product-owner correction to the mark's own geometry - everything else
+from the original CLAUDE-P40-BRAND1 stage below (header wiring, type
+hierarchy, `--brand-gold` token family + contrast verification, the
+combined per-Appearance token-redefinition wiring, UI-reference-badge
+reasoning, pre-auth-scope exclusion) is unchanged and still accurate;
+only the SVG path data inside `archiosk_mark` (`templates/_macros.html`)
+was replaced.
+
+**New construction, exactly five visible elements, explicitly no
+curves of any kind (the prior version's two quadratic-Bezier legs are
+gone outright, not layered alongside):** two mirrored, asymmetrical
+straight-line open angles - a short arm rising up-and-outward from a
+vertex, and a longer leg descending down-and-outward, giving each
+angle a "standing, leaning" character (`M17 9 L29 27 L12 57` left,
+its exact horizontal mirror `M47 9 L35 27 L52 57` right, viewBox
+`0 0 64 64`, `stroke-width="5"`). The two inner vertices (x=29, x=35)
+deliberately do not touch - a real 6-unit "bottleneck" gap - with one
+small filled dot (`fill="currentColor"`, not stroked) on the
+centreline just below it, conceptually the one grain that passed
+through. Reads as a minimal pair of opposing angles / an abstract "A"
+without ever drawing a crossbar. Coordinates used exactly as supplied
+(mirror-checked: `64 - x` for every point, confirmed exact) rather than
+adjusted, since they already satisfy every stated constraint (shorter
+arm/longer leg, non-touching gap, dot below the gap).
+
+**Verification, honestly bounded:** no real browser/SVG-rendering tool
+exists in this environment (unchanged from every prior stage's own
+disclosure), and no SVG rasterizer library (`cairosvg`/`svglib`) is
+installed in the venv either. Built a small one-off Pillow-based
+rasterizer (session scratchpad, not committed - approximates
+`stroke-linecap`/`-linejoin="round"` by stamping filled circles at
+every vertex/endpoint) to actually render the exact path/circle
+coordinates at 24px/32px/64px, supersampled 8x and downscaled for a
+closer approximation of anti-aliased rendering, against both a dark
+canvas swatch (`--dark-brand-gold` on `#1E1A12`) and the real Light
+`--canvas`/`--brand-gold` pairing. At all three sizes the two unequal
+mirrored angles, the central gap, and the dot below it remained
+visually distinct and legible on both backgrounds - a real, if
+approximate, rendered check, not a claimed one. This does not replace
+an eventual real-browser walkthrough across all four Appearance modes
+and both viewport extremes, which remains unverified the same way
+every prior stage's equivalent claim has been stated honestly rather
+than fabricated.
+
+**Tests:** `tests/test_p40brand1_brand_mark.py`'s `MacroGeometryTests`
+rewritten for the new construction (exactly 2 `<path>` + 1 `<circle>`,
+no Q/C/A curve commands, no crossbar, each angle's arm shorter than its
+leg, exact horizontal mirror between the two paths, non-touching inner
+vertices, dot centred on the viewBox mid-line strictly below the gap,
+dot filled not stroked, `viewBox="0 0 64 64"`/`stroke-width="5"`) -
+`RepositoryGroundingTests`' path-data needle updated to match. All
+other test classes in that file (header markup, rendered-HTML,
+CSS/token/contrast) were unaffected by this correction and needed no
+changes. Full suite: 2415 passed, 0 failed.
+
 ## 2026-08-03 — CLAUDE-P40-BRAND1: Top-Left ARCHIOSK Brand Treatment
 
 **Grounding, before any code:** searched the whole repository for an

@@ -3,19 +3,25 @@ CLAUDE-P40-BRAND1 - Top-Left ARCHIOSK Brand Treatment.
 
 No prior mark/medallion/icon of any kind existed anywhere in this
 repository before this stage (grounded by direct search - no `.svg`
-file, no inline `<svg>` beyond annotation-toolbar glyphs, no favicon),
-so "reuse the same mark" meant designing ONE new deterministic
-two-parabola "A" glyph (SVG quadratic-Bezier `Q` segments - literal
-parabola arcs, not an approximation) as a single shared Jinja macro
-(`archiosk_mark` in `templates/_macros.html`), then wiring it into the
-existing top-left `menu.brand` link (`templates/base.html`) alongside
-an enlarged "Archiosk" wordmark, while leaving `menu.context`'s own
-breadcrumb untouched (already within the suggested secondary-text
-range). Colored via a new `--brand-gold` token family (light + one
-shared dark value reused across Black/Midnight Blue/Deep Forest, the
-same convention already established for `--tabcolor-*`), verified with
-`tools/check_contrast.py` at the STRICTER 4.5:1 normal-text floor
-(this is small always-visible identity text, not an occasional badge).
+file, no inline `<svg>` beyond annotation-toolbar glyphs, no favicon).
+The mark itself went through one correction: the first version used
+two quadratic-Bezier parabola legs; a product-owner correction replaced
+it outright with a straight-line-only construction (curves are now an
+explicit prohibited addition) - two mirrored, asymmetrical open angles
+(a short rising arm, a longer leaning leg) whose inner vertices
+deliberately do not touch (the "bottleneck"), plus one small filled dot
+on the centreline just below the gap (the "grain" that passed through).
+Built as a single shared Jinja macro (`archiosk_mark` in
+`templates/_macros.html`), wired into the existing top-left `menu.brand`
+link (`templates/base.html`) alongside an enlarged "Archiosk" wordmark,
+while leaving `menu.context`'s own breadcrumb untouched (already within
+the suggested secondary-text range). Colored via a `--brand-gold` token
+family (light + one shared dark value reused across Black/Midnight
+Blue/Deep Forest, the same convention already established for
+`--tabcolor-*`), verified with `tools/check_contrast.py` at the
+STRICTER 4.5:1 normal-text floor (this is small always-visible identity
+text, not an occasional badge) - untouched by the geometry correction,
+since only the SVG path data changed, not the color values.
 
 No real browser tool exists in this environment - coverage here is
 macro/template/CSS source and rendered-HTML structure, the same
@@ -57,11 +63,11 @@ class RepositoryGroundingTests(unittest.TestCase):
 
     def test_svg_path_data_appears_exactly_once_in_macros(self):
         source = _MACROS_HTML_PATH.read_text(encoding="utf-8")
-        needle = "M 14 90 Q 22 42 50 12"
+        needle = "M17 9 L29 27 L12 57"
         self.assertEqual(source.count(needle), 1)
 
     def test_no_second_copy_of_the_mark_path_anywhere_else_in_templates(self):
-        needle = "M 14 90 Q 22 42 50 12"
+        needle = "M17 9 L29 27 L12 57"
         for path in (_REPO_ROOT / "templates").rglob("*.html"):
             if path == _MACROS_HTML_PATH:
                 continue
@@ -69,27 +75,94 @@ class RepositoryGroundingTests(unittest.TestCase):
 
 
 class MacroGeometryTests(unittest.TestCase):
+    """Pins down the five required visible elements from the corrected,
+    straight-line-only construction: two mirrored asymmetrical open
+    angles (short arm, longer leaning leg) with a non-touching
+    "bottleneck" gap between their inner vertices, plus one dot on the
+    centreline just below the gap. No curves, no crossbar - both
+    explicitly prohibited additions."""
+
     def setUp(self):
         self.source = _MACROS_HTML_PATH.read_text(encoding="utf-8")
         start = self.source.index("{% macro archiosk_mark")
         end = self.source.index("{% endmacro %}", start)
         self.macro = self.source[start:end]
 
-    def test_uses_two_quadratic_bezier_legs(self):
-        self.assertEqual(self.macro.count(" Q "), 2)
+    def test_exactly_two_straight_line_paths_and_one_dot(self):
+        self.assertEqual(self.macro.count("<path "), 2)
+        self.assertEqual(self.macro.count("<circle "), 1)
 
-    def test_legs_are_mirror_images_sharing_the_same_apex(self):
-        # Both legs must terminate at the same apex point (a real "A"
-        # shape needs its two strokes to actually meet at the top).
-        self.assertIn("50 12", self.macro)
-        self.assertEqual(self.macro.count("50 12"), 2)
+    def test_no_curves_of_any_kind(self):
+        # Q (quadratic)/C (cubic)/A (arc) commands are all explicitly
+        # prohibited - straight lines (M/L) only.
+        for forbidden in (" Q ", " C ", " A "):
+            self.assertNotIn(forbidden, self.macro)
 
-    def test_includes_a_crossbar(self):
-        self.assertIn(" L ", self.macro)
+    def test_no_crossbar(self):
+        # Each angle is exactly M-L-L (vertex, arm, leg) - 2 "L" line-to
+        # commands per path, 2 paths, 4 total. A crossbar would need a
+        # third path or a third L within one - the one explicitly
+        # prohibited "A" feature this mark must still suggest without.
+        self.assertEqual(len(re.findall(r"L\d", self.macro)), 4)
+        for path_body in re.findall(r'<path d="([^"]+)"', self.macro):
+            self.assertEqual(len(re.findall(r"L\d", path_body)), 2)
+
+    def test_each_angle_has_a_shorter_upper_arm_and_a_longer_lower_leg(self):
+        import math
+
+        def seg_len(p, q):
+            return math.hypot(q[0] - p[0], q[1] - p[1])
+
+        for path_match in re.finditer(r'<path d="M([\d.\- ]+)L([\d.\- ]+)L([\d.\- ]+)"', self.macro):
+            pts = [tuple(float(v) for v in group.split()) for group in path_match.groups()]
+            vertex, arm_end, leg_end = pts
+            self.assertLess(seg_len(vertex, arm_end), seg_len(vertex, leg_end))
+
+    def test_left_and_right_paths_are_exact_horizontal_mirrors(self):
+        paths = re.findall(r'<path d="M([\d.\- ]+)L([\d.\- ]+)L([\d.\- ]+)"', self.macro)
+        self.assertEqual(len(paths), 2)
+        left_pts = [tuple(float(v) for v in group.split()) for group in paths[0]]
+        right_pts = [tuple(float(v) for v in group.split()) for group in paths[1]]
+        for (lx, ly), (rx, ry) in zip(left_pts, right_pts):
+            self.assertAlmostEqual(lx + rx, 64.0)  # mirrored across x=32 (viewBox 0 0 64 64)
+            self.assertAlmostEqual(ly, ry)
+
+    def test_inner_vertices_do_not_touch_the_bottleneck_gap(self):
+        paths = re.findall(r'<path d="M([\d.\- ]+)L([\d.\- ]+)L([\d.\- ]+)"', self.macro)
+        left_vertex = tuple(float(v) for v in paths[0][1].split())
+        right_vertex = tuple(float(v) for v in paths[1][1].split())
+        self.assertGreater(right_vertex[0] - left_vertex[0], 0, "vertices must not touch or cross")
+
+    def test_dot_sits_on_centreline_below_the_gap(self):
+        match = re.search(r'<circle cx="([\d.]+)" cy="([\d.]+)" r="([\d.]+)"', self.macro)
+        self.assertIsNotNone(match)
+        cx, cy, r = (float(v) for v in match.groups())
+        self.assertAlmostEqual(cx, 32.0)  # viewBox centreline
+        paths = re.findall(r'<path d="M([\d.\- ]+)L([\d.\- ]+)L([\d.\- ]+)"', self.macro)
+        vertex_y = float(paths[0][1].split()[1])
+        self.assertGreater(cy, vertex_y, "dot must sit below the vertex gap, not above/level with it")
+        self.assertGreater(r, 0)
+
+    def test_dot_is_filled_not_only_stroked(self):
+        match = re.search(r"<circle [^>]*>", self.macro)
+        self.assertIn('fill="currentColor"', match.group())
+
+    def test_paths_use_no_fill_only_stroke(self):
+        self.assertIn('fill="none"', self.macro)
+        self.assertIn('stroke="currentColor"', self.macro)
+
+    def test_rounded_caps_and_joins(self):
+        self.assertIn('stroke-linecap="round"', self.macro)
+        self.assertIn('stroke-linejoin="round"', self.macro)
+
+    def test_stroke_width_approximately_5_units_on_64_viewbox(self):
+        self.assertIn('viewBox="0 0 64 64"', self.macro)
+        self.assertIn('stroke-width="5"', self.macro)
 
     def test_color_is_driven_entirely_by_currentcolor(self):
         self.assertIn('stroke="currentColor"', self.macro)
-        # No caller-independent hardcoded color anywhere in the path/svg.
+        self.assertIn('fill="currentColor"', self.macro)
+        # No caller-independent hardcoded color anywhere in the SVG.
         self.assertNotIn("#", self.macro)
 
     def test_decorative_by_default(self):
