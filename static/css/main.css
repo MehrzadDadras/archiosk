@@ -291,6 +291,20 @@ html.launcher-hidden .launcher-panel { display: none; }
     gap: 1.1rem;
 }
 .launcher-section { display: flex; flex-direction: column; gap: 0.1rem; }
+/* CLAUDE-P40-VW7A-QA (Clarify Project Hierarchy and Selection State):
+   uppercase/letter-spaced/--text-metadata was ALREADY a distinct
+   structural-title language from every other row (Section 2's own
+   "dedicated structural title color for main/root headings") - the
+   thing that made a root heading like PROJECTS read as "selected" was
+   never its resting typography, it was sharing .active's fill with
+   every genuinely selected leaf below (.launcher-link.active, same
+   file). .launcher-heading.active no longer fills a background at all
+   - a root heading's OWN expand/collapse state is already fully
+   conveyed by aria-expanded and the caret rotation
+   (.tree-toggle[aria-expanded="true"] .tree-label::before, below) and
+   needs no fill-based echo of it. :hover/:focus-visible still give
+   real interactive feedback - only the PERSISTENT "currently expanded"
+   state stopped painting a highlight. */
 .launcher-heading {
     font-family: var(--font-body);
     font-weight: 600;
@@ -301,7 +315,7 @@ html.launcher-hidden .launcher-panel { display: none; }
     padding: 0.35rem 0.55rem;
     border-radius: 5px;
 }
-.launcher-heading:hover, .launcher-heading.active { background: var(--surface-hover); color: var(--text-primary); text-decoration: none; }
+.launcher-heading:hover, .launcher-heading:focus-visible { background: var(--surface-hover); color: var(--text-primary); text-decoration: none; }
 .launcher-link {
     display: block;
     padding: 0.45rem 0.55rem;
@@ -314,7 +328,31 @@ html.launcher-hidden .launcher-panel { display: none; }
     white-space: nowrap;
 }
 .launcher-link:hover { background: var(--surface-hover); color: var(--text-primary); text-decoration: none; }
+/* CLAUDE-P40-VW7A-QA: reserved for the ONE destination actually
+   projected into Display (Section 1) - a Document/Case/Overview/Chats/
+   Task/Tag leaf whose own href is what's currently rendered. The
+   current Project's own name row (.current-project, below) no longer
+   qualifies for this class at all - see templates/base.html's own
+   comment on why "Chats" (or whichever child is actually open) is the
+   sole thing allowed to look selected. */
 .launcher-link.active { background: var(--surface-selected); color: var(--text-primary); }
+/* CLAUDE-P40-VW7A-QA: the current Project's own restrained "you are
+   here" marker - Section 3's own "distinct title text... a narrow edge
+   indicator... do not reuse the full selected-row fill." A left-edge
+   accent (the same idiom .finding-card's own border-left already uses
+   for "this is flagged/notable" elsewhere in this file) plus a bolder
+   weight, never a background fill - reads as a structural landmark,
+   not a second selected row. --border-strong (not --machine-blue/
+   --surface-selected) keeps it quiet, matching the panel-border-
+   hierarchy correction's own "reserve stronger accent color for
+   meaningful states" discipline - "current Project" is a genuinely
+   meaningful, but not an ACTION, state. */
+.launcher-link.current-project {
+    font-weight: 600;
+    color: var(--text-primary);
+    border-left: 3px solid var(--border-strong);
+    padding-left: calc(0.55rem - 3px);
+}
 .launcher-new-project { color: var(--machine-blue); }
 
 /* CLAUDE-P40-E3A, Section 4: the recursive Lists hierarchy. .tree-toggle
@@ -331,13 +369,34 @@ html.launcher-hidden .launcher-panel { display: none; }
     margin: 0;
     padding: 0;
 }
+/* CLAUDE-P40-VW7A-QA (Clarify Project Hierarchy and Selection State),
+   Section 4: "the rendered hierarchy must visibly and semantically
+   read as... Use consistent indentation, spacing, and a restrained
+   tree guide or equivalent hierarchy cue. Do not rely on background
+   highlighting to communicate nesting." A single 1px left border, the
+   same quiet --border token used everywhere else in this file for
+   ordinary (not accent-colored) structure, applied uniformly to every
+   nested .tree-children - the classic file-tree "vertical connector"
+   convention, restrained enough not to compete with row content, and
+   the SAME cue at every depth (Project -> Documents/Investigations/.../
+   Chats, and any further nesting below those) rather than a Project-
+   specific special case. */
 .tree-children {
     padding-left: 0.75rem;
+    border-left: 1px solid var(--border);
 }
 .tree-children:not([data-tree-open]) {
     display: none;
 }
 .tree-node { margin: 0; }
+/* CLAUDE-P40-VW7A-QA, Section 4: "add enough visual separation to show
+   that the current Project's own child group has ended and sibling
+   Projects have resumed, without introducing a heavy border" -
+   whitespace only (a top margin), on the ONE sibling row immediately
+   following the current Project's own closed child group
+   (templates/base.html's own sibling_separation namespace tracks
+   which single row that is) - no line/border of its own. */
+.tree-node.sibling-project-after-current { margin-top: 0.6rem; }
 .tree-toggle {
     display: flex;
     align-items: center;

@@ -110,11 +110,30 @@ otherwise.
 | `lists.project-switch-dialog.switch` | `<button>` | "Switch in This Tab" | Navigates the current tab to the pending target Project's own already-authorized `workspace.show_workspace` URL | Same as above | active |
 | `lists.project-switch-dialog.open-new-tab` | `<button>` | "Open in New Tab" | Opens the pending target Project's URL via `window.open`; shows `#project-switch-popup-note` if the browser blocks the popup, leaving the current tab untouched | Same as above | active |
 
+**Selection-state hierarchy correction (CLAUDE-P40-VW7A-QA, all identifiers above retained unchanged):**
+`lists.projects` (an expanded root), `lists.project.self` (the current
+Project), and whichever child leaf is actually selected (e.g.
+`lists.project.chats`) used to share the literal same `active` CSS
+class/fill, reading as three indistinguishable "selected" rows. Now
+three genuinely distinct treatments, none of them renumbered or
+reparented: `lists.projects`'s own structural-title typography no
+longer paints a selection-style fill merely for being expanded
+(`aria-expanded` alone conveys that); `lists.project.self` gets a new
+`.current-project` CSS class (a restrained left-edge marker,
+`aria-current="true"`) instead of `.active`; the `.active` class and
+its `--surface-selected` fill are now reserved exclusively for the one
+child leaf whose own href is what is actually displayed
+(`aria-current="page"`). A new `.sibling-project-after-current` class
+(not a UI reference — a pure layout hook, whitespace-only) marks
+whichever sibling Project row renders immediately after the current
+Project's own child group closes, so it doesn't visually read as a
+continuation of that group.
+
 ## Lists — active Project branch (`templates/base.html`, only inside the currently open Project's own row)
 
 | Reference | Element | Label | Current behavior | Auth notes | Status |
 |---|---|---|---|---|---|
-| `lists.project.self` | tree-leaf `<a>`, `active` | active Project's own display name | Navigates to its own workspace (a no-op — already there); this row is what expands into every entry below | Same as `_load_workspace_or_404` (project owner/allow-list/admin) | active |
+| `lists.project.self` | tree-leaf `<a>`, `current-project` (CLAUDE-P40-VW7A-QA — was `active`, see note below) | active Project's own display name | Navigates to its own workspace (a no-op — already there); this row is what expands into every entry below. `aria-current="true"` identifies it as the current Project, distinct from `aria-current="page"` on whichever child leaf is actually selected | Same as `_load_workspace_or_404` (project owner/allow-list/admin) | active |
 | `lists.project.overview` | tree-leaf `<a>`, `data-view="overview"` | "Overview" | **Division 0 is the active target (default):** real navigation to `?view=overview`. **A non-zero Display is the active target (CLAUDE-P40-VW7B):** client-side-intercepted, no navigation — projects into that division via `window.ArchioskDisplay.populateDivision(target, 'overview', '', 'Overview')`, an `<iframe src="...?view=overview&panel=1">`. Either way the content is `display.overview`, below | Same as workspace access | active |
 | `lists.project.documents` | tree-toggle `<button>` | "Documents (`<count>`)" | Expands/collapses; count = `active_sources\|length`; "No Documents yet." empty state (CLAUDE-P40-VW7B) | Same as workspace access | active |
 | `lists.project.documents.leaf` | tree-leaf `<a>`, `data-source-id` (pattern) | Document name | **Division 0 active target:** real navigation to `?source=<id>`. **Non-zero Display active target:** client-side `populateDivision(target, 'source', sourceId, name)` — unchanged since VW7A, a real file embedded via `<iframe src=file_url>`/`<img>`, never the `&panel=1` mechanism. Syncs Toolbox to `toolbox.document` | Same as workspace access | active |

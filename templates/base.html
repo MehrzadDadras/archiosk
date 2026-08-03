@@ -259,15 +259,42 @@
                         <button type="button" class="tree-toggle launcher-heading{% if projects_open %} active{% endif %}" data-tree-parent data-tree-no-clear data-ui-ref="lists.projects" aria-expanded="{{ 'true' if projects_open else 'false' }}">
                             <span class="tree-label">Projects</span>
                         </button>
+                        {# CLAUDE-P40-VW7A-QA (Clarify Project Hierarchy and Selection State):
+                           tracks whether the row about to render is the FIRST sibling Project
+                           immediately after the current Project's own (now-closed) child group -
+                           the one place that needs extra separation so "Nipigon Ramp"'s children
+                           don't visually appear to continue into the next Project row (Section 4's
+                           own "add enough visual separation... without introducing a heavy
+                           border"). Reset to false the moment it's been used once, since only the
+                           SINGLE row immediately following needs it, not every sibling after. #}
+                        {% set sibling_separation = namespace(needed=False) %}
                         <ul class="tree-children"{% if projects_open %} data-tree-open{% endif %}>
                             {% for p in nav_recent_projects %}
                             {% if project_id is defined and project_id == p.project_id %}
                             {# ---------------- The active Project's own real branch ------------- #}
+                            {% set sibling_separation.needed = True %}
                             <li class="tree-node" data-tree-node>
-                                <a class="tree-leaf launcher-link active" data-ui-ref="lists.project.self" href="{{ url_for('workspace.show_workspace', project_id=p.project_id) }}">{{ p.display_name }}</a>
+                                {# CLAUDE-P40-VW7A-QA: "current-project", not "active" - this row
+                                   is the CURRENT Project, a distinct state from "the destination
+                                   actually projected into Display" (Section 1's own "these states
+                                   must not share the same highlight treatment"). It no longer gets
+                                   the .active class (and therefore never gets .launcher-link.active's
+                                   full --surface-selected fill) even when nothing more specific is
+                                   selected - "Chats" (or Overview, a Document, a Case...) already
+                                   independently computes ITS OWN .active state below whenever its
+                                   own href is what's actually displayed; this row's job is only to
+                                   read as "this is the open Project," never as a second, competing
+                                   selected destination. See .current-project's own CSS comment for
+                                   the restrained edge-marker treatment this class gets instead. #}
+                                {# aria-current="true" (not "page") - this row identifies WHICH
+                                   Project is current, a distinct fact from "which page is
+                                   selected" (aria-current="page", used on the actual selected
+                                   child leaf below - Overview/a Document/an Investigation/Chats/
+                                   etc. - never both claiming "page" at once). #}
+                                <a class="tree-leaf launcher-link current-project" data-ui-ref="lists.project.self" aria-current="true" href="{{ url_for('workspace.show_workspace', project_id=p.project_id) }}">{{ p.display_name }}</a>
                                 <ul class="tree-children" data-tree-open>
                                     <li class="tree-node" data-tree-node>
-                                        <a class="tree-leaf launcher-link{% if directory_view == 'overview' %} active{% endif %}" data-ui-ref="lists.project.overview" data-view="overview" href="{{ url_for('workspace.show_workspace', project_id=project_id, view='overview') }}">Overview</a>
+                                        <a class="tree-leaf launcher-link{% if directory_view == 'overview' %} active{% endif %}" data-ui-ref="lists.project.overview" data-view="overview"{% if directory_view == 'overview' %} aria-current="page"{% endif %} href="{{ url_for('workspace.show_workspace', project_id=project_id, view='overview') }}">Overview</a>
                                     </li>
                                     <li class="tree-node" data-tree-node>
                                         <button type="button" class="tree-toggle launcher-link" data-tree-parent data-tree-owns="source" data-ui-ref="lists.project.documents" aria-expanded="{{ 'true' if selected_source else 'false' }}">
@@ -281,7 +308,7 @@
                                                    that as a second visible directory in Display, but the provenance
                                                    detail itself (Section 12: "current source-document provenance")
                                                    is preserved here as a title tooltip rather than dropped outright. #}
-                                                <a class="tree-leaf launcher-link{% if selected_source and selected_source.id == s.id %} active{% endif %}" data-ui-ref="lists.project.documents.leaf" href="{{ url_for('workspace.show_workspace', project_id=project_id, source=s.id) }}" data-source-id="{{ s.id }}" title="Added {{ s.added_at }}">{{ s.name }}</a>
+                                                <a class="tree-leaf launcher-link{% if selected_source and selected_source.id == s.id %} active{% endif %}" data-ui-ref="lists.project.documents.leaf"{% if selected_source and selected_source.id == s.id %} aria-current="page"{% endif %} href="{{ url_for('workspace.show_workspace', project_id=project_id, source=s.id) }}" data-source-id="{{ s.id }}" title="Added {{ s.added_at }}">{{ s.name }}</a>
                                             </li>
                                             {% else %}
                                             {# CLAUDE-P40-VW7B: a coherent empty state, matching the
@@ -309,11 +336,11 @@
                                                project into the active Display instead, exactly like
                                                every other data-*-id leaf already does. #}
                                             <li class="tree-node" data-tree-node>
-                                                <a class="tree-leaf launcher-link tree-leaf-action{% if show_new_case_form %} active{% endif %}" data-ui-ref="lists.project.investigations.new" data-new-case href="{{ url_for('workspace.show_workspace', project_id=project_id, view='new-case') }}">+ New Investigation</a>
+                                                <a class="tree-leaf launcher-link tree-leaf-action{% if show_new_case_form %} active{% endif %}" data-ui-ref="lists.project.investigations.new" data-new-case{% if show_new_case_form %} aria-current="page"{% endif %} href="{{ url_for('workspace.show_workspace', project_id=project_id, view='new-case') }}">+ New Investigation</a>
                                             </li>
                                             {% for c in visible_cases %}
                                             <li class="tree-node" data-tree-node>
-                                                <a class="tree-leaf launcher-link{% if active_case and active_case.id == c.id %} active{% endif %}" data-ui-ref="lists.project.investigations.leaf" data-case-id="{{ c.id }}" data-case-title="{{ c.title }}" href="{{ url_for('workspace.show_workspace', project_id=project_id, case=c.id) }}">{{ c.title }}</a>
+                                                <a class="tree-leaf launcher-link{% if active_case and active_case.id == c.id %} active{% endif %}" data-ui-ref="lists.project.investigations.leaf" data-case-id="{{ c.id }}" data-case-title="{{ c.title }}"{% if active_case and active_case.id == c.id %} aria-current="page"{% endif %} href="{{ url_for('workspace.show_workspace', project_id=project_id, case=c.id) }}">{{ c.title }}</a>
                                             </li>
                                             {% else %}
                                             <li class="tree-node-empty"><span class="pane-note" data-ui-ref="lists.project.investigations.empty">No Investigations yet.</span></li>
@@ -340,7 +367,7 @@
                                                doesn't exist. #}
                                             {% for row in rfi_drafts_view %}
                                             <li class="tree-node" data-tree-node>
-                                                <a class="tree-leaf launcher-link{% if active_case and active_case.id == row.draft.case_id %} active{% endif %}" data-ui-ref="lists.project.rfis.leaf" data-case-id="{{ row.draft.case_id }}" data-case-title="{{ row.case_title }}" href="{{ url_for('workspace.show_workspace', project_id=project_id, case=row.draft.case_id) }}">{{ row.draft.question_text[:60] }}{% if row.draft.question_text|length > 60 %}&hellip;{% endif %}</a>
+                                                <a class="tree-leaf launcher-link{% if active_case and active_case.id == row.draft.case_id %} active{% endif %}" data-ui-ref="lists.project.rfis.leaf" data-case-id="{{ row.draft.case_id }}" data-case-title="{{ row.case_title }}"{% if active_case and active_case.id == row.draft.case_id %} aria-current="page"{% endif %} href="{{ url_for('workspace.show_workspace', project_id=project_id, case=row.draft.case_id) }}">{{ row.draft.question_text[:60] }}{% if row.draft.question_text|length > 60 %}&hellip;{% endif %}</a>
                                             </li>
                                             {% else %}
                                             <li class="tree-node-empty"><span class="pane-note" data-ui-ref="lists.project.rfis.empty">No RFIs yet.</span></li>
@@ -358,7 +385,7 @@
                                        <span class="launcher-count"> convention) is the ONE place it
                                        appears now, not duplicated near the composer too. #}
                                     <li class="tree-node" data-tree-node>
-                                        <a class="tree-leaf launcher-link{% if directory_view is none and not active_case and not selected_source %} active{% endif %}" data-ui-ref="lists.project.chats" href="{{ url_for('workspace.show_workspace', project_id=project_id) }}">Chats <span class="launcher-count">{{ project_conversation_count }}</span></a>
+                                        <a class="tree-leaf launcher-link{% if directory_view is none and not active_case and not selected_source %} active{% endif %}" data-ui-ref="lists.project.chats"{% if directory_view is none and not active_case and not selected_source %} aria-current="page"{% endif %} href="{{ url_for('workspace.show_workspace', project_id=project_id) }}">Chats <span class="launcher-count">{{ project_conversation_count }}</span></a>
                                     </li>
                                     {# ---------------- Tasks (CLAUDE-P40-VW7) --------------------------
                                        Real, persisted project Tasks created via "Make Task" on a
@@ -539,7 +566,7 @@
                                 </ul>
                             </li>
                             {% else %}
-                            <li class="tree-node" data-tree-node>
+                            <li class="tree-node{% if sibling_separation.needed %} sibling-project-after-current{% endif %}" data-tree-node>
                                 {# CLAUDE-P40-VW8: data-project-id only matters when a
                                    DIFFERENT Project is already open (project_id is
                                    defined) - that's exactly when activating this leaf
@@ -558,6 +585,7 @@
                                    {% if project_id is defined %}data-project-id="{{ p.project_id }}"{% endif %}
                                    href="{{ url_for('workspace.show_workspace', project_id=p.project_id) }}">{{ p.display_name }}</a>
                             </li>
+                            {% set sibling_separation.needed = False %}
                             {% endif %}
                             {% endfor %}
                         </ul>
@@ -890,14 +918,21 @@
                     // Display selection (Documents/Investigations, via
                     // data-tree-owns), where collapsing it while its own
                     // leaf is active honestly means "I'm done with this
-                    // Document/Investigation." PROJECTS is different: the
-                    // ACTIVE PROJECT'S OWN ROW always carries .active
-                    // while any Project is open, so isDescendantActive()
-                    // was ALWAYS true here - a second click meant to
-                    // simply collapse the tree was instead also stripping
-                    // ?case=/?source=/?view= and navigating away, exactly
-                    // the "confuses collapsing the root with switching
-                    // the active Project" defect this stage corrects.
+                    // Document/Investigation." PROJECTS is different:
+                    // whichever CHILD is currently selected (Overview/a
+                    // Document/an Investigation/Chats/...) always carries
+                    // .active while any Project is open (CLAUDE-P40-VW7A-QA:
+                    // the Project's own row itself no longer does - see
+                    // .current-project, a separate "this is the current
+                    // Project" marker that intentionally does NOT
+                    // participate in this active-descendant check - but
+                    // one of ITS children always still does), so
+                    // isDescendantActive() is still ALWAYS true here - a
+                    // second click meant to simply collapse the tree would
+                    // otherwise also strip ?case=/?source=/?view= and
+                    // navigate away, exactly the "confuses collapsing the
+                    // root with switching the active Project" defect this
+                    // stage corrects.
                     if (toggle.hasAttribute('data-tree-no-clear')) return;
                     if (!pinned && isDescendantActive(node)) {
                         var owns = toggle.getAttribute('data-tree-owns');

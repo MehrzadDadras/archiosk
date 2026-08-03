@@ -1,5 +1,92 @@
 # Continuation checkpoint
 
+## 2026-08-03 — CLAUDE-P40-VW7A-QA: Clarify Project Hierarchy and Selection State
+
+**Reported defect:** the Lists panel's `PROJECTS` root (an expanded
+heading), the current Project ("Nipigon Ramp"), and whichever child
+was actually the selected destination (e.g. "Chats") all shared the
+exact same literal CSS state — three different meanings collapsed into
+one highlight, so a reviewer couldn't tell which of the three a filled
+row actually meant.
+
+**Root cause, confirmed directly from the markup/CSS (not assumed):**
+`lists.project.self` (the Project's own name row) carried a
+HARDCODED `active` class unconditionally — the exact same class every
+genuinely-selected child leaf (`lists.project.chats`, `.overview`,
+`.documents.leaf`, `.investigations.leaf`, `.rfis.leaf`) already
+computed conditionally, and the exact same class/selector
+(`.launcher-link.active { background: var(--surface-selected); }`)
+painted BOTH with the identical `--surface-selected` fill.
+`.launcher-heading.active` (PROJECTS) used a different color
+(`--surface-hover`) but the same KIND of fill-based "this is
+highlighted" treatment, still reading as selection-like.
+
+**Fix — three now-genuinely-distinct treatments, no new backend/
+domain concept, purely presentational:**
+1. `.launcher-heading` (PROJECTS, and any future equivalent root) keeps
+   its already-distinct structural-title typography (uppercase,
+   letter-spaced, `--text-metadata`) — `.launcher-heading.active` no
+   longer fills a background at all (only real `:hover`/
+   `:focus-visible` do); expansion state is already fully conveyed by
+   `aria-expanded` and the toggle-arrow rotation, needing no fill echo.
+2. `lists.project.self` gets a NEW `.current-project` class instead of
+   `.active` — a restrained left-edge marker (`border-left: 3px solid
+   var(--border-strong)`, the same idiom `.finding-card` already uses
+   elsewhere in this file for "flagged/notable") plus bold text, never
+   `--surface-selected`. `aria-current="true"` identifies it as the
+   current Project for assistive tech, distinct from `aria-current=
+   "page"` on the actual selected child.
+3. `.launcher-link.active` (selector/value unchanged) is now reserved
+   exclusively for the ONE child leaf whose own href is what is
+   actually displayed — `lists.project.self` no longer qualifies.
+   Every already-existing conditional (Overview/Documents leaf/
+   Investigations leaf/RFIs leaf/Chats/+New Investigation) now also
+   sets `aria-current="page"` in lockstep with its own `active`
+   condition — a real accessibility gap (none of these exposed ANY
+   current/selected ARIA state before this stage), not just a visual
+   fix.
+
+**Tree-guide + sibling separation:** every `.tree-children` (uniform,
+not Project-specific) gets a restrained 1px left border in the
+existing quiet `--border` token — the classic file-tree vertical-
+connector convention, satisfying "do not rely on background
+highlighting to communicate nesting." A new `templates/base.html`
+Jinja `namespace` (`sibling_separation`) tracks which ONE sibling
+Project row renders immediately after the current Project's own child
+group closes and adds `.sibling-project-after-current` (whitespace-
+only `margin-top`, no border) there — verified empirically that
+`nav_recent_projects` (`app.py`) sorts most-recently-**ingested**
+first, so render order is the reverse of ingestion order (confirmed
+directly against a real render before writing the corresponding tests,
+not assumed).
+
+**`isDescendantActive`/`data-tree-no-clear` (PROJECTS' own
+collapse-clears-Display guard):** functionally unaffected — the
+function still reads the unchanged `.tree-leaf.active` selector, which
+still exists on whichever child leaf is genuinely selected (it just no
+longer ALSO exists on `lists.project.self`, which was never scanned by
+this specific check anyway since PROJECTS carries `data-tree-no-clear`
+and short-circuits before reaching it). The comment explaining WHY
+`data-tree-no-clear` is needed was corrected — it used to (accurately,
+at the time) attribute this to the Project's own row always carrying
+`.active`; that's no longer true, so the comment now correctly
+attributes it to whichever child leaf is selected instead.
+
+**UI references:** zero renumbered/retired — every existing
+`lists.projects*`/`lists.project.*` identifier is unchanged;
+`.current-project`/`.sibling-project-after-current` are pure CSS/layout
+hooks, not governed references (documented in `UI_REFERENCE_MAP.md`'s
+own new note rather than added as numbered rows).
+
+**Real-browser verification:** NOT available in this environment — the
+rendering claims above were verified via direct HTML inspection of the
+Flask test client's own rendered output (grounded, not fabricated) and
+the accompanying focused test suite, not an actual browser session;
+stated honestly per this project's established convention.
+
+**Commits:** implementation + tests in this stage's own bounded commit
+(see `git log`).
+
 ## 2026-08-03 — CLAUDE-P40-VW8-QA: UI-Tagging completion, Selection-Toolbar Corrections, Panel-Border Hierarchy, Approved Theme Set, Chat Composer Corrections, Tag Reversibility
 
 A single long stage covering a rapid sequence of product-owner
