@@ -1,5 +1,108 @@
 # Continuation checkpoint
 
+## 2026-08-03 — CLAUDE-P40-VW7A-QA: Move Document Controls into the Top Application Menu
+
+**Grounding finding, before any implementation:** the reported "white
+strip toolbar... occupies a separate horizontal band inside the
+Display" did not correspond to anything in this codebase. Direct
+inspection of `templates/case_workspace.html` (pre-change) found the
+entire document viewer was a bare `<iframe src="{{ raw file URL }}">`
+(PDF/DOCX/TXT) or a plain `<img>` (drawings) - zero custom JS, zero
+`data-ui-ref` of its own, and an explicit pane-note already stating
+page/clause navigation "isn't available yet for this format." The
+toolbar being described was the BROWSER'S OWN native PDF viewer chrome
+rendering inside that iframe - not something this app built, styled,
+or could script (a plain cross-origin iframe embed exposes no API for
+a host page to read or drive a native PDF viewer's page/zoom/rotation/
+search state). Reported this finding to the product owner directly
+(via `AskUserQuestion`) before writing any code, rather than building
+a fictional "relocation" of controls that never existed on this side.
+Given three options (build a real PDF.js-based viewer / report only,
+no build / minimal repositioning of what's genuinely Archiosk's own),
+the product owner chose to build a real viewer.
+
+**What was built:**
+- **Vendored PDF.js** (`static/js/vendor/pdfjs/` - `pdf.min.mjs`,
+  `pdf.worker.min.mjs`, Apache-2.0 `LICENSE`, a `README.md` documenting
+  exact version/source/what was deliberately NOT taken). No client
+  build step (`tools/dependency_fit.py` run against this exact vendoring
+  approach: PASS on `no-client-build`, WARN-not-FAIL on
+  `python-native-preferred` with the justification that client-side PDF
+  rendering has no Python equivalent) - loaded via a plain dynamic
+  `import()` from an ordinary script, same loading pattern as every
+  other `static/js/*.js` file in this app. Deliberately did NOT vendor
+  PDF.js's own bundled `pdf_viewer.mjs`/`pdf_viewer.css` UI - the whole
+  point of this stage is Archiosk's own top-menu controls driving the
+  low-level rendering API (`getDocument`/`getViewport`/`render` to a
+  `<canvas>`) directly, not a second toolbar.
+- **`static/js/pdf_viewer.js`** (new) - the adapter. Real page
+  navigation, zoom (25%-400%, clamped), fit-width/fit-page (computed
+  against the live container size), cumulative 90° rotation, and a
+  genuine full-document text search (PDF.js's own `getTextContent()`,
+  cached per page, cycles through matches jumping pages as needed) -
+  not placeholders. Print opens the original PDF in a new tab (the
+  browser's own native print/save chrome there already works reliably;
+  re-implementing print pagination for a canvas-rendered page was
+  judged unnecessary complexity). Auto-mounts by checking for
+  `#document-viewer-pdf-canvas`'s presence/`data-pdf-url` - no inline
+  per-page script needed, and no dependency on script-load ordering;
+  works naturally with this app's full-page-reload architecture
+  ("switching documents" is always a fresh page load, which always
+  re-runs this check).
+- **`templates/base.html`** - a new `#workspace-document-controls`
+  region between the breadcrumb and Display Layout/Appearance/Account,
+  `[hidden]` by default. Essential controls (page nav, zoom) always
+  inline; secondary ones (fit/rotate/search/download/print) physically
+  re-parented (real DOM node move, never a cloned duplicate) into a
+  `<details>` overflow panel below a 900px viewport (matching this
+  file's own existing breakpoint convention) via a `matchMedia`
+  listener. Every button has a real `aria-label`+`title`, disabled
+  state where applicable (page edges, no search matches).
+- **`templates/case_workspace.html`** - a PDF Source (detected via
+  `file_path` ending in `.pdf`, case-insensitive) now renders an empty
+  canvas-container div instead of the old iframe; a drawing/DOCX/TXT
+  Source keeps its existing `<img>`/`<iframe>` completely unchanged
+  (out of scope - no renderer built for those formats). The stale
+  "page navigation isn't available for this format" pane-note is now
+  suppressed specifically for PDFs (still accurate, unchanged, for
+  every other format).
+- **CSS** - `.document-viewer-canvas-container` reuses the exact same
+  box (`height: 70vh`, border, background) the old iframe had; removing
+  the native browser chrome (a `<canvas>` has none) reclaims the extra
+  vertical space automatically within that same box, not by growing
+  it. The new top-menu controls use no per-button border/background
+  except on hover/focus (the same restrained, "part of the application,
+  not a bright toolbar pasted over it" language `.conv-selection-btn`
+  already established for a comparable dense inline-action row) - every
+  color is a `var(--token)` reference, so all four appearance themes
+  (Black/Midnight Blue/Deep Forest/Light) work for free.
+
+**Scope, stated honestly:** PDF only. Sidebar/thumbnail/outline/
+annotation controls were NOT added - none existed before this stage
+(nothing to preserve), and building them would be separate, much
+larger subsystems (thumbnail generation, annotation persistence with
+new backend storage) beyond "move/rebuild the controls that exist."
+
+**UI references:** every `menu.document-controls*` identifier and
+`display.document.pdf-canvas` is genuinely NEW - there was no prior
+Archiosk-owned toolbar-container reference to retire or reparent
+(confirmed directly from the pre-change template source, not assumed).
+Also fixed, while auditing this same Menu region: `UI_REFERENCE_MAP.md`'s
+own `menu.appearance*` rows had gone stale since the earlier Approved
+Theme Set stage (still describing a 3-mode Light/Dark/Tinted matrix) -
+corrected to the real 4-mode Light/Black/Midnight Blue/Deep Forest
+matrix, and `tests/test_p40vw7a_ui_reference_map.py`'s own
+`_APPEARANCE_MODES` constant (used to reconstruct the Jinja-loop-
+constructed `menu.appearance.*` refs a plain regex can't recover) was
+missing `deep-forest` entirely - a real pre-existing gap this stage's
+own registry-consistency test caught and fixed.
+
+**Real-browser verification:** NOT available in this environment -
+every claim above is grounded in template/CSS/JS source inspection,
+`tools/dependency_fit.py`'s own real output, and a rendered-HTML
+structural test suite (see `tests/test_p40vw7a_qa_document_controls.py`),
+not an actual browser session; stated honestly rather than fabricated.
+
 ## 2026-08-03 — CLAUDE-P40-VW7A-QA: Clarify Project Hierarchy and Selection State
 
 **Reported defect:** the Lists panel's `PROJECTS` root (an expanded

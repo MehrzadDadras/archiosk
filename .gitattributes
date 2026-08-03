@@ -5,3 +5,10 @@
 # some machines and break that guarantee - `-text` disables any such
 # conversion, so the files are always checked out exactly as committed.
 tests/fixtures/nreocrc/immutable_original/** -text
+
+# CLAUDE-P40-VW7A-QA: vendored, third-party PDF.js distribution files
+# (static/js/vendor/pdfjs/README.md has the exact source/version) - must
+# stay byte-identical to what was actually downloaded and verified, the
+# same "line-ending normalization would silently change bytes" reasoning
+# as the NREOCRC corpus above, not re-derived.
+static/js/vendor/pdfjs/*.mjs -text

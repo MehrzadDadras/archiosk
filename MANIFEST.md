@@ -143,6 +143,8 @@ deploy/*  (nginx, gunicorn) — infra wrapping wsgi:app, not imported by Python
 | File | Purpose | Connects to |
 |---|---|---|
 | `static/css/main.css` | The full design system: color tokens (`--ink`, `--panel`, `--amber`, `--teal`, etc.), typography, header/nav, hero, pipeline cells, dashboard header, honeycomb lattice, registry table, chips, error page. | Linked from `templates/base.html`; every template's markup is written against these class names. |
+| `static/js/pdf_viewer.js` | (CLAUDE-P40-VW7A-QA) Thin adapter driving vendored PDF.js directly (canvas render, page/zoom/rotation/search state) - the top-menu document controls' own real behavior lives here, not a bundled PDF.js UI. Auto-mounts against `#document-viewer-pdf-canvas` when present (a full-page-reload app - no client router needed to detect "the active document changed"). | Loaded by `templates/case_workspace.html`; drives `templates/base.html`'s own `#workspace-document-controls` region; reads `static/js/vendor/pdfjs/`. |
+| `static/js/vendor/pdfjs/` (`pdf.min.mjs`, `pdf.worker.min.mjs`, `LICENSE`, `README.md`) | Vendored (not npm-installed - no client build step), pre-built ES-module PDF.js distribution files, used as downloaded. See that directory's own `README.md` for exact version/source/license and why only the low-level rendering API files were taken (not PDF.js's own bundled UI). | Loaded via dynamic `import()` from `static/js/pdf_viewer.js` only. |
 
 ## 8. Deployment (infra config, not imported by Python)
 

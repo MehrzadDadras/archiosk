@@ -1343,6 +1343,119 @@ main {
     color: var(--attention-amber);
     margin-left: 0.4rem;
 }
+/* CLAUDE-P40-VW7A-QA (Move Document Controls into the Top Application
+   Menu): the central region between the breadcrumb and Display Layout/
+   Appearance/Account - flex:1 so it claims whatever space is left
+   between those two (which don't grow), and centers its own content
+   within that space. Deliberately styled to "read as part of the
+   application, not a bright toolbar pasted over it" - no per-button
+   borders (unlike .workspace-topbar-btn above), quiet text color,
+   background only on hover/focus, the same restrained language
+   .conv-selection-btn already established for a comparable dense
+   inline-action row. */
+.workspace-topbar-document-controls {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+}
+.workspace-topbar-document-controls[hidden] { display: none; }
+.doc-controls-group {
+    display: flex;
+    align-items: center;
+    gap: 0.15rem;
+    min-width: 0;
+}
+.doc-control-btn {
+    font-family: var(--font-body);
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    background: none;
+    border: none;
+    border-radius: 3px;
+    padding: 0.3rem 0.45rem;
+    cursor: pointer;
+    line-height: 1;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    white-space: nowrap;
+}
+.doc-control-btn:hover:not(:disabled) { background: var(--surface-hover); color: var(--text-primary); text-decoration: none; }
+.doc-control-btn:focus-visible { outline: 2px solid var(--machine-blue); outline-offset: 1px; }
+.doc-control-btn:disabled { color: var(--text-disabled); cursor: default; }
+.doc-page-nav {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+.doc-page-input {
+    width: 2.6em;
+    text-align: center;
+    font-family: var(--font-body);
+    font-size: 0.8rem;
+    padding: 0.2rem 0.3rem;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    background: var(--surface-primary);
+    color: var(--text-primary);
+}
+.doc-page-total { color: var(--text-metadata); }
+.doc-page-total:not(:empty)::before { content: "/ "; }
+.doc-zoom-level {
+    font-size: 0.78rem;
+    color: var(--text-metadata);
+    min-width: 3em;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+}
+.doc-controls-divider { width: 1px; height: 1.1em; background: var(--border); margin: 0 0.2rem; flex-shrink: 0; }
+.doc-search-input {
+    width: 9rem;
+    max-width: 30vw;
+    font-family: var(--font-body);
+    font-size: 0.8rem;
+    padding: 0.25rem 0.4rem;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    background: var(--surface-primary);
+    color: var(--text-primary);
+}
+.doc-search-count { font-size: 0.75rem; color: var(--text-metadata); min-width: 2.5em; }
+/* CLAUDE-P40-VW7A-QA, Section "Responsive behavior": hidden until
+   static/js/pdf_viewer.js's own matchMedia(900px) listener marks it
+   active (narrow viewport) and re-parents .doc-controls-secondary's
+   real DOM node into #doc-controls-overflow-panel below - not a
+   second, cloned copy of the same controls. */
+.doc-controls-overflow { position: relative; display: none; }
+.doc-controls-overflow.doc-controls-overflow-active { display: inline-flex; }
+.doc-controls-overflow-summary { list-style: none; cursor: pointer; }
+.doc-controls-overflow-summary::-webkit-details-marker { display: none; }
+.doc-controls-overflow-panel {
+    position: absolute;
+    top: calc(100% + 0.3rem);
+    right: 0;
+    background: var(--surface-primary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.4rem;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.15rem;
+    z-index: 60;
+    min-width: 170px;
+    box-shadow: none;
+}
+.doc-controls-overflow-panel .doc-control-btn { justify-content: flex-start; }
+.doc-controls-overflow-panel .doc-controls-divider { width: auto; height: 1px; margin: 0.2rem 0; }
+.doc-controls-overflow-panel .doc-search-input { width: 100%; max-width: none; }
+
 .workspace-topbar-controls {
     display: flex;
     align-items: center;
@@ -2026,6 +2139,27 @@ html.toolbox-hidden .workspace-pane-toolbox {
     border: 1px solid var(--border);
     display: block;
 }
+/* CLAUDE-P40-VW7A-QA (Move Document Controls into the Top Application
+   Menu): PDF Sources render here instead of .document-viewer-frame -
+   same box (width/height/border/background all unchanged from the old
+   iframe's own), but with NO competing native browser toolbar chrome
+   inside it, since a <canvas> has none - the "reclaimed vertical
+   height" this stage's own requirement asks for happens automatically
+   inside this same 70vh box, not by growing the box itself. Centers
+   the rendered page horizontally when it's narrower than the
+   container (fit-page/a low zoom level) and scrolls when taller
+   (a tall page at fit-width, or zoomed in). */
+.document-viewer-canvas-container {
+    width: 100%;
+    height: 70vh;
+    border: 1px solid var(--border);
+    background: var(--surface-primary);
+    overflow: auto;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+}
+.document-viewer-canvas { display: block; }
 
 /* -- shared text utilities ------------------------------------------------
    Consolidates inline style="" patterns that had drifted into

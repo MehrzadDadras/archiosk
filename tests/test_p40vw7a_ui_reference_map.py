@@ -89,7 +89,11 @@ _REF_TOKEN_RE = re.compile(r"`([a-z0-9._\-]+)`")
 # added to one but not the other) is still genuinely caught, not
 # silently exempted.
 _APPEARANCE_SURFACES = ("menu", "lists", "display", "toolbox", "chat")
-_APPEARANCE_MODES = ("light", "dark", "tinted")
+# CLAUDE-P40-VW8-QA (Approved Theme Set) added Deep Forest as a 4th
+# choice - "tinted" and "dark" stayed as the RETAINED ref suffixes for
+# Midnight Blue/Black (label/palette revisions, not renumbering - see
+# tokens.css's own comment); "deep-forest" is the one genuinely new one.
+_APPEARANCE_MODES = ("light", "dark", "tinted", "deep-forest")
 _APPEARANCE_DYNAMIC_REFS = {
     f"menu.appearance.{surface}.{mode}" for surface in _APPEARANCE_SURFACES for mode in _APPEARANCE_MODES
 } | {f"menu.appearance.all.{mode}" for mode in _APPEARANCE_MODES} | {

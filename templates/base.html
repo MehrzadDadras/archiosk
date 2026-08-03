@@ -70,6 +70,57 @@
                 </span>
                 {% endif %}
             </div>
+            {# CLAUDE-P40-VW7A-QA (Move Document Controls into the Top
+               Application Menu): the central region between the
+               breadcrumb (.workspace-topbar-identity, above) and
+               Display Layout/Appearance/Account (.workspace-topbar-
+               controls, below). Hidden by default and populated only
+               when a PDF Source is the active Display target -
+               static/js/pdf_viewer.js's own showControls()/
+               hideControls() toggle [hidden] and wire every button's
+               click handler; nothing here is decorative markup waiting
+               for JS to "maybe" activate it - see that file's own
+               comment for exactly which controls are genuinely real.
+               PDF-only: a drawing (<img>) or DOCX/TXT (plain <iframe>)
+               Source has no page/zoom/rotation concept to control, and
+               this stage does not build a renderer for those formats -
+               see the completion report for the honest reasoning. #}
+            <div class="workspace-topbar-document-controls" id="workspace-document-controls" data-ui-ref="menu.document-controls" role="toolbar" aria-label="Document controls" hidden>
+                <div class="doc-controls-group doc-controls-essential">
+                    <button type="button" class="doc-control-btn" id="doc-prev-page" data-ui-ref="menu.document-controls.prev-page" aria-label="Previous page" title="Previous page">&lsaquo;</button>
+                    <span class="doc-page-nav">
+                        <input type="text" inputmode="numeric" class="doc-page-input" id="doc-page-input" data-ui-ref="menu.document-controls.page-input" aria-label="Page number">
+                        <span class="doc-page-total" id="doc-page-total" aria-hidden="true"></span>
+                    </span>
+                    <button type="button" class="doc-control-btn" id="doc-next-page" data-ui-ref="menu.document-controls.next-page" aria-label="Next page" title="Next page">&rsaquo;</button>
+                    <span class="doc-controls-divider" aria-hidden="true"></span>
+                    <button type="button" class="doc-control-btn" id="doc-zoom-out" data-ui-ref="menu.document-controls.zoom-out" aria-label="Zoom out" title="Zoom out">&minus;</button>
+                    <span class="doc-zoom-level" id="doc-zoom-level" aria-live="polite">100%</span>
+                    <button type="button" class="doc-control-btn" id="doc-zoom-in" data-ui-ref="menu.document-controls.zoom-in" aria-label="Zoom in" title="Zoom in">+</button>
+                </div>
+                {# CLAUDE-P40-VW7A-QA, Section "Responsive behavior": secondary
+                   actions - moved into #doc-controls-overflow-panel by JS
+                   below a width breakpoint (a real DOM re-parent of the SAME
+                   elements, never a cloned duplicate - one physical control
+                   per action, so its identity/listeners/state never fork). #}
+                <div class="doc-controls-group doc-controls-secondary" id="doc-controls-secondary">
+                    <button type="button" class="doc-control-btn" id="doc-fit-width" data-ui-ref="menu.document-controls.fit-width" aria-label="Fit width" title="Fit width">Fit width</button>
+                    <button type="button" class="doc-control-btn" id="doc-fit-page" data-ui-ref="menu.document-controls.fit-page" aria-label="Fit page" title="Fit page">Fit page</button>
+                    <button type="button" class="doc-control-btn" id="doc-rotate" data-ui-ref="menu.document-controls.rotate" aria-label="Rotate 90 degrees" title="Rotate 90&deg;">&#8635;</button>
+                    <span class="doc-controls-divider" aria-hidden="true"></span>
+                    <input type="search" class="doc-search-input" id="doc-search-input" data-ui-ref="menu.document-controls.search-input" placeholder="Search in document" aria-label="Search in document">
+                    <button type="button" class="doc-control-btn" id="doc-search-prev" data-ui-ref="menu.document-controls.search-prev" aria-label="Previous match" title="Previous match" disabled>&and;</button>
+                    <button type="button" class="doc-control-btn" id="doc-search-next" data-ui-ref="menu.document-controls.search-next" aria-label="Next match" title="Next match" disabled>&or;</button>
+                    <span class="doc-search-count" id="doc-search-count" aria-live="polite"></span>
+                    <span class="doc-controls-divider" aria-hidden="true"></span>
+                    <a class="doc-control-btn" id="doc-download" data-ui-ref="menu.document-controls.download" aria-label="Download" title="Download" download>&#8595;</a>
+                    <button type="button" class="doc-control-btn" id="doc-print" data-ui-ref="menu.document-controls.print" aria-label="Print" title="Print">&#128438;</button>
+                </div>
+                <details class="doc-controls-overflow" id="doc-controls-overflow" data-ui-ref="menu.document-controls.overflow">
+                    <summary class="doc-control-btn doc-controls-overflow-summary" aria-label="More document controls" title="More document controls">&hellip;</summary>
+                    <div class="doc-controls-overflow-panel" id="doc-controls-overflow-panel" role="group" aria-label="More document controls"></div>
+                </details>
+            </div>
             <div class="workspace-topbar-controls">
                 {% if project_id is defined and workspace is defined %}
                 {# ---------------- Display-layout control (CLAUDE-P40-E3A, Section 6;

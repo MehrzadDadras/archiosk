@@ -1192,6 +1192,23 @@
         <img class="document-viewer-image"
              src="{{ url_for('workspace.source_file', project_id=project_id, source_id=selected_source.id) }}"
              alt="{{ selected_source.name }}">
+        {% elif selected_source.file_path and selected_source.file_path.lower().endswith('.pdf') %}
+        {# CLAUDE-P40-VW7A-QA (Move Document Controls into the Top
+           Application Menu): a real, app-owned canvas renderer
+           (static/js/pdf_viewer.js, vendored PDF.js - see that
+           directory's own README) replaces the plain <iframe src=raw-
+           file-url> this used to be. The OLD iframe's own embedded
+           chrome was never Archiosk's own toolbar - it was whichever
+           browser's native PDF viewer UI, entirely outside this app's
+           control (no data-ui-ref ever existed on it - confirmed by
+           reading this file's own prior source - so there is no old
+           "toolbar container" reference being retired here; only the
+           NEW controls below are genuinely new identifiers). This
+           <div> is empty until static/js/pdf_viewer.js's own auto-
+           mount fills it with a <canvas> - no fallback content is
+           needed here since that script runs on every page that
+           reaches this branch. #}
+        <div class="document-viewer-canvas-container" id="document-viewer-pdf-canvas" data-ui-ref="display.document.pdf-canvas" data-pdf-url="{{ url_for('workspace.source_file', project_id=project_id, source_id=selected_source.id) }}" data-pdf-filename="{{ selected_source.name }}"></div>
         {% else %}
         <iframe class="document-viewer-frame"
                 src="{{ url_for('workspace.source_file', project_id=project_id, source_id=selected_source.id) }}"
@@ -1203,10 +1220,16 @@
             before original uploads were preserved) - nothing to display here.
         </p>
         {% endif %}
+        {# CLAUDE-P40-VW7A-QA: no longer shown for a PDF Source - real
+           page navigation exists now (the top-menu document controls).
+           Still true, unchanged, for a drawing/DOCX/TXT Source - none
+           of those have a page concept this app can navigate. #}
+        {% if not (selected_source.file_path and selected_source.file_path.lower().endswith('.pdf')) %}
         <p class="pane-note">
             Jumping to a specific page, clause, or evidence location inside this
             document isn't available yet for this format - specified, not simulated.
         </p>
+        {% endif %}
         {% endif %}
         <a class="btn btn-ghost workspace-link" href="{{ url_for('workspace.show_workspace', project_id=project_id, view='overview') }}">&larr; Back to Overview</a>
     </section>
@@ -2403,5 +2426,6 @@
 {% endblock %}
 
 {% block extra_scripts %}
+<script src="{{ url_for('static', filename='js/pdf_viewer.js') }}?v={{ static_version }}"></script>
 <script src="{{ url_for('static', filename='js/case_workspace.js') }}?v={{ static_version }}"></script>
 {% endblock %}

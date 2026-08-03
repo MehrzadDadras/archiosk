@@ -81,12 +81,45 @@ otherwise.
 | `menu.display-layout` | `<details>` popup | "Display Layout" | Vertical/Horizontal steppers + Apply — sets `#display-divisions`' grid via `window.ArchioskDisplay`-adjacent client JS (`applyLayout` in `case_workspace.js`) | Only rendered when `project_id`/`workspace` are defined | active |
 | `menu.display-layout.vertical-decrement`, `menu.display-layout.vertical-increment`, `menu.display-layout.horizontal-decrement`, `menu.display-layout.horizontal-increment` | `<button>` (4 distinct, named controls) | −/+ steppers | Adjust the PENDING Vertical/Horizontal count (not yet applied) | Only rendered when `project_id`/`workspace` are defined | active |
 | `menu.display-layout.apply` | `<button>` | "Apply" | Commits the pending Vertical × Horizontal count to `#display-divisions` | Only rendered when `project_id`/`workspace` are defined | active |
-| `menu.appearance` | `<details>` popup | "Appearance" | Per-surface (All/Menu/Lists/Display/Toolbox/Chat) Light/Dark/Tinted radio matrix, `localStorage`-persisted | Only rendered when `project_id`/`workspace` are defined | active |
-| `menu.appearance.all` | `<tr>` | "All" row | **CLAUDE-P40-VW8-QA (new):** applies one mode to all 5 surfaces at once; reflects "checked" only when all 5 already share one mode, otherwise unchecked with `#appearance-mixed-note` shown (Section 5 — never a 4th theme, a control over the existing 3) | Only rendered when `project_id`/`workspace` are defined | active |
-| `menu.appearance.all.light`, `menu.appearance.all.dark`, `menu.appearance.all.tinted` | `<input type="radio">` (3 distinct values, constructed from a fixed `{% for %}` loop — see `UI_REFERENCE_MAP.md`'s own test-side `_APPEARANCE_DYNAMIC_REFS` enumeration) | "All surfaces appearance: `Light`/`Dark`/`Tinted`" | Sets every surface (Menu/Lists/Display/Toolbox/Chat) to that mode in one action | Only rendered when `project_id`/`workspace` are defined | active |
-| `menu.appearance.menu`, `menu.appearance.lists`, `menu.appearance.display`, `menu.appearance.toolbox`, `menu.appearance.chat` | `<tr>` (5 distinct values, one per real surface) | per-surface row | Groups that surface's own 3 radios | Only rendered when `project_id`/`workspace` are defined | active |
-| `menu.appearance.menu.light`, `menu.appearance.menu.dark`, `menu.appearance.menu.tinted`, `menu.appearance.lists.light`, `menu.appearance.lists.dark`, `menu.appearance.lists.tinted`, `menu.appearance.display.light`, `menu.appearance.display.dark`, `menu.appearance.display.tinted`, `menu.appearance.toolbox.light`, `menu.appearance.toolbox.dark`, `menu.appearance.toolbox.tinted`, `menu.appearance.chat.light`, `menu.appearance.chat.dark`, `menu.appearance.chat.tinted` | `<input type="radio">` (15 distinct values: 5 surfaces × 3 modes) | "`<Surface>` appearance: `<Mode>`" | Sets that ONE surface's mode; `beehive:appearance:<surface>` in `localStorage` | Only rendered when `project_id`/`workspace` are defined | active |
+| `menu.appearance` | `<details>` popup | "Appearance" | Per-surface (All/Menu/Lists/Display/Toolbox/Chat) **Light/Black/Midnight Blue/Deep Forest** radio matrix (CLAUDE-P40-VW8-QA Approved Theme Set — was Light/Dark/Tinted; this row was stale until this stage, corrected while auditing the same Menu region for the document-controls addition below), `localStorage`-persisted | Only rendered when `project_id`/`workspace` are defined | active |
+| `menu.appearance.all` | `<tr>` | "All" row | Applies one mode to all 5 surfaces at once; reflects "checked" only when all 5 already share one mode, otherwise unchecked with `#appearance-mixed-note` shown (Section 5 — never a 5th theme, a control over the existing 4) | Only rendered when `project_id`/`workspace` are defined | active |
+| `menu.appearance.all.light`, `menu.appearance.all.dark`, `menu.appearance.all.tinted`, `menu.appearance.all.deep-forest` | `<input type="radio">` (4 distinct values, constructed from a fixed `{% for %}` loop) | "All surfaces appearance: `Light`/`Black`/`Midnight Blue`/`Deep Forest`" | Sets every surface (Menu/Lists/Display/Toolbox/Chat) to that mode in one action. `dark`/`tinted` ref suffixes retained unchanged through two label revisions (Dark→Graphite→Black, Tinted→Midnight Blue — see `tokens.css`'s own comment); `deep-forest` is the one genuinely new suffix | Only rendered when `project_id`/`workspace` are defined | active |
+| `menu.appearance.menu`, `menu.appearance.lists`, `menu.appearance.display`, `menu.appearance.toolbox`, `menu.appearance.chat` | `<tr>` (5 distinct values, one per real surface) | per-surface row | Groups that surface's own 4 radios | Only rendered when `project_id`/`workspace` are defined | active |
+| `menu.appearance.menu.light`, `menu.appearance.menu.dark`, `menu.appearance.menu.tinted`, `menu.appearance.menu.deep-forest`, `menu.appearance.lists.light`, `menu.appearance.lists.dark`, `menu.appearance.lists.tinted`, `menu.appearance.lists.deep-forest`, `menu.appearance.display.light`, `menu.appearance.display.dark`, `menu.appearance.display.tinted`, `menu.appearance.display.deep-forest`, `menu.appearance.toolbox.light`, `menu.appearance.toolbox.dark`, `menu.appearance.toolbox.tinted`, `menu.appearance.toolbox.deep-forest`, `menu.appearance.chat.light`, `menu.appearance.chat.dark`, `menu.appearance.chat.tinted`, `menu.appearance.chat.deep-forest` | `<input type="radio">` (20 distinct values: 5 surfaces × 4 modes) | "`<Surface>` appearance: `<Mode>`" | Sets that ONE surface's mode; `beehive:appearance:<surface>` in `localStorage`, stored value from the new mode vocabulary (`black`/`midnight-blue`/`deep-forest`/`light`) | Only rendered when `project_id`/`workspace` are defined | active |
 | `menu.account` | `<details>` popup | "…" (username) | Contains UI Reference Mode toggle + Sign out | Every authenticated page | active |
+
+**Document controls (CLAUDE-P40-VW7A-QA, Move Document Controls into the Top Application Menu — new surface, no prior identifiers to retire):**
+the central region between `menu.context` and `menu.display-layout`/
+`menu.appearance`/`menu.account`. The document viewer's own OLD
+`<iframe>` embed never had any Archiosk-built toolbar or `data-ui-ref`
+of its own — the "toolbar" reported as a defect was the browser's own
+native PDF chrome rendering inside that iframe, entirely outside this
+app's control (confirmed by direct inspection of the prior template
+source before this stage's own change). Every reference below is
+therefore genuinely NEW, not reparented from an old one — stated
+honestly rather than fabricating a "moved from" history that doesn't
+exist. Hidden (`[hidden]`) whenever no PDF Source is the active
+Display target; `static/js/pdf_viewer.js` (vendored PDF.js — see
+`static/js/vendor/pdfjs/README.md`) owns every control's real
+behavior. PDF only — a drawing/DOCX/TXT Source has no page/zoom/
+rotation concept this stage builds a renderer for (the pre-existing
+`display.document`/`toolbox.document` pane-note about page navigation
+still renders, unchanged, for those formats).
+
+| Reference | Element | Label/summary | Current behavior | Auth notes | Status |
+|---|---|---|---|---|---|
+| `menu.document-controls` | `<div role="toolbar">` | (no visible label — `aria-label="Document controls"`) | The whole contextual region; `[hidden]` unless a PDF Source is active | Same as workspace access | active |
+| `menu.document-controls.prev-page`, `menu.document-controls.next-page` | `<button>` | ‹ / › | Real page navigation — re-renders the PDF.js canvas at the new page; disabled at the first/last page respectively | Same as workspace access | active |
+| `menu.document-controls.page-input` | `<input>` | current page number | Typing a number + blur/Enter jumps to that page (clamped to 1..page count) | Same as workspace access | active |
+| `menu.document-controls.zoom-out`, `menu.document-controls.zoom-in` | `<button>` | − / + | Adjusts the render scale by 10%, clamped 25%–400% | Same as workspace access | active |
+| `menu.document-controls.fit-width`, `menu.document-controls.fit-page` | `<button>` | "Fit width" / "Fit page" | Computes the scale that fits the current page's width, or both dimensions, to the canvas container | Same as workspace access | active |
+| `menu.document-controls.rotate` | `<button>` | ↻ | Rotates the rendered page 90° per click (cumulative, wraps at 360°) | Same as workspace access | active |
+| `menu.document-controls.search-input` | `<input type="search">` | "Search in document" | Real full-document text search via PDF.js's own `getTextContent()` (extracted and cached per page) across every page — not a placeholder | Same as workspace access | active |
+| `menu.document-controls.search-prev`, `menu.document-controls.search-next` | `<button>` | ∧ / ∨ | Cycles to the previous/next match, jumping pages as needed; disabled with no matches | Same as workspace access | active |
+| `menu.document-controls.download` | `<a download>` | ↓ | Direct link to the same `workspace.source_file` URL the canvas itself renders from | Same as workspace access | active |
+| `menu.document-controls.print` | `<button>` | 🖶 | Opens the original PDF in a new tab (the browser's own native print/save chrome there is fully functional) — a real, working action, not a stub; re-implementing print pagination for a canvas-rendered page was judged unnecessary complexity given this already works reliably | Same as workspace access | active |
+| `menu.document-controls.overflow` | `<details>` | "…" | Only shown (CSS `.doc-controls-overflow-active`, JS-toggled) below a 900px viewport; `static/js/pdf_viewer.js` re-parents the SAME secondary-control DOM nodes into it, never a cloned duplicate | Same as workspace access | active |
+| `display.document.pdf-canvas` | `<div>` (Display) | (no visible label) | Empty container `static/js/pdf_viewer.js` fills with a `<canvas>` on mount — replaces the old plain `<iframe src=raw-file-url>` for a PDF Source specifically (drawings/DOCX/TXT keep their existing `<img>`/`<iframe>`, unchanged) | Same as workspace access | active |
 
 ## Shell (structural chrome — `templates/base.html`)
 
