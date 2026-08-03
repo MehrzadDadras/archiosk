@@ -56,7 +56,11 @@ class ProjectsDirectoryRedesignTests(unittest.TestCase):
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
 
     def _card_list(self, body):
-        match = re.search(r'<ul class="project-card-list">.*?</ul>', body, re.S)
+        # CLAUDE-P40-VW8-QA (UI-tagging): the opening tag now also
+        # carries data-ui-ref="projects-directory.list" - tolerate any
+        # additional attributes rather than requiring the tag to close
+        # immediately after class="project-card-list".
+        match = re.search(r'<ul class="project-card-list"[^>]*>.*?</ul>', body, re.S)
         return match.group(0) if match else ""
 
     def test_projects_render_as_cards_not_a_table(self):

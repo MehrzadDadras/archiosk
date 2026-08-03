@@ -843,15 +843,49 @@ document.addEventListener('DOMContentLoaded', () => {
     // full page reload (Tag/Task creation, Tag removal); Task complete/
     // reopen stay classic form-POST + redirect, this app's normal
     // convention, and never touch this code path at all.
+    //
+    // CLAUDE-P40-VW8-QA (native-popup-overlap correction): a browser or
+    // OS text-selection popup (most identifiably Microsoft Edge's own
+    // "mini menu on text selection" - edge://settings/appearance's
+    // "Show mini menu when I select text" toggle, or the
+    // QuickSearchShowMiniMenu enterprise policy in a managed
+    // deployment) is NOT something this page creates, can detect
+    // reliably, or can resize/reposition/merge/restyle - the browser
+    // owns its size and placement, and no web-page API exposes either.
+    // This code deliberately does not attempt browser sniffing or a
+    // "disable the native popup" preference (both explicitly rejected
+    // by the product owner - the first is unreliable, the second would
+    // be misleading, since a page can't actually make that promise).
+    // The only thing on this side of the boundary Archiosk can and does
+    // control: (1) never suppressing the native context menu for text
+    // selection - no contextmenu listener exists anywhere in this
+    // toolbar's own setup, unlike the unrelated Display-division one
+    // elsewhere in this file; (2) positioning ITS OWN menu on the
+    // opposite side of the selection from where that popup
+    // conventionally appears (positionToolbar below now prefers BELOW
+    // the selection, not above); (3) making its own Copy action fully
+    // self-sufficient (doCopy below copies the complete captured
+    // selection text, not a partial value) so a reviewer never NEEDS
+    // the native popup for ordinary copying. Any remaining overlap in a
+    // specific browser/profile is a native-UI placement decision that
+    // only that browser's own setting can change - not a defect in this
+    // page.
     (function setUpConversationTagsAndTasks() {
         const toolbar = document.getElementById('conv-selection-toolbar');
         const statusEl = document.getElementById('conv-selection-status');
         const tagDialog = document.getElementById('conv-tag-dialog');
         const taskDialog = document.getElementById('conv-task-dialog');
+        const removeTagDialog = document.getElementById('conv-remove-tag-dialog');
+        const removeTagList = document.getElementById('conv-remove-tag-list');
+        const undoBtn = document.getElementById('conv-selection-undo');
         if (!toolbar || !statusEl || !tagDialog || !taskDialog) return;
 
         const tagForm = document.getElementById('conv-tag-form');
         const taskForm = document.getElementById('conv-task-form');
+        const removeTagBtn = toolbar.querySelector('[data-conv-action="remove-tag"]');
+        const highlightBtn = toolbar.querySelector('[data-conv-action="highlight"]');
+        const importantBtn = toolbar.querySelector('[data-conv-action="important"]');
+        const questionBtn = toolbar.querySelector('[data-conv-action="question"]');
 
         // Mirrors services/case_workspace.py's own BUILT_IN_TAG_* string
         // constants exactly - these three are fixed code-level identities
@@ -867,6 +901,18 @@ document.addEventListener('DOMContentLoaded', () => {
         let dialogTriggerEl = null;
         let statusHideTimer = null;
         let selectionDebounce = null;
+        // CLAUDE-P40-VW8-QA (reversibility correction): every Tag
+        // occurrence currently overlapping the selection that produced
+        // currentAnchor (built-in or custom) - the read side of
+        // routes/workspace.py's own tag_occurrences_for_selection_route,
+        // refreshed on every meaningful selection change. appliedFetchToken
+        // guards against a slow/late response from an OLD selection
+        // overwriting state after the reviewer has already moved on to a
+        // new one (a plain "last response wins" race without it).
+        let currentAppliedTags = [];
+        let appliedFetchToken = 0;
+        let undoHideTimer = null;
+        let pendingUndo = null; // { anchorFields, label } captured at removal time
 
         function csrfToken() {
             const meta = document.querySelector('meta[name="csrf-token"]');
@@ -903,10 +949,208 @@ document.addEventListener('DOMContentLoaded', () => {
             hideStatus();
             currentAnchor = null;
             currentQuoteText = '';
+            currentAppliedTags = [];
+            // Undo is deliberately NOT hidden here - a reviewer who
+            // clicks away immediately after a removal (a very ordinary
+            // thing to do) should still get the full Undo window; it
+            // times out on its own (see showUndoableStatus).
         }
 
         function dialogOpen() {
-            return !tagDialog.hidden || !taskDialog.hidden;
+            return !tagDialog.hidden || !taskDialog.hidden || (removeTagDialog && !removeTagDialog.hidden);
+        }
+
+        // -------- Reversibility (CLAUDE-P40-VW8-QA correction) ------------
+        // "Anything the user can tag, classify, or highlight must have a
+        // clear way to remove that application later." Highlight/
+        // Important/Question are themselves just built-in Tags (see
+        // BUILT_IN_TAG_* above and services/case_workspace.py's own
+        // BUILT_IN_TAGS) - one removal mechanism (the existing /tags/
+        // <occurrence_id>/remove route, already used by the Lists Tags
+        // branch's own "Remove" button) covers all of them. Nothing here
+        // is a second Tag/Highlight/Important/Question system.
+
+        function undoUrl() { return tagForm.action; } // POST .../workspace/tags - same endpoint Add Tag already uses
+
+        function appliedTagsUrl(anchor) {
+            const params = new URLSearchParams(anchorFormFields(anchor));
+            return `${window.location.pathname.replace(/\/$/, '')}/tags/for-selection?${params.toString()}`;
+        }
+
+        // Refetches which Tags currently overlap `anchor` and updates the
+        // toolbar's own button states (Remove Tag count, Highlight/
+        // Important/Question -> their "remove" state) - called after
+        // every meaningful selection change AND after every successful
+        // add/remove so the toolbar never shows a stale applied state.
+        function refreshAppliedTagState(anchor) {
+            if (!anchor || anchor.ambiguous) { applyAppliedTagState([]); return; }
+            const token = ++appliedFetchToken;
+            fetch(appliedTagsUrl(anchor), { credentials: 'same-origin' })
+                .then((resp) => resp.json())
+                .then((data) => {
+                    if (token !== appliedFetchToken) return; // a newer selection/refresh has already superseded this request
+                    applyAppliedTagState((data && data.ok && data.applied) || []);
+                })
+                .catch(() => { /* leave whatever state was last known - a failed background refresh must not make the toolbar flicker or lie */ });
+        }
+
+        function applyAppliedTagState(applied) {
+            currentAppliedTags = applied;
+            const byTagId = {};
+            applied.forEach((item) => { byTagId[item.tag_id] = item; });
+
+            function setBuiltinButtonState(btn, tagId, addLabel, addRef, removeLabel, removeRef, removeAction) {
+                if (!btn) return;
+                const item = byTagId[tagId];
+                if (item) {
+                    btn.dataset.convAction = removeAction;
+                    btn.setAttribute('data-ui-ref', removeRef);
+                    btn.textContent = removeLabel;
+                    btn.dataset.occurrenceId = item.occurrence_id;
+                } else {
+                    btn.dataset.convAction = addLabel.action;
+                    btn.setAttribute('data-ui-ref', addRef);
+                    btn.textContent = addLabel.text;
+                    delete btn.dataset.occurrenceId;
+                }
+            }
+            setBuiltinButtonState(highlightBtn, BUILT_IN_TAG_HIGHLIGHT,
+                { action: 'highlight', text: 'Highlight' }, 'chat.selection-toolbar.highlight',
+                'Remove Highlight', 'chat.selection-toolbar.remove-highlight', 'remove-highlight');
+            setBuiltinButtonState(importantBtn, BUILT_IN_TAG_IMPORTANT,
+                { action: 'important', text: 'Important' }, 'chat.selection-toolbar.important',
+                'Unmark Important', 'chat.selection-toolbar.unmark-important', 'unmark-important');
+            setBuiltinButtonState(questionBtn, BUILT_IN_TAG_QUESTION,
+                { action: 'question', text: 'Question' }, 'chat.selection-toolbar.question',
+                'Unmark Question', 'chat.selection-toolbar.unmark-question', 'unmark-question');
+
+            const customTags = applied.filter((item) => item.tag_id !== BUILT_IN_TAG_HIGHLIGHT
+                && item.tag_id !== BUILT_IN_TAG_IMPORTANT && item.tag_id !== BUILT_IN_TAG_QUESTION);
+            if (removeTagBtn) {
+                if (customTags.length > 0) {
+                    removeTagBtn.hidden = false;
+                    // Text alone (not color) identifies the applied count -
+                    // "Do not rely on color alone" for state identification.
+                    removeTagBtn.textContent = customTags.length === 1 ? 'Remove Tag' : `Remove Tag (${customTags.length})`;
+                } else {
+                    removeTagBtn.hidden = true;
+                }
+            }
+        }
+
+        // Finds the rendered <mark> for an occurrence, if this exact
+        // occurrence happens to be the one app.py's own hotlinks filter
+        // chose to draw (Section 11's "first-starting wins" overlap
+        // resolution means it might not be - a no-op in that case, never
+        // an error, since the underlying text is untouched either way).
+        function unwrapTagMark(occurrenceId) {
+            const mark = document.querySelector(`mark.tag-highlight-inline[data-tag-occurrence-id="${cssEscapeLocal(occurrenceId)}"]`);
+            if (mark && mark.parentNode) mark.replaceWith(document.createTextNode(mark.textContent));
+        }
+        function cssEscapeLocal(value) {
+            return (window.CSS && CSS.escape) ? CSS.escape(value) : String(value).replace(/["\\]/g, '\\$&');
+        }
+
+        function showUndoableStatus(message, undo) {
+            showStatus(message, false);
+            window.clearTimeout(undoHideTimer);
+            if (undo && undoBtn) {
+                pendingUndo = undo;
+                undoBtn.hidden = false;
+                undoHideTimer = window.setTimeout(() => { undoBtn.hidden = true; pendingUndo = null; }, 8000);
+            } else if (undoBtn) {
+                undoBtn.hidden = true;
+                pendingUndo = null;
+            }
+            window.clearTimeout(statusHideTimer);
+            statusHideTimer = window.setTimeout(hideStatus, 8000);
+        }
+
+        if (undoBtn) {
+            undoBtn.addEventListener('click', () => {
+                if (!pendingUndo) return;
+                const undo = pendingUndo;
+                pendingUndo = null;
+                undoBtn.hidden = true;
+                undoBtn.disabled = true;
+                postForm(undoUrl(), undo.fields).then(({ ok, data }) => {
+                    undoBtn.disabled = false;
+                    if (!ok || !data.ok) {
+                        showStatus((data && data.error) || 'Could not undo.', true);
+                        return;
+                    }
+                    patchTagsListOnAdd(data.occurrence, data.tag, data.counts);
+                    showStatus(`Restored ${undo.label}.`, true);
+                    if (currentAnchor) refreshAppliedTagState(currentAnchor);
+                });
+            });
+        }
+
+        // The one place a Tag/Highlight/Important/Question occurrence is
+        // ever removed from - the Lists "Remove" form submit handler
+        // (further below) and every selection-toolbar removal action
+        // both route through this, exactly the same "single place a
+        // state is ever applied" discipline setSurfaceMode established
+        // for Appearance. Guards against duplicate requests via the
+        // caller-supplied button's own [disabled] state.
+        let removalInFlight = false;
+        function removeOccurrenceWithUndo(btn, occurrenceId, tagId, tagName, anchorForUndo) {
+            if (removalInFlight) return; // "Prevent duplicate removal requests"
+            removalInFlight = true;
+            if (btn) btn.disabled = true;
+            postForm(removeOccurrenceUrl(occurrenceId), {}).then(({ ok, data }) => {
+                removalInFlight = false;
+                if (btn) btn.disabled = false;
+                if (!ok || !data.ok) {
+                    showStatus((data && data.error) || 'Could not remove.', true);
+                    return;
+                }
+                unwrapTagMark(occurrenceId);
+                patchTagsListOnRemove(occurrenceId, tagId, data.counts);
+                const undoFields = anchorForUndo
+                    ? Object.assign({ tag_id: tagId }, anchorFormFields(anchorForUndo))
+                    : null;
+                showUndoableStatus(`Removed ${tagName}.`, undoFields ? { fields: undoFields, label: tagName } : null);
+                if (currentAnchor) refreshAppliedTagState(currentAnchor);
+                const row = removeTagList && removeTagList.querySelector(`[data-occurrence-id="${cssEscapeLocal(occurrenceId)}"]`);
+                if (row) row.remove();
+                if (removeTagList && !removeTagList.children.length && removeTagDialog && !removeTagDialog.hidden) {
+                    closeDialog(removeTagDialog);
+                }
+            }).catch(() => {
+                removalInFlight = false;
+                if (btn) btn.disabled = false;
+                showStatus('Network error \u2014 please try again.', true);
+            });
+        }
+
+        function populateRemoveTagDialog(anchor) {
+            if (!removeTagList) return;
+            removeTagList.textContent = '';
+            const customTags = currentAppliedTags.filter((item) => item.tag_id !== BUILT_IN_TAG_HIGHLIGHT
+                && item.tag_id !== BUILT_IN_TAG_IMPORTANT && item.tag_id !== BUILT_IN_TAG_QUESTION);
+            customTags.forEach((item) => {
+                const li = document.createElement('li');
+                li.className = 'conv-remove-tag-row';
+                li.setAttribute('data-occurrence-id', item.occurrence_id);
+                const swatch = document.createElement('span');
+                swatch.className = `launcher-tag-swatch conv-tag-color-${item.tag_color}`;
+                swatch.setAttribute('aria-hidden', 'true');
+                li.appendChild(swatch);
+                const name = document.createElement('span');
+                name.className = 'conv-remove-tag-name';
+                name.textContent = item.tag_name; // text, not color alone, identifies which Tag this row removes
+                li.appendChild(name);
+                const removeBtn = document.createElement('button');
+                removeBtn.type = 'button';
+                removeBtn.className = 'link-button';
+                removeBtn.textContent = 'Remove';
+                removeBtn.addEventListener('click', () => {
+                    removeOccurrenceWithUndo(removeBtn, item.occurrence_id, item.tag_id, item.tag_name, anchor);
+                });
+                li.appendChild(removeBtn);
+                removeTagList.appendChild(li);
+            });
         }
 
         // -------- Anchor computation (Section 4: text-quote anchoring, --
@@ -1030,9 +1274,20 @@ document.addEventListener('DOMContentLoaded', () => {
         function positionToolbar(rect) {
             toolbar.hidden = false;
             const margin = 8;
-            let top = rect.top - toolbar.offsetHeight - margin;
-            if (top < margin) top = rect.bottom + margin;
+            // Prefer BELOW the selection first, not above. The browser/
+            // OS-owned selection popup (e.g. Edge's "mini menu on text
+            // selection") conventionally appears above/beside the
+            // selection start - defaulting Archiosk's own menu to the
+            // opposite side keeps the two from contesting the same space
+            // instead of visually overlapping (CLAUDE-P40-VW8-QA, native-
+            // popup-overlap correction). Falls back to above, then to a
+            // viewport-clamped position, exactly as before - only the
+            // preferred side changed.
+            let top = rect.bottom + margin;
             if (top + toolbar.offsetHeight > window.innerHeight - margin) {
+                top = rect.top - toolbar.offsetHeight - margin;
+            }
+            if (top < margin) {
                 top = Math.max(margin, window.innerHeight - toolbar.offsetHeight - margin);
             }
             let left = rect.left + (rect.width / 2) - (toolbar.offsetWidth / 2);
@@ -1040,6 +1295,27 @@ document.addEventListener('DOMContentLoaded', () => {
             toolbar.style.top = `${top}px`;
             toolbar.style.left = `${left}px`;
         }
+
+        // A scroll or resize of any containing panel (the conversation
+        // thread, <main>, or the window itself) leaves a fixed-position
+        // toolbar stale at its old coordinates unless recomputed here -
+        // it never had its own listener before this correction. Reuses
+        // the LIVE selection's own rect rather than caching one, and
+        // hides cleanly if the selection is gone by the time this runs.
+        function repositionOrHideOnViewportChange() {
+            if (toolbar.hidden) return;
+            const sel = window.getSelection();
+            if (!sel || sel.rangeCount === 0 || sel.isCollapsed) { hideToolbar(); return; }
+            const text = sel.toString();
+            if (!text || !text.trim()) { hideToolbar(); return; }
+            positionToolbar(sel.getRangeAt(0).getBoundingClientRect());
+        }
+        // capture:true - 'scroll' does not bubble, but IS dispatched
+        // during the capture phase, so this is the only way a window-
+        // level listener ever sees a scroll on an internal panel like
+        // .conversation-thread or <main>.
+        window.addEventListener('scroll', repositionOrHideOnViewportChange, true);
+        window.addEventListener('resize', repositionOrHideOnViewportChange);
 
         function handleSelectionMaybeChanged() {
             if (dialogOpen()) return;
@@ -1062,6 +1338,7 @@ document.addEventListener('DOMContentLoaded', () => {
             currentQuoteText = text;
             positionToolbar(range.getBoundingClientRect());
             applyToolbarAvailability(anchor);
+            refreshAppliedTagState(anchor);
         }
 
         document.addEventListener('selectionchange', () => {
@@ -1159,6 +1436,18 @@ document.addEventListener('DOMContentLoaded', () => {
             injectAnchorHiddenFields(taskForm, anchor);
             showDialog(taskDialog);
         }
+        // CLAUDE-P40-VW8-QA (reversibility correction): the toolbar stays
+        // visible behind this dialog (unlike Add Tag/Make Task above,
+        // which hide it) - removing a second, then a third Tag from the
+        // same selection without the toolbar's own state having to be
+        // rebuilt is a real, ordinary use of "remove one or more
+        // individually," and closeDialog below already restores focus to
+        // whichever button opened it.
+        function openRemoveTagDialog(anchor, triggerEl) {
+            dialogTriggerEl = triggerEl;
+            populateRemoveTagDialog(anchor);
+            showDialog(removeTagDialog);
+        }
 
         document.querySelectorAll('[data-conv-dialog-cancel]').forEach((btn) => {
             btn.addEventListener('click', () => closeDialog(btn.closest('.conv-dialog')));
@@ -1167,12 +1456,17 @@ document.addEventListener('DOMContentLoaded', () => {
             if (e.key !== 'Escape') return;
             if (!tagDialog.hidden) { closeDialog(tagDialog); return; }
             if (!taskDialog.hidden) { closeDialog(taskDialog); return; }
+            if (removeTagDialog && !removeTagDialog.hidden) { closeDialog(removeTagDialog); return; }
             if (!toolbar.hidden) hideToolbar();
         });
         document.addEventListener('mousedown', (e) => {
             if (!tagDialog.hidden && !tagDialog.contains(e.target)) { closeDialog(tagDialog); return; }
             if (!taskDialog.hidden && !taskDialog.contains(e.target)) { closeDialog(taskDialog); return; }
-            if (!toolbar.hidden && !toolbar.contains(e.target)) {
+            if (removeTagDialog && !removeTagDialog.hidden && !removeTagDialog.contains(e.target) && !toolbar.contains(e.target)) {
+                closeDialog(removeTagDialog);
+                return;
+            }
+            if (!toolbar.hidden && !toolbar.contains(e.target) && (!removeTagDialog || removeTagDialog.hidden)) {
                 const sel = window.getSelection();
                 if (!sel || sel.isCollapsed || !sel.toString().trim()) hideToolbar();
             }
@@ -1234,7 +1528,17 @@ document.addEventListener('DOMContentLoaded', () => {
             if (action === 'copy') { doCopy(quote); return; }
             if (!anchor || anchor.ambiguous) return; // defensive - button is already disabled in this state
             if (action === 'tag') { openTagDialog(anchor, quote, btn); return; }
+            if (action === 'remove-tag') { openRemoveTagDialog(anchor, btn); return; }
             if (action === 'task') { openTaskDialog(anchor, quote, btn); return; }
+            const removeBuiltIn = action === 'remove-highlight' ? { id: BUILT_IN_TAG_HIGHLIGHT, name: 'Highlight' }
+                : action === 'unmark-important' ? { id: BUILT_IN_TAG_IMPORTANT, name: 'Important' }
+                : action === 'unmark-question' ? { id: BUILT_IN_TAG_QUESTION, name: 'Question' } : null;
+            if (removeBuiltIn) {
+                const occurrenceId = btn.dataset.occurrenceId;
+                if (!occurrenceId) return; // defensive - button only shows this action once an occurrence id is known
+                removeOccurrenceWithUndo(btn, occurrenceId, removeBuiltIn.id, removeBuiltIn.name, anchor);
+                return;
+            }
             const builtIn = action === 'important' ? { id: BUILT_IN_TAG_IMPORTANT, name: 'Important' }
                 : action === 'question' ? { id: BUILT_IN_TAG_QUESTION, name: 'Question' }
                 : action === 'highlight' ? { id: BUILT_IN_TAG_HIGHLIGHT, name: 'Highlight' } : null;
@@ -1376,6 +1680,33 @@ document.addEventListener('DOMContentLoaded', () => {
             openList.appendChild(buildTaskElement(task, true));
         }
 
+        // CLAUDE-P40-VW8-QA (reversibility correction): the ONE place
+        // Lists' own Tags branch gets patched after a removal - both the
+        // Lists "Remove" form below AND the selection-toolbar's own
+        // Remove Tag/Remove Highlight/Unmark Important/Unmark Question
+        // actions (removeOccurrenceWithUndo, above) route through this,
+        // rather than two divergent DOM-patching code paths.
+        function patchTagsListOnRemove(occurrenceId, tagId, counts) {
+            const countEl = document.getElementById('lists-tags-count');
+            if (countEl) countEl.textContent = String(counts.total);
+            const row = document.querySelector(`[data-tag-occurrence-id="${cssEscape(occurrenceId)}"]`);
+            const group = (row && row.closest('[data-tag-group]')) || document.querySelector(`[data-tag-group="${cssEscape(tagId)}"]`);
+            if (row) row.remove();
+            if (group) {
+                const remaining = counts.by_tag && counts.by_tag[tagId] != null ? counts.by_tag[tagId] : 0;
+                if (remaining <= 0) {
+                    group.remove();
+                    const groupsRoot = document.getElementById('lists-tags-groups');
+                    if (groupsRoot && !groupsRoot.querySelector('[data-tag-group]')) {
+                        groupsRoot.appendChild(buildEmptyRow('No Tags yet.'));
+                    }
+                } else {
+                    const groupCountEl = group.querySelector('[data-tag-group-count]');
+                    if (groupCountEl) groupCountEl.textContent = String(remaining);
+                }
+            }
+        }
+
         // Removal is wired via delegation so it uniformly covers both
         // server-rendered rows (present on page load) and rows this
         // script itself just inserted, without a second binding pass.
@@ -1383,30 +1714,15 @@ document.addEventListener('DOMContentLoaded', () => {
             const form = e.target.closest('[data-tag-remove-form]');
             if (!form) return;
             e.preventDefault();
-            const row = form.closest('[data-tag-occurrence-id]');
+            const occurrenceId = form.getAttribute('data-occurrence-id');
             const group = form.closest('[data-tag-group]');
+            const tagId = group ? group.getAttribute('data-tag-group') : null;
             postForm(form.action, {}).then(({ ok, data }) => {
                 if (!ok || !data.ok) {
                     showStatus((data && data.error) || 'Could not remove tag.', true);
                     return;
                 }
-                if (row) row.remove();
-                const countEl = document.getElementById('lists-tags-count');
-                if (countEl) countEl.textContent = String(data.counts.total);
-                if (group) {
-                    const tagId = group.getAttribute('data-tag-group');
-                    const remaining = data.counts.by_tag && data.counts.by_tag[tagId] != null ? data.counts.by_tag[tagId] : 0;
-                    if (remaining <= 0) {
-                        group.remove();
-                        const groupsRoot = document.getElementById('lists-tags-groups');
-                        if (groupsRoot && !groupsRoot.querySelector('[data-tag-group]')) {
-                            groupsRoot.appendChild(buildEmptyRow('No Tags yet.'));
-                        }
-                    } else {
-                        const groupCountEl = group.querySelector('[data-tag-group-count]');
-                        if (groupCountEl) groupCountEl.textContent = String(remaining);
-                    }
-                }
+                patchTagsListOnRemove(occurrenceId, tagId, data.counts);
             });
         });
 

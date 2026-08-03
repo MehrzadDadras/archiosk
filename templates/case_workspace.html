@@ -2228,11 +2228,28 @@
         'Ask a question, or describe what you want to work on…',
         include_anchor_fields=True,
     ) %}
-        <p class="pane-note" id="project-conversation-guidance" data-anchor-scope="guidance" data-guidance-key="{{ conversation_guidance_key }}">
-            Talk to the Project itself &mdash; general notes, or anything opened from a
-            &ldquo;Discuss this&hellip;&rdquo; link elsewhere on this page (each message below
-            shows what it was about, if anything).
-        </p>
+        {# CLAUDE-P40-VW8-QA: the explanatory sentence that used to live
+           here ("Talk to the Project itself...") is deleted outright,
+           per explicit instruction not to replace it with another
+           instructional paragraph. The element itself is KEPT, empty,
+           because id="project-conversation-guidance" is a real,
+           already-wired anchor target - services/case_workspace.py's
+           own resolve_conversation_anchor and this page's own
+           navigate-to-source flash (static/js/case_workspace.js) both
+           resolve a "guidance"-scope Tag/Task occurrence against this
+           exact element id, and any ALREADY-persisted occurrence
+           created before this correction still needs somewhere to
+           scroll/flash to. Deleting the element outright would have
+           orphaned that existing data (still resolvable per the
+           service's own guidance_key check, but with no DOM target to
+           navigate to) - keeping an empty, zero-margin element avoids
+           that while satisfying "give the message history the released
+           space" (no .pane-note margin left behind - see main.css's
+           own comment on this element). New guidance-scope tagging
+           requires selectable text, so this specific text is no longer
+           selectable/taggable going forward - a disclosed, deliberate
+           side effect of deleting its content, not an oversight. #}
+        <p class="conversation-guidance-anchor" id="project-conversation-guidance" data-anchor-scope="guidance" data-guidance-key="{{ conversation_guidance_key }}"></p>
         <div class="conversation-thread" data-conversation-scope="project" data-anchor-scope="project" data-ui-ref="chat.thread">
             {% for message in project_conversation_view %}
             <div class="conversation-message {{ message.role }}" id="message-{{ message.id }}" data-message-id="{{ message.id }}">
@@ -2283,13 +2300,61 @@
        field's value rather than inventing a second CSRF mechanism. #}
     <div class="conv-selection-toolbar" id="conv-selection-toolbar" data-ui-ref="chat.selection-toolbar" role="toolbar" aria-label="Selected text actions" hidden>
         <button type="button" class="conv-selection-btn" data-conv-action="tag" data-ui-ref="chat.selection-toolbar.tag">Add Tag</button>
+        {# CLAUDE-P40-VW8-QA (reversibility correction): hidden by default,
+           shown only when 1+ non-built-in Tag occurrences overlap the
+           current selection (static/js/case_workspace.js's own
+           applyAppliedTagState) - a DISTINCT button from Add Tag above
+           (Tags are multi-valued: a selection can always gain another
+           tag even while others already apply, so this never replaces
+           Add Tag's own label/action, only appears alongside it). Its
+           own text carries the applied count (e.g. "Remove Tag (2)") so
+           the state is identified without relying on color. #}
+        <button type="button" class="conv-selection-btn" data-conv-action="remove-tag" data-ui-ref="chat.selection-toolbar.remove-tag" hidden>Remove Tag</button>
         <button type="button" class="conv-selection-btn" data-conv-action="task" data-ui-ref="chat.selection-toolbar.task">Make Task</button>
+        {# Highlight/Important/Question: same three buttons as before,
+           but static/js/case_workspace.js's own applyAppliedTagState now
+           swaps each one's data-conv-action/data-ui-ref/label between
+           its "apply" state (unchanged identifiers: .highlight/
+           .important/.question) and a distinct "remove" state
+           (.remove-highlight/.unmark-important/.unmark-question) - never
+           both at once, and never the add identifiers reused for the
+           remove meaning (Section "UI references": "must not inherit
+           the identifiers of their corresponding add/apply actions"). #}
         <button type="button" class="conv-selection-btn" data-conv-action="highlight" data-ui-ref="chat.selection-toolbar.highlight">Highlight</button>
         <button type="button" class="conv-selection-btn" data-conv-action="important" data-ui-ref="chat.selection-toolbar.important">Important</button>
         <button type="button" class="conv-selection-btn" data-conv-action="question" data-ui-ref="chat.selection-toolbar.question">Question</button>
         <button type="button" class="conv-selection-btn" data-conv-action="copy" data-ui-ref="chat.selection-toolbar.copy">Copy</button>
     </div>
     <p class="conv-selection-status" id="conv-selection-status" role="status" aria-live="polite" hidden></p>
+    {# Short-lived Undo affordance (Section "Interaction": "immediate and
+       reversible through a short-lived Undo confirmation rather than a
+       blocking confirmation dialog") - a real, separately-focusable
+       button, not a link buried in the status text, so it is reachable
+       by keyboard and announced distinctly by a screen reader. Hidden
+       until a removal actually happens; static/js/case_workspace.js's
+       own showUndoableStatus times it out automatically. #}
+    <button type="button" class="conv-selection-undo" id="conv-selection-undo" data-ui-ref="chat.selection-toolbar.undo" hidden>Undo</button>
+
+    <div class="conv-dialog" id="conv-remove-tag-dialog" data-ui-ref="chat.remove-tag-dialog" role="dialog" aria-modal="true" aria-labelledby="conv-remove-tag-dialog-heading" hidden>
+        <p class="conv-dialog-heading" id="conv-remove-tag-dialog-heading">Remove Tag</p>
+        <p class="conv-dialog-error" data-conv-dialog-error role="alert" hidden></p>
+        {# CLAUDE-P40-VW8-QA: "If multiple Tags are attached, selecting
+           Remove Tag must show the applied Tags and allow the user to
+           remove one or more individually" - a real list, one row per
+           overlapping Tag occurrence (not just whichever one happens to
+           be visibly rendered as a <mark> - Section "Selection
+           precision": routes/workspace.py's own tag_occurrences_for_
+           selection_route is the read side of this, since app.py's
+           hotlinks filter only ever draws ONE <mark> per position when
+           occurrences overlap). Populated entirely by JS
+           (populateRemoveTagDialog) - no server round-trip to open the
+           dialog itself, only to fetch which Tags currently apply
+           (already done before this dialog is ever shown). #}
+        <ul class="conv-remove-tag-list" id="conv-remove-tag-list" data-ui-ref="chat.selection-toolbar.applied-tags-list"></ul>
+        <div class="conv-dialog-actions">
+            <button type="button" class="btn btn-ghost" data-conv-dialog-cancel>Close</button>
+        </div>
+    </div>
 
     <div class="conv-dialog" id="conv-tag-dialog" data-ui-ref="chat.tag-dialog" role="dialog" aria-modal="true" aria-labelledby="conv-tag-dialog-heading" hidden>
         <form method="post" action="{{ url_for('workspace.add_tag_occurrence_route', project_id=project_id) }}" id="conv-tag-form">

@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import io
 import json
+import re
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -136,10 +137,23 @@ class TopBarContractTests(_BaseTestCase):
     def test_no_nonfunctional_drawing_or_tagging_controls(self):
         # Section 3/6/8: "Do not add nonfunctional Undo, Redo, drawing or
         # tagging controls during this stage."
+        #
+        # CLAUDE-P40-VW8-QA (reversibility correction) later added a
+        # REAL, functional Undo control (#conv-selection-undo) - reverses
+        # a just-removed Tag/Highlight/Important/Question occurrence via
+        # the same add-Tag route, not a decorative placeholder. This
+        # test's own underlying constraint ("no NONFUNCTIONAL Undo") is
+        # still satisfied; only the blanket "the substring 'Undo' must
+        # never appear anywhere" check needed narrowing to exclude that
+        # one, specific, real control. Redo/drawing-tool/paint-bucket/
+        # color-palette/chat-tag remain genuinely out of scope and still
+        # checked.
         client = self._client_as("e3a_owner", 1)
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
+        self.assertIn('id="conv-selection-undo"', body)  # the one real, functional Undo control
+        body_without_real_undo_control = re.sub(r'<button[^>]*id="conv-selection-undo"[^>]*>[^<]*</button>', "", body)
         for token in ("Undo", "Redo", "drawing-tool", "paint-bucket", "color-palette", "chat-tag"):
-            self.assertNotIn(token, body, token)
+            self.assertNotIn(token, body_without_real_undo_control, token)
 
 
 # ---------------------------------------------------------------------------

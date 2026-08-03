@@ -41,8 +41,16 @@
    (e.g. the legacy dashboard). `html_id` is a plain element id, for
    in-page anchor links (`#some-id`) - independent of the JS `id` above,
    and only needed when something actually links to this section. #}
-{% macro accordion(title, status=None, group=None, id=None, html_id=None, open=False) %}
-<details class="accordion-section"{% if group %} data-accordion-group="{{ group }}"{% endif %}{% if id %} data-accordion-id="{{ id }}"{% endif %}{% if html_id %} id="{{ html_id }}"{% endif %}{% if open %} open{% endif %}>
+{% macro accordion(title, status=None, group=None, id=None, html_id=None, open=False, ui_ref=None) %}
+{# CLAUDE-P40-VW8-QA (Complete Root and Subfolder UI Reference Tagging):
+   `ui_ref` is optional and backward-compatible - every pre-existing
+   caller (case_workspace.html's own Overview accordions, deliberately
+   left untagged individually; they stay consolidated under the single
+   `display.overview` reference per CLAUDE-P40-E3A Section 5/4's "no
+   second navigation directory in Display" decision, not reopened
+   here) is completely unaffected. Only security_department.html's own
+   top-level sections pass one. #}
+<details class="accordion-section"{% if group %} data-accordion-group="{{ group }}"{% endif %}{% if id %} data-accordion-id="{{ id }}"{% endif %}{% if html_id %} id="{{ html_id }}"{% endif %}{% if open %} open{% endif %}{% if ui_ref %} data-ui-ref="{{ ui_ref }}"{% endif %}>
     <summary class="accordion-summary">
         <span class="accordion-summary-text">{{ title }}</span>
         {% if status %}<span class="accordion-summary-status">{{ status }}</span>{% endif %}
@@ -57,8 +65,15 @@
    summary, no status badge - if a section ever needs one, that's a sign
    it should be a top-level `accordion` instead, not a reason to add a
    status param here. #}
-{% macro subdisclosure(label, html_id=None) %}
-<details class="add-source-details"{% if html_id %} id="{{ html_id }}"{% endif %}>
+{% macro subdisclosure(label, html_id=None, ui_ref=None) %}
+{# CLAUDE-P40-VW8-QA (Complete Root and Subfolder UI Reference Tagging):
+   `ui_ref` optional/backward-compatible, same reasoning as accordion's
+   own note above - existing callers (Project Tools' own add-document/
+   add-text-record/removed-items, whose CONTENT already carries a ref
+   under the established lists.project.tools.* convention, and every
+   Overview-page subdisclosure, left untagged individually per the same
+   "one consolidated display.overview leaf" decision) are unaffected. #}
+<details class="add-source-details"{% if html_id %} id="{{ html_id }}"{% endif %}{% if ui_ref %} data-ui-ref="{{ ui_ref }}"{% endif %}>
     <summary>{{ label }}</summary>
     {{ caller() }}
 </details>
@@ -115,8 +130,29 @@
     <div class="conversation-dock-resize-handle" id="conversation-dock-resize-handle"
          role="separator" aria-orientation="horizontal" aria-label="Resize conversation panel"
          tabindex="0" aria-valuemin="120" aria-valuemax="640"></div>
+    {# CLAUDE-P40-VW8-QA: the old "{{ heading }} ({{ message_count }})"
+       heading text (accordion-summary-text) that used to sit here read
+       as visually/verbally heavy ("PROJECT CONVERSATION" - product-
+       owner report). A first correction moved a compact "Chat (N)"
+       label down to the composer row - the immediate product-owner
+       follow-up (CLAUDE-P40-VW7A-QA) rejected THAT too, as a duplicate
+       of the Lists panel's own "Chats" row: the count now lives there
+       instead (see templates/base.html's own lists.project.chats row,
+       "Chats <span class="launcher-count">{{ '{{' }} project_conversation_count {{ '}}' }}</span>"),
+       and this header row holds ONLY the Expand/Collapse toggle. heading
+       itself is NOT deleted as a macro parameter: it still names this
+       region for assistive tech via aria-label above (distinguishing
+       "Project Conversation" from a specific Investigation's own title
+       at the LANDMARK level stays useful even with no visible heading
+       text). chat.dock.label (the first correction's own new ref) is
+       RETIRED - see UI_REFERENCE_MAP.md's own retirement note; nothing
+       renders it any more. message_count is STILL passed into this
+       macro (used only by the "Chats" Lists row now, computed
+       separately in routes/workspace.py as project_conversation_count -
+       not read from this parameter directly, since the Investigation-
+       scoped call site's own message_count means something different:
+       that Investigation's own conversation length, not the Project's). #}
     <div class="conversation-dock-header">
-        <span class="accordion-summary-text">{{ heading }} ({{ message_count }})</span>
         <button type="button" class="conversation-size-toggle" id="conversation-size-toggle" aria-pressed="false">Expand</button>
     </div>
     {{ caller() }}
@@ -127,7 +163,12 @@
         <input type="hidden" name="anchor_description" id="dock-composer-anchor-description" value="">
         <span class="dock-composer-anchor-label" id="dock-composer-anchor-label" hidden></span>
         {% endif %}
-        <input type="text" name="text" id="dock-composer-input" data-ui-ref="chat.composer.input" data-conversation-draft="{{ scope_key }}" placeholder="{{ placeholder }}" autocomplete="off" required>
+        {# CLAUDE-P40-VW7A-QA: aria-label, not a visible <label> - the
+           input's accessible name must not rely on placeholder text
+           alone (still true), but a visible "Chat (N)"/"Message" label
+           here would recreate exactly the "duplicate label beside the
+           composer" defect this correction removes. #}
+        <input type="text" name="text" id="dock-composer-input" data-ui-ref="chat.composer.input" data-conversation-draft="{{ scope_key }}" placeholder="{{ placeholder }}" aria-label="Message" autocomplete="off" required>
         <button type="submit" data-ui-ref="chat.composer.send">Send</button>
     </form>
 </div>

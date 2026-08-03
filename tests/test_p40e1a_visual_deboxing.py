@@ -138,8 +138,14 @@ class ConversationMessageDeboxedTests(unittest.TestCase):
         self.assertNotIn("border-radius", body)
 
     def test_human_modifier_has_no_filled_background(self):
-        body = _rule_body(self.css, ".conversation-message.human")
-        self.assertNotIn("background", body)
+        # CLAUDE-P40-VW7A-QA removed .conversation-message.human's own
+        # rule entirely (it only ever declared margin-left:1.5rem, the
+        # per-role asymmetric indent that stage's own "inconsistent
+        # horizontal alignment" report named as the actual problem - see
+        # that stage's own comment on .conversation-thread) - no rule at
+        # all is an even stronger guarantee of "no filled background"
+        # than an empty one would be.
+        self.assertNotRegex(self.css, re.escape(".conversation-message.human") + r"(?![\w-])\s*\{")
 
     def test_system_modifier_has_no_background_or_border(self):
         body = _rule_body(self.css, ".conversation-message.system")

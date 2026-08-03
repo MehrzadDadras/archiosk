@@ -600,7 +600,7 @@ def _register_template_filters(app: Flask) -> None:
                     tag = next((t for t in workspace.tags if t["id"] == occ["tag_id"]), None)
                 if tag is None:
                     continue
-                tag_ranges.append((start, end, tag["color"], tag["name"], occ["id"]))
+                tag_ranges.append((start, end, tag["color"], tag["name"], occ["id"], occ["tag_id"]))
                 occupied_until = end
 
         if not tag_ranges:
@@ -628,7 +628,7 @@ def _register_template_filters(app: Flask) -> None:
             boundaries.add(cursor + seg_len)
             segment_source_at[cursor] = segment["source_id"]
             cursor += seg_len
-        for start, end, _color, _name, _occ_id in tag_ranges:
+        for start, end, _color, _name, _occ_id, _tag_id in tag_ranges:
             boundaries.add(start)
             boundaries.add(end)
         cut_points = sorted(boundaries)
@@ -642,9 +642,9 @@ def _register_template_filters(app: Flask) -> None:
             return best
 
         def _tag_at(pos):
-            for start, end, color, name, occ_id in tag_ranges:
+            for start, end, color, name, occ_id, tag_id in tag_ranges:
                 if start <= pos < end:
-                    return color, name, occ_id
+                    return color, name, occ_id, tag_id
             return None
 
         rendered = []
@@ -659,12 +659,13 @@ def _register_template_filters(app: Flask) -> None:
                 chunk = Markup('<a href="{}">{}</a>').format(url, chunk)
             tag_here = _tag_at(start)
             if tag_here:
-                color, name, occ_id = tag_here
+                color, name, occ_id, tag_id = tag_here
                 chunk = Markup(
                     '<mark class="tag-highlight-inline conv-tag-color-{}" '
-                    'data-tag-occurrence-id="{}" data-ui-ref="chat.tag-highlight" '
+                    'data-tag-occurrence-id="{}" data-tag-id="{}" data-tag-name="{}" '
+                    'data-ui-ref="chat.tag-highlight" '
                     'title="Tagged: {}">{}</mark>'
-                ).format(color, occ_id, name, chunk)
+                ).format(color, occ_id, escape(tag_id), escape(name), name, chunk)
             rendered.append(chunk)
         return Markup("").join(rendered)
 

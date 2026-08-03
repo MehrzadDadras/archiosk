@@ -133,7 +133,14 @@ class ConversationApertureRouteTests(unittest.TestCase):
         )
         resp = self.client.get(f"/projects/{self.project_id}/workspace?view=overview")
         body = resp.get_data(as_text=True)
-        self.assertIn("Project Conversation (2)", body)
+        # CLAUDE-P40-VW7A-QA: the "Project Conversation (N)" heading text
+        # was removed outright (a first correction moved it to the
+        # composer as "Chat (N)"; the immediate follow-up removed THAT
+        # too as a duplicate of the Lists panel's own "Chats" row, which
+        # now carries the count instead - see base.html's own
+        # lists.project.chats row).
+        self.assertIn('Chats <span class="launcher-count">2</span>', body)
+        self.assertNotIn("Project Conversation (2)", body)
         self.assertIn("Any update?", body)
         self.assertIn("Discuss this Requirement", body)
 
@@ -424,7 +431,9 @@ class RecentFocusTests(unittest.TestCase):
         self.assertIn("Recent Focus (0)", body)
         # owner2 can still see the message itself in Project Conversation -
         # that stays project-wide - just not in owner2's OWN focus trail.
-        self.assertIn("Project Conversation (2)", body)
+        # CLAUDE-P40-VW7A-QA: the count now lives on the Lists "Chats"
+        # row, not a "Project Conversation (N)" heading (removed).
+        self.assertIn('Chats <span class="launcher-count">2</span>', body)
 
     def test_recent_focus_deduplicates_by_anchor_keeping_only_the_latest(self):
         requirement = self._register_requirement(self.client)

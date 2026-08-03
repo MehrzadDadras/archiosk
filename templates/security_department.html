@@ -14,7 +14,7 @@
     </p>
 </section>
 
-{% call macros.accordion('Mandatory ARCHIOSK Security Floor', group='left', id='floor', open=True) %}
+{% call macros.accordion('Mandatory ARCHIOSK Security Floor', group='left', id='floor', open=True, ui_ref='security.floor') %}
 <p class="pane-note">
     These protections cannot be weakened by any organization baseline, project profile, or
     exception &mdash; there is no configurable action anywhere in this system that could disable them.
@@ -26,7 +26,7 @@
 </ul>
 {% endcall %}
 
-{% call macros.accordion('Security Claims Registry (' ~ security_claims_registry|length ~ ')', group='left', id='claims') %}
+{% call macros.accordion('Security Claims Registry (' ~ security_claims_registry|length ~ ')', group='left', id='claims', ui_ref='security.claims') %}
 <p class="pane-note">What this deployment can and cannot truthfully promise today.</p>
 <ul class="source-list">
     {% for claim, status in security_claims_registry.items() %}
@@ -35,7 +35,7 @@
 </ul>
 {% endcall %}
 
-{% call macros.accordion('Organization Security Baseline (' ~ baselines|length ~ ')', group='left', id='baselines', open=True) %}
+{% call macros.accordion('Organization Security Baseline (' ~ baselines|length ~ ')', group='left', id='baselines', open=True, ui_ref='security.baselines') %}
 {% if active_baseline %}
 <p class="workspace-pane-label">Active: version {{ active_baseline.version_number }} (effective {{ active_baseline.effective_date }})</p>
 {% else %}
@@ -83,7 +83,7 @@
 </form>
 {% endcall %}
 
-{% call macros.accordion('Source Policies (' ~ source_policies|length ~ ')', group='left', id='policies') %}
+{% call macros.accordion('Source Policies (' ~ source_policies|length ~ ')', group='left', id='policies', ui_ref='security.policies') %}
 <ul class="source-list">
     {% for policy in source_policies %}
     <li class="source-item">
@@ -100,7 +100,7 @@
     </li>
     {% endfor %}
 </ul>
-{% call macros.subdisclosure('+ Ingest a source policy') %}
+{% call macros.subdisclosure('+ Ingest a source policy', ui_ref='security.policies.add') %}
 <form class="workspace-form" method="post" enctype="multipart/form-data" action="{{ url_for('security.record_source_policy') }}">
     <input type="text" name="title" placeholder="Title" required>
     <input type="text" name="issuing_organization" placeholder="Issuing organization" required>
@@ -115,13 +115,13 @@
 {% endcall %}
 {% endcall %}
 
-{% call macros.accordion('Proposed Controls (' ~ proposed_controls|length ~ ')', group='center', id='controls') %}
+{% call macros.accordion('Proposed Controls (' ~ proposed_controls|length ~ ')', group='center', id='controls', ui_ref='security.controls') %}
 <ul class="source-list">
     {% for control in proposed_controls %}
     <li class="source-item">{{ control.action_id }} &rarr; <strong>{{ control.proposed_decision.replace('_',' ') }}</strong> <small class="text-muted">({{ control.source_type }}, {{ control.status }})</small><br>{{ control.rationale }}</li>
     {% endfor %}
 </ul>
-{% call macros.subdisclosure('+ Propose a control') %}
+{% call macros.subdisclosure('+ Propose a control', ui_ref='security.controls.add') %}
 <form class="workspace-form" method="post" action="{{ url_for('security.propose_control') }}">
     <select name="action_id" required>{% for a in governed_actions %}<option value="{{ a }}">{{ a }}</option>{% endfor %}</select>
     <select name="proposed_decision" required>{% for d in known_decisions %}<option value="{{ d }}">{{ d.replace('_',' ') }}</option>{% endfor %}</select>
@@ -134,7 +134,7 @@
 {% endcall %}
 {% endcall %}
 
-{% call macros.accordion('Governed Q&amp;A (' ~ qa_entries|length ~ ')', group='center', id='qa') %}
+{% call macros.accordion('Governed Q&amp;A (' ~ qa_entries|length ~ ')', group='center', id='qa', ui_ref='security.qa') %}
 <ul class="source-list">
     {% for qa in qa_entries %}
     <li class="source-item">
@@ -149,7 +149,7 @@
     </li>
     {% endfor %}
 </ul>
-{% call macros.subdisclosure('+ Record a Q&amp;A entry') %}
+{% call macros.subdisclosure('+ Record a Q&amp;A entry', ui_ref='security.qa.add') %}
 <form class="workspace-form" method="post" action="{{ url_for('security.record_qa_entry') }}">
     <input type="text" name="question" placeholder="Question" required>
     <textarea name="answer" placeholder="Answer"></textarea>
@@ -162,7 +162,7 @@
 {% endcall %}
 {% endcall %}
 
-{% call macros.accordion('Exceptions (' ~ exceptions|length ~ ')', group='center', id='exceptions') %}
+{% call macros.accordion('Exceptions (' ~ exceptions|length ~ ')', group='center', id='exceptions', ui_ref='security.exceptions') %}
 <ul class="source-list">
     {% for exc in exceptions %}
     <li class="source-item">
@@ -176,7 +176,7 @@
     </li>
     {% endfor %}
 </ul>
-{% call macros.subdisclosure('+ Grant an exception') %}
+{% call macros.subdisclosure('+ Grant an exception', ui_ref='security.exceptions.add') %}
 <form class="workspace-form" method="post" action="{{ url_for('security.grant_exception') }}">
     <select name="action_id" required>{% for a in governed_actions %}<option value="{{ a }}">{{ a }}</option>{% endfor %}</select>
     <select name="decision" required>{% for d in known_decisions %}<option value="{{ d }}">{{ d.replace('_',' ') }}</option>{% endfor %}</select>
@@ -188,7 +188,7 @@
 {% endcall %}
 {% endcall %}
 
-{% call macros.accordion('Projects (' ~ projects|length ~ ')', group='center', id='projects') %}
+{% call macros.accordion('Projects (' ~ projects|length ~ ')', group='center', id='projects', ui_ref='security.projects') %}
 <ul class="source-list">
     {% for p in projects %}
     {% set ws = project_profiles.get(p.project_id) %}
@@ -204,7 +204,7 @@
 </ul>
 {% endcall %}
 
-{% call macros.accordion('Learning Contribution Requests (' ~ learning_requests|length ~ ')', group='right', id='learning') %}
+{% call macros.accordion('Learning Contribution Requests (' ~ learning_requests|length ~ ')', group='right', id='learning', ui_ref='security.learning') %}
 <p class="pane-note">
     No shared-learning pipeline exists in this deployment &mdash; approval here records governed
     intent only; it does not move any data.
@@ -231,7 +231,7 @@
     </li>
     {% endfor %}
 </ul>
-{% call macros.subdisclosure('+ Request a learning contribution review') %}
+{% call macros.subdisclosure('+ Request a learning contribution review', ui_ref='security.learning.add') %}
 <form class="workspace-form" method="post" action="{{ url_for('security.create_learning_request') }}">
     <input type="text" name="project_id" placeholder="Project id" required>
     <select name="source_zone" required>{% for z in learning_zones %}<option value="{{ z }}">{{ z }}</option>{% endfor %}</select>
@@ -242,7 +242,7 @@
 {% endcall %}
 {% endcall %}
 
-{% call macros.accordion('Assurance &mdash; Activity (' ~ activity|length ~ ')', group='right', id='assurance-activity', open=True) %}
+{% call macros.accordion('Assurance &mdash; Activity (' ~ activity|length ~ ')', group='right', id='assurance-activity', open=True, ui_ref='security.assurance-activity') %}
 <p class="pane-note">Activity-level only &mdash; actor, project, action category, decision. No project content is shown here.</p>
 <ul class="source-list">
     {% for entry in activity %}
@@ -251,7 +251,7 @@
 </ul>
 {% endcall %}
 
-{% call macros.accordion('Assurance &mdash; Self-Check (' ~ self_check_findings|length ~ ')', group='right', id='self-check') %}
+{% call macros.accordion('Assurance &mdash; Self-Check (' ~ self_check_findings|length ~ ')', group='right', id='self-check', ui_ref='security.self-check') %}
 <ul class="source-list">
     {% for finding in self_check_findings %}
     <li class="source-item {% if finding.severity == 'anomaly' %}consistency-flagged{% else %}consistency-clean{% endif %}">

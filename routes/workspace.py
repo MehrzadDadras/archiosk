@@ -56,6 +56,7 @@ from services.case_workspace import (
     CONVERSATION_ANCHOR_SCOPE_PROJECT,
     CONVERSATION_GUIDANCE_PROJECT_INTRO,
     GO_NO_GO_DECISIONS,
+    KNOWN_CONVERSATION_ANCHOR_SCOPES,
     KNOWN_PARTICIPANT_ROLES,
     KNOWN_PERSPECTIVE_POLARITIES,
     KNOWN_RESOLUTION_OUTCOMES,
@@ -1238,6 +1239,7 @@ def show_workspace(project_id):
         project_home_summary=project_home_summary,
         since_last_visit=since_last_visit,
         project_conversation_view=project_conversation_view,
+        project_conversation_count=len(workspace.project_conversation),
         opened_snapshot_view=opened_snapshot_view,
         snapshot_compare_view=snapshot_compare_view,
         case_outcome_states=case_outcome_states,
@@ -2806,6 +2808,75 @@ def remove_tag_occurrence_route(project_id, occurrence_id):
 
     workspace = store.get(project_id)
     return jsonify({"ok": True, "counts": _tag_counts(workspace)})
+
+
+@workspace_bp.route("/projects/<project_id>/workspace/tags/for-selection", methods=["GET"])
+@login_required
+def tag_occurrences_for_selection_route(project_id):
+    """CLAUDE-P40-VW8-QA (selection-toolbar reversibility correction):
+    read-only lookup of every occurrence (built-in or custom Tag) whose
+    range OVERLAPS the given [start_offset, end_offset) window on this
+    exact source anchor - the client-side complement to app.py's own
+    `hotlinks` filter, which only ever draws ONE <mark> per position
+    when occurrences overlap (Section 11's own documented "first-
+    starting wins" resolution). A live text selection can span an
+    occurrence that lost that resolution and never got its own visible
+    <mark> at all - this endpoint is the only reliable way the
+    contextual selection menu can know "multiple Tags are attached
+    here" in that case, not scraping rendered DOM. Never creates or
+    mutates anything; same authorization boundary as every other
+    workspace read (login + project access via _load_workspace_or_404)."""
+    _, store, workspace = _load_workspace_or_404(project_id)
+
+    def _int_or_none(raw):
+        try:
+            return int(raw)
+        except (TypeError, ValueError):
+            return None
+
+    scope = (request.args.get("anchor_scope") or "").strip()
+    case_id = (request.args.get("anchor_case_id") or "").strip() or None
+    message_id = (request.args.get("anchor_message_id") or "").strip() or None
+    guidance_key = (request.args.get("anchor_guidance_key") or "").strip() or None
+    start_offset = _int_or_none(request.args.get("anchor_start_offset"))
+    end_offset = _int_or_none(request.args.get("anchor_end_offset"))
+    if scope not in KNOWN_CONVERSATION_ANCHOR_SCOPES or start_offset is None or end_offset is None or end_offset <= start_offset:
+        return jsonify({"ok": False, "error": "A valid selection anchor is required."}), 400
+
+    applied = []
+    for occ in workspace.tag_occurrences:
+        anchor = occ["source_anchor"]
+        if anchor.get("scope") != scope:
+            continue
+        if scope == CONVERSATION_ANCHOR_SCOPE_CASE and anchor.get("case_id") != case_id:
+            continue
+        if scope == CONVERSATION_ANCHOR_SCOPE_GUIDANCE:
+            if anchor.get("guidance_key") != guidance_key:
+                continue
+        elif anchor.get("message_id") != message_id:
+            continue
+        occ_start, occ_end = anchor.get("start_offset"), anchor.get("end_offset")
+        if occ_start is None or occ_end is None:
+            continue
+        # Overlap, not containment - a selection partially covering an
+        # existing tagged range must still surface it as removable
+        # (Section "Selection precision": "Partial overlap with a
+        # tagged range").
+        if occ_start >= end_offset or occ_end <= start_offset:
+            continue
+        tag = store.resolve_tag(workspace, occ["tag_id"])
+        if tag is None:
+            continue
+        applied.append({
+            "occurrence_id": occ["id"],
+            "tag_id": tag["id"],
+            "tag_name": tag["name"],
+            "tag_color": tag["color"],
+            "start_offset": occ_start,
+            "end_offset": occ_end,
+        })
+    applied.sort(key=lambda a: a["start_offset"])
+    return jsonify({"ok": True, "applied": applied})
 
 
 @workspace_bp.route("/projects/<project_id>/workspace/tasks", methods=["POST"])

@@ -140,7 +140,11 @@ class SecondNavigationColumnRemovedTests(_BaseWorkspaceTestCase):
         self.assertIn(self.project_id, body)
         self.assertIn(">Documents", body)
         self.assertIn(">Investigations", body)
-        self.assertIn(">Chats<", body)
+        # CLAUDE-P40-VW7A-QA added a <span class="launcher-count"> after
+        # "Chats" (matching Documents/Investigations' own already-open-
+        # ended pattern above) - was the one exact-closed-tag ">Chats<"
+        # check in this file, now consistent with its siblings.
+        self.assertIn(">Chats", body)
 
     def test_unified_nav_absent_for_unauthorized_project(self):
         # p40e_outsider is authenticated but neither owner, allow-

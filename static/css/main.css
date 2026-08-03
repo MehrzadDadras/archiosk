@@ -192,13 +192,24 @@ a:focus-visible, button:focus-visible, input:focus-visible {
     min-height: 0;
     overflow: hidden;
 }
+/* CLAUDE-P40-VW8-QA (panel-border hierarchy correction): the desktop
+   rule no longer draws its own border-right - .panel-divider's own
+   ::before (below) already draws a line ~4px to the right of this
+   panel's edge, so the two together were a "double line" (product-
+   owner report: "the Lists-to-Display boundary" among the distracting
+   areas). One line now, from the divider alone - it already carries
+   the correct quiet-resting/accent-on-hover-or-focus hierarchy this
+   correction asks for everywhere. The narrow-viewport drawer variant
+   further below KEEPS its own border-right deliberately: at that width
+   the drawer floats over content with no adjacent .panel-divider
+   beside it (the divider is what collapses the panel in the first
+   place), so there is no second line to double up with there. */
 .launcher-panel {
     width: 240px;
     flex-shrink: 0;
     display: flex;
     flex-direction: column;
     justify-content: space-between;
-    border-right: 1px solid var(--border);
     background: var(--surface-primary);
     overflow-y: auto;
     /* CLAUDE-P40-VW8-QA: was height:100vh + position:sticky/top:0 - a
@@ -1214,14 +1225,30 @@ main {
    a handful of small buttons. Never a second "brand card": no
    background fill, no border-radius box, no shadow - the bottom
    border is the only separation from the grid below it, same
-   restrained-divider language as .workspace-pane. */
+   restrained-divider language as .workspace-pane.
+
+   CLAUDE-P40-VW8-QA (panel-border hierarchy correction): this line
+   spans the ENTIRE application width, unlike every other "ordinary"
+   divider in this file - product-owner report named "the divider below
+   the top Menu bar" among the distracting areas. var(--border) is
+   already this file's general "quiet divider" token, but at full
+   viewport width even the quiet token read as too present. Switched to
+   var(--divider-strong) instead - NOT because it's stronger (it isn't;
+   it's the same fixed, mode-invariant, deliberately understated color
+   Chat's own already-approved resize-handle divider uses, see
+   .conversation-dock-resize-handle::before's own comment) but because
+   it is the one token in this file proven to read calmly at every
+   theme's own background rather than tracking whichever surface
+   happens to render it - the same reasoning that token's own original
+   comment gives, applied here to a second full-width seam instead of
+   only the workspace/Chat one. */
 .workspace-topbar {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 1rem;
     padding: 0.6rem 0;
-    border-bottom: 1px solid var(--border);
+    border-bottom: 1px solid var(--divider-strong);
     margin-bottom: 1rem;
     flex-wrap: wrap;
 }
@@ -1326,20 +1353,35 @@ main {
    linear read). Sits inside .workspace-appearance-options above, which
    already supplies this popover's own background/border/padding - this
    only lays out the grid itself, compact enough that 5 rows x 3 modes
-   doesn't turn the popover into its own scrolling panel. */
+   doesn't turn the popover into its own scrolling panel.
+
+   CLAUDE-P40-VW8-QA (Approved Theme Set): a 4th column (Deep Forest)
+   added two-word header text ("Midnight Blue") wide enough to grow the
+   popover past the viewport on a narrow screen if left unconstrained -
+   .workspace-appearance-options below now caps its own width, and
+   header cells are left free to wrap (no white-space:nowrap - only the
+   row-header/surface-name column has that, unchanged) so the table
+   itself is squeezed by the popover's max-width rather than pushing it
+   wider. */
+.workspace-appearance-options {
+    max-width: min(320px, 94vw);
+}
 .appearance-matrix {
     border-collapse: collapse;
     font-size: var(--text-sm);
+    width: 100%;
 }
 .appearance-matrix th,
 .appearance-matrix td {
-    padding: 0.2rem 0.4rem;
+    padding: 0.2rem 0.3rem;
     text-align: center;
 }
 .appearance-matrix thead th {
     color: var(--text-metadata);
     font-weight: 400;
     font-size: var(--text-xs);
+    word-break: normal;
+    overflow-wrap: break-word;
 }
 .appearance-matrix tbody th {
     text-align: left;
@@ -2059,6 +2101,20 @@ html.toolbox-hidden .workspace-pane-toolbox {
    .conversation-thread (history) takes the remaining space and scrolls
    internally, and the composer stays pinned at the panel's OWN bottom
    edge via flex. */
+/* CLAUDE-P40-VW7A-QA: ONE shared horizontal inset, applied to every
+   piece of Chat content (message text/role-labels via .conversation-
+   thread's own padding below, and the composer via .conversation-
+   input-form's own padding) rather than the PREVIOUS scheme's
+   per-role, per-side asymmetric margins (.conversation-message.human
+   had margin-left:1.5rem/margin-right:0, .system had the opposite) -
+   product-owner report: "inconsistent horizontal alignment... left
+   edges must align... right margin must visually balance the left
+   margin." Declared once here (a local custom property, inherited by
+   every descendant) so both consuming rules reference the SAME value
+   instead of two separately hardcoded 1.5rem literals that could drift
+   apart. Deliberately NOT applied to .conversation-dock-resize-handle
+   (a direct sibling-in-spirit, not a padded-content child) - that
+   divider line must stay full-width, unaffected by this inset. */
 .conversation-dock-panel {
     height: 100%;
     display: flex;
@@ -2066,6 +2122,7 @@ html.toolbox-hidden .workspace-pane-toolbox {
     overflow: hidden;
     background: var(--surface-primary);
     min-height: 0;
+    --conversation-inset: 1.5rem;
     /* CLAUDE-P40-E3A-QA, Section 10 fix: .accordion-section (a class this
        element also carries - see the macro's own comment on reusing its
        visual treatment) sets border-top/margin-top/padding-top by
@@ -2188,10 +2245,51 @@ html.toolbox-hidden .workspace-pane-toolbox {
     background: var(--surface-primary);
     color: var(--text-primary);
 }
+/* "Deep Forest" (CLAUDE-P40-VW8-QA, Approved Theme Set) - third dark
+   appearance choice, same redefinition pattern as .appearance-dark
+   ("Graphite") and .appearance-tinted ("Midnight Blue") directly
+   above, reading from the new --forest-* token family
+   (static/css/tokens.css's own comment there has the full derivation
+   and contrast-verification story). */
+.workspace-topbar.appearance-deep-forest,
+.launcher-panel.appearance-deep-forest,
+.app-main.appearance-deep-forest,
+.workspace-pane-toolbox.appearance-deep-forest,
+.chat-region.appearance-deep-forest {
+    --canvas: var(--forest-canvas);
+    --surface-primary: var(--forest-surface-primary);
+    --surface-secondary: var(--forest-surface-secondary);
+    --surface-hover: var(--forest-surface-hover);
+    --surface-selected: var(--forest-surface-selected);
+    --border: var(--forest-border);
+    --border-strong: var(--forest-border-strong);
+    --text-primary: var(--forest-text-primary);
+    --text-secondary: var(--forest-text-secondary);
+    --text-metadata: var(--forest-text-metadata);
+    --text-disabled: var(--forest-text-disabled);
+    --seal-red: var(--forest-seal-red);
+    --seal-red-tint: var(--forest-seal-red-tint);
+    --machine-blue: var(--forest-machine-blue);
+    --machine-blue-tint: var(--forest-machine-blue-tint);
+    --highlight-orange: var(--forest-highlight-orange);
+    --highlight-orange-tint: var(--forest-highlight-orange-tint);
+    --accepted-green: var(--forest-accepted-green);
+    --accepted-green-tint: var(--forest-accepted-green-tint);
+    --attention-amber: var(--forest-attention-amber);
+    --attention-amber-tint: var(--forest-attention-amber-tint);
+    --failure-red: var(--forest-failure-red);
+    --failure-red-tint: var(--forest-failure-red-tint);
+    --risk-red: var(--forest-risk-red);
+    --risk-red-tint: var(--forest-risk-red-tint);
+    background: var(--surface-primary);
+    color: var(--text-primary);
+}
 .chat-region.appearance-tinted,
 .chat-region.appearance-tinted .conversation-dock-panel,
 .chat-region.appearance-dark,
-.chat-region.appearance-dark .conversation-dock-panel {
+.chat-region.appearance-dark .conversation-dock-panel,
+.chat-region.appearance-deep-forest,
+.chat-region.appearance-deep-forest .conversation-dock-panel {
     background: var(--surface-primary);
     color: var(--text-primary);
 }
@@ -2237,10 +2335,15 @@ html.toolbox-hidden .workspace-pane-toolbox {
     outline: 2px solid var(--machine-blue);
     outline-offset: 2px;
 }
+/* CLAUDE-P40-VW8-QA: was justify-content:space-between, spreading the
+   old heading text (removed - see _macros.html's own comment) and this
+   toggle to opposite ends. With only the toggle left, flex-end keeps it
+   in its prior top-right position rather than letting a single flex
+   item collapse to flex-start under the old rule. */
 .conversation-dock-header {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: flex-end;
     gap: 0.6rem;
     font-family: var(--font-body);
     text-transform: uppercase;
@@ -2281,24 +2384,32 @@ html.toolbox-hidden .workspace-pane-toolbox {
     min-height: 0;
     overflow-y: auto;
     margin-bottom: 1rem;
-    padding-right: 0.3rem;
+    /* CLAUDE-P40-VW7A-QA: the shared --conversation-inset (declared on
+       .conversation-dock-panel above) on both sides, superseding the
+       old right-only 0.3rem scrollbar-clearance padding - comfortably
+       larger than a scrollbar needs, so that purpose is still served
+       for free. */
+    padding-left: var(--conversation-inset);
+    padding-right: var(--conversation-inset);
     scroll-behavior: smooth;
 }
 /* CLAUDE-P40-E1A-VISUAL: was a filled beige bubble (human) and a
    bordered card (system) per message - the de-boxing addendum names
    this directly ("remove borders and filled cards around ordinary
-   user and Archiosk messages"). Distinguished now by indentation and
-   the existing .role-label alone (already uppercase/letter-spaced/
-   colored differently per role) - whitespace and typography carry the
-   distinction a colored box used to. */
+   user and Archiosk messages"). CLAUDE-P40-VW7A-QA removed the
+   per-role asymmetric indent (.human had margin-left:1.5rem/.system
+   had margin-right:1.5rem instead - two different left edges,
+   "inconsistent horizontal alignment" per that stage's own report) -
+   role is now distinguished by the existing .role-label alone (already
+   uppercase/letter-spaced/colored differently per role), not
+   indentation; every message now starts at the SAME left edge, set by
+   .conversation-thread's own shared inset above. */
 .conversation-message {
     padding: 0.3rem 0;
     font-size: 0.88rem;
     line-height: 1.45;
     color: var(--text-primary);
 }
-.conversation-message.human { margin-left: 1.5rem; }
-.conversation-message.system { margin-right: 1.5rem; }
 .conversation-message .role-label {
     display: block;
     font-family: var(--font-body);
@@ -2325,7 +2436,23 @@ html.toolbox-hidden .workspace-pane-toolbox {
 }
 .conversation-thread .conversation-empty { text-align: center; }
 
-.conversation-input-form { display: flex; flex-wrap: wrap; gap: 0.6rem; flex-shrink: 0; }
+/* CLAUDE-P40-VW7A-QA: padding-left/right use the SAME --conversation-
+   inset .conversation-thread uses above (declared once, on their
+   shared ancestor .conversation-dock-panel) - the composer's own left/
+   right edges now line up with the message thread's, and the input
+   itself (flex:1) simply fills whatever width remains inside that
+   inset, which grew once the old Chat (N) footer label was removed
+   (CLAUDE-P40-VW7A-QA) - nothing here needs to know that label ever
+   existed; it just fills available space, same as before. */
+.conversation-input-form {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.6rem;
+    flex-shrink: 0;
+    padding-left: var(--conversation-inset);
+    padding-right: var(--conversation-inset);
+}
 /* CLAUDE-P40-E1: the "Re: <anchored object>" badge a "Discuss this X"
    click (macros.aperture) sets on the ONE dock composer - flex-basis
    100% forces it onto its own line above the input/button when shown,
@@ -2344,6 +2471,13 @@ html.toolbox-hidden .workspace-pane-toolbox {
     flex: 1;
     font-family: var(--font-body);
     font-size: 0.9rem;
+    /* CLAUDE-P40-VW7A-QA: back to symmetric internal padding - the
+       form's own padding-left (above) is what now aligns the input's
+       text with the message thread's own left edge, so the input no
+       longer needs its own asymmetric compensation (CLAUDE-P40-VW8-QA's
+       left:1.5rem special case is superseded, not layered on top of,
+       the new shared inset - two overlapping fixes for the same
+       alignment would just be a different inconsistency). */
     padding: 0.7rem 0.9rem;
     background: var(--surface-primary);
     border: 1px solid var(--border);
@@ -2379,14 +2513,26 @@ html.toolbox-hidden .workspace-pane-toolbox {
 .conv-selection-toolbar {
     position: fixed;
     display: flex;
-    align-items: center;
-    gap: 0.2rem;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.05rem;
     background: var(--surface-primary);
     border: 1px solid var(--border-strong);
     border-radius: 5px;
     padding: 0.25rem;
     box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
     z-index: 70;
+}
+/* The [hidden] attribute alone does not hide the toolbar: this class
+   selector's own `display: flex` and the UA default `[hidden]{display:
+   none}` are equal specificity (0,1,0 each), and this rule is declared
+   later in the cascade, so it silently won - the toolbar rendered
+   permanently regardless of `toolbar.hidden` being set correctly by
+   JS. Same bug CLASS as the tokens.css comment-boundary regression
+   (CLAUDE-P40-VW8-QA-R3): logic was correct, a cascade/specificity
+   detail made it invisible in its effect. */
+.conv-selection-toolbar[hidden] {
+    display: none;
 }
 .conv-selection-btn {
     font-family: var(--font-body);
@@ -2398,6 +2544,7 @@ html.toolbox-hidden .workspace-pane-toolbox {
     color: var(--text-primary);
     cursor: pointer;
     white-space: nowrap;
+    text-align: left;
 }
 .conv-selection-btn:hover:not(:disabled) { background: var(--surface-hover); }
 .conv-selection-btn:disabled { color: var(--text-disabled); cursor: default; }
@@ -2413,6 +2560,58 @@ html.toolbox-hidden .workspace-pane-toolbox {
     bottom: 1rem;
     right: 1rem;
     max-width: 320px;
+}
+/* CLAUDE-P40-VW8-QA (reversibility correction): the short-lived Undo
+   affordance for a Tag/Highlight/Important/Question removal - sits
+   immediately left of .conv-selection-status (same fixed bottom-right
+   corner, same z-index/solid-background/border treatment) so the
+   result message and the way to reverse it read as one unit. Written
+   with its own [hidden] override from the start (learned directly from
+   .conv-selection-toolbar's own bug above - display declared on the
+   base rule always needs one, not just when a report catches its
+   absence). */
+.conv-selection-undo {
+    position: fixed;
+    z-index: 70;
+    font-family: var(--font-body);
+    font-size: var(--text-xs);
+    font-weight: 600;
+    color: var(--machine-blue);
+    background: var(--surface-primary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.3rem 0.6rem;
+    bottom: 1rem;
+    right: 340px;
+    cursor: pointer;
+}
+.conv-selection-undo[hidden] { display: none; }
+.conv-selection-undo:hover { border-color: var(--border-strong); }
+.conv-selection-undo:focus-visible { outline: 2px solid var(--machine-blue); outline-offset: 2px; }
+
+/* The Remove Tag dialog's own applied-Tags list - reuses .conv-dialog's
+   shared modal chrome (background/border/z-index/centering, above),
+   this only lays out the rows themselves. Each row identifies its Tag
+   by NAME (text), not the color swatch alone - "do not rely on color
+   alone" for state identification. */
+.conv-remove-tag-list {
+    list-style: none;
+    margin: 0.5rem 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+}
+.conv-remove-tag-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.3rem 0;
+}
+.conv-remove-tag-name {
+    flex: 1;
+    font-size: 0.85rem;
+    color: var(--text-primary);
 }
 
 /* Add Tag / Make Task - small, compact dialogs (Section 10: "don't

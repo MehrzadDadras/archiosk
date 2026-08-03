@@ -5,20 +5,20 @@
 
 {% block content %}
 {% call macros.page_header('Projects') %}
-    <a class="btn btn-ghost" href="{{ url_for('portal.removed_projects') }}">Removed Projects</a>
+    <a class="btn btn-ghost" href="{{ url_for('portal.removed_projects') }}" data-ui-ref="projects-directory.removed-link">Removed Projects</a>
 {% endcall %}
 
-<form class="projects-controls" method="get" action="{{ url_for('portal.projects_list') }}">
+<form class="projects-controls" method="get" action="{{ url_for('portal.projects_list') }}" data-ui-ref="projects-directory.search">
     <input
         type="search" name="q" value="{{ query }}"
         placeholder="Search projects" class="text-input projects-search" aria-label="Search projects">
 </form>
 
 {% if projects %}
-<ul class="project-card-list">
+<ul class="project-card-list" data-ui-ref="projects-directory.list">
     {% for p in projects %}
     <li class="project-card">
-        <a class="project-card-link" href="{{ url_for('workspace.show_workspace', project_id=p.project_id) }}">
+        <a class="project-card-link" data-ui-ref="projects-directory.leaf" href="{{ url_for('workspace.show_workspace', project_id=p.project_id) }}">
             <div class="project-card-main">
                 <span class="project-card-name">{{ p.display_name }}</span>
                 <span class="project-card-id mono">{{ p.project_id }}</span>
@@ -41,14 +41,14 @@
         </a>
         {% if is_admin %}
         <form method="post" action="{{ url_for('portal.delete_project', project_id=p.project_id) }}">
-            <button type="submit" class="link-button">Delete</button>
+            <button type="submit" class="link-button" data-ui-ref="projects-directory.leaf.delete">Delete</button>
         </form>
         {% endif %}
     </li>
     {% endfor %}
 </ul>
 {% else %}
-<div class="projects-empty">
+<div class="projects-empty" data-ui-ref="projects-directory.empty">
     {% if query %}
     <p>No projects match &ldquo;{{ query }}&rdquo;.</p>
     {% else %}
