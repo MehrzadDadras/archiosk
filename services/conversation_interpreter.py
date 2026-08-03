@@ -46,6 +46,7 @@ from services.drawing_analysis import analyze_drawing, make_comparison_artifact
 from services.project_qa import answer_project_question
 from services.requirement_investigation import investigate_requirement
 from services.security_policy import DECISION_ALLOW, DECISION_ALLOW_APPROVED_ROUTE
+import services.quantitative_investigation as quant
 
 
 @dataclass
@@ -139,12 +140,38 @@ def interpret_message(
         and anchor.get("anchor_type") == "requirement"
         and _looks_like_investigation_request(lowered)
     )
+
+    # CLAUDE-P40-VW8-QA-R6: a Case-scoped, evidence-guided quantitative
+    # feasibility question (distance/elevation/slope/clearance - see
+    # services/quantitative_investigation.py's own header for the full
+    # reasoning) OR a follow-up message supplying a value for one
+    # already in progress in THIS Case's conversation. Checked before
+    # is_requirement_investigation_question's own handler below so a
+    # quantitative question anchored to nothing in particular still
+    # gets the specific, useful handler rather than falling through to
+    # the generic project-question/discussion-acknowledgment path.
+    # `looks_like_quantitative` itself is NOT case-gated (needed below,
+    # for the needs_case escalation offer, which fires precisely when
+    # no Case is open yet); `is_quantitative_question` is the case-
+    # gated version this function actually dispatches on.
+    looks_like_quantitative = quant.looks_like_quantitative_feasibility_question(lowered)
+    is_quantitative_question = case is not None and (
+        looks_like_quantitative
+        or (
+            quant.extract_values_from_text(text)
+            and any(
+                quant.looks_like_quantitative_feasibility_question((m.get("text") or "").lower())
+                for m in case["conversation"]
+            )
+        )
+    )
     needs_case = (
         lowered.startswith(("analyze", "analyse"))
         or ("evidence" in lowered and "finding" in lowered)
         or lowered.startswith("compare") or " compare " in f" {lowered} "
         or (focused_finding_id is not None and _looks_like_correction(lowered))
         or is_requirement_investigation_question
+        or looks_like_quantitative
     )
     if needs_case and case is None:
         # The "conversation -> Investigation" escalation offer (routes/
@@ -158,11 +185,20 @@ def interpret_message(
         # "why is this like this?" never itself pushes toward creating
         # an Investigation just because it went unrecognized.
         action_taken = f"needs_case:{triggering_message_id}" if triggering_message_id else "needs_case"
+        # CLAUDE-P40-VW8-QA-R6: a real suggested title for a
+        # quantitative feasibility question - the question itself is
+        # never replaced/truncated by it (it stays the full message,
+        # unchanged, in this same reply and in the eventual Case's own
+        # conversation).
+        title_suggestion = (
+            f" A suggested Investigation title: \"{quant.suggested_title(text)}\"."
+            if looks_like_quantitative else ""
+        )
         return InterpretationResult(
             action_taken=action_taken,
             reply_text=(
                 "That needs an open Investigation (Findings live inside one) - "
-                "start one from this below, or open one and ask again."
+                f"start one from this below, or open one and ask again.{title_suggestion}"
             ),
         )
 
@@ -185,6 +221,9 @@ def interpret_message(
         return _handle_investigate_requirement(
             text, workspace, case, store, reviewer, anchor, triggering_message_id, governance_log,
         )
+
+    if is_quantitative_question:
+        return _handle_quantitative_investigation(text, workspace, case, store, reviewer, triggering_message_id)
 
     if anchor is not None:
         return InterpretationResult(
@@ -225,6 +264,31 @@ def interpret_message(
         "\"This is not a datum, it is a civil reference\")." if has_drawing_source
         else "\"This is not a scope item, it is background context\")."
     )
+
+    # CLAUDE-P40-VW8-QA-R6: "when an Investigation is active, ordinary
+    # natural language must be treated as Investigation discussion
+    # unless it clearly invokes another supported action." Every branch
+    # above this one already tried every recognized action-shaped
+    # pattern and this specific case-scoped quantitative pattern - a
+    # plain contextual statement/clarification with an open Case
+    # reaches here, and gets recorded as a real discussion contribution
+    # instead of the same "unrecognized" reply a genuinely unrelated
+    # stray message (no Case open at all) still gets below. Never
+    # invents understanding of WHAT was said - the honest acknowledgment
+    # is that it was received and will be considered, not a claim of
+    # having reasoned about it.
+    if case is not None:
+        return InterpretationResult(
+            action_taken="discussion_contribution",
+            reply_text=(
+                "Noted as context for this Investigation. I don't have a specific action to take on "
+                "that alone - ask me to calculate/evaluate something (e.g. a feasibility question "
+                "with the relevant dimensions), or use one of the recognized actions "
+                f"({analyze_example}\"Show me the evidence supporting Finding N\", \"Compare ... with "
+                "...\") when you're ready."
+            ),
+        )
+
     return InterpretationResult(
         action_taken="unrecognized",
         reply_text=(
@@ -916,4 +980,123 @@ def _handle_project_question(
         action_taken="project_qa_answered",
         reply_text=" ".join(reply_parts),
         grounded_in=result.grounded_in,
+    )
+
+
+def _handle_quantitative_investigation(
+    text: str,
+    workspace: ProjectWorkspace,
+    case: dict,
+    store: CaseWorkspaceStore,
+    reviewer: str,
+    triggering_message_id: Optional[str],
+) -> InterpretationResult:
+    """
+    CLAUDE-P40-VW8-QA-R6: a general, reusable evidence-guided
+    quantitative pattern (distance/elevation-difference/slope/clearance
+    feasibility) - see services/quantitative_investigation.py's own
+    header for the full capability-boundary reasoning (no drawing OCR/
+    measurement extraction, no hardcoded regulatory slope, no external-
+    AI call - every value here is a number the reviewer has directly
+    typed into this Case's own conversation, deterministic arithmetic
+    only).
+
+    Re-scans the WHOLE Case conversation (not just this one message) so
+    a value confirmed several messages ago is still "remembered" -
+    conversation history is the only persistence this uses; no new
+    working-memory data model is introduced (see this file's own
+    header on why: Finding remains a plain statement string, exactly
+    as it already was).
+    """
+    all_text = [m.get("text", "") for m in case["conversation"]] + [text]
+    value_lists = [quant.extract_values_from_text(t) for t in all_text]
+    confirmed = quant.merge_values(*value_lists)
+
+    has_drawing_source = bool(
+        any(
+            s["id"] in case["source_ids"] and s["kind"] == "drawing"
+            for s in CaseWorkspaceStore.active_sources(workspace)
+        )
+    )
+
+    # The question text itself: the EARLIEST prior message in this
+    # conversation that looked like the question, so a later message
+    # that only supplies a value (and may itself also happen to match
+    # the same keyword trigger, e.g. "Available length is 22m") never
+    # displaces the ORIGINAL question - never truncated either way
+    # (Section: "the user's full question must not be replaced by a
+    # truncated title"). Falls back to the current message only when
+    # this is genuinely the first one to ever match.
+    question_text = next(
+        (m["text"] for m in case["conversation"]
+         if quant.looks_like_quantitative_feasibility_question((m.get("text") or "").lower())),
+        text,
+    )
+
+    missing = quant.missing_fields(confirmed)
+    if missing:
+        return InterpretationResult(
+            action_taken="quantitative_investigation_in_progress",
+            reply_text=quant.build_progress_reply(question_text, confirmed, has_drawing_source),
+        )
+
+    available = confirmed.get("available_travel_length")
+    calc = quant.compute_feasibility(
+        entrance_grade=confirmed["entrance_grade_elevation"].value,
+        basement_grade=confirmed["basement_grade_elevation"].value,
+        slope_percent=confirmed["longitudinal_slope_percent"].value,
+        available_travel_length=available.value if available else None,
+    )
+    calculation_reply = quant.build_calculation_reply(calc, confirmed)
+
+    if available is None:
+        # Section "Finding behavior": "only create a candidate Finding
+        # after the relevant evidence and assumptions are visible" - a
+        # feasibility comparison isn't visible yet without an available
+        # length, so no Finding is created for this reply; the
+        # calculation so far is still shown transparently, plus a
+        # specific ask for the one remaining input.
+        return InterpretationResult(
+            action_taken="quantitative_investigation_calculated",
+            reply_text=(
+                calculation_reply + " To compare against what's actually available, I still need the "
+                f"{quant.FIELD_LABELS['available_travel_length']}." +
+                quant.build_source_guidance(has_drawing_source)
+            ),
+        )
+
+    unresolved = []
+    if calc.additional_length == 0.0:
+        unresolved.append("top/bottom transitions and required landing/curved geometry not yet stated")
+    if not has_drawing_source:
+        unresolved.append("no drawing Source attached - values are reviewer-stated, not drawing-measured")
+
+    width = confirmed.get("driveway_width")
+    statement = quant.build_finding_statement(question_text, confirmed, calc, width, unresolved)
+
+    trigger = AnalysisTrigger(
+        trigger_type=ANALYSIS_TRIGGER_USER_INITIATED,
+        trigger_reference_type="conversation_message" if triggering_message_id else None,
+        trigger_reference_id=triggering_message_id,
+        triggered_by_actor=reviewer,
+    )
+    analysis = store.record_analysis(
+        workspace,
+        case_id=case["id"],
+        source_ids=list(case["source_ids"]),
+        objective=question_text,
+        engine_name="quantitative_investigation",
+        engine_version="p40-vw8qa-r6",
+        findings=[{"statement": statement, "machine_confidence": 0.5}],
+        trigger=trigger,
+    )
+
+    return InterpretationResult(
+        action_taken=f"quantitative_investigation_finding:{analysis['id']}",
+        reply_text=(
+            calculation_reply +
+            " Recorded as a candidate Finding for your review - provisional until you confirm it; "
+            "this is geometric feasibility from stated values, not a regulatory or professional "
+            "engineering sign-off."
+        ),
     )
