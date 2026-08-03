@@ -1591,11 +1591,32 @@ main {
     margin-bottom: 1rem;
     flex-wrap: wrap;
 }
+/* CLAUDE-P40-VW7B-QA2: flex-shrink:0 added - a real-browser check found
+   that clicking the Foreground Project's own name (menu.context.switch-
+   project) did not open the Vestibule. Root cause: this was the ONLY
+   one of .workspace-topbar's three flex children without flex-shrink:0
+   (.workspace-topbar-controls, the mirror-image region on the right,
+   already has it) - #workspace-document-controls (the middle region,
+   flex:1 1 auto, actively GROWS to fill space whenever Document
+   controls are visible) could squeeze this region's own rendered width
+   toward its min-width:0 floor, shrinking the Project-name link's
+   actual clickable area toward nothing even though its DOM/href/
+   aria-label were always correct - not a JS interception bug, not a
+   missing anchor, a pure flex-distribution asymmetry. Now protected at
+   its natural content width, exactly like .workspace-topbar-controls
+   already is; .workspace-topbar's own flex-wrap:wrap is the safe
+   fallback if all three regions' combined natural width ever exceeds
+   the viewport (a two-line header, still fully clickable) rather than
+   a one-line header with an invisible-width link. .workspace-topbar-
+   context's own nested overflow:hidden/text-overflow:ellipsis (below)
+   still truncates an unusually long Project+Document name WITHIN this
+   now-guaranteed width, unaffected by this change. */
 .workspace-topbar-identity {
     display: flex;
     align-items: baseline;
     gap: 0.6rem;
     min-width: 0;
+    flex-shrink: 0;
     overflow: hidden;
 }
 /* CLAUDE-P40-BRAND1 (product-owner correction): "Archiosk" used to be

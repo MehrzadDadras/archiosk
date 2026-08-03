@@ -1,5 +1,113 @@
 # Continuation checkpoint
 
+## 2026-08-03 — CLAUDE-P40-VW7B-QA2: Header Project Link Does Not Open Vestibule
+
+**Started from a verified clean state:** local `HEAD` at `96bb08f`
+(the VW7B-QA1 PDF fix, one commit ahead of `origin/main` at `0c6c520`,
+not yet pushed - pending product-owner review) confirmed before any
+edit; working tree clean apart from the pre-existing, unrelated
+`tests/fixtures/nreocrc/_lab_instance_scratch_002/` scratch fixture.
+
+**Report:** real-browser acceptance of pushed VW7B found that clicking
+the current Project name ("Nipigon Ramp") in the top header did not
+open the Project Vestibule - the browser stayed on the current Project
+workspace.
+
+**Diagnosis, methodically ruling out every angle the task named, with
+direct evidence for each:**
+- **Rendered header composition / link target:** re-rendered the exact
+  header markup via the Flask test client - the Project name genuinely
+  IS a real `<a href="/projects/choose?current=<project_id>">` with a
+  correct, authorized target and a real `aria-label`. Confirmed
+  correct, not the defect.
+- **JavaScript interference:** searched every `static/js/*.js` file for
+  any reference to `.workspace-topbar` (none exist) and every
+  `addEventListener('click', ...)` in the codebase - the one
+  document-wide click listener (`case_workspace.js`, closing a context
+  menu) does not call `preventDefault()`/`stopPropagation()` and is
+  therefore harmless; the one interceptor scoped near the header
+  (`base.html`'s Display-division routing script, from the OTHER,
+  earlier "VW7B" stage) is explicitly scoped to `[data-tree-root]`
+  (the Lists tree), which does not contain the header at all. Ruled
+  out.
+- **Overlay interference (CSS):** checked `pointer-events`
+  declarations (only UI Reference Mode's own badge, itself
+  `pointer-events: none` and irrelevant unless that dev-only mode is
+  active) and z-index/absolute-positioning on every neighboring
+  region - none present. Ruled out as a literal overlay.
+- **Click area - the actual defect:** `.workspace-topbar` has three
+  flex children - `.workspace-topbar-identity` (brand + the
+  Project-switch link), `#workspace-document-controls` (the middle
+  region, `flex: 1 1 auto`, actively grows to fill space whenever
+  Document controls are visible - exactly the scenario CLAUDE-P40-
+  VW7B-QA1 just fixed, making this region visible again for the first
+  time in a real acceptance pass), and `.workspace-topbar-controls`
+  (Display Layout/Appearance/Account). Only the LAST of these three
+  had `flex-shrink: 0`. `.workspace-topbar-identity` did not, so the
+  actively-growing middle region could squeeze it toward its own
+  `min-width: 0` floor - shrinking the Project-name link's actual
+  rendered/clickable area toward nothing, even though its DOM, href,
+  and aria-label were correct the entire time. A geometry defect, not
+  a routing, interception, or missing-anchor one.
+
+**Fix, the smallest verified change:** `.workspace-topbar-identity`
+gained the same `flex-shrink: 0` its sibling `.workspace-topbar-
+controls` already had - symmetric treatment across both edge regions,
+no new mechanism invented. `.workspace-topbar`'s own existing
+`flex-wrap: wrap` remains the safe overflow fallback if all three
+now-protected regions' combined natural width ever exceeds the
+viewport (a two-line header, still fully clickable) rather than a
+one-line header with an invisible-width link. `.workspace-topbar-
+context`'s own nested `overflow: hidden`/`text-overflow: ellipsis`
+still truncates an unusually long Project+Document name WITHIN this
+now-guaranteed width, unaffected.
+
+**Preserved and re-confirmed, per this stage's own explicit
+checklist:**
+- The Vestibule still distinguishes Current Project ("Currently
+  entered") from Available Projects.
+- Returning to the Project still restores its own independent
+  workspace state (this is entirely client-side/localStorage,
+  untouched by a CSS change - the header link itself carries no such
+  state of its own).
+- The Archiosk brand mark retains its own established destination
+  (`/`, `aria-label="Archiosk Home"`) - unaffected.
+- No click target overlaps another header control - if anything, this
+  fix REDUCES overlap/ambiguity risk by guaranteeing each edge region
+  its own space rather than letting the middle region encroach.
+- Keyboard activation (a real, natively-focusable `<a>`, no
+  `tabindex="-1"`) and accessible naming (`aria-label` carrying "Switch
+  Project") both confirmed intact.
+- Project isolation, Lists scoping, Investigation Attention Positions,
+  and all business data - none of this logic lives in header CSS, so
+  none of it was at risk from either the bug or the fix.
+
+**Tests:** new `tests/test_p40vw7b_qa2_header_vestibule_link_fix.py`
+(14 tests) - the flex-shrink fix itself, confirmation it matches the
+sibling's own established pattern, confirmation the middle document-
+controls region remains deliberately flexible, re-confirmation of
+every other angle the task asked to rule out (link target with a
+Document actually open - the exact real-browser scenario - JS
+interference, single-tab-stop, brand-mark destination, keyboard/
+accessible-name), and direct confirmation the Vestibule/restoration
+guarantees are unaffected. Re-ran the BRAND1/header/VW7B test files
+(122 tests) unmodified as an explicit regression gate - all passed. No
+UI-reference changes were needed - no new reference, no structural DOM
+change, purely a CSS layout property. Full suite: 2523 passed, 0 failed.
+
+**Real-browser verification:** not available in this environment - a
+real flex-shrink computed-geometry regression can only be directly
+observed in an actual browser layout engine; stated honestly rather
+than fabricated as a rendered-pixel proof. Product-owner verification
+checklist: open a Project with a PDF Document active (Document
+controls visible, reproducing the exact reported scenario) and confirm
+the Project name in the header is reliably clickable across its full
+visible width; confirm it still opens the Vestibule with "Current
+Project"/"Currently entered" shown; confirm the Archiosk mark still
+navigates home; confirm keyboard Tab reaches the link and Enter
+activates it; confirm at a narrow viewport that the header wraps
+sensibly rather than clipping the link again.
+
 ## 2026-08-03 — CLAUDE-P40-VW7B-QA1: Real-Browser PDF Source Failure
 
 **Started from a verified clean state:** `HEAD == origin/main` at
