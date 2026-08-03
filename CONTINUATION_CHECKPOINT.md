@@ -1,6 +1,125 @@
 # Continuation checkpoint
 
-## 2026-08-03 — CLAUDE-P40-VW7B: Foreground Project Vestibule and Four-Position Investigation Attention Model
+## 2026-08-03 — CLAUDE-P40-VW7B-QA1: Real-Browser PDF Source Failure
+
+**Started from a verified clean state:** `HEAD == origin/main` at
+`0c6c520` (the VW7B stage) confirmed before any edit; working tree
+clean apart from the pre-existing, unrelated
+`tests/fixtures/nreocrc/_lab_instance_scratch_002/` scratch fixture.
+
+**Report:** real-browser acceptance review of pushed commit `0c6c520`
+found that selecting "Nipigan Starter.pdf" correctly moved the Lists
+highlight from Chats to the Document and correctly updated the
+breadcrumb/Toolbox, but Display showed "This PDF could not be opened
+in the viewer: getDocument - expected either data, range, or url
+parameter," with Thumbnails simultaneously stuck at its empty state.
+
+**Diagnosis, grounded directly against the shipped vendor source, not
+assumed:** `static/js/pdf_viewer.js`'s `mount()` and
+`mountRememberedThumbnailsIfAny()` (CLAUDE-P40-LTH1) both called
+`pdfjsLib.getDocument(url)` with `url` as a BARE STRING.
+`static/js/vendor/pdfjs/pdf.min.mjs` (version 6.2.108, per that
+directory's own README) does **not** normalize a bare string into
+`{url: ...}` - confirmed by reading the actual shipped source: its real
+`getDocument(t={})` immediately reads `t.url`, which is `undefined` for
+a plain string, so neither `data`, `range`, nor a resolved `url` is
+ever set. The literal throw text ("getDocument - expected either
+`data`, `range`, or `url` parameter.") was found verbatim in the
+shipped file, inside an ASYNCHRONOUS `Promise.all([...]).then(...)`
+continuation that only runs once the PDF.js worker responds - not a
+synchronous validation at call time, which is exactly why no prior
+smoke check caught it, and why it would fail identically for **every**
+PDF, not something specific to this one fixture. A Node.js empirical
+probe against the same vendored file (stubbing just enough browser
+globals to import it - `DOMMatrix`/`Path2D`/`ImageData`) additionally
+confirmed neither call form throws synchronously, consistent with the
+throw being deferred into the async continuation this diagnosis
+identifies, rather than contradicting it.
+
+**Ruled out, with direct evidence, not assumption:**
+- **Not caused by VW7B** - VW7B never touched `pdf_viewer.js` at all;
+  `git diff` across the VW7B commit confirms this file is absent from
+  it.
+- **Not a VW7B Lists/Vestibule/attention regression** - the report
+  itself confirms Lists highlighting, breadcrumb, and Toolbox all
+  behaved correctly; only Display/Thumbnails (pdf_viewer.js's own
+  domain) failed.
+- **Not caused by LTH1's remembered-thumbnail LOGIC** - LTH1 only
+  inherited the identical, already-broken call convention via
+  copy-paste from `mount()`'s own pre-existing (CLAUDE-P40-VW7A-QA2)
+  code; the remembered-context reconciliation, revalidation, and
+  isolation logic around it are all unaffected and unchanged.
+- **Not a missing/invalid route or DOM source value** - confirmed via
+  a real rendered-HTML check (`DomSourceValueGroundingTests`): the
+  server-rendered `data-pdf-url` is a real, non-empty, correctly-
+  authorized URL, and that URL genuinely resolves to the real file
+  content through `workspace.source_file`. The bug was entirely in how
+  the CLIENT consumed an already-correct value, never in what the
+  server sent.
+- **Not stale restoration state** - the failure occurs on a fresh,
+  first-time `mount()` of an actively-selected Document, not a
+  restored/remembered one; the remembered-thumbnails path shares the
+  identical bug independently, not because of any restoration-state
+  corruption.
+- **Not a pre-existing invalid fixture** - the underlying file itself
+  is never involved in producing this specific error text; a genuinely
+  missing/corrupt file produces a different failure mode entirely (a
+  404 from `source_file`, then a network-level PDF.js rejection),
+  confirmed still distinct and still handled honestly (see below).
+
+**Fix, the smallest verified change:** both call sites now pass
+`{ url: url }` / `{ url: match.file_url }` instead of the bare string -
+the real, verified contract this vendored build actually requires. No
+Project or Document data was modified in any way to produce this fix
+or make a test pass.
+
+**Honest failure state, confirmed unaffected:** the genuinely-missing-
+file case (a real, separate failure mode) still surfaces honestly - a
+missing file on disk still 404s from `workspace.source_file`
+(`services/case_workspace.py`'s own existing check, untouched), and
+`mount()`'s own `.catch()` still calls `showLoadError()` +
+`clearThumbnails()` for ANY `getDocument()` rejection reason, not just
+the one this stage fixed - never a silently-undefined state passed to
+PDF.js, and never a fabricated success state.
+
+**Confirmed correct behavior, preserved and unaffected by this fix:**
+only the current Project appears in opened Lists; clicking
+Investigations/Documents/etc. only expands the family; clicking the
+actual Document selects it; Chats loses its active highlight;
+breadcrumb and Toolbox identify the selected Document; per-Project
+restoration and authorization remain intact - none of this logic lives
+in `pdf_viewer.js`, so none of it was at risk from either the bug or
+the fix.
+
+**Tests:** new `tests/test_p40vw7b_qa1_pdf_getdocument_fix.py` (9
+tests) - the exact call-shape fix at both sites, a regression guard
+against a bare-string call ever being reintroduced (scoped to the real
+`pdfjsLib.` prefix specifically, after first catching and fixing a
+self-collision where the guard's own broad regex matched this file's
+own docstring quoting the vendored source's bare signature in prose -
+the same "assertion trips on its own explanatory comment" bug class
+this repo has hit before), confirmation the honest-failure path is
+unaffected, and direct rendered-HTML evidence ruling out a DOM/route
+cause. Re-ran the complete pre-existing LTH1/VW7A-QA2/DTAB1/document-
+controls test files (197 tests) unmodified as an explicit regression
+gate - all passed. No UI-reference changes were needed - no visible
+structure, `data-ui-ref`, or route changed, only an internal JS
+call-argument shape. Full suite: 2509 passed, 0 failed.
+
+**Real-browser verification:** not available in this environment - the
+fix itself was verified by direct inspection of the actual shipped
+PDF.js source (not assumed), including locating the literal throw
+statement and its surrounding async validation branch, exactly the
+honest standard this repo has held to throughout. Product-owner
+verification checklist: open "Nipigan Starter.pdf" (and, ideally, at
+least one other previously-untested PDF, given this was a universal
+defect, not fixture-specific) and confirm Display renders real pages
+and Thumbnails populates; confirm a genuinely-removed/renamed file on
+disk still shows the honest "could not be opened" error rather than a
+silent blank state; confirm a remembered-thumbnails scenario (opening
+a PDF, then navigating to an Investigation/Chat within the same
+Project) also renders real thumbnails now, not just the empty state.
+
 
 **Tag collision, flagged explicitly:** "CLAUDE-P40-VW7B" was already
 used once before this stage, for an unrelated, already-shipped stage

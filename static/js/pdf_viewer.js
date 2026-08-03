@@ -230,7 +230,10 @@
         }
         thumbnailsOnlyMode = true;
         loadPdfJs().then(function () {
-            return pdfjsLib.getDocument(match.file_url).promise;
+            // CLAUDE-P40-VW7B-QA1: same object-form fix as mount()'s
+            // own getDocument() call - see that call site's own
+            // comment for why a bare string was never valid here.
+            return pdfjsLib.getDocument({ url: match.file_url }).promise;
         }).then(function (doc) {
             pdfDoc = doc;
             currentSourceId = match.id;
@@ -853,7 +856,17 @@
             canvasContainer.textContent = '';
             canvasContainer.appendChild(pageWrap);
             canvasContainer.addEventListener('scroll', saveViewStateSoon);
-            return pdfjsLib.getDocument(url).promise;
+            // CLAUDE-P40-VW7B-QA1: getDocument() requires an object
+            // with a `url` property in this vendored build (6.2.108) -
+            // it does NOT normalize a bare string into {url: ...} the
+            // way some PDF.js versions/docs suggest (confirmed by
+            // reading the shipped, minified source directly rather
+            // than assuming: getDocument(t={}) immediately reads
+            // t.url, which is undefined for a plain string - the exact
+            // "getDocument - expected either `data`, `range`, or `url`
+            // parameter" throw a real-browser check reported for every
+            // PDF, universally, not a document-specific defect).
+            return pdfjsLib.getDocument({ url: url }).promise;
         }).then(function (doc) {
             pdfDoc = doc;
             thumbnailsOnlyMode = false;
