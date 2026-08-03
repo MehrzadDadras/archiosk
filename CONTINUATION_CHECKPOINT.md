@@ -1,5 +1,131 @@
 # Continuation checkpoint
 
+## 2026-08-02 — CLAUDE-P40-VW8-QA-R6: Natural-Language, Evidence-Guided Quantitative Investigation
+
+**Reported defect:** inside an active Investigation, the reviewer
+wrote "Those numbers are geodetic elevations from ground floor to the
+basement." (a clarifying statement, not a command) and got the same "I
+didn't recognize an action in that message" reply as a genuinely
+unrelated stray message — the interpreter's final fallback never
+distinguished "an open Investigation with nothing recognized" from
+"no Investigation at all."
+
+**Fix 1 — discussion contribution:** `services/conversation_
+interpreter.py`'s final fallback now checks for an open Case first:
+when one is open and nothing else matched, the message is recorded as
+a real discussion contribution ("Noted as context for this
+Investigation...") instead of the generic "unrecognized" reply. A
+project-level message with no Case open still gets the original,
+unchanged "unrecognized" reply — the change is scoped to exactly the
+reported condition, not a blanket softening of every unmatched
+message.
+
+**Fix 2 — general evidence-guided quantitative pattern:** new
+`services/quantitative_investigation.py` — a reusable (not "Nipigon
+Ramp"-hardcoded) distance/elevation-difference/slope/clearance
+feasibility pattern, wired into `conversation_interpreter.py` as a new
+`_handle_quantitative_investigation` branch, checked before the
+generic project-question/discussion-acknowledgment fallbacks. Every
+value extracted is a number the reviewer directly TYPED into this
+conversation (`extraction_method="conversation_stated"`, always
+carrying its own exact matched quote and `status="user_provided"`) —
+never a drawing citation, since no drawing was actually read: local
+OCR and PDF-page rendering are NOT available in this environment
+(confirmed directly during the R2A stage's own capability audit,
+identical conclusion, not re-derived). Re-scans the WHOLE Case
+conversation (not just the current message) each turn, so a value
+confirmed several messages ago is still "remembered" — no new
+persisted working-memory data model was introduced; conversation
+history (already durable) is the only state this uses, and `Finding`
+stays a plain statement string exactly as it already was (no new
+business object).
+
+**Calculation (the exact 5-step formula specified):** vertical drop =
+entrance grade − basement grade; basic sloped run = vertical drop /
+slope; total required travel = basic sloped run + additional length;
+compared against available measured length once stated. The 6 m
+driveway width is structurally never insertable into this formula —
+`compute_feasibility` has no width parameter at all. No default/
+hardcoded regulatory slope value anywhere — the reply explicitly
+states the applicable slope must come from an already-adopted governed
+source in the Project or the reviewer's own explicit assumption, and
+is "never assumed automatically."
+
+**Missing-source guidance:** when no drawing Source is attached, the
+reply names specific evidence and explains why (site plan for entry
+grade/available run, basement/parking plan for threshold elevation,
+building section for clearances) — not a bare "add a Source." Points
+to the real, pre-existing "+ Add drawing Source to this Investigation"
+control (`templates/case_workspace.html`'s own Investigation-detail
+view — corrected during this stage's own testing from an initially
+wrong "in Lists" claim to where that control actually renders).
+
+**Finding behavior:** only recorded once every value required for the
+calculation (entrance grade, basement grade, slope) AND the available
+length are all confirmed — reuses `CaseWorkspaceStore.record_analysis`/
+`Finding` completely unchanged (provisional by default, requiring the
+existing `ReviewerValidation`/`Disposition` review before Apply — the
+"human must confirm before Apply" requirement was already true of
+every Finding this mechanism has ever produced, not something newly
+added). The statement packs every required field (question evaluated
+in full — never truncated — confirmed inputs with their conversation
+quotes, formula, computed values, margin, unresolved items, and an
+explicit "not a final regulatory/professional engineering sign-off"
+caveat).
+
+**Escalation path:** a quantitative-shaped question asked with no
+Investigation open yet now also triggers the existing "start an
+Investigation" offer (`needs_case`), with a real suggested title
+(`quant.suggested_title` — "Basement driveway ramp feasibility" for
+the acceptance scenario, generalized from the question's own shape,
+not a single hardcoded string) — the full question itself is never
+replaced by this shorter title anywhere.
+
+**No external-AI call of any kind** — every calculation is
+deterministic arithmetic on reviewer-stated conversation text; verified
+directly (a full acceptance-scenario run succeeds with no reachable
+Anthropic client at all, not just by source inspection).
+
+**Tests:** `tests/test_p40vw8qa_r6_quantitative_investigation.py` (37
+tests) — the reported defect itself, natural-language question
+recognition, missing-source/missing-measurement guidance, extraction
+provenance/units/no-fabrication, the exact calculation formula
+(including the width-never-in-slope-formula structural guarantee),
+full conversational flow through candidate-Finding creation,
+provisional (not auto-applied) status, conversation persistence, and
+no-external-AI-call verification.
+
+**No new UI elements this stage** — the entire capability runs through
+the EXISTING Chat composer/conversation dock (`chat.composer.*`,
+already registered), so there is nothing new for `UI_REFERENCE_MAP.md`
+to record; stated honestly here rather than inventing a reference for
+a control that doesn't exist.
+
+**What remains unavailable (honest scope boundary):** real drawing
+measurement (OCR/vision-based dimension extraction from a site
+plan/basement plan/section) is NOT built — the same capability gap the
+R2A stage's own audit already found and recorded, not re-litigated
+here. Automated retrieval of governed regulatory/design criteria from
+Documents already adopted into the Project is NOT built — the reply
+asks the reviewer to state the applicable slope as an explicit
+assumption instead of searching for one; a genuine "look up the
+adopted standard" capability would be a real, separate future stage.
+Only the elevation/slope/available-length pattern is implemented, not
+distance/area/capacity/generic dimensional-fit — the module's own
+structure (a field-pattern table + a single formula function) is built
+to extend to those without a rewrite, but extending it is not part of
+this bounded stage.
+
+**Real-browser verification:** no interactive browser-automation tool
+is connected in this environment. Every claim above is verified via
+direct calls into `interpret_message`/`services.quantitative_
+investigation` reproducing the exact acceptance-scenario conversation
+turn-by-turn (not merely unit-testing the arithmetic in isolation) —
+genuinely strong evidence for the conversational LOGIC, but the actual
+rendered chat reply's appearance/readability in a real browser was not
+observed; that remains the product owner's own retry to perform, on
+this exact ramp-feasibility Investigation, left ready for it.
+
 ## 2026-08-02 — CLAUDE-P40-VW8-QA: New Investigation Action in Lists
 
 **Commits:** `a78e8c8`. Product-owner walkthrough evidence: the
