@@ -163,7 +163,7 @@
        perceptual weight a piece of governed, still-fully-present
        content currently carries. Orthogonal to the semantic color
        grammar above - pressure never substitutes for or dims a
-       semantic color; every --review-state-*/--evidence-*/verdict
+       semantic color; every --review-state-* / --evidence-* / verdict
        badge stays at full strength regardless of a --pressure-quiet-
        text class applied to surrounding neutral text, so "this has
        gone quiet" can never be mistaken for "this verdict is wrong" or
@@ -207,7 +207,7 @@
 
    CLAUDE-P40-VW8-QA (Theme Foreground Contrast Addendum): tools/
    check_contrast.py itself only ever checked LIGHT pairings (the
-   --text-*/--canvas/--surface-primary names it reads are the Light
+   --text-* / --canvas / --surface-primary names it reads are the Light
    :root values; Dark/Tinted use differently-prefixed token names it
    never parsed). Auditing the full text-tier x surface-tier matrix
    for all three modes directly (same relative-luminance math, run by
