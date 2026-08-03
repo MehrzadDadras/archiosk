@@ -47,12 +47,13 @@ _GATEWAY_SHELL_HTML_PATH = _REPO_ROOT / "templates" / "gateway_shell.html"
 _PROJECT_CHOOSER_HTML_PATH = _REPO_ROOT / "templates" / "project_chooser.html"
 _LOGIN_HTML_PATH = _REPO_ROOT / "templates" / "login.html"
 _UPLOAD_HTML_PATH = _REPO_ROOT / "templates" / "upload.html"
+_UPLOAD_CONFIRM_HTML_PATH = _REPO_ROOT / "templates" / "upload_confirm.html"
 _ERROR_HTML_PATH = _REPO_ROOT / "templates" / "errors" / "error.html"
 _APP_PY_PATH = _REPO_ROOT / "app.py"
 _MAIN_CSS_PATH = _REPO_ROOT / "static" / "css" / "main.css"
 _REFERENCE_MAP_PATH = _REPO_ROOT / "UI_REFERENCE_MAP.md"
 
-_DATA_REF_RE = re.compile(r'data-ui-ref="([a-z0-9.\-]+)"')
+_DATA_REF_RE = re.compile(r'data-ui-ref="([a-z0-9._\-]+)"')
 # CLAUDE-P40-VW8-QA: a row's own FIRST CELL may name more than one
 # data-ui-ref value (e.g. "`menu.appearance.all.light`,
 # `menu.appearance.all.dark`, `menu.appearance.all.tinted`") rather
@@ -61,7 +62,7 @@ _DATA_REF_RE = re.compile(r'data-ui-ref="([a-z0-9.\-]+)"')
 # against that one row's status, so a genuinely readable multi-value
 # row is still exactly as machine-checked as a single-value one.
 _REGISTRY_ROW_RE = re.compile(r"^\| (.+?) \|.*\| (active|retired) \|$", re.MULTILINE)
-_REF_TOKEN_RE = re.compile(r"`([a-z0-9.\-]+)`")
+_REF_TOKEN_RE = re.compile(r"`([a-z0-9._\-]+)`")
 
 # CLAUDE-P40-VW8-QA: the Appearance matrix constructs its own data-ui-ref
 # VALUES from a Jinja loop variable (data-ui-ref="menu.appearance.
@@ -89,17 +90,50 @@ _APPEARANCE_DYNAMIC_REFS = {
 # passes a non-None `ui_ref` - hardcoded here from that exact literal.
 _ERROR_PAGE_DYNAMIC_REFS = {"errors.upload-too-large"}
 
+# CLAUDE-P40-VW8-QA-R2A: found while adding this stage's own dynamic-ref
+# handling for upload_confirm.html - templates/upload.html's Operating
+# Environment radios (data-ui-ref="upload.operating-environment.
+# {{ value }}") were ALREADY a Jinja-loop-constructed ref (added in the
+# earlier upload-capacity stage) with no dynamic-ref registration of
+# their own, so this consistency check had a silent blind spot for them
+# the whole time - never actually verified. Fixed here, not carried
+# forward as a known gap.
+from services.environment_capabilities import OPERATING_ENVIRONMENT_LABELS as _OPERATING_ENVIRONMENT_LABELS  # noqa: E402
+
+_UPLOAD_ENVIRONMENT_DYNAMIC_REFS = {
+    f"upload.operating-environment.{value}" for value in _OPERATING_ENVIRONMENT_LABELS
+}
+
+# CLAUDE-P40-VW8-QA-R2A: templates/upload_confirm.html builds three
+# data-ui-ref families from services/drawing_intake.py's own
+# CANDIDATE_FIELDS loop variable (data-ui-ref="upload.confirm.field.
+# {{ field_name }}" etc.) - a plain source regex can never recover
+# these, same reasoning as _APPEARANCE_DYNAMIC_REFS above. Enumerated
+# from the exact same fixed field-name tuple the template's own
+# {% for %} loop iterates over.
+from services.drawing_intake import CANDIDATE_FIELDS as _DRAWING_CANDIDATE_FIELDS  # noqa: E402
+
+_UPLOAD_CONFIRM_DYNAMIC_REFS = {
+    f"upload.confirm.field.{name}" for name in _DRAWING_CANDIDATE_FIELDS
+} | {
+    f"upload.confirm.field.{name}.input" for name in _DRAWING_CANDIDATE_FIELDS
+} | {
+    f"upload.confirm.field.{name}.evidence" for name in _DRAWING_CANDIDATE_FIELDS
+}
+
 
 def _all_template_refs() -> set[str]:
     refs: set[str] = set()
     for path in (
         _BASE_HTML_PATH, _CASE_WORKSPACE_HTML_PATH, _MACROS_HTML_PATH,
         _GATEWAY_HTML_PATH, _GATEWAY_SHELL_HTML_PATH, _PROJECT_CHOOSER_HTML_PATH,
-        _LOGIN_HTML_PATH, _UPLOAD_HTML_PATH, _ERROR_HTML_PATH, _APP_PY_PATH,
+        _LOGIN_HTML_PATH, _UPLOAD_HTML_PATH, _UPLOAD_CONFIRM_HTML_PATH, _ERROR_HTML_PATH, _APP_PY_PATH,
     ):
         refs |= set(_DATA_REF_RE.findall(path.read_text(encoding="utf-8")))
     refs |= _APPEARANCE_DYNAMIC_REFS
     refs |= _ERROR_PAGE_DYNAMIC_REFS
+    refs |= _UPLOAD_CONFIRM_DYNAMIC_REFS
+    refs |= _UPLOAD_ENVIRONMENT_DYNAMIC_REFS
     return refs
 
 
@@ -152,7 +186,7 @@ class RegistryConsistencyTests(unittest.TestCase):
         # UI_REFERENCE_MAP.md's own Gateway/Auth sections and Section
         # 4's "must work on Sign-in, Gateway... too" requirement).
         for ref in _all_template_refs():
-            self.assertRegex(ref, r"^(menu|lists|display|toolbox|chat|shell|gateway|auth|upload|errors)\.[a-z0-9.\-]+$", ref)
+            self.assertRegex(ref, r"^(menu|lists|display|toolbox|chat|shell|gateway|auth|upload|errors)\.[a-z0-9._\-]+$", ref)
 
     def test_ui_reference_mode_css_rule_exists(self):
         css = _MAIN_CSS_PATH.read_text(encoding="utf-8")
