@@ -131,7 +131,10 @@ _SURFACE_SELECTORS = {
     "menu": ".workspace-topbar",
     "lists": ".launcher-panel",
     "display": ".app-main",
-    "toolbox": ".workspace-pane-toolbox",
+    # CLAUDE-P40-EYE1: the Toolbox surface's own painted root moved to
+    # .workspace-right-column (the new full-height column containing
+    # Toolbox AND Eye) - see that stage's own comment in main.css.
+    "toolbox": ".workspace-right-column",
     "chat": ".chat-region",
 }
 

@@ -135,7 +135,7 @@ still renders, unchanged, for those formats).
 | Reference | Element | Label | Current behavior | Auth notes | Status |
 |---|---|---|---|---|---|
 | `shell.lists-divider` | `<button>` | (unlabeled divider) | Collapses/shows the Lists panel; `localStorage`-persisted, reviewer-wide | Every authenticated page | active |
-| `shell.toolbox-divider` | `<button>` | (unlabeled divider) | Collapses/shows the Toolbox; `localStorage`-persisted, per-Project | Only rendered when `project_id`/`workspace` are defined | active |
+| `shell.toolbox-divider` | `<button>` | (unlabeled divider) | Collapses/shows the WHOLE right column (Toolbox and Eye together, CLAUDE-P40-EYE1 — was Toolbox alone); `localStorage`-persisted, per-Project. **Product-owner browser correction:** now ALSO a real, mouse-draggable/keyboard-operable (`ArrowLeft` widens/`ArrowRight` narrows) WIDTH resize handle for the right column — a genuine drag (movement past a small threshold) is distinguished from a plain click, so the pre-existing collapse/show behavior is unchanged for an ordinary click. Width persisted separately (`beehive:panel:right-column-width:<project_id>`), clamped against a practical minimum for both the right column and the centre (Display/Chat) column | Only rendered when `project_id`/`workspace` are defined | active |
 | `shell.lists-thumbnails-divider` | `<div role="separator">` (new, CLAUDE-P40-VW7A-QA2) | (unlabeled divider) | Draggable (pointer + arrow-key) horizontal split between the new `lists.thumbnails-pane` and Lists above it; percentage-based, `sessionStorage`-persisted (deliberately weaker than the `localStorage` panel-show/hide prefs above — Section 3's own "may persist per session"); double-click restores the default 60/40 split. `[hidden]` unless `lists.thumbnails-pane` is also shown | Every authenticated page | active |
 
 ## Lists — cross-Project (`templates/base.html`, reviewer-wide)
@@ -269,11 +269,49 @@ assertion before ever shipping, not discovered live.
 
 | Reference | Element | Current behavior | Auth notes | Status |
 |---|---|---|---|---|
-| `toolbox.panel` | `#workspace-toolbox-panel` (`<aside>`, `templates/base.html`) | The panel container itself — always present within an open Workspace, empty elsewhere | Only rendered when `project_id`/`workspace` are defined | active |
+| `toolbox.panel` | `#workspace-toolbox-panel` (`<aside>`, `templates/base.html`) | The panel container itself — always present within an open Workspace, empty elsewhere. CLAUDE-P40-EYE1: no longer owns its own width/background/scroll (moved to `#workspace-right-column`, below) — the upper pane inside that column, sized by the Toolbox/Eye divider | Only rendered when `project_id`/`workspace` are defined | active |
+| `toolbox.maximize` | `<button aria-pressed>` (new, CLAUDE-P40-EYE1) | "Maximize Toolbox" / "Restore" | Expands Toolbox toward the right column's practical maximum (keeping whatever proportion was active immediately before, on the toggle-back click); floats over the pane's own top-right corner rather than a new header row, since `toolbox.heading` already occupies that position | Only rendered when `project_id`/`workspace` are defined | active |
 | `toolbox.heading` | `<h2>` | "Toolbox" — static | — | active |
 | `toolbox.investigation-findings` | `<section>` | Rendered when an Investigation is the active selection (`active_case`) — Findings list, artifacts, RFI actions | Findings filtered to `findings_view` (already access/visibility-scoped) | active |
 | `toolbox.document` | `<section>` | Rendered when a Document is the active selection (`selected_source`) — Document-level tools | Same as workspace access | active |
 | `toolbox.empty` | `<section>` | Rendered when neither an Investigation nor a Document is selected — concise neutral empty state, points to Documents/Investigations/Project Tools in Lists | — | active |
+
+## Right column: Toolbox above Eye (`templates/base.html`, CLAUDE-P40-EYE1)
+
+Mirrors the Lists/Thumbnails split (CLAUDE-P40-VW7A-QA2) on the opposite
+side — `#workspace-right-column` is now the full-height column (a
+sibling of Lists AND `.workspace-main-column` inside `.app-shell-body`,
+spanning the same vertical extent as Display+Chat, never stopping at
+the Display/Chat divider), containing Toolbox (upper, see above) and
+the new Eye pane (lower) split by a draggable divider. The existing
+`shell.toolbox-divider` show/hide control (see the Shell section above)
+now collapses/restores this WHOLE column, not Toolbox alone, **and**
+(product-owner browser correction) is also a real mouse-draggable/
+keyboard-operable WIDTH resize handle for the column — a genuine drag
+is distinguished from a plain click via a movement threshold, so the
+existing collapse/show behavior is unchanged for an ordinary click.
+Eye itself is a structural scaffold only this stage (Section 4's own
+explicit boundary) — a heading, a neutral empty state, and a real (not
+decorative) paste/drop target with a responsive zoom/pan viewing canvas
+(browser correction, Section 3) that previews an image in-session with
+no persistence, no editing, no annotation, and no AI interpretation.
+
+`shell.toolbox-divider`'s own row (Shell section above) already documents this extended behavior in full — not repeated as a second row here to avoid a duplicate ref in the registry.
+
+| Reference | Element | Label | Current behavior | Auth notes | Status |
+|---|---|---|---|---|---|
+| `shell.toolbox-eye-divider` | `<div role="separator">` (new) | (unlabeled divider) | Draggable (pointer + arrow-key) horizontal split between Toolbox and Eye; percentage-based, `localStorage`-persisted per-Project (matching Toolbox's own existing show/hide preference scoping); double-click restores the default 60/40 split; never `[hidden]` — Eye is a permanent pane, only the split proportion is adjustable | Only rendered when `project_id`/`workspace` are defined | active |
+| `eye.panel` | `<div>` (new) | "Eye" (header text) | The whole pane; contains the heading, the maximize toggle, and the drop target | Only rendered when `project_id`/`workspace` are defined | active |
+| `eye.heading` | `<h2>` (new) | "Eye" — static | — | active |
+| `eye.maximize` | `<button aria-pressed>` (new) | "Maximize Eye" / "Restore Eye" | **Two-dimensional** (product-owner browser correction): collapses Toolbox toward its practical minimum (height) AND expands the right column to its largest practical width (via `shell.toolbox-divider`'s own resize logic) in one action; restores BOTH dimensions exactly on the toggle-back click. The maximized width is deliberately never persisted, so a mid-maximize page reload can't leave the reviewer stuck there | Only rendered when `project_id`/`workspace` are defined | active |
+| `eye.drop-target` | `<div role="group">` (new) | "Paste or drop an image here to preview it." (empty state) | A real drop target: `static/js/eye_pane.js` handles `dragover`/`drop`/`paste`, reads an image file via `FileReader`, and hands it to `eye.canvas` (below) for display — held only in this tab's own memory, never sent anywhere. Non-image drops/pastes show an inline error, not a silent failure. Dropping/pasting a new image while one is shown replaces it. Deliberately no Save/Export/annotate/attach-to-Chat control here — Section 4's own explicit scope boundary for this stage | Only rendered when `project_id`/`workspace` are defined | active |
+| `eye.canvas` | `<div>` (new, product-owner browser correction) | — | The responsive image-viewing canvas — `[hidden]` until an image is loaded, then fills `eye.drop-target`'s own available area (not a small fixed thumbnail). Contains the view-control toolbar and `eye.canvas.viewport` | Only rendered when `project_id`/`workspace` are defined | active |
+| `eye.canvas.zoom-out`, `eye.canvas.zoom-in` | `<button>` (new) | − / + | Multiplies/divides the current scale by 1.25, clamped 5%–800%; switches to manual (non-auto-refitting) mode | Only rendered when `project_id`/`workspace` are defined | active |
+| `eye.canvas.fit` | `<button>` (new) | "Fit" | Scales the image to fill the viewport on whichever axis is tighter, preserving aspect ratio (not capped at 100% — a small image is scaled UP to use the available area too); the initial view for every newly-loaded image | Only rendered when `project_id`/`workspace` are defined | active |
+| `eye.canvas.actual-size` | `<button>` (new) | "1:1" | Sets scale to exactly 100% (the image's real pixel size); switches to manual mode | Only rendered when `project_id`/`workspace` are defined | active |
+| `eye.canvas.reset` | `<button>` (new) | "Reset" | Returns to Fit (same target as `eye.canvas.fit`) and re-centers | Only rendered when `project_id`/`workspace` are defined | active |
+| `eye.canvas.remove` | `<button>` (new) | "Remove" | Clears the loaded image, returning `eye.drop-target` to its neutral empty state | Only rendered when `project_id`/`workspace` are defined | active |
+| `eye.canvas.viewport` | `<div>` (new) | — | The actual scroll/pan surface — the image is sized to its real scaled pixel dimensions (never CSS percentage-based sizing, so no stretching/distortion at any zoom); native browser scroll is the pan mechanism (keyboard/touch/trackpad all work for free); mouse-wheel/trackpad zoom is active only while this element itself has focus; a `ResizeObserver` recalculates Fit automatically whenever its own container is resized or Eye is maximized/restored, but only while still in Fit mode — a deliberate manual zoom is never silently overridden | Only rendered when `project_id`/`workspace` are defined | active |
 
 ## Chat (`templates/_macros.html`'s `conversation_dock` macro + `templates/case_workspace.html`)
 

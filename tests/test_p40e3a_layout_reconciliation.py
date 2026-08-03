@@ -356,17 +356,33 @@ class ToolboxContractTests(_BaseTestCase):
             self.assertNotIn('id="chat-region"', body, url)
 
     def test_toolbox_never_duplicates_new_project_removed_projects_or_security(self):
+        # CLAUDE-P40-EYE1: was sliced to id="chat-region" - Chat now
+        # renders BEFORE the Toolbox/Eye right column in DOM order (see
+        # test_toolbox_empty_when_nothing_selected's own comment below),
+        # which silently made this slice empty (body.index for the START
+        # marker landing AFTER the END marker) and every assertNotIn
+        # below vacuously true regardless of the real content - fixed to
+        # the Toolbox <aside>'s own closing tag, a real, DOM-accurate
+        # boundary.
         client = self._client_as("e3a_owner", 1)
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
-        toolbox = body[body.index('id="workspace-toolbox-panel"'):body.index('id="chat-region"')]
+        start = body.index('id="workspace-toolbox-panel"')
+        toolbox = body[start:body.index("</aside>", start)]
         self.assertNotIn("+ New Project", toolbox)
         self.assertNotIn("Removed Projects", toolbox)
         self.assertNotIn(">Security<", toolbox)
 
     def test_toolbox_empty_when_nothing_selected(self):
+        # CLAUDE-P40-EYE1: Chat now renders BEFORE the Toolbox/Eye right
+        # column in DOM order (Chat is nested inside .workspace-main-
+        # column, itself before .workspace-right-column as a sibling of
+        # Lists) - slicing to the next "</aside>" (the Toolbox <aside>'s
+        # own closing tag) is DOM-structure-accurate regardless of
+        # ordering elsewhere, unlike the old id="chat-region" boundary.
         client = self._client_as("e3a_owner", 1)
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
-        toolbox = body[body.index('id="workspace-toolbox-panel"'):body.index('id="chat-region"')]
+        start = body.index('id="workspace-toolbox-panel"')
+        toolbox = body[start:body.index("</aside>", start)]
         self.assertIn("No Investigation or Document is currently selected", toolbox)
 
 

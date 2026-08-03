@@ -808,7 +808,6 @@
            column rather than a full-width row needing an artificial
            offset. #}
         <div class="workspace-main-column">
-        <div class="workspace-content-row">
         <div class="app-main">
             <main>
                 {% with flashed = get_flashed_messages(with_categories=true) %}
@@ -825,34 +824,18 @@
         </div>
 
         {% if project_id is defined and workspace is defined %}
-        <button type="button" class="panel-divider panel-divider-toolbox" id="toolbox-divider" data-ui-ref="shell.toolbox-divider" aria-expanded="true" aria-controls="workspace-toolbox-panel" aria-label="Collapse Toolbox"></button>
-        {# ---------------- The one right Toolbox (CLAUDE-P40-E3A, Section 8) --------
-           Shell-owned markup (one definition, one place), but only actually
-           present within an open, ACTIVE Workspace - "workspace is defined"
-           (not just project_id) is the same gate the top bar's Display-
-           layout/Appearance controls already use, deliberately narrower than
-           the Lists hierarchy's own project_id-only gate: project_removed.html
-           (the removed-Project tombstone, Section 12's "removed-state
-           containment") passes project_id but never workspace, so this
-           correctly stays absent there too, not just on the dashboard/
-           Security/uploads pages. Content comes from {% block toolbox %},
-           filled in only by case_workspace.html. #}
-        <aside class="workspace-pane-toolbox" id="workspace-toolbox-panel" data-ui-ref="toolbox.panel">
-            {% block toolbox %}{% endblock %}
-        </aside>
-        {% endif %}
-        </div>
-
-        {% if project_id is defined and workspace is defined %}
         {# ---------------- The one Chat region (CLAUDE-P40-E3A, Section 9) ----------
-           Full width of THIS column (Display+Toolbox - CLAUDE-P40-VW7A-QA2
-           moved this inside .workspace-main-column, a sibling of Lists
-           rather than of .app-shell-body itself, so Lists' own full-height
+           Full width of THIS column (Display - CLAUDE-P40-VW7A-QA2 moved
+           this inside .workspace-main-column, a sibling of Lists rather
+           than of .app-shell-body itself, so Lists' own full-height
            background covers this row too - see that stage's own comment
-           on .workspace-main-column above), beneath Display/Toolbox, the
+           on .workspace-main-column above; CLAUDE-P40-EYE1 then moved
+           Toolbox OUT of this column entirely, into its own full-height
+           .workspace-right-column below, so this column is now just
+           Display+Chat, not Display+Toolbox+Chat), beneath Display, the
            bottom row of this column - present only within an open, ACTIVE
-           Workspace (same "workspace is defined" reasoning as Toolbox
-           above - a sticky, height-bearing bar has no honest reason to
+           Workspace (same "workspace is defined" reasoning as Toolbox/Eye
+           below - a sticky, height-bearing bar has no honest reason to
            occupy space on the dashboard/Security/uploads pages OR a
            removed-Project tombstone, none of which have real conversation
            context). Content comes from {% block chat %}, filled in only
@@ -862,6 +845,105 @@
         </div>
         {% endif %}
         </div>
+
+        {% if project_id is defined and workspace is defined %}
+        {# ---------------- The right column: Toolbox above Eye (CLAUDE-P40-EYE1) ----
+           Mirrors the Lists/Thumbnails split (CLAUDE-P40-VW7A-QA2) on the
+           opposite side: one full-height column, sibling of Lists AND of
+           .workspace-main-column inside .app-shell-body (never stopping
+           at the Display/Chat divider - Section 1's own explicit
+           requirement), divided vertically into Toolbox (upper) and Eye
+           (lower) by a draggable divider. The EXISTING toolbox-divider/
+           html.toolbox-hidden show/hide mechanism (CLAUDE-P40-E3A,
+           Section 7) now targets this WHOLE column, not .workspace-pane-
+           toolbox alone (Section 3's own "apply it to the complete right
+           column") - aria-controls updated to match what is actually
+           being toggled. #}
+        <button type="button" class="panel-divider panel-divider-toolbox" id="toolbox-divider" data-ui-ref="shell.toolbox-divider" aria-expanded="true" aria-controls="workspace-right-column" aria-label="Collapse Toolbox and Eye"></button>
+        <div class="workspace-right-column" id="workspace-right-column">
+            {# ---------------- The one Toolbox (CLAUDE-P40-E3A, Section 8) --------
+               Shell-owned markup (one definition, one place). Content
+               comes from {% block toolbox %}, filled in only by
+               case_workspace.html. CLAUDE-P40-EYE1: no longer owns its
+               own width/background/flex-shrink - .workspace-right-column
+               (above) now owns those, the same "outer column owns
+               sizing, inner pane owns its own scroll" split
+               .launcher-panel/.lists-pane already established. #}
+            <aside class="workspace-pane-toolbox" id="workspace-toolbox-panel" data-ui-ref="toolbox.panel">
+                {# CLAUDE-P40-EYE1, Section 2: "clear collapse and restore
+                   controls" - floats over the top-right corner rather
+                   than a dedicated header row, since case_workspace.html's
+                   own {% block toolbox %} already renders its own real
+                   <h2 data-ui-ref="toolbox.heading">Toolbox</h2> as its
+                   first child - this deliberately does not duplicate or
+                   wrap that heading. #}
+                <button type="button" class="toolbox-maximize-btn" id="toolbox-maximize-btn" data-ui-ref="toolbox.maximize" aria-pressed="false" aria-label="Maximize Toolbox">Maximize Toolbox</button>
+                {% block toolbox %}{% endblock %}
+            </aside>
+            {# CLAUDE-P40-EYE1, Section 2: draggable horizontal divider
+               between Toolbox and Eye - same role="separator"/pointer-
+               drag/keyboard-step/percentage-based idiom as the Lists/
+               Thumbnails divider (CLAUDE-P40-VW7A-QA2), reused rather
+               than invented fresh. Unlike Lists/Thumbnails, Eye is never
+               hidden/shown independently (Section 4: a permanent
+               structural surface from this stage on) - only the SPLIT
+               proportion is adjustable, all the way to "practically
+               collapsed" for either pane, so this divider is never
+               itself [hidden]. #}
+            <div class="toolbox-eye-divider" id="toolbox-eye-divider" data-ui-ref="shell.toolbox-eye-divider"
+                 role="separator" aria-orientation="horizontal" aria-label="Resize Toolbox/Eye split"
+                 tabindex="0" aria-valuemin="8" aria-valuemax="92"></div>
+            {# ---------------- The Eye (CLAUDE-P40-EYE1) --------------------------------
+               Structural scaffold ONLY (Section 4's own explicit scope
+               boundary) - a clear heading, a neutral empty state, and a
+               visually understandable paste/drop TARGET (the target
+               itself is real - it visibly reacts to drag-over and a
+               real paste/drop event is captured - but nothing beyond
+               that yet: no image editing, no annotation, no chat/
+               terminal attachment, no AI interpretation, no persistence,
+               no ingestion. Deliberately not "no interaction at all"
+               (which would itself be a misleading dead control the
+               moment it invited a drop), and deliberately not "looks
+               like it saves/analyzes" (which would misrepresent
+               unimplemented functionality) - the honest middle: capture
+               and DISPLAY what was pasted/dropped in-session, state
+               plainly that it is not saved, nothing more. #}
+            <div class="eye-pane" id="eye-pane" data-ui-ref="eye.panel" aria-label="Eye">
+                <div class="eye-pane-header">
+                    <h2 data-ui-ref="eye.heading">Eye</h2>
+                    <button type="button" class="eye-maximize-btn" id="eye-maximize-btn" data-ui-ref="eye.maximize" aria-pressed="false" aria-label="Maximize Eye">Maximize Eye</button>
+                </div>
+                <div class="eye-pane-body">
+                    {# CLAUDE-P40-EYE1 (product-owner browser correction),
+                       Section 3: a real responsive viewing canvas, not a
+                       small fixed thumbnail in a large empty area - stays
+                       the SAME drop/paste zone (#eye-drop-target) in both
+                       states, so dropping/pasting a new image while one
+                       is already shown just replaces it. #}
+                    <div class="eye-drop-target" id="eye-drop-target" data-ui-ref="eye.drop-target" tabindex="0" role="group" aria-label="Paste or drop an image to preview it here">
+                        <p class="eye-drop-target-empty" id="eye-drop-target-empty">Paste or drop an image here to preview it.</p>
+                        <p class="eye-drop-target-note" id="eye-drop-target-note">Not saved anywhere - cleared when you navigate away or reload. Editing, annotation, and evidence capture are not part of this stage.</p>
+                        <div class="eye-canvas" id="eye-canvas" data-ui-ref="eye.canvas" hidden>
+                            <div class="eye-canvas-toolbar" role="toolbar" aria-label="Image view controls">
+                                <button type="button" class="eye-canvas-btn" id="eye-canvas-zoom-out" data-ui-ref="eye.canvas.zoom-out" aria-label="Zoom out" title="Zoom out">&minus;</button>
+                                <span class="eye-canvas-zoom-level" id="eye-canvas-zoom-level" aria-live="polite">100%</span>
+                                <button type="button" class="eye-canvas-btn" id="eye-canvas-zoom-in" data-ui-ref="eye.canvas.zoom-in" aria-label="Zoom in" title="Zoom in">+</button>
+                                <span class="eye-canvas-divider" aria-hidden="true"></span>
+                                <button type="button" class="eye-canvas-btn" id="eye-canvas-fit" data-ui-ref="eye.canvas.fit" aria-label="Fit to view" title="Fit">Fit</button>
+                                <button type="button" class="eye-canvas-btn" id="eye-canvas-actual" data-ui-ref="eye.canvas.actual-size" aria-label="Actual size (100%)" title="Actual size (100%)">1:1</button>
+                                <button type="button" class="eye-canvas-btn" id="eye-canvas-reset" data-ui-ref="eye.canvas.reset" aria-label="Reset view" title="Reset view">Reset</button>
+                                <span class="eye-canvas-divider" aria-hidden="true"></span>
+                                <button type="button" class="eye-canvas-btn" id="eye-canvas-remove" data-ui-ref="eye.canvas.remove" aria-label="Remove the previewed image" title="Remove">Remove</button>
+                            </div>
+                            <div class="eye-canvas-viewport" id="eye-canvas-viewport" data-ui-ref="eye.canvas.viewport" tabindex="0" aria-label="Pasted or dropped image - scroll or use the view controls to zoom and pan">
+                                <img class="eye-canvas-image" id="eye-canvas-image" alt="Pasted or dropped image preview">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
     </div>
 
     <script>
@@ -926,7 +1008,13 @@
                 menu: document.querySelector('.workspace-topbar'),
                 lists: document.querySelector('.launcher-panel'),
                 display: document.querySelector('.app-main'),
-                toolbox: document.querySelector('.workspace-pane-toolbox'),
+                // CLAUDE-P40-EYE1: .workspace-right-column (not
+                // .workspace-pane-toolbox alone) is the theme root now -
+                // Eye is its own sibling pane inside the same column,
+                // and needs the identical --surface-primary/--text-*
+                // redefinition Toolbox already gets, via ordinary CSS
+                // custom-property inheritance from one shared ancestor.
+                toolbox: document.querySelector('.workspace-right-column'),
                 chat: document.querySelector('.chat-region'),
             };
             Object.keys(earlyTargets).forEach(function (key) {
@@ -1163,6 +1251,296 @@
             };
         })();
     </script>
+    {% if project_id is defined and workspace is defined %}
+    <script>
+        // CLAUDE-P40-EYE1, Section 2: draggable divider between Toolbox
+        // and Eye - the SAME percentage-based pointer-drag/keyboard-step/
+        // double-click-restore pattern as the Lists/Thumbnails divider
+        // just above (CLAUDE-P40-VW7A-QA2), reused rather than invented
+        // fresh. Unlike that one, there is no show()/hide() API here -
+        // Eye is never independently hidden (Section 4: a permanent
+        // pane from this stage on), only its SIZE is adjustable, so this
+        // script only ever needs to manage --toolbox-height.
+        // Persistence: localStorage, per-Project (beehive:panel:
+        // toolbox-eye:{{ project_id }}) - matching Toolbox's OWN
+        // existing show/hide preference scoping (per-Project, unlike
+        // Lists' reviewer-wide one), the "the lightest existing
+        // preference mechanism" already established for this exact
+        // panel family, not a new scoping convention invented for Eye.
+        (function () {
+            var column = document.querySelector('.workspace-right-column');
+            var divider = document.getElementById('toolbox-eye-divider');
+            var maximizeBtn = document.getElementById('toolbox-maximize-btn');
+            var eyeMaximizeBtn = document.getElementById('eye-maximize-btn');
+            if (!column || !divider) return;
+
+            var MIN_PCT = 8;
+            var MAX_PCT = 92;
+            var DEFAULT_PCT = 60;
+            var heightKey = 'beehive:panel:toolbox-eye:{{ project_id }}';
+            var preMaximizePct = null;
+
+            function clamp(pct) { return Math.max(MIN_PCT, Math.min(MAX_PCT, pct)); }
+
+            function applyPct(pct, persist) {
+                var clamped = clamp(pct);
+                column.style.setProperty('--toolbox-height', clamped + '%');
+                divider.setAttribute('aria-valuenow', String(Math.round(clamped)));
+                if (persist !== false) {
+                    try { window.localStorage.setItem(heightKey, String(clamped)); } catch (e) { /* ignore */ }
+                }
+                return clamped;
+            }
+
+            var stored = null;
+            try { stored = window.localStorage.getItem(heightKey); } catch (e) { /* ignore */ }
+            applyPct(stored ? parseFloat(stored) : DEFAULT_PCT, false);
+
+            var dragStartY = null;
+            var dragStartPct = null;
+            var dragTotalHeight = null;
+            function onPointerMove(e) {
+                if (dragStartY === null || !dragTotalHeight) return;
+                var deltaPx = e.clientY - dragStartY;
+                var deltaPct = (deltaPx / dragTotalHeight) * 100;
+                applyPct(dragStartPct + deltaPct);
+            }
+            function onPointerUp() {
+                dragStartY = null;
+                dragStartPct = null;
+                divider.classList.remove('dragging');
+                document.removeEventListener('pointermove', onPointerMove);
+                document.removeEventListener('pointerup', onPointerUp);
+            }
+            divider.addEventListener('pointerdown', function (e) {
+                dragStartY = e.clientY;
+                dragTotalHeight = column.clientHeight || 1;
+                dragStartPct = parseFloat(getComputedStyle(column).getPropertyValue('--toolbox-height')) || DEFAULT_PCT;
+                divider.classList.add('dragging');
+                document.addEventListener('pointermove', onPointerMove);
+                document.addEventListener('pointerup', onPointerUp);
+                e.preventDefault();
+            });
+            divider.addEventListener('dblclick', function () { applyPct(DEFAULT_PCT); });
+
+            var KEY_STEP = 4;
+            divider.addEventListener('keydown', function (e) {
+                var current = parseFloat(divider.getAttribute('aria-valuenow')) || DEFAULT_PCT;
+                if (e.key === 'ArrowUp') { applyPct(current - KEY_STEP); e.preventDefault(); }
+                else if (e.key === 'ArrowDown') { applyPct(current + KEY_STEP); e.preventDefault(); }
+                else if (e.key === 'Home') { applyPct(MIN_PCT); e.preventDefault(); }
+                else if (e.key === 'End') { applyPct(MAX_PCT); e.preventDefault(); }
+            });
+
+            // Section 2's own "permit Toolbox to be minimized so Eye can
+            // occupy almost the entire right column" AND the reverse -
+            // two explicit collapse/restore toggles (one per pane) rather
+            // than a single "maximize Eye" control, so either direction
+            // is a real, discoverable, keyboard-reachable button, not
+            // just a hard-to-discover extreme drag position.
+            function toggleMaximize(btn, targetPct, restoreLabel, actionLabel) {
+                var isMaximized = btn.getAttribute('aria-pressed') === 'true';
+                if (isMaximized) {
+                    applyPct(preMaximizePct != null ? preMaximizePct : DEFAULT_PCT);
+                    btn.setAttribute('aria-pressed', 'false');
+                    btn.textContent = actionLabel;
+                    btn.setAttribute('aria-label', actionLabel + ' the right column');
+                } else {
+                    preMaximizePct = parseFloat(getComputedStyle(column).getPropertyValue('--toolbox-height')) || DEFAULT_PCT;
+                    applyPct(targetPct);
+                    btn.setAttribute('aria-pressed', 'true');
+                    btn.textContent = restoreLabel;
+                    btn.setAttribute('aria-label', restoreLabel + ' the Toolbox/Eye split');
+                }
+            }
+            if (maximizeBtn) {
+                maximizeBtn.addEventListener('click', function () { toggleMaximize(maximizeBtn, MAX_PCT, 'Restore', 'Maximize Toolbox'); });
+            }
+            // CLAUDE-P40-EYE1 (product-owner browser correction), Section
+            // 2: "Maximize Eye must enlarge Eye both vertically AND
+            // horizontally" - a dedicated handler, not the shared
+            // toggleMaximize() above (Maximize Toolbox stays height-only,
+            // per this correction's own scope), that ALSO drives
+            // .workspace-right-column's own WIDTH via window.
+            // ArchioskRightColumnWidth (the drag/keyboard-resize script,
+            // above). The maximized width is deliberately NEVER persisted
+            // (applyWidth's own persist=false) - only the last NORMAL
+            // width is - so reloading the page mid-maximize still starts
+            // from a sane, restorable state next time rather than
+            // trapping the reviewer in the maximized width permanently
+            // (Section 2's own explicit "do not trap the user").
+            var preMaximizeWidth = null;
+            function toggleEyeMaximize() {
+                var isMaximized = eyeMaximizeBtn.getAttribute('aria-pressed') === 'true';
+                if (isMaximized) {
+                    applyPct(preMaximizePct != null ? preMaximizePct : DEFAULT_PCT);
+                    if (window.ArchioskRightColumnWidth) {
+                        window.ArchioskRightColumnWidth.apply(preMaximizeWidth != null ? preMaximizeWidth : window.ArchioskRightColumnWidth.DEFAULT_WIDTH, true);
+                    }
+                    eyeMaximizeBtn.setAttribute('aria-pressed', 'false');
+                    eyeMaximizeBtn.textContent = 'Maximize Eye';
+                    eyeMaximizeBtn.setAttribute('aria-label', 'Maximize Eye');
+                } else {
+                    // Avoid two conflicting "maximize" states fighting
+                    // over the same --toolbox-height at once.
+                    if (maximizeBtn && maximizeBtn.getAttribute('aria-pressed') === 'true') {
+                        toggleMaximize(maximizeBtn, MAX_PCT, 'Restore', 'Maximize Toolbox');
+                    }
+                    preMaximizePct = parseFloat(getComputedStyle(column).getPropertyValue('--toolbox-height')) || DEFAULT_PCT;
+                    applyPct(MIN_PCT);
+                    if (window.ArchioskRightColumnWidth) {
+                        preMaximizeWidth = window.ArchioskRightColumnWidth.current();
+                        window.ArchioskRightColumnWidth.apply(window.ArchioskRightColumnWidth.maxForMaximize(), false, true);
+                    }
+                    eyeMaximizeBtn.setAttribute('aria-pressed', 'true');
+                    eyeMaximizeBtn.textContent = 'Restore Eye';
+                    eyeMaximizeBtn.setAttribute('aria-label', 'Restore Eye');
+                }
+            }
+            if (eyeMaximizeBtn) {
+                eyeMaximizeBtn.addEventListener('click', toggleEyeMaximize);
+            }
+        })();
+    </script>
+    <script>
+        // CLAUDE-P40-EYE1 (product-owner browser correction), Section 1:
+        // the Toolbox/right-column divider (#toolbox-divider - already
+        // click-to-toggle, CLAUDE-P40-E3A Section 7 above) is now ALSO a
+        // real, mouse-draggable WIDTH resize handle for the whole
+        // .workspace-right-column, using the same pointerdown/
+        // pointermove/pointerup + CSS-custom-property + persistence
+        // pattern as every other divider in this file - pixel-based
+        // this time (matching the column's own existing width unit),
+        // not percentage. A real drag (movement past a small threshold)
+        // suppresses the pre-existing click-toggle via a CAPTURE-phase
+        // listener (fires before any bubble-phase handler regardless of
+        // script/registration order, so this stays correct even though
+        // Section 7's own click-toggle is registered earlier in the
+        // file) - a plain click (no real movement) still toggles
+        // show/hide exactly as before this correction.
+        (function () {
+            var mainColumn = document.querySelector('.workspace-main-column');
+            var rightColumn = document.querySelector('.workspace-right-column');
+            var divider = document.getElementById('toolbox-divider');
+            if (!mainColumn || !rightColumn || !divider) return;
+
+            var RIGHT_MIN = 260;
+            var RIGHT_MAX = 640;
+            var CENTRE_MIN = 320;
+            var DEFAULT_WIDTH = 340;
+            var DRAG_THRESHOLD = 3;
+            var widthKey = 'beehive:panel:right-column-width:{{ project_id }}';
+
+            function listsWidth() {
+                var lists = document.querySelector('.launcher-panel');
+                if (!lists || document.documentElement.classList.contains('launcher-hidden')) return 0;
+                return lists.getBoundingClientRect().width;
+            }
+
+            // The real, currently-available "largest practical" right-
+            // column width - Section 2's own maximize behavior calls
+            // this too, so both normal drag and maximize respect the
+            // SAME centre-column floor (CENTRE_MIN) from one place.
+            function maxAllowed() {
+                var available = window.innerWidth - listsWidth() - CENTRE_MIN;
+                return Math.max(RIGHT_MIN, Math.min(RIGHT_MAX, available));
+            }
+
+            function maxAllowedForMaximize() {
+                var available = window.innerWidth - listsWidth() - CENTRE_MIN;
+                return Math.max(RIGHT_MIN, available);
+            }
+
+            function clamp(px, allowMaximizeRange) {
+                var ceiling = allowMaximizeRange ? maxAllowedForMaximize() : maxAllowed();
+                return Math.max(RIGHT_MIN, Math.min(ceiling, px));
+            }
+
+            function currentWidth() {
+                return parseFloat(getComputedStyle(rightColumn).getPropertyValue('--right-column-width')) || DEFAULT_WIDTH;
+            }
+
+            function applyWidth(px, persist, allowMaximizeRange) {
+                var clamped = clamp(px, allowMaximizeRange);
+                rightColumn.style.setProperty('--right-column-width', clamped + 'px');
+                divider.setAttribute('aria-valuenow', String(Math.round(clamped)));
+                divider.setAttribute('aria-valuemax', String(Math.round(maxAllowed())));
+                if (persist !== false) {
+                    try { window.localStorage.setItem(widthKey, String(clamped)); } catch (e) { /* ignore */ }
+                }
+                return clamped;
+            }
+
+            var stored = null;
+            try { stored = window.localStorage.getItem(widthKey); } catch (e) { /* ignore */ }
+            divider.setAttribute('aria-valuemin', String(RIGHT_MIN));
+            applyWidth(stored ? parseFloat(stored) : DEFAULT_WIDTH, false);
+
+            var dragStartX = null;
+            var dragStartWidth = null;
+            var dragMoved = false;
+            var justDragged = false;
+            function onPointerMove(e) {
+                if (dragStartX === null) return;
+                // Dragging the divider LEFT (negative deltaX) WIDENS the
+                // right column - its left edge moves further left while
+                // its right edge stays pinned to the viewport edge, the
+                // mirror image of a left-side panel's own right-edge-
+                // widens-rightward relationship.
+                var deltaPx = dragStartX - e.clientX;
+                if (Math.abs(deltaPx) > DRAG_THRESHOLD) dragMoved = true;
+                applyWidth(dragStartWidth + deltaPx);
+            }
+            function onPointerUp() {
+                dragStartX = null;
+                dragStartWidth = null;
+                if (dragMoved) justDragged = true;
+                divider.classList.remove('dragging');
+                document.removeEventListener('pointermove', onPointerMove);
+                document.removeEventListener('pointerup', onPointerUp);
+            }
+            divider.addEventListener('pointerdown', function (e) {
+                dragStartX = e.clientX;
+                dragStartWidth = currentWidth();
+                dragMoved = false;
+                divider.classList.add('dragging');
+                document.addEventListener('pointermove', onPointerMove);
+                document.addEventListener('pointerup', onPointerUp);
+                e.preventDefault();
+            });
+            // Capture phase - runs before Section 7's own bubble-phase
+            // click-toggle listener regardless of registration order.
+            divider.addEventListener('click', function (e) {
+                if (justDragged) {
+                    e.stopImmediatePropagation();
+                    e.preventDefault();
+                    justDragged = false;
+                }
+            }, true);
+
+            var KEY_STEP = 20;
+            divider.addEventListener('keydown', function (e) {
+                var current = currentWidth();
+                if (e.key === 'ArrowLeft') { applyWidth(current + KEY_STEP); e.preventDefault(); }
+                else if (e.key === 'ArrowRight') { applyWidth(current - KEY_STEP); e.preventDefault(); }
+                else if (e.key === 'Home') { applyWidth(maxAllowed()); e.preventDefault(); }
+                else if (e.key === 'End') { applyWidth(RIGHT_MIN); e.preventDefault(); }
+            });
+
+            // Exposed for the Eye maximize/restore logic (Section 2,
+            // above) - the SAME clamp/persistence path, so a maximize-
+            // driven width change is indistinguishable from a manual
+            // drag to anything reading --right-column-width afterward.
+            window.ArchioskRightColumnWidth = {
+                apply: applyWidth,
+                current: currentWidth,
+                maxForMaximize: maxAllowedForMaximize,
+                DEFAULT_WIDTH: DEFAULT_WIDTH
+            };
+        })();
+    </script>
+    <script src="{{ url_for('static', filename='js/eye_pane.js') }}?v={{ static_version }}"></script>
+    {% endif %}
     <script>
         // CLAUDE-P40-E3A: the recursive Lists hierarchy - hover temporarily
         // reveals a parent's children; clicking pins them open (persists
@@ -1458,7 +1836,13 @@
                 menu: document.querySelector('.workspace-topbar'),
                 lists: document.querySelector('.launcher-panel'),
                 display: document.querySelector('.app-main'),
-                toolbox: document.querySelector('.workspace-pane-toolbox'),
+                // CLAUDE-P40-EYE1: .workspace-right-column (not
+                // .workspace-pane-toolbox alone) is the theme root now -
+                // Eye is its own sibling pane inside the same column,
+                // and needs the identical --surface-primary/--text-*
+                // redefinition Toolbox already gets, via ordinary CSS
+                // custom-property inheritance from one shared ancestor.
+                toolbox: document.querySelector('.workspace-right-column'),
                 chat: document.querySelector('.chat-region'),
             };
             var surfaceKeys = Object.keys(targets);

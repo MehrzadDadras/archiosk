@@ -299,12 +299,18 @@ class DarkTokenCssTests(unittest.TestCase):
             self.assertIn("ALL PAIRINGS PASS", result.stdout)
 
     def test_appearance_dark_rule_scopes_all_five_surfaces_not_root(self):
+        # CLAUDE-P40-EYE1: the Toolbox surface's own painted root moved
+        # from .workspace-pane-toolbox to .workspace-right-column (the
+        # new full-height column containing Toolbox AND Eye) - Eye needs
+        # the identical theme redefinition Toolbox already had, via
+        # ordinary CSS custom-property inheritance from one shared
+        # ancestor, so the class now lives one level up.
         rule_match = re.search(r"\.workspace-topbar\.appearance-dark,[^{]*\{[^}]*\}", self.main_css, re.S)
         self.assertIsNotNone(rule_match, "no combined .appearance-dark rule found")
         rule = rule_match.group(0)
         for selector in (
             ".workspace-topbar.appearance-dark", ".launcher-panel.appearance-dark",
-            ".app-main.appearance-dark", ".workspace-pane-toolbox.appearance-dark",
+            ".app-main.appearance-dark", ".workspace-right-column.appearance-dark",
             ".chat-region.appearance-dark",
         ):
             self.assertIn(selector, rule, selector)

@@ -219,7 +219,10 @@ class ComputedValueDistinctnessTests(unittest.TestCase):
             self._resolve(color, scope) if color else None,
         )
 
-    _SURFACES = ("workspace-topbar", "launcher-panel", "app-main", "workspace-pane-toolbox", "chat-region")
+    # CLAUDE-P40-EYE1: the Toolbox surface's own painted root moved to
+    # .workspace-right-column (the new full-height column containing
+    # Toolbox AND Eye) - see that stage's own comment in main.css.
+    _SURFACES = ("workspace-topbar", "launcher-panel", "app-main", "workspace-right-column", "chat-region")
 
     def test_dark_mode_resolves_to_the_approved_black_background_on_every_surface(self):
         # CLAUDE-P40-VW8-QA (Approved Theme Set): .appearance-dark is

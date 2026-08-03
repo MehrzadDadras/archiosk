@@ -273,14 +273,16 @@ class ToolboxContextualScopingTests(_BaseTestCase):
 
 class NeutralDefaultAppearanceTests(unittest.TestCase):
     def test_toolbox_has_a_plain_default_background_not_only_a_tinted_one(self):
+        # CLAUDE-P40-EYE1: the background now lives on .workspace-right-
+        # column (the new full-height column containing Toolbox AND
+        # Eye) - .workspace-pane-toolbox itself paints nothing of its
+        # own anymore (mirrors .lists-pane inside .launcher-panel), but
+        # the underlying concern this test checks ("a plain neutral
+        # background is reliably painted, not only a tinted one") is
+        # still true, just one level up.
         css = _CSS_PATH.read_text(encoding="utf-8")
-        # Anchored to the START of a line so this matches only the
-        # standalone base selector, not html.toolbox-hidden
-        # .workspace-pane-toolbox or .workspace-pane-toolbox.appearance-
-        # tinted, both of which also contain this class name as a
-        # substring and would otherwise be matched first.
-        rule = re.search(r"^\.workspace-pane-toolbox\s*\{[^}]*\}", css, re.M | re.S)
-        self.assertIsNotNone(rule, "no base .workspace-pane-toolbox rule found")
+        rule = re.search(r"^\.workspace-right-column\s*\{[^}]*\}", css, re.M | re.S)
+        self.assertIsNotNone(rule, "no base .workspace-right-column rule found")
         self.assertIn("background: var(--surface-primary)", rule.group(0))
 
     def test_chat_has_no_duplicate_top_divider(self):

@@ -206,10 +206,13 @@ class RegistryConsistencyTests(unittest.TestCase):
         # surfaces outside the original five (gateway/auth - see
         # UI_REFERENCE_MAP.md's own Gateway/Auth sections and Section
         # 4's "must work on Sign-in, Gateway... too" requirement).
+        # CLAUDE-P40-EYE1 added "eye" - the new structural-scaffold pane
+        # in the right column (see UI_REFERENCE_MAP.md's own "Right
+        # column: Toolbox above Eye" section).
         for ref in _all_template_refs():
             self.assertRegex(
                 ref,
-                r"^(menu|lists|display|toolbox|chat|shell|gateway|auth|upload|errors|"
+                r"^(menu|lists|display|toolbox|chat|eye|shell|gateway|auth|upload|errors|"
                 r"security|projects-directory|removed-projects)\.[a-z0-9._\-]+$",
                 ref,
             )

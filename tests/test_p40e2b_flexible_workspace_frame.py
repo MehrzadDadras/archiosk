@@ -158,9 +158,13 @@ class IndependentPanelCollapseTests(_BaseTestCase):
         # the moment display:none removes it, with no separate
         # column-count override needed at all. That absence is itself
         # the thing to confirm here.
+        # CLAUDE-P40-EYE1: html.toolbox-hidden now targets
+        # .workspace-right-column (the whole Toolbox+Eye column), not
+        # .workspace-pane-toolbox alone - Section 3's own "apply it to
+        # the complete right column."
         css = _CSS_PATH.read_text(encoding="utf-8")
         self.assertIn("flex: 1", _rule_body(css, ".app-main"))
-        self.assertIn("display: none", _rule_body(css, "html.toolbox-hidden .workspace-pane-toolbox"))
+        self.assertIn("display: none", _rule_body(css, "html.toolbox-hidden .workspace-right-column"))
         # No active rule for the retired grid (historical comments
         # mentioning its old name are fine and expected).
         self.assertNotIn(".case-workspace {", css)
@@ -170,11 +174,11 @@ class IndependentPanelCollapseTests(_BaseTestCase):
         # OUT of the tab order entirely - opacity:0/visibility:hidden
         # would not (Section B: "must not remain keyboard-focusable
         # off-screen"). Checked separately now that Launcher (base.html)
-        # and Toolbox (case_workspace.html) are two independent rules,
-        # not one combined selector.
+        # and the right column (Toolbox+Eye, CLAUDE-P40-EYE1) are two
+        # independent rules, not one combined selector.
         css = _CSS_PATH.read_text(encoding="utf-8")
         self.assertIn("display: none", _rule_body(css, "html.launcher-hidden .launcher-panel"))
-        self.assertIn("display: none", _rule_body(css, "html.toolbox-hidden .workspace-pane-toolbox"))
+        self.assertIn("display: none", _rule_body(css, "html.toolbox-hidden .workspace-right-column"))
 
     def test_preferences_are_localstorage_reviewer_specific_not_a_project_write(self):
         # SUPERSEDED (CLAUDE-P40-E3A, Section 7): the old top-bar-button
@@ -469,16 +473,21 @@ class NarrowScreenFallbackTests(unittest.TestCase):
         # (app-shell-level), separate from Toolbox's (Workspace-local) -
         # two independent rules, not one combined selector, since the
         # panels are no longer siblings in the same grid. Both
-        # ".launcher-panel {" and ".workspace-pane-toolbox {" are each
-        # declared TWICE in this stylesheet (a base rule, then a narrow-
-        # width override) so _rule_body's "first match" helper can't
-        # target the override specifically - matched directly instead.
+        # ".launcher-panel {" and (CLAUDE-P40-EYE1) ".workspace-right-
+        # column {" are each declared TWICE in this stylesheet (a base
+        # rule, then a narrow-width override) so _rule_body's "first
+        # match" helper can't target the override specifically - matched
+        # directly instead.
+        # CLAUDE-P40-EYE1: the narrow-width drawer rule now targets
+        # .workspace-right-column (Toolbox+Eye together), not
+        # .workspace-pane-toolbox alone - same "apply it to the complete
+        # right column" reasoning as the hide/show mechanism above.
         self.assertIn(
             "@media (max-width: 640px) {\n    .launcher-panel {\n        position: fixed",
             self.css,
         )
         self.assertIn(
-            "@media (max-width: 640px) {\n    .workspace-pane-toolbox {\n        position: fixed",
+            "@media (max-width: 640px) {\n    .workspace-right-column {\n        position: fixed",
             self.css,
         )
 

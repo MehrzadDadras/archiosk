@@ -169,9 +169,12 @@ class PerSurfaceScopingCompletenessTests(unittest.TestCase):
         "--seal-red", "--machine-blue", "--highlight-orange",
         "--accepted-green", "--attention-amber", "--failure-red", "--risk-red",
     )
+    # CLAUDE-P40-EYE1: the Toolbox surface's own painted root moved to
+    # .workspace-right-column (the new full-height column containing
+    # Toolbox AND Eye) - see that stage's own comment in main.css.
     _OWNED_SURFACE_SELECTORS = (
         ".workspace-topbar", ".launcher-panel", ".app-main",
-        ".workspace-pane-toolbox", ".chat-region",
+        ".workspace-right-column", ".chat-region",
     )
 
     @classmethod

@@ -1,5 +1,245 @@
 # Continuation checkpoint
 
+## 2026-08-03 — CLAUDE-P40-EYE1 (browser corrections): Horizontal Expansion, Two-Dimensional Maximize, Scalable Canvas, and a Real Shell-Theming Bug Fix
+
+Two real-browser checks of the EYE1 entry below reported further gaps,
+plus a genuinely separate visual defect report ("thick white/cream
+strips" on several workspace edges) that led to finding and fixing a
+real bug in the EARLIER CLAUDE-P40-VW7A-QA2 shell-theming work. All
+fixed within EYE1's own scope (no EYE2 features).
+
+**Real bug found and fixed: `.app-shell` was never actually in the
+appearance-mode selector lists.** The VW7A-QA2 browser-correction round
+built a JS mechanism to piggyback an `.appearance-dark`/`-tinted`/
+`-deep-forest` class onto `.app-shell` (so shell chrome like panel
+dividers would have a themed fallback background) and gave `.app-shell`
+a `background: var(--surface-primary)` declaration — but never actually
+added `.app-shell` to the three combined CSS selector lists
+(`.workspace-topbar.appearance-dark, .launcher-panel.appearance-dark,
+...`) that redefine `--surface-primary`/`--canvas`/etc. per mode. The
+JS class was applied correctly; there was simply no CSS rule that class
+ever matched, so `.app-shell`'s own `--surface-primary` always resolved
+to the unthemed `:root` Light default regardless of which class was
+present — exactly reproducing "white/cream strips" anywhere shell
+chrome relied on it in a dark mode. Found via direct code inspection
+(`grep -n "app-shell\.appearance" static/css/main.css` returned nothing)
+after a real-browser report, not by guessing at the screenshot's exact
+pixel content (no image was actually attached to that message — only a
+text description of marked edges). Fixed by adding `.app-shell` to all
+three combined rules; a regression-guard test
+(`test_app_shell_is_actually_in_the_combined_appearance_selector_lists`)
+added so this specific class of bug (JS-only half of a fix shipped
+without its CSS-only half) can't silently recur.
+
+**1. Draggable right-column width.** `#toolbox-divider` (existing,
+click-to-collapse/show) is now ALSO a real, mouse-draggable and
+keyboard-operable (`ArrowLeft` widens/`ArrowRight` narrows, matching
+drag direction) width resize handle for `.workspace-right-column` —
+`width` is now `var(--right-column-width, min(340px, 30vw))` instead of
+a fixed value. A genuine drag (movement past a small pixel threshold)
+is distinguished from a plain click via a capture-phase click
+interceptor (fires before the pre-existing bubble-phase toggle handler
+regardless of script registration order), so an ordinary click still
+collapses/shows exactly as before. Practical minimums: `RIGHT_MIN=260px`
+in the drag-clamp logic, `CENTRE_MIN=320px` enforced both in that same
+clamp logic AND as a real CSS floor on `.workspace-main-column` (defense
+in depth). `ew-resize` cursor, the same `.dragging`-class accent
+treatment as every other divider in this file. Persisted via
+`localStorage`, per-Project (`beehive:panel:right-column-width:<id>`).
+Hiding the column (`html.toolbox-hidden`) still `display:none`s it
+entirely regardless of the stored width — no leftover reserved space.
+
+**2. Two-dimensional Maximize Eye.** `#eye-maximize-btn` previously only
+adjusted `--toolbox-height` (the Toolbox/Eye vertical split); it now
+ALSO drives `.workspace-right-column`'s own width via a new
+`window.ArchioskRightColumnWidth` API the width-drag script exposes
+(`apply`/`current`/`maxForMaximize`/`DEFAULT_WIDTH`) — collapsing
+Toolbox's height AND expanding the column to the largest practical
+width (computed from the real current viewport width minus Lists' own
+current width minus the centre column's practical minimum) in one
+action. "Restore Eye" reverts both dimensions to their exact
+pre-maximize values. The maximized width is deliberately never
+persisted (only the last NORMAL width is) — a mid-maximize page reload
+starts from the last real width, not the maximized one, so the reviewer
+can never get trapped there. A conflicting Toolbox-own maximize (if
+active) is reset first to avoid two controls fighting over
+`--toolbox-height` at once.
+
+**3. Responsive zoom/pan image canvas.** `static/js/eye_pane.js` was
+substantially rewritten: the old small, fixed-size `<img>` preview
+(`max-width/max-height: 100%` inside a much larger, centered drop
+target) is replaced by a real canvas (`#eye-canvas`, `[hidden]` until an
+image loads) with Fit/zoom-in/zoom-out/Actual-size(100%)/Reset controls
+plus a Remove control. Fit computes `Math.min(viewport width / natural
+width, viewport height / natural height)` — not capped at 1, so a small
+image is scaled UP to genuinely use the available Eye area, matching
+the report's own "must not remain a small thumbnail." The image's
+`width`/`height` are set as real pixel values (`natural × scale`), never
+CSS percentage-based sizing, so there is no stretching/distortion at any
+zoom level (aspect ratio preserved by construction, both axes scaled by
+the identical factor). Panning is native browser scroll
+(`overflow: auto` on the viewport, the image sized to its own real
+scaled pixels) rather than hand-rolled pointer-drag — real keyboard
+(Page Up/Down, arrows) and touch/trackpad support for free. Mouse-wheel/
+trackpad zoom is active only while the viewport itself has focus (the
+report's own explicit "when focused" wording), so scrolling the page
+near Eye is never accidentally hijacked. A `ResizeObserver` on the
+viewport recalculates Fit automatically on any container resize — the
+Toolbox/Eye divider drag, the new right-column width drag, or Eye
+maximize/restore, all just resize the SAME observed element — but only
+while still in "fit" mode; a deliberate manual zoom is tracked
+separately and never silently overridden by a resize.
+
+**Tests:** two new files — `tests/test_p40eye1_correction_resize_canvas.py`
+(36 tests: width drag mouse/keyboard/persistence, two-dimensional
+maximize/restore, canvas markup/CSS/JS for fit/zoom/pan/resize-
+recalculation, no scope creep into EYE2 features) and a new regression
+test in `tests/test_p40vw7a_qa2_thumbnails_annotations_layout.py`'s own
+`AppearanceControlledSplitterTests` for the `.app-shell` selector-list
+bug. Full suite: see this stage's own commit message for the exact
+count.
+
+**Real-browser verification:** still not available in this
+environment — no screenshot was actually attached to either of this
+round's product-owner messages, only text descriptions; every fix above
+is grounded in template/CSS/JS source inspection (including, for the
+`.app-shell` bug, a direct `grep` proving the missing selector, not a
+guess at what the described screenshot showed) and rendered-HTML
+structural tests, not a claimed rendered check. Product-owner
+verification checklist for this round specifically: (1) no white/cream
+strip anywhere in the shell in Black, Midnight Blue, Deep Forest, or
+Light — the Lists/Display divider, Display/Toolbox divider, and the gap
+below the header should all read as the same theme-correct color as the
+edge already confirmed correct; (2) dragging `#toolbox-divider`'s own
+left edge resizes the right column smoothly, with `ArrowLeft`/
+`ArrowRight` doing the same via keyboard, and a plain click still
+toggling collapse/show; (3) "Maximize Eye" visibly expands Eye both
+taller AND wider, "Restore Eye" returns exactly to the prior split and
+width; (4) a dropped/pasted image genuinely fills the available Eye
+area at Fit, zoom in/out/Actual-size/Reset all behave correctly, the
+mouse wheel zooms only when the image area itself is focused, and
+panning works via normal scrolling once zoomed past the viewport size;
+(5) resizing or maximizing Eye while a Fit-mode image is loaded
+re-fits it automatically, but a manually-zoomed image does not snap back
+on resize.
+
+## 2026-08-03 — CLAUDE-P40-EYE1: Full-Height Right Column and Eye Structural Scaffold
+
+**Started from a verified clean state:** `HEAD == origin/main` (`7e28371`)
+confirmed before any edit, per this stage's own opening instruction.
+
+**What was built** (mirrors CLAUDE-P40-VW7A-QA2's Lists/Thumbnails split
+on the opposite side of the shell):
+
+- **Right-column restructuring** (`templates/base.html`): Toolbox moved
+  out of `.workspace-main-column` (where it briefly shared a row with
+  Display, sibling of `.app-main` inside the now-retired
+  `.workspace-content-row`) into a new, full-height `.workspace-right-
+  column` - a THIRD sibling of Lists and `.workspace-main-column` inside
+  `.app-shell-body`, spanning the same vertical extent as Display+Chat
+  combined (Section 1's own explicit "must not stop at the Display/Chat
+  divider"). `.workspace-content-row`, left with only `.app-main` as a
+  child once Toolbox moved out, was removed rather than kept as dead
+  CSS. The new column contains Toolbox (upper) and a new Eye pane
+  (lower).
+- **Toolbox/Eye divider**: a new draggable `#toolbox-eye-divider`,
+  reusing the exact percentage-based pointer-drag/keyboard-step/
+  double-click-restore pattern the Lists/Thumbnails divider already
+  established. Persistence: `localStorage`, per-Project
+  (`beehive:panel:toolbox-eye:{{ project_id }}`) - matching Toolbox's
+  OWN existing show/hide preference scoping (per-Project), the
+  "lightest existing preference mechanism" already established for
+  this exact panel family, not a new scoping convention. Two explicit
+  "Maximize Toolbox"/"Maximize Eye" buttons (each toggling to "Restore"
+  and remembering the pre-maximize proportion) give both directions a
+  real, discoverable, keyboard-reachable control, on top of the
+  divider's own Home/End keyboard jump-to-extremes and manual drag.
+- **Right-column hide/show**: the EXISTING `toolbox-divider`/
+  `html.toolbox-hidden` mechanism (CLAUDE-P40-E3A, Section 7) now
+  targets `.workspace-right-column` as a whole (Toolbox AND Eye
+  together, plus the divider between them - a descendant, no separate
+  rule needed), not `.workspace-pane-toolbox` alone - `aria-controls`
+  on `shell.toolbox-divider` updated to match. `display: none` on the
+  whole column is what releases all its width with no leftover empty
+  panel/scrollbar channel/gutter, the same mechanism Lists' own hide/
+  show already relies on (`.app-main`'s `flex: 1` expands automatically).
+- **Eye pane scaffold** (Section 4's own explicit "structural surface,
+  not a completed tool" boundary): a real `eye.heading` ("Eye"), a
+  neutral empty state, and a genuinely functional (not decorative)
+  paste/drop target (`static/js/eye_pane.js`, new) - real `dragover`/
+  `drop`/`paste` event handling, an image read via `FileReader` and
+  previewed in-tab-memory only (a plain `<img>` holding a `data:` URL;
+  the file confirms via its own tests that no `fetch()`/`XMLHttpRequest`
+  call exists anywhere), a Remove control returning to the empty state,
+  and an inline (not silent) error for non-image input. Explicitly NOT
+  built this stage, per the prompt's own deferral list: image editing,
+  screenshot annotation, chat/Development-Terminal attachment, AI image
+  interpretation, evidence persistence, document ingestion, DT1/
+  Terminal behavior - all reserved for CLAUDE-P40-EYE2.
+- **Appearance coverage**: the Toolbox surface's own painted root moved
+  from `.workspace-pane-toolbox` to `.workspace-right-column` (all
+  three combined `.appearance-dark`/`.appearance-tinted`/`.appearance-
+  deep-forest` rules updated) - both Toolbox AND Eye now inherit the
+  theme via ordinary CSS custom-property cascade from one shared
+  ancestor, the same "outer column owns theme + background, inner panes
+  stay transparent" split `.launcher-panel`/`.lists-pane` already
+  established. `scrollbar-color` added to both scrollable panes. No
+  opacity used anywhere in the new rules (verified by this stage's own
+  tests) - existing dark-mode/Light-mode text-color rules inside
+  Toolbox's own content were never touched, only the wrapper.
+- **Narrow-viewport drawer**: `@media (max-width: 640px)` now applies
+  `position: fixed`/width/z-index/padding/border to `.workspace-right-
+  column` as a whole (the WHOLE column becomes the overlay drawer,
+  Toolbox and Eye stacked exactly as at desktop widths via the base
+  rule's own `display:flex`/`flex-direction:column`), not `.workspace-
+  pane-toolbox` alone.
+
+**Note on theme names:** this stage's prompt referred to "Black, Deep
+Blue, Deep Purple, and Soft Light" - this repo's actual approved theme
+set (CLAUDE-P40-VW8-QA) is Black, Midnight Blue, Deep Forest, and
+Light. Flagged directly (consistent with the same note on the VW7A-QA2
+browser-correction entry below) rather than silently substituted; all
+reasoning above uses the real names.
+
+**Tests:** new `tests/test_p40eye1_toolbox_eye_column.py` (32 tests -
+structure, CSS, divider drag/keyboard/persistence, collapse/restore,
+hide/show width release, Eye scaffold markup and JS, existing-behavior
+preservation including the VW7A-QA2 Chat composer margin fix). Fixed
+9 pre-existing test files whose own hardcoded selector lists/DOM-
+ordering assumptions were made stale by the Toolbox surface's root
+moving to `.workspace-right-column` and by Chat now rendering before
+Toolbox in DOM order - the same "update the test's own selector list,
+don't revert the change" precedent this repo's history already
+establishes, not a silent regression. Two of those (`test_p40e3a_
+layout_reconciliation.py`'s own toolbox-content slice tests) had
+silently become no-op checks (Python's `body[start:end]` on a reversed
+index range returns an empty string, so every `assertNotIn` on it was
+vacuously true) - caught and fixed, not left passing for the wrong
+reason. Full suite green (see the exact count in this stage's own
+commit message).
+
+**Real-browser verification:** still not available in this environment
+- every claim above is grounded in template/CSS/JS source inspection
+and rendered-HTML structural tests. Product-owner verification
+checklist: (1) the right column visibly spans header-to-workspace-
+bottom, matching Lists' own height, in every state; (2) dragging the
+Toolbox/Eye divider resizes both panes smoothly, with keyboard Home/End
+jumping to the practical extremes and arrow keys stepping; (3)
+"Maximize Toolbox"/"Maximize Eye" each expand their own pane and
+correctly restore the prior proportion on a second click; (4) hiding
+Toolbox (the existing top-bar control) now visibly removes Eye too,
+with Display/Chat reclaiming the full released width and no leftover
+gutter; (5) restoring brings back the previous width AND the previous
+Toolbox/Eye split; (6) the Eye pane accepts a real drag-and-drop image
+and a real clipboard paste, previews it, and Remove returns to the
+empty state; (7) all four Appearance themes (Black/Midnight Blue/Deep
+Forest/Light) render both panes and the divider correctly, no white/
+beige gutters, no opacity-faded text; (8) narrow viewport still shows
+the whole right column as one overlay drawer; (9) the Chat composer's
+own bottom margin (CLAUDE-P40-VW7A-QA2) is still visibly present; (10)
+existing Toolbox content (Findings, Document tools, empty state) is
+unchanged.
+
 ## 2026-08-03 — CLAUDE-P40-VW7A-QA2 (browser corrections): Left-Column Full-Height Background, Appearance-Controlled Splitters, Chat Composer Margin
 
 Two real-browser checks of the VW7A-QA2 entry below reported three

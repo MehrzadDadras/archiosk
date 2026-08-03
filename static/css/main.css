@@ -210,27 +210,30 @@ a:focus-visible, button:focus-visible, input:focus-visible {
     overflow: hidden;
 }
 /* CLAUDE-P40-VW7A-QA2 (product-owner browser correction): Lists
-   (.launcher-panel) and .workspace-main-column are now the only two
-   real children sharing .app-shell-body's row (Display/Toolbox/Chat
-   are all nested inside the column below) - this is what makes Lists'
-   own height:100% actually cover the SAME vertical extent as Chat's
-   row, closing the "light rectangle beneath Lists in dark modes" gap
-   that existed while Chat was a full-width sibling of .app-shell-body
-   itself. .workspace-content-row is exactly what .app-shell-body used
-   to be before Lists moved out of its row (Display + Toolbox side by
-   side); .workspace-main-column stacks that row above Chat. */
+   (.launcher-panel) and .workspace-main-column (Display+Chat) share
+   .app-shell-body's row - this is what makes Lists' own height:100%
+   actually cover the SAME vertical extent as Chat's row, closing the
+   "light rectangle beneath Lists in dark modes" gap that existed while
+   Chat was a full-width sibling of .app-shell-body itself.
+   CLAUDE-P40-EYE1: a third sibling, .workspace-right-column
+   (Toolbox+Eye - see that rule below), was added for the SAME reason
+   on the opposite side - it used to be Toolbox alone, a plain flex
+   sibling of .app-main inside .workspace-content-row (retired: with
+   Toolbox moved out, that row wrapper had only one child left,
+   .app-main, so it added nothing .workspace-main-column doesn't
+   already provide directly). */
 .workspace-main-column {
     display: flex;
     flex-direction: column;
     flex: 1;
-    min-width: 0;
-    min-height: 0;
-    overflow: hidden;
-}
-.workspace-content-row {
-    display: flex;
-    align-items: stretch;
-    flex: 1;
+    /* CLAUDE-P40-EYE1 (product-owner browser correction), Section 1:
+       "enforce practical minimum widths for both the centre and right
+       column" - a real CSS-level floor for Display+Chat (the actual
+       flex item competing for width against Lists and the right
+       column), defense-in-depth alongside the drag logic's own clamp
+       in base.html (which keeps the user from dragging past this in
+       the first place). */
+    min-width: 320px;
     min-height: 0;
     overflow: hidden;
 }
@@ -472,6 +475,25 @@ a:focus-visible, button:focus-visible, input:focus-visible {
 }
 .panel-divider[aria-expanded="false"]::before {
     left: 6px;
+}
+/* CLAUDE-P40-EYE1 (product-owner browser correction), Section 1: the
+   Toolbox/right-column divider is now ALSO a real, mouse-draggable
+   width resize handle (base.html's own drag logic), not click-to-
+   toggle only - .panel-divider-lists (Lists) stays click-only, so this
+   modifier-scoped rather than added to the shared .panel-divider base.
+   ew-resize is the standard "drag left/right" cursor affordance; the
+   accent line gets the same .dragging class treatment as every other
+   draggable divider in this file (:hover/:focus-visible/.dragging all
+   painting the same accent, since a drag can continue after the
+   pointer strays off this thin line - see .lists-thumbnails-divider's
+   own comment on why :hover alone isn't enough). */
+.panel-divider-toolbox {
+    cursor: ew-resize;
+}
+.panel-divider-toolbox.dragging::before {
+    background: var(--machine-blue);
+    width: 2px;
+    left: 3.5px;
 }
 /* CLAUDE-P40-E2B1, Section B: one show/hide control (the top bar's
    "Lists" button), a reviewer-wide localStorage preference (not
@@ -1940,7 +1962,14 @@ main {
    environment. Treat as reasoned, not proven, until someone resizes a
    real window through each state (see this stage's own completion
    report for the browser-validation limitation this carries forward). */
-html.toolbox-hidden .workspace-pane-toolbox {
+/* CLAUDE-P40-EYE1, Section 3: was html.toolbox-hidden .workspace-pane-
+   toolbox - now targets .workspace-right-column, the new full-height
+   column containing BOTH Toolbox and Eye, so hiding it removes both
+   panes AND the divider between them (a descendant, no separate rule
+   needed) with no leftover empty panel/gutter/reserved width, exactly
+   the same display:none mechanism as before, just retargeted to the
+   new outer column. */
+html.toolbox-hidden .workspace-right-column {
     display: none;
 }
 /* CLAUDE-P40-E2B, Section E, carried forward: an explicit plain/neutral
@@ -2187,51 +2216,93 @@ html.toolbox-hidden .workspace-pane-toolbox {
 .display-division-content iframe { flex: 1; min-height: 0; height: 100%; background: var(--surface-primary); }
 .display-division-content img { max-width: 100%; max-height: 100%; display: block; margin: 0 auto; object-fit: contain; }
 
+/* CLAUDE-P40-EYE1, Section 1: the full-height right column itself -
+   Toolbox (upper) and Eye (lower), mirroring .launcher-panel's own role
+   on the left (CLAUDE-P40-VW7A-QA2's Lists/Thumbnails split). Owns the
+   width/background/flex-shrink that used to live directly on
+   .workspace-pane-toolbox (below) - a sibling of .launcher-panel AND
+   .workspace-main-column inside .app-shell-body, so it spans the SAME
+   full vertical extent Chat's row occupies (never stopping at the
+   Display/Chat divider - Section 1's own explicit requirement), the
+   same "one shared painted background, transparent panes on top of it"
+   split .lists-pane/.thumbnails-pane already established. */
+/* CLAUDE-P40-EYE1 (product-owner browser correction): width is now a
+   real, draggable dimension (--right-column-width, set by the new
+   toolbox-divider drag logic in base.html), not a fixed value - the
+   min(340px, 30vw) default becomes the STARTING value instead
+   (fallback for the var()), so an unvisited browser/reset state still
+   renders identically to before this correction. */
+.workspace-right-column {
+    width: var(--right-column-width, min(340px, 30vw));
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+    background: var(--surface-primary);
+}
 /* CLAUDE-P40-E2: the Toolbox itself - a flex stack of .workspace-pane
    sections (Investigation/Document/Project tools, contextual; Removed
    Items and admin-only Project Data Management, always visible - see
    case_workspace.html), not a single pane of its own.
-   CLAUDE-P40-E3A: no longer a grid-area (the .case-workspace grid it
-   belonged to is retired) - a plain flex sibling of .app-main inside
-   base.html's own .app-shell-body row, fixed width, natural (non-
-   stretched, non-sticky) height so it scrolls away with the page
-   exactly as it did before, never forced to match Display's own
-   (possibly much taller) content height. */
+   CLAUDE-P40-EYE1: no longer owns width/flex-shrink/background of its
+   own (moved to .workspace-right-column, above) - just the upper pane
+   inside that column, sized by --toolbox-height (the Toolbox/Eye
+   divider's own live value) and independently scrollable, the same
+   "outer column owns sizing, inner pane owns its own scroll" split
+   .lists-pane already established. */
 .workspace-pane-toolbox {
-    width: min(340px, 30vw);
-    flex-shrink: 0;
+    flex: 0 0 var(--toolbox-height, 60%);
     display: flex;
     flex-direction: column;
     gap: 1rem;
     min-width: 0;
-    /* CLAUDE-P40-VW8-QA: was align-self:flex-start (natural content
-       height, never bounded) with no overflow rule of its own - safe
-       only under the OLD model where the whole PAGE scrolled to reveal
-       tall Toolbox content. Now that html/body/.app-shell are height-
-       locked and .app-shell-body no longer scrolls as a whole (see
-       those rules' own comments), an unbounded, unscrolled Toolbox
-       would have its own overflow silently clipped instead - a real
-       regression this fix prevents, not a cosmetic tweak. Stretches to
-       .app-shell-body's own height (align-items:stretch, that
-       container's existing default) and scrolls its own content
-       internally, exactly like .launcher-panel and <main> already do. */
+    min-height: 0;
     overflow-y: auto;
-    /* CLAUDE-P40-E3A-QA, Section 8 fix: never had a default background at
-       all (a real gap from this stage's own rewrite, not a deliberate
-       choice) - transparent let the page's own warm --canvas bleed
-       straight through, which is exactly the "beige/default tinted
-       surfaces" the product owner flagged. Lists (.launcher-panel) and
-       Display (.workspace-pane-display) already default to this same
-       plain --surface-primary; Toolbox now matches them. */
-    background: var(--surface-primary);
+    scrollbar-color: var(--border-strong) var(--surface-primary);
+    /* CLAUDE-P40-EYE1: positioning context for .toolbox-maximize-btn
+       (below), which floats over this pane's own top-right corner
+       rather than a dedicated header row. */
+    position: relative;
+    padding-top: 2.2rem;
 }
+/* CLAUDE-P40-EYE1, Section 2: "clear collapse and restore controls" for
+   Toolbox - floats rather than a new header row, since case_workspace.
+   html's own {% block toolbox %} already renders a real Toolbox
+   heading as its first child; padding-top on the pane itself (above)
+   reserves room so this never overlaps that heading's own text. */
+.toolbox-maximize-btn {
+    position: absolute;
+    top: 0.4rem;
+    right: 0.4rem;
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--text-secondary);
+    font-family: var(--font-body);
+    font-size: 0.72rem;
+    padding: 0.2rem 0.4rem;
+    border-radius: 4px;
+    z-index: 2;
+}
+.toolbox-maximize-btn:hover, .toolbox-maximize-btn:focus-visible {
+    background: var(--surface-hover);
+    color: var(--text-primary);
+}
+.toolbox-maximize-btn[aria-pressed="true"] { color: var(--machine-blue); }
 /* CLAUDE-P40-VW6: the old .workspace-pane-toolbox.appearance-tinted
    single-property rule that used to live here is gone - Toolbox's own
-   root IS its painted surface (unlike Display/Chat, which paint a
-   descendant), so the combined .appearance-tinted/.appearance-dark
-   rule below (near .chat-region's own rules) already covers it
+   root used to BE its painted surface (unlike Display/Chat, which paint
+   a descendant), so the combined .appearance-tinted/.appearance-dark
+   rule below (near .chat-region's own rules) already covered it
    directly via its own background/color declarations, the same way
-   .appearance-dark always did. */
+   .appearance-dark always did.
+   CLAUDE-P40-EYE1: that combined rule's own selector now names
+   .workspace-right-column instead - the new full-height right column
+   (Toolbox above Eye) is the painted root today, so BOTH panes inherit
+   the theme via ordinary CSS custom-property cascade; .workspace-pane-
+   toolbox itself paints nothing of its own anymore (mirrors .lists-pane
+   inside .launcher-panel). */
 .workspace-pane-toolbox > h2 {
     font-family: var(--font-display);
     font-size: 0.95rem;
@@ -2252,19 +2323,250 @@ html.toolbox-hidden .workspace-pane-toolbox {
    screen drawer lives in base.html's own media query, alongside the
    panel itself - "only one overlay should obstruct Display at a time"
    (Section 11) is enforced in that script, not here. */
+/* CLAUDE-P40-EYE1: was .workspace-pane-toolbox - now the WHOLE right
+   column becomes the overlay drawer (Toolbox and Eye both, stacked
+   exactly as they are at desktop widths via the base .workspace-right-
+   column rule's own display:flex/flex-direction:column, unchanged
+   here), not Toolbox alone. .workspace-pane-toolbox's own padding:1rem
+   moves to this element too - it used to double as both the drawer's
+   outer padding AND (implicitly) Toolbox's own content inset, since
+   Toolbox was the only thing in it; now .eye-pane needs the same
+   drawer-edge breathing room, so the padding lives one level up. */
 @media (max-width: 640px) {
-    .workspace-pane-toolbox {
+    .workspace-right-column {
         position: fixed;
         top: 0;
         bottom: 0;
         right: 0;
         width: min(85vw, 320px);
-        overflow-y: auto;
-        background: var(--surface-primary);
         z-index: 30;
         padding: 1rem;
         border: 1px solid var(--border);
     }
+}
+
+/* CLAUDE-P40-EYE1, Section 2: draggable divider between Toolbox and
+   Eye - same visual/interaction grammar as .lists-thumbnails-divider
+   (CLAUDE-P40-VW7A-QA2): quiet resting line (var(--border), a
+   descendant of .workspace-right-column so it inherits that column's
+   own theme directly, never the shell fallback), --machine-blue accent
+   on hover/focus/active-drag only, transparent hit-target background
+   inheriting the column's own (no white/beige gutter in dark modes),
+   thin line with a comfortable invisible hit target. Never [hidden] -
+   unlike Lists/Thumbnails, Eye is a permanent pane from this stage on
+   (Section 4), only its SIZE is adjustable. */
+.toolbox-eye-divider {
+    flex-shrink: 0;
+    width: 100%;
+    height: 9px;
+    border: none;
+    padding: 0;
+    cursor: row-resize;
+    background: var(--surface-primary);
+    position: relative;
+    z-index: 1;
+}
+.toolbox-eye-divider::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 4px;
+    height: 1px;
+    background: var(--border);
+}
+.toolbox-eye-divider:hover::before,
+.toolbox-eye-divider:focus-visible::before,
+.toolbox-eye-divider.dragging::before {
+    background: var(--machine-blue);
+    height: 2px;
+    top: 3.5px;
+}
+.toolbox-eye-divider:focus-visible {
+    outline: 2px solid var(--machine-blue);
+    outline-offset: 1px;
+}
+
+/* CLAUDE-P40-EYE1, Section 4: the Eye pane itself - a structural
+   scaffold, not a completed tool. Takes whatever height Toolbox's own
+   flex-basis (--toolbox-height) doesn't use, the same "remaining space"
+   idiom .thumbnails-pane already established relative to .lists-pane. */
+.eye-pane {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+    border-top: 1px solid var(--border);
+}
+.eye-pane-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem 0.7rem;
+    flex-shrink: 0;
+}
+.eye-maximize-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--text-secondary);
+    font-family: var(--font-body);
+    font-size: 0.72rem;
+    padding: 0.2rem 0.4rem;
+    border-radius: 4px;
+}
+.eye-maximize-btn:hover, .eye-maximize-btn:focus-visible {
+    background: var(--surface-hover);
+    color: var(--text-primary);
+}
+.eye-maximize-btn[aria-pressed="true"] { color: var(--machine-blue); }
+.eye-pane-header h2 {
+    font-family: var(--font-display);
+    font-size: 0.95rem;
+    margin: 0;
+    color: var(--text-primary);
+}
+.eye-pane-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    padding: 0 0.7rem 0.7rem;
+    scrollbar-color: var(--border-strong) var(--surface-primary);
+}
+/* CLAUDE-P40-EYE1, Section 4: a real (not decorative) drop target - a
+   dashed border reads as "things go here" without implying a filled/
+   bordered "card" the CLAUDE-P40-E1A-VISUAL de-boxing pass deliberately
+   removed elsewhere (this is a genuinely functional boundary - Section
+   4's own "select this to paste/drop" affordance - not a decorative
+   container, so it is exempt from that pass the same way .finding-card/
+   .delegation-choice already are). --surface-secondary (a step above
+   the pane's own --surface-primary, the same "grouped/interactive
+   sub-region" meaning it already carries elsewhere in this file) marks
+   it as its own distinct drop zone within the pane, not a repaint of
+   the whole pane. static/js/eye_pane.js toggles .eye-drop-target-active
+   during a real dragover/dragenter (Section 4's own "visually reacts to
+   drag-over"). */
+.eye-drop-target {
+    flex: 1 1 auto;
+    min-height: 120px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    text-align: center;
+    padding: 1rem;
+    border: 2px dashed var(--border-strong);
+    border-radius: 6px;
+    background: var(--surface-secondary);
+    cursor: pointer;
+}
+.eye-drop-target:focus-visible {
+    outline: 2px solid var(--machine-blue);
+    outline-offset: 2px;
+}
+.eye-drop-target.eye-drop-target-active {
+    border-color: var(--machine-blue);
+    background: var(--surface-hover);
+}
+.eye-drop-target-empty {
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    margin: 0;
+}
+.eye-drop-target-note {
+    color: var(--text-metadata);
+    font-size: 0.72rem;
+    margin: 0;
+    max-width: 24rem;
+}
+.eye-drop-target-error {
+    color: var(--failure-red);
+    font-size: 0.78rem;
+    margin: 0;
+}
+/* CLAUDE-P40-EYE1 (product-owner browser correction), Section 3: a real
+   responsive viewing canvas replacing the old small fixed-size preview
+   - align-self:stretch/flex:1 override .eye-drop-target's own
+   align-items:center/justify-content:center (correct for the EMPTY
+   state's centered message, wrong for a canvas that should fill the
+   available area) so the canvas genuinely uses the pane's available
+   space instead of shrink-wrapping to the image's own natural size. */
+.eye-canvas {
+    align-self: stretch;
+    flex: 1 1 auto;
+    min-height: 0;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+.eye-canvas[hidden] { display: none; }
+.eye-canvas-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+    flex-shrink: 0;
+}
+.eye-canvas-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--text-secondary);
+    font-family: var(--font-body);
+    font-size: 0.78rem;
+    padding: 0.3rem 0.55rem;
+    border-radius: 4px;
+}
+.eye-canvas-btn:hover, .eye-canvas-btn:focus-visible {
+    background: var(--surface-hover);
+    color: var(--text-primary);
+}
+.eye-canvas-zoom-level {
+    font-size: 0.75rem;
+    color: var(--text-metadata);
+    font-variant-numeric: tabular-nums;
+    min-width: 3.2em;
+    text-align: center;
+}
+.eye-canvas-divider {
+    width: 1px;
+    height: 1.1rem;
+    background: var(--border);
+}
+/* CLAUDE-P40-EYE1 (product-owner browser correction), Section 3: native
+   scroll IS the pan mechanism - #eye-canvas-image is sized to its real
+   scaled pixel dimensions (static/js/eye_pane.js sets width/height
+   directly from naturalWidth/naturalHeight * scale, never CSS max-
+   width/height percentages, so there is no stretching or distortion at
+   any zoom level), and overflow:auto lets the browser's own scrollbars/
+   touch/trackpad panning take over once the image exceeds the viewport
+   - real keyboard accessibility (Page Up/Down, arrow keys) and touch
+   support for free, no hand-rolled pointer-drag panning needed.
+   display:flex + align-items/justify-content:center is what keeps a
+   smaller-than-viewport image centered rather than pinned top-left. */
+.eye-canvas-viewport {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--surface-primary);
+    border-radius: 4px;
+}
+.eye-canvas-viewport:focus-visible {
+    outline: 2px solid var(--machine-blue);
+    outline-offset: -2px;
+}
+.eye-canvas-image {
+    display: block;
+    flex-shrink: 0;
 }
 
 /* CLAUDE-P40-E1A-VISUAL: was a filled/bordered/rounded "card"
@@ -2593,13 +2895,16 @@ html.toolbox-hidden .workspace-pane-toolbox {
    own box instead of moving it left a strip beneath Lists unpainted by
    anything, reading as a light rectangle in dark Appearance modes. The
    actual, structural fix: .chat-region is now nested inside
-   templates/base.html's own .workspace-main-column, alongside
-   .workspace-content-row (Display+Toolbox), both children of a column
-   that is itself Lists' own sibling inside .app-shell-body - so Chat's
-   box starts at the correct horizontal position automatically (never
-   needing a margin-left kept in sync with Lists' own width/collapsed
-   state), while Lists' own height:100% now genuinely covers the same
-   vertical extent Chat's row occupies. */
+   templates/base.html's own .workspace-main-column, alongside .app-main
+   (Display), both children of a column that is itself Lists' own
+   sibling inside .app-shell-body - so Chat's box starts at the correct
+   horizontal position automatically (never needing a margin-left kept
+   in sync with Lists' own width/collapsed state), while Lists' own
+   height:100% now genuinely covers the same vertical extent Chat's row
+   occupies. CLAUDE-P40-EYE1 later moved Toolbox out of this column
+   entirely (into its own .workspace-right-column, alongside a new Eye
+   pane) - Chat's own width here is therefore Display's alone, not
+   Display+Toolbox as it briefly was for one stage. */
 .chat-region {
     flex-shrink: 0;
     position: sticky;
@@ -2632,10 +2937,11 @@ html.toolbox-hidden .workspace-pane-toolbox {
    - a real light navy-blue palette, not --surface-secondary borrowed
    from its own unrelated "grouped content" meaning (VW3's own defect,
    corrected here). */
+.app-shell.appearance-dark,
 .workspace-topbar.appearance-dark,
 .launcher-panel.appearance-dark,
 .app-main.appearance-dark,
-.workspace-pane-toolbox.appearance-dark,
+.workspace-right-column.appearance-dark,
 .chat-region.appearance-dark {
     --canvas: var(--dark-canvas);
     --surface-primary: var(--dark-surface-primary);
@@ -2665,10 +2971,11 @@ html.toolbox-hidden .workspace-pane-toolbox {
     background: var(--surface-primary);
     color: var(--text-primary);
 }
+.app-shell.appearance-tinted,
 .workspace-topbar.appearance-tinted,
 .launcher-panel.appearance-tinted,
 .app-main.appearance-tinted,
-.workspace-pane-toolbox.appearance-tinted,
+.workspace-right-column.appearance-tinted,
 .chat-region.appearance-tinted {
     --canvas: var(--tint-canvas);
     --surface-primary: var(--tint-surface-primary);
@@ -2704,10 +3011,11 @@ html.toolbox-hidden .workspace-pane-toolbox {
    above, reading from the new --forest-* token family
    (static/css/tokens.css's own comment there has the full derivation
    and contrast-verification story). */
+.app-shell.appearance-deep-forest,
 .workspace-topbar.appearance-deep-forest,
 .launcher-panel.appearance-deep-forest,
 .app-main.appearance-deep-forest,
-.workspace-pane-toolbox.appearance-deep-forest,
+.workspace-right-column.appearance-deep-forest,
 .chat-region.appearance-deep-forest {
     --canvas: var(--forest-canvas);
     --surface-primary: var(--forest-surface-primary);

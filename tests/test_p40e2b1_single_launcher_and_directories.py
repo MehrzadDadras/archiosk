@@ -469,9 +469,13 @@ class PanelBehaviorIntactTests(_BaseTestCase):
             self.assertIn('id="conversation-dock-resize-handle"', body, url)
 
     def test_narrow_screen_drawer_rules_exist_for_both_panels(self):
+        # CLAUDE-P40-EYE1: html.toolbox-hidden now targets
+        # .workspace-right-column (Toolbox+Eye together), not
+        # .workspace-pane-toolbox alone - Section 3's own "apply it to
+        # the complete right column."
         css = _CSS_PATH.read_text(encoding="utf-8")
         self.assertIn("html.launcher-hidden .launcher-panel { display: none; }", css)
-        self.assertIn("html.toolbox-hidden .workspace-pane-toolbox {\n    display: none;\n}", css)
+        self.assertIn("html.toolbox-hidden .workspace-right-column {\n    display: none;\n}", css)
 
 
 # ---------------------------------------------------------------------------

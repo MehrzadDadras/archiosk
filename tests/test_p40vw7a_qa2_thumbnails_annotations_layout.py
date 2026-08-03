@@ -243,11 +243,15 @@ class ChatRegionLeftEdgeTests(unittest.TestCase):
         self.assertNotIn("margin-left", body)
         self.assertNotIn("html.launcher-hidden .chat-region", self.css)
 
-    def test_workspace_main_column_and_content_row_rules_exist(self):
+    def test_workspace_main_column_rule_exists(self):
+        # CLAUDE-P40-EYE1: .workspace-content-row (Display+Toolbox) is
+        # retired - Toolbox moved out into its own .workspace-right-
+        # column, leaving .app-main as .workspace-main-column's only row
+        # content, so the separate row wrapper added nothing and was
+        # removed rather than left as dead CSS.
         main_column = _rule_body(self.css, ".workspace-main-column")
         self.assertIn("flex-direction: column", main_column)
-        content_row = _rule_body(self.css, ".workspace-content-row")
-        self.assertIn("display: flex", content_row)
+        self.assertNotIn(".workspace-content-row {", self.css)
 
 
 class ChatRegionNestingTests(unittest.TestCase):
@@ -256,34 +260,34 @@ class ChatRegionNestingTests(unittest.TestCase):
     plain regex, and this repo's own convention is source/structure
     inspection over a live DOM anyway - see this file's own module
     docstring). Confirms the literal nesting templates/base.html now
-    has: .workspace-main-column > [.workspace-content-row > (.app-main,
-    toolbox), .chat-region] - Chat is a DESCENDANT of the column that is
-    itself Lists' own sibling, not a sibling of .app-shell-body reaching
-    edge-to-edge on its own row (the prior, superseded margin-left
-    approach)."""
+    has: .workspace-main-column > [.app-main, .chat-region] - Chat is a
+    DESCENDANT of the column that is itself Lists' own sibling, not a
+    sibling of .app-shell-body reaching edge-to-edge on its own row (the
+    prior, superseded margin-left approach). CLAUDE-P40-EYE1 later moved
+    Toolbox out of this same column entirely, into its own sibling
+    .workspace-right-column - not re-checked here (see EYE1's own test
+    classes), just confirmed not to have disturbed this nesting."""
 
     def setUp(self):
         self.html = _BASE_HTML_PATH.read_text(encoding="utf-8")
 
-    def test_workspace_main_column_opens_before_content_row_and_chat(self):
+    def test_workspace_main_column_opens_before_app_main_and_chat(self):
         main_column_idx = self.html.index('<div class="workspace-main-column">')
-        content_row_idx = self.html.index('<div class="workspace-content-row">')
         app_main_idx = self.html.index('<div class="app-main">')
         chat_idx = self.html.index('<div class="chat-region"')
-        self.assertLess(main_column_idx, content_row_idx)
-        self.assertLess(content_row_idx, app_main_idx)
+        self.assertLess(main_column_idx, app_main_idx)
         self.assertLess(app_main_idx, chat_idx)
 
     def test_chat_region_is_the_last_real_child_before_the_column_closes(self):
         # Between chat-region's own closing {% endif %} and the next
-        # <script> tag, there must be exactly two more </div> closes
-        # (workspace-main-column, then app-shell-body) - not one (would
-        # mean chat-region escaped back out to being app-shell-body's
-        # own sibling again) and not three+ (an extra, unmatched wrapper).
+        # real element, there must be exactly one </div> close
+        # (workspace-main-column) before CLAUDE-P40-EYE1's own right-
+        # column block begins - not zero (would mean chat-region escaped
+        # back out to being app-shell-body's own sibling again).
         chat_block_end = self.html.index("{% endif %}", self.html.index('<div class="chat-region"'))
-        next_script_idx = self.html.index("<script>", chat_block_end)
-        tail = self.html[chat_block_end:next_script_idx]
-        self.assertEqual(tail.count("</div>"), 2)
+        next_marker_idx = self.html.index("{% if project_id is defined and workspace is defined %}", chat_block_end)
+        tail = self.html[chat_block_end:next_marker_idx]
+        self.assertEqual(tail.count("</div>"), 1)
 
     def test_no_stray_margin_left_hack_remains_in_the_template(self):
         # A guard against reintroducing the superseded fix instead of
@@ -522,6 +526,21 @@ class AppearanceControlledSplitterTests(unittest.TestCase):
     def test_conversation_dock_resize_handle_has_a_real_background(self):
         body = _rule_body(self.css, ".conversation-dock-resize-handle")
         self.assertIn("var(--surface-primary)", body)
+
+    def test_app_shell_is_actually_in_the_combined_appearance_selector_lists(self):
+        # Regression guard for a real bug found during a later product-
+        # owner browser correction (CLAUDE-P40-EYE1's own "thick white/
+        # cream strips" report): the JS piggyback above (test_app_shell_
+        # gets_a_piggybacked_appearance_class_early) toggles .appearance-
+        # dark/-tinted/-deep-forest on .app-shell, but that class did
+        # NOTHING until .app-shell was also added to the three combined
+        # CSS selector lists that actually redefine --surface-primary/
+        # --canvas/etc. per mode - the JS-only half of the fix was
+        # shipped without this CSS-only half, so .app-shell's own
+        # background always resolved to the unthemed Light default in
+        # every dark mode, regardless of the class being present.
+        for mode in ("appearance-dark", "appearance-tinted", "appearance-deep-forest"):
+            self.assertIn(f".app-shell.{mode}", self.css, mode)
 
     def test_no_opacity_based_parent_trick_used_for_any_divider(self):
         for selector in (".panel-divider", ".lists-thumbnails-divider", ".conversation-dock-resize-handle", ".app-shell"):
