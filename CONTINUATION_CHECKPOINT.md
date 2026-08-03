@@ -1,5 +1,242 @@
 # Continuation checkpoint
 
+## 2026-08-02 — CLAUDE-P40-VW8 / CLAUDE-P40-VW8-QA: Reference Mode completion, Appearance/theme correction, Lists/Display/Menu structural fixes, Add Tag visible consequence, focused Project chooser, Project-switching dialog, and three follow-up addenda (foreground contrast, site-wide visual consistency, upload capacity)
+
+**Commits:** `4043784` (implementation), `639d84f` (tests). Full suite:
+1864 passed, 0 failed, verified on the final combined state (all three
+addenda included) immediately before these commits. **No product-owner
+acceptance seal recorded** — not requested, and explicitly not
+appropriate before the product owner's own real-browser walkthrough
+(see this entry's own closing paragraph).
+
+**Starting state:** VW7B (`9a5c11b`/`a61a7b8`) was the actual last
+pushed baseline — the product owner's own VW8-QA prompt initially
+assumed a "VW8" stage already existed; it did not (verified directly
+via `git log`, same discrepancy-surfacing pattern as VW7A's own entry
+below), corrected by a mid-session addendum before continuing. Full
+suite: 1014 baseline → this stage adds four new test files plus
+extensions to eleven existing ones; see the exact final count in the
+push-time test run, not repeated here as a stale number.
+
+**Section 3's 14 product-owner-observed defects — all addressed:**
+UI Reference Mode is now genuinely discoverable (a real "UI Reference
+Mode" checkbox in the account menu, off by default, persisted via
+`localStorage`, honored pre-paint on Sign-in/Gateway/Workspace/popups);
+every Appearance control (including the per-surface×mode radios) has
+its own stable reference; a new Appearance "All" row applies Light/
+Dark/Tinted to all five owned surfaces at once and shows an accessible
+"Mixed" state rather than silently guessing; Tinted's palette was
+relightened to a genuinely light, desaturated navy-blue-grey (was
+reading as beige/too-strong); each of Light/Dark/Tinted now governs its
+whole owned panel (body, header, empty state, scrollable region, nested
+backgrounds, inputs, dividers, conversation history, composer,
+divisions) via the existing per-surface CSS-custom-property scoping
+mechanism, not a handful of spot-patched elements; the PROJECTS root
+now genuinely toggles closed on a second activation (traced to a
+generic "collapsing clears an active Display descendant" rule written
+for Documents/Investigations incorrectly also firing for the Projects
+root, whose own active-project row always carries `.active` — fixed
+with a `data-tree-no-clear` guard, not a special case bolted onto the
+shared handler); Display's right-click context menu now actually opens,
+scoped specifically to `.display-division`'s own `contextmenu` handler
+(never Lists/Toolbox/Chat/Menu); Display divisions now fill their real
+available height instead of rendering as shallow white rectangles or
+small patches — root-caused to `html`/`body` never having a height/
+overflow constraint before this stage, so nothing in the Display grid's
+own ancestor chain had a real height to distribute `1fr` tracks against
+(the same missing constraint also explains defect 12); the Menu bar
+now stays fixed while Lists/Display/Toolbox/Chat each scroll
+independently — not via `position:sticky`, but because Menu is simply
+never inside anything that scrolls once `html,body{height:100%;
+overflow:hidden}` → `.app-shell{height:100vh;overflow:hidden}` →
+`.app-shell-body{flex:1;overflow:hidden}` is in place; Add Tag now has
+a real visible consequence on the tagged source text (see below); "Open
+an existing project" now leads to a small focused chooser instead of
+the full Projects-management page (see below).
+
+**Add Tag visible consequence:** `app.py`'s `hotlinks` template filter
+gained optional `message_id`/`anchor_scope`/`anchor_case_id` args
+(backward-compatible — omitted, behavior is byte-identical to before)
+that additionally wrap any tagged substring in
+`<mark class="tag-highlight-inline conv-tag-color-{color}"
+data-tag-occurrence-id="{id}" data-ui-ref="chat.tag-highlight"
+title="Tagged: {name}">`, computed in ONE pass against the raw text
+(hotlink-segment boundaries and tag-range boundaries merged into one
+ordered cut-point list before rendering) so overlapping/partial
+intersections with a hotlinked filename still produce valid, correctly-
+nested HTML rather than two independent substring-wrapping passes
+corrupting each other's output. `services/case_workspace.py` gained
+`tag_occurrences_for_message` (the read-side counterpart) — reuses
+`TagOccurrence`/its existing `source_anchor` exactly; no new business
+object. `tests/test_p40vw8qa_tag_visible_consequence.py` (new) covers
+the end-to-end route→rendered-HTML path, overlap/duplicate handling,
+case- vs project-scoped anchoring, and the backward-compatible no-args
+call shape.
+
+**Focused existing-Project chooser:** new `routes/portal.py:
+choose_project` (`/projects/choose`) + `templates/project_chooser.html`
+(new, extends `gateway_base.html` — no Lists panel, no counts/sort/
+Delete-forms), reusing `_accessible_documents`/`_safe_workspace`
+unchanged (no new authorization surface). `projects_list`/`projects.html`
+are untouched and remain the separate "administrative management"
+destination, still reachable at `/projects`. Gateway's "Open an
+existing project" now points here instead.
+
+**CLAUDE-P40-VW8 — Project-switching interruption dialog:** activating
+a different Project from Lists now shows an accessible dialog (Stay in
+Current Project / Switch in This Tab / Open in New Tab) instead of
+silently replacing the workspace. `data-project-id` on a Projects-root
+leaf link marks it as a real switch target — present only when a
+DIFFERENT Project is already open (`project_id is defined`); the active
+Project's own row (`lists.project.self`) never carries it, so
+"activating the already-current Project never opens the dialog" holds
+by construction. Switch/Open-in-New-Tab reuse the link's own real,
+already-authorized `workspace.show_workspace` href — no new route, no
+client-side authorization decision. **A regression caught and fixed
+during this stage's own self-review:** the first version also added a
+`data-project-name` attribute duplicating the leaf's own already-
+visible text, which broke CLAUDE-P40-E2B1's "a Project name must never
+appear a second time" invariant (`test_p40e2b1_single_launcher_and_
+directories.py`/`test_p40e2b1a_recursive_projection.py` both caught
+this on the pre-commit full-suite run) — fixed by reading the target
+name from the link's own `textContent` in JS instead of a redundant
+attribute. `tests/test_p40vw8_project_switch_and_chooser.py` (new)
+covers dialog gating, leaf-attribute correctness, the no-duplicate-name
+regression specifically, and the chooser route.
+
+**Theme Foreground Contrast Addendum (mid-session, product-owner
+follow-up):** `tools/check_contrast.py`'s own `REQUIRED_PAIRINGS` only
+ever checked LIGHT-mode pairings (the token names it reads are the
+Light `:root` names; Dark/Tinted use separately-prefixed names it never
+parsed) — auditing the full text-tier × surface-tier matrix directly
+for all three modes found Light itself fully AA-compliant everywhere,
+but two real sub-4.5:1 failures neither that script nor any prior
+stage's spot checks had caught: `--dark-text-metadata` on
+`--dark-surface-selected` (4.24:1) and `--tint-text-metadata` on
+`--tint-surface-hover`/`-selected` (4.09:1 / 3.46:1) — both the
+deepest/most-saturated layering step in each mode. Corrected in
+`tokens.css` (`--dark-text-metadata: #BBB3A8`, `--tint-text-metadata:
+#3D4D66`), each with enough margin to clear 4.5:1 while staying
+visibly the dimmest of the three text tiers.
+`tests/test_p40vw8qa_theme_foreground_contrast.py` (new) pins the full
+corrected matrix down as a running regression, verifies the seven
+semantic accents at 3:1 across all three modes, and verifies the
+per-surface CSS-scoping mechanism (`.appearance-dark`/`.appearance-
+tinted`) redefines the complete required token set on all five owned
+surfaces, not just the two or three the original VW6 test file
+checked.
+
+**Site-Wide Visual-System Consistency Addendum (mid-session, product-
+owner follow-up):** exhaustive template/stylesheet audit (no hardcoded
+colors found anywhere in templates; two in `main.css` — see below) plus
+two real, site-wide corrections: (1) `font-stretch: condensed` on
+`html,body` removed — the font stack (`"Arial Nova Cond", "Arial
+Narrow", Arial, sans-serif`) already names its condensed variants
+explicitly, so `font-stretch` had no real effect THERE, but on the
+fallback tier (plain "Arial"/`sans-serif`, i.e. any system without
+Arial Nova installed) it caused the browser to synthesize a horizontal
+squish — "unjustified synthetic font stretching," and specifically on
+whichever system *didn't* have the intended font, the opposite of
+graceful degradation; removing it changes zero px of which font family
+loads. (2) `.blueprint-grid`'s backdrop line color (`#5995C0`, a fixed,
+z-index:-1, 0.3-opacity brand watermark) was the one hardcoded hex
+value left in `main.css` outside `tokens.css` itself — tokenized as
+`--blueprint-grid-line` (same value, same deliberately mode-invariant
+reasoning as `--divider-strong`) purely so `tokens.css` stays the one
+place any shipped color is defined. Gateway/Auth pages confirmed
+deliberately Light-only by design (no per-panel Appearance system
+pre-workspace) but built from the SAME semantic token names as the
+themed workspace shell, not a parallel palette.
+`tests/test_p40vw8qa_site_wide_visual_consistency.py` (new) guards
+both corrections as running regressions (no hardcoded color anywhere
+outside `tokens.css`, no inline color styles in any template, no
+`font-stretch` declaration anywhere) plus Gateway/Auth token-family
+and heading-scale consistency checks.
+
+**UI Reference Mode / registry:** `data-ref` renamed to `data-ui-ref`
+throughout (templates, CSS, `app.py`, docs, tests) to match this
+stage's own naming requirement; `UI_REFERENCE_MAP.md` gained new
+`## Gateway`/`## Auth` sections and every new reference this stage
+introduced (Appearance All row + its 3 mode radios, per-surface×mode
+radios corrected from broken abbreviated shorthand to fully-qualified
+values, Display context-menu + sub-actions, selection-toolbar actions,
+`chat.composer.input`/`.send`, `chat.tag-highlight`,
+`lists.project-switch-dialog` + its 3 actions, `gateway.chooser`/
+`.search`/`.leaf`/`.back`, `auth.signin.*`). The Sign-in/Gateway
+isolation invariant (VW5) evolved from "zero refs anywhere" to "no
+workspace-shell-prefixed (`lists.`/`display.`/`toolbox.`/`chat.`/
+`menu.`) refs leak" — Sign-in/Gateway now correctly carry their OWN
+(`auth.*`/`gateway.*`) references, which is required, not a violation.
+
+**Deferred, not implemented this stage (Section 13):** a microphone/
+voice-input control for the Chat composer. Recorded here per explicit
+instruction, reserved for a future bounded stage — no groundwork
+(no UI stub, no route, no permission plumbing) was added, since the
+prompt asked only that the requirement be recorded, not scaffolded.
+
+**Project-Creation Upload-Capacity Correction (mid-session, product-
+owner follow-up):** a real-document walkthrough hit Werkzeug's raw
+default "Request Entity Too Large" page creating a Project. Diagnosis:
+the ONLY enforcing layer reachable in dev is Flask's `MAX_CONTENT_LENGTH`
+(`config.py`, sourced from `.env`'s `MAX_UPLOAD_MB`, was `25`);
+`deploy/nginx.conf`'s `client_max_body_size` is a second, production-
+only layer, already documented as "keep in sync," now updated to match.
+Werkzeug's own form parser raises `RequestEntityTooLarge` **before**
+`routes/portal.py:upload`'s view function ever runs, so a rejected
+request never reaches `ingest_upload` at all — confirmed directly (not
+just asserted) via `tests/test_p40vw8qa_upload_capacity.py`'s own
+before/after registry-and-`workspace_sources`-directory checks: zero
+partial Project/Document/temp-file state, and the requested project
+name stays available for an immediate retry (`_reject_if_name_taken`
+is never reached either). `routes/api.py`'s own existing blueprint-
+scoped JSON 413 handler was the ONLY place this was ever handled — the
+real web upload FORM (`routes/portal.py`) had no equivalent and fell
+through to Flask's unstyled default.
+
+Raised to **60MB** (`MAX_UPLOAD_MB` in `.env`/`.env.example`,
+`client_max_body_size` in `deploy/nginx.conf`, kept consistent) —
+evidence-based, not arbitrary: `services/ingestion.py`'s `ingest_upload`
+reads the whole file into memory (`file_storage.read()`), a synchronous,
+single-request, no-chunking/no-background-queue architecture bounded by
+`ANTHROPIC_CLASSIFY_BUDGET_SECONDS=90`/`GUNICORN_TIMEOUT=150`. 60MB is
+comfortable for real text-based RFP/RFQ/spec/report PDFs and DOCX files
+with exhibits, and stays well inside a safe per-request memory/time
+budget; a full scanned drawing package (100MB+) is explicitly recorded
+as NOT safely supported by this architecture yet (needs streaming/
+chunked upload or background processing) — a deliberate, documented
+limitation, not silently papered over with an arbitrarily larger number.
+
+Added `app.py`'s own app-level `@app.errorhandler(413)` (styled via the
+existing `errors/error.html`/`_render_error` machinery 404/500/403
+already use — never a new template), stating the actual configured
+limit in plain language, a "Choose a different file" action back to
+`/upload`, and no path/stack-trace/internals exposure (verified
+directly). `routes/api.py`'s own JSON 413 handler is unaffected
+(blueprint-scoped handlers win over the new app-level one for
+`/api/v1/*`). `templates/upload.html` gained client-side pre-submit
+file-size validation (the exact `"This file is X MB. The current
+maximum is Y MB..."` message format specified), a stated processing
+limitation note, and UI references on every control (`upload.*`) —
+server-side `MAX_CONTENT_LENGTH` remains the real enforcement; the
+client-side check is only a convenience. `tests/test_p40vw8qa_upload_
+capacity.py` (new, 21 tests) covers boundary/over-limit behavior,
+custom 413 presentation, transactional safety, authorization
+preservation (a non-admin/unauthenticated request still never reaches
+the 413 path — `@admin_required`/`@login_required` win first), and
+supported/unsupported file types.
+
+**Real-browser verification:** no interactive browser-automation tool
+is connected in this environment (confirmed via `ToolSearch` — only
+`WebFetch`, which summarizes content rather than driving interaction).
+Every claim above is a structural/route/rendered-HTML/JS-source
+assertion, verified by the automated suite; the actual pixel/
+interaction-level walkthrough (Reference Mode toggle in a live account
+menu, Appearance All/mixed-state visually, Display right-click/geometry
+across viewport widths, the Project-switching dialog's focus/Escape/
+popup-blocked behavior, tag highlight color contrast by eye) is left to
+the product owner, stated honestly rather than fabricated, per that
+addendum's own explicit instruction.
+
 ## 2026-08-02 — CLAUDE-P40-VW7B: left Lists root system and active-Display projection cleanup
 
 **Commits:** `9a5c11b` (implementation), `a61a7b8` (tests). Starting
@@ -114,7 +351,7 @@ seal recorded.**
 **Why this stage exists**: CLAUDE-P40-VW7B's own prompt assumed a
 "CLAUDE-P40-VW7A UI-reference registry/map" already existed from a
 prior stage - it did not. Verified directly (`git log --all` for any
-VW7A commit, a repo-wide search for a registry file or `data-ref`-
+VW7A commit, a repo-wide search for a registry file or `data-ui-ref`-
 style attribute) before touching anything, surfaced the discrepancy,
 and asked how to proceed rather than silently fabricating a "VW7A
 already happened" story or guessing at reference ids while
@@ -124,7 +361,7 @@ against it - this entry is that stage.
 
 **What VW7A is**: purely additive instrumentation, zero behavior
 change. Every family/leaf-pattern/action across Menu, Lists, Display,
-Toolbox, and Chat gained a stable `data-ref="<surface>.<family>..."`
+Toolbox, and Chat gained a stable `data-ui-ref="<surface>.<family>..."`
 attribute directly on its existing element - never a new wrapper,
 never a route/class/behavior change. `UI_REFERENCE_MAP.md` (new,
 repo-root, alongside `MANIFEST.md`/`CONTINUATION_CHECKPOINT.md`) is
@@ -132,12 +369,12 @@ the central registry: 55 reference ids, one row each, documenting
 current element/label/behavior/authorization notes/status
 (active/retired). A new "UI Reference Mode" toggle (Account menu, off
 by default, `localStorage`-persisted like the existing risk-layer/
-history-full toggles) overlays each `data-ref` value as a small CSS
-badge (`content: attr(data-ref)` - no new JS needed to read it) for
+history-full toggles) overlays each `data-ui-ref` value as a small CSS
+badge (`content: attr(data-ui-ref)` - no new JS needed to read it) for
 live cross-checking against the registry.
 
 **Design choices worth remembering**:
-- `data-ref` identifies a KIND of control, not one instance - a
+- `data-ui-ref` identifies a KIND of control, not one instance - a
   repeating pattern (a Document leaf, a Task row) shares one value
   across every rendered instance; the existing per-instance attributes
   (`data-source-id`, `data-task-id`, an `href`) still disambiguate
@@ -167,7 +404,7 @@ live cross-checking against the registry.
 **Test-infrastructure note**: six pre-existing tests failed on the
 first full-suite run after implementation - all six were either a
 brittle exact-string/exact-attribute-order assertion broken by an
-inserted (harmless) `data-ref` attribute, or a z-index/font-mono-count
+inserted (harmless) `data-ui-ref` attribute, or a z-index/font-mono-count
 invariant that genuinely needed updating for the same legitimate
 reasons above. None were regressions; each was fixed by updating the
 test's own selector/expected-count to the new, still-correct reality
