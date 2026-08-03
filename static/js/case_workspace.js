@@ -469,6 +469,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const id = division.dataset.recordId || '';
                 const selector = kind === 'source' ? `a[data-source-id="${cssEscapeValue(id)}"]`
                     : kind === 'case' ? `a[data-case-id="${cssEscapeValue(id)}"]`
+                    : kind === 'new-case' ? 'a[data-new-case]'
                     : 'a[data-view="overview"]';
                 listsRoot.querySelectorAll(selector).forEach((el) => {
                     if (!el.classList.contains('active')) {
@@ -502,6 +503,11 @@ document.addEventListener('DOMContentLoaded', () => {
             url.search = '';
             if (kind === 'case') url.searchParams.set('case', id);
             else if (kind === 'overview') url.searchParams.set('view', 'overview');
+            // CLAUDE-P40-VW8-QA (New Investigation Action in Lists):
+            // same vocabulary, same route, same &panel=1 mechanism -
+            // routes/workspace.py's own show_new_case_form reads this
+            // exact ?view=new-case value.
+            else if (kind === 'new-case') url.searchParams.set('view', 'new-case');
             url.searchParams.set('panel', '1');
             return url.toString();
         }
@@ -538,7 +544,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     frame.title = source.name;
                     contentEl.appendChild(frame);
                 }
-            } else if (kind === 'case' || kind === 'overview') {
+            } else if (kind === 'case' || kind === 'overview' || kind === 'new-case') {
                 contentEl.textContent = '';
                 const frame = document.createElement('iframe');
                 frame.src = buildPanelUrl(kind, id);
@@ -754,7 +760,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!normalized || !normalized.kind) return;
             if (normalized.kind === 'source') {
                 if (sourcesById[normalized.id]) populateDivision(idx + 1, 'source', normalized.id, sourcesById[normalized.id].name, false);
-            } else if (normalized.kind === 'case' || normalized.kind === 'overview') {
+            } else if (normalized.kind === 'case' || normalized.kind === 'overview' || normalized.kind === 'new-case') {
                 populateDivision(idx + 1, normalized.kind, normalized.id, normalized.displayName, false);
             }
         });

@@ -452,6 +452,14 @@ def show_workspace(project_id):
     # 5's own "if no leaf or action is selected" rule, the same honest
     # degrade convention selected_source/active_case already use.
     directory_view = request.args.get("view")
+    # CLAUDE-P40-VW8-QA (New Investigation Action in Lists): a focused
+    # CREATE FORM, not a browsable directory - deliberately a separate
+    # flag from directory_view (never itself a value directory_view can
+    # take), so it can never be mistaken for, or accidentally widen, the
+    # "?view= is the one directory vocabulary, Overview only" rule the
+    # comment above this one already establishes. Same precedence rules
+    # as directory_view below (a real ?case=/?source= selection wins).
+    show_new_case_form = request.args.get("view") == "new-case"
     if directory_view not in ("overview",):
         directory_view = None
 
@@ -526,6 +534,7 @@ def show_workspace(project_id):
     # directory view - see the ?view= comment above.
     if active_case is not None or selected_source is not None:
         directory_view = None
+        show_new_case_form = False
 
     # Project-wide "Needs Attention": every unresolved Finding (not yet
     # "applied") across every non-archived visible Case, not just
@@ -1181,6 +1190,7 @@ def show_workspace(project_id):
         active_case=active_case,
         selected_source=selected_source,
         directory_view=directory_view,
+        show_new_case_form=show_new_case_form,
         needs_attention_view=needs_attention_view,
         findings_view=findings_view,
         focused_finding_id=focused_finding_id,
@@ -1312,10 +1322,26 @@ def show_workspace(project_id):
 def create_case(project_id):
     _, store, workspace = _load_workspace_or_404(project_id)
 
+    # CLAUDE-P40-VW8-QA (New Investigation Action in Lists): this route
+    # is unchanged/reused as-is (no parallel Investigation-creation
+    # implementation) - the one addition is remembering whether the
+    # SUBMITTING form came from the focused "+ New Investigation"
+    # projection (a hidden field the new form below sets) so a
+    # validation failure re-projects that SAME focused form instead of
+    # the pre-existing Overview subdisclosure's own "?view=overview"
+    # target. `panel` is preserved the same way VW7B's own panel_only
+    # convention already works everywhere else - present only when the
+    # request actually originated inside a projected iframe.
+    from_new_case_form = request.form.get("source") == "new-case-form"
+    panel_only = request.form.get("panel") == "1"
+    extra_args = {"panel": "1"} if panel_only else {}
+
     title = (request.form.get("title") or "").strip()
     objective = (request.form.get("objective") or "").strip()
     if not title:
         flash("A Case needs a title.", "error")
+        if from_new_case_form:
+            return redirect(url_for("workspace.show_workspace", project_id=project_id, view="new-case", **extra_args))
         return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
 
     case = store.create_case(workspace, title=title, objective=objective, created_by=_reviewer())
@@ -1328,7 +1354,7 @@ def create_case(project_id):
         payload={"case_id": case["id"], "title": title, "visibility": case["visibility"]},
     )
 
-    return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case["id"]))
+    return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case["id"], **extra_args))
 
 
 # -- Project Home: star, details, instructions, project-level Sources, Snapshot ----

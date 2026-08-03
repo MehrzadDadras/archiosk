@@ -370,6 +370,12 @@ html.launcher-hidden .launcher-panel { display: none; }
     letter-spacing: normal;
 }
 .tree-leaf.launcher-new-project { color: var(--machine-blue); }
+/* CLAUDE-P40-VW8-QA (New Investigation Action in Lists): same accent
+   "+ New X" already uses (.launcher-new-project, above) - a generic
+   reusable modifier, not a one-off, in case a future family adopts the
+   same action-row pattern (see this stage's own audit of whether other
+   expandable families already have an equivalent). */
+.tree-leaf.tree-leaf-action { color: var(--machine-blue); }
 
 /* CLAUDE-P40-VW7: Tasks/Tags branches - reuse the tree idiom above as-
    is (.tree-node/.tree-toggle/.tree-children/.launcher-count already do
@@ -2679,6 +2685,13 @@ html.toolbox-hidden .workspace-pane-toolbox {
 .project-home-back { font-size: 0.88rem; color: var(--text-secondary); margin: 0 0 0.6rem; }
 .project-home-back a { color: var(--text-secondary); }
 .project-home-back a:hover { color: var(--text-primary); }
+
+/* CLAUDE-P40-VW8-QA (New Investigation Action in Lists): the focused
+   create-form panel projected into Display - reuses .project-home's own
+   max-width/padding (class list is "project-home new-case-form-panel"),
+   these two rules are the only genuinely new geometry needed. */
+.new-case-form-heading { font-family: var(--font-display); font-size: 1.3rem; font-weight: 500; margin: 0 0 0.8rem; }
+.new-case-form-actions { display: flex; gap: 0.6rem; align-items: center; margin-top: 0.3rem; }
 
 /* Project Home's title/actions row is now the shared .dash-head (see
    above) instead of its own parallel rule. */

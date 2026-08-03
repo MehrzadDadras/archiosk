@@ -272,16 +272,29 @@
                                         </ul>
                                     </li>
                                     <li class="tree-node" data-tree-node>
-                                        <button type="button" class="tree-toggle launcher-link" data-tree-parent data-tree-owns="case" data-ui-ref="lists.project.investigations" aria-expanded="{{ 'true' if active_case else 'false' }}">
+                                        <button type="button" class="tree-toggle launcher-link" data-tree-parent data-tree-owns="case" data-ui-ref="lists.project.investigations" aria-expanded="{{ 'true' if (active_case or show_new_case_form) else 'false' }}">
                                             <span class="tree-label">Investigations <span class="launcher-count">{{ visible_cases|length }}</span></span>
                                         </button>
-                                        <ul class="tree-children"{% if active_case %} data-tree-open{% endif %}>
+                                        <ul class="tree-children"{% if active_case or show_new_case_form %} data-tree-open{% endif %}>
+                                            {# CLAUDE-P40-VW8-QA (New Investigation Action in Lists): an
+                                               accessible action row, not a radio button (radios mean
+                                               mutually-exclusive choices, which this isn't - it's a
+                                               command). Always first, always present even at zero
+                                               Investigations - never gated on visible_cases being
+                                               non-empty. A real <a href> (works with JS disabled, real
+                                               navigation to the standalone ?view=new-case form) that
+                                               the same click-interceptor below also intercepts to
+                                               project into the active Display instead, exactly like
+                                               every other data-*-id leaf already does. #}
+                                            <li class="tree-node" data-tree-node>
+                                                <a class="tree-leaf launcher-link tree-leaf-action{% if show_new_case_form %} active{% endif %}" data-ui-ref="lists.project.investigations.new" data-new-case href="{{ url_for('workspace.show_workspace', project_id=project_id, view='new-case') }}">+ New Investigation</a>
+                                            </li>
                                             {% for c in visible_cases %}
                                             <li class="tree-node" data-tree-node>
                                                 <a class="tree-leaf launcher-link{% if active_case and active_case.id == c.id %} active{% endif %}" data-ui-ref="lists.project.investigations.leaf" data-case-id="{{ c.id }}" data-case-title="{{ c.title }}" href="{{ url_for('workspace.show_workspace', project_id=project_id, case=c.id) }}">{{ c.title }}</a>
                                             </li>
                                             {% else %}
-                                            <li class="tree-node-empty"><span class="pane-note">No Investigations yet.</span></li>
+                                            <li class="tree-node-empty"><span class="pane-note" data-ui-ref="lists.project.investigations.empty">No Investigations yet.</span></li>
                                             {% endfor %}
                                         </ul>
                                     </li>
@@ -855,7 +868,7 @@
             var root = document.querySelector('[data-tree-root]');
             if (!root) return;
             root.addEventListener('click', function (e) {
-                var link = e.target.closest('a[data-source-id], a[data-case-id], a[data-view]');
+                var link = e.target.closest('a[data-source-id], a[data-case-id], a[data-view], a[data-new-case]');
                 if (!link || !root.contains(link)) return;
                 if (!window.ArchioskDisplay) return;
                 var target = window.ArchioskDisplay.getActiveTarget();
@@ -870,6 +883,17 @@
                     kind = 'case';
                     id = link.getAttribute('data-case-id');
                     displayName = link.getAttribute('data-case-title') || link.textContent.trim();
+                } else if (link.hasAttribute('data-new-case')) {
+                    // CLAUDE-P40-VW8-QA (New Investigation Action in
+                    // Lists): projects the focused create-form panel,
+                    // same iframe/panel_only mechanism as case/overview
+                    // below - not a real record yet, so never "clear on
+                    // second click" (there is no record to compare
+                    // against; clicking it again just re-shows the same
+                    // empty form, harmless).
+                    kind = 'new-case';
+                    id = '';
+                    displayName = 'New Investigation';
                 } else {
                     kind = 'overview';
                     id = '';

@@ -34,7 +34,7 @@
         {% if not panel_only %}
         <div class="display-division-header">
             <span class="display-division-header-name">
-                {% if active_case %}{{ active_case.title }}{% elif selected_source %}{{ selected_source.name }}{% elif directory_view == 'overview' %}Overview{% endif %}
+                {% if active_case %}{{ active_case.title }}{% elif selected_source %}{{ selected_source.name }}{% elif directory_view == 'overview' %}Overview{% elif show_new_case_form %}New Investigation{% endif %}
             </span>
         </div>
         {% endif %}
@@ -1710,6 +1710,47 @@
                .case-workspace grid closes, below), not here - see
                macros.conversation_dock and its call site. #}
         </div>
+    </div>
+{% elif show_new_case_form %}
+    {# CLAUDE-P40-VW8-QA (New Investigation Action in Lists): a focused
+       CREATE form only - never the full Overview/management page
+       (Section: "Not open an unrelated management page"). Reuses the
+       exact same workspace.create_case route/form fields as the
+       pre-existing Overview "+ Start Investigation" subdisclosure
+       (templates/case_workspace.html's own project-home block, below/
+       above depending on render order) - no parallel Investigation-
+       creation implementation. Works standalone (a real, bookmarkable
+       ?view=new-case URL) and projected (?view=new-case&panel=1, via
+       the same populateDivision mechanism Documents/Investigations/
+       Overview already use) - panel-only chrome differences follow the
+       identical {% if not panel_only %} convention as Overview's own
+       "back to Projects" link above. #}
+    <div class="project-home new-case-form-panel">
+        {% if not panel_only %}
+        <p class="project-home-back">
+            <a href="{{ url_for('workspace.show_workspace', project_id=project_id, view='overview') }}">&larr; Overview</a>
+        </p>
+        {% endif %}
+        <h1 class="new-case-form-heading">New Investigation</h1>
+        {% with flashed = get_flashed_messages(with_categories=true) %}
+        {% if flashed %}
+        <div class="flash-stack">
+            {% for category, message in flashed %}
+            <div class="flash-message flash-{{ category }}" data-ui-ref="lists.project.investigations.new.validation-error">{{ message }}</div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% endwith %}
+        <form class="workspace-form" method="post" action="{{ url_for('workspace.create_case', project_id=project_id) }}" data-ui-ref="lists.project.investigations.new.form">
+            <input type="hidden" name="source" value="new-case-form">
+            {% if panel_only %}<input type="hidden" name="panel" value="1">{% endif %}
+            <input type="text" name="title" placeholder="Investigation title (e.g. Schedule Conflict Review)" required autofocus data-ui-ref="lists.project.investigations.new.title">
+            <input type="text" name="objective" placeholder="Objective (optional)" data-ui-ref="lists.project.investigations.new.objective">
+            <div class="new-case-form-actions">
+                <button type="submit" class="btn btn-primary" data-ui-ref="lists.project.investigations.new.create">Create Investigation</button>
+                <a class="btn btn-ghost" href="{{ url_for('workspace.show_workspace', project_id=project_id, view='overview') }}" data-ui-ref="lists.project.investigations.new.cancel">Cancel</a>
+            </div>
+        </form>
     </div>
 {% else %}
     {# CLAUDE-P40-E3A, Section 5: "if no leaf or action is selected,
