@@ -347,10 +347,35 @@
     // Section 9: "if the active tab is hidden, activate the most
     // recently used visible tab, otherwise a preview, otherwise a clear
     // empty Display state."
+    //
+    // CLAUDE-P40-VW8 (Governed Display Tab System, Section 4's "Closing
+    // the active tab selects a deterministic neighboring or previously
+    // active tab"): a fourth, final fallback added ahead of the empty
+    // state - an attended Investigation, via investigation_attention.js's
+    // own window.ArchioskInvestigationAttention.mostRecentAttended (see
+    // that file's own comment on this exact addition). This app has TWO
+    // real dynamic-record tab strips (Documents, Investigations); closing
+    // the active Document tab with no other Document tab or preview open
+    // used to go straight to the empty Display state even when a
+    // perfectly good attended Investigation was sitting right there in
+    // the Attention strip - this makes "closing the active tab" coherent
+    // across the WHOLE governed system, not just within one strip.
+    // Guarded (typeof check) since investigation_attention.js's own
+    // early-return (no #attention-strip element - e.g. panel_only iframe
+    // content) means window.ArchioskInvestigationAttention is not always
+    // defined; degrades to the pre-existing empty-state behavior exactly
+    // as before whenever that's the case, never throws.
     function activateFallback(excludingId) {
         var fallback = mostRecentVisibleFallback(excludingId);
         if (fallback) { navigateTo(fallback); return; }
         if (preview && preview.id !== excludingId && activeById[preview.id]) { navigateTo(preview.id); return; }
+        if (window.ArchioskInvestigationAttention && typeof window.ArchioskInvestigationAttention.mostRecentAttended === 'function') {
+            var attendedFallback = window.ArchioskInvestigationAttention.mostRecentAttended(null);
+            if (attendedFallback) {
+                window.location.href = baseUrl + '?case=' + encodeURIComponent(attendedFallback);
+                return;
+            }
+        }
         navigateToEmpty();
     }
 

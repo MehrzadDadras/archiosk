@@ -529,6 +529,28 @@ document.addEventListener('DOMContentLoaded', () => {
         // Division-0 content this page already knows how to show, just
         // wrapped in panel_shell.html instead of the full application
         // shell (see routes/workspace.py's panel_only comment).
+        // CLAUDE-P40-VW8 (Governed Display Tab System - distinct from the
+        // earlier, already-shipped "CLAUDE-P40-VW8"/"CLAUDE-P40-VW8-QA"
+        // stage this same file's own comments above reference; the tag is
+        // reused because that is what this stage's own governing prompt
+        // specifies, flagged here per this repo's own established
+        // discipline for tag collisions - see git log a61a7b8/9a5c11b and
+        // investigation_attention.js's own header comment for the prior
+        // "CLAUDE-P40-VW7B" collision this exact pattern already covers).
+        // Section 9's reserved extension point: 'kind' here is this app's
+        // real, governing tab-identity vocabulary (this function's own
+        // dispatch below is its single source of truth) - 'source'
+        // (Document), 'case' (Investigation), 'overview', and 'new-case'
+        // are the only REAL kinds implemented today. 'files' is reserved
+        // for the future dedicated Files Display tab (mirrored Data Room +
+        // Design-Builder Workspace roots) but deliberately has NO branch
+        // below and NO picker/strip entry anywhere - implementing even a
+        // stub branch here would be exactly the "placeholder controls that
+        // imply the Files system already works" Section 9 forbids. When
+        // that later stage arrives, it adds a real 'files' branch here,
+        // one line in buildPanelUrl (if it needs the panel-iframe path at
+        // all, since Files may not be a per-division-1-5 concept in the
+        // first place), and its own UI-reference entries - not before.
         function populateDivision(divisionIndex, kind, id, displayName, persist) {
             const division = document.getElementById(`display-division-${divisionIndex}`);
             if (!division) return;

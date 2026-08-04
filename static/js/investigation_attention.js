@@ -192,6 +192,14 @@
         render();
     }
 
+    // CLAUDE-P40-VW8 (Governed Display Tab System, Section 4's "mouse and
+    // keyboard operation"): Space-key activation added - a real gap found
+    // by this stage's own audit against document_tabs.js's onTabKeydown,
+    // which already has this. Native <a href> elements activate on Enter
+    // but NOT Space (that's a button/checkbox convention); document_tabs.js
+    // already compensates with an explicit e.key === ' ' handler, this file
+    // never did. Same fix, same reasoning, applied here for parity across
+    // both of this app's real dynamic-record tab strips.
     function onPositionKeydown(e, el) {
         var positions = Array.prototype.slice.call(list.querySelectorAll('.attention-position'));
         var idx = positions.indexOf(el);
@@ -206,6 +214,7 @@
         else if (e.key === 'ArrowLeft') { focusIndex(idx - 1); e.preventDefault(); }
         else if (e.key === 'Home') { focusIndex(0); e.preventDefault(); }
         else if (e.key === 'End') { focusIndex(positions.length - 1); e.preventDefault(); }
+        else if (e.key === ' ') { e.preventDefault(); el.click(); }
     }
 
     render();
@@ -303,7 +312,33 @@
     // Exposed for tests/future callers - a read-only lookup, never a
     // second write path for attention-set membership (mirrors
     // document_tabs.js's own window.ArchioskDocumentTabs.isPinned).
+    //
+    // CLAUDE-P40-VW8 (Governed Display Tab System, Section 4's "Closing
+    // the active tab selects a deterministic neighboring or previously
+    // active tab"): mostRecentAttended added so document_tabs.js's own
+    // activateFallback can treat BOTH of this app's real dynamic-record
+    // tab strips (Documents, Investigations) as one governed fallback
+    // pool, rather than falling straight to the empty Display state when
+    // no other Document tab exists but a perfectly good attended
+    // Investigation does. Deliberately does NOT reach into Attention's
+    // own "release" behavior (still never navigates - VW7B's own
+    // explicit, accepted "removing an Investigation from attention must
+    // not... otherwise falsify its real status" / "never navigates"
+    // guarantee is untouched) - this is a read-only lookup consulted by
+    // a DIFFERENT action (closing a Document tab), not a change to what
+    // release itself does. attention has no per-entry recency timestamp
+    // (unlike document_tabs.js's own pinned entries' lastActiveAt) - the
+    // array's own insertion order (last pushed = most recently brought
+    // into attention) is used as the defined, deterministic rule instead
+    // of inventing new persisted state for a fallback path.
     window.ArchioskInvestigationAttention = {
-        isAttended: function (caseId) { return attention.indexOf(caseId) !== -1; }
+        isAttended: function (caseId) { return attention.indexOf(caseId) !== -1; },
+        mostRecentAttended: function (excludingId) {
+            for (var i = attention.length - 1; i >= 0; i--) {
+                var id = attention[i];
+                if (id !== excludingId && casesById[id]) return id;
+            }
+            return null;
+        }
     };
 })();

@@ -1,5 +1,195 @@
 # Continuation checkpoint
 
+## 2026-08-03 — CLAUDE-P40-VW8 (Governed Display Tab System)
+
+**Tag collision, flagged explicitly:** this is a DIFFERENT stage from
+the earlier, already-shipped "CLAUDE-P40-VW8"/"CLAUDE-P40-VW8-QA"
+(Reference Mode completion, Appearance/theme correction, Lists/Display/
+Menu fixes, Add Tag visible consequence, focused Project chooser,
+Project-switching dialog — git log `4043784`/`639d84f`, and this file's
+own entry further down). The tag is reused because that is what this
+stage's own governing prompt specifies — the same "reused because the
+prompt says so, disambiguated everywhere it matters" handling this
+session already gave the earlier "CLAUDE-P40-VW7B" collision (see this
+file's own VW7B entries).
+
+**Started from a verified clean state:** local `HEAD` at `17eba2f`
+(the VW7B-QA3 header-stacking fix, matching `origin/main` exactly,
+already pushed) confirmed before any edit; working tree clean apart
+from the pre-existing, unrelated `tests/fixtures/nreocrc/
+_lab_instance_scratch_002/` scratch fixture.
+
+**Authorization:** the product owner was unavailable for this session
+and granted broad autonomous completion authority in advance (proceed
+continuously through implementation/test/commit/push without pausing
+for routine choices, progress reports, or push confirmation; hard-stop
+only for the specific conditions that governing message listed - none
+of which were reached). No product-owner acceptance seal is issued -
+that remains pending the product owner's return, per that same
+authorization's own explicit instruction.
+
+**Audit (Section 2), grounded directly in the actual repository, not
+assumed:** this application already has TWO real, working, tested
+dynamic-record Display tab mechanisms before this stage touched
+anything - CLAUDE-P40-DTAB1's Document tab strip (`kind='source'`:
+pin/preview/hidden, rename/color, keyboard roving-tabindex, an "All
+Tabs" overflow panel) and CLAUDE-P40-VW7B's Investigation Attention
+Positions strip (`kind='case'`: a bounded 4-slot attention set, a real
+"Focused" indicator, a non-destructive "release" that never navigates
+or falsifies status). Neither RFI, Task, nor Tag is a separate Display
+"kind" at all: an RFI leaf (`lists.project.rfis.leaf`) routes into its
+OWNING Investigation (`?case=`); a Task/Tag leaf routes via
+`routes/workspace.py`'s own `_conversation_source_url` into either the
+bare workspace URL (Chats/no-selection state) or an Investigation's own
+conversation (`?case=`) with a `#conv-source-<id>` scroll anchor - never
+a `?source=` Document route, confirming Tasks/Tags are tied to
+CONVERSATION passages, not Documents (a real, useful correction to my
+own initial assumption while auditing - checked against the actual
+route source, not left as a guess). "Project Tools" is a pure Lists-
+region set of forms/actions that never touches Display at all. Overview
+and Chats (the "nothing selected" state) are this app's two STABLE
+surfaces - each a Project-level singleton with no possible duplicate,
+represented through Lists' own server-rendered active-state plus the
+Display division header text, deliberately with NO tab-strip pill of
+their own - a considered "smallest coherent" choice (Section 3/4's own
+"do not introduce browser-style tab complexity... unsupported by real
+product needs"), not an oversight: a singleton that can never be
+duplicated trivially satisfies "opening the same surface again focuses
+the existing tab" without needing a switchable pill. "Files" is
+reserved (Section 9) as a documented, no-op kind in
+`case_workspace.js`'s own `populateDivision` comment - no branch, no
+picker entry, no placeholder control anywhere, per that section's own
+explicit "do not create placeholder controls that imply the Files
+system already works."
+
+Toolbox (Section 8) already implements the `active_case > selected_
+source > neutral-empty-state` priority order server-side, request-
+scoped exactly like Display itself - confirmed by direct template
+inspection (`case_workspace.html`'s own `{% block toolbox %}`), no
+client-side state to go stale, no code change needed. Eye (Section 8)
+already clears on navigation by its own prior, accepted, explicitly-
+documented design (EYE1's own "Not saved anywhere - cleared when you
+navigate away or reload") - since every real tab activation in this
+full-page-reload app IS a navigation, this is pre-existing, correct,
+unchanged behavior. Both strips' CSS already truncates long labels
+identically and both already scroll horizontally when more tabs exist
+than fit - confirmed by direct CSS inspection (`.document-tab-label`/
+`.attention-position-label`), no changes needed. Lists active-state
+staleness (Section 5) was checked directly against
+`case_workspace.js`'s own `syncListsActiveState` (idempotent - clears
+its own client-managed `.active` classes before reapplying, every
+render) and against `?case=`/`?source=`/`?view=` being fully server-
+rendered per-request for division 0 (no client state to go stale there
+at all) - no bug found.
+
+**Two genuine, small, targeted coherence gaps were found and fixed** -
+deliberately NOT a merge of the two existing strips into one, which
+would have risked regressing VW7B's own recently-accepted 4-slot
+capacity model and Document tabs' pin/preview mechanics for no product-
+requested benefit (Section 4's own "do not introduce browser-style tab
+complexity... unsupported by real product needs" cuts against a forced
+merge just as much as it cuts against inventing new complexity):
+
+1. `investigation_attention.js`'s own keyboard handler
+   (`onPositionKeydown`) was missing the explicit Space-key activation
+   `document_tabs.js`'s `onTabKeydown` already has (native `<a href>`
+   elements activate on Enter but not Space - a button/checkbox
+   convention, not a link one). A real accessibility-parity gap between
+   this app's two dynamic-record tab strips - `UI_REFERENCE_MAP.md`'s
+   own `.attention-position` row had actually already (incorrectly)
+   documented "click/Enter/Space" as its behavior at VW7B time, ahead of
+   the code actually implementing it; this stage closes that pre-
+   existing doc/code gap rather than just noticing it. Fixed identically
+   to `document_tabs.js`'s own approach.
+2. `document_tabs.js`'s own `activateFallback` (closing the active
+   Document tab with no other Document tab or preview left) fell
+   straight to the empty Display state even when a perfectly good
+   attended Investigation was sitting in the Attention strip right next
+   to it - not incorrect per DTAB1's own original, Documents-only scope,
+   but incoherent once this stage treats BOTH strips as one governed
+   dynamic-record tab system per Section 4's "closing the active tab
+   selects a deterministic neighboring... tab." Fixed by exposing a new,
+   read-only `window.ArchioskInvestigationAttention.mostRecentAttended
+   (excludingId)` lookup (insertion-order-based - attention has no
+   per-entry recency timestamp the way Document tabs' own `lastActiveAt`
+   does, so "last pushed into attention" is the defined, deterministic
+   rule used instead of inventing new persisted state) that
+   `activateFallback` now consults as a FINAL fallback, only after
+   exhausting its own existing Document-tab/preview options and before
+   the empty state - purely additive, degrades safely (a guarded
+   `typeof` check) when `investigation_attention.js` never ran at all
+   (a `panel_only` iframe division has no `#attention-strip`). Does NOT
+   touch Attention's own "release never navigates" guarantee - a
+   read-only lookup consulted by a DIFFERENT action (closing a Document
+   tab), never a change to what release itself does.
+
+No other code changes were required or made - every other item on
+Section 2's own audit checklist was found already correct by direct
+repository evidence, not merely assumed correct because nothing was
+reported broken.
+
+**Tests:** new `tests/test_p40vw8_governed_display_tab_system.py` (14
+tests) - audit-confirmation tests (RFI/Task/Tag/Project-Tools routing,
+empty-Display-state message, both strips present regardless of
+selection, Overview/Chats deliberately pill-less), source-level tests
+for both fixes, and two genuine real-Chromium tests (via the
+`playwright` Python package - a dev/test-only optional dependency,
+deliberately NOT added to `requirements.txt`, every test skips cleanly
+if it's absent) for the cross-kind fallback and Space-key activation -
+the two genuinely NEW pieces of runtime behavior a source-text assertion
+cannot prove. A real, empirically-confirmed Chromium restriction was
+hit and worked around here: `page.set_content()`-hosted documents (the
+technique VW7B-QA3 established) have an opaque origin in this browser -
+`window.localStorage` throws `SecurityError` there, which every call
+site in both files under test silently swallows via `try/catch`,
+meaning a `set_content()`-based test would have silently "passed" with
+completely inert localStorage rather than erroring loudly. Fixed by
+serving the real rendered HTML from a real (but non-routable, RFC 2606
+`.invalid`) HTTP origin via `page.route()`'s own `fulfill()` instead -
+still zero live server/real network dependency, but real, working
+`localStorage`. Sanity-checked by reverting both JS fixes and
+re-running: 7 of 14 tests genuinely failed (the ones actually exercising
+either fix), 7 still passed (the unrelated audit-confirmation ones) -
+proof this suite is a real regression guard, not tautological. Re-ran
+DTAB1's own test file (`test_p40dtab1_document_tabs.py`) and both VW7B
+test files unmodified as an explicit regression gate (158 tests total
+across all four files) - all passed. `UI_REFERENCE_MAP.md`'s own
+validation suite (`test_p40vw7a_ui_reference_map.py`, 22 tests) also
+re-ran clean - no registry drift, since this stage added no new/moved/
+retired `data-ui-ref` identifiers. Full suite: see this entry's own
+final line below.
+
+**Real-browser verification**, against the live running app (restarted,
+`STATIC_VERSION` bumped 54→55), using a fresh throwaway account/Project
+(2 Documents, 2 Investigations, all created via the real UI forms in a
+real browser - deleted again after use, no real data touched):
+no-selection empty state, Overview, opening a Document (tab strip
+appears), opening a second Document (2 tabs, correct pin/preview
+styling), re-opening an already-open Document (no duplicate tab),
+opening an Investigation (attention position appears), attending a
+second Investigation, closing an INACTIVE Document tab (no navigation),
+closing the ONLY remaining active Document tab while 2 Investigations
+are attended (**the new cross-kind fallback - landed on the attended
+Investigation, screenshotted, Toolbox/Lists/breadcrumb all correctly
+agreeing on the new active tab**), reload restoration, keyboard-only
+Arrow+Space activation of an attention position (**the new Space-key
+fix - genuinely worked live**), the header Switch-Project link, signed-
+out access correctly redirecting to `/login` with no Project data
+leaked, a 500px narrow viewport (Document tab strip still visible/
+usable), and UI Reference Mode toggling on correctly. All confirmed
+working via direct URL/DOM inspection and screenshots; no defect found.
+
+**Preserved:** VW1-VW7B and all their accepted QA corrections
+(explicitly re-confirmed by the DTAB1/VW7B regression test re-runs
+above and the real-browser walkthrough) - Attention's own 4-slot
+capacity model, "release never navigates," Document tabs' pin/preview/
+hidden/rename/color mechanics, per-Project isolation, all untouched.
+Files/Data Room hierarchy, Design-Builder folders, folder/ZIP import,
+external storage sync, linked-document retrieval, a new ingestion
+lifecycle, Add Document redesign, cross-Project document access, global
+search, and P41 were NOT started - only the reservation comment
+described above.
+
 ## 2026-08-03 — CLAUDE-P40-VW7B-QA3: Header Project Link Still Fails in Clean Browser Session
 
 **Started from a verified clean state:** local `HEAD` at `c590d00`

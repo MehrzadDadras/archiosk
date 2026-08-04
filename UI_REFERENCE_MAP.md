@@ -300,6 +300,50 @@ same convention `.document-tab`/`.thumbnail-row`/
 | `.attention-position-release` | `<button>` (per position) | "×" — releases that Investigation from attention only (Section 8's own explicit "must not delete, close, resolve, archive, or otherwise falsify its real status"); never navigates, even when releasing the currently-focused position |
 | `.attention-capacity-dialog-item` | `<li>` (inside the capacity dialog, one per currently-attended position) | Shows the Investigation's title with two real actions: "Release" (pure attention-set change, immediate, no page reload) and "Conclude" (the real, already-existing, owner-or-admin-gated `workspace.archive_case` route — the genuine governed completion action Section 9 requires, not a fabricated "soft close"; no "move to Waiting/Parked" option is offered, since no such governed Case state exists in this repository's actual model — grounded, not omitted by oversight) |
 
+### CLAUDE-P40-VW8 (Governed Display Tab System) audit note
+
+Distinct from the earlier, already-shipped "CLAUDE-P40-VW8"/"CLAUDE-
+P40-VW8-QA" stage (Reference Mode completion, Appearance/theme
+correction, etc. — see this file's own entries elsewhere and
+`CONTINUATION_CHECKPOINT.md`); flagged per this repository's established
+tag-collision discipline. This stage added no new, moved, or retired
+`data-ui-ref` identifiers — every control above already existed and is
+unchanged structurally. What it formalizes, grounded directly in the
+repository rather than assumed:
+
+- **The real governed tab-kind vocabulary** is `case_workspace.js`'s own
+  `populateDivision(divisionIndex, kind, id, displayName)` dispatch —
+  `'source'` (Document), `'case'` (Investigation), `'overview'`, and
+  `'new-case'` are the only real kinds. `'files'` is now a documented,
+  reserved, no-op kind (a comment only — no branch, no picker entry, no
+  placeholder control anywhere) for the future dedicated Files Display
+  tab.
+- **`display.document-tabs`** (Documents) and **`display.attention-
+  positions`** (Investigations) are this app's two real dynamic-record
+  tab strips. Neither RFI, Task, nor Tag is a separate Display kind —
+  an RFI leaf (`lists.project.rfis.leaf`) routes into its owning
+  Investigation (`?case=`); a Task/Task leaf (`lists.project.tasks.leaf`
+  / `lists.project.tags.leaf`) routes via `routes/workspace.py`'s own
+  `_conversation_source_url` into either the bare workspace URL (Chats)
+  or an Investigation's own conversation (`?case=`) with a `#conv-
+  source-<id>` scroll anchor — never a `?source=` Document route.
+  `lists.project.tools` is Lists-only and never touches Display at all.
+- **`display.overview`** and the bare/"Chats" no-selection state are
+  this app's two stable surfaces — Project-level singletons with no
+  possible duplicate, represented through Lists' own server-rendered
+  active-state plus the division header text, deliberately with no
+  tab-strip pill of their own (a considered choice, not an omission —
+  see this stage's own checkpoint entry for the full reasoning).
+- Two small, targeted coherence fixes were made (both purely behavioral
+  — no markup/ref changes): `.attention-position` now also activates on
+  Space (this table's own row above already documented "click/Enter/
+  Space" as its behavior — the code had not actually implemented Space
+  until this stage closed that pre-existing doc/code gap); and
+  `document_tabs.js`'s close-fallback now also considers an attended
+  Investigation before falling back to the empty Display state, so
+  "closing the active tab" is coherent across BOTH real dynamic-record
+  tab strips, not just within whichever one was closed.
+
 ## Display (`templates/case_workspace.html`)
 
 **CLAUDE-P40-VW7B, the `panel_only`/`panel_shell.html` mechanism:**
