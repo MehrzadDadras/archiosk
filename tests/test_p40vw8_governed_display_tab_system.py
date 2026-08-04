@@ -322,8 +322,18 @@ class SourceLevelFixTests(unittest.TestCase):
         self.assertIn("window.ArchioskInvestigationAttention &&", fn)
 
     def test_reserved_files_kind_is_documentation_only_no_functional_branch(self):
+        # CLAUDE-P40-VW8-QA1: the dispatch itself was generalized from
+        # three independent `kind === 'files'`-shaped if/elif chains into
+        # one shared PANEL_KINDS registry (see that table's own header
+        # comment in case_workspace.js) - "no functional branch for
+        # 'files'" is now proven by 'files' having no KEY in that
+        # registry, not by the absence of a string comparison.
         js = _CASE_WORKSPACE_JS_PATH.read_text(encoding="utf-8")
-        self.assertIn("'files' is reserved", js)
+        self.assertIn("'files' has NO entry in PANEL_KINDS", js)
+        table_idx = js.index("const PANEL_KINDS = {")
+        table = js[table_idx:js.index("\n        };", table_idx)]
+        self.assertNotIn("files:", table)
+        self.assertNotIn("'files':", table)
         # No real dispatch branch anywhere compares kind to 'files'.
         self.assertNotIn("kind === 'files'", js)
         self.assertNotIn('kind === "files"', js)

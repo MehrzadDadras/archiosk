@@ -34,7 +34,7 @@
         {% if not panel_only %}
         <div class="display-division-header">
             <span class="display-division-header-name">
-                {% if active_case %}{{ active_case.title }}{% elif selected_source %}{{ selected_source.name }}{% elif directory_view == 'overview' %}Overview{% elif show_new_case_form %}New Investigation{% endif %}
+                {% if active_case %}{{ active_case.title }}{% elif selected_source %}{{ selected_source.name }}{% elif directory_view_label %}{{ directory_view_label }}{% elif show_new_case_form %}New Investigation{% endif %}
             </span>
         </div>
         {# ---------------- Document tab strip (CLAUDE-P40-DTAB1) --------------------

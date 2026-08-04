@@ -101,6 +101,27 @@ workspace_bp = Blueprint("workspace", __name__)
 ALLOWED_DRAWING_EXTENSIONS = {".png", ".jpg", ".jpeg"}
 ALLOWED_DOCUMENT_EXTENSIONS = {".pdf", ".docx", ".txt", ".csv", ".md"}
 
+# CLAUDE-P40-VW8-QA1 (Governed Display Tab System sufficiency review): the
+# registered vocabulary of "stable Display kinds" - a Project-level
+# singleton surface with no open/close, no pinning, no tab-strip pill
+# (show_workspace's own ?view= comment below explains why this is
+# deliberately NOT a second browsable directory in Display). Overview is
+# the only one implemented today; this dict is what the ?view= whitelist
+# below AND the shared breadcrumb/division-0-header label both derive
+# from. Before this stage, "Overview" was three independent string
+# literals (the whitelist tuple, base.html's breadcrumb, case_workspace
+# .html's division header) that had to be kept in sync by hand with
+# nothing enforcing it - this is the single source of truth a second
+# stable kind (e.g. a future dedicated Files Display tab) would register
+# into, so adding one is one new entry here, not three independently-
+# maintained literals. Registering a key here does NOT give it any real
+# content - see the dedicated `directory_view == 'overview'` branches in
+# case_workspace.html for that; this dict controls only the kind's name/
+# identity, never what renders inside it.
+STABLE_DIRECTORY_KINDS = {
+    "overview": "Overview",
+}
+
 # Requirement-evidence explainability: maps the EXISTING, already-governed
 # Relationship.relationship_type vocabulary (case_workspace.py's
 # KNOWN_RELATIONSHIP_TYPES) onto the workspace's own already-documented
@@ -461,8 +482,13 @@ def show_workspace(project_id):
     # comment above this one already establishes. Same precedence rules
     # as directory_view below (a real ?case=/?source= selection wins).
     show_new_case_form = request.args.get("view") == "new-case"
-    if directory_view not in ("overview",):
+    if directory_view not in STABLE_DIRECTORY_KINDS:
         directory_view = None
+    # CLAUDE-P40-VW8-QA1: the one shared label breadcrumb/division-header
+    # both read (see STABLE_DIRECTORY_KINDS' own comment above) - None
+    # whenever directory_view itself is None, matching every other
+    # "nothing selected" degrade in this route.
+    directory_view_label = STABLE_DIRECTORY_KINDS.get(directory_view)
 
     # CLAUDE-P40-VW7B: "panel" rendering - the exact same authorization,
     # data computation, and Division-0 content this route already
@@ -535,6 +561,7 @@ def show_workspace(project_id):
     # directory view - see the ?view= comment above.
     if active_case is not None or selected_source is not None:
         directory_view = None
+        directory_view_label = None
         show_new_case_form = False
 
     # Project-wide "Needs Attention": every unresolved Finding (not yet
@@ -1191,6 +1218,7 @@ def show_workspace(project_id):
         active_case=active_case,
         selected_source=selected_source,
         directory_view=directory_view,
+        directory_view_label=directory_view_label,
         show_new_case_form=show_new_case_form,
         needs_attention_view=needs_attention_view,
         findings_view=findings_view,

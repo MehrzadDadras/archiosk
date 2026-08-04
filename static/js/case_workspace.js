@@ -461,10 +461,48 @@ document.addEventListener('DOMContentLoaded', () => {
         // different items" - every leaf whose record is CURRENTLY SHOWN
         // in ANY division (0 through 5) reads as active, not only the
         // one division 0 or the active target happens to hold.
-        let clientManagedActiveLeaves = [];
         function cssEscapeValue(value) {
             return (window.CSS && CSS.escape) ? CSS.escape(value) : String(value).replace(/["\\]/g, '\\$&');
         }
+
+        // CLAUDE-P40-VW8-QA1 (Governed Display Tab System sufficiency
+        // review): the single registration point for every "singleton"
+        // kind - a Project-level record with no real file of its own,
+        // embedded via the &panel=1 iframe route (buildPanelUrl) rather
+        // than a plain <img>/<iframe src=file_url> the way a Document
+        // ('source') is. Before this stage, buildPanelUrl, populateDivision,
+        // and syncListsActiveState each had their own independent kind ===
+        // 'case' / 'overview' / 'new-case' chain - three places that had to
+        // be kept in sync by hand, and syncListsActiveState's own final
+        // fallback (`: 'a[data-view="overview"]'`) applied to ANY
+        // unrecognized kind, not only 'overview' - a real latent bug
+        // (an unknown future kind would have silently marked Overview's
+        // own Lists leaf active instead of nothing). This table is what
+        // those three functions now share; a future singleton kind (e.g. a
+        // dedicated Files Display tab, still not implemented - see
+        // routes/workspace.py's own STABLE_DIRECTORY_KINDS for the
+        // matching server-side registration point) adds one entry here,
+        // not three independently-maintained branches.
+        const PANEL_KINDS = {
+            case: {
+                buildQuery: (url, id) => { url.searchParams.set('case', id); },
+                listsSelector: (id) => `a[data-case-id="${cssEscapeValue(id)}"]`,
+            },
+            overview: {
+                buildQuery: (url) => { url.searchParams.set('view', 'overview'); },
+                listsSelector: () => 'a[data-view="overview"]',
+            },
+            // CLAUDE-P40-VW8-QA (New Investigation Action in Lists): same
+            // vocabulary, same route, same &panel=1 mechanism -
+            // routes/workspace.py's own show_new_case_form reads this
+            // exact ?view=new-case value.
+            'new-case': {
+                buildQuery: (url) => { url.searchParams.set('view', 'new-case'); },
+                listsSelector: () => 'a[data-new-case]',
+            },
+        };
+
+        let clientManagedActiveLeaves = [];
         function syncListsActiveState() {
             const listsRoot = document.querySelector('[data-tree-root]');
             if (!listsRoot) return;
@@ -475,10 +513,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (!division || !division.dataset.kind) continue;
                 const kind = division.dataset.kind;
                 const id = division.dataset.recordId || '';
+                const panelKind = PANEL_KINDS[kind];
                 const selector = kind === 'source' ? `a[data-source-id="${cssEscapeValue(id)}"]`
-                    : kind === 'case' ? `a[data-case-id="${cssEscapeValue(id)}"]`
-                    : kind === 'new-case' ? 'a[data-new-case]'
-                    : 'a[data-view="overview"]';
+                    : panelKind ? panelKind.listsSelector(id)
+                    : null;
+                if (!selector) continue;
                 listsRoot.querySelectorAll(selector).forEach((el) => {
                     if (!el.classList.contains('active')) {
                         el.classList.add('active');
@@ -509,13 +548,8 @@ document.addEventListener('DOMContentLoaded', () => {
         function buildPanelUrl(kind, id) {
             const url = new URL(window.location.href);
             url.search = '';
-            if (kind === 'case') url.searchParams.set('case', id);
-            else if (kind === 'overview') url.searchParams.set('view', 'overview');
-            // CLAUDE-P40-VW8-QA (New Investigation Action in Lists):
-            // same vocabulary, same route, same &panel=1 mechanism -
-            // routes/workspace.py's own show_new_case_form reads this
-            // exact ?view=new-case value.
-            else if (kind === 'new-case') url.searchParams.set('view', 'new-case');
+            const panelKind = PANEL_KINDS[kind];
+            if (panelKind) panelKind.buildQuery(url, id);
             url.searchParams.set('panel', '1');
             return url.toString();
         }
@@ -538,19 +572,21 @@ document.addEventListener('DOMContentLoaded', () => {
         // investigation_attention.js's own header comment for the prior
         // "CLAUDE-P40-VW7B" collision this exact pattern already covers).
         // Section 9's reserved extension point: 'kind' here is this app's
-        // real, governing tab-identity vocabulary (this function's own
-        // dispatch below is its single source of truth) - 'source'
-        // (Document), 'case' (Investigation), 'overview', and 'new-case'
-        // are the only REAL kinds implemented today. 'files' is reserved
-        // for the future dedicated Files Display tab (mirrored Data Room +
-        // Design-Builder Workspace roots) but deliberately has NO branch
-        // below and NO picker/strip entry anywhere - implementing even a
-        // stub branch here would be exactly the "placeholder controls that
-        // imply the Files system already works" Section 9 forbids. When
-        // that later stage arrives, it adds a real 'files' branch here,
-        // one line in buildPanelUrl (if it needs the panel-iframe path at
-        // all, since Files may not be a per-division-1-5 concept in the
-        // first place), and its own UI-reference entries - not before.
+        // real, governing tab-identity vocabulary - 'source' (Document,
+        // embedded as a real file below) and whatever is registered in
+        // PANEL_KINDS above (Investigation, Overview, and the New
+        // Investigation form today) are the only REAL kinds implemented.
+        // 'files' has NO entry in PANEL_KINDS and NO picker/strip entry
+        // anywhere - adding even a stub entry here would be exactly the
+        // "placeholder controls that imply the Files system already
+        // works" Section 9 forbids. When that later stage arrives, it
+        // registers a real 'files' entry in PANEL_KINDS above (this
+        // function's own dispatch, buildPanelUrl, and syncListsActiveState
+        // all read that one table - see its own comment for why this
+        // stopped being three independently-maintained branches), plus a
+        // matching STABLE_DIRECTORY_KINDS entry server-side if it's a
+        // singleton like Overview rather than a per-Project record list,
+        // and its own UI-reference entries - not before.
         function populateDivision(divisionIndex, kind, id, displayName, persist) {
             const division = document.getElementById(`display-division-${divisionIndex}`);
             if (!division) return;
@@ -574,7 +610,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     frame.title = source.name;
                     contentEl.appendChild(frame);
                 }
-            } else if (kind === 'case' || kind === 'overview' || kind === 'new-case') {
+            } else if (PANEL_KINDS[kind]) {
                 contentEl.textContent = '';
                 const frame = document.createElement('iframe');
                 frame.src = buildPanelUrl(kind, id);
@@ -790,7 +826,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!normalized || !normalized.kind) return;
             if (normalized.kind === 'source') {
                 if (sourcesById[normalized.id]) populateDivision(idx + 1, 'source', normalized.id, sourcesById[normalized.id].name, false);
-            } else if (normalized.kind === 'case' || normalized.kind === 'overview' || normalized.kind === 'new-case') {
+            } else if (PANEL_KINDS[normalized.kind]) {
                 populateDivision(idx + 1, normalized.kind, normalized.id, normalized.displayName, false);
             }
         });

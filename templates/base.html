@@ -91,9 +91,9 @@
                     <span class="workspace-topbar-sep" aria-hidden="true">/</span>
                     <span class="workspace-topbar-doc">{{ selected_source.name }}</span>
                     {% if selected_source.removed_at %}<span class="workspace-topbar-badge">removed</span>{% endif %}
-                    {% elif directory_view == 'overview' %}
+                    {% elif directory_view_label %}
                     <span class="workspace-topbar-sep" aria-hidden="true">/</span>
-                    <span class="workspace-topbar-doc">Overview</span>
+                    <span class="workspace-topbar-doc">{{ directory_view_label }}</span>
                     {% endif %}
                 </span>
                 {% endif %}

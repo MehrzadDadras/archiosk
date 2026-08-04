@@ -1,5 +1,82 @@
 # Continuation checkpoint
 
+## 2026-08-04 — CLAUDE-P40-VW8-QA1 (Governed Display Tab System sufficiency review)
+
+**Task:** independently determine whether VW8 (immediately below) genuinely
+satisfied its product-owner purpose - not merely repairing the two
+existing record-tab mechanisms (Documents, Investigations), but
+establishing a real Display foundation for a *future* dedicated,
+persistent Files Display tab. Explicitly not authorized to implement
+Files itself, add a placeholder Files control, build a Data Room, or
+touch real Project data.
+
+**Finding: VW8 was incomplete.** VW8's own audit correctly identified
+that Overview/Chats are this app's STABLE surfaces (a Project-level
+singleton, no tab-strip pill) - but never generalized that pattern.
+Grounded in the actual repository: `directory_view == 'overview'` was a
+bare string literal independently repeated across `routes/workspace.py`'s
+own `?view=` whitelist (`if directory_view not in ("overview",)`), the
+breadcrumb in `templates/base.html`, and the Display division-0 header
+name in `templates/case_workspace.html` - three copies kept in sync only
+by hand, no registry naming "the set of stable kinds" anywhere.
+`static/js/case_workspace.js`'s own client-side `kind` dispatch (for the
+separate VW7B/VW4 multi-Display split-screen embedding path) had the
+identical problem one layer down: `buildPanelUrl`, `populateDivision`,
+and `syncListsActiveState` each ran their own independent
+`kind === 'case' || kind === 'overview' || kind === 'new-case'`-shaped
+chain - and `syncListsActiveState`'s own final fallback
+(`: 'a[data-view="overview"]'`) was a genuine latent bug: it applied to
+ANY unrecognized kind, not only 'overview', so a future unknown kind
+would have silently marked Overview's own Lists leaf active instead of
+nothing.
+
+**Fix (smallest generic foundation, not Files):** `routes/workspace.py`'s
+new `STABLE_DIRECTORY_KINDS` dict and `case_workspace.js`'s new
+`PANEL_KINDS` table are now the two single sources of truth those sites
+read from. `STABLE_DIRECTORY_KINDS` drives a new `directory_view_label`
+computed once server-side and consumed by both the breadcrumb and the
+division-0 header (replacing their independent `'Overview'` literals).
+`PANEL_KINDS` replaces the three independent kind-dispatch chains with
+one registry consulted by all three functions, fixing the latent
+fallback bug in the process. Neither change adds a Lists leaf, a picker
+entry, or any content branch for anything but Overview - registering a
+kind's identity alone still renders nothing (proven by test, see below).
+
+**Tests:** `tests/test_p40vw8qa1_stable_surface_extension_point.py` (9
+tests) - registers a synthetic, non-user-facing test-only kind into
+`STABLE_DIRECTORY_KINDS` for the duration of a test (`patch.dict`) and
+confirms the breadcrumb, division-0 header, and `?view=` whitelist all
+pick it up with ZERO template changes, that an unregistered value still
+degrades to nothing, that a real `?case=`/`?source=` selection still
+overrides a registered stable kind, and that registering a kind never
+fabricates Overview-specific content. Plus source-text evidence that
+`PANEL_KINDS` is the single table `buildPanelUrl`/`populateDivision`/
+`syncListsActiveState` all read from, and that the old unconditional
+Overview fallback in `syncListsActiveState` is gone. Fixed 3 pre-existing
+tests (`test_p40vw8_governed_display_tab_system.py`'s
+`test_reserved_files_kind_is_documentation_only_no_functional_branch`,
+`test_p40vw8qa_new_investigation_action.py`'s
+`test_populate_division_handles_new_case_kind` and
+`test_build_panel_url_maps_new_case_to_the_view_query_param`) that pinned
+the OLD three-independent-chains source-text shape - updated to verify
+the same invariants against the new `PANEL_KINDS`-registry shape, not
+reverted. Full suite: 2549 passed, 0 failed (`~53min` this run - no code
+relationship to the change, matches this file's own already-documented
+"duration has occasionally spiked" note elsewhere).
+
+**Real-browser verified live** (restarted, throwaway account + Client/
+Owner project + Investigation, both deleted after use): Overview
+breadcrumb/division header render identically to before (now sourced
+from `directory_view_label`, not a literal); multi-Display split-screen
+Overview embedding via the refactored `buildPanelUrl`/`populateDivision`
+still works end-to-end (iframe content + Lists active-state agreement);
+closing that division correctly reverts. No visible regression.
+
+**Not implemented (by design, per this stage's own constraints):** Files
+itself, any Files control/leaf/picker entry, Data Room, folder hierarchy,
+Add Document redesign, cross-Project access, global search, P41. No
+product-owner acceptance seal issued.
+
 ## 2026-08-03 — CLAUDE-P40-VW8 (Governed Display Tab System)
 
 **Tag collision, flagged explicitly:** this is a DIFFERENT stage from

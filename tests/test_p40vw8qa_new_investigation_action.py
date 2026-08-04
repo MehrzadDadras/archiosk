@@ -360,13 +360,30 @@ class JavaScriptStructureTests(unittest.TestCase):
         self.assertIn("kind = 'new-case'", self.base_html)
 
     def test_populate_division_handles_new_case_kind(self):
-        self.assertIn("kind === 'new-case'", self.js)
+        # CLAUDE-P40-VW8-QA1: populateDivision's own kind === 'case' ||
+        # kind === 'overview' || kind === 'new-case' chain was generalized
+        # into one shared PANEL_KINDS registry lookup (see that table's own
+        # header comment in case_workspace.js) - 'new-case' is handled
+        # because it is a registered key in that table, not because
+        # populateDivision itself names it.
+        populate_idx = self.js.index("function populateDivision(")
+        populate_body = self.js[populate_idx:populate_idx + 1200]
+        self.assertIn("PANEL_KINDS[kind]", populate_body)
+        table_idx = self.js.index("const PANEL_KINDS = {")
+        table = self.js[table_idx:self.js.index("\n        };", table_idx)]
+        self.assertIn("'new-case':", table)
 
     def test_build_panel_url_maps_new_case_to_the_view_query_param(self):
-        idx = self.js.index("function buildPanelUrl(kind, id)")
-        window = self.js[idx:idx + 600]
-        self.assertIn("'new-case'", window)
-        self.assertIn("'view'", window)
+        # CLAUDE-P40-VW8-QA1: buildPanelUrl itself now just delegates to
+        # whichever PANEL_KINDS entry matches - the 'new-case' -> ?view=
+        # mapping lives in that entry's own buildQuery, not in
+        # buildPanelUrl's own body.
+        table_idx = self.js.index("const PANEL_KINDS = {")
+        table = self.js[table_idx:self.js.index("\n        };", table_idx)]
+        entry_idx = table.index("'new-case':")
+        entry = table[entry_idx:entry_idx + 200]
+        self.assertIn("'view'", entry)
+        self.assertIn("'new-case'", entry)
 
 
 if __name__ == "__main__":
