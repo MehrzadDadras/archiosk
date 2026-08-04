@@ -1,5 +1,48 @@
 # Continuation checkpoint
 
+## 2026-08-04 — CLAUDE-P40-VW8-QA-CLOSE (Product-Owner Acceptance Seal)
+
+**Bounded documentation-only close-out** - no application code, template,
+CSS, JavaScript, schema, or test file was touched in this stage.
+
+**Product owner accepts:**
+
+* `CLAUDE-P40-VW8 — Governed Display Tab System` (implementation commit
+  `d623e1d`)
+* `CLAUDE-P40-VW8-QA1 — Display Tab Architecture Sufficiency Review`
+  (corrective commit `fa254fa`)
+
+The acceptance explicitly includes the QA1 finding immediately below
+this entry: VW8 initially lacked a reusable extension point for a future
+stable Files Display surface (`directory_view == 'overview'` was an
+independently-repeated literal, not a registry), and QA1 corrected this
+with `routes/workspace.py`'s server-side `STABLE_DIRECTORY_KINDS`
+registry and `static/js/case_workspace.js`'s client-side `PANEL_KINDS`
+registry - the smallest generic foundation, not Files itself. The
+synthetic-kind tests in
+`tests/test_p40vw8qa1_stable_surface_extension_point.py` proved a future
+stable Display surface can be registered and mounted through both
+registries without adding any Files-specific placeholder behavior.
+
+**This seal accepts the Display-tab foundation only** - it does not
+authorize or accept a Files/Data Room implementation, Design-Builder
+Workspace folders, file ingestion/retrieval changes, cross-Project
+access, global search, additional business objects, or P41. None of
+those were started.
+
+**Evidence re-verified, not re-run:** `HEAD` and `origin/main` both
+confirmed at `fa254fa` before this close-out; the QA1 entry's own
+recorded full-suite result (2,549 passed, 0 failed) and real-browser
+verification stand as recorded - the suite was not re-run since no
+repository evidence changed and that recorded result was directly
+verifiable from this same file. The pre-existing, unrelated
+`tests/fixtures/nreocrc/_lab_instance_scratch_002/` scratch fixture
+remains untouched (not deleted, modified, regenerated, staged, or
+committed) - preserved exactly as QA1 and every prior session already
+left it.
+
+**UI reference update not required.**
+
 ## 2026-08-04 — CLAUDE-P40-VW8-QA1 (Governed Display Tab System sufficiency review)
 
 **Task:** independently determine whether VW8 (immediately below) genuinely
