@@ -1581,6 +1581,45 @@ main {
    happens to render it - the same reasoning that token's own original
    comment gives, applied here to a second full-width seam instead of
    only the workspace/Chat one. */
+/* CLAUDE-P40-VW7B-QA3 (real-Chromium/Playwright-verified correction):
+   QA2's flex-shrink:0 fix (below, on .workspace-topbar-identity) was
+   real and still correct as far as it went, but a clean-session
+   real-browser reproduction showed the Project-name link still failed
+   to navigate. Genuine browser evidence (Playwright against the live
+   local app - getBoundingClientRect/elementFromPoint/elementsFromPoint/
+   a real .click(), swept across viewport widths from 1920px down to
+   600px) found the ACTUAL cause at narrow widths: both
+   .launcher-panel (Lists) and .workspace-right-column (Toolbox+Eye)
+   become `position: fixed; top: 0; ... z-index: 30` overlay drawers
+   below the 640px breakpoint (see each one's own @media rule) - and
+   since .workspace-topbar itself was plain `position: static` with no
+   z-index, EITHER drawer paints over the ENTIRE topbar, including this
+   link, because both drawers start at top:0 rather than below the
+   topbar's own height. document.elementFromPoint at the visible
+   "Project name" text returned `.tree-leaf.launcher-link.current-
+   project` (Lists' own current-Project row) at 600px, not the topbar
+   anchor at all - confirming the visible topbar text was being
+   REACHED by clicks, just not by the element a user would expect,
+   exactly the class of bug QA3 asked to rule out ("whether the visible
+   text is rendered by the anchor or another overlapping element").
+   Fix: .workspace-topbar gets its own stacking context
+   (position:relative) and z-index:31 - one step above the drawers'
+   ceiling of 30 (the same "stack higher than anything it could ever
+   appear over" idiom this file already uses for
+   .conv-selection-toolbar/z-index:70 relative to the 60-ceiling
+   Appearance popup) - so the topbar, which is this app's "one shell
+   every authenticated page shares" (this rule's own original comment,
+   above), can never again be occluded by a drawer at any width,
+   without touching either drawer's own top:0/z-index:30 (both still
+   correctly cover Display/Chat beneath the topbar, which is the
+   intended drawer behavior) and without depending on the topbar's own
+   height (which varies - two-line wrap when Document controls are
+   present, see QA2's own comment - so an offset like `top:
+   <topbar-height>` on the drawers would have been fragile in exactly
+   the way a structural fix must not be). Verified with a real
+   .click(): fails at 600px before this fix (Timeout, drawer link
+   receives it instead), succeeds at every width from 600px through
+   1920px after it. */
 .workspace-topbar {
     display: flex;
     align-items: center;
@@ -1590,6 +1629,8 @@ main {
     border-bottom: 1px solid var(--divider-strong);
     margin-bottom: 1rem;
     flex-wrap: wrap;
+    position: relative;
+    z-index: 31;
 }
 /* CLAUDE-P40-VW7B-QA2: flex-shrink:0 added - a real-browser check found
    that clicking the Foreground Project's own name (menu.context.switch-

@@ -1,5 +1,125 @@
 # Continuation checkpoint
 
+## 2026-08-03 — CLAUDE-P40-VW7B-QA3: Header Project Link Still Fails in Clean Browser Session
+
+**Started from a verified clean state:** local `HEAD` at `c590d00`
+(the combined VW7B-QA1+QA2 push, already on `origin/main`) confirmed
+before any edit; working tree clean apart from the pre-existing,
+unrelated `tests/fixtures/nreocrc/_lab_instance_scratch_002/` scratch
+fixture.
+
+**Report:** a clean-session real-browser reproduction (sign out, sign
+in fresh, open a Project with a Document, single-click the Project
+name once) showed the header link still did not navigate, contradicting
+QA2's own report. The task explicitly instructed: do not assume QA2's
+explanation was complete merely because static markup contains an
+anchor, and required genuine browser-computed evidence, not another
+source-text assertion.
+
+**New capability exploited for this stage:** `npx playwright install
+chromium --with-deps` successfully downloaded a real, working headless
+Chromium into this environment (`C:\Users\<user>\AppData\Local\
+ms-playwright\`) - every prior stage in this session had correctly and
+honestly reported "no real browser tool exists here." The `playwright`
+Python package (installed into `venv/`, NOT added to `requirements.txt`
+- dev/test-only, never imported by the shipped app, every test using it
+skips cleanly rather than failing if it's ever absent) reuses that same
+browser install. This is the first stage in this session with genuine
+`getBoundingClientRect`/`elementFromPoint`/`elementsFromPoint`/real-
+`.click()` evidence instead of static-source reasoning about geometry.
+
+**Diagnosis, with direct genuine-browser evidence:** launched the real
+Chromium against the actual local dev server (a throwaway verifier
+account + a real ingested PDF Project, deleted again after use - see
+below), signed in fresh, opened the Project with its Document active,
+and swept `document.elementFromPoint()` plus a real `.click()` across
+viewport widths from 1920px down to 320px. Every width from 1920px down
+to 700px clicked correctly - QA2's `flex-shrink: 0` fix was real and
+never wrong as far as it went. At 600px and narrower, the click
+consistently failed (`Timeout 3000ms exceeded`), and
+`elementFromPoint()` at the link's own visible-text coordinates
+returned `.tree-leaf.launcher-link.current-project` (Lists' own
+current-Project row) instead of the topbar anchor - direct proof the
+visible header text was being reached by clicks, just not by the
+element a user would expect. Root cause: `main.css`'s own `@media
+(max-width: 640px)` rules turn BOTH `.launcher-panel` (Lists) and
+`.workspace-right-column` (Toolbox+Eye) into `position: fixed; top: 0;
+... z-index: 30` overlay drawers below that breakpoint - a symmetric,
+pre-existing, systemic gap on both sides, not a one-off. `.workspace-
+topbar` itself was plain `position: static` with no z-index, so at
+narrow widths either drawer painted over the entire topbar, including
+the Project-name link, regardless of the link's own (correct) geometry.
+The user's own browser window width at the time of the report was
+never directly observed (no way to inspect that after the fact), but a
+narrower-than-1024px effective viewport - an unmaximized window, a
+snapped half-screen, devtools docked open, or OS display scaling - is
+readily plausible and was the only variable, across the full sweep,
+that reproduced the exact reported symptom.
+
+**Fix, a structural correction (not a speculative one-property patch):**
+`.workspace-topbar` gained `position: relative; z-index: 31` - one step
+above the drawers' shared ceiling of 30, the same "stack higher than
+anything it could ever appear over" idiom this file already uses
+elsewhere (`.conv-selection-toolbar`/70 above the 60-ceiling Appearance
+popup). Neither drawer's own `top: 0`/`z-index: 30` was touched - both
+still correctly cover Display/Chat beneath the topbar, which is their
+own intended behavior; only the always-persistent topbar strip (this
+app's "one shell every authenticated page shares," per that rule's own
+original comment) is now guaranteed to stay on top of them, at every
+viewport width, regardless of which drawer (if either) is open. Because
+the topbar has a real (opaque, per-appearance) background, this also
+visually cleans up the narrow-width drawer's own top edge rather than
+leaving two texts visually colliding.
+
+**Verified with the real browser, re-run after the fix:** the same
+1920px-to-320px sweep now succeeds at every width, including the
+previously-failing 600px and down to 320px (a mobile width, not even
+one QA3 asked about). Re-verified live against the actual running dev
+server (not just the hermetic test) at 500px and 1440px with a fresh
+throwaway account/Project: both widths navigate correctly to the
+Vestibule, which correctly shows the Project as "CURRENTLY ENTERED";
+screenshots taken before/after each click. The throwaway verifier
+account and Project (used for both the diagnostic sweep and the live
+double-check) were deleted from the real dev DB/registry afterward -
+no lingering fixtures.
+
+**Preserved and re-confirmed:** the VW7B-QA1 PDF fix (the live-browser
+double-check's own screenshot shows the PDF rendering real page content
+- confirms this independently, live, not just via the existing
+regression tests), Project isolation, Lists scoping, per-Project
+restoration, Investigation Attention Positions, the Archiosk mark's own
+destination, and all real business data (only two throwaway
+diagnostic-only accounts/Projects, created and destroyed within this
+stage, ever touched the real dev DB).
+
+**Tests:** new `tests/test_p40vw7b_qa3_header_topbar_stacking_fix.py`
+(3 tests) - the first browser-capable/geometry-aware regression
+coverage in this repository, per the task's own explicit demand that a
+source-text assertion is insufficient for this class of bug (QA2's own
+14 source-text tests had already passed while the real click failed).
+Renders the genuine Flask-served HTML plus the genuine, unmodified
+`tokens.css`/`main.css` file contents into a real headless Chromium via
+`set_content()` - no live HTTP server involved, staying consistent with
+this repo's hermetic-test discipline while still exercising real
+browser layout/paint/hit-testing. Every test class skips cleanly (not
+loudly) if Chromium isn't installed in a given environment. Sanity-
+checked the test's own validity by temporarily reverting the CSS fix
+and re-running: 2 of 3 tests genuinely failed against the unfixed CSS
+(a different drawer intercepted the click in that run -
+`.workspace-pane-toolbox` rather than the Lists tree - same root class
+of bug, confirming this isn't narrowly overfit to one specific
+intercepting element). Full suite: 2526 passed, 0 failed, in 794s -
+only pre-existing, unrelated rate-limiter warnings. No UI-reference
+changes were needed - no new `data-ui-ref`, no structural DOM change,
+purely a CSS stacking-context property.
+
+**Not started (per this stage's own explicit scope boundary):** SAFE1,
+VW8, cross-Project access, global search, P41.
+
+**Not pushed** - `HEAD` carries this stage's commit locally, one ahead
+of `origin/main` at `c590d00`; pending product-owner review per this
+session's established convention.
+
 ## 2026-08-03 — CLAUDE-P40-VW7B-QA2: Header Project Link Does Not Open Vestibule
 
 **Started from a verified clean state:** local `HEAD` at `96bb08f`
