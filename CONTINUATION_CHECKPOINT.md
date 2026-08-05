@@ -1,5 +1,19 @@
 # Continuation checkpoint
 
+## 2026-08-05 — CLAUDE-CGP-02 post-gate cleanup review (throwaway account/project audit)
+
+**Verified state at close:** `HEAD` and `origin/main` both at `adb819c`, in sync. Working tree unchanged apart from the preserved, untouched `tests/fixtures/nreocrc/_lab_instance_scratch_002/`. No `python.exe`, `app.py`, or `pytest` processes remained running.
+
+**Removed:** the `cgp02-audit` throwaway account and its one project (created during the CGP-02 live-browser cockpit review) were deleted.
+
+**Confirmed absent:** the `qa1_vw8_throwaway` account did not exist — nothing to remove.
+
+**Investigated and left active, no changes made:**
+- `workspacetester` — a standing QA/reference account with historical project ownership; left active.
+- `prodtest` and `produser` — no discovered dependencies, but their origin remains ambiguous; both left active pending stronger evidence.
+
+No other users, projects, or files were altered during this review.
+
 ## 2026-08-05 — CLAUDE-CGP-02 (Final Cockpit Gate and MM1 Readiness Decision)
 
 **Evidence-based cockpit gate review, not implementation work.** Reconstructed the accepted baseline from `governance/STATUS.md`/`CONTINUATION_CHECKPOINT.md`, then verified the live application directly in a real browser (sign-in through error state, project creation/ingestion, Lists/Documents/Files, Display Layout/multi-Display/Appearance, Toolbox/Eye, conversation dock, dark theme) rather than relying on prior-stage prose alone. A first background-fork attempt at the browser survey drifted into spawning its own nested agents/background jobs instead of doing the work directly (an instance of the fork-scope-bleed pattern already recorded in memory); stood it down and completed the walkthrough directly instead.
