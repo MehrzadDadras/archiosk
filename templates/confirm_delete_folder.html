@@ -20,4 +20,13 @@
     </button>
 </form>
 {% endblock %}
-{% block confirm_back_url %}{{ url_for('workspace.show_workspace', project_id=project_id, view='files') }}{% endblock %}
+{# CLAUDE-P40-VW9A (Files Cockpit Close-Out, A4): parent_folder_id is
+   resolved server-side from the folder record already loaded and
+   project-scoped by delete_folder_route (never taken from raw request
+   input) - the same "controlled application state, not an arbitrary
+   redirect" shape confirm_action.html's own case_id back-link already
+   uses above. Root-level folders pass parent_folder_id=None, which
+   _files_redirect-equivalent url_for below naturally omits, landing on
+   the bare Files root - itself the correct "originating context" for
+   a root-level folder. #}
+{% block confirm_back_url %}{{ url_for('workspace.show_workspace', project_id=project_id, view='files', folder=parent_folder_id) if parent_folder_id else url_for('workspace.show_workspace', project_id=project_id, view='files') }}{% endblock %}

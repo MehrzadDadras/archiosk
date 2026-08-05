@@ -1911,7 +1911,7 @@
                                     <select name="parent_folder_id" data-ui-ref="display.files.design-builder.folder-row.move.destination">
                                         <option value="">Design-Builder Workspace (root)</option>
                                         {% for candidate in design_builder_move_targets.get(folder.id, []) %}
-                                        <option value="{{ candidate.id }}">{{ candidate.name }}</option>
+                                        <option value="{{ candidate.id }}">{{ candidate.path_label }}</option>
                                         {% endfor %}
                                     </select>
                                     <button type="submit" data-ui-ref="display.files.design-builder.folder-row.move.submit">Move</button>
@@ -2639,4 +2639,5 @@
 {% endif %}
 <script src="{{ url_for('static', filename='js/pdf_viewer.js') }}?v={{ static_version }}"></script>
 <script src="{{ url_for('static', filename='js/case_workspace.js') }}?v={{ static_version }}"></script>
+<script src="{{ url_for('static', filename='js/files_folder_menus.js') }}?v={{ static_version }}"></script>
 {% endblock %}

@@ -4394,13 +4394,40 @@ main::-webkit-scrollbar-corner,
 }
 .files-folder-actions summary::-webkit-details-marker { display: none; }
 .files-folder-actions summary:hover { color: var(--text-primary); background: var(--surface-hover); }
+/* CLAUDE-P40-VW9A (Files Cockpit Close-Out, A1/A3): the panel renders
+   IN-FLOW, never as a floating absolute overlay. It used to be
+   position:absolute/right:0 against .files-folder-actions itself (the
+   small "..." trigger near the row's own right edge) - real testing
+   this stage found the SAME underlying problem at two different
+   widths: at the realistic ~300-400px a multi-Display division
+   actually renders at (A3's own ask), the panel genuinely extended
+   past the iframe body's own left edge; and, independently, at
+   ORDINARY full desktop width, a panel tall enough to hold three
+   stacked forms could visually cover several folder rows below it,
+   taking THEIR triggers physically out of reach too - not a
+   narrow-viewport-only problem after all (confirmed directly by a
+   10-folder real-browser regression test, not assumed). :has()
+   (already used elsewhere in this file - see
+   .conversation-thread:has(...) above) switches the ROW itself to a
+   column layout only while its OWN menu is open, so the expanding
+   panel pushes later rows down instead of floating over them -
+   applied unconditionally rather than gated behind a width
+   breakpoint, since the reachability problem it fixes was never
+   actually width-specific. A bounded, in-flow variant reusing
+   already-tested styling, not a redesign of the page. */
+.files-folder-row:has(.files-folder-actions[open]) { flex-direction: column; align-items: stretch; }
 .files-folder-actions-panel {
-    position: absolute; right: 0; top: 100%; z-index: 5;
     background: var(--surface-primary); border: 1px solid var(--border-strong);
     border-radius: 6px; padding: 0.6rem; display: grid; gap: 0.5rem;
-    min-width: 220px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    margin-top: 0.4rem; width: 100%; box-sizing: border-box;
 }
-.files-folder-actions-panel form { display: flex; gap: 0.35rem; align-items: center; }
+.files-folder-actions-panel form { display: flex; gap: 0.35rem; align-items: center; flex-wrap: wrap; }
+@media (max-width: 480px) {
+    /* The realistic ~300-400px multi-Display division case: even a
+       wrapped horizontal form (select + button) can feel cramped -
+       stack its own fields vertically too, at that width only. */
+    .files-folder-actions-panel form { flex-direction: column; align-items: stretch; }
+}
 
 /* Project Home's title/actions row is now the shared .dash-head (see
    above) instead of its own parallel rule. */

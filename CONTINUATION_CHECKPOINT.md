@@ -1,5 +1,138 @@
 # Continuation checkpoint
 
+## 2026-08-05 — CLAUDE-P40-VW9A (Files Cockpit Close-Out and Camel Programme Record)
+
+**Scope:** a bounded close-out of the four cockpit residuals the VW9
+final report identified, plus recording the previously-untracked Camel
+MM1–MM9 multimodal programme. Product owner accepted the underlying VW9
+Files/folder architecture conditionally; this stage resolves the
+conditions, it does not issue the VW9 acceptance seal.
+
+**A1 — folder-menu exclusivity and dismissal.** New `static/js/
+files_folder_menus.js`: the Design-Builder Workspace's per-row "..."
+`<details>` menus now behave as an exclusive group (opening one closes
+any other), dismiss on outside click, and dismiss on Escape (returning
+focus to the trigger) — adapts `document_tabs.js`'s own document-level
+dismissal pattern to NATIVE `<details>`/`<summary>` elements rather than
+rebuilding a synthetic menu (those hold real `<form>`s, not just
+buttons), so native keyboard/screen-reader semantics are never touched.
+**A real, broader defect found while testing this** (not merely the
+narrow-viewport case A3 named): the panel used to be a floating
+`position:absolute` overlay tall enough (three stacked forms) to
+visually cover several rows below it — not just out of view, out of
+*reach* (confirmed directly: a focused, in-viewport `<summary>` covered
+by another row's open panel did not respond to a real click OR keyboard
+Enter, polled for 3+ seconds). Fixed at the root rather than patched
+around: the panel now renders in-flow unconditionally (`main.css`'s
+`.files-folder-row:has(.files-folder-actions[open])`, using `:has()` -
+already precedented in this file, `.conversation-thread:has(...)`),
+pushing later rows down instead of floating over them. This single fix
+also resolves A3.
+
+**A2 — unambiguous move destinations.** `routes/workspace.py`'s
+`design_builder_move_targets` now computes a `path_label` per candidate
+(full ancestor breadcrumb via the same `store._folder_path()` the
+in-page breadcrumb already uses), rendered in the Move `<select>`
+instead of the bare folder name. Two same-named folders in different
+branches ("Structural Drawings › Details" vs. "Architectural Drawings ›
+Details") are now visibly distinguishable; the submitted `<option
+value>` stays the folder id, unchanged and authoritative. Sibling-scoped
+uniqueness itself was not touched.
+
+**A3 — narrow display-division behavior.** Folded into A1's fix above:
+the in-flow panel is unconditional, not gated behind a width
+breakpoint, since real testing found the reachability problem was never
+actually narrow-width-specific. Verified at a representative ~360px
+`panel=1` (multi-Display division) width: `.files-roots` still
+correctly stacks to one column (pre-existing 900px breakpoint,
+unchanged), and the folder-actions panel is confirmed `position:
+static`, never escaping the container, Rename field genuinely visible
+and clickable. Only the panel's own internal form layout keeps a
+dedicated `@media (max-width: 480px)` rule (stack fields vertically at
+that width for readability).
+
+**A4 — delete-cancellation return context.** `delete_folder_route`
+(`routes/workspace.py`) now passes the folder's own server-derived
+`parent_folder_id` (from the already-loaded, project-scoped folder
+record — never raw request input) into `confirm_delete_folder.html`,
+whose `confirm_back_url` now returns there (root-level folders still
+land on the bare Files root) — the same "controlled application state,
+not an arbitrary redirect" shape `confirm_action.html`'s own `case_id`
+back-link already uses. Verified end-to-end (nested and root-level),
+including actually following the rendered link to confirm it lands
+inside the correct parent folder's own listing, not just that the href
+string looks right.
+
+**Part B — fluidity, recorded as deferred, not fixed.** The "+ New
+Folder" disclosure closing after every POST/redirect (full-page-reload
+architecture) is accepted fast-follow polish, not a VW9 blocker. No
+client-side live-update conversion was made.
+
+**Part C — viewport-support finding, recorded, not fixed.** Real-browser
+evidence (fresh session, no `localStorage` state, 412px viewport, full
+`base.html` shell): `.launcher-panel` (Lists) and `.workspace-right-
+column` (Toolbox+Eye) BOTH default to their visible, `position:fixed`
+overlay-drawer state simultaneously (neither auto-collapses on narrow
+first load — only *manual* toggling has the existing mutual-exclusion
+JS, `base.html`'s own `onNarrow()`/divider-click handlers), and their
+bounding boxes measured `x:0..320` and `x:92..412` respectively — a
+228px overlap covering the ENTIRE 412px viewport width, obscuring the
+Display/main content area almost completely (screenshot evidence
+captured). Escape does dismiss both (existing keydown handler), but
+nothing surfaces that to a first-time narrow visitor. This is
+DIFFERENT from, and narrower than, the earlier VW9 report's own claim
+that "the whole shell does not collapse into a usable layout at ~412px”
+— CLAUDE-P40-VW7B-QA3 (prior stage) already proved, with a real 1920px-
+to-320px sweep, that the shell (including both drawers, and the topbar
+z-index fix that keeps it clickable above either) works correctly once
+a panel's hidden/shown state is established; the gap is specifically
+the FRESH-SESSION default, not the mechanism itself. No existing
+mobile/responsive marketing claim was found anywhere in the templates
+(`grep`-verified), so per this stage's own governing instruction ("do
+not undertake a broad shell redesign... unless a tiny correction is
+clearly necessary to prevent false compatibility claims") no fix was
+made — recorded for the product owner's own choice among: enforce/
+document a minimum supported width (≥641px, where the drawer mechanism
+never engages at all); build a controlled reduced-panel mode (the
+cheapest concrete option: extend the existing `onNarrow()`/mutual-
+exclusion JS to also auto-collapse BOTH drawers by default on first
+narrow load, a few lines, reusing code that already exists); or
+schedule full narrow-shell adaptation as a later cockpit stage.
+
+**Part D/E — the Camel MM1–MM9 programme, recorded.** New
+`governance/specified-unbuilt/camel-multimodal-programme.md`: the
+product owner's own staged MM1 (multimodal foundation/evidence
+contract) through MM9 (consolidated validation) intent, preserved in
+substance, with a dependency graph and cross-cutting requirements
+(fact/measurement/judgment/assumption/AI-suggestion vocabulary; no
+silent AI-to-authoritative promotion; provenance; Excel interop) called
+out explicitly rather than left implicit per-stage. Includes the
+Design-Manager-as-expert-integrator requirement (Part E) with its
+canonical Progressive Design-Build Excel risk-register/Monte Carlo
+acceptance case, and an explicit table mapping that requirement's own
+facets across MM1/MM3/MM6/MM7/MM8/MM9. `governance/STATUS.md` gained one
+pointer row (not stage-by-stage rows) in "What's specified but unbuilt"
+— every MM stage is explicitly **NOT AUTHORIZED** for implementation,
+a staged intent record, not a build order. `MM1`–`MM9`/"cockpit" were
+confirmed absent from the repository before this stage (`grep -rli`,
+zero matches) — this closes that continuity gap, it does not silently
+assert the programme was always tracked here.
+
+**Tests:** new `tests/test_p40vw9a_files_cockpit_closeout.py` (10
+focused tests - request-level A2/A4 coverage plus real-Chromium A1/A3
+coverage, including the genuine reachability-race and hit-testing
+findings surfaced while writing them, documented in the test file's own
+comments rather than papered over). All pre-existing VW9/VW8/UI-
+reference-map suites re-run clean after these changes. Full suite run
+once, cleanly, for this stage's own close-out (see the final report for
+the exact count/duration) - no competing browser/test/server process
+left running afterward.
+
+**Recommendation:** see the VW9A final report delivered in conversation
+for the evidence-based accept/conditionally-accept/reject
+recommendation. No acceptance seal is recorded in this entry, per this
+stage's own explicit governing instruction.
+
 ## 2026-08-04 — CLAUDE-P40-VW9 (Governed Files Display and Project File Architecture)
 
 **Scope, stated up front:** the first bounded implementation of a real

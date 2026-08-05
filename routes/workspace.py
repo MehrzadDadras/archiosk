@@ -628,9 +628,26 @@ def show_workspace(project_id):
             (f for f in workspace.folders if f["root"] == FOLDER_ROOT_DESIGN_BUILDER and not f.get("removed_at")),
             key=lambda f: f["name"].lower(),
         )
+        # CLAUDE-P40-VW9A (Files Cockpit Close-Out, A2): sibling-scoped
+        # uniqueness (CaseWorkspaceStore._reject_if_sibling_folder_name_
+        # taken) means two DIFFERENT branches can legitimately hold a
+        # same-named folder - the picker used to show bare candidate
+        # names, so those pairs were visually indistinguishable even
+        # though the submitted <option value> (folder id) was always
+        # correct underneath. path_label is a display-only breadcrumb
+        # (root-most first, via the same store._folder_path() the
+        # in-page breadcrumb above already uses) built fresh here, never
+        # written back onto the candidate dict - the authoritative
+        # target is still, and only, the id.
         design_builder_move_targets = {
             child["id"]: [
-                candidate for candidate in all_active_design_builder_folders
+                {
+                    "id": candidate["id"],
+                    "path_label": " › ".join(
+                        ancestor["name"] for ancestor in store._folder_path(workspace, candidate["id"])
+                    ),
+                }
+                for candidate in all_active_design_builder_folders
                 if candidate["id"] != child["id"]
                 and candidate["id"] not in store._folder_descendant_ids(workspace, child["id"])
             ]
@@ -2031,6 +2048,7 @@ def delete_folder_route(project_id, folder_id):
             folder_name=folder["name"],
             action_url=request.url,
             project_id=project_id,
+            parent_folder_id=parent_folder_id,
         )
 
     try:
