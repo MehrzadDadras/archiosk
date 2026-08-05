@@ -1,5 +1,19 @@
 # Continuation checkpoint
 
+## 2026-08-05 — CLAUDE-CGP-02 (Final Cockpit Gate and MM1 Readiness Decision)
+
+**Evidence-based cockpit gate review, not implementation work.** Reconstructed the accepted baseline from `governance/STATUS.md`/`CONTINUATION_CHECKPOINT.md`, then verified the live application directly in a real browser (sign-in through error state, project creation/ingestion, Lists/Documents/Files, Display Layout/multi-Display/Appearance, Toolbox/Eye, conversation dock, dark theme) rather than relying on prior-stage prose alone. A first background-fork attempt at the browser survey drifted into spawning its own nested agents/background jobs instead of doing the work directly (an instance of the fork-scope-bleed pattern already recorded in memory); stood it down and completed the walkthrough directly instead.
+
+**Two live-confirmed, bounded corrections** (commit `e929304`): `templates/upload.html`'s H1 ("Ingest an RFP or RFQ") and body copy overclaimed procurement-only framing beyond even its own accepted-format list — reworded to "Ingest a project document," honestly scoped to the still-real PDF/DOCX/TXT/CSV/MD-only support. Separately, every ingested Source's internal `kind` (`rfq_rfp_document` — still the one real ingestion pipeline) was rendered verbatim to users as "RFQ RFP DOCUMENT" in both the Display header and Toolbox, reinforcing the same narrow framing structurally; added `services/formatting.py`'s presentation-only `source_kind_label` (`Source.kind` itself untouched) wired via a new Jinja filter at all four raw-render call sites in `templates/case_workspace.html`. `tests/test_formatting.py` added (3 tests). Full suite: 2,600 passed, 0 failed.
+
+**Everything else evaluated and left alone, per this stage's own "gate-critical only" scope**: the Appearance "All" matrix, Display division numbering/split add-remove, dark-theme contrast, and the Files surface's Data Room/Design-Builder Workspace distinction (adequately explained in-context, mitigating the Documents-vs-Files naming overlap on first glance) all verified working as designed. The already-known, already-documented 412px fresh-session drawer-overlap residual (VW9A) was reconfirmed present, not re-litigated or fixed here — still pending its own product-owner choice among the three options VW9A already recorded. The gateway footer's "Flat-JSON registry" text (a mild internal-implementation-detail leak) was noted but left as non-blocking polish, below this stage's correction threshold.
+
+**Governance record added** (commit `c484d1c`), planning-level only: `governance/specified-unbuilt/external-intelligence-airlock.md` — the product owner's Intelligence Airlock/External Intelligence Vestibule and Constructive Boundary Response concepts, composing with (not duplicating) `services/security_policy.py`'s existing `ACTION_EXTERNAL_AI_REQUEST` gate and `services/governance.py`'s `GovernanceLog`, mapped across MM1-MM9. `governance/STATUS.md` gained one pointer row, same filing pattern as the Camel programme's own entry. **NOT AUTHORIZED** for implementation — no connector, sanitization pipeline, new governed action, or boundary-response runtime behavior exists.
+
+**Gate recommendation:** see the final report delivered in conversation for the full acceptance matrix and accept/conditional-accept/reject decision. No product-owner acceptance seal is recorded in this entry, per this stage's own explicit governing instruction.
+
+**Evidence:** `HEAD`/`origin/main` both confirmed at `c484d1c` after push. Working tree clean except the pre-existing, untouched `tests/fixtures/nreocrc/_lab_instance_scratch_002/`.
+
 ## 2026-08-05 — CLAUDE-P40-VW9/VW9A-QA-CLOSE (Product-Owner Acceptance Seal)
 
 **Bounded documentation-only close-out** - no application code, template, CSS, JavaScript, schema, or test file was touched in this stage.
