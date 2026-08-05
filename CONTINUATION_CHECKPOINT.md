@@ -203,12 +203,26 @@ all verified end-to-end; existing Document opening unaffected; multi-
 Display embedding of Files alongside an open Document (the click-
 interceptor bug above was found and fixed during exactly this check);
 UI Reference Mode badges render identically to Overview's own sibling
-leaves; unauthorized direct URL access denied. Narrow-viewport resize
-could not be verified in this session (a tooling limitation of the
-browser-automation window resize, not a product gap - the existing
-900px breakpoint convention was applied to `.files-roots` the same way
-every other responsive rule in `main.css` already works, unverified
-live this session).
+leaves; unauthorized direct URL access denied.
+
+**Narrow-viewport, verified in a follow-up session** after the browser-
+automation window-resize tool was confirmed non-functional in this
+environment (tested at two different target sizes, and via a DevTools
+responsive-mode keyboard shortcut - neither changed the actual rendered
+viewport, a tooling limitation, not a product gap). Worked around with a
+same-origin `<iframe>` (420px wide, pointing at the live Files page,
+inheriting the real session cookie) injected via `javascript_tool` -
+CSS media queries evaluate against an iframe's own width independently
+of the parent window, so this is genuine browser layout-engine output,
+not a simulation. Confirmed `iframe.contentWindow.innerWidth === 412`
+(well under the 900px breakpoint) and read `.files-roots`' own computed
+style directly: `gridTemplateColumns` resolved to a SINGLE value
+(`"300.271px"`, not two columns), and `.files-root-design-builder`'s
+`top` (613px) sat below `.files-root-data-room`'s `bottom` (594px) -
+i.e. genuinely stacked vertically, not two narrow side-by-side columns.
+The breakpoint works correctly. Cleanup: iframe removed, throwaway
+account/project created for this check were removed then permanently
+deleted afterward.
 
 **Governance:** `governance/STATUS.md` and `governance/current/kernel-
 object-model.md` both gained a `Folder`/Files-architecture entry,
