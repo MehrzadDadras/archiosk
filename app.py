@@ -529,9 +529,10 @@ def _register_context_processors(app: Flask) -> None:
 
 
 def _register_template_filters(app: Flask) -> None:
-    from services.formatting import humanize_timestamp
+    from services.formatting import humanize_timestamp, source_kind_label
 
     app.jinja_env.filters["humanize"] = humanize_timestamp
+    app.jinja_env.filters["source_kind_label"] = source_kind_label
 
     @app.template_filter("hotlinks")
     def render_conversation_hotlinks(text, workspace, project_id, message_id=None, anchor_scope=None, anchor_case_id=None):

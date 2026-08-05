@@ -37,3 +37,27 @@ def humanize_timestamp(value: str | None, *, now: datetime | None = None) -> str
         return f"{hours} hour{'s' if hours != 1 else ''} ago"
 
     return f"{dt.strftime('%b')} {dt.day}, {dt.year}"
+
+
+# Source.kind is an open-world string (services/case_workspace.py), never a
+# closed enum - display labels here are presentation-only overrides for the
+# handful of internally-meaningful values; any kind not listed falls back to
+# the existing underscore-replace humanization, unchanged.
+_SOURCE_KIND_LABELS = {
+    # Every ingestion today still runs through the one real pipeline
+    # (services/case_workspace.py's own comment: "the RFQ/RFP pipeline is
+    # the beginning of the same persistent Project, not a separate
+    # product") - the stored kind honestly reflects that. The raw
+    # identifier read verbatim ("rfq rfp document") reads as narrower than
+    # the product actually is to a first-time user with a contract, spec,
+    # or report rather than an RFP/RFQ specifically; this is a display-only
+    # gloss, not a reclassification.
+    "rfq_rfp_document": "Project Document",
+}
+
+
+def source_kind_label(kind: str | None) -> str:
+    """Human-facing label for a Source.kind value - presentation only."""
+    if not kind:
+        return ""
+    return _SOURCE_KIND_LABELS.get(kind, kind.replace("_", " "))

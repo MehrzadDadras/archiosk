@@ -706,7 +706,7 @@
                   action="{{ url_for('workspace.promote_requirement_item_route', project_id=project_id, case_id=active_case.id, requirement_item_id=item.id) }}">
                 <select name="source_id" required>
                     {% for source in active_sources %}
-                    <option value="{{ source.id }}"{% if source.kind == 'rfq_rfp_document' %} selected{% endif %}>{{ source.name }} ({{ source.kind.replace('_', ' ') }})</option>
+                    <option value="{{ source.id }}"{% if source.kind == 'rfq_rfp_document' %} selected{% endif %}>{{ source.name }} ({{ source.kind|source_kind_label }})</option>
                     {% endfor %}
                 </select>
                 <button type="submit">Promote to governed Requirement</button>
@@ -729,7 +729,7 @@
                 <select name="source_id" required>
                     <option value="" disabled selected>Which Source states this?</option>
                     {% for source in active_sources %}
-                    <option value="{{ source.id }}">{{ source.name }} ({{ source.kind.replace('_', ' ') }})</option>
+                    <option value="{{ source.id }}">{{ source.name }} ({{ source.kind|source_kind_label }})</option>
                     {% endfor %}
                 </select>
                 <input type="text" name="original_requirement_identifier" placeholder="Clause/identifier (e.g. ADD-04-2, Section 3.1)" required>
@@ -1233,7 +1233,7 @@
     <section class="workspace-pane workspace-pane-document">
         <h2>{{ selected_source.name }}</h2>
         <p class="workspace-pane-label">
-            {{ selected_source.kind.replace('_', ' ') }}
+            {{ selected_source.kind|source_kind_label }}
             {% if selected_source.superseded_by_source_id %}&middot; superseded by a later revision{% endif %}
             {% if selected_source.removed_at %}&middot; removed{% endif %}
         </p>
@@ -2307,7 +2307,7 @@
     <section class="workspace-pane" data-ui-ref="toolbox.document">
         <h3>Document</h3>
         <p class="workspace-pane-label">
-            {{ selected_source.kind.replace('_', ' ') }}
+            {{ selected_source.kind|source_kind_label }}
             {% if selected_source.removed_at %}&middot; removed{% endif %}
         </p>
         <p class="pane-note">{{ selected_source.name }}</p>
