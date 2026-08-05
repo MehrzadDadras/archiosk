@@ -478,11 +478,11 @@ document.addEventListener('DOMContentLoaded', () => {
         // unrecognized kind, not only 'overview' - a real latent bug
         // (an unknown future kind would have silently marked Overview's
         // own Lists leaf active instead of nothing). This table is what
-        // those three functions now share; a future singleton kind (e.g. a
-        // dedicated Files Display tab, still not implemented - see
-        // routes/workspace.py's own STABLE_DIRECTORY_KINDS for the
-        // matching server-side registration point) adds one entry here,
-        // not three independently-maintained branches.
+        // those three functions now share - proven for real by
+        // CLAUDE-P40-VW9's own 'files' entry below (see routes/
+        // workspace.py's matching STABLE_DIRECTORY_KINDS registration):
+        // one new entry here, not three independently-maintained
+        // branches.
         const PANEL_KINDS = {
             case: {
                 buildQuery: (url, id) => { url.searchParams.set('case', id); },
@@ -499,6 +499,15 @@ document.addEventListener('DOMContentLoaded', () => {
             'new-case': {
                 buildQuery: (url) => { url.searchParams.set('view', 'new-case'); },
                 listsSelector: () => 'a[data-new-case]',
+            },
+            // CLAUDE-P40-VW9 (Governed Files Display and Project File
+            // Architecture): the first real second stable-surface kind
+            // registered here since VW8-QA1 built this table - exactly
+            // the extension point it was built for. Same shape as
+            // 'overview' (a Project-level singleton, no per-instance id).
+            files: {
+                buildQuery: (url) => { url.searchParams.set('view', 'files'); },
+                listsSelector: () => 'a[data-view="files"]',
             },
         };
 
@@ -574,19 +583,17 @@ document.addEventListener('DOMContentLoaded', () => {
         // Section 9's reserved extension point: 'kind' here is this app's
         // real, governing tab-identity vocabulary - 'source' (Document,
         // embedded as a real file below) and whatever is registered in
-        // PANEL_KINDS above (Investigation, Overview, and the New
-        // Investigation form today) are the only REAL kinds implemented.
-        // 'files' has NO entry in PANEL_KINDS and NO picker/strip entry
-        // anywhere - adding even a stub entry here would be exactly the
-        // "placeholder controls that imply the Files system already
-        // works" Section 9 forbids. When that later stage arrives, it
-        // registers a real 'files' entry in PANEL_KINDS above (this
-        // function's own dispatch, buildPanelUrl, and syncListsActiveState
-        // all read that one table - see its own comment for why this
-        // stopped being three independently-maintained branches), plus a
-        // matching STABLE_DIRECTORY_KINDS entry server-side if it's a
-        // singleton like Overview rather than a per-Project record list,
-        // and its own UI-reference entries - not before.
+        // PANEL_KINDS above (Investigation, Overview, New Investigation,
+        // and - as of CLAUDE-P40-VW9 - Files) are the only REAL kinds
+        // implemented. Files itself has no picker entry (it is not a
+        // Documents-shaped per-instance list) - it registers exactly one
+        // PANEL_KINDS entry, same as Overview, and is reachable from
+        // Lists/multi-Display the identical way Overview already was.
+        // The two Files roots (Data Room/Design-Builder Workspace) are
+        // NOT separate 'kind' values - they are both rendered inside the
+        // one 'files' surface's own content (see case_workspace.html's
+        // own `directory_view == 'files'` branch), the same way Overview's
+        // many internal sections all live under the one 'overview' kind.
         function populateDivision(divisionIndex, kind, id, displayName, persist) {
             const division = document.getElementById(`display-division-${divisionIndex}`);
             if (!division) return;

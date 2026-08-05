@@ -53,6 +53,15 @@ _SECURITY_DEPARTMENT_HTML_PATH = _REPO_ROOT / "templates" / "security_department
 _PROJECTS_HTML_PATH = _REPO_ROOT / "templates" / "projects.html"
 _REMOVED_PROJECTS_HTML_PATH = _REPO_ROOT / "templates" / "removed_projects.html"
 _APP_PY_PATH = _REPO_ROOT / "app.py"
+# CLAUDE-P40-VW9 (Governed Files Display and Project File Architecture):
+# the first confirm_*.html template to ever carry a data-ui-ref (its own
+# governing prompt's own explicit "confirmation choices" requirement) -
+# confirm_remove_document.html/confirm_remove_project.html, the pre-
+# existing precedent this template's own structure otherwise mirrors,
+# were never added to this scanned list and so were never registered
+# either; extending the scan here rather than leaving this template's
+# own new refs silently unchecked.
+_CONFIRM_DELETE_FOLDER_HTML_PATH = _REPO_ROOT / "templates" / "confirm_delete_folder.html"
 _MAIN_CSS_PATH = _REPO_ROOT / "static" / "css" / "main.css"
 _REFERENCE_MAP_PATH = _REPO_ROOT / "UI_REFERENCE_MAP.md"
 
@@ -147,6 +156,7 @@ def _all_template_refs() -> set[str]:
         _GATEWAY_HTML_PATH, _GATEWAY_SHELL_HTML_PATH, _PROJECT_CHOOSER_HTML_PATH,
         _LOGIN_HTML_PATH, _UPLOAD_HTML_PATH, _UPLOAD_CONFIRM_HTML_PATH, _ERROR_HTML_PATH,
         _SECURITY_DEPARTMENT_HTML_PATH, _PROJECTS_HTML_PATH, _REMOVED_PROJECTS_HTML_PATH, _APP_PY_PATH,
+        _CONFIRM_DELETE_FOLDER_HTML_PATH,
     ):
         text = path.read_text(encoding="utf-8")
         refs |= set(_DATA_REF_RE.findall(text))

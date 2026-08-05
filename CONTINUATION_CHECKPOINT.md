@@ -1,5 +1,235 @@
 # Continuation checkpoint
 
+## 2026-08-04 — CLAUDE-P40-VW9 (Governed Files Display and Project File Architecture)
+
+**Scope, stated up front:** the first bounded implementation of a real
+Files Display surface and its underlying Project file architecture -
+explicitly NOT the final issued Data Room hierarchy, bulk/ZIP import,
+external retrieval, existing-Document relocation, the full linked/
+retrieved/ingested/used/preserved lifecycle, addenda/supersession
+comparison, cross-Project access, global search, or P41. This is a
+genuine new business-object family (`Folder`) - the same category of
+authorization as CLAUDE-P40-VW7's Tag/Task addition, not a pure UI/
+navigation stage - so, following that precedent, `governance/STATUS.md`
+and `governance/current/kernel-object-model.md` both gained a matching
+entry (see below), unlike VW7B/VW8/VW8-QA1 which stayed UI-only.
+
+**A process incident, disclosed rather than silently absorbed:** three
+forks were launched in parallel for pure read-only research (auditing
+`services/case_workspace.py`, `routes/workspace.py`, and Lists/UI-
+reference templates) before any implementation began. Because
+`subagent_type: "fork"` inherits the FULL parent conversation - including
+this stage's own large governing prompt - two of the three forks began
+writing actual implementation code (a duplicate, conflicting `Folder`
+dataclass/constants block) despite an explicit "before writing any code"
+instruction. Caught immediately via `git status`/`git diff`; the rogue
+uncommitted changes were `git stash`-ed (not discarded) and the domain
+model was implemented directly, by hand, using only the forks' clean
+research findings. Nothing from the rogue edits was used. Recorded as a
+feedback memory for future sessions (avoid parallel research forks when
+a large implementation mandate is already in the inherited context).
+
+**1. Files as a real stable Display surface.** `routes/workspace.py`'s
+`STABLE_DIRECTORY_KINDS["files"] = "Files"` and `case_workspace.js`'s
+`PANEL_KINDS.files` - the second real entry in the extension point
+CLAUDE-P40-VW8-QA1 built, proving it genuinely generalizes rather than
+being a comment promising it would. Breadcrumb and division-0-header
+labeling needed ZERO template changes (both already read the shared
+`directory_view_label` VW8-QA1 introduced). One new Lists leaf
+(`lists.project.files`, positioned between Documents and Investigations),
+same stable-singleton shape as Overview - no tab-strip pill, no per-
+instance id, no duplicate-open concept, works in multi-Display layouts
+via the same `&panel=1` mechanism Overview/Investigations already use.
+
+**A real bug found and fixed during real-browser verification, not
+caught by any request-level test:** `base.html`'s multi-Display click-
+interceptor used to have exactly ONE `data-view` Lists leaf (Overview),
+so its dispatch fell through to a hardcoded `kind='overview'` for "any
+`data-view` link, whatever its value" - accidentally correct at the
+time. Adding Files as a SECOND `data-view` leaf exposed the real shape
+of that bug: clicking Files while a non-zero Display was the active
+target silently populated Overview instead. Fixed by reading the
+attribute's own value (`data-view === 'files'` branch, checked before
+the generic fallback); confirmed live in a real browser before and
+after the fix, and now has its own source-text regression test
+(`test_multi_display_click_interceptor_resolves_files_kind_not_overview`).
+
+**2. Two governed sibling roots, Data Room and Design-Builder
+Workspace - governed VIRTUAL roots, not persisted domain rows.**
+`FOLDER_ROOT_DATA_ROOM`/`FOLDER_ROOT_DESIGN_BUILDER` are fixed code-level
+constants; neither root is itself a `Folder` record. Real, persisted
+`Folder` rows exist only inside Design-Builder Workspace -
+`CaseWorkspaceStore.create_folder` has no `root` parameter at all and
+always writes `FOLDER_ROOT_DESIGN_BUILDER`, so there is structurally no
+route or method that can create a Data Room folder this stage - "ordinary
+Design-Builder actions cannot touch Data Room" is true by construction,
+not convention. Data Room's own real issued hierarchy import is
+deliberately not started; its panel instead shows a truthful
+compatibility view of every existing active `workspace.sources` (name +
+link, honestly labeled "not yet organized into the issued hierarchy"),
+or an honest empty state explaining the root's purpose when there are
+none - never an invented hierarchy, never a reclassification.
+
+**3. Stable folder identity.** `Folder.id` (uuid4, `_new_id()`) is
+canonical, mirroring the exact principle already stated on `Source`'s
+own docstring ("folder locations and filenames are external
+representations only"). A folder's full path is always DERIVED at read
+time by walking `parent_folder_id` (`CaseWorkspaceStore._folder_path`),
+never stored as a string - the same "store flat, derive structure at
+read time" shape this module already uses everywhere else. Rename only
+touches `name`; move only touches `parent_folder_id`; neither ever
+touches `id`. Deletion is a recoverable soft-delete (`removed_at`/
+`removed_by`, same tombstone convention `Source`/`Project` already
+establish) restricted to EMPTY folders only - a removed id is never
+reused. No `folder_id` field was added to `Source` this stage - a
+Document is structurally incapable of being assigned into a folder yet,
+so no existing Investigation/RFI/Task/Tag/conversation/citation
+relationship is touched by anything here, now or by construction for
+whatever a future stage adds.
+
+**4. Design-Builder Workspace folder operations - the full set asked
+for, none deferred.** `create_folder`/`rename_folder`/`move_folder`/
+`delete_folder` on `CaseWorkspaceStore`, routed through `routes/
+workspace.py`'s new `/projects/<id>/workspace/folders...` routes. No
+owner/admin gate (deliberately mirrors `create_task`/`create_custom_tag`'s
+precedent, not `remove_source`'s - Design-Builder Workspace is
+collaborative team structure, "created by the Project team," not owner-
+locked evidence); `_load_workspace_or_404` is the one and only
+authorization check, same as every other route. Sibling-name uniqueness
+scoped to (project, root, parent) via `_reject_if_sibling_folder_name_taken`
+(style mirrors `ingestion.py`'s own `_reject_if_name_taken`). Cycle
+prevention via `_folder_descendant_ids` (rejects moving a folder into
+itself or its own descendant); a corrupted/foreign `project_id` on a
+folder record is independently rejected too (defense in depth, not just
+structural workspace-file isolation - both were separately falsified and
+confirmed during this stage's own review). Delete refuses a non-empty
+folder outright. `templates/confirm_delete_folder.html` uses the
+lightweight `confirm=yes/no` gate (same family as `confirm_remove_
+document.html`), not the Approval Gate - deleting an empty organizational
+folder is consequential-but-not-governed, the same category CLAUDE.md's
+own "two different confirm vocabularies" note already places Remove
+Document/Remove Project in.
+
+**5. File lifecycle vocabulary - named and documented, NOT implemented,
+per this stage's own explicit instruction not to fabricate states.**
+`linked → retrieved → ingested → used → preserved`:
+- **linked** - the Data Room references an external location/identifier
+  for material not yet retrieved into Archiosk's own storage. No record
+  type for this exists yet.
+- **retrieved** - file bytes have been fetched into storage but not yet
+  parsed/registered. No intermediate state exists yet - every current
+  ingestion path goes straight from upload to a fully-registered `Source`.
+- **ingested** - the ONLY state that is genuinely real today, and has
+  been since before this stage: a Document is a first-class `Source`
+  record in `workspace.sources` (`ingest_upload`/`add_document_source`).
+  VW9 did not change this meaning at all.
+- **used** - the Source has been actively drawn on by governed project
+  work (cited by a Finding/Requirement/Relationship, referenced in an
+  RFI). Not tracked as a stored field anywhere; only inferable today by
+  querying existing references. The natural future shape is a DERIVED
+  property (matching `review_state_for_finding`/`requirement_
+  adjudication_state`'s own "derive at read time, never store" pattern),
+  not a new stored flag.
+- **preserved** - a Source (or a specific revision) locked as immutable
+  relied-upon evidence, checksum-verified, replaceable only through
+  `Supersession`'s existing append-only mechanism. Partially precedented
+  (`Source.file_hash` already exists but is optional/unenforced) but not
+  wired to any actual immutability gate.
+
+Registering a Folder's identity, or a Source's existing ingestion, never
+implies any of the other four states - no code path anywhere marks an
+existing Document with a lifecycle state it hasn't actually earned.
+
+**6. Existing Document compatibility - audited, all safeguards hold.**
+No route in this stage creates, moves, duplicates, or mutates a `Source`
+in any way. Existing Document URLs, tab restoration, Investigation/RFI
+ownership, Task/Tag/conversation/citation links, and Remove/Restore
+Document all verified unaffected (regression suite + direct browser
+check: opened an existing Document normally while Files/folders existed
+in the same Project, confirmed identical behavior). A legacy Project
+predating this stage loads safely - `ProjectWorkspace.folders` is a
+purely additive `list[dict]` field with an empty-list default (same
+backward-compatible shape as `tags`/`tag_occurrences`/`tasks`), verified
+directly by stripping the key from a real persisted workspace JSON and
+confirming it still loads and can create folders going forward.
+
+**7. Security.** Files/folders reuse `_load_workspace_or_404`/
+`can_access_project` exactly like every other view - no new
+authorization path. Verified: an unauthorized `read_only` stranger gets
+404 on both the Files view and every folder mutation route;
+unauthenticated requests redirect to `/login`; a crafted folder id from
+a different Project is rejected (both via the structural "not in this
+workspace's own list" path and, independently, via the explicit
+`project_id` field check inside each mutation method - falsified and
+confirmed both actually matter, not merely one masking the other being
+untested); CSRF stays enforced (global `Flask-WTF` `CSRFProtect`, no
+route in this stage is exempted). No case-level (`visible_cases_for`)
+concept applies - folders follow the `Source` model (project-level
+access only, no per-record visibility), matching fork audit findings
+that Sources have no such layer either.
+
+**Tests:** `tests/test_p40vw9_files_display_and_folder_architecture.py`
+(40 tests - registry/architecture, persistence/identity, governance,
+display behavior) plus the new click-interceptor regression test noted
+above. Four of the most safety-critical tests (cross-project defense-in-
+depth, cycle prevention, empty-folder-required delete, `STABLE_
+DIRECTORY_KINDS` registration) were directly falsified during this
+stage's own review - temporarily disabled the guard, confirmed the test
+genuinely failed, restored the correct code - per this stage's own
+"prove tests are sensitive" instruction; one of those falsification
+passes (the naive cross-project test) revealed the test itself was
+vacuous for an unrelated structural reason and was rewritten to
+genuinely exercise the intended guard rather than accepted as passing.
+One pre-existing VW8-QA1 test (`test_reserved_files_kind_is_
+documentation_only_no_functional_branch`) asserted "files has NO entry
+in PANEL_KINDS" - now literally false by this stage's own deliberate,
+authorized design (that test's own prior-stage comment explicitly
+anticipated this: "adds a real 'files' entry... not before" - that
+"later stage" is this one) - updated, not reverted, to assert the new
+invariant (`files:` IS a real registered entry, dispatched through the
+shared table, still no bare string-comparison branch). Full suite:
+2,588 passed, 0 failed (2,549 baseline + 39 new, +1 after the click-
+interceptor regression test was added = 40 in the final VW9 file).
+
+**Real-browser verified live** (restarted, `STATIC_VERSION` 55→56 for
+the `main.css`/`case_workspace.js` changes; throwaway account/Project/
+folders, all removed then permanently deleted after use): Files
+projects into Display from Lists; the two roots render as visually/
+semantically distinct siblings in both Black and Light appearance
+modes; nested folder creation, rename, move (including the real move-
+targets dropdown correctly excluding the folder itself and offering its
+true valid destinations), and the delete confirm→cancel→confirm flow
+all verified end-to-end; existing Document opening unaffected; multi-
+Display embedding of Files alongside an open Document (the click-
+interceptor bug above was found and fixed during exactly this check);
+UI Reference Mode badges render identically to Overview's own sibling
+leaves; unauthorized direct URL access denied. Narrow-viewport resize
+could not be verified in this session (a tooling limitation of the
+browser-automation window resize, not a product gap - the existing
+900px breakpoint convention was applied to `.files-roots` the same way
+every other responsive rule in `main.css` already works, unverified
+live this session).
+
+**Governance:** `governance/STATUS.md` and `governance/current/kernel-
+object-model.md` both gained a `Folder`/Files-architecture entry,
+following the CLAUDE-P40-VW7 precedent (a real new business-object
+family gets a governance row; pure UI/navigation stages don't).
+
+**Deliberately not started, explicitly out of this stage's scope:** the
+final issued Data Room hierarchy, inventing standard folder names, bulk/
+ZIP import, external cloud-drive integration, remote retrieval, binary-
+storage redesign, the full lifecycle automation named above, addenda
+reconciliation, supersession/version comparison, checksum-based
+evidence preservation beyond the honest naming above, moving existing
+Documents into folders, replacing the ingestion workflow, a Files
+restore-UI (soft-delete data is recoverable, no UI surface built),
+cross-Project access, global search, organization sharing, multi-
+tenancy, billing, and P41. No placeholder Files control was ever built
+for any of these - every implemented piece is real.
+
+No product-owner acceptance seal issued, per this stage's own governing
+instruction.
+
 ## 2026-08-04 — CLAUDE-P40-VW8-QA-CLOSE (Product-Owner Acceptance Seal)
 
 **Bounded documentation-only close-out** - no application code, template,

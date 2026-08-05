@@ -1,6 +1,6 @@
 # UI Reference Map
 
-**CLAUDE-P40-VW7A**, updated by **CLAUDE-P40-VW7B**. A stable-ID
+**CLAUDE-P40-VW7A**, updated by **CLAUDE-P40-VW7B** and **CLAUDE-P40-VW9**. A stable-ID
 registry over the application's Menu, Lists, Display, Toolbox, and
 Chat surfaces — the traceability layer this and future stages use to
 know what a control currently is, means, and does before renaming,
@@ -21,6 +21,20 @@ retired and relocated (see "Retired references") after VW7B's own
 inspection found it resets **every** Project in the deployment, not
 the active one — nesting it under one Project's own tools misrepresented
 its real scope.
+
+**VW9 in one line:** Files became the second real entry in the
+`STABLE_DIRECTORY_KINDS`/`PANEL_KINDS` stable-surface extension point
+VW8-QA1 built — one new Lists leaf (`lists.project.files`) and one new
+Display surface (`display.files`, the two governed sibling roots below
+it) rendered through the exact same registry-driven mechanism Overview
+already used, proving that extension point genuinely generalizes rather
+than being a comment promising it would. No existing reference was
+retired or reparented by this stage; every new reference is additive.
+A real, latent bug in the multi-Display click-interceptor (`templates/
+base.html`) was found and fixed during this stage's own real-browser
+verification: it used to hardcode `kind='overview'` for ANY `data-view`
+link, correct only by coincidence when Overview was the only one that
+existed — fixed to read the attribute's own value.
 
 ## What this is, and isn't
 
@@ -182,6 +196,7 @@ continuation of that group.
 | `lists.project.documents` | tree-toggle `<button>` | "Documents (`<count>`)" | Expands/collapses; count = `active_sources\|length`; "No Documents yet." empty state (CLAUDE-P40-VW7B) | Same as workspace access | active |
 | `lists.project.documents.leaf` | tree-leaf `<a>`, `data-source-id` (pattern) | Document name | **Division 0 active target:** real navigation to `?source=<id>`. **Non-zero Display active target:** client-side `populateDivision(target, 'source', sourceId, name)` — unchanged since VW7A, a real file embedded via `<iframe src=file_url>`/`<img>`, never the `&panel=1` mechanism. Syncs Toolbox to `toolbox.document` | Same as workspace access | active |
 | `lists.project.documents.empty` | `<span>` | "No Documents yet." | Empty-state message (CLAUDE-P40-VW7B — untagged until CLAUDE-P40-VW8-QA's Complete Root and Subfolder UI Reference Tagging stage) | Same as workspace access | active |
+| `lists.project.files` | tree-leaf `<a>`, `data-view="files"` (CLAUDE-P40-VW9, new) | "Files" | **Division 0 is the active target (default):** real navigation to `?view=files`. **A non-zero Display is the active target:** client-side-intercepted via `PANEL_KINDS.files` — projects into that division via `populateDivision(target, 'files', '', 'Files')`, an `<iframe src="...?view=files&panel=1">`. Either way the content is `display.files`, below. Same stable-singleton shape as `lists.project.overview` — no tab-strip pill, no per-instance id, no duplicate-open concept | Same as workspace access | active |
 | `lists.project.investigations` | tree-toggle `<button>` | "Investigations (`<count>`)" | Expands/collapses; count = `visible_cases\|length`; "No Investigations yet." empty state (CLAUDE-P40-VW7B) | Same as workspace access, further filtered to `visible_cases` (Case-privacy-aware) | active |
 | `lists.project.investigations.leaf` | tree-leaf `<a>`, `data-case-id`/`data-case-title` (pattern) | Investigation title | **Division 0 active target:** real navigation to `?case=<id>`. **Non-zero Display active target (CLAUDE-P40-VW7B, new):** client-side, no navigation — `populateDivision(target, 'case', caseId, title)`, an `<iframe src="...?case=<id>&panel=1">` rendering the exact same content Division 0 would have shown, wrapped in `panel_shell.html` instead of the full shell. Syncs Toolbox to `toolbox.investigation-findings` only when it's Division 0 (a non-zero division's iframe has no Toolbox of its own — see `templates/panel_shell.html`) | Same as `visible_cases` | active |
 | `lists.project.investigations.new` | tree-leaf `<a>` (action row, `data-new-case`), always first inside the expanded family, present even at zero Investigations | "+ New Investigation" | **Division 0 active target:** real navigation to the focused `?view=new-case` create-form page. **Non-zero Display active target (CLAUDE-P40-VW8-QA, new):** projects the same focused form via `populateDivision(target, 'new-case', '', 'New Investigation')` — `?view=new-case&panel=1`, same iframe/`panel_shell.html` mechanism as an Investigation/Overview leaf. Not a radio — a command, always available, never creates a record merely by expanding the family | Same as workspace access | active |
@@ -379,6 +394,23 @@ assertion before ever shipping, not discovered live.
 | `display.division.picker` | `<select>` (pattern, divisions 1-5 only) | "Open a Document here…" — populates that division client-side via `window.ArchioskDisplay.populateDivision`. **Still Documents-only** — not extended to list Investigations this stage (a considered, deferred enhancement; the Lists-leaf-click path above is what VW7B's own prompt asked for, not this picker) | Options limited to `active_sources` | active |
 | `display.division.close` | `<button>` (pattern, divisions 1-5 only) | Clears that division (any kind — Document, Investigation, or Overview), shrinks the Vertical/Horizontal layout by one (VW4's deterministic shrink rule) | — | active |
 | `display.overview` | `#project-overview` | The Overview leaf's actual content: Operating Environment, Access/Settings, Needs Attention, Recent Focus, Investigation Quality, Participants, Go/No-Go, Accepted Knowledge, Instructions, Requirement Compliance, RFIs, Requirements, Key Dates, History — all consolidated under this one leaf (CLAUDE-P40-E3A, Section 5). Its own "← Projects" back-link is suppressed when rendered inside a panel (CLAUDE-P40-VW7B) | Same as workspace access | active |
+| `display.files` | `.files-surface` (CLAUDE-P40-VW9, new) | The Files leaf's actual content — the two governed sibling roots below | Same as workspace access | active |
+| `display.files.data-room` | `.files-root-data-room` | "Data Room" | Controlled, project-level root. No mutation control of any kind is rendered inside this section — Design-Builder Workspace's own folder routes cannot reach `FOLDER_ROOT_DATA_ROOM` at all (structural, not merely a missing button) | Same as workspace access | active |
+| `display.files.data-room.compatibility-list` | `<ul>` | Existing Document names (pattern, same `source-item`/`<a href=?source=<id>>` shape `lists.project.documents.leaf` already uses) | Rendered only when `data_room_sources` is non-empty — every active (non-removed) `workspace.sources`, honestly labeled as pre-Files/not-yet-organized, never reclassified or duplicated | Same as workspace access | active |
+| `display.files.data-room.empty` | `<p>` | "No Documents yet…" | Rendered only when `data_room_sources` is empty — explains the root's purpose, not an error state | Same as workspace access | active |
+| `display.files.design-builder` | `.files-root-design-builder` | "Design-Builder Workspace" | Editable, team-organized root — the one root every folder route below can mutate | Same as workspace access | active |
+| `display.files.design-builder.breadcrumb` | `<p>` | Design-Builder Workspace › ⟨open folder ancestors⟩ | Derived at read time from `CaseWorkspaceStore._folder_path` (never a stored path string); each ancestor is a real link to `?view=files&folder=<id>`. Distinct from the top application breadcrumb (`menu.context`), which stays "Files" regardless of which folder is open, the same way `display.overview`'s own internal accordions never change it either | Same as workspace access | active |
+| `display.files.design-builder.new-folder` | `<details>` (via `macros.subdisclosure`) | "+ New Folder" | Contains the create-folder form below | Same as workspace access | active |
+| `display.files.design-builder.new-folder.name` | `<input type="text">` | Folder name | POSTs to `create_folder_route` (`parent_folder_id` = the currently open folder, or empty for root) | Same as workspace access | active |
+| `display.files.design-builder.new-folder.create` | `<button>` | "Create Folder" | Submits the form above | Same as workspace access | active |
+| `display.files.design-builder.folder-list` | `<ul>` | — | Contains one `display.files.design-builder.folder-row` per child folder of the currently open folder (or the root) | Same as workspace access | active |
+| `display.files.design-builder.folder-row` | `<li>` (pattern) | Folder name | Real navigation to `?view=files&folder=<id>` — drills into that folder. Contains the contextual action menu below | Same as workspace access | active |
+| `display.files.design-builder.folder-row.options` | `<summary>` (pattern, `<details>`) | "⋮" (aria-label "Folder options for `<name>`") | Opens the contextual Rename/Move/Delete panel for that row | Same as workspace access | active |
+| `display.files.design-builder.folder-row.rename.name`, `display.files.design-builder.folder-row.rename.submit` | `<input>`/`<button>` (pattern) | Rename form | POSTs to `rename_folder_route` — sibling-name uniqueness enforced server-side | Same as workspace access | active |
+| `display.files.design-builder.folder-row.move.destination`, `display.files.design-builder.folder-row.move.submit` | `<select>`/`<button>` (pattern) | Move form | POSTs to `move_folder_route` — the `<select>`'s own options are server-computed per row (`design_builder_move_targets`) to exclude the folder itself and its own descendants, on top of `move_folder`'s independent, authoritative re-validation | Same as workspace access | active |
+| `display.files.design-builder.folder-row.delete` | `<button>` (pattern) | "Delete" | POSTs to `delete_folder_route` — the confirm=yes/no gate below, never an immediate delete | Same as workspace access | active |
+| `display.files.design-builder.empty` | `<p>` | "This folder is empty."/"No folders yet…" | Empty-state message, phrased differently for an open subfolder vs. the Design-Builder Workspace root itself | Same as workspace access | active |
+| `display.files.design-builder.folder.delete.confirm-yes`, `display.files.design-builder.folder.delete.confirm-no` | `<button>` (`templates/confirm_delete_folder.html`) | "Yes — delete this folder" / "No — keep this folder" | The confirm=yes/no interruption page (same family as `confirm_remove_document.html`) — only reachable after `delete_folder_route`'s own empty-folder check would otherwise pass | Same as workspace access | active |
 | `display.context-menu` | `#display-context-menu` (CLAUDE-P40-VW8-QA — formally registered; existed since CLAUDE-P40-E3A) | Right-click menu for the targeted division — Close/Divide | Hidden by default; opens via `contextmenu` on a `.display-division`, targets whichever one was clicked | Same as workspace access | active |
 | `display.context-menu.close` | `<button>` | "Close this Display" | Clears the targeted division, reflows remaining divisions (VW4's deterministic shrink rule) | Same as workspace access | active |
 | `display.context-menu.vertical-decrement`, `display.context-menu.vertical-increment`, `display.context-menu.horizontal-decrement`, `display.context-menu.horizontal-increment` | `<button>` (4 distinct, named controls) | −/+ steppers | Adjust the PENDING Vertical/Horizontal count for "Divide this Display" | Same as workspace access | active |

@@ -1802,6 +1802,136 @@
                macros.conversation_dock and its call site. #}
         </div>
     </div>
+{% elif directory_view == 'files' %}
+    {# CLAUDE-P40-VW9 (Governed Files Display and Project File
+       Architecture): the Files stable surface's own real content - two
+       governed sibling roots, Data Room (controlled, externally-issued
+       material) and Design-Builder Workspace (editable, team-organized
+       material) - different governance spaces (this stage's own
+       governing prompt, Section 1), kept visually/semantically distinct
+       below without inventing heavy chrome for it. Same "back to
+       Overview"/panel-suppression shape as the New Investigation form
+       above. #}
+    <div class="project-home files-surface" data-ui-ref="display.files">
+        {% if not panel_only %}
+        <p class="project-home-back">
+            <a href="{{ url_for('workspace.show_workspace', project_id=project_id, view='overview') }}">&larr; Overview</a>
+        </p>
+        {% endif %}
+        <h1 class="new-case-form-heading">Files</h1>
+
+        {% with flashed = get_flashed_messages(with_categories=true) %}
+        {% if flashed %}
+        <div class="flash-stack">
+            {% for category, message in flashed %}
+            <div class="flash-message flash-{{ category }}">{{ message }}</div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% endwith %}
+
+        <div class="files-roots">
+            {# ---------------- Data Room (controlled) --------------------- #}
+            <section class="files-root files-root-data-room" data-ui-ref="display.files.data-room">
+                <p class="workspace-pane-label">Data Room</p>
+                <p class="pane-note">
+                    Controlled source material issued or received from an external
+                    authority, client, owner, procurement body, or consultant.
+                    Design-Builder Workspace's own folder controls cannot reach or
+                    reorganize this root - its real issued hierarchy is imported
+                    through a separate, deliberate, governed action, not yet part of
+                    this stage.
+                </p>
+                {% if data_room_sources %}
+                <p class="pane-note" style="margin-top:0.6rem;">
+                    Existing Documents, shown here under their existing (pre-Files)
+                    identity - not yet organized into the issued hierarchy. Open one
+                    below, or from Documents in Lists.
+                </p>
+                <ul class="source-list" data-ui-ref="display.files.data-room.compatibility-list">
+                    {% for s in data_room_sources %}
+                    <li class="source-item">
+                        <a href="{{ url_for('workspace.show_workspace', project_id=project_id, source=s.id) }}">{{ s.name }}</a>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <p class="pane-note" data-ui-ref="display.files.data-room.empty" style="margin-top:0.6rem;">
+                    No Documents yet. Documents added to this Project will appear
+                    here, honestly labeled, until the Data Room's own issued
+                    hierarchy is imported in a future stage.
+                </p>
+                {% endif %}
+            </section>
+
+            {# ---------------- Design-Builder Workspace (editable) --------- #}
+            <section class="files-root files-root-design-builder" data-ui-ref="display.files.design-builder">
+                <p class="workspace-pane-label">Design-Builder Workspace</p>
+                <p class="pane-note">
+                    Editable working organization created by the Project team -
+                    folders, working documents, and derived material. Reorganize
+                    freely; nothing here is externally issued.
+                </p>
+
+                {# In-content breadcrumb - always DERIVED by walking
+                   parent_folder_id (CaseWorkspaceStore._folder_path),
+                   never stored as a string. Distinct from the top
+                   application breadcrumb (menu.context), which stays
+                   "Files" regardless of which folder is open - the same
+                   way Overview's own internal accordions never change
+                   that breadcrumb either. #}
+                <p class="files-breadcrumb" data-ui-ref="display.files.design-builder.breadcrumb">
+                    <a href="{{ url_for('workspace.show_workspace', project_id=project_id, view='files') }}">Design-Builder Workspace</a>
+                    {% for ancestor in folder_ancestors %}
+                    &rsaquo; <a href="{{ url_for('workspace.show_workspace', project_id=project_id, view='files', folder=ancestor.id) }}">{{ ancestor.name }}</a>
+                    {% endfor %}
+                </p>
+
+                {% call macros.subdisclosure('+ New Folder', ui_ref='display.files.design-builder.new-folder') %}
+                <form class="workspace-form" method="post" action="{{ url_for('workspace.create_folder_route', project_id=project_id) }}">
+                    <input type="hidden" name="parent_folder_id" value="{{ open_folder.id if open_folder else '' }}">
+                    <input type="text" name="name" placeholder="Folder name" required data-ui-ref="display.files.design-builder.new-folder.name">
+                    <button type="submit" data-ui-ref="display.files.design-builder.new-folder.create">Create Folder</button>
+                </form>
+                {% endcall %}
+
+                {% if design_builder_children %}
+                <ul class="files-folder-list" data-ui-ref="display.files.design-builder.folder-list">
+                    {% for folder in design_builder_children %}
+                    <li class="files-folder-row" data-ui-ref="display.files.design-builder.folder-row">
+                        <a class="files-folder-link" href="{{ url_for('workspace.show_workspace', project_id=project_id, view='files', folder=folder.id) }}">{{ folder.name }}</a>
+                        <details class="files-folder-actions">
+                            <summary aria-label="Folder options for {{ folder.name }}" data-ui-ref="display.files.design-builder.folder-row.options">&#8942;</summary>
+                            <div class="files-folder-actions-panel">
+                                <form method="post" action="{{ url_for('workspace.rename_folder_route', project_id=project_id, folder_id=folder.id) }}">
+                                    <input type="text" name="name" value="{{ folder.name }}" required data-ui-ref="display.files.design-builder.folder-row.rename.name">
+                                    <button type="submit" data-ui-ref="display.files.design-builder.folder-row.rename.submit">Rename</button>
+                                </form>
+                                <form method="post" action="{{ url_for('workspace.move_folder_route', project_id=project_id, folder_id=folder.id) }}">
+                                    <select name="parent_folder_id" data-ui-ref="display.files.design-builder.folder-row.move.destination">
+                                        <option value="">Design-Builder Workspace (root)</option>
+                                        {% for candidate in design_builder_move_targets.get(folder.id, []) %}
+                                        <option value="{{ candidate.id }}">{{ candidate.name }}</option>
+                                        {% endfor %}
+                                    </select>
+                                    <button type="submit" data-ui-ref="display.files.design-builder.folder-row.move.submit">Move</button>
+                                </form>
+                                <form method="post" action="{{ url_for('workspace.delete_folder_route', project_id=project_id, folder_id=folder.id) }}">
+                                    <button type="submit" data-ui-ref="display.files.design-builder.folder-row.delete">Delete</button>
+                                </form>
+                            </div>
+                        </details>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <p class="pane-note" data-ui-ref="display.files.design-builder.empty">
+                    {% if open_folder %}This folder is empty.{% else %}No folders yet - create one to start organizing the Project team's own working material.{% endif %}
+                </p>
+                {% endif %}
+            </section>
+        </div>
+    </div>
 {% elif show_new_case_form %}
     {# CLAUDE-P40-VW8-QA (New Investigation Action in Lists): a focused
        CREATE form only - never the full Overview/management page

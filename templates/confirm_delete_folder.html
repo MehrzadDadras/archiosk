@@ -1,0 +1,23 @@
+{% extends "confirm_base.html" %}
+
+{% block confirm_title %}Delete Folder{% endblock %}
+{% block confirm_label %}Recoverable removal{% endblock %}
+{% block confirm_heading %}Delete &ldquo;{{ folder_name }}&rdquo;?{% endblock %}
+{% block confirm_body %}
+<p style="color:var(--text-primary);">
+    This only works on an empty folder &mdash; it disappears from the Design-Builder
+    Workspace. Nothing inside this folder is deleted (it has nothing in it), and the
+    record itself is preserved, never erased.
+</p>
+{% endblock %}
+{% block confirm_actions %}
+<form method="post" action="{{ action_url }}" class="approval-gate-actions">
+    <button type="submit" name="confirm" value="yes" class="review-btn reject" data-ui-ref="display.files.design-builder.folder.delete.confirm-yes">
+        Yes &mdash; delete this folder
+    </button>
+    <button type="submit" name="confirm" value="no" class="btn btn-ghost" data-ui-ref="display.files.design-builder.folder.delete.confirm-no">
+        No &mdash; keep this folder
+    </button>
+</form>
+{% endblock %}
+{% block confirm_back_url %}{{ url_for('workspace.show_workspace', project_id=project_id, view='files') }}{% endblock %}

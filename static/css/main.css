@@ -4351,6 +4351,57 @@ main::-webkit-scrollbar-corner,
 .new-case-form-heading { font-family: var(--font-display); font-size: 1.3rem; font-weight: 500; margin: 0 0 0.8rem; }
 .new-case-form-actions { display: flex; gap: 0.6rem; align-items: center; margin-top: 0.3rem; }
 
+/* CLAUDE-P40-VW9 (Governed Files Display and Project File Architecture):
+   the two governed sibling roots read as different GOVERNANCE SPACES
+   without inventing a new color distinction (this file's own header
+   comment: color is used rarely, only for the fixed semantic meanings
+   above - Data Room/Design-Builder are not one of them). The
+   differentiation is structural/neutral instead: Data Room gets the
+   quieter --surface-secondary + --border-strong treatment ("controlled,
+   structural"); Design-Builder Workspace gets --surface-primary + the
+   ordinary --border ("open, editable") - the same two-tier surface
+   language main.css already uses elsewhere (nav vs. panel), reused, not
+   a new one invented for this stage. .files-surface widens past
+   .project-home's own 760px max-width since two side-by-side roots need
+   more room; narrows to one stacked column under the existing 900px
+   breakpoint (see main.css's own responsive rules), never a second,
+   parallel breakpoint system. */
+.files-surface { max-width: 1100px; }
+.files-roots { display: grid; grid-template-columns: 1fr 1fr; gap: 1.2rem; margin-top: 1rem; }
+@media (max-width: 900px) {
+    .files-roots { grid-template-columns: 1fr; }
+}
+.files-root {
+    border-radius: 6px;
+    padding: 1rem 1.1rem;
+}
+.files-root-data-room { background: var(--surface-secondary); border: 1px solid var(--border-strong); }
+.files-root-design-builder { background: var(--surface-primary); border: 1px solid var(--border); }
+.files-breadcrumb { font-size: 0.85rem; color: var(--text-secondary); margin: 0.6rem 0; }
+.files-breadcrumb a { color: var(--text-secondary); }
+.files-breadcrumb a:hover { color: var(--text-primary); }
+.files-folder-list { list-style: none; margin: 0.6rem 0 0; padding: 0; display: grid; gap: 0.25rem; }
+.files-folder-row {
+    display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;
+    padding: 0.35rem 0.5rem; border-radius: 4px;
+}
+.files-folder-row:hover { background: var(--surface-hover); }
+.files-folder-link { color: var(--text-primary); font-size: 0.92rem; }
+.files-folder-actions { position: relative; flex-shrink: 0; }
+.files-folder-actions summary {
+    list-style: none; cursor: pointer; color: var(--text-metadata);
+    padding: 0.1rem 0.4rem; border-radius: 4px;
+}
+.files-folder-actions summary::-webkit-details-marker { display: none; }
+.files-folder-actions summary:hover { color: var(--text-primary); background: var(--surface-hover); }
+.files-folder-actions-panel {
+    position: absolute; right: 0; top: 100%; z-index: 5;
+    background: var(--surface-primary); border: 1px solid var(--border-strong);
+    border-radius: 6px; padding: 0.6rem; display: grid; gap: 0.5rem;
+    min-width: 220px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+.files-folder-actions-panel form { display: flex; gap: 0.35rem; align-items: center; }
+
 /* Project Home's title/actions row is now the shared .dash-head (see
    above) instead of its own parallel rule. */
 .project-home-subtitle { color: var(--text-secondary); font-size: 0.85rem; margin: 0.35rem 0 0; max-width: 56ch; }

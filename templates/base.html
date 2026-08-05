@@ -472,6 +472,18 @@
                                             {% endfor %}
                                         </ul>
                                     </li>
+                                    {# CLAUDE-P40-VW9 (Governed Files Display and Project File
+                                       Architecture): a single stable leaf, same shape as Overview
+                                       above - no tab-strip pill, no dynamic-record count (Files
+                                       itself is not a per-instance record the way a Document or
+                                       Investigation is), no duplicate-open concept. Projects the
+                                       two governed sibling roots (Data Room, Design-Builder
+                                       Workspace) into Display via the same ?view= vocabulary
+                                       Overview already established - see routes/workspace.py's
+                                       own STABLE_DIRECTORY_KINDS. #}
+                                    <li class="tree-node" data-tree-node>
+                                        <a class="tree-leaf launcher-link{% if directory_view == 'files' %} active{% endif %}" data-ui-ref="lists.project.files" data-view="files"{% if directory_view == 'files' %} aria-current="page"{% endif %} href="{{ url_for('workspace.show_workspace', project_id=project_id, view='files') }}">Files</a>
+                                    </li>
                                     <li class="tree-node" data-tree-node>
                                         <button type="button" class="tree-toggle launcher-link" data-tree-parent data-tree-owns="case" data-ui-ref="lists.project.investigations" aria-expanded="{{ 'true' if (active_case or show_new_case_form) else 'false' }}">
                                             <span class="tree-label">Investigations <span class="launcher-count">{{ visible_cases|length }}</span></span>
@@ -1758,6 +1770,22 @@
                     kind = 'new-case';
                     id = '';
                     displayName = 'New Investigation';
+                } else if (link.getAttribute('data-view') === 'files') {
+                    // CLAUDE-P40-VW9: a real bug found during this
+                    // stage's own real-browser verification - this
+                    // dispatch used to have exactly ONE data-view leaf
+                    // (Overview), so falling through to a hardcoded
+                    // kind='overview' for "any data-view link, whatever
+                    // its value" was accidentally correct. Adding a
+                    // SECOND data-view leaf (Files) exposed the real
+                    // shape of the bug: Files silently populated Overview
+                    // instead. Fixed by reading the attribute's own
+                    // VALUE, not just its presence - the same principle
+                    // case_workspace.js's PANEL_KINDS table already
+                    // applies to its own kind dispatch.
+                    kind = 'files';
+                    id = '';
+                    displayName = 'Files';
                 } else {
                     kind = 'overview';
                     id = '';

@@ -57,6 +57,25 @@ SOURCE_KIND_DRAWING = "drawing"
 SOURCE_KIND_PROJECT_DOCUMENT = "project_document"
 SOURCE_KIND_TEXT_RECORD = "text_record"
 
+# CLAUDE-P40-VW9 (Governed Files Display and Project File Architecture):
+# a Folder's `root` names which of the two GOVERNED SIBLING ROOTS it
+# belongs to - Data Room (controlled, externally-issued material) and
+# Design-Builder Workspace (editable, team-organized material) are
+# different governance spaces, not two flavors of the same thing a
+# future stage might casually extend, so this is a closed tuple
+# (validated below), not open-world like SOURCE_KIND_* above. Both
+# roots are GOVERNED VIRTUAL roots this stage - neither is itself a
+# persisted Folder record; a project's `workspace.folders` list holds
+# only real, user-created folders, and every one of them this stage
+# ever creates has root=FOLDER_ROOT_DESIGN_BUILDER (no route or method
+# below accepts FOLDER_ROOT_DATA_ROOM as a creation target - see
+# create_folder's own docstring). FOLDER_ROOT_DATA_ROOM exists as a
+# named, honest placeholder for the future issued-hierarchy import,
+# not a hidden half-built feature.
+FOLDER_ROOT_DATA_ROOM = "data_room"
+FOLDER_ROOT_DESIGN_BUILDER = "design_builder"
+KNOWN_FOLDER_ROOTS = (FOLDER_ROOT_DATA_ROOM, FOLDER_ROOT_DESIGN_BUILDER)
+
 FINDING_STATUS_PROVISIONAL = "provisional"
 FINDING_STATUS_APPLIED = "applied"
 
@@ -802,6 +821,60 @@ class Source:
     # import archive reference, or None for an ordinary upload).
     origin_type: Optional[str] = None  # open-world, KNOWN_SOURCE_ORIGIN_TYPES
     origin_reference: Optional[str] = None
+
+
+@dataclass
+class Folder:
+    """
+    CLAUDE-P40-VW9: a Project-scoped organizational container inside one
+    of the two governed Files roots (`root` - FOLDER_ROOT_DATA_ROOM or
+    FOLDER_ROOT_DESIGN_BUILDER, above; every Folder this stage creates
+    has root=FOLDER_ROOT_DESIGN_BUILDER). Canonical identity is `id`,
+    exactly matching Source's own "folder locations and filenames are
+    external representations only" principle above - a Folder retains
+    its identity across rename (`name` changes) and move
+    (`parent_folder_id` changes); nothing here is ever derived from
+    name, parent, sibling order, or render order. A folder's full path
+    is always DERIVED at read time by walking `parent_folder_id`
+    pointers (see CaseWorkspaceStore._folder_path), never stored as a
+    string - the same "store flat, derive structure at read time" shape
+    this module already uses everywhere else (e.g. visible_cases_for).
+
+    `parent_folder_id=None` means directly under this Folder's own
+    `root` - `root` and `parent_folder_id` together, not
+    `parent_folder_id` alone, place a Folder; a Design-Builder folder's
+    `parent_folder_id`, even when None, never means "the Data Room" or
+    vice versa. Every mutation method on CaseWorkspaceStore re-validates
+    `project_id` against the calling workspace before acting (Section 10
+    of this stage's own governing prompt: "folder operations cannot
+    cross Project boundaries through crafted identifiers") - `project_id`
+    is carried on the record itself, not inferred solely from already
+    being inside `workspace.folders`, the same defensive shape
+    `Source.project_id` already uses.
+
+    No `folder_id` exists on `Source` (this stage does not add one - see
+    this stage's own completion notes): a Document is never assigned
+    into a Folder in this slice, so Document identity/relationships are
+    completely unaffected by anything in this class.
+
+    Deletion is a recoverable removal (`removed_at`/`removed_by`), the
+    same "never a true deletion" convention `Source`/`ProjectWorkspace`
+    already establish above (Constitutional Invariant 5: "correction is
+    non-destructive... never erase") - `delete_folder` below only ever
+    operates on an EMPTY folder (never one with real content to lose),
+    but the id itself is still never reused for a different folder once
+    removed, matching every other tombstone in this codebase.
+    """
+
+    id: str
+    project_id: str
+    root: str  # FOLDER_ROOT_* - only FOLDER_ROOT_DESIGN_BUILDER is ever created this stage
+    name: str
+    created_at: str
+    created_by: Optional[str] = None
+    parent_folder_id: Optional[str] = None
+    removed_at: Optional[str] = None
+    removed_by: Optional[str] = None
 
 
 @dataclass
@@ -2555,6 +2628,11 @@ class ProjectWorkspace:
     tags: list[dict] = field(default_factory=list)  # see Tag
     tag_occurrences: list[dict] = field(default_factory=list)  # see TagOccurrence
     tasks: list[dict] = field(default_factory=list)  # see Task
+    # CLAUDE-P40-VW9: Design-Builder Workspace working folders (see Folder
+    # above) - purely additive, same backward-compatible pattern as tags/
+    # tag_occurrences/tasks above (a legacy record predating this stage
+    # simply lacks the key and loads with the empty-list default).
+    folders: list[dict] = field(default_factory=list)  # see Folder
 
     # CLAUDE-P31: this project's Security Profile (services.security_policy.
     # INFORMATION_CLASSIFICATIONS) -- unlike operating_environment, NOT
@@ -4409,6 +4487,230 @@ class CaseWorkspaceStore:
                 payload={},
             )
         return workspace
+
+    # -- folders (CLAUDE-P40-VW9) ------------------------------------------
+
+    def _folder_path(self, workspace: ProjectWorkspace, folder_id: Optional[str]) -> list[dict]:
+        """Derives the ancestor chain (root-most first, ending with the
+        folder itself) by walking parent_folder_id - a folder's path is
+        NEVER stored as a string (Folder's own docstring), the same
+        "store flat, derive structure at read time" shape this module
+        already uses everywhere else."""
+        chain: list[dict] = []
+        seen: set[str] = set()
+        current_id = folder_id
+        while current_id is not None:
+            if current_id in seen:
+                break  # defensive only - move_folder's own cycle guard means a real cycle should never exist
+            seen.add(current_id)
+            folder = self._find(workspace.folders, current_id)
+            if folder is None:
+                break
+            chain.append(folder)
+            current_id = folder.get("parent_folder_id")
+        chain.reverse()
+        return chain
+
+    def _folder_descendant_ids(self, workspace: ProjectWorkspace, folder_id: str) -> set[str]:
+        """Every folder id transitively parented under folder_id (never
+        including folder_id itself) - move_folder's own cycle guard
+        (Section 5's own "prevent invalid cycles")."""
+        children_by_parent: dict[Optional[str], list[dict]] = {}
+        for f in workspace.folders:
+            children_by_parent.setdefault(f.get("parent_folder_id"), []).append(f)
+        descendants: set[str] = set()
+        frontier = [folder_id]
+        while frontier:
+            current = frontier.pop()
+            for child in children_by_parent.get(current, []):
+                if child["id"] not in descendants:
+                    descendants.add(child["id"])
+                    frontier.append(child["id"])
+        return descendants
+
+    def _active_folder_siblings(
+        self, workspace: ProjectWorkspace, project_id: str, root: str, parent_folder_id: Optional[str],
+    ) -> list[dict]:
+        return [
+            f for f in workspace.folders
+            if f["project_id"] == project_id and f["root"] == root
+            and f.get("parent_folder_id") == parent_folder_id and not f.get("removed_at")
+        ]
+
+    def _reject_if_sibling_folder_name_taken(
+        self, workspace: ProjectWorkspace, project_id: str, root: str, parent_folder_id: Optional[str],
+        name: str, exclude_folder_id: Optional[str] = None,
+    ) -> None:
+        """Sibling-scoped uniqueness (only folders sharing the same
+        project/root/parent) - deliberately narrower than
+        ingestion.py's own _reject_if_name_taken, which is scoped to the
+        WHOLE registry (Project entry names); exact-match string
+        comparison and a short, plain, no-id message, matching that
+        precedent's own style."""
+        for sibling in self._active_folder_siblings(workspace, project_id, root, parent_folder_id):
+            if sibling["id"] != exclude_folder_id and sibling["name"] == name:
+                raise CaseWorkspaceError("A folder with that name already exists here.")
+
+    def create_folder(
+        self, workspace: ProjectWorkspace, name: str, parent_folder_id: Optional[str] = None,
+        actor: Optional[str] = None, governance_log: Optional[GovernanceLog] = None,
+    ) -> dict:
+        """
+        CLAUDE-P40-VW9: creates a Design-Builder Workspace folder only -
+        no caller may pass a root; this method always creates
+        root=FOLDER_ROOT_DESIGN_BUILDER (Section 4's own "do not allow
+        ordinary Design-Builder working-folder actions to silently
+        modify [the Data Room]" - there is structurally no way to reach
+        FOLDER_ROOT_DATA_ROOM through this method at all, not merely a
+        convention some caller could bypass). No owner/admin gate,
+        matching create_task/create_custom_tag's own precedent rather
+        than remove_source/remove_project's - a Design-Builder folder is
+        collaborative team working structure ("editable working
+        organization created by the Project team"), not owner-locked
+        evidence.
+        """
+        clean_name = (name or "").strip()
+        if not clean_name:
+            raise CaseWorkspaceError("A folder name cannot be empty.")
+        if parent_folder_id is not None:
+            parent = self._find(workspace.folders, parent_folder_id)
+            if (
+                parent is None or parent["project_id"] != workspace.project_id
+                or parent["root"] != FOLDER_ROOT_DESIGN_BUILDER or parent.get("removed_at")
+            ):
+                raise CaseWorkspaceError("The parent folder was not found.")
+        self._reject_if_sibling_folder_name_taken(
+            workspace, workspace.project_id, FOLDER_ROOT_DESIGN_BUILDER, parent_folder_id, clean_name,
+        )
+
+        folder = Folder(
+            id=_new_id(), project_id=workspace.project_id, root=FOLDER_ROOT_DESIGN_BUILDER,
+            name=clean_name, created_at=_now(), created_by=actor, parent_folder_id=parent_folder_id,
+        )
+        workspace.folders.append(asdict(folder))
+        self.save(workspace)
+
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id, event_type="folder_created",
+                actor=actor or "system", role="human",
+                payload={"folder_id": folder.id, "name": clean_name, "parent_folder_id": parent_folder_id},
+                correlation_id=folder.id,
+            )
+        return asdict(folder)
+
+    def rename_folder(
+        self, workspace: ProjectWorkspace, folder_id: str, new_name: str,
+        actor: Optional[str] = None, governance_log: Optional[GovernanceLog] = None,
+    ) -> dict:
+        """Renaming never changes `id` - the same "location is external
+        representation only" convention Folder's own docstring
+        establishes."""
+        folder = self._find(workspace.folders, folder_id)
+        if folder is None or folder["project_id"] != workspace.project_id:
+            raise CaseWorkspaceError(f"Folder {folder_id} was not found.")
+        if folder.get("removed_at"):
+            raise CaseWorkspaceError(f"Folder {folder_id} has been deleted.")
+        clean_name = (new_name or "").strip()
+        if not clean_name:
+            raise CaseWorkspaceError("A folder name cannot be empty.")
+        self._reject_if_sibling_folder_name_taken(
+            workspace, workspace.project_id, folder["root"], folder.get("parent_folder_id"),
+            clean_name, exclude_folder_id=folder_id,
+        )
+        folder["name"] = clean_name
+        self.save(workspace)
+
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id, event_type="folder_renamed",
+                actor=actor or "system", role="human",
+                payload={"folder_id": folder_id, "name": clean_name},
+                correlation_id=folder_id,
+            )
+        return folder
+
+    def move_folder(
+        self, workspace: ProjectWorkspace, folder_id: str, new_parent_folder_id: Optional[str],
+        actor: Optional[str] = None, governance_log: Optional[GovernanceLog] = None,
+    ) -> dict:
+        """Section 5's own "prevent invalid cycles" / "prevent movement
+        outside the current Project" / "prevent movement into the Data
+        Room unless a later governed action explicitly authorizes it" -
+        all three enforced here, structurally, not merely by what the UI
+        happens to offer as choices."""
+        folder = self._find(workspace.folders, folder_id)
+        if folder is None or folder["project_id"] != workspace.project_id:
+            raise CaseWorkspaceError(f"Folder {folder_id} was not found.")
+        if folder.get("removed_at"):
+            raise CaseWorkspaceError(f"Folder {folder_id} has been deleted.")
+
+        if new_parent_folder_id == folder_id:
+            raise CaseWorkspaceError("A folder cannot be moved into itself.")
+        if new_parent_folder_id is not None:
+            new_parent = self._find(workspace.folders, new_parent_folder_id)
+            if (
+                new_parent is None or new_parent["project_id"] != workspace.project_id
+                or new_parent["root"] != FOLDER_ROOT_DESIGN_BUILDER or new_parent.get("removed_at")
+            ):
+                raise CaseWorkspaceError("The destination folder was not found.")
+            if new_parent_folder_id in self._folder_descendant_ids(workspace, folder_id):
+                raise CaseWorkspaceError("A folder cannot be moved into one of its own subfolders.")
+
+        self._reject_if_sibling_folder_name_taken(
+            workspace, workspace.project_id, folder["root"], new_parent_folder_id,
+            folder["name"], exclude_folder_id=folder_id,
+        )
+        folder["parent_folder_id"] = new_parent_folder_id
+        self.save(workspace)
+
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id, event_type="folder_moved",
+                actor=actor or "system", role="human",
+                payload={"folder_id": folder_id, "new_parent_folder_id": new_parent_folder_id},
+                correlation_id=folder_id,
+            )
+        return folder
+
+    def delete_folder(
+        self, workspace: ProjectWorkspace, folder_id: str,
+        actor: Optional[str] = None, governance_log: Optional[GovernanceLog] = None,
+    ) -> dict:
+        """Section 4's own "delete an empty folder" - never a populated
+        one; refuses outright if any active child folder exists.
+        Recoverable (removed_at), matching Source/Project's own tombstone
+        convention - see Folder's own docstring for why this is still the
+        right shape even though nothing here holds real content to lose.
+        No restore UI is built this stage (not part of the required
+        Design-Builder operation list) - the data itself stays
+        recoverable, a future stage can add a "Removed Folders" surface
+        the same way Removed Items/Removed Projects already work."""
+        folder = self._find(workspace.folders, folder_id)
+        if folder is None or folder["project_id"] != workspace.project_id:
+            raise CaseWorkspaceError(f"Folder {folder_id} was not found.")
+        if folder.get("removed_at"):
+            raise CaseWorkspaceError(f"Folder {folder_id} is already deleted.")
+        has_active_children = any(
+            f["project_id"] == workspace.project_id and f.get("parent_folder_id") == folder_id and not f.get("removed_at")
+            for f in workspace.folders
+        )
+        if has_active_children:
+            raise CaseWorkspaceError("Only an empty folder can be deleted - move or delete its contents first.")
+
+        removed_at = _now()
+        folder["removed_at"] = removed_at
+        folder["removed_by"] = actor
+        self.save(workspace)
+
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id, event_type="folder_deleted",
+                actor=actor or "system", role="human",
+                payload={"folder_id": folder_id, "name": folder.get("name")},
+                correlation_id=folder_id,
+            )
+        return folder
 
     # -- cases -----------------------------------------------------------------
 

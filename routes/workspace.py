@@ -55,6 +55,8 @@ from services.case_workspace import (
     CONVERSATION_ANCHOR_SCOPE_GUIDANCE,
     CONVERSATION_ANCHOR_SCOPE_PROJECT,
     CONVERSATION_GUIDANCE_PROJECT_INTRO,
+    FOLDER_ROOT_DATA_ROOM,
+    FOLDER_ROOT_DESIGN_BUILDER,
     GO_NO_GO_DECISIONS,
     KNOWN_CONVERSATION_ANCHOR_SCOPES,
     KNOWN_PARTICIPANT_ROLES,
@@ -120,6 +122,14 @@ ALLOWED_DOCUMENT_EXTENSIONS = {".pdf", ".docx", ".txt", ".csv", ".md"}
 # identity, never what renders inside it.
 STABLE_DIRECTORY_KINDS = {
     "overview": "Overview",
+    # CLAUDE-P40-VW9 (Governed Files Display and Project File
+    # Architecture): the first real second entry in this registry -
+    # exactly the extension point CLAUDE-P40-VW8-QA1 built this dict
+    # for. A Project-level stable singleton, same shape as Overview (no
+    # tab-strip pill, no duplicate-open concept) - its own content
+    # branch below (`directory_view == 'files'`) renders the two
+    # governed sibling roots (Data Room, Design-Builder Workspace).
+    "files": "Files",
 }
 
 # Requirement-evidence explainability: maps the EXISTING, already-governed
@@ -563,6 +573,69 @@ def show_workspace(project_id):
         directory_view = None
         directory_view_label = None
         show_new_case_form = False
+
+    # CLAUDE-P40-VW9: Files - the Design-Builder Workspace's own
+    # "which folder is currently open" browsing state, resolved only
+    # when Files is actually the active directory view (the same
+    # "only ever resolved against this already-authorized workspace's
+    # own records, never a raw trusted id" convention selected_source/
+    # active_case already use above). An unknown/stale/foreign
+    # ?folder= degrades honestly to the Design-Builder Workspace root
+    # - never a crash, never a lookup that leaks another Project's own
+    # data, matching this route's own established degrade convention
+    # throughout.
+    open_folder = None
+    folder_ancestors: list = []
+    design_builder_children: list = []
+    design_builder_move_targets: dict = {}
+    data_room_sources: list = []
+    if directory_view == "files":
+        requested_folder_id = request.args.get("folder")
+        if requested_folder_id:
+            candidate = next(
+                (
+                    f for f in workspace.folders
+                    if f["id"] == requested_folder_id and f["root"] == FOLDER_ROOT_DESIGN_BUILDER
+                    and not f.get("removed_at")
+                ),
+                None,
+            )
+            open_folder = candidate
+        folder_ancestors = store._folder_path(workspace, open_folder["id"] if open_folder else None)
+        open_folder_id = open_folder["id"] if open_folder else None
+        design_builder_children = sorted(
+            (
+                f for f in workspace.folders
+                if f["root"] == FOLDER_ROOT_DESIGN_BUILDER and f.get("parent_folder_id") == open_folder_id
+                and not f.get("removed_at")
+            ),
+            key=lambda f: f["name"].lower(),
+        )
+        # Data Room compatibility view (Section 7): every existing
+        # active Source, exactly as Documents already lists them -
+        # never reclassified, never assigned a folder, never
+        # duplicated. Honest about what this is: the pre-Files system's
+        # own existing Documents, not the future issued hierarchy.
+        data_room_sources = [s for s in workspace.sources if not s.get("removed_at")]
+
+        # Move-target candidates per visible folder row: every OTHER
+        # active Design-Builder folder in the project, excluding the
+        # folder itself and its own descendants (Section 5's own
+        # "prevent invalid cycles") - computed server-side so the
+        # picker never even OFFERS an invalid destination, on top of
+        # move_folder's own independent, authoritative re-validation.
+        all_active_design_builder_folders = sorted(
+            (f for f in workspace.folders if f["root"] == FOLDER_ROOT_DESIGN_BUILDER and not f.get("removed_at")),
+            key=lambda f: f["name"].lower(),
+        )
+        design_builder_move_targets = {
+            child["id"]: [
+                candidate for candidate in all_active_design_builder_folders
+                if candidate["id"] != child["id"]
+                and candidate["id"] not in store._folder_descendant_ids(workspace, child["id"])
+            ]
+            for child in design_builder_children
+        }
 
     # Project-wide "Needs Attention": every unresolved Finding (not yet
     # "applied") across every non-archived visible Case, not just
@@ -1219,6 +1292,11 @@ def show_workspace(project_id):
         selected_source=selected_source,
         directory_view=directory_view,
         directory_view_label=directory_view_label,
+        open_folder=open_folder,
+        folder_ancestors=folder_ancestors,
+        design_builder_children=design_builder_children,
+        design_builder_move_targets=design_builder_move_targets,
+        data_room_sources=data_room_sources,
         show_new_case_form=show_new_case_form,
         needs_attention_view=needs_attention_view,
         findings_view=findings_view,
@@ -1856,6 +1934,111 @@ def restore_project_route(project_id):
     except CaseWorkspaceError as exc:
         flash(str(exc), "error")
     return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
+
+
+# -- CLAUDE-P40-VW9: Files - Design-Builder Workspace folders --------------
+# Every route below operates ONLY on FOLDER_ROOT_DESIGN_BUILDER folders -
+# the store-layer methods themselves have no way to reach
+# FOLDER_ROOT_DATA_ROOM at all (Section 4's own "do not allow ordinary
+# Design-Builder working-folder actions to silently modify [the Data
+# Room]"). No owner/admin gate (matching create_task/create_custom_tag's
+# own precedent - see CaseWorkspaceStore.create_folder's own docstring
+# for the reasoning); `_load_workspace_or_404` (project-level access) is
+# the one and only authorization check every route below relies on, the
+# same "no new authorization path" discipline this stage's own governing
+# prompt requires.
+
+def _files_redirect(project_id, folder_id=None):
+    if folder_id:
+        return redirect(url_for("workspace.show_workspace", project_id=project_id, view="files", folder=folder_id))
+    return redirect(url_for("workspace.show_workspace", project_id=project_id, view="files"))
+
+
+@workspace_bp.route("/projects/<project_id>/workspace/folders", methods=["POST"])
+@login_required
+def create_folder_route(project_id):
+    _, store, workspace = _load_workspace_or_404(project_id)
+    name = request.form.get("name") or ""
+    parent_folder_id = request.form.get("parent_folder_id") or None
+    try:
+        folder = store.create_folder(
+            workspace, name=name, parent_folder_id=parent_folder_id,
+            actor=_reviewer(), governance_log=_log(),
+        )
+        flash(f'Folder "{folder["name"]}" created.', "success")
+        return _files_redirect(project_id, folder["parent_folder_id"])
+    except CaseWorkspaceError as exc:
+        flash(str(exc), "error")
+        return _files_redirect(project_id, parent_folder_id)
+
+
+@workspace_bp.route("/projects/<project_id>/workspace/folders/<folder_id>/rename", methods=["POST"])
+@login_required
+def rename_folder_route(project_id, folder_id):
+    _, store, workspace = _load_workspace_or_404(project_id)
+    new_name = request.form.get("name") or ""
+    current = next((f for f in workspace.folders if f["id"] == folder_id), None)
+    parent_folder_id = current.get("parent_folder_id") if current else None
+    try:
+        folder = store.rename_folder(workspace, folder_id=folder_id, new_name=new_name, actor=_reviewer(), governance_log=_log())
+        flash(f'Folder renamed to "{folder["name"]}".', "success")
+        return _files_redirect(project_id, folder["parent_folder_id"])
+    except CaseWorkspaceError as exc:
+        flash(str(exc), "error")
+        return _files_redirect(project_id, parent_folder_id)
+
+
+@workspace_bp.route("/projects/<project_id>/workspace/folders/<folder_id>/move", methods=["POST"])
+@login_required
+def move_folder_route(project_id, folder_id):
+    _, store, workspace = _load_workspace_or_404(project_id)
+    new_parent_folder_id = request.form.get("parent_folder_id") or None
+    current = next((f for f in workspace.folders if f["id"] == folder_id), None)
+    origin_parent_folder_id = current.get("parent_folder_id") if current else None
+    try:
+        folder = store.move_folder(
+            workspace, folder_id=folder_id, new_parent_folder_id=new_parent_folder_id,
+            actor=_reviewer(), governance_log=_log(),
+        )
+        flash(f'Folder "{folder["name"]}" moved.', "success")
+        return _files_redirect(project_id, folder["parent_folder_id"])
+    except CaseWorkspaceError as exc:
+        flash(str(exc), "error")
+        return _files_redirect(project_id, origin_parent_folder_id)
+
+
+@workspace_bp.route("/projects/<project_id>/workspace/folders/<folder_id>/delete", methods=["POST"])
+@login_required
+def delete_folder_route(project_id, folder_id):
+    """The lighter confirm=yes/no gate (matching remove_document_route/
+    remove_project_route above), not the Approval Gate - deleting an
+    EMPTY organizational folder is consequential-but-not-governed, the
+    same category CLAUDE.md's own "two different confirm vocabularies"
+    note already places Remove Document/Remove Project in."""
+    _, store, workspace = _load_workspace_or_404(project_id)
+    folder = next((f for f in workspace.folders if f["id"] == folder_id), None)
+    if folder is None:
+        abort(404)
+    parent_folder_id = folder.get("parent_folder_id")
+
+    confirm = request.form.get("confirm")
+    if confirm == "no":
+        flash("Cancelled - the folder was not deleted.", "success")
+        return _files_redirect(project_id, folder_id)
+    if confirm != "yes":
+        return render_template(
+            "confirm_delete_folder.html",
+            folder_name=folder["name"],
+            action_url=request.url,
+            project_id=project_id,
+        )
+
+    try:
+        store.delete_folder(workspace, folder_id=folder_id, actor=_reviewer(), governance_log=_log())
+        flash(f'Folder "{folder["name"]}" deleted.', "success")
+    except CaseWorkspaceError as exc:
+        flash(str(exc), "error")
+    return _files_redirect(project_id, parent_folder_id)
 
 
 @workspace_bp.route("/projects/<project_id>/workspace/sources/document", methods=["POST"])

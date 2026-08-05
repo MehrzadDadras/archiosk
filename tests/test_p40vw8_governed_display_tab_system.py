@@ -321,20 +321,23 @@ class SourceLevelFixTests(unittest.TestCase):
         fn = js[js.index("function activateFallback("):js.index("\n    function hideTab(")]
         self.assertIn("window.ArchioskInvestigationAttention &&", fn)
 
-    def test_reserved_files_kind_is_documentation_only_no_functional_branch(self):
-        # CLAUDE-P40-VW8-QA1: the dispatch itself was generalized from
-        # three independent `kind === 'files'`-shaped if/elif chains into
-        # one shared PANEL_KINDS registry (see that table's own header
-        # comment in case_workspace.js) - "no functional branch for
-        # 'files'" is now proven by 'files' having no KEY in that
-        # registry, not by the absence of a string comparison.
+    def test_reserved_files_kind_became_a_real_registered_entry_in_vw9(self):
+        # CLAUDE-P40-VW8-QA1 originally proved 'files' had NO entry in
+        # PANEL_KINDS - a deliberate, documented reservation, not an
+        # oversight (that stage's own comment: "adds a real 'files' entry
+        # in PANEL_KINDS above... not before"). CLAUDE-P40-VW9 is that
+        # "later stage" arriving: 'files' now DOES have a real entry,
+        # authorized and implemented for exactly this reason. This test
+        # replaces the old "still reserved" assertion (which would now be
+        # testing a historical state VW9 deliberately changed) with the
+        # current invariant - 'files' is real, registered, and dispatched
+        # through the SAME shared table (never a parallel/duplicated
+        # dispatch mechanism), still with no bare `kind === 'files'`
+        # string-comparison branch anywhere (dispatch stays table-driven).
         js = _CASE_WORKSPACE_JS_PATH.read_text(encoding="utf-8")
-        self.assertIn("'files' has NO entry in PANEL_KINDS", js)
         table_idx = js.index("const PANEL_KINDS = {")
         table = js[table_idx:js.index("\n        };", table_idx)]
-        self.assertNotIn("files:", table)
-        self.assertNotIn("'files':", table)
-        # No real dispatch branch anywhere compares kind to 'files'.
+        self.assertIn("files:", table)
         self.assertNotIn("kind === 'files'", js)
         self.assertNotIn('kind === "files"', js)
 
