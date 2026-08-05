@@ -1,5 +1,24 @@
 # Continuation checkpoint
 
+## 2026-08-05 — CLAUDE-P40-VW9/VW9A-QA-CLOSE (Product-Owner Acceptance Seal)
+
+**Bounded documentation-only close-out** - no application code, template, CSS, JavaScript, schema, or test file was touched in this stage.
+
+**Product owner accepts:**
+
+* `CLAUDE-P40-VW9 — Governed Files Display and Project File Architecture` (implementation commit `82d573b`, narrow-viewport verification commit `507e77e`)
+* `CLAUDE-P40-VW9A — Files Cockpit Close-Out and Camel Programme Record` (cockpit-residual implementation + tests commit `13c0347`, Camel MM1-MM9 programme record commit `c7ef12b`)
+
+The acceptance covers: the Files Display surface and Data Room/Design-Builder Workspace two-root architecture (VW9); the bounded Design-Builder folder domain model (create/nested-create/rename/move/delete-empty, soft-delete, sibling-scoped uniqueness, cycle prevention); and VW9A's resolution of all four cockpit residuals identified in the VW9 final report - A1 (folder-menu exclusivity/dismissal, and the broader in-flow-panel reachability fix it surfaced), A2 (move-destination path disambiguation), A3 (narrow multi-Display-division layout, resolved by the same fix as A1), and A4 (delete-cancellation return context).
+
+**Evidence, re-verified as part of this close-out:** `HEAD` and `origin/main` both confirmed at `c7ef12b` immediately before this seal. Full test suite: **2,597 passed, 0 failed**, 12m32s, run once cleanly with no competing browser/test/server process left running afterward (VW9A's own close-out run). The pre-existing, unrelated `tests/fixtures/nreocrc/_lab_instance_scratch_002/` scratch fixture remains untouched (not deleted, modified, regenerated, staged, or committed) - preserved exactly as every prior session already left it.
+
+**Retained, non-blocking cockpit residual, explicitly not resolved by this seal:** the whole-application shell (Menu/Lists/Toolbox/Eye) does not auto-collapse on a fresh session (no `localStorage` state yet) at narrow (~412px) viewport widths - both side drawers default to their visible overlay state simultaneously and measurably overlap (228px of mutual overlap at 412px, screenshot-verified during VW9A), obscuring the Display/main content area. No existing product claim asserts mobile/narrow-viewport support, so this was deliberately left unfixed pending a genuine product-owner choice among: enforcing/documenting a minimum supported width (≥641px, where the drawer mechanism never engages); a controlled reduced-panel mode (cheapest option: extend the existing `onNarrow()` mutual-exclusion JS in `templates/base.html` to also auto-collapse both drawers by default on first narrow load); or scheduling full narrow-shell adaptation as its own later cockpit stage. Tracked here for later resolution, not silently dropped.
+
+**Also explicitly not part of this seal** (VW9's own stated exclusions, unchanged): the final issued Data Room hierarchy, bulk/ZIP import, external retrieval, existing-Document-to-folder assignment, full lifecycle automation, addenda/supersession comparison, a Files restore UI, cross-Project access, global search, and P41. VW9A's own Part B deferral (the "+ New Folder" disclosure closing after each POST/redirect) also remains accepted fast-follow polish, not part of this seal's own scope. The Camel MM1-MM9 programme record (`governance/specified-unbuilt/camel-multimodal-programme.md`) is a specified-but-unbuilt intent record - this seal does not authorize implementation of any MM stage.
+
+**UI reference update not required** (no new `data-ui-ref` entries were added by VW9A's own residual fixes).
+
 ## 2026-08-05 — CLAUDE-P40-VW9A (Files Cockpit Close-Out and Camel Programme Record)
 
 **Scope:** a bounded close-out of the four cockpit residuals the VW9
