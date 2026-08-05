@@ -1,5 +1,30 @@
 # Continuation checkpoint
 
+## 2026-08-05 — CLAUDE-CGP-02 (Final Cockpit Gate — Product-Owner Acceptance Seal)
+
+**Product owner accepts the final cockpit gate recommendation: GO — cockpit accepted; MM1 may begin.**
+
+**Verified finding preserved:** the procurement-narrow project-creation framing found live during this gate's own browser review — `templates/upload.html`'s H1 ("Ingest an RFP or RFQ") and body copy, and every ingested Source's internal `kind` rendered verbatim to users as "RFQ RFP DOCUMENT" in the Display header and Toolbox — was corrected (honest, generic "Ingest a project document" copy; a new presentation-only `source_kind_label` filter, `Source.kind` itself untouched) and validated both in the real browser and by the full test suite.
+
+**Accepted residuals, recorded exactly as non-blocking — none blocks or is a dependency of MM1:**
+- 412px drawer overlap below the currently supported width; no mobile-support claim is being made; future resolution requires a separate product-owner choice.
+- Footer implementation-detail text.
+- New Folder disclosure closing after POST/redirect.
+
+**Relevant CGP-02 commits:**
+- `e929304` — Part D corrections (procurement-narrow copy, `Source.kind` display label)
+- `c484d1c` — Part E governance record (External Intelligence Airlock / Constructive Boundary Response)
+- `adb819c` — gate continuation checkpoint (final report reference)
+- `502bd42` — post-gate cleanup review checkpoint
+
+**Test result:** full suite 2,600 passed, 0 failed (2,597 baseline + 3 new in `tests/test_formatting.py`).
+
+**Browser evidence:** live-verified directly — sign-in/error state, project creation/ingestion, Lists/Documents/Files, Display Layout (division numbering, split create/remove), Appearance matrix ("All" row, Black/Midnight Blue/Deep Forest), dark-theme contrast, conversation dock (send → AI response → source-grounding disclosure), and the two corrected defects above, each confirmed live before and after the fix.
+
+**Evidence at seal:** `HEAD` and `origin/main` both confirmed at `502bd42` immediately before this seal. Working tree clean except the pre-existing, untouched `tests/fixtures/nreocrc/_lab_instance_scratch_002/`.
+
+**MM1 is not started by this seal.** This entry records acceptance only.
+
 ## 2026-08-05 — CLAUDE-CGP-02 post-gate cleanup review (throwaway account/project audit)
 
 **Verified state at close:** `HEAD` and `origin/main` both at `adb819c`, in sync. Working tree unchanged apart from the preserved, untouched `tests/fixtures/nreocrc/_lab_instance_scratch_002/`. No `python.exe`, `app.py`, or `pytest` processes remained running.
