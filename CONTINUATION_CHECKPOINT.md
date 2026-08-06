@@ -1,5 +1,44 @@
 # Continuation checkpoint
 
+## 2026-08-06 — CLAUDE-MM7 (Product-Owner Acceptance Seal)
+
+**Product owner accepts MM7 and the recommendation: ACCEPT — MM7 delivers a real, tested, live-verified governed-investigation capability with structural anti-hallucination citation guarantees, honest abstention, first-class contradiction handling, and human authority preserved at every promotion point.**
+
+**Commits sealed:** `351bc1c` (implementation: `Claim`/`record_investigation_claim`/`resolve_claim_status`/`accept_claim_as_observation`/`accept_claim_as_finding`/`dispute_claim`/`reject_claim`/`request_claim_specialist_review`/`request_claim_authority`/`supersede_claim`/`explain_investigation_answer`/`build_investigation_evidence_sachet` in `services/case_workspace.py`; new `services/cross_modal_investigation.py`; eleven new `/api/v1` routes in `routes/api.py`; the "Investigate" sub-form and inline claim list in `static/js/drawing_image_viewer.js`/`static/css/main.css`; `tests/test_mm7_governed_investigation.py` and the `tests/test_api_authentication.py` route-auth extension) → `6cfd172` (documentation: `kernel-object-model.md`'s real ground-truth entry, `STATUS.md`'s MM7-scoped `IMPLEMENTED` row, `camel-multimodal-programme.md`'s MM7 section marked implemented) → `5b7e493` (continuation checkpoint).
+
+**Test evidence:** 31 focused tests in `tests/test_mm7_governed_investigation.py` plus 16 new tests and 8 new admin-gated routes in `tests/test_api_authentication.py`'s route-auth matrix. One controlled full-suite run: **2,850 passed, 0 failed** — a real regression against a pre-existing governance-scope guard test (`test_case_adoption.py`'s own closed `adopt_*` method list for the unrelated Selective Adopt/Carry-Forward feature) was caught and fixed by renaming the colliding methods (`adopt_claim_as_*` → `accept_claim_as_*`) rather than weakening that guard, in the same work session, not a separate defect.
+
+**Live-browser verification:** a real throwaway project and account, seeded with genuine three-modality evidence (drawing region, spreadsheet row, PDF paragraph) linked by a contradiction relationship and a since-superseded source, run against the live dev server with a clean `restart-app` cycle before and after, then fully removed afterward.
+
+**Claim-level citation validation:** every `evidence_link` is validated against a real, already-governed object in THIS project before a claim can be written — falsification-tested that a nonexistent id and a real id belonging to another project are both refused, so a fabricated citation is structurally impossible to persist, not merely discouraged.
+
+**Abstention when evidence is insufficient:** proven both by test and live — an investigation run live against a brand-new marker's evidence (no relationships yet) correctly produced an honest `claim_class=unknown` claim ("I cannot establish a defensible answer from the available evidence"), carrying its own defined confidence meaning and a recommended next check, never a fabricated answer.
+
+**Contradiction and stale-evidence behavior:** a real `contradicts` relationship in the live-seeded investigation produced its own `conflicting` claim (`contradiction_state: true`), never hidden behind co-existing support; a relationship whose endpoint Source had been superseded produced a `stale_evidence`-confidence claim (`freshness_state: stale_evidence_present`) — both confirmed via authenticated fetches against the running app, not tests alone.
+
+**"Why should I trust this?" evidence-path behavior:** `explain_investigation_answer` (one assembly serving both the Trustworthy Answer Contract and the "Why should I trust this?" control) was confirmed live to return the full claim list with classification, confidence state and its defined meaning, citations, contradiction links, and adoption state for every claim in the seeded investigation.
+
+**AI proposal versus human adoption states:** every claim starts `proposed` regardless of `claim_class` or author; `record_investigation_claim` structurally refuses pairing an AI author with a `directly_verified`/`deterministic_calculation` classification (falsification-tested). Live-verified: clicking "Accept as observation" in the running UI updated the claim's status badge from `proposed` to `accepted_as_observation` in place, proving the human-adoption gate is real, not decorative.
+
+**Correction-history and downstream-review behavior:** `supersede_claim` was exercised live on a claim already accepted as an observation — the original claim was preserved unmutated, a new corrected claim was created and linked via `Supersession` (its third real consumer), and the original's resolved status correctly showed `superseded`; `downstream_requires_review` correctly named the finding/observation the original claim had already produced, confirmed via authenticated fetch against the running app.
+
+**Project-isolation and cross-project denial evidence:** a live, authenticated POST attempting to start an investigation anchored on another project's own evidence was confirmed refused (400 `invalid_investigation`) against the running app, matching the paired falsification test proving the same denial at the store layer.
+
+**Repository state:** `HEAD` and `origin/main` both confirmed at `5b7e493` immediately before this seal. Working tree clean except the pre-existing, untouched `tests/fixtures/nreocrc/_lab_instance_scratch_002/`.
+
+**Preserved, explicit, non-blocking scope boundaries — none resolved or narrowed at this seal:**
+- No unrestricted external search.
+- No generalized autonomous agents.
+- No automatic legal, contractual, code-compliance, design-approval, risk-acceptance, grading, or disciplinary conclusions — every consequential promotion from evidence to observation, Finding, decision, or action remains an explicit human act.
+- No Navisworks or drone-mission analytics integration.
+- No Monte Carlo engine.
+- No Layer-3 trusted-agency federation.
+- `propose_ai_assisted_claim` exists and is tested for its own honest no-key degrade, but remains not wired into any live route or UI this stage.
+
+**Carried forward, cross-cutting doctrine this stage's implementation is consistent with, not restated verbatim here:** the Probing Vessel doctrine (AI as navigator/scout, human as captain); the Trustworthy Answer Contract (implemented this stage as `explain_investigation_answer`, distinguishing directly-verified/deterministic/interpretive/AI-proposal/conflicting/unknown/decision-requiring-authority claims and surfacing contradiction and staleness honestly); the Governed Evidence Sachet (extended this stage to a whole investigation via `build_investigation_evidence_sachet`, same allow-listed/excluded-summary discipline MM4/MM6 already established); Proof Before Federation; and human authority over every consequential promotion from evidence to observation, Finding, decision, or action — no claim this stage produces, deterministic or AI-authored, can become governed truth without an explicit human `accept_claim_as_observation`/`accept_claim_as_finding` action.
+
+**MM8 is not started by this seal.** This entry records acceptance only.
+
 ## 2026-08-06 — CLAUDE-MM7 (Governed Investigation, Analytical Reasoning, and Trustworthy Answers)
 
 **Seventh real MM1 consumer**, authorized following the accepted MM6 seal (`503f9e9`). Repository-grounded investigation found most of the substrate already in place, scoped narrowly to Requirements: `InvestigationStep` (Prompt 8/CLAUDE-P04) already carried question/evidence_requested/evidence_examined_ids/ran/skipped_reason/analysis_id, fed by `services/requirement_investigation.py`'s own real, policy-gated Anthropic call; `services/project_qa.py` (CLAUDE-P38) already answered project questions via a real model call grounded in Requirement/milestone text, with `grounded_in` as unvalidated free-text strings. Neither reached into the MM1-MM6 evidence/relationship graph or decomposed an answer into individually-classified, individually-citable claims.
