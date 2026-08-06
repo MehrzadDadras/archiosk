@@ -1,5 +1,37 @@
 # Continuation checkpoint
 
+## 2026-08-06 — CLAUDE-MM5 (Product-Owner Acceptance Seal)
+
+**Product owner accepts MM5 and the recommendation: ACCEPT — MM5 delivers a real, tested, end-to-end image, screenshot, and camera-evidence vertical slice, with Eye operating as a governed visual-evidence surface, an explicit temporary-versus-saved lifecycle, reversible orientation, region and marker evidence, stable citations, EXIF-free derivative export, and a rigorous GPS-privacy boundary.**
+
+**Commits sealed:** `8951d48` (implementation: `services/image_intelligence.py` — `register_eye_capture`/`extract_bounded_crop`/`create_marker_and_evidence`; `create_addressable_marker_region` and a backward-compatible `unit_type` parameter on `register_drawing_sheet_structure` in `services/case_workspace.py`; three new admin-gated `/api/v1` routes; `eye_pane.js`'s real Save-to-project/rotate/mirror/reset; `drawing_image_viewer.js`'s marker tool, "Export crop" action, and the live-verified `unit_type="image"` recognition fix; `tests/test_mm5_image_intelligence.py` and two corrected pre-existing EYE1-era test files) → `8c10b45` (documentation: `kernel-object-model.md`, `STATUS.md`'s MM5-scoped `IMPLEMENTED` row, `camel-multimodal-programme.md`'s MM5 section marked implemented, `UI_REFERENCE_MAP.md`) → `db27f87` (continuation checkpoint).
+
+**Test evidence:** focused — 32 new tests (26 in `tests/test_mm5_image_intelligence.py`, 6 new tests + 3 new routes in `tests/test_api_authentication.py`'s route-auth matrix), all passing. Full suite: **2764 passed, 0 failed** (2732 baseline + 26 MM5 + 6 auth). Falsification evidence: a real GPS-bearing JPEG fixture proved its own coordinate values never appear anywhere in the returned metadata dict's own string form (the privacy boundary is enforced by never reading the values, not by redacting them after the fact); original-bytes-unchanged proven by direct checksum comparison after live rotate/mirror/region/marker/crop-export activity; `unit_type` backward compatibility with MM4 proven for every existing call site; cross-project denial proven for markers and derivative crops; stale-anchor-after-revision proven via the pre-existing `register_source_revision` mechanism.
+
+**Reuse of MM4's infrastructure rather than duplication:** Eye's own "Save to project" action hands off to the SAME real, already-tested `drawing_image_viewer.js` MM4 built — full rotate/mirror/region-select/citation/metadata-panel functionality reused as-is, not reimplemented. `register_drawing_sheet_structure`'s new `unit_type` parameter and `create_addressable_marker_region`'s reuse of the generic `create_addressable_region` underneath mean MM5 added no parallel domain objects at all. Comparison with an MM4 drawing needed zero new code — an Eye-saved photo is a `Source(kind="drawing")` like any MM4 drawing image.
+
+**Live-browser/application evidence:** a real screenshot-shaped PNG constructed in-browser via `<canvas>`/`toBlob()` and dropped onto Eye — confirmed "Temporary preview — not saved to the project," rotate producing the required visible status text, then "Save to project" with a description, landing on the real persisted-Source viewer. Region creation, citation rendering, and "Export crop" (a real derivative Source, checksum shown) confirmed live via the running server. A marker note and a region both confirmed persisted via direct evidence-listing API calls (`user_entered_evidence`/`direct_source_evidence`/`marker_note`, correct content). Two-Display comparison: an MM4 drawing and a second Eye-saved photo opened simultaneously — mirroring only the photo's own division left the drawing's division completely unaffected. On-disk byte-for-byte integrity confirmed for every MM5-created file (original photo, second photo, derivative crop) against their own recorded SHA-256 checksums after all of this live activity. A real defect (the sheet-lookup not recognizing `unit_type="image"`, forcing a redundant manual registration click) was found and fixed during this same pass, then re-verified live. Throwaway account and project cleaned up afterward.
+
+**Metadata and GPS privacy handling, recorded as verified, not merely designed:** EXIF fields (camera make/model, software, capture timestamp, orientation) are extracted with reliability and exposure tags; GPS coordinates are DETECTED (`gps_present: true/false`) but their values are never read into memory at all; a derivative crop is EXIF-free by construction, with a `removed_metadata_fields` manifest naming exactly what the original had that the derivative lacks.
+
+**Preserved, explicit, non-blocking scope boundaries — none resolved or narrowed at this seal:**
+- `Finding` and `DerivedObservation` remain distinct pending further evidence — not merged or migrated this stage.
+- No automatic object recognition, defect diagnosis, facial recognition, OCR over arbitrary images, panorama stitching, continuous camera streaming, or external image service.
+- No full photo editor or advanced annotation suite — one bounded point-marker type only.
+- MM6 is not started by this seal.
+
+**Preserved future cross-cutting requirements — identified but not built or scheduled by this seal, and not expanding MM5's own scope:**
+- The Probing Vessel and Trustworthy Answer Contract.
+- The Governed Evidence Sachet (already implemented at the MM4 layer and reused unchanged by MM5's own regions/markers; its own further evolution beyond the current allow-listed-packet shape remains future work).
+- A future Drone Mission / Micro-Drone Bee-Scout Colony / site-reality-to-IFC evidence stream.
+- A future Learning Vessel branch, to remain strictly separated from the current construction product.
+
+**Also carried forward unchanged:** OCR, PDF-to-image rendering, automatic overlay registration, synchronized comparison controls, native CAD/BIM parsing, and every other later-modality engine already deferred by MM1-MM4.
+
+**Evidence at seal:** `HEAD` and `origin/main` both confirmed at `db27f87` immediately before this seal. Working tree clean except the pre-existing, untouched `tests/fixtures/nreocrc/_lab_instance_scratch_002/`.
+
+**MM6 is not started by this seal.** This entry records acceptance only.
+
 ## 2026-08-06 — CLAUDE-MM5 (Image, Screenshot, and Camera Evidence)
 
 **Fifth real MM1 consumer**, authorized following the accepted MM4 seal (`09472ed`). Repository-grounded investigation first found Eye (`templates/base.html`, `static/js/eye_pane.js`) already had a genuinely real paste/drop/preview/zoom/fit surface from CLAUDE-P40-EYE1, explicitly documented as "not saved anywhere... editing, annotation, and evidence capture are not part of this stage" - this stage's own governing prompt is exactly the authorized "next stage" that note anticipated. `static/js/drawing_image_viewer.js` (MM4) already had full rotate/mirror/region-select/citation logic for a PERSISTED Source - the smallest real MM5 slice was making Eye's own SAVE action a bridge into that already-built machinery, not reimplementing it.
