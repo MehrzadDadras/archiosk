@@ -1,5 +1,33 @@
 # Continuation checkpoint
 
+## 2026-08-05 — CLAUDE-MM3 (Product-Owner Acceptance Seal)
+
+**Product owner accepts MM3 and the recommendation: ACCEPT — ARCHIOSK can open, inspect, bounded-edit, and re-export real XLSX/CSV files through the MM1 evidence contract, with live round-trip verification and all 2,687 tests passing.**
+
+**Commits sealed:** `35fd70a` (implementation: `SPREADSHEET_CLASSIFICATION_*` constants, `register_spreadsheet_structure`, `create_addressable_cell_region` in `services/case_workspace.py`; new `services/spreadsheet_intelligence.py` — `inspect_workbook`, `_inspect_csv`, `register_spreadsheet_evidence_for_source`, `apply_bounded_cell_edit`, `safe_csv_cell`; two new admin-gated `/api/v1` routes in `routes/api.py`; `.xlsx` added to `routes/workspace.py`'s `ALLOWED_DOCUMENT_EXTENSIONS` as add-only; `templates/base.html`'s Add-Documents `accept` attribute fixed; `tests/test_mm3_spreadsheet_intelligence.py`, `tests/test_api_authentication.py` extended) → `a9dc614` (documentation: `kernel-object-model.md`, `STATUS.md`'s MM3-scoped `IMPLEMENTED` row, `camel-multimodal-programme.md`'s MM3 section marked implemented) → `cf969b8` (continuation checkpoint).
+
+**Test evidence:** focused — 37 new tests (33 in `tests/test_mm3_spreadsheet_intelligence.py` using real openpyxl-built workbook fixtures throughout, no mocking of the parser itself; 4 new tests + 2 new routes in `tests/test_api_authentication.py`), all passing. Full suite: **2,687 passed, 0 failed** (2,650 baseline + 33 + 4 new), 6 pre-existing unrelated rate-limiter warnings, 31 subtests passed, 1552.29s. Falsification evidence: a `.xlsx`-renamed encrypted/OLE2 file was proven refused despite its extension (content-based detection, not extension trust); a formula-cell edit attempt was proven refused with a clear error rather than silently succeeding or corrupting the cell; a stale `expected_file_hash` was proven to reject the edit rather than silently overwrite; the `cell.coordinate`-vs-`cell.column_letter` key-contract bug was caught by a genuine test failure (`KeyError: 'E'`), not by inspection alone.
+
+**Live upload-edit-export-reopen evidence:** a real risk-register `.xlsx` workbook (formulas, a hidden sheet) uploaded through the actual "+ Add Documents" browser flow, registered via the new API into real `StructuralUnit`/`AddressableRegion`/`EvidenceItem` records, one non-formula cell edited via the new API (pre-edit backup file written, file-level hash updated), then re-downloaded through the pre-existing generic `source_file` route and reopened with openpyxl — the edit persisted, every formula and untouched cell was byte-for-byte unaffected, the hidden sheet remained hidden. A real product defect was found and fixed during this same live-browser pass: `templates/base.html`'s Add-Documents file input had a stale `accept` attribute missing `.xlsx`, silently filtering the file out of the browser's own FileList before submission even though the server-side check was already correct; root-caused via workspace-store inspection → template grep → curl route verification (CSRF token correctly extracted from the page's `<meta name="csrf-token">` tag) → fix → re-verified live. Throwaway account and project cleaned up afterward.
+
+**Preserved scope boundaries — explicit, non-blocking, none resolved or narrowed at this seal:**
+- No Excel formula-recalculation engine — formula cells remain read-only; openpyxl's cached last-known value is reported honestly (including as `None` when the workbook was never opened by real Excel), never computed.
+- No Monte Carlo engine — not attempted, per this stage's own explicit scope exclusion.
+- No forced, permanent risk-register schema — a risk-register row remains representable through the general worksheet/row/cell model; no risk-specific dataclass or field set was created.
+- No full Excel parity — no grid/editor UI, no multi-cell/range edits, no Power Query, no pivot tables/charts, no legacy `.xls` support, no cross-workbook comparison.
+- MM4 is not started by this seal.
+
+**Preserved future cross-cutting requirements — identified but not built or scheduled by this seal:**
+- A document-contextual top toolbar spanning PDF, spreadsheet, image, and drawing surfaces — currently each surface's controls remain separate; unifying them is future UI work, not started.
+- The Governed Evidence Sachet / "tea-bag" principle — evidence packaging/provenance concept noted for a future stage, not implemented.
+- Reversible horizontal/vertical mirroring and rotation for drawings, images, screenshots, and page renderings, with transformed-coordinate mapping back to an unchanged source — noted as future geometry-transform work; no mirroring/rotation code exists yet in any MM1–MM3 surface.
+
+**Also carried forward unchanged from MM1/MM2:** the `Finding`-versus-`DerivedObservation` convergence question remains open; `pdf_intelligence.py`'s broad `except Exception` fallback remains a future exception-narrowing item; OCR, PDF-to-image rendering, handwriting recognition, advanced table extraction, annotation, redaction, digital-signature validation, form filling, embedded-file extraction, a new region-selection UI, and full redline/version comparison all remain deferred.
+
+**Evidence at seal:** `HEAD` and `origin/main` both confirmed at `cf969b8` immediately before this seal. Working tree clean except the pre-existing, untouched `tests/fixtures/nreocrc/_lab_instance_scratch_002/`. App server verified to start cleanly (`/login` → HTTP 200) and shut down cleanly (no residual `python.exe` processes) on this exact commit prior to sealing.
+
+**MM4 is not started by this seal.** This entry records acceptance only.
+
 ## 2026-08-05 — CLAUDE-MM3 (Spreadsheet and Structured-Data Intelligence)
 
 **Third real MM1 consumer**, authorized following the accepted MM2 seal (`8d577b1`). Repository-grounded investigation first found NO spreadsheet library installed at all (no openpyxl/xlrd/pandas) - the first genuine new-dependency decision in the whole Camel programme. Checked `openpyxl` against `tools/dependency_fit.py` (clean PASS on every constraint) before adding; judged directly analogous to the already-accepted `pypdf`/`python-docx` and required for MM3 to exist at all, not a "major dependency" hard-stop. Legacy `.xls` deliberately not added (would need a second, separate dependency).
