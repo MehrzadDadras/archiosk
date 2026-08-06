@@ -1,5 +1,27 @@
 # Continuation checkpoint
 
+## 2026-08-05 — CLAUDE-MM3 (Spreadsheet and Structured-Data Intelligence)
+
+**Third real MM1 consumer**, authorized following the accepted MM2 seal (`8d577b1`). Repository-grounded investigation first found NO spreadsheet library installed at all (no openpyxl/xlrd/pandas) - the first genuine new-dependency decision in the whole Camel programme. Checked `openpyxl` against `tools/dependency_fit.py` (clean PASS on every constraint) before adding; judged directly analogous to the already-accepted `pypdf`/`python-docx` and required for MM3 to exist at all, not a "major dependency" hard-stop. Legacy `.xls` deliberately not added (would need a second, separate dependency).
+
+**Implementation:** `.xlsx` is an add-to-existing-project Source format only (`routes/workspace.py`'s `ALLOWED_DOCUMENT_EXTENSIONS`), deliberately not a project-creation format - avoids forcing a spreadsheet through `BHiveParser`'s fragile requirement-classification pipeline. `services/case_workspace.py`'s `register_spreadsheet_structure` reuses MM1/MM2's own primitives with zero new domain objects (worksheet = `StructuralUnit`, row = `AddressableRegion` carrying real structured cell data); citation rendering needed zero new code. New `services/spreadsheet_intelligence.py`: two-pass openpyxl read distinguishing formula/cached-value/entered-value, content-based macro detection, OLE2 encrypted-file detection, decompression-bomb/row-count bounds, and `apply_bounded_cell_edit` (refuses formula cells, checks a file-level concurrency hash, backs up the pre-edit original, preserves data type on write). "Export a revised workbook" needed zero new code - the pre-existing generic Source-download route already serves the post-edit bytes.
+
+**Real defect found and fixed during live-browser verification:** `templates/base.html`'s Add-Documents file input had a stale hardcoded `accept` attribute silently filtering `.xlsx` out of the browser's own FileList before submission, even though the server-side check was already correct - fixed to match.
+
+**Tests:** 81 total (33 in `tests/test_mm3_spreadsheet_intelligence.py`, using real openpyxl-built workbooks throughout rather than mocking - openpyxl is now a first-class dependency; plus 4 new tests + 2 new routes in `tests/test_api_authentication.py`). Full suite: **2,687 passed, 0 failed** (2,650 baseline + 33 + 4 new).
+
+**Live-verified against the running app:** a real risk-register workbook (formulas, hidden sheet) uploaded via the actual Add Documents flow, registered via the new API with real data, one cell edited via the API, then re-downloaded through the existing generic download route and reopened - the edit persisted, every formula and untouched cell was byte-for-byte unaffected, hidden sheet still hidden. Throwaway account and project cleaned up afterward.
+
+**Finding/DerivedObservation usage evidence:** real spreadsheet-sourced evidence continues to show the same MM1/MM2 pattern - not merged, convergence question remains open.
+
+**Documentation** (commit `a9dc614`): `governance/current/kernel-object-model.md` gained the real ground-truth entry; `governance/STATUS.md`'s authorization table gained an MM3-scoped `IMPLEMENTED` row (MM4-MM9 remain their own separate, still-`NOT AUTHORIZED` authorizations); `camel-multimodal-programme.md`'s own MM3 section marked implemented with a pointer.
+
+**Deferred, per this stage's own explicit scope:** Monte Carlo simulation, a spreadsheet grid/editor UI, full Excel recalculation, VBA/macro execution, Power Query, pivot-table/chart editing, arbitrary formula authoring, legacy `.xls` support, full workbook-wide semantic comparison. No permanent risk-record schema was created - a risk-register row is already representable via the general row-region mechanism.
+
+**Recommendation:** see the final report delivered in conversation for full detail. No product-owner acceptance seal is recorded in this entry, per this stage's own explicit governing instruction. MM4 is not started by this stage.
+
+**Evidence:** `HEAD`/`origin/main` both confirmed in sync after push (see final report for the exact hash). Working tree clean except the pre-existing, untouched `tests/fixtures/nreocrc/_lab_instance_scratch_002/`.
+
 ## 2026-08-05 — CLAUDE-MM2 (Product-Owner Acceptance Seal)
 
 **Product owner accepts MM2 and the recommendation: ACCEPT — the PDF/document-intelligence slice is real, tested, additive, live-verified against uploaded content, and reuses the MM1 evidence infrastructure without duplicating it.**
