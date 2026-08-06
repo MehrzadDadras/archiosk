@@ -31,14 +31,15 @@ invariants.md`, not as pre-authorized.
 
 **Authorization status:** every stage below is **NOT AUTHORIZED** for
 implementation — this document records intent and sequencing, it is not
-a build order — **except MM1 and MM2, now IMPLEMENTED** (`CLAUDE-MM1`,
+a build order — **except MM1, MM2, and MM3, now IMPLEMENTED** (`CLAUDE-MM1`,
 2026-08-05, authorized following the accepted cockpit gate
 `CLAUDE-CGP-02`; `CLAUDE-MM2`, 2026-08-05, authorized following the
-accepted MM1 seal; see `STATUS.md`'s own authorization table and
+accepted MM1 seal; `CLAUDE-MM3`, 2026-08-05, authorized following the
+accepted MM2 seal; see `STATUS.md`'s own authorization table and
 `current/kernel-object-model.md` for the real, tested, ground-truth
-detail — this document's own MM1/MM2 sections below are retained as the
-original stage descriptions, not updated to duplicate that record). MM3–
-MM9 remain exactly as originally recorded: this programme's "specified
+detail — this document's own MM1/MM2/MM3 sections below are retained as
+the original stage descriptions, not updated to duplicate that record).
+MM4–MM9 remain exactly as originally recorded: this programme's "specified
 but unbuilt" pointer in `STATUS.md` continues to cover them as a single
 pointer, not stage-by-stage rows, until each is individually taken up.
 
@@ -101,6 +102,18 @@ stage would extend, not replace.
 **Depends on MM1.**
 
 ## MM3 — Spreadsheet and structured-data intelligence
+
+**IMPLEMENTED, bounded** — see `current/kernel-object-model.md`'s
+"Worksheet/row structure and bounded editing" entry for what actually
+exists in code today: worksheet/row `StructuralUnit`/`AddressableRegion`/
+`EvidenceItem`s, workbook classification (including content-based macro
+detection and decompression-bomb bounds), formula preservation with an
+honest cached-value distinction, and one bounded single-cell edit with a
+real, live-verified export/reopen round trip. Monte Carlo, a spreadsheet
+grid UI, full Excel recalculation, and a permanent risk-record schema
+were deliberately not built - see that entry's own deferral list. The
+description below is preserved as the original stage intent this
+implementation was built from, not rewritten to narrate what was built.
 
 Open, inspect, create, and edit spreadsheets and structured tables;
 sheets, tables, cells, formulas, named ranges, charts, types,
