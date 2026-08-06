@@ -189,8 +189,18 @@ ANALYSIS_TRIGGER_TYPES = (
 # ReviewerValidation) are not listed here: naming a kind before anything
 # produces it would be recording a capability that doesn't exist.
 INVESTIGATION_STEP_KIND_REQUIREMENT_INVESTIGATION = "requirement_investigation"
+# CLAUDE-MM7: the second real kind this vocabulary has ever needed - a
+# governed investigation across the MM1-MM6 evidence/relationship graph
+# (EvidenceItem/AddressableRegion/DerivedObservation/Relationship),
+# distinct from INVESTIGATION_STEP_KIND_REQUIREMENT_INVESTIGATION's own
+# Requirement-only scope. Reuses InvestigationStep unchanged (same
+# question/evidence_requested/evidence_examined_ids/ran/skipped_reason/
+# analysis_id shape already proven by MM7's own Requirement-investigation
+# precedent) - only a new `step_kind` value, no new container.
+INVESTIGATION_STEP_KIND_CROSS_MODAL_INVESTIGATION = "cross_modal_investigation"
 KNOWN_INVESTIGATION_STEP_KINDS = (
     INVESTIGATION_STEP_KIND_REQUIREMENT_INVESTIGATION,
+    INVESTIGATION_STEP_KIND_CROSS_MODAL_INVESTIGATION,
 )
 
 
@@ -284,6 +294,12 @@ OBJECT_KIND_DERIVED_OBSERVATION = "derived_observation"
 # RiskRecord; an RFI is generated FROM Requirements (services/
 # rfi_export.py), not itself a first-class linkable object today.
 OBJECT_KIND_TASK = "task"
+# CLAUDE-MM7: an inspectable analytical Claim (see class Claim below) is
+# itself a governed, citable, correctable object - Supersession's third
+# real consumer (after Source and Relationship), so a corrected Claim's
+# own predecessor/successor pair can be recorded the same way a
+# corrected Relationship already is (see supersede_claim).
+OBJECT_KIND_CLAIM = "claim"
 
 KNOWN_OBJECT_KINDS = (
     OBJECT_KIND_SOURCE,
@@ -316,6 +332,8 @@ KNOWN_OBJECT_KINDS = (
     OBJECT_KIND_ADDRESSABLE_REGION,
     OBJECT_KIND_EVIDENCE_ITEM,
     OBJECT_KIND_DERIVED_OBSERVATION,
+    OBJECT_KIND_TASK,
+    OBJECT_KIND_CLAIM,
 )
 
 # -- Typed relationship vocabulary (Prompt 8 #1) -----------------------------
@@ -421,6 +439,158 @@ RELATIONSHIP_STATUS_REJECTED = "rejected"
 RELATIONSHIP_STATUS_STALE = "stale"
 RELATIONSHIP_STATUS_BROKEN = "broken"
 RELATIONSHIP_STATUS_SUPERSEDED = "superseded"
+
+# -- CLAUDE-MM7: Governed Investigation, Analytical Reasoning, and ----------
+# Trustworthy Answers. Every vocabulary below backs `Claim` (defined near
+# Finding/InvestigationStep) - the new, genuinely small adapter Section 7
+# asks for: "do not duplicate EvidenceItem/DerivedObservation/Finding
+# truth unnecessarily... prefer adapters." A Claim never stores evidence
+# CONTENT of its own - only validated references to real, already-
+# governed EvidenceItem/AddressableRegion/DerivedObservation/Finding/
+# Source/Task ids (the exact same `_MM6_ENDPOINT_LISTS` MM6 already
+# validates against, reused unchanged - see record_investigation_claim).
+
+# Section 4's seven required distinctions - a closed vocabulary (unlike
+# KNOWN_RELATIONSHIP_TYPES's deliberately open one): these seven categories
+# are the whole point of the Trustworthy Answer Contract, so silently
+# accepting an eighth, uncontrolled spelling here would undermine the
+# contract itself, not extend it.
+CLAIM_CLASS_DIRECTLY_VERIFIED = "directly_verified"
+CLAIM_CLASS_DETERMINISTIC_CALCULATION = "deterministic_calculation"
+CLAIM_CLASS_SUPPORTED_INTERPRETATION = "supported_interpretation"
+CLAIM_CLASS_AI_PROPOSAL = "ai_proposal"
+CLAIM_CLASS_CONFLICTING = "conflicting"
+CLAIM_CLASS_UNKNOWN = "unknown"
+CLAIM_CLASS_DECISION_REQUIRING_AUTHORITY = "decision_requiring_authority"
+KNOWN_CLAIM_CLASSES = (
+    CLAIM_CLASS_DIRECTLY_VERIFIED,
+    CLAIM_CLASS_DETERMINISTIC_CALCULATION,
+    CLAIM_CLASS_SUPPORTED_INTERPRETATION,
+    CLAIM_CLASS_AI_PROPOSAL,
+    CLAIM_CLASS_CONFLICTING,
+    CLAIM_CLASS_UNKNOWN,
+    CLAIM_CLASS_DECISION_REQUIRING_AUTHORITY,
+)
+
+# Section 5's own explicit instruction: "Do not use vague confidence
+# percentages without a defined and testable meaning" - a closed,
+# categorical vocabulary instead of Finding.machine_confidence's own
+# free float (that field is untouched; a Claim carries ITS OWN
+# confidence_state, deliberately not reusing or repurposing the older
+# float - the two answer different questions for different objects).
+CONFIDENCE_STATE_STRONG_DIRECT_SUPPORT = "strong_direct_support"
+CONFIDENCE_STATE_PARTIAL_SUPPORT = "partial_support"
+CONFIDENCE_STATE_CONFLICTING_SUPPORT = "conflicting_support"
+CONFIDENCE_STATE_INDIRECT_SUPPORT = "indirect_support"
+CONFIDENCE_STATE_INSUFFICIENT_EVIDENCE = "insufficient_evidence"
+CONFIDENCE_STATE_STALE_EVIDENCE = "stale_evidence"
+CONFIDENCE_STATE_SPECIALIST_CONFIRMATION_REQUIRED = "specialist_confirmation_required"
+KNOWN_CONFIDENCE_STATES = (
+    CONFIDENCE_STATE_STRONG_DIRECT_SUPPORT,
+    CONFIDENCE_STATE_PARTIAL_SUPPORT,
+    CONFIDENCE_STATE_CONFLICTING_SUPPORT,
+    CONFIDENCE_STATE_INDIRECT_SUPPORT,
+    CONFIDENCE_STATE_INSUFFICIENT_EVIDENCE,
+    CONFIDENCE_STATE_STALE_EVIDENCE,
+    CONFIDENCE_STATE_SPECIALIST_CONFIRMATION_REQUIRED,
+)
+
+# Section 5's own explicit requirement: each confidence_state must carry a
+# DEFINED, TESTABLE meaning, not just a label - explain_investigation_answer
+# includes this verbatim in every assembled answer so a first-time user
+# never has to guess what "partial_support" is supposed to mean.
+CONFIDENCE_STATE_MEANINGS = {
+    CONFIDENCE_STATE_STRONG_DIRECT_SUPPORT: (
+        "At least one directly-verified, current piece of evidence supports this claim, "
+        "and no contradicting evidence was found."
+    ),
+    CONFIDENCE_STATE_PARTIAL_SUPPORT: (
+        "Some supporting evidence exists, but it is indirect, incomplete, or covers only "
+        "part of the claim."
+    ),
+    CONFIDENCE_STATE_CONFLICTING_SUPPORT: (
+        "Both supporting and contradicting evidence exist for this claim - see the "
+        "contradiction list, do not treat this as resolved."
+    ),
+    CONFIDENCE_STATE_INDIRECT_SUPPORT: (
+        "Evidence exists but does not directly address this claim - it supports a related "
+        "fact this claim was inferred from."
+    ),
+    CONFIDENCE_STATE_INSUFFICIENT_EVIDENCE: (
+        "The evidence gathered for this investigation cannot establish this claim - "
+        "see recommended_next_check for what would be needed."
+    ),
+    CONFIDENCE_STATE_STALE_EVIDENCE: (
+        "The cited evidence's own Source has since been superseded by a later revision - "
+        "the citation still resolves, but may no longer reflect current conditions."
+    ),
+    CONFIDENCE_STATE_SPECIALIST_CONFIRMATION_REQUIRED: (
+        "This claim touches a judgment this system cannot make on its own - a qualified "
+        "specialist must confirm it before it is relied on."
+    ),
+}
+
+# Section 13's controlled analytical-method vocabulary - open-world (same
+# pattern as KNOWN_RELATIONSHIP_TYPES/KNOWN_INVESTIGATION_STEP_KINDS),
+# since "such as" in the governing prompt signals an extensible list, not
+# a final closed set. ai_assisted_synthesis is the one method whose
+# result is NEVER deterministic - Section 13's own "do not claim
+# deterministic computation when the result was AI-generated" is enforced
+# by record_investigation_claim (see its own docstring), not merely
+# documented here.
+ANALYTICAL_METHOD_DIRECT_RETRIEVAL = "direct_retrieval"
+ANALYTICAL_METHOD_DETERMINISTIC_COMPARISON = "deterministic_comparison"
+ANALYTICAL_METHOD_ARITHMETIC_CALCULATION = "arithmetic_calculation"
+ANALYTICAL_METHOD_FORMULA_EVALUATION = "formula_evaluation"
+ANALYTICAL_METHOD_CROSS_SOURCE_COMPARISON = "cross_source_comparison"
+ANALYTICAL_METHOD_VERSION_COMPARISON = "version_comparison"
+ANALYTICAL_METHOD_REQUIREMENT_TO_EVIDENCE_TRACE = "requirement_to_evidence_trace"
+ANALYTICAL_METHOD_VISUAL_OBSERVATION = "visual_observation"
+ANALYTICAL_METHOD_STRUCTURED_INTERPRETATION = "structured_interpretation"
+ANALYTICAL_METHOD_AI_ASSISTED_SYNTHESIS = "ai_assisted_synthesis"
+ANALYTICAL_METHOD_HUMAN_ADJUDICATION = "human_adjudication"
+KNOWN_ANALYTICAL_METHODS = (
+    ANALYTICAL_METHOD_DIRECT_RETRIEVAL,
+    ANALYTICAL_METHOD_DETERMINISTIC_COMPARISON,
+    ANALYTICAL_METHOD_ARITHMETIC_CALCULATION,
+    ANALYTICAL_METHOD_FORMULA_EVALUATION,
+    ANALYTICAL_METHOD_CROSS_SOURCE_COMPARISON,
+    ANALYTICAL_METHOD_VERSION_COMPARISON,
+    ANALYTICAL_METHOD_REQUIREMENT_TO_EVIDENCE_TRACE,
+    ANALYTICAL_METHOD_VISUAL_OBSERVATION,
+    ANALYTICAL_METHOD_STRUCTURED_INTERPRETATION,
+    ANALYTICAL_METHOD_AI_ASSISTED_SYNTHESIS,
+    ANALYTICAL_METHOD_HUMAN_ADJUDICATION,
+)
+
+# Section 15's own required states (nine total): eight are STORED (set by
+# an explicit human or system action - record_investigation_claim/
+# accept_claim_as_observation/accept_claim_as_finding/dispute_claim/
+# reject_claim/request_claim_specialist_review/request_claim_authority);
+# "superseded" (the ninth) is deliberately NOT stored here - exactly like
+# RELATIONSHIP_STATUS_SUPERSEDED, it is derived at read time in
+# resolve_claim_status from a real Supersession record, never a value
+# this field is ever directly set to.
+CLAIM_ADOPTION_PROPOSED = "proposed"
+CLAIM_ADOPTION_UNDER_REVIEW = "under_review"
+CLAIM_ADOPTION_ACCEPTED_AS_OBSERVATION = "accepted_as_observation"
+CLAIM_ADOPTION_ACCEPTED_AS_FINDING = "accepted_as_finding"
+CLAIM_ADOPTION_REJECTED = "rejected"
+CLAIM_ADOPTION_DISPUTED = "disputed"
+CLAIM_ADOPTION_REQUIRES_SPECIALIST = "requires_specialist"
+CLAIM_ADOPTION_REQUIRES_AUTHORITY = "requires_product_owner_or_contractual_authority"
+# Derived-only, never stored - see resolve_claim_status.
+CLAIM_ADOPTION_SUPERSEDED = "superseded"
+KNOWN_CLAIM_ADOPTION_STATES = (
+    CLAIM_ADOPTION_PROPOSED,
+    CLAIM_ADOPTION_UNDER_REVIEW,
+    CLAIM_ADOPTION_ACCEPTED_AS_OBSERVATION,
+    CLAIM_ADOPTION_ACCEPTED_AS_FINDING,
+    CLAIM_ADOPTION_REJECTED,
+    CLAIM_ADOPTION_DISPUTED,
+    CLAIM_ADOPTION_REQUIRES_SPECIALIST,
+    CLAIM_ADOPTION_REQUIRES_AUTHORITY,
+)
 
 # -- Temporal Obligation vocabulary (Prompt 8 #5/#9/#10) ---------------------
 # Lifecycle STATE (stored, changed only by governed action) - kept separate
@@ -1474,6 +1644,76 @@ class InvestigationStep:
     needs_human_judgment: bool = True
     analysis_id: Optional[str] = None
     branched_from_step_id: Optional[str] = None
+
+
+@dataclass
+class Claim:
+    """
+    CLAUDE-MM7: one inspectable, individually-classified, individually-
+    cited unit of a governed investigation's answer - Section 7's own
+    "represent an answer as inspectable claims rather than one
+    undifferentiated paragraph." Attaches to an InvestigationStep
+    (`investigation_step_id`) exactly the way an Artifact attaches to an
+    AnalysisRun - the step is the container/audit-trail (question, what
+    evidence categories were gathered, when), a Claim is one of
+    potentially several individually-adoptable statements that step
+    produced.
+
+    `evidence_links` is a list of `{"object_type", "object_id"}` dicts -
+    ALWAYS a reference to an already-governed, already-persisted record
+    (validated by record_investigation_claim against the same
+    `_MM6_ENDPOINT_LISTS` MM6 already uses), NEVER free text. This is
+    the concrete, structural answer to Section 9's "no citation
+    laundering": there is no code path by which a Claim can cite a
+    source name, page, cell, or region that does not actually exist as
+    a real object in THIS project - a hallucinated citation is not
+    merely discouraged, it is impossible to persist.
+
+    `contradiction_relationship_ids` references real, already-recorded
+    MM6 Relationships (relationship_type CONTRADICTS by convention, but
+    validated only for existence/project membership, not type, the same
+    tolerant discipline the rest of this module already applies) - a
+    Claim never re-describes a contradiction in its own words when a
+    governed Relationship already says so.
+
+    `confidence_state` (KNOWN_CONFIDENCE_STATES) is the ONLY confidence
+    signal a Claim carries - deliberately no float alongside it (Section
+    5: "do not use vague confidence percentages without a defined and
+    testable meaning").
+
+    `adoption_state` starts at CLAIM_ADOPTION_PROPOSED unconditionally,
+    regardless of `claim_class` or `author_type` - even a
+    directly_verified claim is a PROPOSAL until a human adopts it
+    (Section 15: "AI-generated answers and relationships must remain
+    proposals until appropriately reviewed" - this module reads that as
+    "not yet human-adopted", not "not yet AI-generated", so the same
+    discipline applies uniformly to every claim_class, not only ai_
+    proposal). `derived_observation_id`/`finding_id` are set only once
+    accept_claim_as_observation/accept_claim_as_finding actually creates
+    the corresponding governed record - never guessed or pre-allocated.
+    """
+
+    id: str
+    project_id: str
+    investigation_step_id: str
+    statement: str
+    claim_class: str  # KNOWN_CLAIM_CLASSES (closed)
+    method: str  # KNOWN_ANALYTICAL_METHODS (open-world)
+    confidence_state: str  # KNOWN_CONFIDENCE_STATES (closed)
+    author_type: str  # KNOWN_OBSERVATION_AUTHOR_TYPES (closed) - human/deterministic_process/ai
+    created_by: str
+    created_at: str
+    evidence_links: list = field(default_factory=list)  # [{"object_type","object_id"}]
+    evidence_excluded: list = field(default_factory=list)  # [{"object_type","object_id","reason"}]
+    contradiction_relationship_ids: list = field(default_factory=list)
+    assumptions: list = field(default_factory=list)
+    recommended_next_check: Optional[str] = None
+    adoption_state: str = CLAIM_ADOPTION_PROPOSED
+    adopted_by: Optional[str] = None
+    adopted_at: Optional[str] = None
+    adoption_reason: Optional[str] = None
+    derived_observation_id: Optional[str] = None
+    finding_id: Optional[str] = None
 
 
 @dataclass
@@ -3308,6 +3548,13 @@ class ProjectWorkspace:
     operating_environment: Optional[str] = None
     operating_environment_set_by: Optional[str] = None
     operating_environment_set_at: Optional[str] = None
+
+    # CLAUDE-MM7: Governed Investigation, Analytical Reasoning, and
+    # Trustworthy Answers - purely additive, same backward-compatible
+    # pattern as every list field above (a legacy record predating this
+    # stage simply lacks this key and loads with the empty-list
+    # default). See Claim above.
+    claims: list[dict] = field(default_factory=list)
 
 
 def _snapshot_reference_lists(workspace: ProjectWorkspace) -> dict:
@@ -6551,6 +6798,426 @@ class CaseWorkspaceStore:
     def investigation_step_for_analysis(self, workspace: ProjectWorkspace, analysis_id: str) -> Optional[dict]:
         return next((s for s in workspace.investigation_steps if s.get("analysis_id") == analysis_id), None)
 
+    # -- CLAUDE-MM7: Governed Investigation, Analytical Reasoning, and ---------
+    # Trustworthy Answers - Claim is the one genuinely new adapter object
+    # (Section 7); everything else below reuses MM1-MM6 primitives (evidence
+    # contract, Relationship, Supersession, Finding/DerivedObservation).
+
+    def record_investigation_claim(
+        self,
+        workspace: ProjectWorkspace,
+        investigation_step_id: str,
+        statement: str,
+        claim_class: str,
+        method: str,
+        confidence_state: str,
+        author_type: str,
+        created_by: str,
+        evidence_links: Optional[list[dict]] = None,
+        evidence_excluded: Optional[list[dict]] = None,
+        contradiction_relationship_ids: Optional[list[str]] = None,
+        assumptions: Optional[list[str]] = None,
+        recommended_next_check: Optional[str] = None,
+        governance_log: Optional[GovernanceLog] = None,
+    ) -> dict:
+        """
+        Section 9 ("no citation laundering"), enforced structurally, not
+        merely documented: every entry in `evidence_links` must name a
+        REAL, already-governed object in THIS project (validated against
+        the same `_MM6_ENDPOINT_LISTS` MM6 already uses) - there is no
+        code path here that accepts a citation as free text. A claim
+        asserting something (any claim_class other than CLAIM_CLASS_
+        UNKNOWN, the honest-abstention class) must cite at least one
+        piece of real evidence; abstention is the one class permitted to
+        have none.
+
+        Section 13's own "do not claim deterministic computation when
+        the result was AI-generated" is enforced here, not left to
+        caller discipline: `author_type=OBSERVATION_AUTHOR_AI` may never
+        be paired with `claim_class` DIRECTLY_VERIFIED or DETERMINISTIC_
+        CALCULATION.
+        """
+        step = self._find(workspace.investigation_steps, investigation_step_id)
+        if step is None or step["project_id"] != workspace.project_id:
+            raise CaseWorkspaceError(f"Investigation step {investigation_step_id} was not found.")
+
+        if claim_class not in KNOWN_CLAIM_CLASSES:
+            raise CaseWorkspaceError(
+                f"'{claim_class}' is not a recognized claim class. Use one of: {', '.join(KNOWN_CLAIM_CLASSES)}."
+            )
+        if confidence_state not in KNOWN_CONFIDENCE_STATES:
+            raise CaseWorkspaceError(
+                f"'{confidence_state}' is not a recognized confidence state. "
+                f"Use one of: {', '.join(KNOWN_CONFIDENCE_STATES)}."
+            )
+        if author_type not in KNOWN_OBSERVATION_AUTHOR_TYPES:
+            raise CaseWorkspaceError(
+                f"'{author_type}' is not a recognized author type. Use one of: {', '.join(KNOWN_OBSERVATION_AUTHOR_TYPES)}."
+            )
+        if author_type == OBSERVATION_AUTHOR_AI and claim_class in (
+            CLAIM_CLASS_DIRECTLY_VERIFIED, CLAIM_CLASS_DETERMINISTIC_CALCULATION,
+        ):
+            raise CaseWorkspaceError(
+                "An AI-authored claim cannot be classified as directly_verified or "
+                "deterministic_calculation - that would claim deterministic computation "
+                "for a result that was AI-generated. Use 'ai_proposal' or 'supported_interpretation'."
+            )
+
+        evidence_links = evidence_links or []
+        for link in evidence_links:
+            if self._resolve_mm6_endpoint(workspace, link.get("object_type"), link.get("object_id")) is None:
+                raise CaseWorkspaceError(
+                    f"Claim evidence link ({link.get('object_type')} {link.get('object_id')}) "
+                    "was not found in this project - a claim can only cite real, already-governed evidence."
+                )
+        if not evidence_links and claim_class != CLAIM_CLASS_UNKNOWN:
+            raise CaseWorkspaceError(
+                "A claim must cite at least one piece of evidence unless its claim_class "
+                "is 'unknown' (an honest abstention)."
+            )
+
+        contradiction_relationship_ids = contradiction_relationship_ids or []
+        for rel_id in contradiction_relationship_ids:
+            rel = self._find(workspace.relationships, rel_id)
+            if rel is None or rel["project_id"] != workspace.project_id:
+                raise CaseWorkspaceError(f"Contradiction relationship {rel_id} was not found in this project.")
+
+        method = normalize_open_world_value(method, KNOWN_ANALYTICAL_METHODS)
+
+        claim = Claim(
+            id=_new_id(),
+            project_id=workspace.project_id,
+            investigation_step_id=investigation_step_id,
+            statement=statement,
+            claim_class=claim_class,
+            method=method,
+            confidence_state=confidence_state,
+            author_type=author_type,
+            created_by=created_by,
+            created_at=_now(),
+            evidence_links=evidence_links,
+            evidence_excluded=evidence_excluded or [],
+            contradiction_relationship_ids=contradiction_relationship_ids,
+            assumptions=assumptions or [],
+            recommended_next_check=recommended_next_check,
+        )
+        workspace.claims.append(asdict(claim))
+        self.save(workspace)
+
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id, event_type="investigation_claim_recorded",
+                actor=created_by, role="ai" if author_type == OBSERVATION_AUTHOR_AI else "human",
+                payload={
+                    "claim_id": claim.id, "investigation_step_id": investigation_step_id,
+                    "claim_class": claim_class, "method": method, "confidence_state": confidence_state,
+                },
+                correlation_id=claim.id,
+            )
+        return asdict(claim)
+
+    def claims_for_investigation_step(self, workspace: ProjectWorkspace, investigation_step_id: str) -> list[dict]:
+        return [c for c in workspace.claims if c["investigation_step_id"] == investigation_step_id]
+
+    def resolve_claim_status(self, workspace: ProjectWorkspace, claim_id: str) -> dict:
+        """
+        Section 6/14's own read-time-derivation discipline, applied to
+        Claim exactly as resolve_relationship_status already applies it
+        to Relationship: status is never a field this store writes
+        directly (except the underlying `adoption_state`, which is a
+        real stored human/system decision, not a derived fact) - broken/
+        stale/superseded are all recomputed from CURRENT state on every
+        call. Precedence (most authoritative first): REJECTED > DISPUTED
+        > SUPERSEDED (a corrected replacement claim already exists) >
+        BROKEN (a cited endpoint no longer resolves) > the stored
+        adoption_state (proposed/under_review/accepted_as_observation/
+        accepted_as_finding/requires_specialist/requires_product_owner_
+        or_contractual_authority) - deliberately mirroring Relationship's
+        own precedence so a human rejection can never be silently masked
+        by a later machine-derived state.
+        """
+        claim = self._find(workspace.claims, claim_id)
+        if claim is None:
+            return {"status": "unresolved", "claim_id": claim_id}
+
+        evidence_status = [
+            self._resolve_mm6_endpoint_status(workspace, link["object_type"], link["object_id"])
+            for link in claim["evidence_links"]
+        ]
+        contradiction_status = [
+            {"relationship_id": rel_id, "resolved": self._find(workspace.relationships, rel_id) is not None}
+            for rel_id in claim.get("contradiction_relationship_ids", [])
+        ]
+        successor_supersession = next(
+            (s for s in workspace.supersessions
+             if s["predecessor_type"] == OBJECT_KIND_CLAIM and s["predecessor_id"] == claim_id),
+            None,
+        )
+
+        any_broken = any(not e["resolved"] for e in evidence_status) or any(
+            not c["resolved"] for c in contradiction_status
+        )
+        any_stale = any(e.get("stale") for e in evidence_status)
+
+        if claim["adoption_state"] == CLAIM_ADOPTION_REJECTED:
+            status = CLAIM_ADOPTION_REJECTED
+        elif claim["adoption_state"] == CLAIM_ADOPTION_DISPUTED:
+            status = CLAIM_ADOPTION_DISPUTED
+        elif successor_supersession is not None:
+            status = CLAIM_ADOPTION_SUPERSEDED
+        elif any_broken:
+            status = "broken"
+        else:
+            status = claim["adoption_state"]
+
+        result = {
+            "status": status,
+            "claim_id": claim_id,
+            "claim_class": claim["claim_class"],
+            "confidence_state": claim["confidence_state"],
+            "stale": any_stale,
+            "evidence": evidence_status,
+            "contradictions": contradiction_status,
+        }
+        if successor_supersession is not None:
+            result["superseded_by_claim_id"] = successor_supersession["successor_id"]
+        return result
+
+    def accept_claim_as_observation(
+        self, workspace: ProjectWorkspace, claim_id: str, actor: str, reason: Optional[str] = None,
+        governance_log: Optional[GovernanceLog] = None,
+    ) -> dict:
+        """Section 14/15: the safe, explicit convergence bridge from a
+        proposed Claim to a real, governed DerivedObservation - never a
+        silent auto-promotion. `supporting_evidence_ids` is filtered to
+        only this claim's EvidenceItem-typed citations (record_derived_
+        observation's own closed requirement); a claim citing only
+        regions/other object kinds still adopts, just with an honestly
+        empty supporting_evidence_ids list, exactly like any other
+        DerivedObservation with no EvidenceItem citations of its own."""
+        claim = self._find(workspace.claims, claim_id)
+        if claim is None or claim["project_id"] != workspace.project_id:
+            raise CaseWorkspaceError(f"Claim {claim_id} was not found.")
+
+        evidence_ids = [
+            link["object_id"] for link in claim["evidence_links"]
+            if link["object_type"] == OBJECT_KIND_EVIDENCE_ITEM
+        ]
+        observation = self.record_derived_observation(
+            workspace, statement=claim["statement"], author_type=claim["author_type"], author=actor,
+            method=claim["method"], supporting_evidence_ids=evidence_ids, actor=actor,
+            governance_log=governance_log,
+        )
+
+        claim["adoption_state"] = CLAIM_ADOPTION_ACCEPTED_AS_OBSERVATION
+        claim["adopted_by"] = actor
+        claim["adopted_at"] = _now()
+        claim["adoption_reason"] = reason
+        claim["derived_observation_id"] = observation["id"]
+        self.save(workspace)
+
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id, event_type="investigation_claim_adopted_as_observation",
+                actor=actor, role="human",
+                payload={"claim_id": claim_id, "derived_observation_id": observation["id"], "reason": reason},
+                correlation_id=claim_id,
+            )
+        return {"claim": claim, "derived_observation": observation}
+
+    def accept_claim_as_finding(
+        self, workspace: ProjectWorkspace, claim_id: str, actor: str, case_id: str,
+        reason: Optional[str] = None, governance_log: Optional[GovernanceLog] = None,
+    ) -> dict:
+        """The other half of Section 14's convergence bridge - a Claim
+        promoted into a real, Case-scoped, governed Finding via the
+        SAME record_analysis every other Finding in this codebase is
+        created through (never a second Finding-creation path). The
+        resulting Finding is FINDING_STATUS_PROVISIONAL exactly like
+        every other freshly-recorded Finding - adoption here means "this
+        claim is worth a Finding," never "this Finding is already
+        validated" (ReviewerValidation/Disposition remain the real gate
+        for that, unchanged)."""
+        claim = self._find(workspace.claims, claim_id)
+        if claim is None or claim["project_id"] != workspace.project_id:
+            raise CaseWorkspaceError(f"Claim {claim_id} was not found.")
+
+        source_ids: list[str] = []
+        for link in claim["evidence_links"]:
+            if link["object_type"] == OBJECT_KIND_EVIDENCE_ITEM:
+                evidence = self._find(workspace.evidence_items, link["object_id"])
+                if evidence and evidence.get("source_id") and evidence["source_id"] not in source_ids:
+                    source_ids.append(evidence["source_id"])
+            elif link["object_type"] == OBJECT_KIND_ADDRESSABLE_REGION:
+                region = self._find(workspace.addressable_regions, link["object_id"])
+                unit = self._find(workspace.structural_units, region["structural_unit_id"]) if region else None
+                if unit and unit.get("source_id") and unit["source_id"] not in source_ids:
+                    source_ids.append(unit["source_id"])
+
+        trigger = AnalysisTrigger(
+            trigger_type=ANALYSIS_TRIGGER_AGENT_INITIATED if claim["author_type"] == OBSERVATION_AUTHOR_AI
+            else ANALYSIS_TRIGGER_USER_INITIATED,
+            triggered_by_actor=actor,
+        )
+        # Claim.confidence_state (categorical) is the authoritative
+        # signal end users see; machine_confidence here exists only
+        # because Finding's own pre-existing schema requires a float -
+        # a coarse, honestly-labeled midpoint, never presented on its
+        # own as if it carried the categorical meaning.
+        confidence_midpoint = {
+            CONFIDENCE_STATE_STRONG_DIRECT_SUPPORT: 0.9,
+            CONFIDENCE_STATE_PARTIAL_SUPPORT: 0.6,
+            CONFIDENCE_STATE_INDIRECT_SUPPORT: 0.4,
+            CONFIDENCE_STATE_CONFLICTING_SUPPORT: 0.3,
+            CONFIDENCE_STATE_STALE_EVIDENCE: 0.3,
+            CONFIDENCE_STATE_SPECIALIST_CONFIRMATION_REQUIRED: 0.2,
+            CONFIDENCE_STATE_INSUFFICIENT_EVIDENCE: 0.1,
+        }.get(claim["confidence_state"], 0.5)
+
+        analysis = self.record_analysis(
+            workspace, source_ids=source_ids, objective=claim["statement"],
+            engine_name="cross_modal_investigation", engine_version=claim["method"],
+            findings=[{"statement": claim["statement"], "machine_confidence": confidence_midpoint}],
+            trigger=trigger, case_id=case_id, governance_log=governance_log,
+        )
+        finding_id = analysis["finding_ids"][0]
+
+        claim["adoption_state"] = CLAIM_ADOPTION_ACCEPTED_AS_FINDING
+        claim["adopted_by"] = actor
+        claim["adopted_at"] = _now()
+        claim["adoption_reason"] = reason
+        claim["finding_id"] = finding_id
+        self.save(workspace)
+
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id, event_type="investigation_claim_adopted_as_finding",
+                actor=actor, role="human",
+                payload={"claim_id": claim_id, "finding_id": finding_id, "reason": reason},
+                correlation_id=claim_id,
+            )
+        return {"claim": claim, "analysis": analysis, "finding_id": finding_id}
+
+    def _set_claim_adoption_state(
+        self, workspace: ProjectWorkspace, claim_id: str, new_state: str, event_type: str, actor: str,
+        reason: Optional[str], governance_log: Optional[GovernanceLog],
+    ) -> dict:
+        claim = self._find(workspace.claims, claim_id)
+        if claim is None or claim["project_id"] != workspace.project_id:
+            raise CaseWorkspaceError(f"Claim {claim_id} was not found.")
+        claim["adoption_state"] = new_state
+        claim["adopted_by"] = actor
+        claim["adopted_at"] = _now()
+        claim["adoption_reason"] = reason
+        self.save(workspace)
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id, event_type=event_type, actor=actor, role="human",
+                payload={"claim_id": claim_id, "reason": reason}, correlation_id=claim_id,
+            )
+        return claim
+
+    def dispute_claim(
+        self, workspace: ProjectWorkspace, claim_id: str, actor: str, reason: Optional[str] = None,
+        governance_log: Optional[GovernanceLog] = None,
+    ) -> dict:
+        """Section 12: first-class disagreement, never silently smoothed
+        into consensus - the claim record itself is preserved, never
+        deleted, exactly like dispute_relationship."""
+        return self._set_claim_adoption_state(
+            workspace, claim_id, CLAIM_ADOPTION_DISPUTED, "investigation_claim_disputed", actor, reason, governance_log,
+        )
+
+    def reject_claim(
+        self, workspace: ProjectWorkspace, claim_id: str, actor: str, reason: Optional[str] = None,
+        governance_log: Optional[GovernanceLog] = None,
+    ) -> dict:
+        return self._set_claim_adoption_state(
+            workspace, claim_id, CLAIM_ADOPTION_REJECTED, "investigation_claim_rejected", actor, reason, governance_log,
+        )
+
+    def request_claim_specialist_review(
+        self, workspace: ProjectWorkspace, claim_id: str, actor: str, reason: Optional[str] = None,
+        governance_log: Optional[GovernanceLog] = None,
+    ) -> dict:
+        """Section 15: a claim this codebase must not resolve on its
+        own - e.g. a structural/geotechnical judgment call - is marked
+        as requiring a specialist rather than being silently adopted or
+        silently left ambiguous."""
+        return self._set_claim_adoption_state(
+            workspace, claim_id, CLAIM_ADOPTION_REQUIRES_SPECIALIST,
+            "investigation_claim_requires_specialist", actor, reason, governance_log,
+        )
+
+    def request_claim_authority(
+        self, workspace: ProjectWorkspace, claim_id: str, actor: str, reason: Optional[str] = None,
+        governance_log: Optional[GovernanceLog] = None,
+    ) -> dict:
+        """Section 15: a claim whose adoption would itself constitute
+        issuing an RFI, accepting risk, approving design, certifying
+        compliance, or closing a deficiency - none of which this claim
+        object may ever do on its own (Section 15's own explicit
+        prohibition) - is marked as requiring product-owner or
+        contractual authority rather than silently treated as an
+        ordinary adoptable observation."""
+        return self._set_claim_adoption_state(
+            workspace, claim_id, CLAIM_ADOPTION_REQUIRES_AUTHORITY,
+            "investigation_claim_requires_authority", actor, reason, governance_log,
+        )
+
+    def supersede_claim(
+        self, workspace: ProjectWorkspace, old_claim_id: str, statement: str, claim_class: str, method: str,
+        confidence_state: str, author_type: str, reason: str, actor: str,
+        evidence_links: Optional[list[dict]] = None, governance_log: Optional[GovernanceLog] = None,
+    ) -> dict:
+        """
+        Section 16 (correction integrity): the original Claim is NEVER
+        mutated or deleted - a correction creates a genuinely NEW Claim
+        (via record_investigation_claim, so it is validated exactly like
+        any other claim) and links it back to the original via
+        record_supersession (Supersession's third real consumer, after
+        Source and Relationship). `downstream_requires_review` names any
+        DerivedObservation/Finding the OLD claim had already produced -
+        Section 16's own "flag downstream work requiring review",
+        computed here at the moment of correction rather than stored as
+        a separate flag that could drift.
+        """
+        old = self._find(workspace.claims, old_claim_id)
+        if old is None or old["project_id"] != workspace.project_id:
+            raise CaseWorkspaceError(f"Claim {old_claim_id} was not found.")
+
+        new_claim = self.record_investigation_claim(
+            workspace, investigation_step_id=old["investigation_step_id"], statement=statement,
+            claim_class=claim_class, method=method, confidence_state=confidence_state, author_type=author_type,
+            created_by=actor, evidence_links=evidence_links if evidence_links is not None else old["evidence_links"],
+            governance_log=governance_log,
+        )
+        supersession = self.record_supersession(
+            workspace, predecessor_type=OBJECT_KIND_CLAIM, predecessor_id=old_claim_id,
+            successor_type=OBJECT_KIND_CLAIM, successor_id=new_claim["id"], actor=actor, reason=reason,
+            authority_class="approval_gate:claim_correction",
+        )
+
+        downstream_requires_review = {}
+        if old.get("derived_observation_id"):
+            downstream_requires_review["derived_observation_id"] = old["derived_observation_id"]
+        if old.get("finding_id"):
+            downstream_requires_review["finding_id"] = old["finding_id"]
+
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id, event_type="investigation_claim_superseded", actor=actor, role="human",
+                payload={
+                    "old_claim_id": old_claim_id, "new_claim_id": new_claim["id"], "reason": reason,
+                    "downstream_requires_review": downstream_requires_review or None,
+                },
+                correlation_id=new_claim["id"],
+            )
+        return {
+            "old_claim_id": old_claim_id, "new_claim": new_claim, "supersession": supersession,
+            "downstream_requires_review": downstream_requires_review or None,
+        }
+
     # -- investigation hypothesis survival / quality signal (CLAUDE-P11) -----------
 
     def record_case_outcome(
@@ -7863,6 +8530,35 @@ class CaseWorkspaceStore:
             return None
         return record
 
+    def _resolve_mm6_endpoint_status(self, workspace: ProjectWorkspace, object_type: str, object_id: str) -> dict:
+        """Shared by resolve_relationship_status and resolve_claim_status
+        (CLAUDE-MM7) - the SAME "does this endpoint still resolve, and is
+        it stale" question, asked identically whether the endpoint is one
+        side of a Relationship or one citation of a Claim. Extracted
+        rather than duplicated so the two resolvers can never quietly
+        drift apart on what "stale" means for a given object_type."""
+        record = self._resolve_mm6_endpoint(workspace, object_type, object_id)
+        if record is None:
+            return {"object_type": object_type, "object_id": object_id, "resolved": False}
+        info = {"object_type": object_type, "object_id": object_id, "resolved": True}
+        # Reuse the SAME citation resolver already built for MM2-MM5's
+        # own regions where the endpoint IS a region - the cheapest,
+        # most direct way to learn whether the underlying Source has
+        # been superseded (Section 14's own staleness trigger).
+        if object_type == OBJECT_KIND_ADDRESSABLE_REGION:
+            citation = self.resolve_region_citation(workspace, object_id)
+            info["citation"] = citation
+            info["stale"] = citation.get("status") == "stale"
+        elif object_type == OBJECT_KIND_EVIDENCE_ITEM and record.get("region_id"):
+            citation = self.resolve_region_citation(workspace, record["region_id"])
+            info["citation"] = citation
+            info["stale"] = citation.get("status") == "stale"
+        elif object_type == OBJECT_KIND_SOURCE:
+            info["stale"] = bool(record.get("superseded_by_source_id"))
+        else:
+            info["stale"] = False
+        return info
+
     def record_evidence_relationship(
         self,
         workspace: ProjectWorkspace,
@@ -7943,31 +8639,8 @@ class CaseWorkspaceStore:
         if relationship is None:
             return {"status": "unresolved", "relationship_id": relationship_id}
 
-        def endpoint_status(object_type: str, object_id: str) -> dict:
-            record = self._resolve_mm6_endpoint(workspace, object_type, object_id)
-            if record is None:
-                return {"object_type": object_type, "object_id": object_id, "resolved": False}
-            info = {"object_type": object_type, "object_id": object_id, "resolved": True}
-            # Reuse the SAME citation resolver already built for MM2-MM5's
-            # own regions where the endpoint IS a region - the cheapest,
-            # most direct way to learn whether the underlying Source has
-            # been superseded (Section 14's own staleness trigger).
-            if object_type == OBJECT_KIND_ADDRESSABLE_REGION:
-                citation = self.resolve_region_citation(workspace, object_id)
-                info["citation"] = citation
-                info["stale"] = citation.get("status") == "stale"
-            elif object_type == OBJECT_KIND_EVIDENCE_ITEM and record.get("region_id"):
-                citation = self.resolve_region_citation(workspace, record["region_id"])
-                info["citation"] = citation
-                info["stale"] = citation.get("status") == "stale"
-            elif object_type == OBJECT_KIND_SOURCE:
-                info["stale"] = bool(record.get("superseded_by_source_id"))
-            else:
-                info["stale"] = False
-            return info
-
-        from_status = endpoint_status(relationship["from_type"], relationship["from_id"])
-        to_status = endpoint_status(relationship["to_type"], relationship["to_id"])
+        from_status = self._resolve_mm6_endpoint_status(workspace, relationship["from_type"], relationship["from_id"])
+        to_status = self._resolve_mm6_endpoint_status(workspace, relationship["to_type"], relationship["to_id"])
 
         successor_supersession = next(
             (s for s in workspace.supersessions
@@ -8122,32 +8795,6 @@ class CaseWorkspaceStore:
             return {"status": "unavailable", "relationship_id": relationship_id}
         relationship = self._find(workspace.relationships, relationship_id)
 
-        def endpoint_summary(object_type: str, object_id: str) -> dict:
-            record = self._resolve_mm6_endpoint(workspace, object_type, object_id)
-            summary = {"object_type": object_type, "object_id": object_id, "resolved": record is not None}
-            if record is None:
-                return summary
-            if object_type == OBJECT_KIND_ADDRESSABLE_REGION:
-                summary["citation"] = self.resolve_region_citation(workspace, object_id)
-            elif object_type == OBJECT_KIND_EVIDENCE_ITEM:
-                summary["content"] = record.get("content")
-                summary["evidence_class"] = record.get("evidence_class")
-                if record.get("region_id"):
-                    summary["citation"] = self.resolve_region_citation(workspace, record["region_id"])
-            elif object_type == OBJECT_KIND_DERIVED_OBSERVATION:
-                summary["statement"] = record.get("statement")
-                summary["author_type"] = record.get("author_type")
-            elif object_type == OBJECT_KIND_FINDING:
-                summary["statement"] = record.get("statement")
-                summary["claim_status"] = record.get("claim_status")
-            elif object_type == OBJECT_KIND_SOURCE:
-                summary["name"] = record.get("name")
-                summary["security_classification"] = record.get("security_classification")
-            elif object_type == OBJECT_KIND_TASK:
-                summary["title"] = record.get("title")
-                summary["status"] = record.get("status")
-            return summary
-
         total_relationships = len(workspace.relationships)
         return {
             "status": "assembled",
@@ -8161,12 +8808,48 @@ class CaseWorkspaceStore:
                 "created_by": relationship.get("created_by"),
                 "created_at": relationship.get("created_at"),
             },
-            "from": endpoint_summary(relationship["from_type"], relationship["from_id"]),
-            "to": endpoint_summary(relationship["to_type"], relationship["to_id"]),
+            "from": self._resolve_mm6_endpoint_summary(workspace, relationship["from_type"], relationship["from_id"]),
+            "to": self._resolve_mm6_endpoint_summary(workspace, relationship["to_type"], relationship["to_id"]),
             "excluded": {
                 "summary": f"{max(total_relationships - 1, 0)} other relationship(s) in this project were excluded entirely.",
             },
         }
+
+    def _resolve_mm6_endpoint_summary(self, workspace: ProjectWorkspace, object_type: str, object_id: str) -> dict:
+        """Shared by build_relationship_sachet and CLAUDE-MM7's own
+        build_investigation_evidence_sachet/explain_investigation_answer -
+        the SAME "give me an intelligible summary of this endpoint,
+        never just a bare id" question, asked identically whether the
+        endpoint is one side of a Relationship or one citation of a
+        Claim. Extracted rather than duplicated for the same reason as
+        _resolve_mm6_endpoint_status above."""
+        record = self._resolve_mm6_endpoint(workspace, object_type, object_id)
+        summary = {"object_type": object_type, "object_id": object_id, "resolved": record is not None}
+        if record is None:
+            return summary
+        if object_type == OBJECT_KIND_ADDRESSABLE_REGION:
+            summary["citation"] = self.resolve_region_citation(workspace, object_id)
+        elif object_type == OBJECT_KIND_EVIDENCE_ITEM:
+            summary["content"] = record.get("content")
+            summary["evidence_class"] = record.get("evidence_class")
+            if record.get("region_id"):
+                summary["citation"] = self.resolve_region_citation(workspace, record["region_id"])
+        elif object_type == OBJECT_KIND_DERIVED_OBSERVATION:
+            summary["statement"] = record.get("statement")
+            summary["author_type"] = record.get("author_type")
+        elif object_type == OBJECT_KIND_FINDING:
+            summary["statement"] = record.get("statement")
+            summary["claim_status"] = record.get("claim_status")
+        elif object_type == OBJECT_KIND_SOURCE:
+            summary["name"] = record.get("name")
+            summary["security_classification"] = record.get("security_classification")
+            summary["issue_date"] = record.get("issue_date")
+            summary["revision"] = record.get("revision")
+            summary["superseded"] = bool(record.get("superseded_by_source_id"))
+        elif object_type == OBJECT_KIND_TASK:
+            summary["title"] = record.get("title")
+            summary["status"] = record.get("status")
+        return summary
 
     def explain_evidence_trust(self, workspace: ProjectWorkspace, evidence_item_id: str) -> dict:
         """
@@ -8256,6 +8939,166 @@ class CaseWorkspaceStore:
             "derived_observation_ids": sorted(observation_ids),
             "finding_ids": sorted(finding_ids),
             "authority_boundary": authority_boundary,
+        }
+
+    def explain_investigation_answer(self, workspace: ProjectWorkspace, investigation_step_id: str) -> dict:
+        """
+        CLAUDE-MM7 Section 5/6: the Trustworthy Answer Contract AND the
+        "Why should I trust this?" control - deliberately ONE assembly
+        function serving both, since Section 6's own field list
+        (classification/anchors/relationship path/version/date/support/
+        contradiction/method/uncertainty/review-status/authority
+        boundary) is not a second, different contract, just Section 5's
+        contract narrowed to what a user-facing drawer actually shows.
+        The UI's own progressive disclosure (Section 20: answer+warning,
+        then claims+citations, then full evidence+method) reveals more
+        of this SAME payload in stages, rather than three separate
+        endpoints that could drift apart from each other.
+
+        A pure, read-time AGGREGATION over this investigation step's own
+        Claims (no new storage) - matches explain_evidence_trust's own
+        doctrine exactly, one level up (an investigation's worth of
+        claims, not one evidence item's worth of relationships).
+        """
+        step = self._find(workspace.investigation_steps, investigation_step_id)
+        if step is None or step["project_id"] != workspace.project_id:
+            return {"status": "unavailable", "investigation_step_id": investigation_step_id}
+
+        claims = self.claims_for_investigation_step(workspace, investigation_step_id)
+        evidence_used, evidence_excluded_all = [], []
+        claim_summaries = []
+        contradiction_present = False
+        stale_present = False
+        missing_evidence, recommended_next_checks = [], []
+        authority_boundary = "informational"
+
+        for claim in claims:
+            resolved = self.resolve_claim_status(workspace, claim["id"])
+            citations = [
+                self._resolve_mm6_endpoint_summary(workspace, link["object_type"], link["object_id"])
+                for link in claim["evidence_links"]
+            ]
+            for link in claim["evidence_links"]:
+                if link not in evidence_used:
+                    evidence_used.append(link)
+            for excluded in claim.get("evidence_excluded", []):
+                if excluded not in evidence_excluded_all:
+                    evidence_excluded_all.append(excluded)
+
+            if claim["contradiction_relationship_ids"] or claim["claim_class"] == CLAIM_CLASS_CONFLICTING:
+                contradiction_present = True
+            if resolved.get("stale"):
+                stale_present = True
+            if claim["confidence_state"] in (
+                CONFIDENCE_STATE_INSUFFICIENT_EVIDENCE, CONFIDENCE_STATE_SPECIALIST_CONFIRMATION_REQUIRED,
+            ) or claim["claim_class"] == CLAIM_CLASS_UNKNOWN:
+                missing_evidence.append(claim["statement"])
+            if claim.get("recommended_next_check"):
+                recommended_next_checks.append(claim["recommended_next_check"])
+            if (
+                claim["claim_class"] == CLAIM_CLASS_DECISION_REQUIRING_AUTHORITY
+                or claim["adoption_state"] in (CLAIM_ADOPTION_REQUIRES_SPECIALIST, CLAIM_ADOPTION_REQUIRES_AUTHORITY)
+                or claim["author_type"] == OBSERVATION_AUTHOR_AI
+            ):
+                authority_boundary = "requires_human_authority"
+
+            claim_summaries.append({
+                "claim_id": claim["id"],
+                "statement": claim["statement"],
+                "claim_class": claim["claim_class"],
+                "method": claim["method"],
+                "confidence_state": claim["confidence_state"],
+                "confidence_meaning": CONFIDENCE_STATE_MEANINGS.get(claim["confidence_state"]),
+                "assumptions": claim["assumptions"],
+                "citations": citations,
+                "contradiction_relationship_ids": claim["contradiction_relationship_ids"],
+                "author_type": claim["author_type"],
+                "created_by": claim["created_by"],
+                "created_at": claim["created_at"],
+                "status": resolved["status"],
+                "adoption_state": claim["adoption_state"],
+                "adopted_by": claim.get("adopted_by"),
+                "adopted_at": claim.get("adopted_at"),
+                "recommended_next_check": claim.get("recommended_next_check"),
+                "superseded_by_claim_id": resolved.get("superseded_by_claim_id"),
+            })
+
+        return {
+            "status": "assembled",
+            "investigation_step_id": investigation_step_id,
+            "question": step["question"],
+            "scope": "case" if step.get("case_id") else "project",
+            "case_id": step.get("case_id"),
+            "project": workspace.project_id,
+            "ran": step["ran"],
+            "skipped_reason": step.get("skipped_reason"),
+            "evidence_used": evidence_used,
+            "evidence_excluded": evidence_excluded_all,
+            "claims": claim_summaries,
+            "contradiction_state": contradiction_present,
+            "freshness_state": "stale_evidence_present" if stale_present else "current",
+            "confidence_state_meanings": CONFIDENCE_STATE_MEANINGS,
+            "authority_boundary": authority_boundary,
+            "missing_evidence": missing_evidence,
+            "recommended_next_check": recommended_next_checks,
+            "human_adoption_state": {c["claim_id"]: c["adoption_state"] for c in claim_summaries},
+        }
+
+    def build_investigation_evidence_sachet(
+        self, workspace: ProjectWorkspace, investigation_step_id: str, task_description: Optional[str] = None,
+    ) -> dict:
+        """
+        Section 11: the Governed Evidence Sachet, extended to a whole
+        INVESTIGATION - "minimum necessary does not mean minimum
+        intelligible." Assembles only the evidence actually cited by
+        this investigation's own Claims (never the whole project),
+        each with its own citation/version/exclusion accounting, mirroring
+        build_relationship_sachet's shape exactly one level up. No
+        external connectivity is implemented or referenced here (Section
+        11's own explicit boundary). `expiry` is honestly `None` with an
+        explanation, not a fabricated timestamp - this sachet is
+        reassembled fresh from current state on every call, so it has no
+        separate lifetime of its own to expire; a caller wanting a fixed
+        snapshot should record one via Snapshot instead.
+        """
+        step = self._find(workspace.investigation_steps, investigation_step_id)
+        if step is None or step["project_id"] != workspace.project_id:
+            return {"status": "unavailable", "investigation_step_id": investigation_step_id}
+
+        claims = self.claims_for_investigation_step(workspace, investigation_step_id)
+        included, seen = [], set()
+        for claim in claims:
+            for link in claim["evidence_links"]:
+                key = (link["object_type"], link["object_id"])
+                if key in seen:
+                    continue
+                seen.add(key)
+                included.append(self._resolve_mm6_endpoint_summary(workspace, link["object_type"], link["object_id"]))
+
+        excluded_reasons = []
+        for claim in claims:
+            for excluded in claim.get("evidence_excluded", []):
+                excluded_reasons.append(excluded)
+
+        return {
+            "status": "assembled",
+            "task": task_description,
+            "investigation_step_id": investigation_step_id,
+            "question": step["question"],
+            "included": included,
+            "included_count": len(included),
+            "excluded": {
+                "items": excluded_reasons,
+                "summary": (
+                    f"{len(excluded_reasons)} item(s) explicitly excluded by the investigating claim(s); "
+                    "every other object in this project not named above was never examined at all."
+                ),
+            },
+            "expiry": None,
+            "expiry_note": (
+                "Not persisted - this sachet is assembled fresh from current state on every "
+                "call, so it has no separate lifetime of its own to expire."
+            ),
         }
 
     # -- Temporal Obligation (Prompt 8 #5/#6) -----------------------------------------

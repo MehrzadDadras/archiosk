@@ -43,6 +43,9 @@ _ADMIN_ONLY_ENDPOINTS = {
     "api.save_eye_capture", "api.create_image_marker", "api.export_derivative_crop",
     "api.create_relationship", "api.confirm_relationship_route", "api.dispute_relationship_route",
     "api.reject_relationship_route", "api.supersede_relationship_route",
+    "api.create_investigation", "api.accept_claim_as_observation", "api.accept_claim_as_finding",
+    "api.dispute_claim_route", "api.reject_claim_route", "api.request_claim_specialist_route",
+    "api.request_claim_authority_route", "api.supersede_claim_route",
 }
 
 
@@ -630,6 +633,202 @@ def get_evidence_trust(project_id, evidence_item_id):
     _document, workspace = _load_authorized_project_or_404(project_id)
     store = CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"])
     return jsonify(store.explain_evidence_trust(workspace, evidence_item_id))
+
+
+# -- CLAUDE-MM7: Governed Investigation, Analytical Reasoning, and ----------
+# Trustworthy Answers. Write paths (admin-gated, _ADMIN_ONLY_ENDPOINTS
+# above): create an investigation, adopt a claim as observation/Finding,
+# dispute/reject a claim, request specialist/authority review, supersede a
+# claim. Read paths (not admin-gated, matching the relationship/evidence-
+# trust routes' own authority level): the Trustworthy Answer Contract /
+# "Why should I trust this?" payload, the investigation evidence sachet, and
+# one claim's own resolved status.
+
+@api_bp.route('/documents/<project_id>/investigations', methods=['POST'])
+def create_investigation(project_id):
+    """
+    JSON body: `{"question", "case_id", "anchor_object_type",
+    "anchor_object_id", "unresolvable_aspects"?}` - runs a real,
+    deterministic cross-modal investigation (services/cross_modal_
+    investigation.py) anchored on an already-governed MM1-MM6 object,
+    walking every real Relationship it participates in and recording
+    one Claim per contradiction/stale-endpoint/ordinary-support found
+    (Section 19). `unresolvable_aspects` is an optional list of things
+    this question touches that no evidence in this project could
+    settle - each becomes its own honest abstention claim (Section 8).
+    """
+    from services.cross_modal_investigation import CrossModalInvestigationError, investigate_cross_modal_question
+
+    _document, workspace = _load_authorized_project_or_404(project_id)
+    store = CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"])
+    body = request.get_json(silent=True) or {}
+    required = ('question', 'case_id', 'anchor_object_type', 'anchor_object_id')
+    if any(not body.get(field) for field in required):
+        return jsonify(
+            error="invalid_investigation",
+            message="'question'/'case_id'/'anchor_object_type'/'anchor_object_id' are all required.",
+        ), 400
+    try:
+        result = investigate_cross_modal_question(
+            store, workspace, question=body['question'], case_id=body['case_id'],
+            anchor_object_type=body['anchor_object_type'], anchor_object_id=body['anchor_object_id'],
+            actor=session.get('username', 'system'), unresolvable_aspects=body.get('unresolvable_aspects'),
+            governance_log=get_governance_log(current_app),
+        )
+    except CrossModalInvestigationError as exc:
+        return jsonify(error="invalid_investigation", message=str(exc)), 400
+    except CaseWorkspaceError as exc:
+        return jsonify(error="invalid_investigation", message=str(exc)), 400
+    return jsonify({
+        "investigation_step": result["investigation_step"],
+        "claim_ids": result["claim_ids"],
+    }), 201
+
+
+@api_bp.route('/documents/<project_id>/investigations/<investigation_step_id>/answer', methods=['GET'])
+def get_investigation_answer(project_id, investigation_step_id):
+    """The Trustworthy Answer Contract AND 'Why should I trust this?'
+    payload (Section 5/6) - one assembly serving both."""
+    _document, workspace = _load_authorized_project_or_404(project_id)
+    store = CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"])
+    return jsonify(store.explain_investigation_answer(workspace, investigation_step_id))
+
+
+@api_bp.route('/documents/<project_id>/investigations/<investigation_step_id>/sachet', methods=['GET'])
+def get_investigation_sachet(project_id, investigation_step_id):
+    _document, workspace = _load_authorized_project_or_404(project_id)
+    store = CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"])
+    sachet = store.build_investigation_evidence_sachet(workspace, investigation_step_id, task_description=request.args.get('task'))
+    return jsonify(sachet)
+
+
+@api_bp.route('/documents/<project_id>/claims/<claim_id>/status', methods=['GET'])
+def get_claim_status(project_id, claim_id):
+    _document, workspace = _load_authorized_project_or_404(project_id)
+    store = CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"])
+    return jsonify(store.resolve_claim_status(workspace, claim_id))
+
+
+@api_bp.route('/documents/<project_id>/claims/<claim_id>/accept-observation', methods=['POST'])
+def accept_claim_as_observation(project_id, claim_id):
+    _document, workspace = _load_authorized_project_or_404(project_id)
+    store = CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"])
+    body = request.get_json(silent=True) or {}
+    try:
+        result = store.accept_claim_as_observation(
+            workspace, claim_id, actor=session.get('username', 'system'), reason=body.get('reason'),
+            governance_log=get_governance_log(current_app),
+        )
+    except CaseWorkspaceError as exc:
+        return jsonify(error="invalid_claim", message=str(exc)), 400
+    return jsonify(result), 200
+
+
+@api_bp.route('/documents/<project_id>/claims/<claim_id>/accept-finding', methods=['POST'])
+def accept_claim_as_finding(project_id, claim_id):
+    """JSON body: `{"case_id", "reason"?}` - `case_id` required since
+    Finding remains Case-scoped everywhere else in this codebase."""
+    _document, workspace = _load_authorized_project_or_404(project_id)
+    store = CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"])
+    body = request.get_json(silent=True) or {}
+    if not body.get('case_id'):
+        return jsonify(error="invalid_claim", message="'case_id' is required."), 400
+    try:
+        result = store.accept_claim_as_finding(
+            workspace, claim_id, actor=session.get('username', 'system'), case_id=body['case_id'],
+            reason=body.get('reason'), governance_log=get_governance_log(current_app),
+        )
+    except CaseWorkspaceError as exc:
+        return jsonify(error="invalid_claim", message=str(exc)), 400
+    return jsonify(result), 200
+
+
+@api_bp.route('/documents/<project_id>/claims/<claim_id>/dispute', methods=['POST'])
+def dispute_claim_route(project_id, claim_id):
+    _document, workspace = _load_authorized_project_or_404(project_id)
+    store = CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"])
+    body = request.get_json(silent=True) or {}
+    try:
+        claim = store.dispute_claim(
+            workspace, claim_id, actor=session.get('username', 'system'), reason=body.get('reason'),
+            governance_log=get_governance_log(current_app),
+        )
+    except CaseWorkspaceError as exc:
+        return jsonify(error="invalid_claim", message=str(exc)), 400
+    return jsonify(claim), 200
+
+
+@api_bp.route('/documents/<project_id>/claims/<claim_id>/reject', methods=['POST'])
+def reject_claim_route(project_id, claim_id):
+    _document, workspace = _load_authorized_project_or_404(project_id)
+    store = CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"])
+    body = request.get_json(silent=True) or {}
+    try:
+        claim = store.reject_claim(
+            workspace, claim_id, actor=session.get('username', 'system'), reason=body.get('reason'),
+            governance_log=get_governance_log(current_app),
+        )
+    except CaseWorkspaceError as exc:
+        return jsonify(error="invalid_claim", message=str(exc)), 400
+    return jsonify(claim), 200
+
+
+@api_bp.route('/documents/<project_id>/claims/<claim_id>/request-specialist', methods=['POST'])
+def request_claim_specialist_route(project_id, claim_id):
+    _document, workspace = _load_authorized_project_or_404(project_id)
+    store = CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"])
+    body = request.get_json(silent=True) or {}
+    try:
+        claim = store.request_claim_specialist_review(
+            workspace, claim_id, actor=session.get('username', 'system'), reason=body.get('reason'),
+            governance_log=get_governance_log(current_app),
+        )
+    except CaseWorkspaceError as exc:
+        return jsonify(error="invalid_claim", message=str(exc)), 400
+    return jsonify(claim), 200
+
+
+@api_bp.route('/documents/<project_id>/claims/<claim_id>/request-authority', methods=['POST'])
+def request_claim_authority_route(project_id, claim_id):
+    _document, workspace = _load_authorized_project_or_404(project_id)
+    store = CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"])
+    body = request.get_json(silent=True) or {}
+    try:
+        claim = store.request_claim_authority(
+            workspace, claim_id, actor=session.get('username', 'system'), reason=body.get('reason'),
+            governance_log=get_governance_log(current_app),
+        )
+    except CaseWorkspaceError as exc:
+        return jsonify(error="invalid_claim", message=str(exc)), 400
+    return jsonify(claim), 200
+
+
+@api_bp.route('/documents/<project_id>/claims/<claim_id>/supersede', methods=['POST'])
+def supersede_claim_route(project_id, claim_id):
+    """JSON body: `{"statement", "claim_class", "method",
+    "confidence_state", "author_type", "reason", "evidence_links"?}` -
+    `evidence_links` optional, defaulting to the original claim's own
+    (Section 16: a correction may keep the same evidence and only
+    change the statement/classification, or supply new evidence)."""
+    _document, workspace = _load_authorized_project_or_404(project_id)
+    store = CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"])
+    body = request.get_json(silent=True) or {}
+    required = ('statement', 'claim_class', 'method', 'confidence_state', 'author_type', 'reason')
+    if any(not body.get(field) for field in required):
+        return jsonify(
+            error="invalid_claim",
+            message="'statement'/'claim_class'/'method'/'confidence_state'/'author_type'/'reason' are all required.",
+        ), 400
+    try:
+        result = store.supersede_claim(
+            workspace, claim_id, statement=body['statement'], claim_class=body['claim_class'],
+            method=body['method'], confidence_state=body['confidence_state'], author_type=body['author_type'],
+            reason=body['reason'], actor=session.get('username', 'system'),
+            evidence_links=body.get('evidence_links'), governance_log=get_governance_log(current_app),
+        )
+    except CaseWorkspaceError as exc:
+        return jsonify(error="invalid_claim", message=str(exc)), 400
+    return jsonify(result), 201
 
 
 @api_bp.route('/documents/<project_id>/rfi', methods=['GET'])

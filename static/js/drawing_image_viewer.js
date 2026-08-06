@@ -525,6 +525,182 @@
             return form;
         }
 
+        // -------- CLAUDE-MM7: governed investigation, inline in the ------
+        // -------- same bounded river panel MM6 already built. -----------
+        var CLAIM_CLASS_LABELS = {
+            directly_verified: 'directly verified', deterministic_calculation: 'calculated',
+            supported_interpretation: 'interpretation', ai_proposal: 'AI proposal',
+            conflicting: 'conflicting', unknown: 'unknown / abstained',
+            decision_requiring_authority: 'requires authority',
+        };
+
+        function renderClaimRow(claim, container, investigationStepId, refreshAnswer) {
+            var row = document.createElement('div');
+            row.className = 'relationship-river-row';
+
+            var head = document.createElement('div');
+            head.className = 'relationship-river-row-head';
+            var classSpan = document.createElement('span');
+            classSpan.textContent = (CLAIM_CLASS_LABELS[claim.claim_class] || claim.claim_class) + ' — ' + claim.confidence_state.replace(/_/g, ' ');
+            head.appendChild(classSpan);
+            head.appendChild(statusBadge(claim.status));
+            row.appendChild(head);
+
+            var statementEl = document.createElement('p');
+            statementEl.className = 'relationship-river-reason';
+            statementEl.textContent = claim.statement;
+            row.appendChild(statementEl);
+
+            if (claim.confidence_meaning) {
+                var meaningEl = document.createElement('p');
+                meaningEl.className = 'relationship-trust-summary';
+                meaningEl.textContent = claim.confidence_meaning;
+                row.appendChild(meaningEl);
+            }
+
+            if (claim.citations && claim.citations.length) {
+                var citeList = document.createElement('p');
+                citeList.className = 'relationship-river-reason';
+                citeList.textContent = 'Citations: ' + claim.citations.map(function (c) {
+                    return (c.citation && c.citation.label) || (c.name || c.content || c.object_type + ' ' + String(c.object_id).slice(0, 8) + '…');
+                }).join('; ');
+                row.appendChild(citeList);
+            }
+            if (claim.contradiction_relationship_ids && claim.contradiction_relationship_ids.length) {
+                var contraEl = document.createElement('p');
+                contraEl.className = 'relationship-river-reason';
+                contraEl.textContent = 'Contradicts ' + claim.contradiction_relationship_ids.length + ' other relationship(s) - see the Relationships list above.';
+                row.appendChild(contraEl);
+            }
+            if (claim.recommended_next_check) {
+                var nextEl = document.createElement('p');
+                nextEl.className = 'relationship-river-reason';
+                nextEl.textContent = 'Recommended next check: ' + claim.recommended_next_check;
+                row.appendChild(nextEl);
+            }
+
+            var actions = document.createElement('div');
+            actions.className = 'relationship-river-row-actions';
+            function claimActionButton(label, path, body) {
+                var btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'doc-control-btn';
+                btn.textContent = label;
+                btn.addEventListener('click', function () {
+                    btn.disabled = true;
+                    fetch(apiBase + '/claims/' + encodeURIComponent(claim.claim_id) + '/' + path, {
+                        method: 'POST', credentials: 'same-origin',
+                        headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}),
+                    }).then(function () { refreshAnswer(); });
+                });
+                actions.appendChild(btn);
+                return btn;
+            }
+            claimActionButton('Accept as observation', 'accept-observation');
+
+            var findingCaseInput = document.createElement('input');
+            findingCaseInput.type = 'text';
+            findingCaseInput.placeholder = 'Case id';
+            findingCaseInput.setAttribute('aria-label', 'Case id to attach this Finding to');
+            findingCaseInput.className = 'relationship-river-claim-case-input';
+            actions.appendChild(findingCaseInput);
+            var acceptFindingBtn = document.createElement('button');
+            acceptFindingBtn.type = 'button';
+            acceptFindingBtn.className = 'doc-control-btn';
+            acceptFindingBtn.textContent = 'Accept as Finding';
+            acceptFindingBtn.addEventListener('click', function () {
+                if (!findingCaseInput.value.trim()) { findingCaseInput.focus(); return; }
+                acceptFindingBtn.disabled = true;
+                fetch(apiBase + '/claims/' + encodeURIComponent(claim.claim_id) + '/accept-finding', {
+                    method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ case_id: findingCaseInput.value.trim() }),
+                }).then(function () { refreshAnswer(); });
+            });
+            actions.appendChild(acceptFindingBtn);
+
+            claimActionButton('Dispute', 'dispute');
+            claimActionButton('Reject', 'reject');
+            row.appendChild(actions);
+
+            container.appendChild(row);
+        }
+
+        function renderInvestigationAnswer(investigationStepId, container) {
+            container.textContent = 'Loading investigation…';
+            function refresh() { renderInvestigationAnswer(investigationStepId, container); }
+            fetch(apiBase + '/investigations/' + encodeURIComponent(investigationStepId) + '/answer', { credentials: 'same-origin' })
+                .then(function (r) { return r.json(); })
+                .then(function (answer) {
+                    container.textContent = '';
+                    if (answer.status !== 'assembled') {
+                        container.textContent = 'Investigation not available.';
+                        return;
+                    }
+                    var summary = document.createElement('p');
+                    summary.className = 'relationship-trust-summary';
+                    summary.textContent = 'Question: ' + answer.question +
+                        (answer.contradiction_state ? ' — contains conflicting evidence.' : '') +
+                        (answer.freshness_state === 'stale_evidence_present' ? ' — some evidence is stale.' : '') +
+                        (answer.authority_boundary === 'requires_human_authority' ? ' — requires human authority before acting on this.' : '');
+                    container.appendChild(summary);
+                    if (answer.missing_evidence && answer.missing_evidence.length) {
+                        var missing = document.createElement('p');
+                        missing.className = 'relationship-river-empty';
+                        missing.textContent = 'Could not be established: ' + answer.missing_evidence.join('; ');
+                        container.appendChild(missing);
+                    }
+                    (answer.claims || []).forEach(function (claim) {
+                        renderClaimRow(claim, container, investigationStepId, refresh);
+                    });
+                });
+        }
+
+        function buildInvestigateForm(evidenceItemId, resultContainer) {
+            var form = document.createElement('div');
+            form.className = 'relationship-river-create';
+
+            var caseInput = document.createElement('input');
+            caseInput.type = 'text'; caseInput.placeholder = 'Case id'; caseInput.setAttribute('aria-label', 'Case id');
+            var questionInput = document.createElement('input');
+            questionInput.type = 'text'; questionInput.placeholder = 'Investigation question';
+            questionInput.setAttribute('aria-label', 'Investigation question');
+            var goBtn = document.createElement('button');
+            goBtn.type = 'button'; goBtn.className = 'doc-control-btn'; goBtn.textContent = 'Investigate';
+            var statusEl = document.createElement('span');
+            statusEl.className = 'relationship-river-create-status';
+
+            goBtn.addEventListener('click', function () {
+                if (!caseInput.value.trim() || !questionInput.value.trim()) {
+                    statusEl.textContent = 'Case id and a question are both required.';
+                    return;
+                }
+                goBtn.disabled = true;
+                statusEl.textContent = 'Investigating…';
+                fetch(apiBase + '/investigations', {
+                    method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        question: questionInput.value.trim(), case_id: caseInput.value.trim(),
+                        anchor_object_type: 'evidence_item', anchor_object_id: evidenceItemId,
+                    }),
+                }).then(function (r) { return r.json().then(function (b) { return { ok: r.ok, body: b }; }); })
+                    .then(function (result) {
+                        goBtn.disabled = false;
+                        if (!result.ok) {
+                            statusEl.textContent = result.body.message || 'Could not run that investigation.';
+                            return;
+                        }
+                        statusEl.textContent = '';
+                        renderInvestigationAnswer(result.body.investigation_step.id, resultContainer);
+                    });
+            });
+
+            form.appendChild(caseInput);
+            form.appendChild(questionInput);
+            form.appendChild(goBtn);
+            form.appendChild(statusEl);
+            return form;
+        }
+
         function openRelationshipRiver(evidenceItemId) {
             riverPanel.textContent = '';
             riverPanel.hidden = false;
@@ -544,6 +720,14 @@
             loadRelationships(evidenceItemId, listEl);
 
             riverPanel.appendChild(buildCreateRelationshipForm(evidenceItemId, listEl));
+
+            var investigateHeading = document.createElement('h4');
+            investigateHeading.textContent = 'Investigate';
+            riverPanel.appendChild(investigateHeading);
+            var investigationResult = document.createElement('div');
+            investigationResult.className = 'relationship-river-list';
+            riverPanel.appendChild(buildInvestigateForm(evidenceItemId, investigationResult));
+            riverPanel.appendChild(investigationResult);
         }
 
         function addRelationshipsButton(statusContainer, evidenceItemId) {

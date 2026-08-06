@@ -61,6 +61,18 @@ API_ROUTES = [
     ("POST", "/api/v1/documents/some-project/relationships/some-relationship/supersede"),
     ("GET", "/api/v1/documents/some-project/relationships/some-relationship/sachet"),
     ("GET", "/api/v1/documents/some-project/evidence/some-evidence/trust"),
+    # CLAUDE-MM7
+    ("POST", "/api/v1/documents/some-project/investigations"),
+    ("GET", "/api/v1/documents/some-project/investigations/some-step/answer"),
+    ("GET", "/api/v1/documents/some-project/investigations/some-step/sachet"),
+    ("GET", "/api/v1/documents/some-project/claims/some-claim/status"),
+    ("POST", "/api/v1/documents/some-project/claims/some-claim/accept-observation"),
+    ("POST", "/api/v1/documents/some-project/claims/some-claim/accept-finding"),
+    ("POST", "/api/v1/documents/some-project/claims/some-claim/dispute"),
+    ("POST", "/api/v1/documents/some-project/claims/some-claim/reject"),
+    ("POST", "/api/v1/documents/some-project/claims/some-claim/request-specialist"),
+    ("POST", "/api/v1/documents/some-project/claims/some-claim/request-authority"),
+    ("POST", "/api/v1/documents/some-project/claims/some-claim/supersede"),
 ]
 
 # Admin-only write routes - excluded from "read_only can reach every read
@@ -88,6 +100,14 @@ ADMIN_ONLY_ROUTE_PATHS = {
     ("POST", "/api/v1/documents/some-project/relationships/some-relationship/dispute"),
     ("POST", "/api/v1/documents/some-project/relationships/some-relationship/reject"),
     ("POST", "/api/v1/documents/some-project/relationships/some-relationship/supersede"),
+    ("POST", "/api/v1/documents/some-project/investigations"),
+    ("POST", "/api/v1/documents/some-project/claims/some-claim/accept-observation"),
+    ("POST", "/api/v1/documents/some-project/claims/some-claim/accept-finding"),
+    ("POST", "/api/v1/documents/some-project/claims/some-claim/dispute"),
+    ("POST", "/api/v1/documents/some-project/claims/some-claim/reject"),
+    ("POST", "/api/v1/documents/some-project/claims/some-claim/request-specialist"),
+    ("POST", "/api/v1/documents/some-project/claims/some-claim/request-authority"),
+    ("POST", "/api/v1/documents/some-project/claims/some-claim/supersede"),
 }
 
 
@@ -219,6 +239,54 @@ class ApiAuthenticationTests(unittest.TestCase):
         self.assertEqual(response.status_code, 403)
         self.assertEqual(response.get_json()["error"], "forbidden")
 
+    def test_create_investigation_rejects_authenticated_non_admin(self):
+        client = self._client_as("read_only")
+        response = client.post("/api/v1/documents/some-project/investigations")
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.get_json()["error"], "forbidden")
+
+    def test_accept_claim_as_observation_rejects_authenticated_non_admin(self):
+        client = self._client_as("read_only")
+        response = client.post("/api/v1/documents/some-project/claims/some-claim/accept-observation")
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.get_json()["error"], "forbidden")
+
+    def test_accept_claim_as_finding_rejects_authenticated_non_admin(self):
+        client = self._client_as("read_only")
+        response = client.post("/api/v1/documents/some-project/claims/some-claim/accept-finding")
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.get_json()["error"], "forbidden")
+
+    def test_dispute_claim_rejects_authenticated_non_admin(self):
+        client = self._client_as("read_only")
+        response = client.post("/api/v1/documents/some-project/claims/some-claim/dispute")
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.get_json()["error"], "forbidden")
+
+    def test_reject_claim_rejects_authenticated_non_admin(self):
+        client = self._client_as("read_only")
+        response = client.post("/api/v1/documents/some-project/claims/some-claim/reject")
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.get_json()["error"], "forbidden")
+
+    def test_request_claim_specialist_rejects_authenticated_non_admin(self):
+        client = self._client_as("read_only")
+        response = client.post("/api/v1/documents/some-project/claims/some-claim/request-specialist")
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.get_json()["error"], "forbidden")
+
+    def test_request_claim_authority_rejects_authenticated_non_admin(self):
+        client = self._client_as("read_only")
+        response = client.post("/api/v1/documents/some-project/claims/some-claim/request-authority")
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.get_json()["error"], "forbidden")
+
+    def test_supersede_claim_rejects_authenticated_non_admin(self):
+        client = self._client_as("read_only")
+        response = client.post("/api/v1/documents/some-project/claims/some-claim/supersede")
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.get_json()["error"], "forbidden")
+
     # -- Authenticated, correct role: existing behaviour is unchanged --
 
     def test_admin_can_reach_ingest_route(self):
@@ -317,6 +385,54 @@ class ApiAuthenticationTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.get_json()["error"], "invalid_relationship")
+
+    def test_admin_can_reach_create_investigation_route(self):
+        client = self._client_as("admin")
+        response = client.post("/api/v1/documents/some-project/investigations", json={})
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.get_json()["error"], "invalid_investigation")
+
+    def test_admin_can_reach_accept_claim_as_observation_route(self):
+        client = self._client_as("admin")
+        response = client.post("/api/v1/documents/some-project/claims/some-claim/accept-observation")
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.get_json()["error"], "invalid_claim")
+
+    def test_admin_can_reach_accept_claim_as_finding_route(self):
+        client = self._client_as("admin")
+        response = client.post("/api/v1/documents/some-project/claims/some-claim/accept-finding", json={})
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.get_json()["error"], "invalid_claim")
+
+    def test_admin_can_reach_dispute_claim_route(self):
+        client = self._client_as("admin")
+        response = client.post("/api/v1/documents/some-project/claims/some-claim/dispute")
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.get_json()["error"], "invalid_claim")
+
+    def test_admin_can_reach_reject_claim_route(self):
+        client = self._client_as("admin")
+        response = client.post("/api/v1/documents/some-project/claims/some-claim/reject")
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.get_json()["error"], "invalid_claim")
+
+    def test_admin_can_reach_request_claim_specialist_route(self):
+        client = self._client_as("admin")
+        response = client.post("/api/v1/documents/some-project/claims/some-claim/request-specialist")
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.get_json()["error"], "invalid_claim")
+
+    def test_admin_can_reach_request_claim_authority_route(self):
+        client = self._client_as("admin")
+        response = client.post("/api/v1/documents/some-project/claims/some-claim/request-authority")
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.get_json()["error"], "invalid_claim")
+
+    def test_admin_can_reach_supersede_claim_route(self):
+        client = self._client_as("admin")
+        response = client.post("/api/v1/documents/some-project/claims/some-claim/supersede", json={})
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.get_json()["error"], "invalid_claim")
 
     def test_read_only_can_reach_every_read_route(self):
         client = self._client_as("read_only")

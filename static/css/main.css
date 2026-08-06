@@ -3573,7 +3573,14 @@ main::-webkit-scrollbar-corner,
 }
 .relationship-river-row-head { display: flex; align-items: center; gap: 0.4rem; color: var(--text-primary); }
 .relationship-river-reason { margin: 0.2rem 0 0; color: var(--text-metadata); }
-.relationship-river-row-actions { display: flex; gap: 0.25rem; margin-top: 0.3rem; }
+.relationship-river-row-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem; margin-top: 0.3rem; }
+.relationship-river-claim-case-input {
+    width: 6rem;
+    padding: 0.15rem 0.3rem;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    font-size: 0.76rem;
+}
 .relationship-status-badge {
     display: inline-block;
     padding: 0.05rem 0.4rem;
