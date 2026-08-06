@@ -1,5 +1,25 @@
 # Continuation checkpoint
 
+## 2026-08-05 — CLAUDE-MM2 (PDF and Document Intelligence)
+
+**First real MM1 consumer**, authorized following the accepted MM1 seal (`8a6cf3f`). Repository-grounded investigation first found substantial existing infrastructure that shrank the real implementation needed: `BHiveParser.extract_pdf_pages` already gives real per-page text (used by `services/drawing_intake.py`); a full PDF.js-backed viewer with page navigation/zoom/search already exists (`static/js/pdf_viewer.js`); PDF bytes are reliably persisted at `Source.file_path`; `services/drawing_intake.py`'s own prior audit already established OCR/PDF-rendering are unavailable in this environment (no pypdfium2/PyMuPDF/pdf2image, no pytesseract/tesseract).
+
+**Implementation:** `services/case_workspace.py`'s `register_pdf_page_structure` mirrors `register_table_evidence`'s own already-parsed-input shape (`pages: list[str]` in, never raw bytes — preserving the standing "does not import `bhive_parser`" rule) - one `StructuralUnit` per PDF page unconditionally, paragraph-level `AddressableRegion`/`EvidenceItem`s for pages with real text. New `services/pdf_intelligence.py` is the thin orchestration layer that does the real pypdf read and classifies `text_native`/`image_only`/`mixed`/`extraction_failed`/`encrypted_or_unsupported` - the last two only ever from a failed read, never conflated with "no text." `resolve_region_citation` gained source-version staleness awareness (`"status": "stale"` when the underlying Source has been superseded, label still preserved - "preserved old citation," reusing the existing `Source.superseded_by_source_id` pointer, no new mechanism). `update_source_identity` gained the four MM1 `Source` fields as parameters rather than a second method. One new admin-gated write route (`POST /api/v1/documents/<project_id>/sources/<source_id>/pdf-structure`); no new UI - the existing viewer was reused as-is.
+
+**Tests:** 48 total (23 in `tests/test_mm2_pdf_document_intelligence.py`, 2 new + 1 new route in `tests/test_api_authentication.py`), including a deliberate falsification of the cross-project guard and a real, hand-built minimal PDF (no reportlab/fpdf dependency added) used for one genuine end-to-end unit test. Full suite: **2,650 passed, 0 failed** (2,625 baseline + 25 new).
+
+**Live-verified against the running app, not tests alone:** a real 3-page hand-built PDF uploaded through the actual `/upload` flow (no regression), opened and paginated in the existing browser viewer (page 1 → page 2, thumbnails, real rendered text), then the new API route triggered via a real authenticated session against that real Source, producing real `StructuralUnit`/`EvidenceItem` records and a citation rendering exactly `"mm2_verify_3page.pdf · Page 2 · paragraph 1"` - matching this stage's own governing prompt's citation example precisely. Throwaway account and project cleaned up afterward.
+
+**Finding/DerivedObservation usage evidence:** real PDF-sourced evidence continues to show the two concepts serving different grains (anchored verbatim content vs. an interpretation built from it) - consistent with MM1's own finding, not merged or migrated, the convergence question remains open.
+
+**Documentation:** `governance/current/kernel-object-model.md` gained the real ground-truth entry; `governance/STATUS.md`'s authorization table gained an MM2-scoped `IMPLEMENTED` row (MM3-MM9 remain their own separate, still-`NOT AUTHORIZED` authorizations); `camel-multimodal-programme.md`'s own MM2 section marked implemented with a pointer, original stage-intent prose preserved.
+
+**Deferred, per this stage's own explicit scope:** OCR, PDF-to-image rendering, handwritten recognition, advanced table extraction (Batch J's `Table`/`TableRow` remains the tabular path), PDF annotation editing, redaction, digital-signature validation, form filling, embedded-file extraction, a new region-selection UI, and full semantic redline/version comparison.
+
+**Recommendation:** see the final report delivered in conversation for full detail. No product-owner acceptance seal is recorded in this entry, per this stage's own explicit governing instruction. MM3 is not started by this stage.
+
+**Evidence:** `HEAD`/`origin/main` both confirmed in sync after push (see final report for the exact hash). Working tree clean except the pre-existing, untouched `tests/fixtures/nreocrc/_lab_instance_scratch_002/`.
+
 ## 2026-08-05 — CLAUDE-MM1 (Product-Owner Acceptance Seal)
 
 **Product owner accepts MM1 and its recommendation: ACCEPT — the multimodal evidence contract is real, tested, additive, live-verified, and sufficient for MM2-MM9 to build upon without premature extraction-engine implementation.**
