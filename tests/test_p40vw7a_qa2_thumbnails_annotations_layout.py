@@ -496,12 +496,19 @@ class AnnotationJsTests(unittest.TestCase):
         self.assertIn("resetAnnotationState();", mount_fn)
 
     def test_original_document_is_never_written_to(self):
-        # The only write target anywhere near mount() is the in-memory
-        # annotationsByPage map / the canvas overlay - no fetch/XHR/form
-        # submission back to the Document's own file route exists in
-        # this file at all.
-        self.assertNotIn("fetch(", self.js)
+        # Annotations themselves are still purely in-memory (the
+        # annotationsByPage map / canvas overlay) - never POSTed anywhere.
+        # CLAUDE-MM4 added real fetch() calls, but only to the NEW,
+        # separate /drawing-structure (registers StructuralUnits) and
+        # /drawing-regions (creates a governed AddressableRegion +
+        # EvidenceItem) API routes - neither ever writes to the Source's
+        # own original file bytes. The real invariant this test protects
+        # is narrower than "no fetch() anywhere": the Document's own
+        # file-serving download link/route is never a fetch() TARGET.
         self.assertNotIn("XMLHttpRequest", self.js)
+        self.assertNotIn("fetch(downloadLink", self.js)
+        self.assertIn("/drawing-structure", self.js)
+        self.assertIn("/drawing-regions", self.js)
 
     def test_unsaved_changes_are_surfaced_and_warned_on_unload(self):
         self.assertIn("Unsaved annotations", self.js)

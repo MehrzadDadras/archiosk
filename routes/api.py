@@ -37,6 +37,7 @@ api_bp = Blueprint('api', __name__)
 _ADMIN_ONLY_ENDPOINTS = {
     "api.ingest_document", "api.register_pdf_structure",
     "api.register_spreadsheet_structure_route", "api.edit_spreadsheet_cell",
+    "api.register_drawing_structure", "api.create_drawing_region",
 }
 
 
@@ -306,6 +307,89 @@ def edit_spreadsheet_cell(project_id, source_id):
     except SpreadsheetIntelligenceError as exc:
         return jsonify(error="invalid_edit", message=str(exc)), 400
     return jsonify(result), 200
+
+
+# -- CLAUDE-MM4: Drawing Intelligence and Orientation-Normalized Comparison -
+# Two write paths (admin-gated, _ADMIN_ONLY_ENDPOINTS below): the read/
+# classify/register trigger (mirrors pdf-structure/spreadsheet-structure
+# exactly) and the bounded region-creation path (Section 4/6 - "select or
+# define an addressable drawing region; create direct evidence anchored to
+# that region"). The evidence-sachet route is read-only and NOT admin-
+# gated, matching get_region_citation's own authority level - assembling
+# an already-governed evidence packet for an authenticated project member
+# to inspect is not a write.
+
+@api_bp.route('/documents/<project_id>/sources/<source_id>/drawing-structure', methods=['POST'])
+def register_drawing_structure(project_id, source_id):
+    """
+    Reads the named Source's own already-persisted drawing bytes (a
+    drawing-oriented .pdf or a standalone .png/.jpg/.jpeg) and registers
+    one StructuralUnit per sheet. Idempotent only in the sense that
+    calling it twice creates two independent sets of records (no dedup) -
+    matching register_pdf_structure/register_spreadsheet_structure_route's
+    own precedent above.
+    """
+    from services.drawing_intelligence import DrawingIntelligenceError, register_drawing_evidence_for_source
+
+    _document, workspace = _load_authorized_project_or_404(project_id)
+    store = CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"])
+    try:
+        result = register_drawing_evidence_for_source(
+            store, workspace, source_id, actor=session.get('username', 'system'),
+            governance_log=get_governance_log(current_app),
+        )
+    except DrawingIntelligenceError as exc:
+        return jsonify(error="invalid_source", message=str(exc)), 400
+    return jsonify(result), 201
+
+
+@api_bp.route('/documents/<project_id>/sources/<source_id>/drawing-regions', methods=['POST'])
+def create_drawing_region(project_id, source_id):
+    """
+    JSON body: `{"structural_unit_id", "x", "y", "width", "height",
+    "note"}` - x/y/width/height are normalized 0-1 fractions of the
+    sheet's own ORIGINAL (unrotated, unmirrored) width/height; a caller
+    driving this from a transformed on-screen selection is responsible
+    for converting first (services/drawing_intelligence.py's own
+    transform_rect_to_original). `note` is optional free text.
+    """
+    from services.drawing_intelligence import DrawingIntelligenceError, create_drawing_region_and_evidence
+
+    _document, workspace = _load_authorized_project_or_404(project_id)
+    store = CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"])
+    body = request.get_json(silent=True) or {}
+    structural_unit_id = body.get('structural_unit_id')
+    if not structural_unit_id:
+        return jsonify(error="invalid_region", message="'structural_unit_id' is required."), 400
+    try:
+        x, y, width, height = (float(body.get(k)) for k in ('x', 'y', 'width', 'height'))
+    except (TypeError, ValueError):
+        return jsonify(error="invalid_region", message="'x'/'y'/'width'/'height' must all be numbers."), 400
+    try:
+        result = create_drawing_region_and_evidence(
+            store, workspace, source_id, structural_unit_id, x=x, y=y, width=width, height=height,
+            note=body.get('note'), actor=session.get('username', 'system'),
+            governance_log=get_governance_log(current_app),
+        )
+    except DrawingIntelligenceError as exc:
+        return jsonify(error="invalid_region", message=str(exc)), 400
+    return jsonify(result), 201
+
+
+@api_bp.route('/documents/<project_id>/regions/<region_id>/evidence-sachet', methods=['GET'])
+def get_evidence_sachet(project_id, region_id):
+    """
+    Section 14: the Governed Evidence Sachet - a read-time-assembled,
+    allow-listed evidence packet for ONE region (its sheet, its sibling
+    regions on that same sheet, its citation, its Source's own
+    sensitivity), never the whole drawing set or the whole project. See
+    CaseWorkspaceStore.build_evidence_sachet's own docstring for the full
+    contract. `?task=` is optional free text carried through unchanged.
+    """
+    _document, workspace = _load_authorized_project_or_404(project_id)
+    store = CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"])
+    sachet = store.build_evidence_sachet(workspace, region_id, task_description=request.args.get('task'))
+    return jsonify(sachet)
 
 
 @api_bp.route('/documents/<project_id>/rfi', methods=['GET'])

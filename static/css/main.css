@@ -3374,6 +3374,101 @@ main::-webkit-scrollbar-corner,
     color: var(--text-metadata);
     white-space: nowrap;
 }
+/* CLAUDE-MM4: the in-pane drawing toolbar/viewport - lives DIRECTLY in
+   the document pane (case_workspace.html's own kind == 'drawing' branch,
+   and every 'source'-kind Display division static/js/case_workspace.js
+   inserts), never the top application menu bar, so it renders
+   identically for the primary document AND any comparison Display
+   (Section 8) with no dependency on #workspace-document-controls. */
+.drawing-viewer {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+.drawing-viewer-toolbar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.15rem;
+    padding: 0.25rem 0.4rem;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--surface-secondary);
+}
+.doc-orientation-status,
+.doc-region-status {
+    font-size: 0.72rem;
+    color: var(--text-metadata);
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+}
+.drawing-viewport {
+    position: relative;
+    width: 100%;
+    height: 70vh;
+    border: 1px solid var(--border);
+    background: var(--surface-primary);
+    overflow: hidden;
+    touch-action: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.drawing-pan-zoom {
+    /* JS (drawing_image_viewer.js's own applyPanZoomTransform) sets
+       `transform: translate(panX,panY) scale(zoom)` here - flexbox
+       centering above gives pan=0/zoom=1 a sensible starting position,
+       panning/zooming is layered on top of that via the transform. */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.drawing-pan-zoom .document-viewer-image {
+    display: block;
+    max-width: none;
+    max-height: 68vh;
+    border: none;
+    /* transform-origin defaults to "center" - never overwritten by JS
+       (only .style.transform is set, never .style.transformOrigin) - so
+       every rotate()/scaleX()/scaleY() JS applies always pivots around
+       the drawing's own visual center, matching this stage's own
+       transform_point_to_display/original convention. */
+}
+.drawing-region-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+}
+.drawing-region-box {
+    position: absolute;
+    border: 2px dashed var(--machine-blue);
+    background: rgba(79, 169, 162, 0.15);
+}
+.drawing-sheet-metadata {
+    padding: 0.5rem 0.6rem;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--surface-secondary);
+    font-size: 0.78rem;
+}
+.drawing-sheet-metadata-list {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.15rem 0.6rem;
+    margin: 0 0 0.4rem;
+}
+.drawing-sheet-metadata-list dt { color: var(--text-metadata); }
+.drawing-sheet-metadata-list dd { margin: 0; color: var(--text-primary); }
+.drawing-sheet-metadata-unavailable { color: var(--text-disabled); font-style: italic; }
+.drawing-scale-warning {
+    margin: 0;
+    color: var(--attention-amber);
+    font-size: 0.74rem;
+}
 
 /* -- shared text utilities ------------------------------------------------
    Consolidates inline style="" patterns that had drifted into

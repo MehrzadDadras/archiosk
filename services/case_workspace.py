@@ -2664,6 +2664,46 @@ KNOWN_SPREADSHEET_CLASSIFICATIONS = (
     SPREADSHEET_CLASSIFICATION_EXCESSIVE_SIZE,
 )
 
+# CLAUDE-MM4: drawing-sheet classification (Section 5/16/20) - the same
+# "successful read with real sheets" vs. "read itself refused/failed"
+# distinction PDF/spreadsheet classification above already establish.
+# Covers BOTH drawing-oriented PDFs (pypdf-read) and standalone raster
+# images (PNG/JPEG, PIL-read) under one shared vocabulary - a drawing
+# sheet is a drawing sheet regardless of container format.
+DRAWING_CLASSIFICATION_SUPPORTED = "supported"
+DRAWING_CLASSIFICATION_MALFORMED = "malformed"
+DRAWING_CLASSIFICATION_ENCRYPTED_OR_UNSUPPORTED = "encrypted_or_unsupported"
+DRAWING_CLASSIFICATION_EXCESSIVE_SIZE = "excessive_size"
+KNOWN_DRAWING_CLASSIFICATIONS = (
+    DRAWING_CLASSIFICATION_SUPPORTED,
+    DRAWING_CLASSIFICATION_MALFORMED,
+    DRAWING_CLASSIFICATION_ENCRYPTED_OR_UNSUPPORTED,
+    DRAWING_CLASSIFICATION_EXCESSIVE_SIZE,
+)
+
+# CLAUDE-MM4 Section 10: title-block field reliability - every metadata
+# field this stage exposes (sheet number/title/discipline/revision/issue
+# date/consultant/scale) is tagged with exactly one of these, never
+# silently promoted to a higher tier than the extraction method actually
+# supports. Mirrors drawing_intake.py's own CONFIDENCE_HIGH/MEDIUM +
+# STATUS_UNCONFIRMED/CONFIRMED/CORRECTED vocabulary in spirit, but this is
+# a distinct, coarser tier set for STRUCTURAL-UNIT metadata display
+# (Section 10's own five named states) rather than that module's
+# candidate-confirmation workflow (a different, Project-identity-scoped
+# concern - see that module's own docstring).
+METADATA_RELIABILITY_DIRECTLY_EXTRACTED = "directly_extracted"
+METADATA_RELIABILITY_USER_ENTERED = "user_entered"
+METADATA_RELIABILITY_INFERRED = "inferred"
+METADATA_RELIABILITY_UNAVAILABLE = "unavailable"
+METADATA_RELIABILITY_UNVERIFIED = "unverified"
+KNOWN_METADATA_RELIABILITY_TIERS = (
+    METADATA_RELIABILITY_DIRECTLY_EXTRACTED,
+    METADATA_RELIABILITY_USER_ENTERED,
+    METADATA_RELIABILITY_INFERRED,
+    METADATA_RELIABILITY_UNAVAILABLE,
+    METADATA_RELIABILITY_UNVERIFIED,
+)
+
 
 @dataclass
 class StructuralUnit:
@@ -3421,6 +3461,14 @@ def _render_region_address_label(region_type: str, address: dict) -> Optional[st
     # `order_index`'s own "position, not identity" convention.
     if region_type == "paragraph" and "paragraph_index" in address:
         return f"paragraph {address['paragraph_index'] + 1}"
+    # CLAUDE-MM4: create_addressable_drawing_region's own rectangular
+    # regions - "region_index" is a stable, 1-based, per-StructuralUnit
+    # sequential position (assigned once at creation, never renumbered by
+    # a later region's own creation or removal - see that method's own
+    # docstring), giving the "A101 · Ground Floor Plan · region 3" shape
+    # this stage's own governing prompt (Section 12) asks for.
+    if region_type == "rectangular" and "region_index" in address:
+        return f"region {address['region_index']}"
     if "label" in address:
         return str(address["label"])
     return None
@@ -9494,3 +9542,210 @@ class CaseWorkspaceStore:
             actor=actor, governance_log=governance_log,
         )
         return region
+
+    # -- CLAUDE-MM4: Drawing Intelligence and Orientation-Normalized ------------
+    # Comparison. Mirrors register_pdf_page_structure's/register_spreadsheet_
+    # structure's own shape exactly: takes ALREADY-EXTRACTED per-sheet data
+    # (never raw bytes, never a pypdf/PIL call) - this module still does not
+    # import services/drawing_intelligence.py, the same decoupling every
+    # prior MM stage's own registration method already establishes. A
+    # drawing sheet IS a StructuralUnit (unit_type="sheet") - no new domain
+    # object needed. Deliberately does NOT auto-create AddressableRegions
+    # the way MM2's paragraphs/MM3's rows do: a drawing sheet has no natural
+    # sub-structure to enumerate automatically (Section 6: "do not invent
+    # sheet numbers or titles when they cannot be extracted reliably" -
+    # the same honesty applies to regions, which only a human reviewer can
+    # meaningfully place). See create_addressable_drawing_region below for
+    # the on-demand, reviewer-driven region path.
+
+    def register_drawing_sheet_structure(
+        self, workspace: ProjectWorkspace, source_id: str, sheets: list[dict],
+        extractor_version: Optional[str] = None, actor: str = "system",
+        governance_log: Optional[GovernanceLog] = None,
+    ) -> dict:
+        """
+        `sheets` shape (produced by services/drawing_intelligence.py):
+        `[{"index", "label", "width", "height", "source_rotation",
+        "metadata": {field_name: {"value", "reliability", "evidence_snippet",
+        "source_page"}}}]` - `metadata`'s own per-field shape is Section
+        10's own required classification (directly_extracted/user_entered/
+        inferred/unavailable/unverified - KNOWN_METADATA_RELIABILITY_TIERS),
+        never a bare value with no reliability tag. `width`/`height` are the
+        sheet's own pixel/point dimensions in its ORIGINAL, unrotated,
+        unmirrored orientation - the same frame every AddressableRegion this
+        sheet ever gets is anchored in (see create_addressable_drawing_region
+        and services/drawing_intelligence.py's coordinate-transform module).
+        `source_rotation` is the PDF page's own baked-in `/Rotate` value (0
+        for a raster image, always) - a fact ABOUT the source file itself,
+        distinct from the reviewer's own view-only rotation/mirror state,
+        which this method never stores (Section 7: "transformation state...
+        must not silently alter the source" - there is nothing here for a
+        view transform to even write to).
+
+        One StructuralUnit per sheet unconditionally - the same "a sheet is
+        real and addressable even with no extractable title-block metadata"
+        principle MM2's image-only PDF pages already established (Section 6:
+        "do not invent sheet numbers or titles... when they cannot be
+        extracted reliably" - an honestly-empty metadata dict is preferred
+        over a guessed one).
+        """
+        source = self._find(workspace.sources, source_id)
+        if source is None or source["project_id"] != workspace.project_id:
+            raise CaseWorkspaceError(f"Source {source_id} was not found.")
+
+        structural_unit_ids: list[str] = []
+        for sheet in sheets:
+            unit = StructuralUnit(
+                id=_new_id(), project_id=workspace.project_id, source_id=source_id,
+                unit_type="sheet", order_index=sheet["index"], created_at=_now(), created_by=actor,
+                label=sheet.get("label") or f"Sheet {sheet['index'] + 1}",
+                modality_metadata={
+                    "width": sheet.get("width"),
+                    "height": sheet.get("height"),
+                    "source_rotation": sheet.get("source_rotation", 0),
+                    "fields": sheet.get("metadata", {}),
+                },
+            )
+            workspace.structural_units.append(asdict(unit))
+            structural_unit_ids.append(unit.id)
+
+        self.save(workspace)
+
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id, event_type="drawing_sheet_structure_registered",
+                actor=actor, role="system",
+                payload={"source_id": source_id, "sheet_count": len(sheets)},
+                correlation_id=source_id,
+            )
+
+        return {
+            "sheet_count": len(sheets),
+            "structural_unit_ids": structural_unit_ids,
+        }
+
+    def create_addressable_drawing_region(
+        self, workspace: ProjectWorkspace, structural_unit_id: str,
+        x: float, y: float, width: float, height: float,
+        actor: str = "system", governance_log: Optional[GovernanceLog] = None,
+    ) -> dict:
+        """
+        A rectangular AddressableRegion (Section 6: "support at least...
+        rectangular region") anchored to a drawing sheet's ORIGINAL,
+        unrotated, unmirrored coordinate frame - `x`/`y`/`width`/`height`
+        are all normalized 0-1 fractions of the sheet's own stored
+        width/height (register_drawing_sheet_structure's own `modality_
+        metadata`), the same convention MM3's spreadsheet cells and this
+        module's own pre-MM1 Artifact.crop already use for image regions.
+        Callers (services/drawing_intelligence.py's own coordinate-
+        transform functions) are responsible for converting a reviewer's
+        on-screen, possibly-rotated-or-mirrored selection BACK into this
+        original frame before calling this method - this method itself
+        performs no transform math, only bounds validation, matching the
+        "store flat" principle every other MM1-MM4 write path already
+        follows.
+
+        `region_index` is a stable, 1-based, per-StructuralUnit sequential
+        position - assigned once here from a simple count of this unit's
+        existing regions, NEVER renumbered later (a subsequently-deleted
+        region would leave a gap, not a collision - this codebase has no
+        region-deletion path yet, so the gap case does not currently
+        arise, but the assignment rule itself is written to be safe if one
+        is ever added).
+        """
+        unit = self._find(workspace.structural_units, structural_unit_id)
+        if unit is None or unit["project_id"] != workspace.project_id:
+            raise CaseWorkspaceError(f"Structural unit {structural_unit_id} was not found.")
+
+        for name, value in (("x", x), ("y", y), ("width", width), ("height", height)):
+            if not isinstance(value, (int, float)) or isinstance(value, bool):
+                raise CaseWorkspaceError(f"Region '{name}' must be a number.")
+        if not (0 <= x <= 1 and 0 <= y <= 1):
+            raise CaseWorkspaceError("Region x/y must be normalized fractions between 0 and 1.")
+        if width <= 0 or height <= 0:
+            raise CaseWorkspaceError("Region width/height must be positive.")
+        if x + width > 1 + 1e-9 or y + height > 1 + 1e-9:
+            raise CaseWorkspaceError("Region extends past the sheet's own bounds.")
+
+        existing_count = len(self.regions_for_structural_unit(workspace, structural_unit_id))
+        region = self.create_addressable_region(
+            workspace, structural_unit_id=structural_unit_id, region_type="rectangular",
+            address={
+                "x": x, "y": y, "width": width, "height": height,
+                "region_index": existing_count + 1,
+            },
+            actor=actor, governance_log=governance_log,
+        )
+        return region
+
+    def build_evidence_sachet(
+        self, workspace: ProjectWorkspace, region_id: str, task_description: Optional[str] = None,
+    ) -> dict:
+        """
+        CLAUDE-MM4 Section 14: the Governed Evidence Sachet - "Archiosk
+        does not pour the whole project into every question. It steeps
+        only the minimum necessary evidence through a governed,
+        selectively permeable boundary." A pure, read-time ASSEMBLY of
+        already-governed MM1 records (this StructuralUnit, this Region,
+        its sibling regions on the SAME sheet only, its citation, and the
+        owning Source's own sensitivity classification) into one allow-
+        listed packet - no new persisted object, no external call, the
+        same "derive at read time" convention resolve_region_citation
+        already uses. Deliberately excludes every OTHER sheet and every
+        OTHER source in the project (`excluded_summary` records the counts
+        so the packet is honest about what it left out - "minimum
+        necessary does not mean minimum intelligible": the sibling
+        regions and the sheet's own title-block metadata are INCLUDED
+        specifically so a detail is never detached from its sheet).
+
+        Returns `{"status": "unavailable", "region_id"}` for a broken
+        anchor (same honest shape resolve_region_citation already uses),
+        or the assembled packet dict on success. Raises nothing - a
+        missing task_description is simply carried through as None.
+        """
+        citation = self.resolve_region_citation(workspace, region_id)
+        if citation["status"] == "unavailable":
+            return {"status": "unavailable", "region_id": region_id}
+
+        region = self._find(workspace.addressable_regions, region_id)
+        unit = self._find(workspace.structural_units, citation["structural_unit_id"])
+        source = self._find(workspace.sources, citation["source_id"])
+
+        sibling_regions = [
+            {"region_id": r["id"], "region_type": r["region_type"],
+             "label": _render_region_address_label(r["region_type"], r["address"])}
+            for r in self.regions_for_structural_unit(workspace, unit["id"])
+            if r["id"] != region_id
+        ]
+        total_sheets = len([u for u in workspace.structural_units if u["source_id"] == source["id"]])
+
+        return {
+            "status": "assembled",
+            "task": task_description,
+            "citation": citation["label"],
+            "sheet": {
+                "structural_unit_id": unit["id"],
+                "label": unit.get("label"),
+                "unit_type": unit["unit_type"],
+                "fields": unit.get("modality_metadata", {}).get("fields", {}),
+            },
+            "region": {
+                "region_id": region["id"],
+                "region_type": region["region_type"],
+                "address": region["address"],
+            },
+            "nearby_regions": sibling_regions,
+            "source": {
+                "source_id": source["id"],
+                "name": source["name"],
+                "security_classification": source.get("security_classification"),
+                "version_status": citation["status"],
+            },
+            "excluded": {
+                "summary": (
+                    f"{max(total_sheets - 1, 0)} other sheet(s) and "
+                    f"{len(sibling_regions)} sibling region(s) on this sheet were named but not "
+                    f"expanded; every other source in this project was excluded entirely."
+                ),
+            },
+        }

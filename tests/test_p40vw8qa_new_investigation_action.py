@@ -367,7 +367,9 @@ class JavaScriptStructureTests(unittest.TestCase):
         # because it is a registered key in that table, not because
         # populateDivision itself names it.
         populate_idx = self.js.index("function populateDivision(")
-        populate_body = self.js[populate_idx:populate_idx + 1200]
+        # CLAUDE-MM4 widened this window (was 1200) - see the matching
+        # comment in tests/test_p40vw8qa1_stable_surface_extension_point.py.
+        populate_body = self.js[populate_idx:populate_idx + 2200]
         self.assertIn("PANEL_KINDS[kind]", populate_body)
         table_idx = self.js.index("const PANEL_KINDS = {")
         table = self.js[table_idx:self.js.index("\n        };", table_idx)]

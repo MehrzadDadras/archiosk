@@ -607,10 +607,22 @@ document.addEventListener('DOMContentLoaded', () => {
                 displayName = source.name;
                 contentEl.textContent = '';
                 if (source.kind === 'drawing') {
+                    // CLAUDE-MM4 Section 8: a comparison Display division
+                    // is a direct DOM insertion into THIS SAME page (never
+                    // an <iframe> - unlike the PANEL_KINDS branch below) -
+                    // so mounting static/js/drawing_image_viewer.js on
+                    // this specific <img> gives this division its OWN
+                    // independent rotate/mirror/zoom/pan/region state,
+                    // exactly like the primary document pane's own
+                    // instance, never sharing state with it.
                     const img = document.createElement('img');
+                    img.className = 'document-viewer-image';
                     img.src = source.file_url;
                     img.alt = source.name;
+                    img.dataset.sourceId = source.id;
+                    img.dataset.projectId = projectId;
                     contentEl.appendChild(img);
+                    if (window.ArchioskDrawingImageViewer) window.ArchioskDrawingImageViewer.mount(img);
                 } else {
                     const frame = document.createElement('iframe');
                     frame.src = source.file_url;

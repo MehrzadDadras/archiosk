@@ -1257,9 +1257,16 @@
         {% else %}
         {% if selected_source.file_path %}
         {% if selected_source.kind == 'drawing' %}
+        {# CLAUDE-MM4: static/js/drawing_image_viewer.js auto-mounts on
+           every `.document-viewer-image[data-source-id]` present at load
+           (this one) - real zoom/pan/rotate/mirror/reset/region-select,
+           replacing what used to be a bare, uncontrolled <img> with no
+           viewer of its own (see that file's own header comment). #}
         <img class="document-viewer-image"
              src="{{ url_for('workspace.source_file', project_id=project_id, source_id=selected_source.id) }}"
-             alt="{{ selected_source.name }}">
+             alt="{{ selected_source.name }}"
+             data-source-id="{{ selected_source.id }}"
+             data-project-id="{{ project_id }}">
         {% elif selected_source.file_path and selected_source.file_path.lower().endswith('.pdf') %}
         {# CLAUDE-P40-VW7A-QA (Move Document Controls into the Top
            Application Menu): a real, app-owned canvas renderer
@@ -2638,6 +2645,7 @@
 <script src="{{ url_for('static', filename='js/investigation_attention.js') }}?v={{ static_version }}"></script>
 {% endif %}
 <script src="{{ url_for('static', filename='js/pdf_viewer.js') }}?v={{ static_version }}"></script>
+<script src="{{ url_for('static', filename='js/drawing_image_viewer.js') }}?v={{ static_version }}"></script>
 <script src="{{ url_for('static', filename='js/case_workspace.js') }}?v={{ static_version }}"></script>
 <script src="{{ url_for('static', filename='js/files_folder_menus.js') }}?v={{ static_version }}"></script>
 {% endblock %}

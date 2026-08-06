@@ -43,6 +43,10 @@ API_ROUTES = [
     # CLAUDE-MM3
     ("POST", "/api/v1/documents/some-project/sources/some-source/spreadsheet-structure"),
     ("POST", "/api/v1/documents/some-project/sources/some-source/spreadsheet-cell"),
+    # CLAUDE-MM4
+    ("POST", "/api/v1/documents/some-project/sources/some-source/drawing-structure"),
+    ("POST", "/api/v1/documents/some-project/sources/some-source/drawing-regions"),
+    ("GET", "/api/v1/documents/some-project/regions/some-region/evidence-sachet"),
 ]
 
 # Admin-only write routes - excluded from "read_only can reach every read
@@ -54,6 +58,8 @@ ADMIN_ONLY_ROUTE_PATHS = {
     "/api/v1/documents/some-project/sources/some-source/pdf-structure",
     "/api/v1/documents/some-project/sources/some-source/spreadsheet-structure",
     "/api/v1/documents/some-project/sources/some-source/spreadsheet-cell",
+    "/api/v1/documents/some-project/sources/some-source/drawing-structure",
+    "/api/v1/documents/some-project/sources/some-source/drawing-regions",
 }
 
 
@@ -125,6 +131,18 @@ class ApiAuthenticationTests(unittest.TestCase):
         self.assertEqual(response.status_code, 403)
         self.assertEqual(response.get_json()["error"], "forbidden")
 
+    def test_drawing_structure_rejects_authenticated_non_admin(self):
+        client = self._client_as("read_only")
+        response = client.post("/api/v1/documents/some-project/sources/some-source/drawing-structure")
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.get_json()["error"], "forbidden")
+
+    def test_drawing_regions_rejects_authenticated_non_admin(self):
+        client = self._client_as("read_only")
+        response = client.post("/api/v1/documents/some-project/sources/some-source/drawing-regions")
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.get_json()["error"], "forbidden")
+
     # -- Authenticated, correct role: existing behaviour is unchanged --
 
     def test_admin_can_reach_ingest_route(self):
@@ -160,6 +178,18 @@ class ApiAuthenticationTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.get_json()["error"], "invalid_edit")
+
+    def test_admin_can_reach_drawing_structure_route(self):
+        client = self._client_as("admin")
+        response = client.post("/api/v1/documents/some-project/sources/some-source/drawing-structure")
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.get_json()["error"], "invalid_source")
+
+    def test_admin_can_reach_drawing_regions_route(self):
+        client = self._client_as("admin")
+        response = client.post("/api/v1/documents/some-project/sources/some-source/drawing-regions")
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.get_json()["error"], "invalid_region")
 
     def test_read_only_can_reach_every_read_route(self):
         client = self._client_as("read_only")

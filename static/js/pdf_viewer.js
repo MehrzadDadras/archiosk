@@ -63,6 +63,16 @@
     var overflowDetails = document.getElementById('doc-controls-overflow');
     var overflowPanel = document.getElementById('doc-controls-overflow-panel');
     var secondaryGroup = document.getElementById('doc-controls-secondary');
+    // CLAUDE-MM4: orientation (mirror/reset) and drawing-region controls -
+    // additive to VW7A-QA2's own rotate/annotate controls, absent (null)
+    // on any page whose markup predates this stage without breaking
+    // anything below (every use is null-guarded the same way the
+    // existing optional annotation buttons already are).
+    var mirrorHBtn = document.getElementById('doc-mirror-h');
+    var mirrorVBtn = document.getElementById('doc-mirror-v');
+    var resetOrientationBtn = document.getElementById('doc-reset-orientation');
+    var orientationStatusEl = document.getElementById('doc-orientation-status');
+    var regionStatusEl = document.getElementById('doc-region-status');
     if (!prevBtn || !nextBtn || !pageInput || !zoomOutBtn || !zoomInBtn || !searchInput) return;
 
     // -------- Responsive: move secondary controls into the overflow --
@@ -106,6 +116,12 @@
     var currentPage = 1;
     var currentZoom = 1.0;
     var currentRotation = 0;
+    // CLAUDE-MM4 Section 7: view-only orientation state, layered ON TOP
+    // of the existing PDF.js-baked rotation via a plain CSS transform on
+    // pageWrap (see applyMirrorTransform below) - the underlying PDF
+    // bytes are never touched by either currentRotation or these.
+    var mirrorH = false;
+    var mirrorV = false;
     var renderTask = null;
     var pageTextCache = {};
     var searchMatches = [];
@@ -160,6 +176,8 @@
             page: currentPage,
             zoom: currentZoom,
             rotation: currentRotation,
+            mirrorH: mirrorH,
+            mirrorV: mirrorV,
             scrollLeft: currentCanvasContainer ? currentCanvasContainer.scrollLeft : 0,
             scrollTop: currentCanvasContainer ? currentCanvasContainer.scrollTop : 0,
             searchQuery: searchInput ? searchInput.value : ''
@@ -444,7 +462,86 @@
     function rotate() {
         currentRotation = (currentRotation + 90) % 360;
         renderPage();
+        updateOrientationStatus();
         saveViewStateSoon();
+    }
+
+    // -------- Orientation: mirror + reset (CLAUDE-MM4 Section 7) --------
+    // Mirror is deliberately NOT baked into the PDF.js render viewport
+    // the way currentRotation is (that would require re-deriving PDF.js's
+    // own viewport math for a transform it has no native concept of) -
+    // instead a plain CSS transform on pageWrap (the SAME element already
+    // wrapping both canvas and overlayCanvas together, so the rendered
+    // page and any annotations/regions drawn on it always mirror as one
+    // unit, never independently). This composes as ROTATE-then-MIRROR
+    // (PDF.js bakes rotation into the canvas raster FIRST; the CSS
+    // transform mirrors that already-rotated raster on top) - a
+    // different, but equally valid, composition order from services/
+    // drawing_intelligence.py's own MIRROR-then-rotate convention (used
+    // by static/js/drawing_image_viewer.js, which has no PDF.js baked-
+    // rotation constraint to work around). What matters for correctness
+    // is that THIS pipeline's own forward (render) and inverse (pointer
+    // coordinate correction below) compose consistently with EACH OTHER,
+    // which flippedCanvasPoint below is written to guarantee, not that
+    // every drawing surface in this app shares one universal order.
+    function applyMirrorTransform() {
+        if (!pageWrap) return;
+        var scaleX = mirrorH ? -1 : 1;
+        var scaleY = mirrorV ? -1 : 1;
+        pageWrap.style.transform = (scaleX !== 1 || scaleY !== 1) ? ('scale(' + scaleX + ',' + scaleY + ')') : '';
+    }
+
+    function updateOrientationStatus() {
+        if (!orientationStatusEl) return;
+        var parts = [];
+        if (currentRotation % 360) parts.push('Rotated ' + currentRotation + '° clockwise');
+        if (mirrorH) parts.push('mirrored horizontally');
+        if (mirrorV) parts.push('mirrored vertically');
+        if (!parts.length) { orientationStatusEl.textContent = ''; return; }
+        var text = parts.join(' and ');
+        orientationStatusEl.textContent = text.charAt(0).toUpperCase() + text.slice(1) + ' — source unchanged';
+    }
+
+    function mirrorHorizontal() {
+        mirrorH = !mirrorH;
+        applyMirrorTransform();
+        updateOrientationStatus();
+        saveViewStateSoon();
+    }
+
+    function mirrorVertical() {
+        mirrorV = !mirrorV;
+        applyMirrorTransform();
+        updateOrientationStatus();
+        saveViewStateSoon();
+    }
+
+    function resetOrientation() {
+        currentRotation = 0;
+        mirrorH = false;
+        mirrorV = false;
+        applyMirrorTransform();
+        renderPage();
+        updateOrientationStatus();
+        saveViewStateSoon();
+    }
+
+    // A raw on-screen pointer position, corrected for the CURRENT mirror
+    // state, in CANVAS pixel space - i.e. "undo the CSS mirror" before
+    // handing the point to PDF.js's own currentViewport.convertToPdfPoint
+    // (which already inverts PDF.js's OWN baked-in rotation). Composing
+    // these two inversions in this order is exactly the inverse of this
+    // pipeline's own forward composition (see applyMirrorTransform's own
+    // comment above) - proven correct by tests/test_mm4_drawing_
+    // intelligence.py's equivalent round-trip property for the shared
+    // mirror math, and re-verified live (create a region while mirrored,
+    // reset orientation, confirm the region redisplays in the same real
+    // drawing location).
+    function flippedCanvasPoint(pt) {
+        return {
+            x: mirrorH && canvas ? (canvas.width - pt.x) : pt.x,
+            y: mirrorV && canvas ? (canvas.height - pt.y) : pt.y,
+        };
     }
 
     // -------- Search (Section: "search... where applicable") -----------
@@ -544,9 +641,16 @@
     var inkDrawing = null;
     var highlightDrag = null;
     var activeTextBox = null;
+    // CLAUDE-MM4: drag-to-select-rectangle state for the "region" tool -
+    // same shape as highlightDrag (x1/y1/x2/y2 in PDF-page space), kept
+    // separate so a region selection is never confused with an ephemeral,
+    // never-persisted highlight annotation.
+    var regionDrag = null;
+    var currentStructuralUnitId = null;
+    var currentProjectId = null; // set from the canvas container's own dataset, see mount() below
 
     var annotationToolButtons = [];
-    ['doc-annotate-text', 'doc-annotate-highlight', 'doc-annotate-ink', 'doc-annotate-select'].forEach(function (id) {
+    ['doc-annotate-text', 'doc-annotate-highlight', 'doc-annotate-ink', 'doc-annotate-select', 'doc-region-select'].forEach(function (id) {
         var btn = document.getElementById(id);
         if (btn) annotationToolButtons.push(btn);
     });
@@ -697,6 +801,21 @@
             drawOneAnnotation(ctx, { type: 'ink', points: inkDrawing.points }, false);
         } else if (highlightDrag) {
             drawOneAnnotation(ctx, { type: 'highlight', x1: highlightDrag.x1, y1: highlightDrag.y1, x2: highlightDrag.x2, y2: highlightDrag.y2 }, false);
+        } else if (regionDrag) {
+            // CLAUDE-MM4: rendered in a distinct teal (matches the app's
+            // own evidence/region accent elsewhere) so a region-in-
+            // progress is never visually confused with an ephemeral
+            // highlight annotation while dragging.
+            var p1 = currentViewport.convertToViewportPoint(regionDrag.x1, regionDrag.y1);
+            var p2 = currentViewport.convertToViewportPoint(regionDrag.x2, regionDrag.y2);
+            var rx = Math.min(p1[0], p2[0]), ry = Math.min(p1[1], p2[1]);
+            var rw = Math.abs(p2[0] - p1[0]), rh = Math.abs(p2[1] - p1[1]);
+            ctx.save();
+            ctx.strokeStyle = '#4fa9a2';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([6, 4]);
+            ctx.strokeRect(rx, ry, rw, rh);
+            ctx.restore();
         }
     }
 
@@ -709,6 +828,11 @@
         updateAnnotationUi();
         redrawAnnotations();
         if (overlayCanvas) overlayCanvas.style.cursor = activeTool ? 'crosshair' : 'default';
+        if (activeTool === 'region') {
+            ensureSheetUnitForCurrentPage();
+        } else if (regionStatusEl) {
+            regionStatusEl.textContent = '';
+        }
     }
 
     function canvasPointFromEvent(e) {
@@ -743,13 +867,20 @@
 
     function onOverlayPointerDown(e) {
         if (!activeTool || !currentViewport) return;
-        var pt = canvasPointFromEvent(e);
+        var pt = flippedCanvasPoint(canvasPointFromEvent(e));
         var pdfPt = currentViewport.convertToPdfPoint(pt.x, pt.y);
         if (activeTool === 'ink') {
             inkDrawing = { points: [{ x: pdfPt[0], y: pdfPt[1] }] };
             try { overlayCanvas.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
         } else if (activeTool === 'highlight') {
             highlightDrag = { x1: pdfPt[0], y1: pdfPt[1], x2: pdfPt[0], y2: pdfPt[1] };
+            try { overlayCanvas.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+        } else if (activeTool === 'region') {
+            if (!currentSheetUnit || currentSheetUnit.order_index !== (currentPage - 1)) {
+                ensureSheetUnitForCurrentPage();
+                return;
+            }
+            regionDrag = { x1: pdfPt[0], y1: pdfPt[1], x2: pdfPt[0], y2: pdfPt[1] };
             try { overlayCanvas.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
         } else if (activeTool === 'text') {
             openTextAnnotationInput(pt, pdfPt);
@@ -762,14 +893,17 @@
     }
 
     function onOverlayPointerMove(e) {
-        if (!currentViewport || (!inkDrawing && !highlightDrag)) return;
-        var pt = canvasPointFromEvent(e);
+        if (!currentViewport || (!inkDrawing && !highlightDrag && !regionDrag)) return;
+        var pt = flippedCanvasPoint(canvasPointFromEvent(e));
         var pdfPt = currentViewport.convertToPdfPoint(pt.x, pt.y);
         if (inkDrawing) {
             inkDrawing.points.push({ x: pdfPt[0], y: pdfPt[1] });
         } else if (highlightDrag) {
             highlightDrag.x2 = pdfPt[0];
             highlightDrag.y2 = pdfPt[1];
+        } else if (regionDrag) {
+            regionDrag.x2 = pdfPt[0];
+            regionDrag.y2 = pdfPt[1];
         }
         drawLivePreview();
     }
@@ -787,7 +921,133 @@
             }
             highlightDrag = null;
         }
+        if (regionDrag) {
+            var drag = regionDrag;
+            regionDrag = null;
+            if (Math.abs(drag.x2 - drag.x1) > 2 || Math.abs(drag.y2 - drag.y1) > 2) {
+                commitRegionSelection(drag);
+            }
+        }
         redrawAnnotations();
+    }
+
+    // -------- Drawing regions (CLAUDE-MM4 Section 4/6/12) ----------------
+    // Real, PERSISTED AddressableRegions - distinct from the ephemeral,
+    // never-saved annotations above (Section 4: "create direct evidence
+    // anchored to that region"). Reuses this same overlay's own pointer/
+    // coordinate infrastructure (including the mirror-flip correction
+    // every other tool now shares) rather than a second selection
+    // mechanism.
+    function apiDocumentsBase() {
+        var stripEl = document.getElementById('document-tab-strip');
+        var projectId = stripEl ? stripEl.getAttribute('data-project-id') : '';
+        return '/api/v1/documents/' + encodeURIComponent(projectId || '');
+    }
+
+    // Sheet StructuralUnit for the CURRENTLY DISPLAYED page - fetched
+    // lazily (not on every mount(), only when the reviewer actually
+    // activates the region tool) and re-fetched on every page change,
+    // since each PDF page is its own sheet (register_drawing_sheet_
+    // structure's own one-unit-per-page contract).
+    var currentSheetUnit = null;
+
+    function ensureSheetUnitForCurrentPage() {
+        if (!regionStatusEl || !currentSourceId) return Promise.resolve(null);
+        if (currentSheetUnit && currentSheetUnit.order_index === (currentPage - 1)) {
+            return Promise.resolve(currentSheetUnit);
+        }
+        regionStatusEl.textContent = 'Looking up this sheet…';
+        return fetch(apiDocumentsBase() + '/structural-units?source_id=' + encodeURIComponent(currentSourceId), {
+            credentials: 'same-origin',
+        }).then(function (resp) { return resp.json(); }).then(function (body) {
+            var units = (body && body.structural_units) || [];
+            var match = units.filter(function (u) {
+                return u.unit_type === 'sheet' && u.order_index === (currentPage - 1);
+            })[0];
+            if (!match) {
+                regionStatusEl.textContent = "This drawing's sheets are not registered yet.";
+                offerRegisterSheets();
+                currentSheetUnit = null;
+                return null;
+            }
+            currentSheetUnit = match;
+            regionStatusEl.textContent = 'Drag a rectangle to create a region.';
+            return match;
+        }).catch(function () {
+            regionStatusEl.textContent = 'Could not look up this sheet.';
+            return null;
+        });
+    }
+
+    function offerRegisterSheets() {
+        if (!regionStatusEl) return;
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'doc-control-btn';
+        btn.textContent = 'Register this drawing';
+        btn.addEventListener('click', function () {
+            btn.disabled = true;
+            fetch(apiDocumentsBase() + '/sources/' + encodeURIComponent(currentSourceId) + '/drawing-structure', {
+                method: 'POST', credentials: 'same-origin',
+            }).then(function () {
+                currentSheetUnit = null;
+                return ensureSheetUnitForCurrentPage();
+            });
+        });
+        regionStatusEl.appendChild(document.createTextNode(' '));
+        regionStatusEl.appendChild(btn);
+    }
+
+    // Converts a PDF-user-space point (origin bottom-left, y-up - the
+    // SAME frame page.mediabox.width/height, stored server-side by
+    // services/drawing_intelligence.py, already describes) into this
+    // module's own normalized 0-1, origin top-left, y-down convention -
+    // the one every AddressableRegion is stored in. Assumes a zero-
+    // origin mediabox (true for the overwhelming majority of real-world
+    // PDFs, including this repository's own hand-built test fixture) -
+    // a nonzero mediabox origin is a known, undocumented-until-now edge
+    // case this stage does not correct for.
+    function pdfPointToNormalized(px, py) {
+        var meta = currentSheetUnit.modality_metadata || {};
+        var w = meta.width || 1;
+        var h = meta.height || 1;
+        return { x: px / w, y: 1 - (py / h) };
+    }
+
+    function commitRegionSelection(drag) {
+        if (!currentSheetUnit) return;
+        var n1 = pdfPointToNormalized(drag.x1, drag.y1);
+        var n2 = pdfPointToNormalized(drag.x2, drag.y2);
+        var x = Math.max(0, Math.min(n1.x, n2.x));
+        var y = Math.max(0, Math.min(n1.y, n2.y));
+        var width = Math.min(1 - x, Math.abs(n2.x - n1.x));
+        var height = Math.min(1 - y, Math.abs(n2.y - n1.y));
+        if (regionStatusEl) regionStatusEl.textContent = 'Saving region…';
+        fetch(apiDocumentsBase() + '/sources/' + encodeURIComponent(currentSourceId) + '/drawing-regions', {
+            method: 'POST', credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ structural_unit_id: currentSheetUnit.id, x: x, y: y, width: width, height: height }),
+        }).then(function (resp) { return resp.json().then(function (body) { return { ok: resp.ok, body: body }; }); })
+            .then(function (result) {
+                if (!regionStatusEl) return;
+                if (!result.ok) {
+                    regionStatusEl.textContent = 'Could not save that region: ' + (result.body.message || 'unknown error');
+                    return;
+                }
+                var label = result.body.citation && result.body.citation.label;
+                regionStatusEl.textContent = '';
+                var span = document.createElement('span');
+                span.textContent = label ? ('Region created: ' + label + ' ') : 'Region created. ';
+                regionStatusEl.appendChild(span);
+                if (label && navigator.clipboard) {
+                    var copyBtn = document.createElement('button');
+                    copyBtn.type = 'button';
+                    copyBtn.className = 'doc-control-btn';
+                    copyBtn.textContent = 'Copy citation';
+                    copyBtn.addEventListener('click', function () { navigator.clipboard.writeText(label); });
+                    regionStatusEl.appendChild(copyBtn);
+                }
+            });
     }
 
     function resetAnnotationState() {
@@ -881,6 +1141,12 @@
             var hasSavedPage = saved && typeof saved.page === 'number' && saved.page >= 1 && saved.page <= doc.numPages;
             currentPage = hasSavedPage ? saved.page : 1;
             currentRotation = (saved && typeof saved.rotation === 'number') ? saved.rotation : 0;
+            mirrorH = !!(saved && saved.mirrorH);
+            mirrorV = !!(saved && saved.mirrorV);
+            currentSheetUnit = null;
+            if (regionStatusEl) regionStatusEl.textContent = '';
+            applyMirrorTransform();
+            updateOrientationStatus();
             pageTextCache = {};
             searchMatches = [];
             searchMatchIndex = -1;
@@ -929,6 +1195,11 @@
         currentSourceId = null;
         currentCanvasContainer = null;
         thumbnailsOnlyMode = false;
+        mirrorH = false;
+        mirrorV = false;
+        currentSheetUnit = null;
+        regionDrag = null;
+        if (regionStatusEl) regionStatusEl.textContent = '';
         hideControls();
         clearThumbnails();
         resetAnnotationState();
@@ -946,6 +1217,9 @@
     fitWidthBtn.addEventListener('click', fitWidth);
     fitPageBtn.addEventListener('click', fitPage);
     rotateBtn.addEventListener('click', rotate);
+    if (mirrorHBtn) mirrorHBtn.addEventListener('click', mirrorHorizontal);
+    if (mirrorVBtn) mirrorVBtn.addEventListener('click', mirrorVertical);
+    if (resetOrientationBtn) resetOrientationBtn.addEventListener('click', resetOrientation);
     searchInput.addEventListener('input', function () {
         window.clearTimeout(searchDebounce);
         searchDebounce = window.setTimeout(function () { runSearch(searchInput.value); }, 300);

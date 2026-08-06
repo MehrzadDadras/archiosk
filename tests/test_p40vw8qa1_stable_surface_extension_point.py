@@ -197,7 +197,13 @@ class PanelKindsClientRegistryTests(unittest.TestCase):
 
     def test_populate_division_reads_the_shared_table_not_its_own_chain(self):
         start = self.js.index("function populateDivision(")
-        body = self.js[start:start + 1200]
+        # CLAUDE-MM4 widened this window (was 1200) - its own kind ===
+        # 'source'/'drawing' branch grew a real explanatory comment about
+        # why THAT branch stays a direct DOM insertion rather than the
+        # PANEL_KINDS/iframe path below, pushing PANEL_KINDS[kind] further
+        # into the function body without changing this test's own actual
+        # assertion (PANEL_KINDS[kind] is still there, unconditionally).
+        body = self.js[start:start + 2200]
         self.assertIn("PANEL_KINDS[kind]", body)
         self.assertNotIn("kind === 'case' || kind === 'overview'", body)
 

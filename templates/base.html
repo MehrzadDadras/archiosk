@@ -135,6 +135,17 @@
                     <button type="button" class="doc-control-btn" id="doc-fit-width" data-ui-ref="menu.document-controls.fit-width" aria-label="Fit width" title="Fit width">Fit width</button>
                     <button type="button" class="doc-control-btn" id="doc-fit-page" data-ui-ref="menu.document-controls.fit-page" aria-label="Fit page" title="Fit page">Fit page</button>
                     <button type="button" class="doc-control-btn" id="doc-rotate" data-ui-ref="menu.document-controls.rotate" aria-label="Rotate 90 degrees" title="Rotate 90&deg;">&#8635;</button>
+                    {# CLAUDE-MM4, Section 7: reversible orientation controls -
+                       view-only (static/js/pdf_viewer.js's own applyMirrorTransform,
+                       a plain CSS transform, never touches the stored PDF bytes).
+                       #doc-orientation-status is the required visible "Mirrored/
+                       Rotated - source unchanged" banner, the same "state the
+                       boundary in the control surface itself" pattern
+                       #doc-annotation-status below already establishes. #}
+                    <button type="button" class="doc-control-btn" id="doc-mirror-h" data-ui-ref="menu.document-controls.mirror-h" aria-label="Mirror horizontally" title="Mirror horizontally">&#8596;</button>
+                    <button type="button" class="doc-control-btn" id="doc-mirror-v" data-ui-ref="menu.document-controls.mirror-v" aria-label="Mirror vertically" title="Mirror vertically">&#8597;</button>
+                    <button type="button" class="doc-control-btn" id="doc-reset-orientation" data-ui-ref="menu.document-controls.reset-orientation" aria-label="Reset orientation" title="Reset orientation">&#8634;</button>
+                    <span class="doc-orientation-status" id="doc-orientation-status" data-ui-ref="menu.document-controls.orientation-status" aria-live="polite"></span>
                     <span class="doc-controls-divider" aria-hidden="true"></span>
                     <input type="search" class="doc-search-input" id="doc-search-input" data-ui-ref="menu.document-controls.search-input" placeholder="Search in document" aria-label="Search in document">
                     <button type="button" class="doc-control-btn" id="doc-search-prev" data-ui-ref="menu.document-controls.search-prev" aria-label="Previous match" title="Previous match" disabled>&and;</button>
@@ -165,6 +176,15 @@
                     <button type="button" class="doc-control-btn" id="doc-annotate-undo" data-ui-ref="menu.document-controls.annotate-undo" aria-label="Undo annotation change" title="Undo" disabled>&#8630;</button>
                     <button type="button" class="doc-control-btn" id="doc-annotate-redo" data-ui-ref="menu.document-controls.annotate-redo" aria-label="Redo annotation change" title="Redo" disabled>&#8631;</button>
                     <span class="doc-annotation-status" id="doc-annotation-status" data-ui-ref="menu.document-controls.annotation-status" aria-live="polite"></span>
+                    {# CLAUDE-MM4, Section 4/6/12: the "region" tool joins the SAME
+                       one-active-tool-at-a-time group above (aria-pressed radio-group
+                       behavior, static/js/pdf_viewer.js's own setActiveTool) - but
+                       unlike text/highlight/ink, a region it creates is REAL,
+                       persisted MM1 evidence (an AddressableRegion + EvidenceItem via
+                       the new /drawing-regions API), not a session-only annotation. #}
+                    <span class="doc-controls-divider" aria-hidden="true"></span>
+                    <button type="button" class="doc-control-btn doc-annotation-tool" id="doc-region-select" data-ui-ref="menu.document-controls.region-select" data-tool="region" aria-pressed="false" aria-label="Drawing region tool" title="Select a drawing region">&#9635;</button>
+                    <span class="doc-region-status" id="doc-region-status" data-ui-ref="menu.document-controls.region-status" aria-live="polite"></span>
                 </div>
                 <details class="doc-controls-overflow" id="doc-controls-overflow" data-ui-ref="menu.document-controls.overflow">
                     <summary class="doc-control-btn doc-controls-overflow-summary" aria-label="More document controls" title="More document controls">&hellip;</summary>
