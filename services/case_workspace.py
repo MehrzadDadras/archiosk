@@ -2624,6 +2624,29 @@ KNOWN_OBSERVATION_AUTHOR_TYPES = (
     OBSERVATION_AUTHOR_AI,
 )
 
+# CLAUDE-MM2: PDF/document classification (Section 11 of this stage's own
+# governing prompt) - what register_pdf_page_structure below actually found,
+# never conflated with "extraction succeeded" vs "extraction failed" alone.
+# text_native/image_only/mixed are outcomes of a SUCCESSFUL pypdf read (the
+# document opened fine, its pages simply do or don't carry a text layer);
+# extraction_failed/encrypted_or_unsupported are the read itself failing -
+# a materially different fact a caller must not conflate with "this PDF has
+# no text" (Section 11's own explicit "do not claim 'no usable document'
+# merely because text is absent" applies to image_only, not to a genuine
+# read failure, which is its own honest, separate state).
+PDF_CLASSIFICATION_TEXT_NATIVE = "text_native"
+PDF_CLASSIFICATION_IMAGE_ONLY = "image_only"
+PDF_CLASSIFICATION_MIXED = "mixed"
+PDF_CLASSIFICATION_EXTRACTION_FAILED = "extraction_failed"
+PDF_CLASSIFICATION_ENCRYPTED_OR_UNSUPPORTED = "encrypted_or_unsupported"
+KNOWN_PDF_CLASSIFICATIONS = (
+    PDF_CLASSIFICATION_TEXT_NATIVE,
+    PDF_CLASSIFICATION_IMAGE_ONLY,
+    PDF_CLASSIFICATION_MIXED,
+    PDF_CLASSIFICATION_EXTRACTION_FAILED,
+    PDF_CLASSIFICATION_ENCRYPTED_OR_UNSUPPORTED,
+)
+
 
 @dataclass
 class StructuralUnit:
@@ -3371,6 +3394,16 @@ def _render_region_address_label(region_type: str, address: dict) -> Optional[st
         return f"region x={address['x']},y={address['y']}"
     if region_type in ("cell", "row") and "label" in address:
         return str(address["label"])
+    # CLAUDE-MM2: register_pdf_page_structure's own paragraph regions - the
+    # page number itself already appears via the StructuralUnit's own
+    # label ("Page 14") in resolve_region_citation's label_parts, so this
+    # only ever needs to add the paragraph position, matching the
+    # "RFP.pdf · page 14 · paragraph 3" example this stage's own governing
+    # prompt gives. 1-indexed for the human-facing rendering; the stored
+    # `paragraph_index` itself stays 0-indexed, unchanged, matching
+    # `order_index`'s own "position, not identity" convention.
+    if region_type == "paragraph" and "paragraph_index" in address:
+        return f"paragraph {address['paragraph_index'] + 1}"
     if "label" in address:
         return str(address["label"])
     return None
@@ -4507,6 +4540,10 @@ class CaseWorkspaceStore:
         file_hash: Optional[str] = None,
         origin_type: Optional[str] = None,
         origin_reference: Optional[str] = None,
+        mime_type: Optional[str] = None,
+        size_bytes: Optional[int] = None,
+        security_classification: Optional[str] = None,
+        extractor_version: Optional[str] = None,
         governance_log: Optional[GovernanceLog] = None,
     ) -> dict:
         """
@@ -4514,6 +4551,14 @@ class CaseWorkspaceStore:
         registered Source (e.g. metadata that arrives after the file
         itself was uploaded). Only supplied fields are changed - honest
         absence is preserved for anything left None.
+
+        `mime_type`/`size_bytes`/`security_classification`/
+        `extractor_version` (CLAUDE-MM1) reuse this same partial-update
+        method rather than a second one - they are document-identity
+        metadata exactly like every field above, just added a stage
+        later (services/pdf_intelligence.py is this method's first real
+        caller for these four, populating them once the actual PDF bytes
+        have been read).
         """
         source = self._find(workspace.sources, source_id)
         if source is None:
@@ -4537,6 +4582,14 @@ class CaseWorkspaceStore:
             source["origin_type"] = normalize_open_world_value(origin_type, KNOWN_SOURCE_ORIGIN_TYPES)
         if origin_reference is not None:
             source["origin_reference"] = origin_reference
+        if mime_type is not None:
+            source["mime_type"] = mime_type
+        if size_bytes is not None:
+            source["size_bytes"] = size_bytes
+        if security_classification is not None:
+            source["security_classification"] = security_classification
+        if extractor_version is not None:
+            source["extractor_version"] = extractor_version
 
         self.save(workspace)
 
@@ -9171,12 +9224,123 @@ class CaseWorkspaceStore:
         if address_label:
             label_parts.append(address_label)
 
-        return {
-            "status": "resolved",
+        result = {
+            # CLAUDE-MM2 (Section 13): "preserved old citation" - a region
+            # anchored to a Source that has since been superseded is still
+            # resolved (the old evidence and its citation remain readable,
+            # never silently invalidated), just explicitly flagged stale
+            # via the EXISTING Source.superseded_by_source_id pointer
+            # (register_source_revision, drawings-only today) - no new
+            # version mechanism, no full redline comparison.
+            "status": "stale" if source.get("superseded_by_source_id") else "resolved",
             "label": " · ".join(label_parts),
             "region_id": region["id"],
             "structural_unit_id": unit["id"],
             "source_id": source["id"],
             "region_type": region["region_type"],
             "address": region["address"],
+        }
+        if source.get("superseded_by_source_id"):
+            result["superseded_by_source_id"] = source["superseded_by_source_id"]
+        return result
+
+    # -- CLAUDE-MM2: PDF and Document Intelligence ------------------------------
+    # Mirrors register_table_evidence's own shape (Batch J, above): takes
+    # ALREADY-EXTRACTED per-page text, never raw bytes or a pypdf call -
+    # this module still does not import services/bhive_parser.py (see
+    # promote_requirement_item's own docstring on why). The actual pypdf
+    # read, and the encrypted/malformed classification only a failed READ
+    # can produce, live in services/pdf_intelligence.py, a thin caller that
+    # does the extraction and then calls this method with its result.
+
+    def register_pdf_page_structure(
+        self, workspace: ProjectWorkspace, source_id: str, pages: list[str],
+        extractor_version: Optional[str] = None, actor: str = "system",
+        governance_log: Optional[GovernanceLog] = None,
+    ) -> dict:
+        """
+        One StructuralUnit per PDF page (`unit_type="page"`, stable page
+        index/label) unconditionally - a page's identity and existence are
+        real regardless of whether it carries a text layer (Section 11:
+        "do not claim 'no usable document' merely because text is
+        absent" - an image-only page is still a real, addressable page).
+        For any page with real (non-whitespace) text, additionally splits
+        it into paragraphs (blank-line-delimited - deterministic, no NLP)
+        and registers one AddressableRegion + one EvidenceItem per non-
+        empty paragraph, each carrying its own page/paragraph address for
+        `_render_region_address_label`'s "page N · paragraph M" rendering.
+
+        Returns `{"classification", "page_count", "structural_unit_ids",
+        "addressable_region_ids", "evidence_item_ids"}` - `classification`
+        is one of PDF_CLASSIFICATION_TEXT_NATIVE/IMAGE_ONLY/MIXED (never
+        the two failure states - those only ever come from a failed READ,
+        handled entirely in services/pdf_intelligence.py before this
+        method is ever called with a real `pages` list).
+        """
+        source = self._find(workspace.sources, source_id)
+        if source is None or source["project_id"] != workspace.project_id:
+            raise CaseWorkspaceError(f"Source {source_id} was not found.")
+
+        structural_unit_ids: list[str] = []
+        addressable_region_ids: list[str] = []
+        evidence_item_ids: list[str] = []
+        pages_with_text = 0
+
+        for page_index, page_text in enumerate(pages):
+            unit = StructuralUnit(
+                id=_new_id(), project_id=workspace.project_id, source_id=source_id,
+                unit_type="page", order_index=page_index, created_at=_now(), created_by=actor,
+                label=f"Page {page_index + 1}",
+            )
+            workspace.structural_units.append(asdict(unit))
+            structural_unit_ids.append(unit.id)
+
+            paragraphs = [p.strip() for p in re.split(r"\n\s*\n", page_text) if p.strip()]
+            if paragraphs:
+                pages_with_text += 1
+            for paragraph_index, paragraph_text in enumerate(paragraphs):
+                region = AddressableRegion(
+                    id=_new_id(), project_id=workspace.project_id, structural_unit_id=unit.id,
+                    region_type="paragraph",
+                    address={"page_index": page_index, "paragraph_index": paragraph_index},
+                    created_at=_now(), created_by=actor,
+                )
+                workspace.addressable_regions.append(asdict(region))
+                addressable_region_ids.append(region.id)
+
+                evidence = EvidenceItem(
+                    id=_new_id(), project_id=workspace.project_id, source_id=source_id,
+                    evidence_class=EVIDENCE_CLASS_DIRECT_SOURCE, content=paragraph_text,
+                    content_type="text", created_at=_now(), created_by=actor,
+                    region_id=region.id, extractor_version=extractor_version,
+                )
+                workspace.evidence_items.append(asdict(evidence))
+                evidence_item_ids.append(evidence.id)
+
+        if pages_with_text == 0:
+            classification = PDF_CLASSIFICATION_IMAGE_ONLY
+        elif pages_with_text == len(pages):
+            classification = PDF_CLASSIFICATION_TEXT_NATIVE
+        else:
+            classification = PDF_CLASSIFICATION_MIXED
+
+        self.save(workspace)
+
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id, event_type="pdf_page_structure_registered",
+                actor=actor, role="system",
+                payload={
+                    "source_id": source_id, "classification": classification,
+                    "page_count": len(pages), "evidence_item_count": len(evidence_item_ids),
+                },
+                correlation_id=source_id,
+            )
+
+        return {
+            "classification": classification,
+            "page_count": len(pages),
+            "structural_unit_ids": structural_unit_ids,
+            "addressable_region_ids": addressable_region_ids,
+            "evidence_item_ids": evidence_item_ids,
         }

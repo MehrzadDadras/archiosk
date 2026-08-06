@@ -34,11 +34,14 @@ from services.rfi_export import RFIExportError, build_rfi_docx
 api_bp = Blueprint('api', __name__)
 
 
+_ADMIN_ONLY_ENDPOINTS = {"api.ingest_document", "api.register_pdf_structure"}
+
+
 @api_bp.before_request
 def _require_api_auth():
     if not is_authenticated():
         return jsonify(error="unauthorized", message="Authentication required."), 401
-    if request.endpoint == "api.ingest_document" and not is_admin():
+    if request.endpoint in _ADMIN_ONLY_ENDPOINTS and not is_admin():
         return jsonify(error="forbidden", message="Admin role required."), 403
 
 
@@ -213,6 +216,37 @@ def get_region_citation(project_id, region_id):
     _document, workspace = _load_authorized_project_or_404(project_id)
     store = CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"])
     return jsonify(store.resolve_region_citation(workspace, region_id))
+
+
+# -- CLAUDE-MM2: PDF and Document Intelligence -------------------------------
+# The one write path this stage adds - triggers a real PDF read (services/
+# pdf_intelligence.py) and registers the result as governed MM1 evidence.
+# Admin-gated (_ADMIN_ONLY_ENDPOINTS above), the same authority level
+# services/ingestion.py's own ingest_document already uses for anything
+# that creates governed project records from a file.
+
+@api_bp.route('/documents/<project_id>/sources/<source_id>/pdf-structure', methods=['POST'])
+def register_pdf_structure(project_id, source_id):
+    """
+    Reads the named Source's own already-persisted PDF bytes and registers
+    page StructuralUnits + paragraph AddressableRegions/EvidenceItems.
+    Idempotent only in the sense that calling it twice creates two
+    independent sets of records (no dedup) - matching register_table_
+    evidence's own precedent (Batch J) of leaving re-registration
+    detection to a future stage, not silently guessing intent here.
+    """
+    from services.pdf_intelligence import PdfIntelligenceError, register_pdf_evidence_for_source
+
+    _document, workspace = _load_authorized_project_or_404(project_id)
+    store = CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"])
+    try:
+        result = register_pdf_evidence_for_source(
+            store, workspace, source_id, actor=session.get('username', 'system'),
+            governance_log=get_governance_log(current_app),
+        )
+    except PdfIntelligenceError as exc:
+        return jsonify(error="invalid_source", message=str(exc)), 400
+    return jsonify(result), 201
 
 
 @api_bp.route('/documents/<project_id>/rfi', methods=['GET'])

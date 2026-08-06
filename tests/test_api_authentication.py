@@ -38,7 +38,18 @@ API_ROUTES = [
     ("GET", "/api/v1/documents/some-project/structural-units"),
     ("GET", "/api/v1/documents/some-project/evidence"),
     ("GET", "/api/v1/documents/some-project/citations/some-region"),
+    # CLAUDE-MM2
+    ("POST", "/api/v1/documents/some-project/sources/some-source/pdf-structure"),
 ]
+
+# Admin-only write routes - excluded from "read_only can reach every read
+# route" the same way "/documents/ingest" already was; kept as its own set
+# (not string-matched ad hoc) so a future admin-only route added here can't
+# silently fall through the read-only reachability check by accident.
+ADMIN_ONLY_ROUTE_PATHS = {
+    "/api/v1/documents/ingest",
+    "/api/v1/documents/some-project/sources/some-source/pdf-structure",
+}
 
 
 class ApiAuthenticationTests(unittest.TestCase):
@@ -91,6 +102,12 @@ class ApiAuthenticationTests(unittest.TestCase):
         self.assertEqual(response.status_code, 403)
         self.assertEqual(response.get_json()["error"], "forbidden")
 
+    def test_pdf_structure_rejects_authenticated_non_admin(self):
+        client = self._client_as("read_only")
+        response = client.post("/api/v1/documents/some-project/sources/some-source/pdf-structure")
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.get_json()["error"], "forbidden")
+
     # -- Authenticated, correct role: existing behaviour is unchanged --
 
     def test_admin_can_reach_ingest_route(self):
@@ -102,10 +119,20 @@ class ApiAuthenticationTests(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.get_json()["error"], "invalid_upload")
 
+    def test_admin_can_reach_pdf_structure_route(self):
+        client = self._client_as("admin")
+        # No such source -- exercises that auth/project-access pass and
+        # the route's own existing validation produces the expected 400,
+        # the same "reachable, not necessarily successful" shape
+        # test_admin_can_reach_ingest_route already establishes above.
+        response = client.post("/api/v1/documents/some-project/sources/some-source/pdf-structure")
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.get_json()["error"], "invalid_source")
+
     def test_read_only_can_reach_every_read_route(self):
         client = self._client_as("read_only")
         for method, path in API_ROUTES:
-            if path.endswith("/documents/ingest"):
+            if path in ADMIN_ONLY_ROUTE_PATHS:
                 continue
             with self.subTest(method=method, path=path):
                 response = client.open(path, method=method)
