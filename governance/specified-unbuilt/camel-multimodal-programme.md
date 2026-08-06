@@ -31,19 +31,20 @@ invariants.md`, not as pre-authorized.
 
 **Authorization status:** every stage below is **NOT AUTHORIZED** for
 implementation — this document records intent and sequencing, it is not
-a build order — **except MM1, MM2, MM3, MM4, MM5, and MM6, now IMPLEMENTED**
+a build order — **except MM1, MM2, MM3, MM4, MM5, MM6, and MM7, now IMPLEMENTED**
 (`CLAUDE-MM1`, 2026-08-05, authorized following the accepted cockpit gate
 `CLAUDE-CGP-02`; `CLAUDE-MM2`, 2026-08-05, authorized following the
 accepted MM1 seal; `CLAUDE-MM3`, 2026-08-05, authorized following the
 accepted MM2 seal; `CLAUDE-MM4`, 2026-08-06, authorized following the
 accepted MM3 seal; `CLAUDE-MM5`, 2026-08-06, authorized following the
 accepted MM4 seal; `CLAUDE-MM6`, 2026-08-06, authorized following the
-accepted MM5 seal; see `STATUS.md`'s own authorization table and
+accepted MM5 seal; `CLAUDE-MM7`, 2026-08-06, authorized following the
+accepted MM6 seal; see `STATUS.md`'s own authorization table and
 `current/kernel-object-model.md` for the real, tested, ground-truth
-detail — this document's own MM1/MM2/MM3/MM4/MM5/MM6 sections below are
-retained as the original stage descriptions, not updated to duplicate
-that record).
-MM7–MM9 remain exactly as originally recorded: this programme's "specified
+detail — this document's own MM1/MM2/MM3/MM4/MM5/MM6/MM7 sections below
+are retained as the original stage descriptions, not updated to
+duplicate that record).
+MM8–MM9 remain exactly as originally recorded: this programme's "specified
 but unbuilt" pointer in `STATUS.md` continues to cover them as a single
 pointer, not stage-by-stage rows, until each is individually taken up.
 
@@ -202,7 +203,7 @@ remain themselves, cross-referenced, never flattened into one record.
 **Depends on MM2, MM3, MM4, MM5** (there is nothing to cross-link until
 the individual modalities exist) **and MM1** (transitively).
 
-## MM7 — Governed multimodal investigation and analytics
+## MM7 — Governed multimodal investigation and analytics — IMPLEMENTED, bounded (`CLAUDE-MM7`, 2026-08-06; see `STATUS.md`'s authorization table and `current/kernel-object-model.md`'s matching entry for the real, tested, ground-truth detail — the stage-intent prose immediately below is retained unchanged as the original description, not rewritten to duplicate that record)
 
 AI-assisted and deterministic analysis across modalities, distinguishing
 facts, calculations, expert judgment, assumptions, AI suggestions,
