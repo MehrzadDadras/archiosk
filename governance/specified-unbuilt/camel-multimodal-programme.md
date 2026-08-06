@@ -31,15 +31,16 @@ invariants.md`, not as pre-authorized.
 
 **Authorization status:** every stage below is **NOT AUTHORIZED** for
 implementation — this document records intent and sequencing, it is not
-a build order — **except MM1, MM2, and MM3, now IMPLEMENTED** (`CLAUDE-MM1`,
-2026-08-05, authorized following the accepted cockpit gate
+a build order — **except MM1, MM2, MM3, and MM4, now IMPLEMENTED**
+(`CLAUDE-MM1`, 2026-08-05, authorized following the accepted cockpit gate
 `CLAUDE-CGP-02`; `CLAUDE-MM2`, 2026-08-05, authorized following the
 accepted MM1 seal; `CLAUDE-MM3`, 2026-08-05, authorized following the
-accepted MM2 seal; see `STATUS.md`'s own authorization table and
+accepted MM2 seal; `CLAUDE-MM4`, 2026-08-06, authorized following the
+accepted MM3 seal; see `STATUS.md`'s own authorization table and
 `current/kernel-object-model.md` for the real, tested, ground-truth
-detail — this document's own MM1/MM2/MM3 sections below are retained as
-the original stage descriptions, not updated to duplicate that record).
-MM4–MM9 remain exactly as originally recorded: this programme's "specified
+detail — this document's own MM1/MM2/MM3/MM4 sections below are retained
+as the original stage descriptions, not updated to duplicate that record).
+MM5–MM9 remain exactly as originally recorded: this programme's "specified
 but unbuilt" pointer in `STATUS.md` continues to cover them as a single
 pointer, not stage-by-stage rows, until each is individually taken up.
 
@@ -133,6 +134,19 @@ of this document.
 **Depends on MM1.**
 
 ## MM4 — Drawing intelligence
+
+**IMPLEMENTED, bounded** — see `current/kernel-object-model.md`'s
+"Drawing sheets, reversible orientation, and evidence sachets" entry and
+`STATUS.md`'s own authorization-table row for the real, tested,
+ground-truth detail (`CLAUDE-MM4`, 2026-08-06). The prose immediately
+below is retained as the ORIGINAL stage intent this implementation was
+authorized against, not rewritten to match what was actually built —
+drawing-sheet structure, reversible mirror/rotate view transforms,
+on-demand rectangular regions, real independent-Display comparison, and
+the Governed Evidence Sachet are real; native CAD/BIM parsing, automatic
+symbol/dimension recognition, authoritative takeoff, and full overlay/
+clash-detection registration remain unbuilt, exactly as this section's
+own prose already anticipated below.
 
 Plans, elevations, sections, details, scales, dimensions, symbols,
 callouts, drawing relationships, revisions, visual regions, and
