@@ -101,7 +101,17 @@ from models import User
 workspace_bp = Blueprint("workspace", __name__)
 
 ALLOWED_DRAWING_EXTENSIONS = {".png", ".jpg", ".jpeg"}
-ALLOWED_DOCUMENT_EXTENSIONS = {".pdf", ".docx", ".txt", ".csv", ".md"}
+# CLAUDE-MM3: .xlsx added here (Add Documents, an existing-project Source),
+# deliberately NOT to ingestion.py's own ALLOWED_UPLOAD_EXTENSIONS (project
+# creation) - a spreadsheet is not an RFP/RFQ-shaped text document, and
+# routing it through BHiveParser's requirement-extraction/classification
+# pipeline (already flagged, across many prior stages, as fragile and
+# adversarially-tuned) would be exactly the kind of forced-fit this stage's
+# own "do not force all spreadsheet work into native records" caution
+# argues against. A project must already exist (from an ordinary text
+# document) before a workbook can be added - the same precedent drawing/
+# image intake already established for a different non-text format.
+ALLOWED_DOCUMENT_EXTENSIONS = {".pdf", ".docx", ".txt", ".csv", ".md", ".xlsx"}
 
 # CLAUDE-P40-VW8-QA1 (Governed Display Tab System sufficiency review): the
 # registered vocabulary of "stable Display kinds" - a Project-level

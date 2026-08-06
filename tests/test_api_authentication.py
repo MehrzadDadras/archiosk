@@ -40,6 +40,9 @@ API_ROUTES = [
     ("GET", "/api/v1/documents/some-project/citations/some-region"),
     # CLAUDE-MM2
     ("POST", "/api/v1/documents/some-project/sources/some-source/pdf-structure"),
+    # CLAUDE-MM3
+    ("POST", "/api/v1/documents/some-project/sources/some-source/spreadsheet-structure"),
+    ("POST", "/api/v1/documents/some-project/sources/some-source/spreadsheet-cell"),
 ]
 
 # Admin-only write routes - excluded from "read_only can reach every read
@@ -49,6 +52,8 @@ API_ROUTES = [
 ADMIN_ONLY_ROUTE_PATHS = {
     "/api/v1/documents/ingest",
     "/api/v1/documents/some-project/sources/some-source/pdf-structure",
+    "/api/v1/documents/some-project/sources/some-source/spreadsheet-structure",
+    "/api/v1/documents/some-project/sources/some-source/spreadsheet-cell",
 }
 
 
@@ -108,6 +113,18 @@ class ApiAuthenticationTests(unittest.TestCase):
         self.assertEqual(response.status_code, 403)
         self.assertEqual(response.get_json()["error"], "forbidden")
 
+    def test_spreadsheet_structure_rejects_authenticated_non_admin(self):
+        client = self._client_as("read_only")
+        response = client.post("/api/v1/documents/some-project/sources/some-source/spreadsheet-structure")
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.get_json()["error"], "forbidden")
+
+    def test_spreadsheet_cell_rejects_authenticated_non_admin(self):
+        client = self._client_as("read_only")
+        response = client.post("/api/v1/documents/some-project/sources/some-source/spreadsheet-cell")
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.get_json()["error"], "forbidden")
+
     # -- Authenticated, correct role: existing behaviour is unchanged --
 
     def test_admin_can_reach_ingest_route(self):
@@ -128,6 +145,21 @@ class ApiAuthenticationTests(unittest.TestCase):
         response = client.post("/api/v1/documents/some-project/sources/some-source/pdf-structure")
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.get_json()["error"], "invalid_source")
+
+    def test_admin_can_reach_spreadsheet_structure_route(self):
+        client = self._client_as("admin")
+        response = client.post("/api/v1/documents/some-project/sources/some-source/spreadsheet-structure")
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.get_json()["error"], "invalid_source")
+
+    def test_admin_can_reach_spreadsheet_cell_route(self):
+        client = self._client_as("admin")
+        response = client.post(
+            "/api/v1/documents/some-project/sources/some-source/spreadsheet-cell",
+            json={"sheet_name": "Sheet1", "cell_ref": "A1", "value": "x"},
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.get_json()["error"], "invalid_edit")
 
     def test_read_only_can_reach_every_read_route(self):
         client = self._client_as("read_only")

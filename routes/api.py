@@ -34,7 +34,10 @@ from services.rfi_export import RFIExportError, build_rfi_docx
 api_bp = Blueprint('api', __name__)
 
 
-_ADMIN_ONLY_ENDPOINTS = {"api.ingest_document", "api.register_pdf_structure"}
+_ADMIN_ONLY_ENDPOINTS = {
+    "api.ingest_document", "api.register_pdf_structure",
+    "api.register_spreadsheet_structure_route", "api.edit_spreadsheet_cell",
+}
 
 
 @api_bp.before_request
@@ -247,6 +250,62 @@ def register_pdf_structure(project_id, source_id):
     except PdfIntelligenceError as exc:
         return jsonify(error="invalid_source", message=str(exc)), 400
     return jsonify(result), 201
+
+
+# -- CLAUDE-MM3: Spreadsheet and Structured-Data Intelligence ---------------
+# Two write paths, both admin-gated (_ADMIN_ONLY_ENDPOINTS above): the
+# read/classify/register trigger (mirrors pdf-structure exactly) and the
+# one bounded single-cell edit this stage implements (services/
+# spreadsheet_intelligence.py's own explicit, narrow restrictions - no
+# formula editing, concurrency-checked via expected_file_hash).
+
+@api_bp.route('/documents/<project_id>/sources/<source_id>/spreadsheet-structure', methods=['POST'])
+def register_spreadsheet_structure_route(project_id, source_id):
+    from services.spreadsheet_intelligence import (
+        SpreadsheetIntelligenceError, register_spreadsheet_evidence_for_source,
+    )
+
+    _document, workspace = _load_authorized_project_or_404(project_id)
+    store = CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"])
+    try:
+        result = register_spreadsheet_evidence_for_source(
+            store, workspace, source_id, actor=session.get('username', 'system'),
+            governance_log=get_governance_log(current_app),
+        )
+    except SpreadsheetIntelligenceError as exc:
+        return jsonify(error="invalid_source", message=str(exc)), 400
+    return jsonify(result), 201
+
+
+@api_bp.route('/documents/<project_id>/sources/<source_id>/spreadsheet-cell', methods=['POST'])
+def edit_spreadsheet_cell(project_id, source_id):
+    """
+    JSON body: `{"sheet_name", "cell_ref", "value", "expected_file_hash"}`
+    (the last optional, but recommended - see apply_bounded_cell_edit's
+    own docstring on the race it closes). Every rejection reason (not a
+    Source, not .xlsx, formula cell, stale hash, bad cell reference) comes
+    back as the same `error="invalid_edit"` shape with a human-readable
+    `message` - never a raw traceback, never a partial/corrupted write.
+    """
+    from services.spreadsheet_intelligence import SpreadsheetIntelligenceError, apply_bounded_cell_edit
+
+    _document, workspace = _load_authorized_project_or_404(project_id)
+    store = CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"])
+    body = request.get_json(silent=True) or {}
+    sheet_name = body.get('sheet_name')
+    cell_ref = body.get('cell_ref')
+    value = body.get('value')
+    if not sheet_name or not cell_ref:
+        return jsonify(error="invalid_edit", message="'sheet_name' and 'cell_ref' are required."), 400
+    try:
+        result = apply_bounded_cell_edit(
+            store, workspace, source_id, sheet_name=sheet_name, cell_ref=cell_ref, new_value=value,
+            expected_file_hash=body.get('expected_file_hash'),
+            actor=session.get('username', 'system'), governance_log=get_governance_log(current_app),
+        )
+    except SpreadsheetIntelligenceError as exc:
+        return jsonify(error="invalid_edit", message=str(exc)), 400
+    return jsonify(result), 200
 
 
 @api_bp.route('/documents/<project_id>/rfi', methods=['GET'])

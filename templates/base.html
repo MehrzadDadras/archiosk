@@ -686,7 +686,12 @@
 
                                                 {% call macros.subdisclosure('+ Add Documents', html_id='project-sources-add-document') %}
                                                     <form class="workspace-form" method="post" enctype="multipart/form-data" action="{{ url_for('workspace.add_document_source', project_id=project_id) }}" data-ui-ref="lists.project.tools.add-document">
-                                                        <input type="file" name="document" accept=".pdf,.docx,.txt,.csv,.md" required>
+                                                        {# CLAUDE-MM3: .xlsx added to match routes/workspace.py's own
+                                                           ALLOWED_DOCUMENT_EXTENSIONS - the server-side check is the
+                                                           real enforcement, but this hint must stay in sync or Chrome
+                                                           silently filters an already-selected .xlsx out of the
+                                                           FileList before the form can even submit it. #}
+                                                        <input type="file" name="document" accept=".pdf,.docx,.txt,.csv,.md,.xlsx" required>
                                                         <button type="submit">Add Document</button>
                                                     </form>
                                                 {% endcall %}

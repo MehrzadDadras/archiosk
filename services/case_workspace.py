@@ -2647,6 +2647,23 @@ KNOWN_PDF_CLASSIFICATIONS = (
     PDF_CLASSIFICATION_ENCRYPTED_OR_UNSUPPORTED,
 )
 
+# CLAUDE-MM3: spreadsheet/workbook classification (Section 5/16 of this
+# stage's own governing prompt) - same "successful read with a real
+# finding" vs "read itself failed" distinction PDF classification above
+# already establishes. SUPPORTED covers both .xlsx (openpyxl) and .csv
+# (stdlib csv) once actually read; the other three are the read failing
+# or being refused outright, never silently treated as "empty."
+SPREADSHEET_CLASSIFICATION_SUPPORTED = "supported"
+SPREADSHEET_CLASSIFICATION_MALFORMED = "malformed"
+SPREADSHEET_CLASSIFICATION_ENCRYPTED_OR_UNSUPPORTED = "encrypted_or_unsupported"
+SPREADSHEET_CLASSIFICATION_EXCESSIVE_SIZE = "excessive_size"
+KNOWN_SPREADSHEET_CLASSIFICATIONS = (
+    SPREADSHEET_CLASSIFICATION_SUPPORTED,
+    SPREADSHEET_CLASSIFICATION_MALFORMED,
+    SPREADSHEET_CLASSIFICATION_ENCRYPTED_OR_UNSUPPORTED,
+    SPREADSHEET_CLASSIFICATION_EXCESSIVE_SIZE,
+)
+
 
 @dataclass
 class StructuralUnit:
@@ -9344,3 +9361,136 @@ class CaseWorkspaceStore:
             "addressable_region_ids": addressable_region_ids,
             "evidence_item_ids": evidence_item_ids,
         }
+
+    # -- CLAUDE-MM3: Spreadsheet and Structured-Data Intelligence --------------
+    # Mirrors register_pdf_page_structure's own shape exactly: takes ALREADY-
+    # EXTRACTED sheet data (never raw bytes, never an openpyxl/csv call) -
+    # this module still does not import services/spreadsheet_intelligence.py
+    # or openpyxl, the same decoupling promote_requirement_item() and MM2's
+    # register_pdf_page_structure both already establish. Reuses the exact
+    # same StructuralUnit/AddressableRegion/EvidenceItem primitives MM1
+    # defined and MM2 already realized for PDF pages/paragraphs - a
+    # worksheet IS a StructuralUnit (unit_type="worksheet"), a row IS an
+    # AddressableRegion (region_type="row") - no new domain objects needed.
+
+    def register_spreadsheet_structure(
+        self, workspace: ProjectWorkspace, source_id: str, sheets: list[dict],
+        extractor_version: Optional[str] = None, actor: str = "system",
+        governance_log: Optional[GovernanceLog] = None,
+    ) -> dict:
+        """
+        `sheets` shape (produced by services/spreadsheet_intelligence.py,
+        already bounded/truncated there - this method trusts its input
+        exactly like register_pdf_page_structure trusts its `pages` list):
+        `[{"name", "index", "visible", "row_count", "column_count",
+        "truncated", "rows": [{"row_index", "cells": {col_letter: {"value",
+        "formula", "cached_value", "data_type"}}}]}]`.
+
+        One StructuralUnit per sheet unconditionally (a hidden or empty
+        sheet is still real and addressable - the same "do not claim no
+        usable document merely because content is sparse" principle MM2's
+        image-only PDF pages already established). One AddressableRegion +
+        EvidenceItem per row actually present in the (already-bounded)
+        `rows` list - `region.address` carries the row's own cell values
+        as real structured data (a dict, not just a citation label), since
+        AddressableRegion.address has always been a free-form dict; the
+        EvidenceItem's own `content` is a human-readable rendering of the
+        same row, never a second, potentially-drifting copy of the values.
+        """
+        source = self._find(workspace.sources, source_id)
+        if source is None or source["project_id"] != workspace.project_id:
+            raise CaseWorkspaceError(f"Source {source_id} was not found.")
+
+        structural_unit_ids: list[str] = []
+        addressable_region_ids: list[str] = []
+        evidence_item_ids: list[str] = []
+
+        for sheet in sheets:
+            unit = StructuralUnit(
+                id=_new_id(), project_id=workspace.project_id, source_id=source_id,
+                unit_type="worksheet", order_index=sheet["index"], created_at=_now(), created_by=actor,
+                label=sheet["name"],
+                modality_metadata={
+                    "visible": sheet.get("visible", True),
+                    "row_count": sheet.get("row_count", 0),
+                    "column_count": sheet.get("column_count", 0),
+                    "truncated": sheet.get("truncated", False),
+                },
+            )
+            workspace.structural_units.append(asdict(unit))
+            structural_unit_ids.append(unit.id)
+
+            for row in sheet.get("rows", []):
+                row_index = row["row_index"]
+                cells = row.get("cells", {})
+                region = AddressableRegion(
+                    id=_new_id(), project_id=workspace.project_id, structural_unit_id=unit.id,
+                    region_type="row",
+                    address={
+                        "row_index": row_index, "sheet_name": sheet["name"],
+                        "label": f"row {row_index}", "cells": cells,
+                    },
+                    created_at=_now(), created_by=actor,
+                )
+                workspace.addressable_regions.append(asdict(region))
+                addressable_region_ids.append(region.id)
+
+                rendered = "; ".join(
+                    f"{col}={info.get('value')!r}" for col, info in cells.items()
+                )
+                evidence = EvidenceItem(
+                    id=_new_id(), project_id=workspace.project_id, source_id=source_id,
+                    evidence_class=EVIDENCE_CLASS_DIRECT_SOURCE, content=rendered,
+                    content_type="spreadsheet_row", created_at=_now(), created_by=actor,
+                    region_id=region.id, extractor_version=extractor_version,
+                )
+                workspace.evidence_items.append(asdict(evidence))
+                evidence_item_ids.append(evidence.id)
+
+        self.save(workspace)
+
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id, event_type="spreadsheet_structure_registered",
+                actor=actor, role="system",
+                payload={
+                    "source_id": source_id, "sheet_count": len(sheets),
+                    "evidence_item_count": len(evidence_item_ids),
+                },
+                correlation_id=source_id,
+            )
+
+        return {
+            "sheet_count": len(sheets),
+            "structural_unit_ids": structural_unit_ids,
+            "addressable_region_ids": addressable_region_ids,
+            "evidence_item_ids": evidence_item_ids,
+        }
+
+    def create_addressable_cell_region(
+        self, workspace: ProjectWorkspace, structural_unit_id: str, sheet_name: str, cell_ref: str,
+        value, actor: str = "system", governance_log: Optional[GovernanceLog] = None,
+    ) -> dict:
+        """
+        A single-cell AddressableRegion, distinct from the per-row regions
+        register_spreadsheet_structure creates in bulk - the direct answer
+        to Section 6's own "support at least: cell" requirement and
+        Section 18's "create direct evidence from at least one cell." Not
+        created automatically for every cell in every row (that would
+        multiply region/evidence records by the sheet's own column count
+        for no proven benefit yet - the existing per-row region already
+        carries every cell's value in its own `address["cells"]`); this
+        method exists for the caller (a route, a future UI action) that
+        needs one SPECIFIC cell to be its own first-class, individually-
+        citable anchor.
+        """
+        unit = self._find(workspace.structural_units, structural_unit_id)
+        if unit is None or unit["project_id"] != workspace.project_id:
+            raise CaseWorkspaceError(f"Structural unit {structural_unit_id} was not found.")
+
+        region = self.create_addressable_region(
+            workspace, structural_unit_id=structural_unit_id, region_type="cell",
+            address={"sheet_name": sheet_name, "cell_ref": cell_ref, "label": f"cell {cell_ref}", "value": value},
+            actor=actor, governance_log=governance_log,
+        )
+        return region
