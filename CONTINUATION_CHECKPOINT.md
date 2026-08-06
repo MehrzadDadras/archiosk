@@ -1,5 +1,29 @@
 # Continuation checkpoint
 
+## 2026-08-05 — CLAUDE-MM1 (Multimodal Foundation and Evidence Contract)
+
+**First implementation stage of the Camel MM1-MM9 programme**, authorized following the accepted cockpit gate (`CLAUDE-CGP-02`, GO recommendation, sealed at `febd434`). Repository-grounded investigation first (Foundation Batch J's `Table`/`TableRow`/`SourceReference`, `Relationship`, `Finding`, `Source`, `ConversationSourceAnchor` all read in full before designing anything) found strong existing building blocks that made a much smaller, purely additive implementation possible than a from-scratch design would have needed.
+
+**New primitives** (`services/case_workspace.py`, commit `452a814`): `StructuralUnit` (a Source's logical subdivision - page/sheet/section/frame, open-world `unit_type`), `AddressableRegion` (a precise locatable portion - span/bbox/cell/crop, open-world `region_type`, never overfit to one modality's geometry), `EvidenceItem` (`evidence_class` is the one closed, validated vocabulary in the whole addition - direct/extracted/normalized/user-entered/imported/calculated/AI-generated-proposal/externally-researched), `DerivedObservation` (deliberately NOT `Finding` - `case_id` optional, mirroring `AnalysisRun`/`ConversationMessage`'s own convention, since an evidence-contract observation must also work before any Case exists; whether Case-scoped Findings and cross-modal Observations should eventually converge is left an explicit open question, not silently resolved).
+
+**Reused rather than duplicated:** `Relationship` (already open-world `from_type`/`to_type`/`relationship_type`, already `provisional=True` by default) is reused as-is for every evidence relationship - only new `OBJECT_KIND_*`/`RELATIONSHIP_TYPE_*` constants were added (`same_subject_as`/`compares_with`/`calculated_from`/`mitigates`/`validates`/`invalidates`/`associated_with`). `Table`/`TableRow` (Batch J) remain the real tabular-specific realization, untouched.
+
+**Citation contract:** `resolve_region_citation` derives a human-readable label at read time (never stored), returning an honest `"unavailable"` state - falsification-tested directly (removing the underlying Source flips a previously-resolved citation to unavailable).
+
+**100% additive, zero destructive migration:** four new `ProjectWorkspace` list fields, four new `Optional` `Source` fields (`mime_type`/`size_bytes`/`security_classification`/`extractor_version`) - every legacy record simply lacks the new keys and loads with the existing empty-list/`None`-default convention, verified directly (a pre-MM1 workspace JSON with the keys stripped still loads and can create new MM1 records). Every mutation re-validates each referenced id's own `project_id` against the calling workspace, the same defense-in-depth `Folder`'s own methods already established - falsification-tested (a deliberately unguarded bypass proves the real, guarded method's rejection is load-bearing).
+
+**Retrieval, no new UI:** three read-only routes on the existing `/api/v1` surface (`structural-units`, `evidence`, `citations/<region_id>`), added to `tests/test_api_authentication.py`'s existing route-auth matrix so they can't silently go unchecked.
+
+**Tests:** 25 in `tests/test_mm1_evidence_contract.py` plus the 3 new API routes. Full suite: **2,625 passed, 0 failed** (2,600 baseline + 25 new), ~92min (duration, not pass/fail, is the noisy signal here per this file's own standing note). **Live-verified against the running app**, not request-level tests alone: a real throwaway account, a real project seeded directly against the live `instance/registry` store, then curl with a real session cookie through login → evidence list → structural units → citation resolution for both a real region and an unknown one (`{"status":"unavailable"}`, not a 404/500) - all cleaned up afterward (account and project files deleted).
+
+**Documentation** (commit `cc275c9`): `governance/current/kernel-object-model.md` gained the real ground-truth entry; `governance/STATUS.md`'s authorization table gained an MM1-scoped `IMPLEMENTED` row (MM2-MM9 remain their own separate, still-`NOT AUTHORIZED` authorizations); `camel-multimodal-programme.md`'s own MM1 section marked implemented with a pointer, original stage-intent prose preserved rather than rewritten. Also fixed, as directly in-scope: an accidental duplicate paragraph in `STATUS.md`'s External Intelligence Airlock pointer row (same content committed twice across two prior CGP-02 commits).
+
+**Deferred, per this stage's own explicit scope (MM2-MM9's own future work, not oversight):** any real extraction engine (OCR, PDF rendering, spreadsheet parsing, drawing/image intelligence); cross-document/cross-modal analysis; the Monte Carlo/Design-Manager engine itself (the model was shown compatible, not built); any External Intelligence Airlock connector; full source-version-aware citation staleness detection (`Source` has no version counter yet, only `supersedes_source_id` lineage); wiring structural-unit/region/evidence extraction into the live ingestion pipeline.
+
+**Recommendation:** see the final report delivered in conversation for full detail. No product-owner acceptance seal is recorded in this entry, per this stage's own explicit governing instruction. MM2 is not started by this stage.
+
+**Evidence:** `HEAD`/`origin/main` both confirmed in sync after push (see final report for the exact hash). Working tree clean except the pre-existing, untouched `tests/fixtures/nreocrc/_lab_instance_scratch_002/`.
+
 ## 2026-08-05 — CLAUDE-CGP-02 (Final Cockpit Gate — Product-Owner Acceptance Seal)
 
 **Product owner accepts the final cockpit gate recommendation: GO — cockpit accepted; MM1 may begin.**
