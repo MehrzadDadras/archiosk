@@ -51,22 +51,43 @@ API_ROUTES = [
     ("POST", "/api/v1/documents/some-project/eye-capture"),
     ("POST", "/api/v1/documents/some-project/sources/some-source/markers"),
     ("POST", "/api/v1/documents/some-project/sources/some-source/derivative-crop"),
+    # CLAUDE-MM6
+    ("POST", "/api/v1/documents/some-project/relationships"),
+    ("GET", "/api/v1/documents/some-project/relationships"),
+    ("GET", "/api/v1/documents/some-project/relationships/some-relationship/status"),
+    ("POST", "/api/v1/documents/some-project/relationships/some-relationship/confirm"),
+    ("POST", "/api/v1/documents/some-project/relationships/some-relationship/dispute"),
+    ("POST", "/api/v1/documents/some-project/relationships/some-relationship/reject"),
+    ("POST", "/api/v1/documents/some-project/relationships/some-relationship/supersede"),
+    ("GET", "/api/v1/documents/some-project/relationships/some-relationship/sachet"),
+    ("GET", "/api/v1/documents/some-project/evidence/some-evidence/trust"),
 ]
 
 # Admin-only write routes - excluded from "read_only can reach every read
 # route" the same way "/documents/ingest" already was; kept as its own set
 # (not string-matched ad hoc) so a future admin-only route added here can't
 # silently fall through the read-only reachability check by accident.
+#
+# Keyed by (method, path), not path alone: CLAUDE-MM6's own POST
+# /relationships (admin-only, create) and GET /relationships (read-only,
+# list) share the same path with different methods - a path-only set would
+# have silently skipped the GET route out of the read-only reachability
+# check the moment the POST entry was added for the same path.
 ADMIN_ONLY_ROUTE_PATHS = {
-    "/api/v1/documents/ingest",
-    "/api/v1/documents/some-project/sources/some-source/pdf-structure",
-    "/api/v1/documents/some-project/sources/some-source/spreadsheet-structure",
-    "/api/v1/documents/some-project/sources/some-source/spreadsheet-cell",
-    "/api/v1/documents/some-project/sources/some-source/drawing-structure",
-    "/api/v1/documents/some-project/sources/some-source/drawing-regions",
-    "/api/v1/documents/some-project/eye-capture",
-    "/api/v1/documents/some-project/sources/some-source/markers",
-    "/api/v1/documents/some-project/sources/some-source/derivative-crop",
+    ("POST", "/api/v1/documents/ingest"),
+    ("POST", "/api/v1/documents/some-project/sources/some-source/pdf-structure"),
+    ("POST", "/api/v1/documents/some-project/sources/some-source/spreadsheet-structure"),
+    ("POST", "/api/v1/documents/some-project/sources/some-source/spreadsheet-cell"),
+    ("POST", "/api/v1/documents/some-project/sources/some-source/drawing-structure"),
+    ("POST", "/api/v1/documents/some-project/sources/some-source/drawing-regions"),
+    ("POST", "/api/v1/documents/some-project/eye-capture"),
+    ("POST", "/api/v1/documents/some-project/sources/some-source/markers"),
+    ("POST", "/api/v1/documents/some-project/sources/some-source/derivative-crop"),
+    ("POST", "/api/v1/documents/some-project/relationships"),
+    ("POST", "/api/v1/documents/some-project/relationships/some-relationship/confirm"),
+    ("POST", "/api/v1/documents/some-project/relationships/some-relationship/dispute"),
+    ("POST", "/api/v1/documents/some-project/relationships/some-relationship/reject"),
+    ("POST", "/api/v1/documents/some-project/relationships/some-relationship/supersede"),
 }
 
 
@@ -168,6 +189,36 @@ class ApiAuthenticationTests(unittest.TestCase):
         self.assertEqual(response.status_code, 403)
         self.assertEqual(response.get_json()["error"], "forbidden")
 
+    def test_create_relationship_rejects_authenticated_non_admin(self):
+        client = self._client_as("read_only")
+        response = client.post("/api/v1/documents/some-project/relationships")
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.get_json()["error"], "forbidden")
+
+    def test_confirm_relationship_rejects_authenticated_non_admin(self):
+        client = self._client_as("read_only")
+        response = client.post("/api/v1/documents/some-project/relationships/some-relationship/confirm")
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.get_json()["error"], "forbidden")
+
+    def test_dispute_relationship_rejects_authenticated_non_admin(self):
+        client = self._client_as("read_only")
+        response = client.post("/api/v1/documents/some-project/relationships/some-relationship/dispute")
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.get_json()["error"], "forbidden")
+
+    def test_reject_relationship_rejects_authenticated_non_admin(self):
+        client = self._client_as("read_only")
+        response = client.post("/api/v1/documents/some-project/relationships/some-relationship/reject")
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.get_json()["error"], "forbidden")
+
+    def test_supersede_relationship_rejects_authenticated_non_admin(self):
+        client = self._client_as("read_only")
+        response = client.post("/api/v1/documents/some-project/relationships/some-relationship/supersede")
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.get_json()["error"], "forbidden")
+
     # -- Authenticated, correct role: existing behaviour is unchanged --
 
     def test_admin_can_reach_ingest_route(self):
@@ -234,10 +285,43 @@ class ApiAuthenticationTests(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.get_json()["error"], "invalid_crop")
 
+    def test_admin_can_reach_create_relationship_route(self):
+        client = self._client_as("admin")
+        response = client.post("/api/v1/documents/some-project/relationships", json={})
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.get_json()["error"], "invalid_relationship")
+
+    def test_admin_can_reach_confirm_relationship_route(self):
+        client = self._client_as("admin")
+        response = client.post("/api/v1/documents/some-project/relationships/some-relationship/confirm")
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.get_json()["error"], "invalid_relationship")
+
+    def test_admin_can_reach_dispute_relationship_route(self):
+        client = self._client_as("admin")
+        response = client.post("/api/v1/documents/some-project/relationships/some-relationship/dispute")
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.get_json()["error"], "invalid_relationship")
+
+    def test_admin_can_reach_reject_relationship_route(self):
+        client = self._client_as("admin")
+        response = client.post("/api/v1/documents/some-project/relationships/some-relationship/reject")
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.get_json()["error"], "invalid_relationship")
+
+    def test_admin_can_reach_supersede_relationship_route(self):
+        client = self._client_as("admin")
+        response = client.post(
+            "/api/v1/documents/some-project/relationships/some-relationship/supersede",
+            json={"to_type": "evidence_item", "to_id": "x", "relationship_type": "supports", "reason": "x"},
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.get_json()["error"], "invalid_relationship")
+
     def test_read_only_can_reach_every_read_route(self):
         client = self._client_as("read_only")
         for method, path in API_ROUTES:
-            if path in ADMIN_ONLY_ROUTE_PATHS:
+            if (method, path) in ADMIN_ONLY_ROUTE_PATHS:
                 continue
             with self.subTest(method=method, path=path):
                 response = client.open(path, method=method)

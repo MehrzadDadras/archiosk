@@ -26,7 +26,7 @@ from werkzeug.exceptions import RequestEntityTooLarge
 
 from services.auth import is_admin, is_authenticated
 from services.bhive_parser import REQUIREMENT_CATEGORIES
-from services.case_workspace import CaseWorkspaceStore
+from services.case_workspace import CaseWorkspaceError, CaseWorkspaceStore
 from services.environment_capabilities import OPERATING_ENVIRONMENT_LABELS
 from services.governance import GovernanceError
 from services.ingestion import UploadError, get_governance_log, get_registry, ingest_upload
@@ -41,6 +41,8 @@ _ADMIN_ONLY_ENDPOINTS = {
     "api.register_spreadsheet_structure_route", "api.edit_spreadsheet_cell",
     "api.register_drawing_structure", "api.create_drawing_region",
     "api.save_eye_capture", "api.create_image_marker", "api.export_derivative_crop",
+    "api.create_relationship", "api.confirm_relationship_route", "api.dispute_relationship_route",
+    "api.reject_relationship_route", "api.supersede_relationship_route",
 }
 
 
@@ -482,6 +484,152 @@ def export_derivative_crop(project_id, source_id):
     except ImageIntelligenceError as exc:
         return jsonify(error="invalid_crop", message=str(exc)), 400
     return jsonify(result), 201
+
+
+# -- CLAUDE-MM6: Cross-Document and Cross-Modal Relationship River ----------
+# Write paths (admin-gated, _ADMIN_ONLY_ENDPOINTS below): create, confirm,
+# dispute, reject, supersede. Read paths (not admin-gated, matching the
+# citation/evidence-sachet routes' own authority level - inspecting
+# already-governed relationships is not a write): list-for-object, resolve
+# status, the relationship evidence sachet, and the evidence trust
+# explanation.
+
+@api_bp.route('/documents/<project_id>/relationships', methods=['POST'])
+def create_relationship(project_id):
+    """
+    JSON body: `{"from_type", "from_id", "to_type", "to_id",
+    "relationship_type", "reason", "provisional", "confidence"}` -
+    `from_type`/`to_type` are validated against the MM1-MM5 evidence-
+    contract object kinds this stage supports (see CaseWorkspaceStore.
+    _MM6_ENDPOINT_LISTS); both endpoints must already exist in THIS
+    project or the request is refused (Section 6/16 - "do not permit
+    arbitrary cross-project endpoints"). `provisional` defaults to True
+    (Section 20: "AI may propose a link but must not silently establish
+    it as governed fact") - pass `provisional: false` only for a genuine,
+    immediate human-confirmed link.
+    """
+    _document, workspace = _load_authorized_project_or_404(project_id)
+    store = CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"])
+    body = request.get_json(silent=True) or {}
+    required = ('from_type', 'from_id', 'to_type', 'to_id', 'relationship_type')
+    if any(not body.get(field) for field in required):
+        return jsonify(error="invalid_relationship", message="'from_type'/'from_id'/'to_type'/'to_id'/'relationship_type' are all required."), 400
+    try:
+        relationship = store.record_evidence_relationship(
+            workspace, from_type=body['from_type'], from_id=body['from_id'],
+            to_type=body['to_type'], to_id=body['to_id'], relationship_type=body['relationship_type'],
+            reason=body.get('reason'), created_by=session.get('username', 'system'),
+            provisional=body.get('provisional', True), confidence=body.get('confidence'),
+            governance_log=get_governance_log(current_app),
+        )
+    except CaseWorkspaceError as exc:
+        return jsonify(error="invalid_relationship", message=str(exc)), 400
+    return jsonify(relationship), 201
+
+
+@api_bp.route('/documents/<project_id>/relationships', methods=['GET'])
+def list_relationships(project_id):
+    """`?object_type=&object_id=&direction=from|to|both` (default both)."""
+    _document, workspace = _load_authorized_project_or_404(project_id)
+    store = CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"])
+    object_type = request.args.get('object_type')
+    object_id = request.args.get('object_id')
+    if not object_type or not object_id:
+        return jsonify(error="invalid_query", message="'object_type' and 'object_id' are both required."), 400
+    direction = request.args.get('direction', 'both')
+    relationships = store.relationships_for(workspace, object_type, object_id, direction=direction)
+    return jsonify(relationships=relationships)
+
+
+@api_bp.route('/documents/<project_id>/relationships/<relationship_id>/status', methods=['GET'])
+def get_relationship_status(project_id, relationship_id):
+    _document, workspace = _load_authorized_project_or_404(project_id)
+    store = CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"])
+    return jsonify(store.resolve_relationship_status(workspace, relationship_id))
+
+
+@api_bp.route('/documents/<project_id>/relationships/<relationship_id>/confirm', methods=['POST'])
+def confirm_relationship_route(project_id, relationship_id):
+    _document, workspace = _load_authorized_project_or_404(project_id)
+    store = CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"])
+    try:
+        relationship = store.confirm_relationship(
+            workspace, relationship_id, actor=session.get('username', 'system'),
+            governance_log=get_governance_log(current_app),
+        )
+    except CaseWorkspaceError as exc:
+        return jsonify(error="invalid_relationship", message=str(exc)), 400
+    return jsonify(relationship), 200
+
+
+@api_bp.route('/documents/<project_id>/relationships/<relationship_id>/dispute', methods=['POST'])
+def dispute_relationship_route(project_id, relationship_id):
+    _document, workspace = _load_authorized_project_or_404(project_id)
+    store = CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"])
+    body = request.get_json(silent=True) or {}
+    try:
+        relationship = store.dispute_relationship(
+            workspace, relationship_id, actor=session.get('username', 'system'), reason=body.get('reason'),
+            governance_log=get_governance_log(current_app),
+        )
+    except CaseWorkspaceError as exc:
+        return jsonify(error="invalid_relationship", message=str(exc)), 400
+    return jsonify(relationship), 200
+
+
+@api_bp.route('/documents/<project_id>/relationships/<relationship_id>/reject', methods=['POST'])
+def reject_relationship_route(project_id, relationship_id):
+    _document, workspace = _load_authorized_project_or_404(project_id)
+    store = CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"])
+    body = request.get_json(silent=True) or {}
+    try:
+        relationship = store.reject_relationship(
+            workspace, relationship_id, actor=session.get('username', 'system'), reason=body.get('reason'),
+            governance_log=get_governance_log(current_app),
+        )
+    except CaseWorkspaceError as exc:
+        return jsonify(error="invalid_relationship", message=str(exc)), 400
+    return jsonify(relationship), 200
+
+
+@api_bp.route('/documents/<project_id>/relationships/<relationship_id>/supersede', methods=['POST'])
+def supersede_relationship_route(project_id, relationship_id):
+    """JSON body: `{"to_type", "to_id", "relationship_type", "reason",
+    "from_type", "from_id"}` - `from_type`/`from_id` optional, defaulting
+    to the original relationship's own FROM endpoint (Section 15)."""
+    _document, workspace = _load_authorized_project_or_404(project_id)
+    store = CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"])
+    body = request.get_json(silent=True) or {}
+    required = ('to_type', 'to_id', 'relationship_type', 'reason')
+    if any(not body.get(field) for field in required):
+        return jsonify(error="invalid_relationship", message="'to_type'/'to_id'/'relationship_type'/'reason' are all required."), 400
+    try:
+        result = store.supersede_relationship(
+            workspace, relationship_id, to_type=body['to_type'], to_id=body['to_id'],
+            relationship_type=body['relationship_type'], reason=body['reason'],
+            actor=session.get('username', 'system'), from_type=body.get('from_type'), from_id=body.get('from_id'),
+            governance_log=get_governance_log(current_app),
+        )
+    except CaseWorkspaceError as exc:
+        return jsonify(error="invalid_relationship", message=str(exc)), 400
+    return jsonify(result), 201
+
+
+@api_bp.route('/documents/<project_id>/relationships/<relationship_id>/sachet', methods=['GET'])
+def get_relationship_sachet(project_id, relationship_id):
+    _document, workspace = _load_authorized_project_or_404(project_id)
+    store = CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"])
+    sachet = store.build_relationship_sachet(workspace, relationship_id, task_description=request.args.get('task'))
+    return jsonify(sachet)
+
+
+@api_bp.route('/documents/<project_id>/evidence/<evidence_item_id>/trust', methods=['GET'])
+def get_evidence_trust(project_id, evidence_item_id):
+    """The Trustworthy Answer Contract's own 'Why should I trust this?'
+    endpoint (Section 10)."""
+    _document, workspace = _load_authorized_project_or_404(project_id)
+    store = CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"])
+    return jsonify(store.explain_evidence_trust(workspace, evidence_item_id))
 
 
 @api_bp.route('/documents/<project_id>/rfi', methods=['GET'])

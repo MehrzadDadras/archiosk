@@ -272,6 +272,18 @@ OBJECT_KIND_STRUCTURAL_UNIT = "structural_unit"
 OBJECT_KIND_ADDRESSABLE_REGION = "addressable_region"
 OBJECT_KIND_EVIDENCE_ITEM = "evidence_item"
 OBJECT_KIND_DERIVED_OBSERVATION = "derived_observation"
+# CLAUDE-MM6: the one genuinely missing endpoint type the cross-modal
+# relationship river needs - Task already exists (ProjectWorkspace.tasks,
+# CLAUDE-P40's own "real persisted project Task" - see class Task above)
+# but had no OBJECT_KIND_* of its own yet, since nothing needed to POINT
+# AT one generically until now (Section 8's own "...-> task, risk, RFI,
+# decision..." action-chain). Risk/RFI deliberately get NO new object
+# kind here - MM3's own precedent already established that a risk-
+# register row is representable via the general row-region mechanism
+# (OBJECT_KIND_ADDRESSABLE_REGION/EVIDENCE_ITEM), not a dedicated
+# RiskRecord; an RFI is generated FROM Requirements (services/
+# rfi_export.py), not itself a first-class linkable object today.
+OBJECT_KIND_TASK = "task"
 
 KNOWN_OBJECT_KINDS = (
     OBJECT_KIND_SOURCE,
@@ -342,6 +354,19 @@ RELATIONSHIP_TYPE_MITIGATES = "mitigates"
 RELATIONSHIP_TYPE_VALIDATES = "validates"
 RELATIONSHIP_TYPE_INVALIDATES = "invalidates"
 RELATIONSHIP_TYPE_ASSOCIATED_WITH = "associated_with"
+# CLAUDE-MM6: exactly three new types, chosen for genuine distinctness
+# from everything above rather than "add every synonym from the
+# governing prompt's own list" (Section 7's own explicit caution).
+# Reused instead of duplicated: extracted_from/located_in -> REFERENCES;
+# conflicts_with -> CONTRADICTS; coordinates_with -> SAME_SUBJECT_AS or
+# COMPARES_WITH depending on the reviewer's own intent; verifies/fails_
+# to_verify -> VALIDATES/INVALIDATES (already MM1's own pair for exactly
+# this); resolves/supports_finding -> SUPPORTS (to_type=finding);
+# assigned_to/accepted_by/rejected_by/closed_by -> deferred, no governed
+# Decision/RFI/closure object exists yet for them to name honestly.
+RELATIONSHIP_TYPE_OBSERVES = "observes"  # field-reality evidence (image/photo) observing a design-intent or coordination condition - Section 4's own tributary distinction, not the same claim as CORRESPONDS_TO (which makes no field-vs-design claim)
+RELATIONSHIP_TYPE_DEVIATES_FROM = "deviates_from"  # a built/observed condition diverges from what a requirement or specification calls for - distinct from CONTRADICTS (evidence vs. evidence), this is condition vs. requirement
+RELATIONSHIP_TYPE_REQUIRES_FOLLOW_UP = "requires_follow_up"  # evidence/observation/Finding -> Task, the one governed action-chain edge this stage adds
 
 KNOWN_RELATIONSHIP_TYPES = (
     RELATIONSHIP_TYPE_SUPPORTS,
@@ -363,7 +388,39 @@ KNOWN_RELATIONSHIP_TYPES = (
     RELATIONSHIP_TYPE_VALIDATES,
     RELATIONSHIP_TYPE_INVALIDATES,
     RELATIONSHIP_TYPE_ASSOCIATED_WITH,
+    RELATIONSHIP_TYPE_OBSERVES,
+    RELATIONSHIP_TYPE_DEVIATES_FROM,
+    RELATIONSHIP_TYPE_REQUIRES_FOLLOW_UP,
 )
+
+# CLAUDE-MM6 Section 6: a Relationship's own validation state, ADDITIVE to
+# the pre-existing provisional/confirmed_by axis (proposed-vs-confirmed) -
+# this is a SEPARATE question ("is this edge itself disputed or rejected
+# by a human," not "has anyone confirmed it yet"). None (the default,
+# every pre-MM6 Relationship record) means ordinary/undisputed - never
+# conflated with an explicit, governed dispute or rejection.
+RELATIONSHIP_VALIDATION_DISPUTED = "disputed"
+RELATIONSHIP_VALIDATION_REJECTED = "rejected"
+KNOWN_RELATIONSHIP_VALIDATION_STATES = (
+    RELATIONSHIP_VALIDATION_DISPUTED,
+    RELATIONSHIP_VALIDATION_REJECTED,
+)
+
+# CLAUDE-MM6 Section 6/14: the resolved, READ-TIME-DERIVED status
+# resolve_relationship_status returns - never stored (same "store flat,
+# derive structure at read time" convention resolve_region_citation
+# already uses for citations). "superseded" comes from a Supersession
+# record naming this relationship as predecessor (supersede_relationship,
+# below) - never a stored field on Relationship itself, the same
+# discipline that keeps Source's own staleness derived from Supersession/
+# superseded_by_source_id rather than a mutated boolean.
+RELATIONSHIP_STATUS_PROPOSED = "proposed"
+RELATIONSHIP_STATUS_CONFIRMED = "confirmed"
+RELATIONSHIP_STATUS_DISPUTED = "disputed"
+RELATIONSHIP_STATUS_REJECTED = "rejected"
+RELATIONSHIP_STATUS_STALE = "stale"
+RELATIONSHIP_STATUS_BROKEN = "broken"
+RELATIONSHIP_STATUS_SUPERSEDED = "superseded"
 
 # -- Temporal Obligation vocabulary (Prompt 8 #5/#9/#10) ---------------------
 # Lifecycle STATE (stored, changed only by governed action) - kept separate
@@ -1596,6 +1653,25 @@ class Relationship:
     "this graphic corresponds_to this requirement") is Spin output like
     any Finding - not authoritative until something adjudicates it. This
     batch implements the field, not an adjudication workflow for it.
+
+    CLAUDE-MM6 additions, both backward-compatible (every pre-MM6 record
+    simply lacks these keys and loads with the honest default, the same
+    shape every prior addition to this codebase's own dataclasses
+    already uses): `reason` (Section 6's own "reason or description" -
+    a short human-entered explanation, distinct from `confidence`, which
+    is a number, not prose); `validation_state` (None = ordinary,
+    RELATIONSHIP_VALIDATION_DISPUTED/_REJECTED = an explicit human
+    judgment AGAINST this edge - see dispute_relationship/
+    reject_relationship below). Endpoint VERSION binding (Section 6/14 -
+    "source and target versions") is deliberately NOT a stored field
+    here: a from_id/to_id pointing at an EvidenceItem/AddressableRegion/
+    Source already carries (or is reachable to) that object's own
+    version/supersession state, so recording a SECOND, potentially-
+    drifting copy of "the version this was created against" would
+    violate the same "store flat, derive at read time" principle every
+    citation in this codebase already follows - resolve_relationship_
+    status (below) derives staleness from the ENDPOINT's own current
+    state at read time instead.
     """
 
     id: str
@@ -1612,6 +1688,8 @@ class Relationship:
     confirmed_by: Optional[str] = None
     related_analysis_id: Optional[str] = None
     related_finding_id: Optional[str] = None
+    reason: Optional[str] = None
+    validation_state: Optional[str] = None  # None | RELATIONSHIP_VALIDATION_DISPUTED | RELATIONSHIP_VALIDATION_REJECTED
 
 
 CARRIED_FORWARD_OBJECT_TYPE_FINDING = "finding"
@@ -7689,6 +7767,7 @@ class CaseWorkspaceStore:
         confidence: Optional[float] = None,
         related_analysis_id: Optional[str] = None,
         related_finding_id: Optional[str] = None,
+        reason: Optional[str] = None,
     ) -> dict:
         relationship = Relationship(
             id=_new_id(),
@@ -7704,6 +7783,7 @@ class CaseWorkspaceStore:
             confidence=confidence,
             related_analysis_id=related_analysis_id,
             related_finding_id=related_finding_id,
+            reason=reason,
         )
         workspace.relationships.append(asdict(relationship))
         self.save(workspace)
@@ -7730,6 +7810,453 @@ class CaseWorkspaceStore:
             elif direction == "both" and (matches_from or matches_to):
                 results.append(r)
         return results
+
+    # -- CLAUDE-MM6: Cross-Document and Cross-Modal Relationship River --------
+    # record_relationship (above) is deliberately left UNCHANGED - it has no
+    # endpoint-existence check at all, and dozens of pre-existing tests
+    # (Foundation Batches B/C/D/F/J, the NREOCRC lab fixtures, the self-test
+    # corpus) already rely on that permissiveness, some for object kinds
+    # this store has no dedicated existence-check for at all. Tightening it
+    # in place would be a real regression risk for no proven benefit to
+    # those already-governed call sites. Section 6/16's own "validate every
+    # endpoint... deny cross-project relationships" requirement is met
+    # instead by this NEW, additive, narrower entry point - the one this
+    # stage's own routes/UI actually use - covering exactly the MM1-MM5
+    # evidence-contract object kinds the cross-modal river vertical slice
+    # needs, the same "add a safer wrapper, don't weaken the general
+    # primitive" pattern MM3's create_addressable_cell_region already
+    # established for create_addressable_region.
+
+    # object_type -> the workspace list to search and the project_id key
+    # each stored dict already carries (every one of these already stores
+    # project_id directly on the record - Prompt 12/MM1's own standing
+    # discipline - so this is a lookup table, not new validation logic).
+    _MM6_ENDPOINT_LISTS = {
+        OBJECT_KIND_EVIDENCE_ITEM: "evidence_items",
+        OBJECT_KIND_ADDRESSABLE_REGION: "addressable_regions",
+        OBJECT_KIND_STRUCTURAL_UNIT: "structural_units",
+        OBJECT_KIND_DERIVED_OBSERVATION: "derived_observations",
+        OBJECT_KIND_SOURCE: "sources",
+        OBJECT_KIND_TASK: "tasks",
+        OBJECT_KIND_FINDING: "findings",
+    }
+
+    def _resolve_mm6_endpoint(self, workspace: ProjectWorkspace, object_type: str, object_id: str) -> Optional[dict]:
+        """Returns the real record for (object_type, object_id) IF it
+        exists in THIS project, else None - a direct top-level
+        `workspace.<list>` lookup for every MM6-supported object kind
+        (Finding included - `workspace.findings` is itself already a
+        flat, top-level, project-scoped list, not nested under Case)."""
+        object_type = normalize_open_world_value(object_type, KNOWN_OBJECT_KINDS)
+        list_name = self._MM6_ENDPOINT_LISTS.get(object_type)
+        if list_name is None:
+            return None
+        record = self._find(getattr(workspace, list_name), object_id)
+        if record is None:
+            return None
+        # Task carries no project_id field of its own (see Task's own
+        # docstring) - workspace.tasks is itself already a project-scoped
+        # flat list (one JSON file per project), so finding it there
+        # already proves project membership; every OTHER MM6-supported
+        # kind does carry project_id and is defense-in-depth checked here.
+        if "project_id" in record and record["project_id"] != workspace.project_id:
+            return None
+        return record
+
+    def record_evidence_relationship(
+        self,
+        workspace: ProjectWorkspace,
+        from_type: str,
+        from_id: str,
+        to_type: str,
+        to_id: str,
+        relationship_type: str,
+        reason: Optional[str] = None,
+        created_by: Optional[str] = None,
+        provisional: bool = True,
+        confidence: Optional[float] = None,
+        related_finding_id: Optional[str] = None,
+        governance_log: Optional[GovernanceLog] = None,
+    ) -> dict:
+        """
+        Section 6: "do not permit arbitrary cross-project endpoints" - both
+        `(from_type, from_id)` and `(to_type, to_id)` are resolved against
+        THIS project's own real records before anything is written; a
+        nonexistent id or one belonging to a different project raises
+        CaseWorkspaceError rather than silently creating a broken-from-
+        creation or cross-project-leaking edge. Restricted to the MM1-MM5
+        evidence-contract object kinds (see _MM6_ENDPOINT_LISTS) plus
+        Finding and Task - an endpoint type outside that set raises rather
+        than falling through to the unchecked general primitive.
+        """
+        if from_type not in self._MM6_ENDPOINT_LISTS:
+            raise CaseWorkspaceError(f"'{from_type}' is not a supported relationship endpoint type for this stage.")
+        if to_type not in self._MM6_ENDPOINT_LISTS:
+            raise CaseWorkspaceError(f"'{to_type}' is not a supported relationship endpoint type for this stage.")
+        if self._resolve_mm6_endpoint(workspace, from_type, from_id) is None:
+            raise CaseWorkspaceError(f"Relationship 'from' endpoint ({from_type} {from_id}) was not found in this project.")
+        if self._resolve_mm6_endpoint(workspace, to_type, to_id) is None:
+            raise CaseWorkspaceError(f"Relationship 'to' endpoint ({to_type} {to_id}) was not found in this project.")
+
+        relationship = self.record_relationship(
+            workspace, from_type=from_type, from_id=from_id, to_type=to_type, to_id=to_id,
+            relationship_type=relationship_type, created_by=created_by, provisional=provisional,
+            confidence=confidence, related_finding_id=related_finding_id, reason=reason,
+        )
+
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id, event_type="relationship_recorded",
+                actor=created_by or "system", role="human" if not provisional else "system",
+                payload={
+                    "relationship_id": relationship["id"], "relationship_type": relationship["relationship_type"],
+                    "from_type": from_type, "from_id": from_id, "to_type": to_type, "to_id": to_id,
+                },
+                correlation_id=relationship["id"],
+            )
+        return relationship
+
+    def resolve_relationship_status(self, workspace: ProjectWorkspace, relationship_id: str) -> dict:
+        """
+        Section 6/14: the read-time-derived status a Relationship doesn't
+        store on itself - mirrors resolve_region_citation's own shape
+        (a stable id resolved into a human-legible state at read time,
+        never persisted). Returns `{"status": "unresolved", ...}` for an
+        unknown relationship id (the honest broken-anchor shape every
+        other *_citation/*_status resolver in this codebase already uses),
+        or the full resolved dict on success:
+        `{"status", "relationship_id", "relationship_type", "reason",
+        "from": {...endpoint status...}, "to": {...endpoint status...},
+        "superseded_by_relationship_id"}`.
+
+        Status precedence (most authoritative first): a human REJECTION or
+        DISPUTE always wins over machine-derived staleness (Section 13: "a
+        human disputes an AI-proposed relationship" is first-class
+        information, never silently overridden by a later-computed
+        status); then SUPERSEDED (a real replacement relationship already
+        exists); then BROKEN (an endpoint no longer resolves at all); then
+        STALE (an endpoint's own Source has been superseded, but the
+        endpoint itself still resolves - Section 14's own worked example);
+        then the ordinary CONFIRMED/PROPOSED pair from `provisional`.
+        """
+        relationship = self._find(workspace.relationships, relationship_id)
+        if relationship is None:
+            return {"status": "unresolved", "relationship_id": relationship_id}
+
+        def endpoint_status(object_type: str, object_id: str) -> dict:
+            record = self._resolve_mm6_endpoint(workspace, object_type, object_id)
+            if record is None:
+                return {"object_type": object_type, "object_id": object_id, "resolved": False}
+            info = {"object_type": object_type, "object_id": object_id, "resolved": True}
+            # Reuse the SAME citation resolver already built for MM2-MM5's
+            # own regions where the endpoint IS a region - the cheapest,
+            # most direct way to learn whether the underlying Source has
+            # been superseded (Section 14's own staleness trigger).
+            if object_type == OBJECT_KIND_ADDRESSABLE_REGION:
+                citation = self.resolve_region_citation(workspace, object_id)
+                info["citation"] = citation
+                info["stale"] = citation.get("status") == "stale"
+            elif object_type == OBJECT_KIND_EVIDENCE_ITEM and record.get("region_id"):
+                citation = self.resolve_region_citation(workspace, record["region_id"])
+                info["citation"] = citation
+                info["stale"] = citation.get("status") == "stale"
+            elif object_type == OBJECT_KIND_SOURCE:
+                info["stale"] = bool(record.get("superseded_by_source_id"))
+            else:
+                info["stale"] = False
+            return info
+
+        from_status = endpoint_status(relationship["from_type"], relationship["from_id"])
+        to_status = endpoint_status(relationship["to_type"], relationship["to_id"])
+
+        successor_supersession = next(
+            (s for s in workspace.supersessions
+             if s["predecessor_type"] == OBJECT_KIND_RELATIONSHIP and s["predecessor_id"] == relationship_id),
+            None,
+        )
+
+        if relationship.get("validation_state") == RELATIONSHIP_VALIDATION_REJECTED:
+            status = RELATIONSHIP_STATUS_REJECTED
+        elif relationship.get("validation_state") == RELATIONSHIP_VALIDATION_DISPUTED:
+            status = RELATIONSHIP_STATUS_DISPUTED
+        elif successor_supersession is not None:
+            status = RELATIONSHIP_STATUS_SUPERSEDED
+        elif not from_status["resolved"] or not to_status["resolved"]:
+            status = RELATIONSHIP_STATUS_BROKEN
+        elif from_status.get("stale") or to_status.get("stale"):
+            status = RELATIONSHIP_STATUS_STALE
+        elif relationship.get("provisional", True):
+            status = RELATIONSHIP_STATUS_PROPOSED
+        else:
+            status = RELATIONSHIP_STATUS_CONFIRMED
+
+        result = {
+            "status": status,
+            "relationship_id": relationship_id,
+            "relationship_type": relationship["relationship_type"],
+            "reason": relationship.get("reason"),
+            "from": from_status,
+            "to": to_status,
+        }
+        if successor_supersession is not None:
+            result["superseded_by_relationship_id"] = successor_supersession["successor_id"]
+        return result
+
+    def dispute_relationship(
+        self, workspace: ProjectWorkspace, relationship_id: str, actor: str,
+        reason: Optional[str] = None, governance_log: Optional[GovernanceLog] = None,
+    ) -> dict:
+        """Section 13: "a human disputes an AI-proposed relationship" -
+        marks the edge disputed WITHOUT deleting or rewriting it (Section
+        15's own "do not silently overwrite a mistaken relationship")."""
+        relationship = self._find(workspace.relationships, relationship_id)
+        if relationship is None or relationship["project_id"] != workspace.project_id:
+            raise CaseWorkspaceError(f"Relationship {relationship_id} was not found.")
+        relationship["validation_state"] = RELATIONSHIP_VALIDATION_DISPUTED
+        self.save(workspace)
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id, event_type="relationship_disputed",
+                actor=actor, role="human", payload={"relationship_id": relationship_id, "reason": reason},
+                correlation_id=relationship_id,
+            )
+        return relationship
+
+    def reject_relationship(
+        self, workspace: ProjectWorkspace, relationship_id: str, actor: str,
+        reason: Optional[str] = None, governance_log: Optional[GovernanceLog] = None,
+    ) -> dict:
+        """Section 15: a stronger, terminal form of dispute_relationship -
+        "reason; author; date" are all preserved (reason on the record
+        itself; author/date in the governance log entry, the same split
+        every other correction in this codebase already uses)."""
+        relationship = self._find(workspace.relationships, relationship_id)
+        if relationship is None or relationship["project_id"] != workspace.project_id:
+            raise CaseWorkspaceError(f"Relationship {relationship_id} was not found.")
+        relationship["validation_state"] = RELATIONSHIP_VALIDATION_REJECTED
+        self.save(workspace)
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id, event_type="relationship_rejected",
+                actor=actor, role="human", payload={"relationship_id": relationship_id, "reason": reason},
+                correlation_id=relationship_id,
+            )
+        return relationship
+
+    def supersede_relationship(
+        self,
+        workspace: ProjectWorkspace,
+        old_relationship_id: str,
+        to_type: str,
+        to_id: str,
+        relationship_type: str,
+        reason: str,
+        actor: str,
+        from_type: Optional[str] = None,
+        from_id: Optional[str] = None,
+        governance_log: Optional[GovernanceLog] = None,
+    ) -> dict:
+        """
+        Section 15: "preserve original relationship; correction or
+        rejection; reason; author; date; ... replacement relationship" -
+        implemented by making this stage the SECOND real consumer of the
+        pre-existing Supersession primitive (record_supersession's own
+        docstring names future consumers beyond Source; MM6 is the first
+        to actually arrive), rather than inventing a parallel correction
+        mechanism. The OLD relationship is never deleted or mutated by
+        this method itself (resolve_relationship_status derives its
+        "superseded" state purely from the Supersession record) - only a
+        NEW relationship is created and linked as successor.
+
+        `from_type`/`from_id` default to the OLD relationship's own FROM
+        endpoint when omitted (Section 15's own worked correction case:
+        the FROM side is usually unchanged, only the TO side or the
+        relationship_type itself was wrong) - pass them explicitly to
+        correct the FROM side too.
+        """
+        old = self._find(workspace.relationships, old_relationship_id)
+        if old is None or old["project_id"] != workspace.project_id:
+            raise CaseWorkspaceError(f"Relationship {old_relationship_id} was not found.")
+
+        new_relationship = self.record_evidence_relationship(
+            workspace, from_type=from_type or old["from_type"], from_id=from_id or old["from_id"],
+            to_type=to_type, to_id=to_id, relationship_type=relationship_type, reason=reason,
+            created_by=actor, provisional=False, governance_log=governance_log,
+        )
+
+        supersession = self.record_supersession(
+            workspace, predecessor_type=OBJECT_KIND_RELATIONSHIP, predecessor_id=old_relationship_id,
+            successor_type=OBJECT_KIND_RELATIONSHIP, successor_id=new_relationship["id"],
+            actor=actor, reason=reason, authority_class="approval_gate:relationship_correction",
+        )
+
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id, event_type="relationship_superseded",
+                actor=actor, role="human",
+                payload={"old_relationship_id": old_relationship_id, "new_relationship_id": new_relationship["id"], "reason": reason},
+                correlation_id=new_relationship["id"],
+            )
+        return {"old_relationship_id": old_relationship_id, "new_relationship": new_relationship, "supersession": supersession}
+
+    def build_relationship_sachet(
+        self, workspace: ProjectWorkspace, relationship_id: str, task_description: Optional[str] = None,
+    ) -> dict:
+        """
+        Section 12: the Governed Evidence Sachet, extended to a
+        RELATIONSHIP PATH - "one relationship path... citations and
+        versions... disclose what is included and excluded." Mirrors
+        build_evidence_sachet's own read-time-assembly shape exactly (no
+        new persisted object), but assembles around a Relationship's TWO
+        endpoints rather than one region's sibling regions. Each endpoint
+        gets its own citation where the object kind supports one
+        (AddressableRegion/EvidenceItem-with-a-region); a Source, Task, or
+        Finding endpoint gets its own minimal identity summary instead,
+        never a fabricated citation for a kind that has none. Excludes
+        every OTHER relationship and every unrelated object in the
+        project - `excluded.summary` states this explicitly, the same
+        honesty build_evidence_sachet's own manifest already establishes.
+        """
+        status = self.resolve_relationship_status(workspace, relationship_id)
+        if status["status"] == "unresolved":
+            return {"status": "unavailable", "relationship_id": relationship_id}
+        relationship = self._find(workspace.relationships, relationship_id)
+
+        def endpoint_summary(object_type: str, object_id: str) -> dict:
+            record = self._resolve_mm6_endpoint(workspace, object_type, object_id)
+            summary = {"object_type": object_type, "object_id": object_id, "resolved": record is not None}
+            if record is None:
+                return summary
+            if object_type == OBJECT_KIND_ADDRESSABLE_REGION:
+                summary["citation"] = self.resolve_region_citation(workspace, object_id)
+            elif object_type == OBJECT_KIND_EVIDENCE_ITEM:
+                summary["content"] = record.get("content")
+                summary["evidence_class"] = record.get("evidence_class")
+                if record.get("region_id"):
+                    summary["citation"] = self.resolve_region_citation(workspace, record["region_id"])
+            elif object_type == OBJECT_KIND_DERIVED_OBSERVATION:
+                summary["statement"] = record.get("statement")
+                summary["author_type"] = record.get("author_type")
+            elif object_type == OBJECT_KIND_FINDING:
+                summary["statement"] = record.get("statement")
+                summary["claim_status"] = record.get("claim_status")
+            elif object_type == OBJECT_KIND_SOURCE:
+                summary["name"] = record.get("name")
+                summary["security_classification"] = record.get("security_classification")
+            elif object_type == OBJECT_KIND_TASK:
+                summary["title"] = record.get("title")
+                summary["status"] = record.get("status")
+            return summary
+
+        total_relationships = len(workspace.relationships)
+        return {
+            "status": "assembled",
+            "task": task_description,
+            "relationship": {
+                "relationship_id": relationship_id,
+                "relationship_type": relationship["relationship_type"],
+                "reason": relationship.get("reason"),
+                "status": status["status"],
+                "confidence": relationship.get("confidence"),
+                "created_by": relationship.get("created_by"),
+                "created_at": relationship.get("created_at"),
+            },
+            "from": endpoint_summary(relationship["from_type"], relationship["from_id"]),
+            "to": endpoint_summary(relationship["to_type"], relationship["to_id"]),
+            "excluded": {
+                "summary": f"{max(total_relationships - 1, 0)} other relationship(s) in this project were excluded entirely.",
+            },
+        }
+
+    def explain_evidence_trust(self, workspace: ProjectWorkspace, evidence_item_id: str) -> dict:
+        """
+        Section 10: the Trustworthy Answer Contract's own cross-modal
+        foundation - "the equivalent of 'Why should I trust this?'"
+        answered as a read-time AGGREGATION of already-governed records
+        (no new storage, matching this whole module's own doctrine).
+
+        `basis` classifies this ONE EvidenceItem via its own existing,
+        already-closed `evidence_class` (KNOWN_EVIDENCE_CLASSES) - the
+        same five-vs-more-way split Section 10 asks for was already built
+        by MM1, not reinvented here:
+          - EVIDENCE_CLASS_DIRECT_SOURCE -> "directly_verified_evidence"
+          - EVIDENCE_CLASS_IMPORTED_STRUCTURED_VALUE/_CALCULATED_VALUE ->
+            "imported_or_deterministic_calculation"
+          - EVIDENCE_CLASS_AI_GENERATED_PROPOSAL -> "ai_generated_proposal"
+          - EVIDENCE_CLASS_EXTERNALLY_RESEARCHED -> "externally_researched"
+          - everything else -> "other_recorded_evidence"
+
+        `supporting_relationships`/`contradicting_relationships` are this
+        evidence's own edges filtered by relationship_type (Section 13:
+        contradiction is first-class, never collapsed into a false
+        consensus) - each carries its own resolve_relationship_status
+        result, so a caller can see confirmed vs. disputed vs. stale
+        support/contradiction, not just a bare count. `observations`/
+        `findings` are whatever DerivedObservation/Finding this evidence
+        is linked to via a relationship - Section 8's own evidence ->
+        observation -> Finding chain, read back out.
+        """
+        evidence = self._find(workspace.evidence_items, evidence_item_id)
+        if evidence is None or evidence["project_id"] != workspace.project_id:
+            return {"status": "unavailable", "evidence_item_id": evidence_item_id}
+
+        evidence_class = evidence.get("evidence_class")
+        if evidence_class == EVIDENCE_CLASS_DIRECT_SOURCE:
+            basis = "directly_verified_evidence"
+        elif evidence_class in (EVIDENCE_CLASS_IMPORTED_STRUCTURED_VALUE, EVIDENCE_CLASS_CALCULATED_VALUE):
+            basis = "imported_or_deterministic_calculation"
+        elif evidence_class == EVIDENCE_CLASS_AI_GENERATED_PROPOSAL:
+            basis = "ai_generated_proposal"
+        elif evidence_class == EVIDENCE_CLASS_EXTERNALLY_RESEARCHED:
+            basis = "externally_researched"
+        else:
+            basis = "other_recorded_evidence"
+
+        citation = self.resolve_region_citation(workspace, evidence["region_id"]) if evidence.get("region_id") else None
+
+        edges = self.relationships_for(workspace, OBJECT_KIND_EVIDENCE_ITEM, evidence_item_id, direction="both")
+        supporting, contradicting, other = [], [], []
+        for edge in edges:
+            resolved = self.resolve_relationship_status(workspace, edge["id"])
+            entry = {"relationship_id": edge["id"], "relationship_type": edge["relationship_type"], "status": resolved["status"]}
+            if edge["relationship_type"] == RELATIONSHIP_TYPE_SUPPORTS:
+                supporting.append(entry)
+            elif edge["relationship_type"] == RELATIONSHIP_TYPE_CONTRADICTS:
+                contradicting.append(entry)
+            else:
+                other.append(entry)
+
+        observation_ids = {
+            e["from_id"] if e["to_type"] == OBJECT_KIND_EVIDENCE_ITEM else e["to_id"]
+            for e in edges
+            if OBJECT_KIND_DERIVED_OBSERVATION in (e["from_type"], e["to_type"])
+        }
+        finding_ids = {
+            e["from_id"] if e["to_type"] == OBJECT_KIND_EVIDENCE_ITEM else e["to_id"]
+            for e in edges
+            if OBJECT_KIND_FINDING in (e["from_type"], e["to_type"])
+        }
+
+        authority_boundary = (
+            "requires_human_authority" if (finding_ids or basis == "ai_generated_proposal") else "informational"
+        )
+
+        return {
+            "status": "assembled",
+            "evidence_item_id": evidence_item_id,
+            "basis": basis,
+            "evidence_class": evidence_class,
+            "content": evidence.get("content"),
+            "citation": citation,
+            "validation_status": evidence.get("validation_status"),
+            "supporting_relationships": supporting,
+            "contradicting_relationships": contradicting,
+            "other_relationships": other,
+            "has_contradictions": len(contradicting) > 0,
+            "derived_observation_ids": sorted(observation_ids),
+            "finding_ids": sorted(finding_ids),
+            "authority_boundary": authority_boundary,
+        }
 
     # -- Temporal Obligation (Prompt 8 #5/#6) -----------------------------------------
 

@@ -167,6 +167,16 @@
         metadataPanel.className = 'drawing-sheet-metadata';
         metadataPanel.hidden = true;
 
+        // CLAUDE-MM6 Section 19: the bounded "river relationship viewer" -
+        // a small panel, NOT a free-form graph canvas, opened for the most
+        // recently created region/marker's own EvidenceItem (the one real
+        // object a reviewer has an on-screen reference to right now - this
+        // codebase has no "reopen an existing region" affordance yet, the
+        // same limitation MM4/MM5's own checkpoint notes already record).
+        var riverPanel = document.createElement('div');
+        riverPanel.className = 'relationship-river-panel';
+        riverPanel.hidden = true;
+
         var viewport = document.createElement('div');
         viewport.className = 'drawing-viewport';
 
@@ -181,6 +191,7 @@
         host.appendChild(toolbar);
         host.appendChild(viewport);
         host.appendChild(metadataPanel);
+        host.appendChild(riverPanel);
         viewport.appendChild(panZoom);
         panZoom.appendChild(imgEl);
         panZoom.appendChild(overlay);
@@ -330,6 +341,227 @@
             metadataPanel.hidden = false;
         }
 
+        // -------- CLAUDE-MM6: bounded river relationship viewer ----------
+        // Section 19's own required capabilities: see related objects,
+        // their modality/direction/state, open either endpoint's citation,
+        // create one relationship, confirm/dispute/reject one, see stale/
+        // broken status - all against the real /relationships and
+        // /evidence/<id>/trust routes, never a client-side mock.
+        var RELATIONSHIP_TYPES = [
+            'supports', 'contradicts', 'observes', 'deviates_from', 'requires_follow_up',
+            'references', 'same_subject_as', 'compares_with', 'validates', 'invalidates',
+        ];
+        var ENDPOINT_OBJECT_TYPES = [
+            'evidence_item', 'addressable_region', 'structural_unit', 'derived_observation',
+            'source', 'task', 'finding',
+        ];
+
+        function statusBadge(status) {
+            var span = document.createElement('span');
+            span.className = 'relationship-status-badge relationship-status-' + status;
+            span.textContent = status;
+            return span;
+        }
+
+        function renderTrustSummary(evidenceItemId, container) {
+            container.textContent = '';
+            fetch(apiBase + '/evidence/' + encodeURIComponent(evidenceItemId) + '/trust', { credentials: 'same-origin' })
+                .then(function (r) { return r.json(); })
+                .then(function (trust) {
+                    if (trust.status !== 'assembled') return;
+                    var p = document.createElement('p');
+                    p.className = 'relationship-trust-summary';
+                    p.textContent = 'Why trust this: ' + String(trust.basis || 'unknown').replace(/_/g, ' ') +
+                        (trust.has_contradictions ? ' — has contradicting evidence, see below' : '');
+                    container.appendChild(p);
+                })
+                .catch(function () { /* trust summary is supplementary - a failed fetch leaves it absent, not broken */ });
+        }
+
+        function loadRelationships(evidenceItemId, listEl) {
+            listEl.textContent = 'Loading…';
+            fetch(
+                apiBase + '/relationships?object_type=evidence_item&object_id=' + encodeURIComponent(evidenceItemId) + '&direction=both',
+                { credentials: 'same-origin' },
+            ).then(function (r) { return r.json(); }).then(function (body) {
+                var relationships = (body && body.relationships) || [];
+                listEl.textContent = '';
+                if (!relationships.length) {
+                    var empty = document.createElement('p');
+                    empty.className = 'relationship-river-empty';
+                    empty.textContent = 'No relationships recorded yet.';
+                    listEl.appendChild(empty);
+                    return;
+                }
+                relationships.forEach(function (rel) {
+                    var row = document.createElement('div');
+                    row.className = 'relationship-river-row';
+                    var isFrom = rel.from_type === 'evidence_item' && rel.from_id === evidenceItemId;
+                    var otherType = isFrom ? rel.to_type : rel.from_type;
+                    var otherId = isFrom ? rel.to_id : rel.from_id;
+
+                    var head = document.createElement('div');
+                    head.className = 'relationship-river-row-head';
+                    var summary = document.createElement('span');
+                    summary.textContent = (isFrom ? '→ ' : '← ') + rel.relationship_type + ' ' + otherType +
+                        ' (' + String(otherId).slice(0, 8) + '…)';
+                    head.appendChild(summary);
+                    row.appendChild(head);
+
+                    if (rel.reason) {
+                        var reasonEl = document.createElement('p');
+                        reasonEl.className = 'relationship-river-reason';
+                        reasonEl.textContent = rel.reason;
+                        row.appendChild(reasonEl);
+                    }
+
+                    fetch(apiBase + '/relationships/' + encodeURIComponent(rel.id) + '/status', { credentials: 'same-origin' })
+                        .then(function (r) { return r.json(); })
+                        .then(function (statusResult) { head.appendChild(statusBadge(statusResult.status)); });
+
+                    var actions = document.createElement('div');
+                    actions.className = 'relationship-river-row-actions';
+                    function actionButton(label, verb) {
+                        var btn = document.createElement('button');
+                        btn.type = 'button';
+                        btn.className = 'doc-control-btn';
+                        btn.textContent = label;
+                        btn.addEventListener('click', function () {
+                            btn.disabled = true;
+                            fetch(apiBase + '/relationships/' + encodeURIComponent(rel.id) + '/' + verb, {
+                                method: 'POST', credentials: 'same-origin',
+                                headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}),
+                            }).then(function () { loadRelationships(evidenceItemId, listEl); });
+                        });
+                        actions.appendChild(btn);
+                    }
+                    actionButton('Confirm', 'confirm');
+                    actionButton('Dispute', 'dispute');
+                    actionButton('Reject', 'reject');
+                    row.appendChild(actions);
+
+                    listEl.appendChild(row);
+                });
+            }).catch(function () {
+                listEl.textContent = '';
+                var errorEl = document.createElement('p');
+                errorEl.className = 'relationship-river-empty';
+                errorEl.textContent = 'Could not load relationships.';
+                listEl.appendChild(errorEl);
+            });
+        }
+
+        function buildCreateRelationshipForm(evidenceItemId, listEl) {
+            var form = document.createElement('div');
+            form.className = 'relationship-river-create';
+
+            var typeSelect = document.createElement('select');
+            typeSelect.setAttribute('aria-label', 'Target object type');
+            ENDPOINT_OBJECT_TYPES.forEach(function (t) {
+                var opt = document.createElement('option');
+                opt.value = t; opt.textContent = t;
+                typeSelect.appendChild(opt);
+            });
+
+            var idInput = document.createElement('input');
+            idInput.type = 'text';
+            idInput.placeholder = 'Target object id';
+            idInput.setAttribute('aria-label', 'Target object id');
+
+            var relTypeSelect = document.createElement('select');
+            relTypeSelect.setAttribute('aria-label', 'Relationship type');
+            RELATIONSHIP_TYPES.forEach(function (t) {
+                var opt = document.createElement('option');
+                opt.value = t; opt.textContent = t;
+                relTypeSelect.appendChild(opt);
+            });
+
+            var reasonInput = document.createElement('input');
+            reasonInput.type = 'text';
+            reasonInput.placeholder = 'Reason (optional)';
+            reasonInput.setAttribute('aria-label', 'Reason');
+
+            var createBtn = document.createElement('button');
+            createBtn.type = 'button';
+            createBtn.className = 'doc-control-btn';
+            createBtn.textContent = 'Create relationship';
+
+            var statusEl = document.createElement('span');
+            statusEl.className = 'relationship-river-create-status';
+            statusEl.setAttribute('aria-live', 'polite');
+
+            createBtn.addEventListener('click', function () {
+                var targetId = idInput.value.trim();
+                if (!targetId) { statusEl.textContent = 'Target object id is required.'; return; }
+                createBtn.disabled = true;
+                statusEl.textContent = '';
+                fetch(apiBase + '/relationships', {
+                    method: 'POST', credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        from_type: 'evidence_item', from_id: evidenceItemId,
+                        to_type: typeSelect.value, to_id: targetId,
+                        relationship_type: relTypeSelect.value, reason: reasonInput.value.trim() || null,
+                    }),
+                }).then(function (r) { return r.json().then(function (b) { return { ok: r.ok, body: b }; }); })
+                    .then(function (result) {
+                        createBtn.disabled = false;
+                        if (!result.ok) {
+                            statusEl.textContent = result.body.message || 'Could not create that relationship.';
+                            return;
+                        }
+                        statusEl.textContent = 'Relationship created.';
+                        idInput.value = ''; reasonInput.value = '';
+                        loadRelationships(evidenceItemId, listEl);
+                    });
+            });
+
+            form.appendChild(typeSelect);
+            form.appendChild(idInput);
+            form.appendChild(relTypeSelect);
+            form.appendChild(reasonInput);
+            form.appendChild(createBtn);
+            form.appendChild(statusEl);
+            return form;
+        }
+
+        function openRelationshipRiver(evidenceItemId) {
+            riverPanel.textContent = '';
+            riverPanel.hidden = false;
+            riverPanel.dataset.evidenceId = evidenceItemId;
+
+            var heading = document.createElement('h4');
+            heading.textContent = 'Related evidence';
+            riverPanel.appendChild(heading);
+
+            var trustEl = document.createElement('div');
+            riverPanel.appendChild(trustEl);
+            renderTrustSummary(evidenceItemId, trustEl);
+
+            var listEl = document.createElement('div');
+            listEl.className = 'relationship-river-list';
+            riverPanel.appendChild(listEl);
+            loadRelationships(evidenceItemId, listEl);
+
+            riverPanel.appendChild(buildCreateRelationshipForm(evidenceItemId, listEl));
+        }
+
+        function addRelationshipsButton(statusContainer, evidenceItemId) {
+            if (!evidenceItemId) return;
+            var btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'doc-control-btn';
+            btn.textContent = 'Relationships';
+            btn.addEventListener('click', function () {
+                if (!riverPanel.hidden && riverPanel.dataset.evidenceId === evidenceItemId) {
+                    riverPanel.hidden = true;
+                    return;
+                }
+                openRelationshipRiver(evidenceItemId);
+            });
+            statusContainer.appendChild(btn);
+        }
+
         // -------- Region selection (Section 4/6/12) ----------------------
         function clearOverlay() { overlay.textContent = ''; }
 
@@ -413,6 +645,8 @@
                         });
                         regionStatusEl.appendChild(exportBtn);
                     }
+                    var evidenceItemId = result.body.evidence_item && result.body.evidence_item.id;
+                    addRelationshipsButton(regionStatusEl, evidenceItemId);
                 });
         }
 
@@ -450,7 +684,11 @@
                             return;
                         }
                         var label = result.body.citation && result.body.citation.label;
-                        regionStatusEl.textContent = label ? ('Marker created: ' + label) : 'Marker created.';
+                        var span = document.createElement('span');
+                        span.textContent = label ? ('Marker created: ' + label) : 'Marker created.';
+                        regionStatusEl.appendChild(span);
+                        var evidenceItemId = result.body.evidence_item && result.body.evidence_item.id;
+                        addRelationshipsButton(regionStatusEl, evidenceItemId);
                     });
             }
             input.addEventListener('keydown', function (e) {

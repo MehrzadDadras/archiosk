@@ -3541,6 +3541,79 @@ main::-webkit-scrollbar-corner,
     font-size: 0.74rem;
 }
 
+/* -- CLAUDE-MM6: bounded river relationship viewer -------------------------
+   Section 19's own "NOT a large free-form graph canvas" - a small panel
+   attached to the existing evidence surface (drawing_image_viewer.js),
+   listing an evidence item's own relationships, its Trustworthy Answer
+   Contract summary, and a bounded create-relationship form. Status colors
+   reuse tokens.css's own existing semantic meanings rather than minting
+   new ones: confirmed=accepted-green, proposed/stale=attention-amber
+   (pending/needs re-verification), disputed/rejected/broken=failure-red
+   (a concluded contradiction or a broken anchor), superseded/unresolved
+   stay tonal - neither a success nor a failure, just historical/unknown. */
+.relationship-river-panel {
+    padding: 0.5rem 0.6rem;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--surface-secondary);
+    font-size: 0.78rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+.relationship-river-panel h4 { margin: 0; font-size: 0.82rem; color: var(--text-primary); }
+.relationship-trust-summary { margin: 0; color: var(--text-secondary); }
+.relationship-river-empty { margin: 0; color: var(--text-disabled); font-style: italic; }
+.relationship-river-list { display: flex; flex-direction: column; gap: 0.4rem; }
+.relationship-river-row {
+    padding: 0.35rem 0.5rem;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--surface-primary);
+}
+.relationship-river-row-head { display: flex; align-items: center; gap: 0.4rem; color: var(--text-primary); }
+.relationship-river-reason { margin: 0.2rem 0 0; color: var(--text-metadata); }
+.relationship-river-row-actions { display: flex; gap: 0.25rem; margin-top: 0.3rem; }
+.relationship-status-badge {
+    display: inline-block;
+    padding: 0.05rem 0.4rem;
+    border-radius: 3px;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+}
+.relationship-status-proposed,
+.relationship-status-stale { background: var(--attention-amber-tint); color: var(--attention-amber); }
+.relationship-status-confirmed { background: var(--accepted-green-tint); color: var(--accepted-green); }
+.relationship-status-disputed,
+.relationship-status-rejected,
+.relationship-status-broken { background: var(--failure-red-tint); color: var(--failure-red); }
+.relationship-status-superseded,
+.relationship-status-unresolved { background: var(--surface-hover); color: var(--text-metadata); }
+.relationship-river-create {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.3rem;
+    padding-top: 0.4rem;
+    border-top: 1px solid var(--border);
+}
+.relationship-river-create input[type="text"] {
+    flex: 1 1 8rem;
+    min-width: 6rem;
+    padding: 0.15rem 0.3rem;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    font-size: 0.76rem;
+}
+.relationship-river-create select {
+    padding: 0.15rem 0.3rem;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    font-size: 0.76rem;
+}
+.relationship-river-create-status { font-size: 0.72rem; color: var(--text-metadata); }
+
 /* -- shared text utilities ------------------------------------------------
    Consolidates inline style="" patterns that had drifted into
    near-duplicates across templates (font-size:0.85rem vs 0.82rem vs
