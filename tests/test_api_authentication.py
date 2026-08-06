@@ -34,6 +34,10 @@ API_ROUTES = [
     ("GET", "/api/v1/documents/some-project/governance"),
     ("GET", "/api/v1/documents/some-project/rfi"),
     ("GET", "/api/v1/categories"),
+    # CLAUDE-MM1
+    ("GET", "/api/v1/documents/some-project/structural-units"),
+    ("GET", "/api/v1/documents/some-project/evidence"),
+    ("GET", "/api/v1/documents/some-project/citations/some-region"),
 ]
 
 

@@ -167,6 +167,54 @@ def get_governance(project_id):
     return jsonify(events=[e.__dict__ for e in events])
 
 
+# -- CLAUDE-MM1: Multimodal Foundation and Evidence Contract -----------------
+# A tightly bounded diagnostic read surface proving the evidence contract is
+# reachable through the application's existing JSON API - not a new UI
+# (Part 12's own explicit instruction). Read-only; every write path stays a
+# direct CaseWorkspaceStore call (services/case_workspace.py), the same as
+# every other MM1 method - no route in this file mutates evidence-contract
+# state this stage.
+
+@api_bp.route('/documents/<project_id>/structural-units', methods=['GET'])
+def list_structural_units(project_id):
+    _document, workspace = _load_authorized_project_or_404(project_id)
+    store = CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"])
+    source_id = request.args.get('source_id')
+    if source_id:
+        units = store.structural_units_for_source(workspace, source_id)
+    else:
+        units = workspace.structural_units
+    return jsonify(structural_units=units)
+
+
+@api_bp.route('/documents/<project_id>/evidence', methods=['GET'])
+def list_evidence_items(project_id):
+    _document, workspace = _load_authorized_project_or_404(project_id)
+    store = CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"])
+    source_id = request.args.get('source_id')
+    if source_id:
+        items = store.evidence_items_for_source(workspace, source_id)
+    else:
+        items = workspace.evidence_items
+    return jsonify(evidence_items=items)
+
+
+@api_bp.route('/documents/<project_id>/citations/<region_id>', methods=['GET'])
+def get_region_citation(project_id, region_id):
+    """
+    Resolves an AddressableRegion into the citation contract's own
+    human-readable rendering (Section 7) - `{"status": "resolved", ...}`
+    or the honest `{"status": "unavailable", ...}` broken-anchor state,
+    never a 404/500 for a region that simply no longer resolves (that
+    would conflate "this region id was never real/not in this project"
+    with "this region existed but its Source is currently unavailable" -
+    two different facts callers need to distinguish).
+    """
+    _document, workspace = _load_authorized_project_or_404(project_id)
+    store = CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"])
+    return jsonify(store.resolve_region_citation(workspace, region_id))
+
+
 @api_bp.route('/documents/<project_id>/rfi', methods=['GET'])
 def export_rfi(project_id):
     document, workspace = _load_authorized_project_or_404(project_id)

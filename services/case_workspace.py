@@ -260,6 +260,18 @@ OBJECT_KIND_SOURCE_REFERENCE = "source_reference"  # Batch J
 OBJECT_KIND_REQUIREMENT_ADJUDICATION = "requirement_adjudication"  # Batch K
 OBJECT_KIND_REVIEW_MESSAGE = "review_message"  # Selective Adopt/Carry-Forward tranche - distinct from OBJECT_KIND_REVIEW_THREAD, since a carried-forward comment points at the specific historical message, not its whole thread
 OBJECT_KIND_PARTICIPANT = "participant"  # CLAUDE-P12R - a project party (Owner/Design-Builder/Proponent/etc.), so a Relationship/Anchor can point at one like anything else
+# CLAUDE-MM1: the multimodal foundation/evidence contract - a Source's
+# internal structure (page/sheet/section/frame), a precise locatable
+# portion of one (span/bbox/cell/crop), a piece of evidence anchored to
+# either, and an interpretation built from one or more Evidence Items.
+# Generalizes what OBJECT_KIND_TABLE/TABLE_ROW/TABLE_CELL already do for
+# tabular content specifically (Batch J) to every modality MM2-MM9 will
+# eventually extract - see StructuralUnit/AddressableRegion/EvidenceItem/
+# DerivedObservation below for the real objects these name.
+OBJECT_KIND_STRUCTURAL_UNIT = "structural_unit"
+OBJECT_KIND_ADDRESSABLE_REGION = "addressable_region"
+OBJECT_KIND_EVIDENCE_ITEM = "evidence_item"
+OBJECT_KIND_DERIVED_OBSERVATION = "derived_observation"
 
 KNOWN_OBJECT_KINDS = (
     OBJECT_KIND_SOURCE,
@@ -288,6 +300,10 @@ KNOWN_OBJECT_KINDS = (
     OBJECT_KIND_REQUIREMENT_ADJUDICATION,
     OBJECT_KIND_REVIEW_MESSAGE,
     OBJECT_KIND_PARTICIPANT,
+    OBJECT_KIND_STRUCTURAL_UNIT,
+    OBJECT_KIND_ADDRESSABLE_REGION,
+    OBJECT_KIND_EVIDENCE_ITEM,
+    OBJECT_KIND_DERIVED_OBSERVATION,
 )
 
 # -- Typed relationship vocabulary (Prompt 8 #1) -----------------------------
@@ -312,6 +328,20 @@ RELATIONSHIP_TYPE_RESULTED_IN = "resulted_in"  # Prompt 10 #7: ReviewThread -> s
 # Requirement pair). from_id is always the new derived Case, to_id is
 # always the archived source Case - see derive_case_from_archive.
 RELATIONSHIP_TYPE_DERIVED_FROM = "derived_from"
+# CLAUDE-MM1: the remainder of the evidence-relationship vocabulary the
+# multimodal foundation needs (camel-multimodal-programme.md's MM6) -
+# added to the same open-world Relationship mechanism above, not a
+# second edge type. same_subject_as/compares_with are symmetric in
+# meaning but still stored with one direction, like every other
+# Relationship here; the caller's from/to choice is the only record of
+# which side initiated the comparison.
+RELATIONSHIP_TYPE_SAME_SUBJECT_AS = "same_subject_as"
+RELATIONSHIP_TYPE_COMPARES_WITH = "compares_with"
+RELATIONSHIP_TYPE_CALCULATED_FROM = "calculated_from"
+RELATIONSHIP_TYPE_MITIGATES = "mitigates"
+RELATIONSHIP_TYPE_VALIDATES = "validates"
+RELATIONSHIP_TYPE_INVALIDATES = "invalidates"
+RELATIONSHIP_TYPE_ASSOCIATED_WITH = "associated_with"
 
 KNOWN_RELATIONSHIP_TYPES = (
     RELATIONSHIP_TYPE_SUPPORTS,
@@ -326,6 +356,13 @@ KNOWN_RELATIONSHIP_TYPES = (
     RELATIONSHIP_TYPE_AFFECTS,
     RELATIONSHIP_TYPE_RESULTED_IN,
     RELATIONSHIP_TYPE_DERIVED_FROM,
+    RELATIONSHIP_TYPE_SAME_SUBJECT_AS,
+    RELATIONSHIP_TYPE_COMPARES_WITH,
+    RELATIONSHIP_TYPE_CALCULATED_FROM,
+    RELATIONSHIP_TYPE_MITIGATES,
+    RELATIONSHIP_TYPE_VALIDATES,
+    RELATIONSHIP_TYPE_INVALIDATES,
+    RELATIONSHIP_TYPE_ASSOCIATED_WITH,
 )
 
 # -- Temporal Obligation vocabulary (Prompt 8 #5/#9/#10) ---------------------
@@ -821,6 +858,21 @@ class Source:
     # import archive reference, or None for an ordinary upload).
     origin_type: Optional[str] = None  # open-world, KNOWN_SOURCE_ORIGIN_TYPES
     origin_reference: Optional[str] = None
+    # CLAUDE-MM1: additive Source-Artifact fields the multimodal foundation
+    # needs (camel-multimodal-programme.md's MM1) - every existing Source
+    # simply lacks these keys and loads with the honest None default, the
+    # same backward-compatible shape every prior addition to this dataclass
+    # already uses. mime_type/size_bytes are physical-file facts distinct
+    # from `kind`'s coarse content category; security_classification is
+    # per-Source (narrower than CLAUDE-P31's project-wide security_profile,
+    # not a replacement for it); extractor_version mirrors ParsedDocument's
+    # own parser_version (services/bhive_parser.py) but recorded on the
+    # governed Source record itself, since only the auto-registered first
+    # Source has an equivalent today.
+    mime_type: Optional[str] = None
+    size_bytes: Optional[int] = None
+    security_classification: Optional[str] = None  # open-world
+    extractor_version: Optional[str] = None
 
 
 @dataclass
@@ -2517,6 +2569,228 @@ class SourceReference:
     extractor_version: Optional[str] = None
 
 
+# -- CLAUDE-MM1: Multimodal Foundation and Evidence Contract -----------------
+# The shared governed representation every later Camel stage (MM2-MM9) builds
+# on - camel-multimodal-programme.md's own MM1 framing. Extends today's
+# kernel, which addresses whole Source records, to sub-document regions (a
+# page, a sheet range, a drawing detail, an image region) as first-class,
+# addressable, citable things, and establishes the fact/measurement/expert-
+# judgment/user-assumption/AI-suggestion distinction as a shared vocabulary
+# rather than something each future modality would otherwise re-invent.
+#
+# Deliberately generalizes, rather than duplicates, what already exists:
+# Table/TableRow (Batch J, above) remain the real, tested, tabular-specific
+# realization of "structural subdivision" and "addressable cell" - nothing
+# here replaces them, and a future adapter could describe a Table as a
+# StructuralUnit without migrating Table/TableRow's own storage. Relationship
+# (below) is reused as-is for every evidence relationship this contract
+# needs - see the new RELATIONSHIP_TYPE_*/OBJECT_KIND_* constants above,
+# not a second edge mechanism.
+
+EVIDENCE_CLASS_DIRECT_SOURCE = "direct_source_evidence"
+EVIDENCE_CLASS_EXTRACTED = "extracted_evidence"
+EVIDENCE_CLASS_NORMALIZED = "normalized_evidence"
+EVIDENCE_CLASS_USER_ENTERED = "user_entered_evidence"
+EVIDENCE_CLASS_IMPORTED_STRUCTURED_VALUE = "imported_structured_value"
+EVIDENCE_CLASS_CALCULATED_VALUE = "calculated_value"
+EVIDENCE_CLASS_AI_GENERATED_PROPOSAL = "ai_generated_proposal"
+EVIDENCE_CLASS_EXTERNALLY_RESEARCHED = "externally_researched_evidence"
+
+# Deliberately CLOSED, unlike Source.kind/Requirement.subject_domain above -
+# this is the one vocabulary the whole Camel programme's own "no silent
+# AI-to-authoritative promotion" discipline leans on (camel-multimodal-
+# programme.md's cross-cutting requirements). A caller naming some other
+# distinction is a defect to surface immediately (__post_init__ below),
+# not a value to preserve verbatim - the same closed-vocabulary discipline
+# already applied to REQUIREMENT_ADJUDICATION_OUTCOMES/REVIEWER_VALIDATION_
+# STATES for the same reason.
+KNOWN_EVIDENCE_CLASSES = (
+    EVIDENCE_CLASS_DIRECT_SOURCE,
+    EVIDENCE_CLASS_EXTRACTED,
+    EVIDENCE_CLASS_NORMALIZED,
+    EVIDENCE_CLASS_USER_ENTERED,
+    EVIDENCE_CLASS_IMPORTED_STRUCTURED_VALUE,
+    EVIDENCE_CLASS_CALCULATED_VALUE,
+    EVIDENCE_CLASS_AI_GENERATED_PROPOSAL,
+    EVIDENCE_CLASS_EXTERNALLY_RESEARCHED,
+)
+
+OBSERVATION_AUTHOR_HUMAN = "human"
+OBSERVATION_AUTHOR_DETERMINISTIC_PROCESS = "deterministic_process"
+OBSERVATION_AUTHOR_AI = "ai"
+KNOWN_OBSERVATION_AUTHOR_TYPES = (
+    OBSERVATION_AUTHOR_HUMAN,
+    OBSERVATION_AUTHOR_DETERMINISTIC_PROCESS,
+    OBSERVATION_AUTHOR_AI,
+)
+
+
+@dataclass
+class StructuralUnit:
+    """
+    A logical subdivision of a Source - a PDF/document page, a worksheet,
+    a drawing sheet, an image frame, a slide, a section - generalized
+    across modalities rather than named per-modality (Prompt/Section 4's
+    own examples). `unit_type` is deliberately open-world: MM1 does not
+    extract every modality yet (no OCR, no PDF page renderer, no drawing
+    parser - see this stage's own deferrals), it only needs to make each
+    later modality representable without a schema change once MM2-MM5
+    actually produce them.
+
+    `order_index` is structural position (0-based), not permanent identity
+    - the same "ordinal is not identity" principle Table's own docstring
+    already states for itself; `id` is the only stable identity. A unit
+    may nest under another (`parent_structural_unit_id` - e.g. a drawing
+    detail viewport nested under its sheet) without a separate mechanism.
+    `modality_metadata` is a free dict for modality-specific facts (page
+    dimensions, sheet name, frame timestamp) that don't warrant their own
+    typed field until a real second consumer needs one - honest, minimal,
+    not a schema-avoidance escape hatch for facts that DO need real fields.
+    """
+
+    id: str
+    project_id: str
+    source_id: str
+    unit_type: str  # open-world - "page" | "sheet" | "section" | "frame" | "table" | ...
+    order_index: int
+    created_at: str
+    created_by: str
+    label: Optional[str] = None
+    parent_structural_unit_id: Optional[str] = None
+    modality_metadata: dict = field(default_factory=dict)
+
+
+@dataclass
+class AddressableRegion:
+    """
+    A precise locatable portion of a StructuralUnit - a text span, a
+    bounding box, a table cell, an image crop, a drawing callout region.
+    `address` is a normalized location dict whose shape depends on
+    `region_type` (e.g. `{"start_offset", "end_offset"}` for a text span,
+    `{"x", "y", "width", "height"}` for a bounding box) - deliberately not
+    a fixed set of named coordinate fields, so this is never overfit to
+    PDF/image geometry alone (Section 5.3's own explicit caution). A
+    region may nest under another (`parent_region_id`) for a sub-region
+    of an already-addressed region.
+
+    Citation rendering for a region is NEVER stored here - see
+    CaseWorkspaceStore.resolve_region_citation, which derives a human-
+    readable label at read time from this record plus its StructuralUnit
+    and Source, the same "store flat, derive structure at read time"
+    convention Folder's own path resolution already uses. This is also
+    what gives citation stability across a renamed Source or relabeled
+    unit: the id never changes even though the rendered text can.
+    """
+
+    id: str
+    project_id: str
+    structural_unit_id: str
+    region_type: str  # open-world - "text_span" | "bbox" | "cell" | "row" | "crop" | ...
+    address: dict
+    created_at: str
+    created_by: str
+    parent_region_id: Optional[str] = None
+
+
+@dataclass
+class EvidenceItem:
+    """
+    Direct evidence preserved from, or anchored to, a Source or one of its
+    AddressableRegions. `evidence_class` (KNOWN_EVIDENCE_CLASSES, closed)
+    is the fact/measurement/expert-judgment/user-assumption/AI-suggestion
+    distinction MM7 and the Design-Manager Monte Carlo case both depend on
+    - established once here rather than re-invented per later modality.
+
+    `region_id` is the finest-grained anchor available, not a required
+    one: some evidence (e.g. a value a user typed with no specific source
+    location) is honestly anchored only at the Source level - the same
+    "honest absence over a fabricated anchor" principle Requirement.
+    source_location already establishes. `source_id` is always required;
+    "exact source anchor" is satisfied at minimum by that, refined by
+    `region_id` whenever a real one exists.
+
+    `validation_status` reuses REVIEWER_VALIDATION_STATES' vocabulary in
+    meaning (never a second, drifting copy of it) - None means genuinely
+    not yet reviewed, never silently treated as validated. `version`
+    starts at 1 and is bumped by a future correction path (not built this
+    stage - see MM1's own deferrals); `content_hash` is an optional
+    integrity check, the same honestly-optional shape Source.file_hash
+    already has.
+    """
+
+    id: str
+    project_id: str
+    source_id: str
+    evidence_class: str  # KNOWN_EVIDENCE_CLASSES (closed, validated below)
+    content: str
+    content_type: str  # open-world - "text" | "number" | "boolean" | "image_reference" | ...
+    created_at: str
+    created_by: str  # human actor, or engine/model identity when machine-produced
+    region_id: Optional[str] = None
+    confidence: Optional[float] = None
+    validation_status: Optional[str] = None  # None = not yet reviewed; else a REVIEWER_VALIDATION_STATES value
+    security_classification: Optional[str] = None
+    extractor_version: Optional[str] = None
+    version: int = 1
+    content_hash: Optional[str] = None
+
+    def __post_init__(self):
+        if self.evidence_class not in KNOWN_EVIDENCE_CLASSES:
+            raise CaseWorkspaceError(
+                f"'{self.evidence_class}' is not a recognized evidence class. "
+                f"Use one of: {', '.join(KNOWN_EVIDENCE_CLASSES)}."
+            )
+
+
+@dataclass
+class DerivedObservation:
+    """
+    An interpretation, finding, classification, comparison, inference, or
+    summary based on one or more EvidenceItems - never itself direct
+    evidence (Section 5.5's own explicit distinction). Deliberately NOT
+    Finding: Finding requires a Case (`case_id: str`, no default) and is
+    already the real, tested, Case-scoped assertion record; an evidence-
+    contract observation must also work at the Source/project level
+    before any Case exists, the same reason Requirement stays independent
+    of Case. `case_id` here is optional, mirroring AnalysisRun/
+    ConversationMessage's own case_id=None convention, not a new one.
+
+    Left an open question, not silently resolved: whether Case-scoped
+    Findings and cross-modal DerivedObservations should eventually
+    converge is flagged in governance/current/kernel-object-model.md as a
+    future design-review item - this stage does not merge them, and does
+    not pretend the question is closed either.
+
+    `author_type` (KNOWN_OBSERVATION_AUTHOR_TYPES, closed) is the human/
+    deterministic-process/AI distinction; `author` is the free-text who-
+    or-what. `related_analysis_id` optionally ties this to the AnalysisRun
+    that produced it (engine/model version context), the same field
+    Relationship already carries for the identical reason.
+    """
+
+    id: str
+    project_id: str
+    statement: str
+    author_type: str  # KNOWN_OBSERVATION_AUTHOR_TYPES (closed, validated below)
+    author: str
+    method: str
+    created_at: str
+    supporting_evidence_ids: list[str] = field(default_factory=list)
+    case_id: Optional[str] = None
+    confidence: Optional[float] = None
+    validation_status: Optional[str] = None
+    contradiction_state: Optional[str] = None  # open-world, e.g. "disputed" | "resolved"
+    superseded_by_observation_id: Optional[str] = None
+    related_analysis_id: Optional[str] = None
+
+    def __post_init__(self):
+        if self.author_type not in KNOWN_OBSERVATION_AUTHOR_TYPES:
+            raise CaseWorkspaceError(
+                f"'{self.author_type}' is not a recognized observation author type. "
+                f"Use one of: {', '.join(KNOWN_OBSERVATION_AUTHOR_TYPES)}."
+            )
+
+
 @dataclass
 class Snapshot:
     """
@@ -2633,6 +2907,16 @@ class ProjectWorkspace:
     # tag_occurrences/tasks above (a legacy record predating this stage
     # simply lacks the key and loads with the empty-list default).
     folders: list[dict] = field(default_factory=list)  # see Folder
+
+    # CLAUDE-MM1: Multimodal Foundation and Evidence Contract - purely
+    # additive, same backward-compatible pattern as every list field above
+    # (a legacy record predating this stage simply lacks these keys and
+    # loads with the empty-list default). See StructuralUnit/
+    # AddressableRegion/EvidenceItem/DerivedObservation above.
+    structural_units: list[dict] = field(default_factory=list)
+    addressable_regions: list[dict] = field(default_factory=list)
+    evidence_items: list[dict] = field(default_factory=list)
+    derived_observations: list[dict] = field(default_factory=list)
 
     # CLAUDE-P31: this project's Security Profile (services.security_policy.
     # INFORMATION_CLASSIFICATIONS) -- unlike operating_environment, NOT
@@ -3066,6 +3350,30 @@ def reconcile_table_evidence(table: dict, rows: list[dict]) -> Optional[dict]:
         "mismatched_group_count": sum(1 for g in groups if g["stated_subtotal"] is not None and not g["matches"]),
         "group_count": len(groups),
     }
+
+
+# -- CLAUDE-MM1: citation address rendering ----------------------------------
+
+def _render_region_address_label(region_type: str, address: dict) -> Optional[str]:
+    """
+    Human-readable rendering of an AddressableRegion's own `address` dict,
+    used only by CaseWorkspaceStore.resolve_region_citation - deliberately
+    a small, explicit set of KNOWN shapes (text span, bounding box, table
+    cell/row, generic named point) with an honest fallback for anything
+    else, rather than a single format string that would silently mis-
+    render a shape it wasn't written for. Returns None (not a guess) when
+    `address` doesn't match any recognized shape - the caller still gets
+    a resolvable citation from the Source/unit label alone.
+    """
+    if region_type == "text_span" and "start_offset" in address and "end_offset" in address:
+        return f"offset {address['start_offset']}-{address['end_offset']}"
+    if region_type == "bbox" and {"x", "y", "width", "height"} <= address.keys():
+        return f"region x={address['x']},y={address['y']}"
+    if region_type in ("cell", "row") and "label" in address:
+        return str(address["label"])
+    if "label" in address:
+        return str(address["label"])
+    return None
 
 
 # -- Generic Source-Reference parsing / resolution (Prompt 18 / Batch J) ----
@@ -8651,3 +8959,224 @@ class CaseWorkspaceStore:
         graph (Relationship) - this is citation-level, not analysis-level.
         """
         return [r for r in workspace.source_references if target_id in r["resolved_target_ids"]]
+
+    # -- CLAUDE-MM1: Multimodal Foundation and Evidence Contract ---------------
+    # Every mutation below re-validates each referenced id's own project_id
+    # against the calling workspace before acting - the same "cannot cross
+    # Project boundaries through crafted identifiers" defense-in-depth
+    # CLAUDE-P40-VW9's Folder methods already establish, not a new pattern.
+
+    def create_structural_unit(
+        self, workspace: ProjectWorkspace, source_id: str, unit_type: str, order_index: int,
+        label: Optional[str] = None, parent_structural_unit_id: Optional[str] = None,
+        modality_metadata: Optional[dict] = None, actor: str = "system",
+        governance_log: Optional[GovernanceLog] = None,
+    ) -> dict:
+        source = self._find(workspace.sources, source_id)
+        if source is None or source["project_id"] != workspace.project_id:
+            raise CaseWorkspaceError(f"Source {source_id} was not found.")
+        if parent_structural_unit_id is not None:
+            parent = self._find(workspace.structural_units, parent_structural_unit_id)
+            if parent is None or parent["project_id"] != workspace.project_id:
+                raise CaseWorkspaceError(f"Structural unit {parent_structural_unit_id} was not found.")
+
+        unit = StructuralUnit(
+            id=_new_id(), project_id=workspace.project_id, source_id=source_id,
+            unit_type=unit_type, order_index=order_index, created_at=_now(), created_by=actor,
+            label=label, parent_structural_unit_id=parent_structural_unit_id,
+            modality_metadata=dict(modality_metadata) if modality_metadata else {},
+        )
+        workspace.structural_units.append(asdict(unit))
+        self.save(workspace)
+
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id, event_type="structural_unit_created",
+                actor=actor, role="system",
+                payload={"structural_unit_id": unit.id, "source_id": source_id, "unit_type": unit_type},
+                correlation_id=unit.id,
+            )
+        return asdict(unit)
+
+    def structural_units_for_source(self, workspace: ProjectWorkspace, source_id: str) -> list[dict]:
+        return [u for u in workspace.structural_units if u["source_id"] == source_id]
+
+    def get_structural_unit(self, workspace: ProjectWorkspace, unit_id: str) -> Optional[dict]:
+        return self._find(workspace.structural_units, unit_id)
+
+    def create_addressable_region(
+        self, workspace: ProjectWorkspace, structural_unit_id: str, region_type: str, address: dict,
+        parent_region_id: Optional[str] = None, actor: str = "system",
+        governance_log: Optional[GovernanceLog] = None,
+    ) -> dict:
+        unit = self._find(workspace.structural_units, structural_unit_id)
+        if unit is None or unit["project_id"] != workspace.project_id:
+            raise CaseWorkspaceError(f"Structural unit {structural_unit_id} was not found.")
+        if parent_region_id is not None:
+            parent = self._find(workspace.addressable_regions, parent_region_id)
+            if parent is None or parent["project_id"] != workspace.project_id:
+                raise CaseWorkspaceError(f"Addressable region {parent_region_id} was not found.")
+
+        region = AddressableRegion(
+            id=_new_id(), project_id=workspace.project_id, structural_unit_id=structural_unit_id,
+            region_type=region_type, address=dict(address), created_at=_now(), created_by=actor,
+            parent_region_id=parent_region_id,
+        )
+        workspace.addressable_regions.append(asdict(region))
+        self.save(workspace)
+
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id, event_type="addressable_region_created",
+                actor=actor, role="system",
+                payload={"region_id": region.id, "structural_unit_id": structural_unit_id, "region_type": region_type},
+                correlation_id=region.id,
+            )
+        return asdict(region)
+
+    def regions_for_structural_unit(self, workspace: ProjectWorkspace, structural_unit_id: str) -> list[dict]:
+        return [r for r in workspace.addressable_regions if r["structural_unit_id"] == structural_unit_id]
+
+    def get_addressable_region(self, workspace: ProjectWorkspace, region_id: str) -> Optional[dict]:
+        return self._find(workspace.addressable_regions, region_id)
+
+    def register_evidence_item(
+        self, workspace: ProjectWorkspace, source_id: str, evidence_class: str, content: str, content_type: str,
+        region_id: Optional[str] = None, confidence: Optional[float] = None,
+        security_classification: Optional[str] = None, extractor_version: Optional[str] = None,
+        content_hash: Optional[str] = None, actor: str = "system",
+        governance_log: Optional[GovernanceLog] = None,
+    ) -> dict:
+        """
+        `evidence_class` is validated by EvidenceItem.__post_init__ against
+        the closed KNOWN_EVIDENCE_CLASSES vocabulary - an unrecognized
+        value raises rather than being silently accepted, the one place
+        in this whole method this codebase's usual open-world tolerance
+        does not apply (see EvidenceItem's own docstring for why).
+        """
+        source = self._find(workspace.sources, source_id)
+        if source is None or source["project_id"] != workspace.project_id:
+            raise CaseWorkspaceError(f"Source {source_id} was not found.")
+        if region_id is not None:
+            region = self._find(workspace.addressable_regions, region_id)
+            if region is None or region["project_id"] != workspace.project_id:
+                raise CaseWorkspaceError(f"Addressable region {region_id} was not found.")
+
+        item = EvidenceItem(
+            id=_new_id(), project_id=workspace.project_id, source_id=source_id,
+            evidence_class=evidence_class, content=content, content_type=content_type,
+            created_at=_now(), created_by=actor, region_id=region_id, confidence=confidence,
+            security_classification=security_classification, extractor_version=extractor_version,
+            content_hash=content_hash,
+        )
+        workspace.evidence_items.append(asdict(item))
+        self.save(workspace)
+
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id, event_type="evidence_item_registered",
+                actor=actor, role="system",
+                payload={"evidence_item_id": item.id, "source_id": source_id, "evidence_class": evidence_class},
+                correlation_id=item.id,
+            )
+        return asdict(item)
+
+    def evidence_items_for_source(self, workspace: ProjectWorkspace, source_id: str) -> list[dict]:
+        return [e for e in workspace.evidence_items if e["source_id"] == source_id]
+
+    def get_evidence_item(self, workspace: ProjectWorkspace, evidence_item_id: str) -> Optional[dict]:
+        return self._find(workspace.evidence_items, evidence_item_id)
+
+    def record_derived_observation(
+        self, workspace: ProjectWorkspace, statement: str, author_type: str, author: str, method: str,
+        supporting_evidence_ids: Optional[list[str]] = None, case_id: Optional[str] = None,
+        confidence: Optional[float] = None, related_analysis_id: Optional[str] = None,
+        actor: str = "system", governance_log: Optional[GovernanceLog] = None,
+    ) -> dict:
+        """
+        `author_type` is validated by DerivedObservation.__post_init__
+        against the closed KNOWN_OBSERVATION_AUTHOR_TYPES vocabulary, the
+        same discipline register_evidence_item applies to evidence_class.
+        Every id in `supporting_evidence_ids` must already exist as a real
+        EvidenceItem in THIS project - an observation can never cite
+        evidence that doesn't exist or belongs to another project, the
+        same defense-in-depth every other cross-reference in this module
+        applies.
+        """
+        evidence_ids = list(supporting_evidence_ids or [])
+        for evidence_id in evidence_ids:
+            evidence = self._find(workspace.evidence_items, evidence_id)
+            if evidence is None or evidence["project_id"] != workspace.project_id:
+                raise CaseWorkspaceError(f"Evidence item {evidence_id} was not found.")
+        if case_id is not None:
+            case = self._find(workspace.cases, case_id)
+            if case is None or case["project_id"] != workspace.project_id:
+                raise CaseWorkspaceError(f"Case {case_id} was not found.")
+
+        observation = DerivedObservation(
+            id=_new_id(), project_id=workspace.project_id, statement=statement,
+            author_type=author_type, author=author, method=method, created_at=_now(),
+            supporting_evidence_ids=evidence_ids, case_id=case_id, confidence=confidence,
+            related_analysis_id=related_analysis_id,
+        )
+        workspace.derived_observations.append(asdict(observation))
+        self.save(workspace)
+
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id, event_type="derived_observation_recorded",
+                actor=actor, role="system",
+                payload={
+                    "derived_observation_id": observation.id, "author_type": author_type,
+                    "supporting_evidence_ids": evidence_ids,
+                },
+                correlation_id=observation.id,
+            )
+        return asdict(observation)
+
+    def get_derived_observation(self, workspace: ProjectWorkspace, observation_id: str) -> Optional[dict]:
+        return self._find(workspace.derived_observations, observation_id)
+
+    def resolve_region_citation(self, workspace: ProjectWorkspace, region_id: str) -> dict:
+        """
+        The citation contract (Section 7): a stable internal anchor
+        (`region_id` itself, unaffected by rename/relabel) resolved into a
+        human-readable rendering at READ time, never stored - the same
+        "store flat, derive structure at read time" convention Folder's
+        own path resolution and resolve_conversation_anchor already use.
+        Returns `{"status": "resolved", "label", "region_id",
+        "structural_unit_id", "source_id", "region_type", "address"}` on
+        success, or `{"status": "unavailable", "region_id"}` when the
+        region, its unit, or its Source can no longer be found or has
+        been removed - an honest broken-anchor state, never a fabricated
+        label. Full source-version-aware staleness detection (Section 8)
+        is a deferred future extension, not attempted here - see this
+        stage's own documentation.
+        """
+        region = self._find(workspace.addressable_regions, region_id)
+        if region is None or region["project_id"] != workspace.project_id:
+            return {"status": "unavailable", "region_id": region_id}
+
+        unit = self._find(workspace.structural_units, region["structural_unit_id"])
+        if unit is None or unit["project_id"] != workspace.project_id:
+            return {"status": "unavailable", "region_id": region_id}
+
+        source = self._find(workspace.sources, unit["source_id"])
+        if source is None or source["project_id"] != workspace.project_id or source.get("removed_at"):
+            return {"status": "unavailable", "region_id": region_id}
+
+        unit_label = unit.get("label") or f"{unit['unit_type']} {unit['order_index']}"
+        address_label = _render_region_address_label(region["region_type"], region["address"])
+        label_parts = [source["name"], unit_label]
+        if address_label:
+            label_parts.append(address_label)
+
+        return {
+            "status": "resolved",
+            "label": " · ".join(label_parts),
+            "region_id": region["id"],
+            "structural_unit_id": unit["id"],
+            "source_id": source["id"],
+            "region_type": region["region_type"],
+            "address": region["address"],
+        }
