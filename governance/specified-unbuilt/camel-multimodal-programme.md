@@ -31,14 +31,25 @@ invariants.md`, not as pre-authorized.
 
 **Authorization status:** every stage below is **NOT AUTHORIZED** for
 implementation — this document records intent and sequencing, it is not
-a build order. See `STATUS.md`'s own authorization table for the
-project's actual current authorization state; this programme joins that
-table's "specified but unbuilt" list as a single pointer, not stage-by-
-stage rows, until any individual stage is actually taken up.
+a build order — **except MM1, now IMPLEMENTED** (`CLAUDE-MM1`,
+2026-08-05, authorized following the accepted cockpit gate
+`CLAUDE-CGP-02`; see `STATUS.md`'s own authorization table and
+`current/kernel-object-model.md` for the real, tested, ground-truth
+detail — this document's own MM1 section below is retained as the
+original stage description, not updated to duplicate that record). MM2–
+MM9 remain exactly as originally recorded: this programme's "specified
+but unbuilt" pointer in `STATUS.md` continues to cover them as a single
+pointer, not stage-by-stage rows, until each is individually taken up.
 
 ---
 
 ## MM1 — Multimodal foundation and evidence contract
+
+**IMPLEMENTED** — see `current/kernel-object-model.md`'s
+`StructuralUnit`/`AddressableRegion`/`EvidenceItem`/`DerivedObservation`
+entry for what actually exists in code today. The description below is
+preserved as the original stage intent this implementation was built
+from, not rewritten to narrate what was built.
 
 The shared governed representation every later stage builds on:
 documents, pages, sheets, drawings, images, tables, regions, cells,
