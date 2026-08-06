@@ -1,5 +1,26 @@
 # Continuation checkpoint
 
+## 2026-08-05 — CLAUDE-MM2 (Product-Owner Acceptance Seal)
+
+**Product owner accepts MM2 and the recommendation: ACCEPT — the PDF/document-intelligence slice is real, tested, additive, live-verified against uploaded content, and reuses the MM1 evidence infrastructure without duplicating it.**
+
+**Commits sealed:** `0d95216` (implementation: `register_pdf_page_structure`, `services/pdf_intelligence.py`, the paragraph citation branch, source-version staleness in `resolve_region_citation`, the new admin-gated `/api/v1` route, `tests/test_mm2_pdf_document_intelligence.py`) → `ce325ac` (documentation: `kernel-object-model.md`, `STATUS.md`'s MM2-scoped `IMPLEMENTED` row, `camel-multimodal-programme.md`'s MM2 section marked implemented) → `6abb447` (continuation checkpoint).
+
+**Source classifications tested:** all five - `text_native`, `image_only`, `mixed` (successful reads, distinguished by whether pages carry a text layer) and `extraction_failed`, `encrypted_or_unsupported` (failed reads, never conflated with "no text present") - each with dedicated test coverage in `tests/test_mm2_pdf_document_intelligence.py`.
+
+**Test evidence:** focused - 23 tests in `tests/test_mm2_pdf_document_intelligence.py` plus 2 new tests and 1 new route added to `tests/test_api_authentication.py`'s route-auth matrix, all passing. Full suite: **2,650 passed, 0 failed** (2,625 baseline + 25 new). Falsification evidence: the cross-project reference guard was proven load-bearing (a deliberately unguarded bypass shown to succeed against a foreign source where the real, guarded method correctly raises).
+
+**Live-browser/application evidence:** a real, hand-built 3-page PDF uploaded through the actual `/upload` flow (no regression to existing ingestion), opened and paginated page 1 → page 2 in the existing, unmodified PDF.js-backed browser viewer (real rendered text, real thumbnails), then the new API route triggered via a real authenticated session against that real Source - producing real `StructuralUnit`/`EvidenceItem` records and a citation rendering exactly `"mm2_verify_3page.pdf · Page 2 · paragraph 1"`, matching this stage's own governing prompt's citation example precisely. Throwaway account and project cleaned up afterward, no residue left in the live store.
+
+**Preserved, explicit, non-blocking residuals and deferrals — not resolved or narrowed at this seal:**
+- `Finding` and `DerivedObservation` remain distinct; their possible convergence is still an open architectural question, left open by this seal, not resolved.
+- The broad `except Exception` fallback in `services/pdf_intelligence.py` conservatively classifies any novel failure as `extraction_failed`; retained as a future exception-narrowing item, not addressed now.
+- OCR, PDF-to-image rendering, handwriting recognition, advanced table extraction, annotation, redaction, digital-signature validation, form filling, embedded-file extraction, a new region-selection UI, and complete redline/version comparison all remain deferred, unchanged.
+
+**Evidence at seal:** `HEAD` and `origin/main` both confirmed at `6abb447` immediately before this seal. Working tree clean except the pre-existing, untouched `tests/fixtures/nreocrc/_lab_instance_scratch_002/`.
+
+**MM3 is not started by this seal.** This entry records acceptance only.
+
 ## 2026-08-05 — CLAUDE-MM2 (PDF and Document Intelligence)
 
 **First real MM1 consumer**, authorized following the accepted MM1 seal (`8a6cf3f`). Repository-grounded investigation first found substantial existing infrastructure that shrank the real implementation needed: `BHiveParser.extract_pdf_pages` already gives real per-page text (used by `services/drawing_intake.py`); a full PDF.js-backed viewer with page navigation/zoom/search already exists (`static/js/pdf_viewer.js`); PDF bytes are reliably persisted at `Source.file_path`; `services/drawing_intake.py`'s own prior audit already established OCR/PDF-rendering are unavailable in this environment (no pypdfium2/PyMuPDF/pdf2image, no pytesseract/tesseract).
