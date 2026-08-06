@@ -1,5 +1,25 @@
 # Continuation checkpoint
 
+## 2026-08-05 — CLAUDE-MM1 (Product-Owner Acceptance Seal)
+
+**Product owner accepts MM1 and its recommendation: ACCEPT — the multimodal evidence contract is real, tested, additive, live-verified, and sufficient for MM2-MM9 to build upon without premature extraction-engine implementation.**
+
+**Commits sealed:** `452a814` (implementation: `StructuralUnit`/`AddressableRegion`/`EvidenceItem`/`DerivedObservation`, evidence relationships reusing `Relationship`, the read-time citation resolver, three read-only `/api/v1` routes, `tests/test_mm1_evidence_contract.py`) → `cc275c9` (documentation: `kernel-object-model.md`, `STATUS.md`'s MM1-scoped `IMPLEMENTED` row, `camel-multimodal-programme.md`'s MM1 section marked implemented) → `f76207f` (continuation checkpoint).
+
+**Test evidence:** focused - 25 new tests in `tests/test_mm1_evidence_contract.py` plus 3 new routes added to `tests/test_api_authentication.py`'s route-auth matrix, all passing. Full suite: **2,625 passed, 0 failed** (2,600 baseline + 25 new). Falsification evidence: the cross-project reference guard was proven load-bearing (a deliberately unguarded bypass shown to succeed where the real, guarded method correctly raises); the citation resolver's broken-anchor state was proven load-bearing (removing the underlying Source's availability flips a previously-resolved citation to `unavailable`).
+
+**Live application evidence:** verified against the actually-running app, not request-level tests alone - a real throwaway account and project seeded directly into the live `instance/registry` store, then a real session-cookie login followed by real HTTP requests through all three new endpoints (evidence list, structural-unit list, citation resolution for both a real region and an unknown one, correctly returning `{"status":"unavailable"}` rather than a 404/500) - all cleaned up afterward (account and project files deleted, no residue left in the live store).
+
+**Preserved, explicit, non-blocking architectural residual — not collapsed or migrated at this seal:** whether Case-scoped `Finding` and the new, Case-optional `DerivedObservation` should eventually converge remains an open question. Both concepts stay exactly as implemented in `452a814` — no merge, no migration, no deprecation of either. **Assigned to the earliest later stage where real usage evidence (an actual MM2-MM7 consumer needing both concepts at once) makes the distinction-or-convergence decision necessary** - not resolved speculatively ahead of that evidence existing.
+
+**Security/Intelligence Airlock and Design-Manager/risk-intelligence compatibility remain planning-level only** — the MM1 data model was shown capable of representing sensitivity classification, externally-researched evidence with human-adoption gating, and spreadsheet/risk-register/Monte-Carlo-shaped evidence and observations, but **no external connector, sanitization pipeline, new governed action, or Monte Carlo/spreadsheet engine was implemented in MM1**, and none is authorized by this seal.
+
+**All explicit MM2-MM9 deferrals preserved unchanged:** no OCR, PDF rendering/annotation engine, spreadsheet editing engine, Excel formula execution, drawing geometry recognition, image editor, phone-camera integration, cross-document semantic search, Monte Carlo calculation, external internet/AI connector, addenda reconciliation, broad UI redesign, or production security hardening beyond MM1's own model requirements was built or authorized this stage.
+
+**Evidence at seal:** `HEAD` and `origin/main` both confirmed at `f76207f` immediately before this seal. Working tree clean except the pre-existing, untouched `tests/fixtures/nreocrc/_lab_instance_scratch_002/`.
+
+**MM2 is not started by this seal.** This entry records acceptance only.
+
 ## 2026-08-05 — CLAUDE-MM1 (Multimodal Foundation and Evidence Contract)
 
 **First implementation stage of the Camel MM1-MM9 programme**, authorized following the accepted cockpit gate (`CLAUDE-CGP-02`, GO recommendation, sealed at `febd434`). Repository-grounded investigation first (Foundation Batch J's `Table`/`TableRow`/`SourceReference`, `Relationship`, `Finding`, `Source`, `ConversationSourceAnchor` all read in full before designing anything) found strong existing building blocks that made a much smaller, purely additive implementation possible than a from-scratch design would have needed.
