@@ -31,12 +31,13 @@ invariants.md`, not as pre-authorized.
 
 **Authorization status:** every stage below is **NOT AUTHORIZED** for
 implementation — this document records intent and sequencing, it is not
-a build order — **except MM1, now IMPLEMENTED** (`CLAUDE-MM1`,
+a build order — **except MM1 and MM2, now IMPLEMENTED** (`CLAUDE-MM1`,
 2026-08-05, authorized following the accepted cockpit gate
-`CLAUDE-CGP-02`; see `STATUS.md`'s own authorization table and
+`CLAUDE-CGP-02`; `CLAUDE-MM2`, 2026-08-05, authorized following the
+accepted MM1 seal; see `STATUS.md`'s own authorization table and
 `current/kernel-object-model.md` for the real, tested, ground-truth
-detail — this document's own MM1 section below is retained as the
-original stage description, not updated to duplicate that record). MM2–
+detail — this document's own MM1/MM2 sections below are retained as the
+original stage descriptions, not updated to duplicate that record). MM3–
 MM9 remain exactly as originally recorded: this programme's "specified
 but unbuilt" pointer in `STATUS.md` continues to cover them as a single
 pointer, not stage-by-stage rows, until each is individually taken up.
@@ -74,6 +75,20 @@ regions within them.
 **Depends on nothing below.** Every other MM stage depends on MM1.
 
 ## MM2 — PDF and document intelligence
+
+**IMPLEMENTED, bounded** — see `current/kernel-object-model.md`'s "PDF
+page structure and citation" entry for what actually exists in code
+today: text-native/image-only/mixed classification, page-level
+`StructuralUnit`s, paragraph-level `AddressableRegion`/`EvidenceItem`s,
+a strengthened citation resolver, and `services/pdf_intelligence.py`.
+Scanned/image-only PDFs are classified honestly (OCR and PDF-to-image
+rendering remain unavailable in this environment, per `services/
+drawing_intake.py`'s own prior audit, re-confirmed not re-investigated)
+- never rendered or OCR'd. Annotations, table extraction beyond the
+existing Batch J `Table`/`TableRow` path, and full redline/version
+comparison were not built this stage. The description below is
+preserved as the original stage intent this implementation was built
+from, not rewritten to narrate what was built.
 
 Text-native and scanned PDFs; page navigation; extraction; selectable
 regions; tables; document structure; citations; annotations; links from
