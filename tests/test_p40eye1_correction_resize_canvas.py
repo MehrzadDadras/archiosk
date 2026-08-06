@@ -266,29 +266,48 @@ class EyePaneJsCanvasTests(unittest.TestCase):
 
     def test_reset_and_fit_both_return_to_fit_mode(self):
         self.assertIn("if (fitBtn) fitBtn.addEventListener('click', setFit);", self.js)
-        self.assertIn("if (resetBtn) resetBtn.addEventListener('click', setFit);", self.js)
+        # CLAUDE-MM5: Reset now also clears the new view-only rotate/mirror
+        # state (Section 4/11) alongside the original fit-mode reset - both
+        # still happen on the SAME click, just via a small wrapper instead
+        # of setFit directly.
+        reset_wiring = self.js[self.js.index("if (resetBtn)"):self.js.index("if (rotateBtn)")]
+        self.assertIn("setFit();", reset_wiring)
+        self.assertIn("resetOrientation();", reset_wiring)
 
     def test_remove_control_clears_canvas_state_and_returns_to_empty(self):
         clear_fn = self.js[self.js.index("function clearPreview("):self.js.index("function handleFile(")]
         self.assertIn("canvas.hidden = true;", clear_fn)
         self.assertIn("emptyState.hidden = false;", clear_fn)
 
-    def test_preview_is_client_side_only_never_sent_anywhere(self):
-        self.assertNotIn("fetch(", self.code_only)
+    def test_preview_is_client_side_only_until_the_reviewer_explicitly_saves(self):
+        # CLAUDE-MM5 Section 7: "Save to project" is now a real, intended
+        # network action - the EYE1-era "never sent anywhere" invariant is
+        # narrowed to its real, still-true form: PASTING/DROPPING an image
+        # (handleFile - reading it via FileReader into an in-memory data:
+        # URL) never itself triggers a network call. fetch() exists in
+        # this file now, but only inside saveToProject, reached solely by
+        # an explicit click on #eye-save-btn.
         self.assertNotIn("XMLHttpRequest", self.code_only)
         self.assertIn("FileReader", self.code_only)
+        handle_file_fn = self.js[self.js.index("function handleFile("):self.js.index("dropTarget.addEventListener('dragover'")]
+        self.assertNotIn("fetch(", handle_file_fn)
+        save_fn = self.js[self.js.index("function saveToProject("):self.js.index("// -------- Zoom / fit / pan")]
+        self.assertIn("fetch(", save_fn)
 
     def test_non_image_input_still_shows_a_real_error(self):
         self.assertIn("Only images are supported here.", self.js)
         self.assertIn("Clipboard did not contain an image.", self.js)
 
-    def test_no_scope_creep_into_eye2_features(self):
-        # The header comment's own prose names these deliberately-absent
-        # features (documenting the boundary) - checked against
-        # code_only (header comment stripped), same as the fetch()/
-        # XMLHttpRequest check above, so this doesn't trip on its own
-        # documentation.
-        for forbidden in ("annotate", "chat-attach", "terminal-attach", "persist", "ingest"):
+    def test_no_scope_creep_beyond_mm5(self):
+        # CLAUDE-MM5 (2026-08-06) is the explicitly authorized "next
+        # stage" this EYE1-era guard was written to prevent building
+        # early - "persist"/"annotate"/"ingest" are now legitimately
+        # present (Save to project, marker annotations, eye-capture
+        # registration). The boundary this test protects is narrowed to
+        # what MM5's OWN governing prompt still defers (Section 24):
+        # chat/terminal attachment and any external AI call remain
+        # genuinely out of scope.
+        for forbidden in ("chat-attach", "terminal-attach", "anthropic"):
             self.assertNotIn(forbidden.lower(), self.code_only.lower(), forbidden)
 
 

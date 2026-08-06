@@ -3147,6 +3147,61 @@ html.toolbox-hidden .workspace-right-column {
     display: block;
     flex-shrink: 0;
 }
+/* CLAUDE-MM5: orientation status, save bar, and the post-save handoff
+   view - additive to CLAUDE-P40-EYE1's own canvas layout above, same
+   visual language (--text-secondary/--text-metadata, .eye-canvas-btn's
+   own button styling reused for #eye-save-btn). */
+.eye-orientation-status {
+    font-size: 0.72rem;
+    color: var(--text-metadata);
+    text-align: center;
+    flex-shrink: 0;
+}
+.eye-save-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    flex-shrink: 0;
+    padding-top: 0.3rem;
+    border-top: 1px solid var(--border);
+}
+.eye-save-status {
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+    flex: 1 1 auto;
+}
+.eye-save-description {
+    flex: 1 1 12rem;
+    min-width: 8rem;
+    font-family: var(--font-body);
+    font-size: 0.78rem;
+    padding: 0.3rem 0.5rem;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--surface-primary);
+    color: var(--text-primary);
+}
+/* Reuses .btn-primary's own neutral (--text-primary-on-surface) emphasis
+   convention rather than introducing a new blue-background button -
+   --machine-blue is reserved for machine/system/reference accents
+   (focus rings, links - tokens.css's own header comment), not primary
+   actions. */
+.eye-save-btn {
+    background: var(--text-primary);
+    color: var(--surface-primary);
+    font-weight: 600;
+}
+.eye-save-btn:hover, .eye-save-btn:focus-visible {
+    background: var(--text-secondary);
+}
+.eye-saved-view {
+    align-self: stretch;
+    flex: 1 1 auto;
+    min-height: 0;
+    width: 100%;
+}
+.eye-saved-view[hidden] { display: none; }
 
 /* CLAUDE-P40-EYE1 (product-owner browser correction): "one nested
    scrollbar in the upper-right Toolbox/Findings region remains
@@ -3364,6 +3419,22 @@ main::-webkit-scrollbar-corner,
     background: var(--surface-primary);
     color: var(--text-primary);
     min-width: 120px;
+}
+/* CLAUDE-MM5: the one marker-note input drawing_image_viewer.js creates -
+   same shape as .document-viewer-annotation-text-input above, kept as
+   its own class since it lives inside .drawing-region-overlay's own
+   pointer-events:none layer (needs pointer-events re-enabled locally). */
+.drawing-marker-note-input {
+    position: absolute;
+    z-index: 5;
+    font-size: 13px;
+    padding: 2px 4px;
+    border: 1px solid var(--machine-blue);
+    border-radius: 2px;
+    background: var(--surface-primary);
+    color: var(--text-primary);
+    min-width: 140px;
+    pointer-events: auto;
 }
 .doc-annotation-tool[aria-pressed="true"] {
     background: var(--surface-selected);

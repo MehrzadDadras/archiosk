@@ -1022,9 +1022,9 @@
                        the SAME drop/paste zone (#eye-drop-target) in both
                        states, so dropping/pasting a new image while one
                        is already shown just replaces it. #}
-                    <div class="eye-drop-target" id="eye-drop-target" data-ui-ref="eye.drop-target" tabindex="0" role="group" aria-label="Paste or drop an image to preview it here">
+                    <div class="eye-drop-target" id="eye-drop-target" data-ui-ref="eye.drop-target" tabindex="0" role="group" aria-label="Paste or drop an image to preview it here" data-project-id="{{ project_id }}">
                         <p class="eye-drop-target-empty" id="eye-drop-target-empty">Paste or drop an image here to preview it.</p>
-                        <p class="eye-drop-target-note" id="eye-drop-target-note">Not saved anywhere - cleared when you navigate away or reload. Editing, annotation, and evidence capture are not part of this stage.</p>
+                        <p class="eye-drop-target-note" id="eye-drop-target-note">Not saved anywhere - cleared when you navigate away or reload.</p>
                         <div class="eye-canvas" id="eye-canvas" data-ui-ref="eye.canvas" hidden>
                             <div class="eye-canvas-toolbar" role="toolbar" aria-label="Image view controls">
                                 <button type="button" class="eye-canvas-btn" id="eye-canvas-zoom-out" data-ui-ref="eye.canvas.zoom-out" aria-label="Zoom out" title="Zoom out">&minus;</button>
@@ -1035,12 +1035,38 @@
                                 <button type="button" class="eye-canvas-btn" id="eye-canvas-actual" data-ui-ref="eye.canvas.actual-size" aria-label="Actual size (100%)" title="Actual size (100%)">1:1</button>
                                 <button type="button" class="eye-canvas-btn" id="eye-canvas-reset" data-ui-ref="eye.canvas.reset" aria-label="Reset view" title="Reset view">Reset</button>
                                 <span class="eye-canvas-divider" aria-hidden="true"></span>
-                                <button type="button" class="eye-canvas-btn" id="eye-canvas-remove" data-ui-ref="eye.canvas.remove" aria-label="Remove the previewed image" title="Remove">Remove</button>
+                                {# CLAUDE-MM5 Section 4/11: reversible orientation controls on the
+                                   UNSAVED preview too, not only after "Save to project" - a plain
+                                   CSS transform on #eye-canvas-image, identical in spirit to
+                                   static/js/drawing_image_viewer.js's own approach; nothing here
+                                   is persisted until the reviewer explicitly saves. #}
+                                <button type="button" class="eye-canvas-btn" id="eye-canvas-rotate" data-ui-ref="eye.canvas.rotate" aria-label="Rotate 90 degrees" title="Rotate 90&deg;">&#8635;</button>
+                                <button type="button" class="eye-canvas-btn" id="eye-canvas-mirror-h" data-ui-ref="eye.canvas.mirror-h" aria-label="Mirror horizontally" title="Mirror horizontally">&#8596;</button>
+                                <button type="button" class="eye-canvas-btn" id="eye-canvas-mirror-v" data-ui-ref="eye.canvas.mirror-v" aria-label="Mirror vertically" title="Mirror vertically">&#8597;</button>
+                                <span class="eye-canvas-divider" aria-hidden="true"></span>
+                                <button type="button" class="eye-canvas-btn" id="eye-canvas-remove" data-ui-ref="eye.canvas.remove" aria-label="Discard this preview" title="Discard preview">Discard preview</button>
                             </div>
+                            <span class="eye-orientation-status" id="eye-orientation-status" aria-live="polite"></span>
                             <div class="eye-canvas-viewport" id="eye-canvas-viewport" data-ui-ref="eye.canvas.viewport" tabindex="0" aria-label="Pasted or dropped image - scroll or use the view controls to zoom and pan">
                                 <img class="eye-canvas-image" id="eye-canvas-image" alt="Pasted or dropped image preview">
                             </div>
+                            {# CLAUDE-MM5 Section 7: the required, unambiguous temporary-vs-
+                               saved distinction, plus the "Save to project" action itself -
+                               #eye-save-status is the ONE place this state is stated, updated
+                               by static/js/eye_pane.js on every load/save/discard. #}
+                            <div class="eye-save-bar" id="eye-save-bar">
+                                <span class="eye-save-status" id="eye-save-status" aria-live="polite">Temporary preview &mdash; not saved to the project.</span>
+                                <input type="text" class="eye-save-description" id="eye-save-description" placeholder="Optional description (saved as evidence)" aria-label="Optional description, saved as evidence when you save this image">
+                                <button type="button" class="eye-canvas-btn eye-save-btn" id="eye-save-btn" data-ui-ref="eye.canvas.save" aria-label="Save this image to the project">Save to project</button>
+                            </div>
                         </div>
+                        {# CLAUDE-MM5 Section 4/7: once saved, this pane hosts the SAME
+                           real, persisted drawing/image viewer MM4 already built
+                           (static/js/drawing_image_viewer.js) - full rotate/mirror/reset/
+                           region-select/citation/metadata, reused rather than
+                           reimplemented, mounted on a real Source instead of an
+                           in-memory data: URL. #}
+                        <div class="eye-saved-view" id="eye-saved-view" hidden></div>
                     </div>
                 </div>
             </div>
@@ -1634,6 +1660,15 @@
             };
         })();
     </script>
+    {# CLAUDE-MM5: available wherever Eye is (project_id/workspace defined
+       on ANY page, not only case_workspace.html) so "Save to project"
+       can hand off to the same real drawing/image viewer MM4 built,
+       regardless of which page the reviewer pasted an image on. Also
+       loaded by case_workspace.html's own extra_scripts block for its
+       primary document pane and Display divisions - mount() is
+       idempotent (dataset.drawingViewerMounted guard), so loading it
+       here as well never double-mounts anything. #}
+    <script src="{{ url_for('static', filename='js/drawing_image_viewer.js') }}?v={{ static_version }}"></script>
     <script src="{{ url_for('static', filename='js/eye_pane.js') }}?v={{ static_version }}"></script>
     {% endif %}
     <script>

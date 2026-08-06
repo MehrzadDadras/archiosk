@@ -19,6 +19,8 @@ the API equivalent of the @login_required dashboard/gateway pages.
 """
 from __future__ import annotations
 
+from pathlib import Path
+
 from flask import Blueprint, abort, current_app, jsonify, request, send_file, session
 from werkzeug.exceptions import RequestEntityTooLarge
 
@@ -38,6 +40,7 @@ _ADMIN_ONLY_ENDPOINTS = {
     "api.ingest_document", "api.register_pdf_structure",
     "api.register_spreadsheet_structure_route", "api.edit_spreadsheet_cell",
     "api.register_drawing_structure", "api.create_drawing_region",
+    "api.save_eye_capture", "api.create_image_marker", "api.export_derivative_crop",
 }
 
 
@@ -390,6 +393,95 @@ def get_evidence_sachet(project_id, region_id):
     store = CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"])
     sachet = store.build_evidence_sachet(workspace, region_id, task_description=request.args.get('task'))
     return jsonify(sachet)
+
+
+# -- CLAUDE-MM5: Image, Screenshot, and Camera Evidence ---------------------
+# Three write paths (all admin-gated, _ADMIN_ONLY_ENDPOINTS above): Eye's
+# own "Save to project" action (creates a brand-new Source, unlike MM2-MM4's
+# own structure-registration routes which all act on an ALREADY-uploaded
+# Source), a point-marker annotation (Section 13), and a derivative-crop
+# export (Section 12).
+
+@api_bp.route('/documents/<project_id>/eye-capture', methods=['POST'])
+def save_eye_capture(project_id):
+    """
+    Multipart body: `image` (the file field), optional `description`
+    (free text, becomes a EVIDENCE_CLASS_USER_ENTERED EvidenceItem
+    anchored to the new Source). Section 17: content is validated by
+    Pillow BEFORE any file is written to disk or any Source record is
+    created - a refused image never leaves a trace.
+    """
+    from services.image_intelligence import register_eye_capture
+
+    _document, workspace = _load_authorized_project_or_404(project_id)
+    store = CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"])
+    file_storage = request.files.get('image')
+    if file_storage is None or not file_storage.filename:
+        return jsonify(error="invalid_image", message="An 'image' file is required."), 400
+
+    sources_dir = Path(current_app.config["REGISTRY_STORE_PATH"]) / "workspace_sources" / project_id
+    result = register_eye_capture(
+        store, workspace, raw_bytes=file_storage.read(), filename=file_storage.filename,
+        description=request.form.get('description'), sources_dir=sources_dir,
+        actor=session.get('username', 'system'), governance_log=get_governance_log(current_app),
+    )
+    if result["classification"] != "supported":
+        return jsonify(error="invalid_image", message=f"This image was refused: {result['classification']}.",
+                       classification=result["classification"]), 400
+    return jsonify(result), 201
+
+
+@api_bp.route('/documents/<project_id>/sources/<source_id>/markers', methods=['POST'])
+def create_image_marker(project_id, source_id):
+    """JSON body: `{"structural_unit_id", "x", "y", "note"}` - Section 13's
+    one bounded annotation type, a point marker with a required short
+    text note."""
+    from services.image_intelligence import ImageIntelligenceError, create_marker_and_evidence
+
+    _document, workspace = _load_authorized_project_or_404(project_id)
+    store = CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"])
+    body = request.get_json(silent=True) or {}
+    structural_unit_id = body.get('structural_unit_id')
+    note = body.get('note')
+    if not structural_unit_id or not note:
+        return jsonify(error="invalid_marker", message="'structural_unit_id' and 'note' are required."), 400
+    try:
+        x, y = float(body.get('x')), float(body.get('y'))
+    except (TypeError, ValueError):
+        return jsonify(error="invalid_marker", message="'x'/'y' must both be numbers."), 400
+    try:
+        result = create_marker_and_evidence(
+            store, workspace, source_id, structural_unit_id, x=x, y=y, note=note,
+            actor=session.get('username', 'system'), governance_log=get_governance_log(current_app),
+        )
+    except ImageIntelligenceError as exc:
+        return jsonify(error="invalid_marker", message=str(exc)), 400
+    return jsonify(result), 201
+
+
+@api_bp.route('/documents/<project_id>/sources/<source_id>/derivative-crop', methods=['POST'])
+def export_derivative_crop(project_id, source_id):
+    """JSON body: `{"region_id"}` - crops the ORIGINAL image at that
+    region's already-stored, original-frame coordinates and registers the
+    result as a new, EXIF-free derivative Source (Section 12/10)."""
+    from services.image_intelligence import ImageIntelligenceError, extract_bounded_crop
+
+    _document, workspace = _load_authorized_project_or_404(project_id)
+    store = CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"])
+    body = request.get_json(silent=True) or {}
+    region_id = body.get('region_id')
+    if not region_id:
+        return jsonify(error="invalid_crop", message="'region_id' is required."), 400
+
+    sources_dir = Path(current_app.config["REGISTRY_STORE_PATH"]) / "workspace_sources" / project_id
+    try:
+        result = extract_bounded_crop(
+            store, workspace, source_id, region_id, sources_dir=sources_dir,
+            actor=session.get('username', 'system'), governance_log=get_governance_log(current_app),
+        )
+    except ImageIntelligenceError as exc:
+        return jsonify(error="invalid_crop", message=str(exc)), 400
+    return jsonify(result), 201
 
 
 @api_bp.route('/documents/<project_id>/rfi', methods=['GET'])

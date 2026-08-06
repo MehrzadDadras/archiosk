@@ -143,6 +143,13 @@
         var regionBtn = makeBtn('▢', 'Select a drawing region');
         regionBtn.classList.add('doc-annotation-tool');
         regionBtn.setAttribute('aria-pressed', 'false');
+        // CLAUDE-MM5 Section 13: the one bounded annotation type this
+        // stage implements - a point marker with a required short note,
+        // sharing the SAME one-active-tool-at-a-time group as the region
+        // tool (never both active together).
+        var markerBtn = makeBtn('📍', 'Add a marker');
+        markerBtn.classList.add('doc-annotation-tool');
+        markerBtn.setAttribute('aria-pressed', 'false');
         var regionStatusEl = document.createElement('span');
         regionStatusEl.className = 'doc-region-status';
         regionStatusEl.setAttribute('aria-live', 'polite');
@@ -184,6 +191,7 @@
         var rotation = 0;
         var mirrorH = false, mirrorV = false;
         var regionToolActive = false;
+        var markerToolActive = false;
         var sheetUnit = null;
         var isPanning = false;
         var panStart = null;
@@ -250,7 +258,15 @@
                 credentials: 'same-origin',
             }).then(function (resp) { return resp.json(); }).then(function (body) {
                 var units = (body && body.structural_units) || [];
-                var match = units.filter(function (u) { return u.unit_type === 'sheet'; })[0];
+                // CLAUDE-MM5: this viewer is shared by MM4 drawing sheets
+                // (unit_type="sheet") AND MM5 images (unit_type="image",
+                // already registered automatically at "Save to project"
+                // time - services/image_intelligence.py's own register_
+                // eye_capture) - either is a valid governing unit for
+                // region/marker anchoring here, so both are accepted
+                // rather than forcing a redundant second registration
+                // click for an Eye-saved photo that is already registered.
+                var match = units.filter(function (u) { return u.unit_type === 'sheet' || u.unit_type === 'image'; })[0];
                 if (!match) {
                     regionStatusEl.textContent = '';
                     var msg = document.createElement('span');
@@ -356,6 +372,7 @@
                         return;
                     }
                     var label = result.body.citation && result.body.citation.label;
+                    var regionIdCreated = result.body.region && result.body.region.id;
                     var span = document.createElement('span');
                     span.textContent = label ? ('Region created: ' + label + ' ') : 'Region created. ';
                     regionStatusEl.appendChild(span);
@@ -367,13 +384,89 @@
                         copyBtn.addEventListener('click', function () { navigator.clipboard.writeText(label); });
                         regionStatusEl.appendChild(copyBtn);
                     }
+                    // CLAUDE-MM5 Section 12: "optionally export a derivative
+                    // crop" - a real cropped PNG registered as its own
+                    // Source, EXIF-free by construction (see services/
+                    // image_intelligence.py's own extract_bounded_crop).
+                    if (regionIdCreated) {
+                        var exportBtn = document.createElement('button');
+                        exportBtn.type = 'button';
+                        exportBtn.className = 'doc-control-btn';
+                        exportBtn.textContent = 'Export crop';
+                        exportBtn.addEventListener('click', function () {
+                            exportBtn.disabled = true;
+                            fetch(apiBase + '/sources/' + encodeURIComponent(sourceId) + '/derivative-crop', {
+                                method: 'POST', credentials: 'same-origin',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ region_id: regionIdCreated }),
+                            }).then(function (r) { return r.json().then(function (b) { return { ok: r.ok, body: b }; }); })
+                                .then(function (exportResult) {
+                                    exportBtn.disabled = false;
+                                    if (!exportResult.ok) {
+                                        regionStatusEl.appendChild(document.createTextNode(
+                                            ' Could not export: ' + (exportResult.body.message || 'unknown error')));
+                                        return;
+                                    }
+                                    regionStatusEl.appendChild(document.createTextNode(
+                                        ' Derivative crop saved (checksum ' + exportResult.body.derivative_checksum.slice(0, 12) + '…).'));
+                                });
+                        });
+                        regionStatusEl.appendChild(exportBtn);
+                    }
                 });
+        }
+
+        function commitMarker(clientX, clientY) {
+            var imgRect = imgEl.getBoundingClientRect();
+            if (imgRect.width <= 0 || imgRect.height <= 0 || !sheetUnit) return;
+            var relX = (clientX - imgRect.left) / imgRect.width, relY = (clientY - imgRect.top) / imgRect.height;
+            var o = toOriginalPoint(relX, relY, rotation, mirrorH, mirrorV);
+
+            var input = document.createElement('input');
+            input.type = 'text';
+            input.className = 'drawing-marker-note-input';
+            var vpRect = viewport.getBoundingClientRect();
+            input.style.left = (clientX - vpRect.left) + 'px';
+            input.style.top = (clientY - vpRect.top) + 'px';
+            input.placeholder = 'Marker note';
+            input.setAttribute('aria-label', 'Marker note');
+            overlay.appendChild(input);
+            input.focus();
+
+            function commit() {
+                var note = input.value.trim();
+                if (input.parentNode) input.parentNode.removeChild(input);
+                if (!note) return;
+                regionStatusEl.textContent = 'Saving marker…';
+                fetch(apiBase + '/sources/' + encodeURIComponent(sourceId) + '/markers', {
+                    method: 'POST', credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ structural_unit_id: sheetUnit.id, x: o[0], y: o[1], note: note }),
+                }).then(function (r) { return r.json().then(function (b) { return { ok: r.ok, body: b }; }); })
+                    .then(function (result) {
+                        regionStatusEl.textContent = '';
+                        if (!result.ok) {
+                            regionStatusEl.textContent = 'Could not save that marker: ' + (result.body.message || 'unknown error');
+                            return;
+                        }
+                        var label = result.body.citation && result.body.citation.label;
+                        regionStatusEl.textContent = label ? ('Marker created: ' + label) : 'Marker created.';
+                    });
+            }
+            input.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter') { e.preventDefault(); commit(); }
+                else if (e.key === 'Escape') { e.preventDefault(); input.value = ''; commit(); }
+            });
+            input.addEventListener('blur', commit);
         }
 
         // -------- Pointer handling: pan by default, region-drag when the
         // -------- region tool is active (never both at once). ------------
         viewport.addEventListener('pointerdown', function (e) {
-            if (regionToolActive) {
+            if (markerToolActive) {
+                if (!sheetUnit) { ensureSheetUnit(); return; }
+                commitMarker(e.clientX, e.clientY);
+            } else if (regionToolActive) {
                 if (!sheetUnit) { ensureSheetUnit(); return; }
                 dragRect = { x1: e.clientX, y1: e.clientY, x2: e.clientX, y2: e.clientY };
                 try { viewport.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
@@ -424,9 +517,24 @@
         resetBtn.addEventListener('click', resetOrientation);
         regionBtn.addEventListener('click', function () {
             regionToolActive = !regionToolActive;
+            if (regionToolActive) markerToolActive = false;
             regionBtn.setAttribute('aria-pressed', String(regionToolActive));
-            viewport.style.cursor = regionToolActive ? 'crosshair' : 'grab';
+            markerBtn.setAttribute('aria-pressed', 'false');
+            viewport.style.cursor = (regionToolActive || markerToolActive) ? 'crosshair' : 'grab';
             if (regionToolActive) {
+                ensureSheetUnit();
+            } else {
+                regionStatusEl.textContent = '';
+                clearOverlay();
+            }
+        });
+        markerBtn.addEventListener('click', function () {
+            markerToolActive = !markerToolActive;
+            if (markerToolActive) regionToolActive = false;
+            markerBtn.setAttribute('aria-pressed', String(markerToolActive));
+            regionBtn.setAttribute('aria-pressed', 'false');
+            viewport.style.cursor = (regionToolActive || markerToolActive) ? 'crosshair' : 'grab';
+            if (markerToolActive) {
                 ensureSheetUnit();
             } else {
                 regionStatusEl.textContent = '';

@@ -47,6 +47,10 @@ API_ROUTES = [
     ("POST", "/api/v1/documents/some-project/sources/some-source/drawing-structure"),
     ("POST", "/api/v1/documents/some-project/sources/some-source/drawing-regions"),
     ("GET", "/api/v1/documents/some-project/regions/some-region/evidence-sachet"),
+    # CLAUDE-MM5
+    ("POST", "/api/v1/documents/some-project/eye-capture"),
+    ("POST", "/api/v1/documents/some-project/sources/some-source/markers"),
+    ("POST", "/api/v1/documents/some-project/sources/some-source/derivative-crop"),
 ]
 
 # Admin-only write routes - excluded from "read_only can reach every read
@@ -60,6 +64,9 @@ ADMIN_ONLY_ROUTE_PATHS = {
     "/api/v1/documents/some-project/sources/some-source/spreadsheet-cell",
     "/api/v1/documents/some-project/sources/some-source/drawing-structure",
     "/api/v1/documents/some-project/sources/some-source/drawing-regions",
+    "/api/v1/documents/some-project/eye-capture",
+    "/api/v1/documents/some-project/sources/some-source/markers",
+    "/api/v1/documents/some-project/sources/some-source/derivative-crop",
 }
 
 
@@ -143,6 +150,24 @@ class ApiAuthenticationTests(unittest.TestCase):
         self.assertEqual(response.status_code, 403)
         self.assertEqual(response.get_json()["error"], "forbidden")
 
+    def test_eye_capture_rejects_authenticated_non_admin(self):
+        client = self._client_as("read_only")
+        response = client.post("/api/v1/documents/some-project/eye-capture")
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.get_json()["error"], "forbidden")
+
+    def test_markers_rejects_authenticated_non_admin(self):
+        client = self._client_as("read_only")
+        response = client.post("/api/v1/documents/some-project/sources/some-source/markers")
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.get_json()["error"], "forbidden")
+
+    def test_derivative_crop_rejects_authenticated_non_admin(self):
+        client = self._client_as("read_only")
+        response = client.post("/api/v1/documents/some-project/sources/some-source/derivative-crop")
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.get_json()["error"], "forbidden")
+
     # -- Authenticated, correct role: existing behaviour is unchanged --
 
     def test_admin_can_reach_ingest_route(self):
@@ -190,6 +215,24 @@ class ApiAuthenticationTests(unittest.TestCase):
         response = client.post("/api/v1/documents/some-project/sources/some-source/drawing-regions")
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.get_json()["error"], "invalid_region")
+
+    def test_admin_can_reach_eye_capture_route(self):
+        client = self._client_as("admin")
+        response = client.post("/api/v1/documents/some-project/eye-capture")
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.get_json()["error"], "invalid_image")
+
+    def test_admin_can_reach_markers_route(self):
+        client = self._client_as("admin")
+        response = client.post("/api/v1/documents/some-project/sources/some-source/markers")
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.get_json()["error"], "invalid_marker")
+
+    def test_admin_can_reach_derivative_crop_route(self):
+        client = self._client_as("admin")
+        response = client.post("/api/v1/documents/some-project/sources/some-source/derivative-crop")
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.get_json()["error"], "invalid_crop")
 
     def test_read_only_can_reach_every_read_route(self):
         client = self._client_as("read_only")

@@ -323,15 +323,21 @@ class EyePaneJsTests(unittest.TestCase):
         self.assertIn("Only images are supported here.", self.js)
         self.assertIn("Clipboard did not contain an image.", self.js)
 
-    def test_preview_is_client_side_only_never_sent_anywhere(self):
-        # The header comment's own prose mentions fetch()/XMLHttpRequest
-        # by name (documenting that neither is called) - strip the
-        # leading /* ... */ block comment before checking for a real
-        # call site.
+    def test_preview_is_client_side_only_until_the_reviewer_explicitly_saves(self):
+        # CLAUDE-MM5 Section 7: "Save to project" is a real, intended
+        # network action now - narrowed to the real, still-true
+        # invariant: pasting/dropping (handleFile) never itself triggers
+        # a network call; fetch() exists in this file now, but only
+        # inside saveToProject, reached solely by an explicit click on
+        # #eye-save-btn. See tests/test_p40eye1_correction_resize_
+        # canvas.py's own matching correction for the fuller rationale.
         code_only = self.js[self.js.index("*/") + 2:]
-        self.assertNotIn("fetch(", code_only)
         self.assertNotIn("XMLHttpRequest", code_only)
         self.assertIn("FileReader", code_only)
+        handle_file_fn = self.js[self.js.index("function handleFile("):self.js.index("dropTarget.addEventListener('dragover'")]
+        self.assertNotIn("fetch(", handle_file_fn)
+        save_fn = self.js[self.js.index("function saveToProject("):self.js.index("// -------- Zoom / fit / pan")]
+        self.assertIn("fetch(", save_fn)
 
     def test_remove_control_returns_to_the_neutral_empty_state(self):
         self.assertIn("function clearPreview()", self.js)

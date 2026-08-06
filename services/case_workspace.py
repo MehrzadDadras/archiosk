@@ -505,12 +505,23 @@ SOURCE_ORIGIN_TYPE_UPLOAD = "upload"
 SOURCE_ORIGIN_TYPE_CONTROLLED_CORPUS = "controlled_corpus"
 SOURCE_ORIGIN_TYPE_EXTERNAL_CONNECTOR = "external_connector"
 SOURCE_ORIGIN_TYPE_IMPORT = "import"
+# CLAUDE-MM5: an Eye-pasted/dropped image saved to the project (Section 7 -
+# "Save to project") is genuinely a distinct origin from an ordinary file
+# upload (Section 8's own screenshot-workflow provenance requirement -
+# "preserve... capture time" - reads more honestly as "captured via Eye"
+# than "uploaded"); a derivative crop (Section 12/6) is neither an upload
+# nor a capture - it is MECHANICALLY GENERATED from an existing region,
+# which is exactly what origin_reference (below) is for.
+SOURCE_ORIGIN_TYPE_EYE_CAPTURE = "eye_capture"
+SOURCE_ORIGIN_TYPE_DERIVATIVE_CROP = "derivative_crop"
 
 KNOWN_SOURCE_ORIGIN_TYPES = (
     SOURCE_ORIGIN_TYPE_UPLOAD,
     SOURCE_ORIGIN_TYPE_CONTROLLED_CORPUS,
     SOURCE_ORIGIN_TYPE_EXTERNAL_CONNECTOR,
     SOURCE_ORIGIN_TYPE_IMPORT,
+    SOURCE_ORIGIN_TYPE_EYE_CAPTURE,
+    SOURCE_ORIGIN_TYPE_DERIVATIVE_CROP,
 )
 
 # -- Requirement vocabulary (Prompt 15) --------------------------------------
@@ -2704,6 +2715,51 @@ KNOWN_METADATA_RELIABILITY_TIERS = (
     METADATA_RELIABILITY_UNVERIFIED,
 )
 
+# CLAUDE-MM5: image/screenshot/camera classification (Section 5/17/21) -
+# the same "successful read" vs. "read itself refused/failed" distinction
+# every prior MM stage's own classification vocabulary already
+# establishes, scoped to what MM4's own DRAWING_CLASSIFICATION_* doesn't
+# need to distinguish: an ordinary photo has no "encrypted" state, but DOES
+# need its own honest "this container claims to be an image but isn't one
+# we support" state, kept distinct from "malformed" (a real image file
+# that failed to decode) per Section 5's own explicit classification list.
+IMAGE_CLASSIFICATION_SUPPORTED = "supported"
+IMAGE_CLASSIFICATION_UNSUPPORTED_FORMAT = "unsupported_format"
+IMAGE_CLASSIFICATION_MALFORMED = "malformed"
+IMAGE_CLASSIFICATION_EXCESSIVE_SIZE = "excessive_size"
+KNOWN_IMAGE_CLASSIFICATIONS = (
+    IMAGE_CLASSIFICATION_SUPPORTED,
+    IMAGE_CLASSIFICATION_UNSUPPORTED_FORMAT,
+    IMAGE_CLASSIFICATION_MALFORMED,
+    IMAGE_CLASSIFICATION_EXCESSIVE_SIZE,
+)
+
+# CLAUDE-MM5 Section 10: every metadata field this stage surfaces is
+# tagged with exactly one of these - "preserved internally / shown to
+# authorized users / stripped from exported derivative / unavailable /
+# unverified", Section 10's own five named states verbatim. Deliberately
+# a SEPARATE vocabulary from METADATA_RELIABILITY_* above (MM4's own
+# "how was this value obtained" question) - this one answers a different
+# question, "who is allowed to see this value and in what form," which
+# matters specifically because a field like GPS can be perfectly reliably
+# extracted (METADATA_RELIABILITY_DIRECTLY_EXTRACTED) while still being
+# EXPOSURE_INTERNAL_ONLY (Section 9/10: "do not automatically expose
+# precise location metadata in the UI or external packets") - conflating
+# the two questions into one tier would make that distinction
+# unrepresentable.
+METADATA_EXPOSURE_PRESERVED_INTERNAL = "preserved_internal"
+METADATA_EXPOSURE_SHOWN_TO_AUTHORIZED = "shown_to_authorized"
+METADATA_EXPOSURE_STRIPPED_FROM_EXPORT = "stripped_from_export"
+METADATA_EXPOSURE_UNAVAILABLE = "unavailable"
+METADATA_EXPOSURE_UNVERIFIED = "unverified"
+KNOWN_METADATA_EXPOSURE_TIERS = (
+    METADATA_EXPOSURE_PRESERVED_INTERNAL,
+    METADATA_EXPOSURE_SHOWN_TO_AUTHORIZED,
+    METADATA_EXPOSURE_STRIPPED_FROM_EXPORT,
+    METADATA_EXPOSURE_UNAVAILABLE,
+    METADATA_EXPOSURE_UNVERIFIED,
+)
+
 
 @dataclass
 class StructuralUnit:
@@ -3469,6 +3525,12 @@ def _render_region_address_label(region_type: str, address: dict) -> Optional[st
     # this stage's own governing prompt (Section 12) asks for.
     if region_type == "rectangular" and "region_index" in address:
         return f"region {address['region_index']}"
+    # CLAUDE-MM5 Section 13: create_addressable_marker_region's own point
+    # annotations - same region_index convention as rectangular regions,
+    # rendered as "marker N" rather than "region N" so a citation never
+    # implies a marker has spatial extent it doesn't have.
+    if region_type == "marker" and "region_index" in address:
+        return f"marker {address['region_index']}"
     if "label" in address:
         return str(address["label"])
     return None
@@ -9561,7 +9623,7 @@ class CaseWorkspaceStore:
     def register_drawing_sheet_structure(
         self, workspace: ProjectWorkspace, source_id: str, sheets: list[dict],
         extractor_version: Optional[str] = None, actor: str = "system",
-        governance_log: Optional[GovernanceLog] = None,
+        governance_log: Optional[GovernanceLog] = None, unit_type: str = "sheet",
     ) -> dict:
         """
         `sheets` shape (produced by services/drawing_intelligence.py):
@@ -9588,6 +9650,19 @@ class CaseWorkspaceStore:
         "do not invent sheet numbers or titles... when they cannot be
         extracted reliably" - an honestly-empty metadata dict is preferred
         over a guessed one).
+
+        `unit_type` defaults to "sheet" (MM4's own drawing-set vocabulary)
+        but CLAUDE-MM5's own `services/image_intelligence.py` passes
+        `unit_type="image"` for an ordinary photo/screenshot/Eye capture -
+        Section 6's own distinct vocabulary ("image; frame; page rendering;
+        screenshot; camera capture") for a genuinely different kind of
+        Source, reusing this SAME method (and therefore the SAME
+        AddressableRegion/EvidenceItem/citation machinery below) rather
+        than a parallel, duplicated registration path. Every other field
+        in `sheets` keeps its MM4 meaning unchanged regardless of
+        `unit_type` - a photo simply always has exactly one entry in that
+        list (Section 6: "one stable image-frame structural unit is
+        sufficient"), never a per-page loop.
         """
         source = self._find(workspace.sources, source_id)
         if source is None or source["project_id"] != workspace.project_id:
@@ -9597,8 +9672,8 @@ class CaseWorkspaceStore:
         for sheet in sheets:
             unit = StructuralUnit(
                 id=_new_id(), project_id=workspace.project_id, source_id=source_id,
-                unit_type="sheet", order_index=sheet["index"], created_at=_now(), created_by=actor,
-                label=sheet.get("label") or f"Sheet {sheet['index'] + 1}",
+                unit_type=unit_type, order_index=sheet["index"], created_at=_now(), created_by=actor,
+                label=sheet.get("label") or f"{unit_type.capitalize()} {sheet['index'] + 1}",
                 modality_metadata={
                     "width": sheet.get("width"),
                     "height": sheet.get("height"),
@@ -9674,6 +9749,40 @@ class CaseWorkspaceStore:
                 "x": x, "y": y, "width": width, "height": height,
                 "region_index": existing_count + 1,
             },
+            actor=actor, governance_log=governance_log,
+        )
+        return region
+
+    def create_addressable_marker_region(
+        self, workspace: ProjectWorkspace, structural_unit_id: str,
+        x: float, y: float, actor: str = "system", governance_log: Optional[GovernanceLog] = None,
+    ) -> dict:
+        """
+        CLAUDE-MM5 Section 13: a POINT AddressableRegion (`region_type=
+        "marker"`) - the one bounded annotation shape this stage
+        implements ("marker/pin... Defer a full markup editor"). Same
+        ORIGINAL-frame, bounds-validated, sequential-region_index
+        discipline as create_addressable_drawing_region above, just with
+        no width/height (a marker has no spatial extent, only a point).
+        The marker's own text note is NOT stored here - it lives in the
+        accompanying EvidenceItem (evidence_class=USER_ENTERED), the same
+        "region records geometry, evidence records content" split every
+        other MM1-MM4 region type already follows.
+        """
+        unit = self._find(workspace.structural_units, structural_unit_id)
+        if unit is None or unit["project_id"] != workspace.project_id:
+            raise CaseWorkspaceError(f"Structural unit {structural_unit_id} was not found.")
+
+        for name, value in (("x", x), ("y", y)):
+            if not isinstance(value, (int, float)) or isinstance(value, bool):
+                raise CaseWorkspaceError(f"Marker '{name}' must be a number.")
+        if not (0 <= x <= 1 and 0 <= y <= 1):
+            raise CaseWorkspaceError("Marker x/y must be normalized fractions between 0 and 1.")
+
+        existing_count = len(self.regions_for_structural_unit(workspace, structural_unit_id))
+        region = self.create_addressable_region(
+            workspace, structural_unit_id=structural_unit_id, region_type="marker",
+            address={"x": x, "y": y, "region_index": existing_count + 1},
             actor=actor, governance_log=governance_log,
         )
         return region

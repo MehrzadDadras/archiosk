@@ -1,20 +1,26 @@
 /*
- * CLAUDE-P40-EYE1 - the Eye pane's own structural-scaffold interactivity.
- * Scope, stated honestly (Section 4's own explicit boundary): this is a
- * real paste/drop TARGET plus a real responsive image viewing canvas
- * (CLAUDE-P40-EYE1's own follow-up browser correction, Section 3) -
- * dragover/dragenter/drop and paste events are genuinely captured, an
- * image is genuinely read and previewed at a real, resizable scale with
- * zoom/pan/fit - but nothing beyond that. No editing, no annotation, no
- * chat/terminal attachment, no AI interpretation, no persistence, no
- * ingestion. The preview lives only in this tab's own memory (a data:
- * URL held by a plain <img>); nothing here ever calls fetch()/
- * XMLHttpRequest or writes to any Archiosk store. Deliberately not "no
- * interaction at all" (a drop target that doesn't react to a drop would
- * itself be the kind of misleading dead control Section 4 forbids) and
- * deliberately not "looks like it saves/analyzes" (which would
- * misrepresent unbuilt functionality) - display what was pasted/
- * dropped, in-session, state plainly that it is not saved, nothing more.
+ * CLAUDE-P40-EYE1 (structural scaffold) + CLAUDE-MM5 (Image, Screenshot,
+ * and Camera Evidence - the real governed visual-evidence surface Section
+ * 7 asks Eye to become).
+ *
+ * EYE1's own scope boundary is now explicitly SUPERSEDED, not merely
+ * extended: paste/drop/preview/zoom/pan/fit were already real; MM5 adds
+ * genuine, view-only rotate/mirror/reset on the unsaved preview (Section
+ * 4/11 - a plain CSS transform, nothing persisted), a real "Save to
+ * project" action (services/image_intelligence.py's own register_
+ * eye_capture via the new POST .../eye-capture route), and an explicit,
+ * always-visible temporary-vs-saved status (Section 7's own required
+ * distinction). What EYE1 deliberately left unbuilt and MM5 does NOT
+ * build either: no in-place image editing/filters, no AI interpretation
+ * (Section 24's own deferrals).
+ *
+ * Once saved, this pane hands off to static/js/drawing_image_viewer.js
+ * (MM4) rather than reimplementing rotate/mirror/region-select/citation a
+ * second time - see mountSavedView below. The preview lives only in this
+ * tab's own memory until saved (a data: URL held by a plain <img> plus
+ * the original File object, kept for the eventual multipart upload);
+ * nothing here calls fetch() before the reviewer explicitly clicks "Save
+ * to project".
  */
 (function () {
     'use strict';
@@ -34,6 +40,14 @@
     var actualBtn = document.getElementById('eye-canvas-actual');
     var resetBtn = document.getElementById('eye-canvas-reset');
     var removeBtn = document.getElementById('eye-canvas-remove');
+    var rotateBtn = document.getElementById('eye-canvas-rotate');
+    var mirrorHBtn = document.getElementById('eye-canvas-mirror-h');
+    var mirrorVBtn = document.getElementById('eye-canvas-mirror-v');
+    var orientationStatusEl = document.getElementById('eye-orientation-status');
+    var saveStatusEl = document.getElementById('eye-save-status');
+    var saveBtn = document.getElementById('eye-save-btn');
+    var descriptionInput = document.getElementById('eye-save-description');
+    var savedViewEl = document.getElementById('eye-saved-view');
 
     var currentError = null;
     var naturalWidth = 0;
@@ -49,6 +63,101 @@
     var MAX_SCALE = 8;
     var ZOOM_STEP = 1.25;
 
+    // -------- CLAUDE-MM5: view-only orientation state (Section 4/11) ----
+    var rotation = 0;
+    var mirrorH = false;
+    var mirrorV = false;
+    var currentFile = null; // the real File object - needed for "Save to project"
+    var saving = false;
+
+    function normalizeRotation(r) { return ((r % 360) + 360) % 360; }
+
+    function applyOrientation() {
+        var scaleX = mirrorH ? -1 : 1;
+        var scaleY = mirrorV ? -1 : 1;
+        image.style.transform = 'rotate(' + rotation + 'deg) scale(' + scaleX + ',' + scaleY + ')';
+    }
+
+    function updateOrientationStatus() {
+        if (!orientationStatusEl) return;
+        var parts = [];
+        if (rotation % 360) parts.push('Rotated ' + rotation + '° clockwise');
+        if (mirrorH) parts.push('mirrored horizontally');
+        if (mirrorV) parts.push('mirrored vertically');
+        if (!parts.length) { orientationStatusEl.textContent = ''; return; }
+        var text = parts.join(' and ');
+        orientationStatusEl.textContent = text.charAt(0).toUpperCase() + text.slice(1) + ' — source unchanged';
+    }
+
+    function resetOrientation() {
+        rotation = 0; mirrorH = false; mirrorV = false;
+        applyOrientation();
+        updateOrientationStatus();
+    }
+
+    function rotateStep() {
+        rotation = normalizeRotation(rotation + 90);
+        applyOrientation();
+        updateOrientationStatus();
+    }
+
+    function mirrorHorizontal() { mirrorH = !mirrorH; applyOrientation(); updateOrientationStatus(); }
+    function mirrorVertical() { mirrorV = !mirrorV; applyOrientation(); updateOrientationStatus(); }
+
+    // -------- CLAUDE-MM5: temporary-vs-saved status (Section 7) ---------
+    function setSaveStatus(text) { if (saveStatusEl) saveStatusEl.textContent = text; }
+
+    // Once saved, hand off to the SAME real viewer MM4 built for a
+    // persisted drawing/image Source - no rotate/mirror/region-select/
+    // citation logic is reimplemented here.
+    function mountSavedView(sourceId, projectId) {
+        canvas.hidden = true;
+        savedViewEl.hidden = false;
+        savedViewEl.textContent = '';
+        var img = document.createElement('img');
+        img.className = 'document-viewer-image';
+        img.alt = 'Saved to project';
+        img.dataset.sourceId = sourceId;
+        img.dataset.projectId = projectId;
+        img.src = '/projects/' + encodeURIComponent(projectId) + '/workspace/sources/' + encodeURIComponent(sourceId) + '/file';
+        savedViewEl.appendChild(img);
+        if (window.ArchioskDrawingImageViewer) window.ArchioskDrawingImageViewer.mount(img);
+    }
+
+    function saveToProject() {
+        if (!currentFile || saving) return;
+        var projectId = dropTarget.getAttribute('data-project-id');
+        if (!projectId) { setSaveStatus('No active project - cannot save.'); return; }
+        saving = true;
+        if (saveBtn) saveBtn.disabled = true;
+        setSaveStatus('Saving…');
+
+        var formData = new FormData();
+        formData.append('image', currentFile, currentFile.name || 'image.png');
+        if (descriptionInput && descriptionInput.value.trim()) {
+            formData.append('description', descriptionInput.value.trim());
+        }
+        fetch('/api/v1/documents/' + encodeURIComponent(projectId) + '/eye-capture', {
+            method: 'POST', credentials: 'same-origin', body: formData,
+        }).then(function (resp) {
+            return resp.json().then(function (body) { return { ok: resp.ok, body: body }; });
+        }).then(function (result) {
+            saving = false;
+            if (saveBtn) saveBtn.disabled = false;
+            if (!result.ok) {
+                setSaveStatus('Could not save: ' + (result.body.message || 'unknown error'));
+                return;
+            }
+            setSaveStatus('Saved to the project.');
+            mountSavedView(result.body.source_id, projectId);
+        }).catch(function () {
+            saving = false;
+            if (saveBtn) saveBtn.disabled = false;
+            setSaveStatus('Could not save: network error.');
+        });
+    }
+
+    // -------- Zoom / fit / pan (CLAUDE-P40-EYE1, unchanged) --------------
     function clearError() {
         if (currentError) { currentError.remove(); currentError = null; }
     }
@@ -112,7 +221,10 @@
         clearError();
         if (emptyState) emptyState.hidden = true;
         if (noteEl) noteEl.hidden = true;
+        savedViewEl.hidden = true;
         canvas.hidden = false;
+        resetOrientation();
+        setSaveStatus('Temporary preview — not saved to the project.');
 
         image.onload = function () {
             naturalWidth = image.naturalWidth;
@@ -125,10 +237,14 @@
 
     function clearPreview() {
         canvas.hidden = true;
+        savedViewEl.hidden = true;
+        savedViewEl.textContent = '';
         image.removeAttribute('src');
         naturalWidth = 0;
         naturalHeight = 0;
         mode = 'fit';
+        currentFile = null;
+        resetOrientation();
         if (resizeObserver) { resizeObserver.disconnect(); resizeObserver = null; }
         if (emptyState) emptyState.hidden = false;
         if (noteEl) noteEl.hidden = false;
@@ -140,6 +256,7 @@
             showError('Only images are supported here.');
             return;
         }
+        currentFile = file;
         var reader = new FileReader();
         reader.onload = function () { showCanvas(reader.result); };
         reader.onerror = function () { showError('This image could not be read.'); };
@@ -180,7 +297,11 @@
     if (zoomOutBtn) zoomOutBtn.addEventListener('click', function () { zoomBy(1 / ZOOM_STEP); });
     if (fitBtn) fitBtn.addEventListener('click', setFit);
     if (actualBtn) actualBtn.addEventListener('click', setActualSize);
-    if (resetBtn) resetBtn.addEventListener('click', setFit);
+    if (resetBtn) resetBtn.addEventListener('click', function () { setFit(); resetOrientation(); });
+    if (rotateBtn) rotateBtn.addEventListener('click', rotateStep);
+    if (mirrorHBtn) mirrorHBtn.addEventListener('click', mirrorHorizontal);
+    if (mirrorVBtn) mirrorVBtn.addEventListener('click', mirrorVertical);
+    if (saveBtn) saveBtn.addEventListener('click', saveToProject);
     if (removeBtn) removeBtn.addEventListener('click', function (e) {
         e.stopPropagation();
         clearPreview();
