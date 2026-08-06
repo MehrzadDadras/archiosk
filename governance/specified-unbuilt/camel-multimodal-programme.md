@@ -31,16 +31,18 @@ invariants.md`, not as pre-authorized.
 
 **Authorization status:** every stage below is **NOT AUTHORIZED** for
 implementation — this document records intent and sequencing, it is not
-a build order — **except MM1, MM2, MM3, and MM4, now IMPLEMENTED**
+a build order — **except MM1, MM2, MM3, MM4, and MM5, now IMPLEMENTED**
 (`CLAUDE-MM1`, 2026-08-05, authorized following the accepted cockpit gate
 `CLAUDE-CGP-02`; `CLAUDE-MM2`, 2026-08-05, authorized following the
 accepted MM1 seal; `CLAUDE-MM3`, 2026-08-05, authorized following the
 accepted MM2 seal; `CLAUDE-MM4`, 2026-08-06, authorized following the
-accepted MM3 seal; see `STATUS.md`'s own authorization table and
+accepted MM3 seal; `CLAUDE-MM5`, 2026-08-06, authorized following the
+accepted MM4 seal; see `STATUS.md`'s own authorization table and
 `current/kernel-object-model.md` for the real, tested, ground-truth
-detail — this document's own MM1/MM2/MM3/MM4 sections below are retained
-as the original stage descriptions, not updated to duplicate that record).
-MM5–MM9 remain exactly as originally recorded: this programme's "specified
+detail — this document's own MM1/MM2/MM3/MM4/MM5 sections below are
+retained as the original stage descriptions, not updated to duplicate
+that record).
+MM6–MM9 remain exactly as originally recorded: this programme's "specified
 but unbuilt" pointer in `STATUS.md` continues to cover them as a single
 pointer, not stage-by-stage rows, until each is individually taken up.
 
@@ -160,6 +162,18 @@ regions, not a new mechanism).
 it.**
 
 ## MM5 — Image, screenshot, and camera evidence
+
+**IMPLEMENTED, bounded** — see `current/kernel-object-model.md`'s
+"Eye becomes a real governed visual-evidence surface" entry and
+`STATUS.md`'s own authorization-table row for the real, tested,
+ground-truth detail (`CLAUDE-MM5`, 2026-08-06). The prose immediately
+below is retained as the ORIGINAL stage intent this implementation was
+authorized against, not rewritten to match what was actually built — a
+real paste/drop/upload-to-project Eye pane, reversible orientation,
+region/marker evidence, a stable citation contract, and EXIF-free
+derivative crop export are real; a full photo editor, automatic object/
+defect/facial recognition, and OCR over arbitrary images remain unbuilt,
+exactly as this section's own prose already anticipated below.
 
 Uploaded images, screenshots, pasted images, and phone-camera evidence
 with preview, orientation, metadata, annotation, region selection,
