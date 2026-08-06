@@ -1,5 +1,41 @@
 # Continuation checkpoint
 
+## 2026-08-06 — CLAUDE-MM6 (Product-Owner Acceptance Seal)
+
+**Product owner accepts MM6 and the recommendation: ACCEPT — MM6 delivers a real, tested, live-verified cross-modal relationship layer built on existing ARCHIOSK primitives, with read-time status derivation, first-class disagreement handling, and a bounded user-facing relationship surface.**
+
+**Commits sealed:** `874bd4b` (implementation: `record_evidence_relationship`/`resolve_relationship_status`/`dispute_relationship`/`reject_relationship`/`supersede_relationship`/`explain_evidence_trust`/`build_relationship_sachet` in `services/case_workspace.py`; nine new `/api/v1` routes in `routes/api.py`; the bounded "Relationships" panel in `static/js/drawing_image_viewer.js` and `static/css/main.css`; `tests/test_mm6_relationship_river.py` and the `tests/test_api_authentication.py` route-auth extension) → `6cdf734` (documentation: `kernel-object-model.md`'s real ground-truth entry, `STATUS.md`'s MM6-scoped `IMPLEMENTED` row, `camel-multimodal-programme.md`'s MM6 section marked implemented) → `5c375fc` (continuation checkpoint).
+
+**Test evidence:** 29 focused tests in `tests/test_mm6_relationship_river.py` plus 10 new tests and 5 new admin-gated routes in `tests/test_api_authentication.py`'s route-auth matrix (`ADMIN_ONLY_ROUTE_PATHS` refactored from path-only to `(method, path)` keys — the first route where an admin-gated POST and a non-admin-gated GET share a path). One controlled full-suite run: **2,803 passed, 0 failed** — a real defect (a new CSS class shipped below the app's 11px accessibility floor) was caught by the suite itself and fixed before commit, not a separate regression.
+
+**Live-browser verification:** a real throwaway project and account, seeded with genuine three-modality evidence (a drawing region on a real PNG, a spreadsheet row, a PDF paragraph) linked to a real Case/Finding, run against the live dev server with a clean `restart-app` cycle before and after, then fully removed afterward.
+
+**Relationship creation and navigation across modalities:** a relationship was created live through the actual UI form handler (drawing-region evidence → Finding) and independently via the authenticated API (PDF-paragraph evidence ↔ spreadsheet-row evidence); both endpoints of each relationship resolve to their own real citation/content through the relationship sachet, letting either side be opened from the relationship itself.
+
+**Directional and typed relationships:** every relationship carries an explicit `from`/`to` direction (rendered as `→`/`←` relative to the object being viewed) and a typed `relationship_type` drawn from the closed-plus-open MM1 vocabulary, extended this stage by three new types (`observes`/`deviates_from`/`requires_follow_up`) after deliberately mapping every other candidate name onto an existing type.
+
+**States as actually implemented, all derived at read time, never stored as a mutable field:** `proposed` (default, provisional) and `confirmed` (explicit human confirmation) both verified live via the UI Confirm action; `disputed` and `rejected` (human disagreement recorded in place, the relationship never deleted) verified live, with `rejected` proven live to outrank even a `stale` endpoint; `stale` (an endpoint's own citation or Source has been superseded) verified live both before and after a Confirm action, proving staleness outranks provisional/confirmed; `broken` (an endpoint no longer resolves) covered by falsification test; `superseded` and its corrected replacement (a correction creates a new relationship via `record_evidence_relationship` and links it back via `record_supersession` — the original is preserved, never mutated or deleted, full history reconstructable) verified both by test and by a live authenticated status check confirming the correct `superseded_by_relationship_id`.
+
+**Project-isolation and cross-project denial:** every relationship endpoint is re-validated against `project_id` before anything is written; a falsification test proves a real endpoint belonging to another project is refused (paired with proof the older, unguarded `record_relationship` primitive would have silently allowed the same cross-project link), and a live authenticated POST attempting a cross-project relationship was confirmed refused (400 `invalid_relationship`) against the running app.
+
+**Source-version and citation preservation:** the relationship sachet was confirmed live to preserve the ORIGINAL region citation's content and coordinates unchanged after its owning Source was superseded by a later revision — the old evidence is never silently rewritten, only flagged stale via the existing `superseded_by_source_id` pointer.
+
+**Contradiction and correction-history behavior:** the Trustworthy Answer Contract (`explain_evidence_trust`) keeps supporting and contradicting relationships as separate lists, falsification-tested and live-confirmed that a contradiction is never hidden behind a co-existing support edge — first-class disagreement, never collapsed into false consensus. Correction history for a superseded relationship is fully reconstructable via `supersessions_for`, matching the same non-destructive-correction discipline the rest of this codebase already uses for Source revisions.
+
+**Final recommendation and repository state:** ACCEPT, as stated above. `HEAD` and `origin/main` both confirmed at `5c375fc` immediately before this seal. Working tree clean except the pre-existing, untouched `tests/fixtures/nreocrc/_lab_instance_scratch_002/`.
+
+**Preserved, explicit, non-blocking scope boundaries — none resolved or narrowed at this seal:**
+- No free-form graph visualization — the river viewer remains a small, bounded panel scoped to one object's own relationships, never a general graph canvas.
+- No broad semantic search.
+- No automatic knowledge-graph construction or automatic relationship acceptance — every relationship starts `provisional` unless a human explicitly confirms it.
+- No Navisworks/external-model-coordination integration.
+- No drone or micro-drone (Bee-Scout Colony) integration.
+- `Finding` and `DerivedObservation` remain distinct — this stage's own report neither recommends nor evidences a safer formal relationship or convergence path between them, so no merge or migration is authorized by this seal.
+
+**Carried forward, cross-cutting doctrine this stage's implementation is consistent with, not restated verbatim here:** the Probing Vessel doctrine (AI as navigator/scout, human as captain); the Trustworthy Answer Contract (implemented this stage as `explain_evidence_trust`, distinguishing directly-verified/AI-proposed/other evidence bases and surfacing contradiction honestly); the Governed Evidence Sachet (extended this stage to a relationship path via `build_relationship_sachet`, same allow-listed/excluded-summary discipline MM4 established); Proof Before Federation; and human authority over AI-proposed relationships and conclusions — every relationship this stage can create defaults to `provisional`, and confirmation, dispute, rejection, and correction are all actions this stage models as human acts, never machine-automated ones.
+
+**MM7 is not started by this seal.** This entry records acceptance only.
+
 ## 2026-08-06 — CLAUDE-MM6 (Cross-Document and Cross-Modal Relationship River)
 
 **Sixth real MM1 consumer**, authorized following the accepted MM5 seal (`3f69d50`). Repository-grounded investigation found the substrate this stage needed already largely in place: the general `Relationship` dataclass/`record_relationship`/`relationships_for`/`confirm_relationship` (Foundation Batch H) and the general `Supersession`/`record_supersession`/`supersessions_for` (Prompt 8, previously Source-only) — the second explicitly documented in its own docstring as intended for exactly this kind of future reuse. What did NOT exist: any endpoint-existence/cross-project validation on `record_relationship` (deliberately permissive, used by ~15 existing callers), any derived relationship-status concept, any correction mechanism for a Relationship specifically, and any "why should I trust this" aggregation.
