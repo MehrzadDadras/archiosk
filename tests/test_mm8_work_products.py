@@ -558,6 +558,70 @@ class WorkProductRouteTests(unittest.TestCase):
         )
         self.assertIn(resp.status_code, (302, 401, 403))
 
+    def test_edit_section_form_only_renders_its_own_section_type_fields(self):
+        """CLAUDE-POSTCAMEL-P01 regression test: before this stage, the
+        "Edit this section" form rendered every field from every section
+        type at once (risk description/probability/impact/mitigation/
+        owner ALONGSIDE team_member name/role/company/contact ALONGSIDE a
+        narrative text box), regardless of the section's own actual
+        section_type - a reviewer editing a risk section had no way to
+        tell which of the ~10 visible inputs would actually be saved
+        (edit_work_product_section only persists the fields
+        _WORK_PRODUCT_SECTION_FIELDS maps to that section's own type), so
+        filling the wrong group silently discarded that input with zero
+        warning. Proves the fix: a risk section's own edit form shows
+        risk fields and does NOT show team_member-only fields, and vice
+        versa for a team_member section."""
+        client = self._client()
+        workspace = self.store.get(self.project_id)
+        wp = self.store.create_work_product(workspace, artifact_type="report", title="Field Scoping", created_by="mm8admin")
+        # add_work_product_section returns the parent WORK PRODUCT dict
+        # (not the section) - the section's own id has to be read back
+        # from its own sections list, in creation order.
+        wp = self.store.add_work_product_section(
+            workspace, wp["id"], section_type="risk",
+            content={"description": "Settlement risk", "probability": "medium", "impact": "high"},
+            content_class="human_authored", author="mm8admin",
+        )
+        wp = self.store.add_work_product_section(
+            self.store.get(self.project_id), wp["id"], section_type="team_member",
+            content={"name": "Jane Doe", "role": "Structural Engineer"},
+            content_class="human_authored", author="mm8admin",
+        )
+        risk_section, team_section = wp["sections"][0], wp["sections"][1]
+        self.assertEqual(risk_section["section_type"], "risk")
+        self.assertEqual(team_section["section_type"], "team_member")
+
+        resp = client.get(f"/projects/{self.project_id}/workspace?work_product={wp['id']}")
+        self.assertEqual(resp.status_code, 200)
+        body = resp.get_data(as_text=True)
+
+        # The risk section's own edit form carries risk-shaped field
+        # names/values...
+        self.assertIn('name="probability" placeholder="Probability" value="medium"', body)
+        self.assertIn('name="impact" placeholder="Impact" value="high"', body)
+        # ...but never a team_member-only field name anywhere near it -
+        # a blank `name="role"` input would previously appear directly
+        # inside the SAME risk section's edit form.
+        risk_form_start = body.index(f'work-products/{wp["id"]}/sections/{risk_section["id"]}"')
+        team_form_start = body.index(f'work-products/{wp["id"]}/sections/{team_section["id"]}"')
+        risk_form_slice = body[risk_form_start:team_form_start]
+        self.assertNotIn('name="role"', risk_form_slice)
+        self.assertNotIn('name="company"', risk_form_slice)
+        self.assertNotIn('name="contact"', risk_form_slice)
+        self.assertNotIn('placeholder="Text"', risk_form_slice)
+
+        # The team_member section's own edit form is the mirror case -
+        # role/company/contact with real values, no risk fields. Bounded
+        # at "Add a section" - the generic add-new-section form further
+        # down the page legitimately contains every field group at once
+        # (see that form's own template comment), so an unbounded slice
+        # to end-of-body would false-negative against THIS assertion.
+        team_form_slice = body[team_form_start:body.index("Add a section")]
+        self.assertIn('name="role" placeholder="Role" value="Structural Engineer"', team_form_slice)
+        self.assertNotIn('name="probability"', team_form_slice)
+        self.assertNotIn('name="mitigation"', team_form_slice)
+
 
 if __name__ == "__main__":
     unittest.main()
