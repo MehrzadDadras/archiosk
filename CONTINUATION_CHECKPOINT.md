@@ -1,5 +1,43 @@
 # Continuation checkpoint
 
+## 2026-08-07 — CLAUDE-MM8 (Product-Owner Acceptance Seal)
+
+**Product owner accepts MM8 and the recommendation: ACCEPT — MM8 delivers the governed work-product layer, allowing ARCHIOSK to move from evidence and investigation into editable, reviewable, versioned, issued professional work products while preserving provenance, human authority, revision history, and source traceability.**
+
+**Commits sealed:** `70d5979` (implementation: `WorkProduct`/`WorkProductSection`/`WorkProductExportRecord`/`WorkProductReview` and their full lifecycle, provenance, immutability, and revision methods in `services/case_workspace.py`; new `services/work_product_export.py`; 12 new form-POST/redirect routes in `routes/workspace.py`; the "Work Products" sidebar branch and `?work_product=<id>` detail/edit pane in `templates/base.html`/`templates/case_workspace.html`; `tests/test_mm8_work_products.py`) → `b1e6b28` (documentation: `kernel-object-model.md`'s real ground-truth entry, `STATUS.md`'s MM8-scoped `IMPLEMENTED, bounded` row, `camel-multimodal-programme.md`'s MM8 section marked implemented, `UI_REFERENCE_MAP.md`'s four new rows) → `3228773` (continuation checkpoint).
+
+**Test evidence:** 38 focused tests in `tests/test_mm8_work_products.py` (34 store-level + 4 functional route tests). One controlled full-suite run after all fixes were in place: **2,888 passed, 0 failed, 65 subtests passed** — a real regression against a pre-existing UI-reference-map registry-consistency guard (four new `data-ui-ref` values left undocumented) was caught and fixed by documenting them in `UI_REFERENCE_MAP.md`, not by weakening the guard, in the same work session, not a separate defect.
+
+**Live-browser verification:** a real throwaway account and two projects, seeded with genuine three-modality evidence (drawing region, spreadsheet row, PDF paragraph), run against the live dev server with a clean `restart-app` cycle before and after, then fully removed afterward.
+
+**Work-product creation/edit/save/review/issue behavior:** a "report" WorkProduct was created live from an accepted Finding, populated with a human-authored section citing three evidence objects and an AI-proposed section, edited (confirmed AI provenance transitioned to `edited_ai_proposal`, never silently to `human_authored`), reviewed, approved, and issued through the real UI and the existing Approval Gate's two-step `confirm=once` flow — confirmed live, not by test alone.
+
+**Unsaved-state and save-confirmation behavior:** satisfied by architecture, not new client-side state — MM8's UI is classic form-POST/redirect throughout (matching RFI's own established precedent, not MM6/MM7's fetch()-based JSON convention), so no local draft state exists to desync and no false "saved" indication is possible.
+
+**Issued-version immutability and later revision behavior:** `issue_work_product` computes a permanent SHA-256 `issued_checksum`; every subsequent mutation attempt on an issued work product is structurally refused (falsification-tested, including a checksum-unchanged proof after a refused edit). `revise_work_product` — Supersession's fourth real consumer — was exercised live: the issued report was revised after issue, and the original issued revision was confirmed byte-for-byte unchanged afterward, with the new revision starting as an independent draft.
+
+**Evidence backlinks and citation preservation:** every section's `evidence_links` were validated live against real, already-governed objects in the same project; citations remained intact and navigable from the work-product content back to the underlying evidence across edit, review, issue, and revision.
+
+**Human-authored versus AI-assisted provenance:** all seven closed content classes (`human_authored`/`ai_proposed`/`imported`/`deterministic_calculation`/`direct_evidence_reference`/`edited_ai_proposal`/`template_content`) were exercised; accepting an AI-proposed section was confirmed to record `accepted_by`/`accepted_at` without rewriting `content_class` — acceptance and authorship remain separately visible facts, live-verified in the running UI.
+
+**Structured spreadsheet work-product behavior:** a "risk_register" WorkProduct (the Design-Manager scenario) was created live with a risk section (description/probability/impact/mitigation/owner) citing spreadsheet evidence, reviewed, approved, issued, and exported — structurally ready to feed a later Monte Carlo engine without rework, though that engine itself remains deliberately not built this stage.
+
+**Export/reopen verification:** real DOCX and XLSX downloads were generated and inspected for both the report and risk-register work products; formula-injection sanitization was confirmed live and by falsification test; each export's own checksum (of the actual bytes produced) was confirmed distinct from the permanent `issued_checksum`.
+
+**Project isolation and authority enforcement:** a live, authenticated cross-project evidence-citation attempt (verified with a real CSRF token, not merely an unauthenticated 400) was confirmed refused and caught by the route's own `except CaseWorkspaceError` handler, matching the paired falsification test proving the same denial at the store layer.
+
+**Repository state:** `HEAD` and `origin/main` both confirmed at `3228773` immediately before this seal. Working tree clean except the pre-existing, untouched `tests/fixtures/nreocrc/_lab_instance_scratch_002/`.
+
+**Preserved, explicit, non-blocking residuals and deferrals — none resolved or narrowed at this seal:**
+- Finding and DerivedObservation remain distinct; preserve both, no merge.
+- RFI (`RFIDraft`) remains on its existing, backward-compatible path and has not been migrated into the generalized `WorkProduct` architecture.
+- Full Microsoft Word/Excel/CAD/Bluebeam parity remains deferred.
+- Live collaborative co-authoring, electronic/legally-binding digital signatures, a generalized workflow designer, a full Monte Carlo engine, a schedule engine, Navisworks integration, drone mission operations, external AI/internet connectors, trusted-agency federation, the Learning Vessel/education product, and a broad cockpit redesign all remain deferred.
+
+**Carried forward, cross-cutting doctrine this stage's implementation is consistent with, not restated verbatim here:** the Probing Vessel doctrine (the exported artifact as cargo manifest, not the ocean itself); the Trustworthy Answer Contract (claim classifications and provenance survive promotion into a work product, never silently becoming ordinary prose); the Governed Evidence Sachet (citation, context, and disclosure discipline preserved into exports); Proof Before Federation; and human authority over every consequential promotion from draft to reviewed, approved, issued, or revised — no work product this stage produces, deterministic-cited or AI-authored, can become an issued, authoritative artifact without an explicit human review/approve/issue chain.
+
+**MM9 is not started by this seal.** This entry records acceptance only.
+
 ## 2026-08-07 — CLAUDE-MM8 (Governed Creation, Editing, Review, and Accountable Work Products)
 
 **Eighth real MM1 consumer**, authorized following the accepted MM7 seal (`0147cac`). Repository-grounded investigation found RFI (`RFIDraft`, `services/rfi_export.py`) as the one existing precedent for bounded creation/editing/export of a real professional artifact — implemented entirely via classic form-POST/redirect in `routes/workspace.py`, never `routes/api.py`'s fetch()-based JSON convention MM6/MM7 both used. No prior generalized "work product" abstraction existed; every existing artifact type (RFI, requirement, finding) was purpose-built and non-editable-in-place beyond RFI's own narrow fields.
