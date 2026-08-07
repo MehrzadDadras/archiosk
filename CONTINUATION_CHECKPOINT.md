@@ -1,5 +1,20 @@
 # Continuation checkpoint
 
+## 2026-08-07 — CLAUDE-POSTCAMEL-P01 (Product-Owner Acceptance Seal)
+
+**Product owner accepts CLAUDE-POSTCAMEL-P01 at commit `a67d046` as the completed POSTCAMEL pilot-readiness programme.**
+
+**Accepted evidence:** the repository-grounded audit and live-browser Zero-Founder walkthroughs (procurement, Design Manager, and non-RFP project-start scenarios); correction of the four bounded usability/trust defects identified during the audit (the "for this prototype" founder-language leak, the MM9 registration-panel discoverability fix, and the Work Product "Add a section"/"Edit this section" silent field-scoping data-loss fix); the full-suite result of **2,889 passed, 0 failed, 65 subtests**; the canonical pilot-readiness and Elephant-Test documentation (`governance/current/pilot-readiness-postcamel-p01.md`); and the recommendation **GO — ready for independent expert pilot**.
+
+**Accepted as non-blocking fast-follow items, not conditions of this acceptance:**
+1. MM7 formal Claim/Investigate coverage is stronger for drawing/image evidence than for PDF/spreadsheet evidence (PDF/spreadsheet evidence is served by a real but simpler grounded-Q&A path instead).
+2. Spreadsheet cell editing has no direct UI trigger; governed Work Product workflows currently cover the principal pilot need.
+3. Requirements do not yet have a dedicated sidebar branch.
+
+**Deployment condition for the first pilot:** do not co-host real independent-pilot client data with unrelated projects/users on the present server configuration, because admin accounts currently have server-wide project visibility (the pre-existing, deliberate `CLAUDE-P32` single-deployment boundary — not something this programme changed). Use an isolated pilot deployment or equivalent isolation.
+
+**No work on POSTCAMEL-P02, Surface Trust, Voice Architecture, or another future programme is authorized by this acceptance seal. CLAUDE-POSTCAMEL-P01 is closed.**
+
 ## 2026-08-07 — CLAUDE-POSTCAMEL-P01 (Independent Expert Pilot Readiness and Zero-Founder Hardening)
 
 **First post-Camel programme**, authorized following the accepted Camel MM1–MM9 close-out (`d7df9a3`). Explicitly not a new broad capability programme — a Zero-Founder audit (repository-grounded, then three live-browser walkthroughs: procurement, Design Manager, non-RFP start) to determine pilot readiness, followed by a bounded hardening pass fixing only what the audit found to be genuinely real.
