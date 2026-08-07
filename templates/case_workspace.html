@@ -1283,18 +1283,28 @@
            mount fills it with a <canvas> - no fallback content is
            needed here since that script runs on every page that
            reaches this branch. #}
-        <div class="document-viewer-canvas-container" id="document-viewer-pdf-canvas" data-ui-ref="display.document.pdf-canvas" data-pdf-url="{{ url_for('workspace.source_file', project_id=project_id, source_id=selected_source.id) }}" data-pdf-filename="{{ selected_source.name }}" data-source-id="{{ selected_source.id }}"></div>
-        {# CLAUDE-MM9: MM2's page/paragraph evidence is real and governed
-           but had no UI trigger anywhere in the app - static/js/document_
-           structure_registration.js mounts here, mirroring MM4's own
-           lazy "Register this drawing" button. #}
+        {# CLAUDE-MM9 (repositioned CLAUDE-POSTCAMEL-P01): MM2's page/
+           paragraph evidence is real and governed but had no UI trigger
+           anywhere in the app - static/js/document_structure_registration.js
+           mounts here, mirroring MM4's own lazy "Register this drawing"
+           button. Originally placed AFTER the rendered document, which on
+           anything longer than one page put it entirely below the fold -
+           a first-time user had to scroll past the whole PDF to ever
+           discover it existed. Moved directly under the document title,
+           matching mature document-tool conventions (Acrobat/Bluebeam
+           show a "needs OCR"/status banner right under the toolbar, never
+           after the content) - same element, same behavior, just visible
+           without scrolling. #}
         <div class="document-structure-panel pane-note" data-document-structure-registration data-structure-kind="pdf" data-source-id="{{ selected_source.id }}" data-project-id="{{ project_id }}"></div>
+        <div class="document-viewer-canvas-container" id="document-viewer-pdf-canvas" data-ui-ref="display.document.pdf-canvas" data-pdf-url="{{ url_for('workspace.source_file', project_id=project_id, source_id=selected_source.id) }}" data-pdf-filename="{{ selected_source.name }}" data-source-id="{{ selected_source.id }}"></div>
         {% elif selected_source.file_path and selected_source.file_path.lower().endswith('.xlsx') %}
+        {# CLAUDE-MM9 (repositioned CLAUDE-POSTCAMEL-P01): same gap, same
+           fix, for MM3's worksheet/row evidence - see the PDF branch
+           above for why this moved above the rendered document. #}
+        <div class="document-structure-panel pane-note" data-document-structure-registration data-structure-kind="spreadsheet" data-source-id="{{ selected_source.id }}" data-project-id="{{ project_id }}"></div>
         <iframe class="document-viewer-frame"
                 src="{{ url_for('workspace.source_file', project_id=project_id, source_id=selected_source.id) }}"
                 title="{{ selected_source.name }}"></iframe>
-        {# CLAUDE-MM9: same gap, same fix, for MM3's worksheet/row evidence. #}
-        <div class="document-structure-panel pane-note" data-document-structure-registration data-structure-kind="spreadsheet" data-source-id="{{ selected_source.id }}" data-project-id="{{ project_id }}"></div>
         {% else %}
         <iframe class="document-viewer-frame"
                 src="{{ url_for('workspace.source_file', project_id=project_id, source_id=selected_source.id) }}"
@@ -1372,10 +1382,30 @@
             <details>
                 <summary class="pane-note">Edit this section</summary>
                 <form method="post" action="{{ url_for('workspace.edit_work_product_section', project_id=project_id, work_product_id=selected_work_product.id, section_id=section.id) }}">
-                    {% for field in ('description', 'probability', 'impact', 'mitigation', 'owner', 'name', 'role', 'company', 'contact') %}
+                    {# CLAUDE-POSTCAMEL-P01: only render the fields THIS
+                       section's own type actually stores (matching
+                       routes/workspace.py's _WORK_PRODUCT_SECTION_FIELDS
+                       exactly) - editing a risk section previously showed
+                       every field from every section type at once (team-
+                       member name/role/company/contact alongside risk
+                       description/probability/impact/mitigation/owner
+                       alongside a narrative text box), so a reviewer could
+                       fill in the wrong group and have it silently
+                       discarded on save with no warning. A pure Jinja
+                       conditional - section_type is already fixed and
+                       known server-side for an existing section, so no JS
+                       is needed here at all. #}
+                    {% if section.section_type == 'risk' %}
+                    {% for field in ('description', 'probability', 'impact', 'mitigation', 'owner') %}
                     <input type="text" name="{{ field }}" placeholder="{{ field.replace('_', ' ')|title }}" value="{{ section.content.get(field, '') }}" style="width:100%;margin-bottom:0.3rem;">
                     {% endfor %}
+                    {% elif section.section_type == 'team_member' %}
+                    {% for field in ('name', 'role', 'company', 'contact') %}
+                    <input type="text" name="{{ field }}" placeholder="{{ field.replace('_', ' ')|title }}" value="{{ section.content.get(field, '') }}" style="width:100%;margin-bottom:0.3rem;">
+                    {% endfor %}
+                    {% else %}
                     <textarea name="text" placeholder="Text" style="width:100%;font-family:var(--font-body);background:var(--surface-primary);border:1px solid var(--border);color:var(--text-primary);border-radius:3px;padding:0.5rem;">{{ section.content.get('text', '') }}</textarea>
+                    {% endif %}
                     <input type="text" name="reason" placeholder="Reason for this edit (optional)" style="width:100%;margin-top:0.3rem;">
                     <button type="submit" class="review-btn needs_evidence">Save edit</button>
                 </form>
@@ -1396,8 +1426,21 @@
 
         {% if selected_work_product.state != 'issued' %}
         <h3>Add a section</h3>
-        <form method="post" action="{{ url_for('workspace.add_work_product_section', project_id=project_id, work_product_id=selected_work_product.id) }}">
-            <select name="section_type">
+        <form method="post" action="{{ url_for('workspace.add_work_product_section', project_id=project_id, work_product_id=selected_work_product.id) }}" data-work-product-section-form>
+            {# CLAUDE-POSTCAMEL-P01: every field group for every section
+               type was previously shown at once with no indication that
+               only the group matching the selected "section_type" is
+               actually stored (routes/workspace.py's own
+               _WORK_PRODUCT_SECTION_FIELDS) - filling in the wrong group
+               (e.g. risk fields while "Narrative" is still selected)
+               silently discarded that input on save. Fields stay
+               unconditionally PRESENT here (this form must keep working
+               with JavaScript disabled, this stage's own established
+               precedent - see this route's own comment above) - the
+               data-section-type-group wrapper below is a pure progressive-
+               enhancement hook static/js/case_workspace.js uses to hide
+               non-matching groups for the common case where JS is on. #}
+            <select name="section_type" data-section-type-select>
                 <option value="narrative">Narrative</option>
                 <option value="risk">Risk</option>
                 <option value="team_member">Team member</option>
@@ -1406,10 +1449,19 @@
                 {% for c in known_content_classes %}<option value="{{ c }}">{{ c.replace('_', ' ') }}</option>{% endfor %}
             </select>
             <br>
-            {% for field in ('description', 'probability', 'impact', 'mitigation', 'owner', 'name', 'role', 'company', 'contact') %}
+            <div data-section-type-group="risk">
+            {% for field in ('description', 'probability', 'impact', 'mitigation', 'owner') %}
             <input type="text" name="{{ field }}" placeholder="{{ field.replace('_', ' ')|title }}" style="width:100%;margin-bottom:0.3rem;">
             {% endfor %}
+            </div>
+            <div data-section-type-group="team_member">
+            {% for field in ('name', 'role', 'company', 'contact') %}
+            <input type="text" name="{{ field }}" placeholder="{{ field.replace('_', ' ')|title }}" style="width:100%;margin-bottom:0.3rem;">
+            {% endfor %}
+            </div>
+            <div data-section-type-group="narrative">
             <textarea name="text" placeholder="Narrative text" style="width:100%;font-family:var(--font-body);background:var(--surface-primary);border:1px solid var(--border);color:var(--text-primary);border-radius:3px;padding:0.5rem;"></textarea>
+            </div>
             <p class="pane-note">Cite evidence (optional):</p>
             <input type="text" name="evidence_type" placeholder="Evidence type (e.g. evidence_item)" style="width:48%;">
             <input type="text" name="evidence_id" placeholder="Evidence id" style="width:48%;">

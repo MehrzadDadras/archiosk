@@ -2662,7 +2662,7 @@ def add_drawing_source(project_id, case_id):
     ext = Path(file_storage.filename).suffix.lower()
     if ext not in ALLOWED_DRAWING_EXTENSIONS:
         flash(
-            f"Unsupported drawing format '{ext}'. Use PNG or JPG for this prototype.",
+            f"Unsupported drawing format '{ext}'. Use PNG or JPG for a drawing Source.",
             "error",
         )
         return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))

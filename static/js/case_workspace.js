@@ -1827,4 +1827,25 @@ document.addEventListener('DOMContentLoaded', () => {
         navigateToConversationSource();
         window.addEventListener('hashchange', navigateToConversationSource);
     })();
+
+    // -------- Work Product "Add a section" field grouping (CLAUDE-POSTCAMEL-P01) --------
+    // Progressive enhancement only: every field group stays present and
+    // POST-able with JavaScript disabled (templates/case_workspace.html's
+    // own comment on this form explains why) - this purely hides the
+    // groups that don't match the currently-selected section_type, so a
+    // JS-enabled reviewer isn't shown risk/team-member/narrative fields
+    // all at once and can't fill in a group that would otherwise be
+    // silently discarded on save.
+    document.querySelectorAll('[data-work-product-section-form]').forEach((form) => {
+        const select = form.querySelector('[data-section-type-select]');
+        const groups = form.querySelectorAll('[data-section-type-group]');
+        if (!select || !groups.length) return;
+        function applyVisibility() {
+            groups.forEach((group) => {
+                group.style.display = (group.getAttribute('data-section-type-group') === select.value) ? '' : 'none';
+            });
+        }
+        select.addEventListener('change', applyVisibility);
+        applyVisibility();
+    });
 });
