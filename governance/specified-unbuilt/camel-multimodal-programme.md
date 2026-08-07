@@ -39,14 +39,16 @@ accepted MM2 seal; `CLAUDE-MM4`, 2026-08-06, authorized following the
 accepted MM3 seal; `CLAUDE-MM5`, 2026-08-06, authorized following the
 accepted MM4 seal; `CLAUDE-MM6`, 2026-08-06, authorized following the
 accepted MM5 seal; `CLAUDE-MM7`, 2026-08-06, authorized following the
-accepted MM6 seal; see `STATUS.md`'s own authorization table and
+accepted MM6 seal; `CLAUDE-MM7`, 2026-08-06, authorized following the
+accepted MM6 seal; `CLAUDE-MM8`, 2026-08-07, authorized following the
+accepted MM7 seal; see `STATUS.md`'s own authorization table and
 `current/kernel-object-model.md` for the real, tested, ground-truth
-detail — this document's own MM1/MM2/MM3/MM4/MM5/MM6/MM7 sections below
-are retained as the original stage descriptions, not updated to
+detail — this document's own MM1/MM2/MM3/MM4/MM5/MM6/MM7/MM8 sections
+below are retained as the original stage descriptions, not updated to
 duplicate that record).
-MM8–MM9 remain exactly as originally recorded: this programme's "specified
-but unbuilt" pointer in `STATUS.md` continues to cover them as a single
-pointer, not stage-by-stage rows, until each is individually taken up.
+MM9 remains exactly as originally recorded: this programme's "specified
+but unbuilt" pointer in `STATUS.md` continues to cover it until it is
+taken up.
 
 ---
 
