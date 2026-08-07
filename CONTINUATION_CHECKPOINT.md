@@ -1,5 +1,25 @@
 # Continuation checkpoint
 
+## 2026-08-07 — CLAUDE-MM9 (Product-Owner Acceptance Seal) — Camel MM1–MM9 Programme Close-Out
+
+**Product owner accepts MM9 and the recommendation: ACCEPT — MM9 successfully completed the whole-system integration and validation stage, identified and closed a real user-facing MM2/MM3 evidence-registration gap, verified PDF and XLSX evidence registration live in the browser, completed the full suite with 2,888 passed and 0 failed, preserved repository integrity, and introduced no material scope creep.**
+
+**Commits sealed:** `37b612d` (implementation: `static/js/document_structure_registration.js`, `templates/case_workspace.html`'s new mount point and `.xlsx`-iframe branch) → `bc094d4` (documentation: `kernel-object-model.md`'s real ground-truth entry, `STATUS.md`'s MM9-scoped `IMPLEMENTED, bounded` row and updated authorization-status paragraph, `camel-multimodal-programme.md`'s MM9 section and authorization paragraph, `MANIFEST.md`'s new-file row) → `04ae0db` (continuation checkpoint).
+
+**Repository state:** `HEAD` and `origin/main` both confirmed at `04ae0db` immediately before this seal. Working tree clean except the pre-existing, untouched `tests/fixtures/nreocrc/_lab_instance_scratch_002/`.
+
+**Test evidence:** one controlled full-suite run against the changed template/JS: **2,888 passed, 0 failed, 65 subtests** — identical to MM8's last confirmed count, confirming zero regression from the MM9 UI-wiring change. Deliberately no new Python test file this stage, matching MM4/MM5's own established precedent that a JS-only widget mounted onto already-tested backend routes is proven by live-browser verification, not a second layer of route tests.
+
+**Live-browser verification:** a real throwaway account and project on a freshly `restart-app`'d dev server, starting from a clean sign-in (a stale prior-session cookie was found and explicitly logged out first). Real PDF evidence registration verified live: a hand-built minimal PDF added as a Source, "Register this document" correctly produced "Registered for citation: 1 page, 1 citable paragraph," confirmed to persist correctly across a fresh page reload. Real XLSX evidence registration verified live: a real openpyxl-written workbook added as a Source, "Register this workbook" correctly produced "Registered for citation: 1 worksheet, 3 citable rows." Both registrations reused MM2's/MM3's own existing, unmodified backend methods with no new failure surface.
+
+**Cleanup confirmed:** the throwaway account and project were fully, permanently removed (project permanently deleted via the app's own delete flow, not merely soft-removed; account row deleted, not merely suspended); the verification dev-server process chain was stopped; all scratchpad verification scripts and fixture files were removed. No disposable MM9 artifact was left behind.
+
+**Preserved, explicit, non-blocking residual — not resolved or narrowed at this seal:** the canonical Design-Manager/quantitative-risk/Monte-Carlo case is **not yet proven** because a governed Monte Carlo engine does not yet exist. P50/P80/P90 and the complete Progressive Design-Build risk workflow must not be represented as delivered capability — the risk-register data model (MM3/MM8) is structurally ready to feed such an engine without rework, but the engine itself remains deliberately unbuilt.
+
+**Carried forward, cross-cutting doctrine and deferrals this stage's implementation is consistent with, not restated verbatim here, and not resolved or narrowed by this seal:** the Probing Vessel doctrine; the Trustworthy Answer Contract; the Governed Evidence Sachet; Proof Before Federation; Finding and DerivedObservation remain distinct unless later evidence justifies convergence (unchanged through MM1–MM9, no merge made); future Navisworks/model-coordination integration; a future drone/micro-drone field-reality stream; a future External Intelligence Airlock/external information-retrieval connector; a future Learning Vessel/public-learning branch; remaining cockpit and product-polish work. None of these are narrowed, expanded, or resolved by this seal.
+
+**MM9 is the final stage of the Camel MM1–MM9 programme. No post-MM9 programme is started by this seal.**
+
 ## 2026-08-07 — CLAUDE-MM9 (Whole-System Integration and Consolidated Validation)
 
 **Ninth real MM1 consumer**, authorized following the accepted MM8 seal (`b7768a3`). This session recovered and continued a CLAUDE-MM9 work session interrupted mid-flight by a VS Code reload (the interrupting IDE event terminated the prior Claude/PowerShell terminal, not any part of the repository). Recovery was strictly non-destructive: `git status`/`diff`/`log` confirmed `HEAD == origin/main == b7768a3` with no lost commits; the only surviving uncommitted work was a modified `templates/case_workspace.html`, a new, complete `static/js/document_structure_registration.js`, and an already-bumped `STATIC_VERSION=61` in `.env` — internally consistent and ready to continue from, not restarted from scratch. The pre-existing, untouched `tests/fixtures/nreocrc/_lab_instance_scratch_002/` was left exactly as found throughout.
