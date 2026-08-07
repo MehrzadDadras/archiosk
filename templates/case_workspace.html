@@ -1284,6 +1284,17 @@
            needed here since that script runs on every page that
            reaches this branch. #}
         <div class="document-viewer-canvas-container" id="document-viewer-pdf-canvas" data-ui-ref="display.document.pdf-canvas" data-pdf-url="{{ url_for('workspace.source_file', project_id=project_id, source_id=selected_source.id) }}" data-pdf-filename="{{ selected_source.name }}" data-source-id="{{ selected_source.id }}"></div>
+        {# CLAUDE-MM9: MM2's page/paragraph evidence is real and governed
+           but had no UI trigger anywhere in the app - static/js/document_
+           structure_registration.js mounts here, mirroring MM4's own
+           lazy "Register this drawing" button. #}
+        <div class="document-structure-panel pane-note" data-document-structure-registration data-structure-kind="pdf" data-source-id="{{ selected_source.id }}" data-project-id="{{ project_id }}"></div>
+        {% elif selected_source.file_path and selected_source.file_path.lower().endswith('.xlsx') %}
+        <iframe class="document-viewer-frame"
+                src="{{ url_for('workspace.source_file', project_id=project_id, source_id=selected_source.id) }}"
+                title="{{ selected_source.name }}"></iframe>
+        {# CLAUDE-MM9: same gap, same fix, for MM3's worksheet/row evidence. #}
+        <div class="document-structure-panel pane-note" data-document-structure-registration data-structure-kind="spreadsheet" data-source-id="{{ selected_source.id }}" data-project-id="{{ project_id }}"></div>
         {% else %}
         <iframe class="document-viewer-frame"
                 src="{{ url_for('workspace.source_file', project_id=project_id, source_id=selected_source.id) }}"
@@ -2782,6 +2793,7 @@
 {% endif %}
 <script src="{{ url_for('static', filename='js/pdf_viewer.js') }}?v={{ static_version }}"></script>
 <script src="{{ url_for('static', filename='js/drawing_image_viewer.js') }}?v={{ static_version }}"></script>
+<script src="{{ url_for('static', filename='js/document_structure_registration.js') }}?v={{ static_version }}"></script>
 <script src="{{ url_for('static', filename='js/case_workspace.js') }}?v={{ static_version }}"></script>
 <script src="{{ url_for('static', filename='js/files_folder_menus.js') }}?v={{ static_version }}"></script>
 {% endblock %}
