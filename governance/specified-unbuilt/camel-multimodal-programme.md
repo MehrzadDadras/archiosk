@@ -31,7 +31,7 @@ invariants.md`, not as pre-authorized.
 
 **Authorization status:** every stage below is **NOT AUTHORIZED** for
 implementation — this document records intent and sequencing, it is not
-a build order — **except MM1, MM2, MM3, MM4, MM5, MM6, and MM7, now IMPLEMENTED**
+a build order — **except MM1 through MM9, now IMPLEMENTED**
 (`CLAUDE-MM1`, 2026-08-05, authorized following the accepted cockpit gate
 `CLAUDE-CGP-02`; `CLAUDE-MM2`, 2026-08-05, authorized following the
 accepted MM1 seal; `CLAUDE-MM3`, 2026-08-05, authorized following the
@@ -41,14 +41,22 @@ accepted MM4 seal; `CLAUDE-MM6`, 2026-08-06, authorized following the
 accepted MM5 seal; `CLAUDE-MM7`, 2026-08-06, authorized following the
 accepted MM6 seal; `CLAUDE-MM7`, 2026-08-06, authorized following the
 accepted MM6 seal; `CLAUDE-MM8`, 2026-08-07, authorized following the
-accepted MM7 seal; see `STATUS.md`'s own authorization table and
+accepted MM7 seal; `CLAUDE-MM9`, 2026-08-07, authorized following the
+accepted MM8 seal; see `STATUS.md`'s own authorization table and
 `current/kernel-object-model.md` for the real, tested, ground-truth
-detail — this document's own MM1/MM2/MM3/MM4/MM5/MM6/MM7/MM8 sections
+detail — this document's own MM1/MM2/MM3/MM4/MM5/MM6/MM7/MM8/MM9 sections
 below are retained as the original stage descriptions, not updated to
 duplicate that record).
-MM9 remains exactly as originally recorded: this programme's "specified
-but unbuilt" pointer in `STATUS.md` continues to cover it until it is
-taken up.
+MM9 itself was, per its own stage description below, never intended as a
+full second build pass over MM1–MM8 — it was authorized and implemented
+as a bounded whole-system-integration and validation stage: its own
+repository-grounded investigation found one concrete, real gap (MM2/MM3
+evidence registration had no UI trigger anywhere in the app) and closed
+it, then live-browser-verified the fix end to end. The Design-Manager/
+Monte-Carlo canonical acceptance case below remains genuinely unproven
+end-to-end — it cannot be, honestly, until a Monte Carlo engine exists,
+which this stage deliberately did not build. See `STATUS.md`'s own MM9
+row and `current/kernel-object-model.md` for the real, tested detail.
 
 ---
 
@@ -242,6 +250,16 @@ resequenced earlier if the product owner prioritizes ordinary in-app
 authoring ahead of deeper multimodal intelligence.
 
 ## MM9 — Consolidated product workflows and validation
+
+**IMPLEMENTED, bounded** — see `current/kernel-object-model.md`'s own
+MM9 entry for what actually exists in code today: a real, click-driven
+UI trigger closing the MM2/MM3 evidence-registration gap, live-browser-
+verified end to end for both a PDF and an `.xlsx` Source, deliberately
+NOT the full canonical Design-Manager/Monte-Carlo acceptance case below
+(structurally blocked on the still-unbuilt Monte Carlo engine) or a
+broad automated real-browser harness across MM1–MM8. The description
+below is preserved as the original stage intent this implementation was
+scoped against, not rewritten to match it.
 
 Proves end-to-end multimodal project workflows through real-browser use
 (this repository's own established convention — see CLAUDE.md's "always
