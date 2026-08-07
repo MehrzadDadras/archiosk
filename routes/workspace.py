@@ -58,6 +58,7 @@ from services.case_workspace import (
     FOLDER_ROOT_DATA_ROOM,
     FOLDER_ROOT_DESIGN_BUILDER,
     GO_NO_GO_DECISIONS,
+    KNOWN_CONTENT_CLASSES,
     KNOWN_CONVERSATION_ANCHOR_SCOPES,
     KNOWN_PARTICIPANT_ROLES,
     KNOWN_PERSPECTIVE_POLARITIES,
@@ -96,6 +97,7 @@ from services.governance import GovernanceLog
 from services.ingestion import UploadError, document_source_payload, get_registry, reject_if_display_name_taken
 from services.project_clock import open_project
 from services.rfi_export import RFIExportError, build_rfi_docx, build_rfi_draft_docx
+from services.work_product_export import WorkProductExportError, export_work_product
 from models import User
 
 workspace_bp = Blueprint("workspace", __name__)
@@ -293,6 +295,16 @@ def _rfi_draft_case_id(workspace, draft_id):
     return draft.get("case_id") if draft else None
 
 
+def _work_product_case_id(workspace, work_product_id):
+    """The WorkProduct's OWN recorded case_id (may legitimately be None -
+    a Project-level work product), looked up server-side for the same
+    reason as _finding_case_id/_rfi_draft_case_id: a route keyed by
+    work_product_id must never trust a caller-supplied case_id for its
+    own authorization decision."""
+    work_product = next((w for w in workspace.work_products if w["id"] == work_product_id), None)
+    return work_product.get("case_id") if work_product else None
+
+
 def _attention_case_id(workspace, attention_id):
     """An Attention carries no case_id of its own (see Attention's own
     docstring) - its real Case is its thread's Case, one hop through
@@ -479,6 +491,24 @@ def show_workspace(project_id):
     selected_source = next(
         (s for s in workspace.sources if s["id"] == selected_source_id), None,
     ) if selected_source_id else None
+
+    # CLAUDE-MM8: ?work_product=<id> opens a governed work product
+    # directly inside the Workspace pane, same "?<id> selection, resolved
+    # only against THIS already-authorized project's own workspace list,
+    # None (not 404) for an unknown/foreign id" convention selected_source
+    # already established above.
+    selected_work_product_id = request.args.get("work_product")
+    selected_work_product = next(
+        (w for w in workspace.work_products if w["id"] == selected_work_product_id), None,
+    ) if selected_work_product_id else None
+    selected_work_product_status = (
+        store.resolve_work_product_status(workspace, selected_work_product_id)
+        if selected_work_product else None
+    )
+    selected_work_product_stale = (
+        store.stale_evidence_for_work_product(workspace, selected_work_product_id)
+        if selected_work_product else None
+    )
 
     # CLAUDE-P40-E3A, Section 5: "Overview" is now the one remaining leaf
     # that projects real content into Display via this ?view= query-string
@@ -1145,6 +1175,15 @@ def show_workspace(project_id):
         key=lambda row: row["draft"]["created_at"], reverse=True,
     )
 
+    # CLAUDE-MM8: Lists' own Work Products branch - same Case-privacy
+    # filter as RFIs above, plus Project-level work products (case_id is
+    # None), which carry no Case to hide behind and are visible to anyone
+    # who can already see this Project.
+    work_products_view = sorted(
+        (w for w in workspace.work_products if not w.get("case_id") or w["case_id"] in visible_case_ids),
+        key=lambda w: w["modified_at"], reverse=True,
+    )
+
     # CLAUDE-P40-VW7: Tasks/Tags read-side views for the Lists Tasks/Tags
     # branches - navigation URL and source-availability computed once
     # here (never in the template) so "Source unavailable" (Section 4's
@@ -1357,6 +1396,11 @@ def show_workspace(project_id):
         briefing_generation_in_progress=briefing_generation_in_progress,
         briefing_has_evidence=briefing_has_evidence,
         rfi_drafts_view=rfi_drafts_view,
+        work_products_view=work_products_view,
+        selected_work_product=selected_work_product,
+        selected_work_product_status=selected_work_product_status,
+        selected_work_product_stale=selected_work_product_stale,
+        known_content_classes=KNOWN_CONTENT_CLASSES,
         tasks_view=tasks_view,
         tasks_open_view=tasks_open_view,
         tasks_completed_view=tasks_completed_view,
@@ -3964,6 +4008,289 @@ def export_rfi_draft(project_id, draft_id):
         mimetype="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         as_attachment=True,
         download_name=f"RFI-{draft['id'][:8]}-{status_label}.docx",
+    )
+
+
+# -- CLAUDE-MM8: Governed Creation, Editing, Review, and Accountable -------
+# Work Products. Classic form-POST + redirect throughout, matching RFI's
+# own established precedent exactly (not MM6/MM7's fetch()-based JSON
+# convention) - Part 21's own instruction to treat RFI as one proof of
+# this stage's own architecture, not a separate pattern. Works with
+# JavaScript disabled, matching this codebase's own accessibility
+# precedent (e.g. "+ New Investigation" - a real <a href>/<form>, not a
+# JS-only affordance).
+
+_WORK_PRODUCT_SECTION_FIELDS = {
+    "risk": ("description", "probability", "impact", "mitigation", "owner"),
+    "team_member": ("name", "role", "company", "contact"),
+    "narrative": ("text",),
+}
+
+
+def _work_product_section_content_from_form(section_type: str) -> dict:
+    fields = _WORK_PRODUCT_SECTION_FIELDS.get(section_type, ("text",))
+    return {f: request.form.get(f, "").strip() for f in fields if (request.form.get(f) or "").strip()}
+
+
+def _work_product_evidence_links_from_form() -> list[dict]:
+    """A section's own evidence citations, submitted as parallel
+    `evidence_type`/`evidence_id` repeated form fields (one pair per
+    citation row) - the same bounded, no-JS-required shape the content
+    fields above use, rather than a single free-text field a user could
+    fill with anything."""
+    types = request.form.getlist("evidence_type")
+    ids = request.form.getlist("evidence_id")
+    return [
+        {"object_type": t.strip(), "object_id": i.strip()}
+        for t, i in zip(types, ids) if t.strip() and i.strip()
+    ]
+
+
+@workspace_bp.route("/projects/<project_id>/workspace/work-products", methods=["POST"])
+@login_required
+def create_work_product(project_id):
+    _, store, workspace = _load_workspace_or_404(project_id)
+    case_id = request.form.get("case_id") or None
+    _require_visible_case(store, workspace, case_id)
+
+    try:
+        work_product = store.create_work_product(
+            workspace, artifact_type=request.form.get("artifact_type") or "report",
+            title=request.form.get("title") or "", created_by=_reviewer(), case_id=case_id,
+            source_finding_id=request.form.get("source_finding_id") or None,
+            governance_log=_log(),
+        )
+    except CaseWorkspaceError as exc:
+        flash(str(exc), "error")
+        return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id, view="overview" if not case_id else None))
+
+    flash(f'Work product "{work_product["title"]}" created as a draft.', "success")
+    return redirect(url_for("workspace.show_workspace", project_id=project_id, work_product=work_product["id"]))
+
+
+@workspace_bp.route("/projects/<project_id>/workspace/work-products/<work_product_id>/sections", methods=["POST"])
+@login_required
+def add_work_product_section(project_id, work_product_id):
+    _, store, workspace = _load_workspace_or_404(project_id)
+    case_id = _work_product_case_id(workspace, work_product_id)
+    _require_visible_case(store, workspace, case_id)
+
+    section_type = request.form.get("section_type") or "narrative"
+    try:
+        store.add_work_product_section(
+            workspace, work_product_id, section_type=section_type,
+            content=_work_product_section_content_from_form(section_type),
+            content_class=request.form.get("content_class") or "human_authored", author=_reviewer(),
+            evidence_links=_work_product_evidence_links_from_form(), governance_log=_log(),
+        )
+    except CaseWorkspaceError as exc:
+        flash(str(exc), "error")
+
+    return redirect(url_for("workspace.show_workspace", project_id=project_id, work_product=work_product_id))
+
+
+@workspace_bp.route("/projects/<project_id>/workspace/work-products/<work_product_id>/sections/<section_id>", methods=["POST"])
+@login_required
+def edit_work_product_section(project_id, work_product_id, section_id):
+    _, store, workspace = _load_workspace_or_404(project_id)
+    case_id = _work_product_case_id(workspace, work_product_id)
+    _require_visible_case(store, workspace, case_id)
+
+    work_product = store.get_work_product(workspace, work_product_id)
+    section = next((s for s in work_product["sections"] if s["id"] == section_id), None) if work_product else None
+    if section is None:
+        abort(404)
+
+    try:
+        store.edit_work_product_section(
+            workspace, work_product_id, section_id,
+            content=_work_product_section_content_from_form(section["section_type"]),
+            actor=_reviewer(), reason=request.form.get("reason") or None, governance_log=_log(),
+        )
+    except CaseWorkspaceError as exc:
+        flash(str(exc), "error")
+
+    return redirect(url_for("workspace.show_workspace", project_id=project_id, work_product=work_product_id))
+
+
+@workspace_bp.route("/projects/<project_id>/workspace/work-products/<work_product_id>/sections/<section_id>/accept", methods=["POST"])
+@login_required
+def accept_work_product_section(project_id, work_product_id, section_id):
+    _, store, workspace = _load_workspace_or_404(project_id)
+    case_id = _work_product_case_id(workspace, work_product_id)
+    _require_visible_case(store, workspace, case_id)
+
+    try:
+        store.accept_work_product_section(workspace, work_product_id, section_id, actor=_reviewer(), governance_log=_log())
+    except CaseWorkspaceError as exc:
+        flash(str(exc), "error")
+
+    return redirect(url_for("workspace.show_workspace", project_id=project_id, work_product=work_product_id))
+
+
+@workspace_bp.route("/projects/<project_id>/workspace/work-products/<work_product_id>/sections/<section_id>/remove", methods=["POST"])
+@login_required
+def remove_work_product_section(project_id, work_product_id, section_id):
+    _, store, workspace = _load_workspace_or_404(project_id)
+    case_id = _work_product_case_id(workspace, work_product_id)
+    _require_visible_case(store, workspace, case_id)
+
+    try:
+        store.remove_work_product_section(
+            workspace, work_product_id, section_id, actor=_reviewer(),
+            reason=request.form.get("reason") or None, governance_log=_log(),
+        )
+    except CaseWorkspaceError as exc:
+        flash(str(exc), "error")
+
+    return redirect(url_for("workspace.show_workspace", project_id=project_id, work_product=work_product_id))
+
+
+@workspace_bp.route("/projects/<project_id>/workspace/work-products/<work_product_id>/sections/reorder", methods=["POST"])
+@login_required
+def reorder_work_product_sections(project_id, work_product_id):
+    _, store, workspace = _load_workspace_or_404(project_id)
+    case_id = _work_product_case_id(workspace, work_product_id)
+    _require_visible_case(store, workspace, case_id)
+
+    try:
+        store.reorder_work_product_sections(
+            workspace, work_product_id, request.form.getlist("section_id"), actor=_reviewer(), governance_log=_log(),
+        )
+    except CaseWorkspaceError as exc:
+        flash(str(exc), "error")
+
+    return redirect(url_for("workspace.show_workspace", project_id=project_id, work_product=work_product_id))
+
+
+@workspace_bp.route("/projects/<project_id>/workspace/work-products/<work_product_id>/review", methods=["POST"])
+@login_required
+def review_work_product(project_id, work_product_id):
+    _, store, workspace = _load_workspace_or_404(project_id)
+    case_id = _work_product_case_id(workspace, work_product_id)
+    _require_visible_case(store, workspace, case_id)
+
+    try:
+        store.record_work_product_review(
+            workspace, work_product_id, reviewer=_reviewer(), role=session.get("role") or "unspecified",
+            decision=request.form.get("decision") or "revisions_required",
+            comments=request.form.get("comments") or None, conditions=request.form.get("conditions") or None,
+            unresolved_contradiction=bool(request.form.get("unresolved_contradiction")), governance_log=_log(),
+        )
+    except CaseWorkspaceError as exc:
+        flash(str(exc), "error")
+
+    return redirect(url_for("workspace.show_workspace", project_id=project_id, work_product=work_product_id))
+
+
+@workspace_bp.route("/projects/<project_id>/workspace/work-products/<work_product_id>/approve-for-issue", methods=["POST"])
+@login_required
+def approve_work_product_for_issue(project_id, work_product_id):
+    _, store, workspace = _load_workspace_or_404(project_id)
+    case_id = _work_product_case_id(workspace, work_product_id)
+    _require_visible_case(store, workspace, case_id)
+
+    try:
+        store.approve_work_product_for_issue(workspace, work_product_id, actor=_reviewer(), governance_log=_log())
+    except CaseWorkspaceError as exc:
+        flash(str(exc), "error")
+
+    return redirect(url_for("workspace.show_workspace", project_id=project_id, work_product=work_product_id))
+
+
+@workspace_bp.route("/projects/<project_id>/workspace/work-products/<work_product_id>/issue", methods=["POST"])
+@login_required
+def issue_work_product(project_id, work_product_id):
+    """Section 7/18's own point of no return - Approval-Gated exactly
+    like RFI issue (services.rfi_export's own issue_rfi_draft), since
+    both are consequential, irreversible-in-effect actions ("once issued
+    it cannot be un-issued")."""
+    _, store, workspace = _load_workspace_or_404(project_id)
+    case_id = _work_product_case_id(workspace, work_product_id)
+    _require_visible_case(store, workspace, case_id)
+
+    work_product = store.get_work_product(workspace, work_product_id)
+    if work_product is None:
+        abort(404)
+
+    gate = _require_approval(
+        "work_product_issue",
+        f'Issue "{work_product["title"]}" (v{work_product["version"]}). Once issued it cannot be un-issued - '
+        "further changes require creating a new revision.",
+        project_id, case_id,
+    )
+    if gate is not None:
+        return gate
+
+    try:
+        store.issue_work_product(workspace, work_product_id, actor=_reviewer(), governance_log=_log())
+        flash("Work product issued.", "success")
+    except CaseWorkspaceError as exc:
+        flash(str(exc), "error")
+
+    return redirect(url_for("workspace.show_workspace", project_id=project_id, work_product=work_product_id))
+
+
+@workspace_bp.route("/projects/<project_id>/workspace/work-products/<work_product_id>/revise", methods=["POST"])
+@login_required
+def revise_work_product(project_id, work_product_id):
+    _, store, workspace = _load_workspace_or_404(project_id)
+    case_id = _work_product_case_id(workspace, work_product_id)
+    _require_visible_case(store, workspace, case_id)
+
+    try:
+        result = store.revise_work_product(
+            workspace, work_product_id, actor=_reviewer(), reason=request.form.get("reason") or None,
+            governance_log=_log(),
+        )
+    except CaseWorkspaceError as exc:
+        flash(str(exc), "error")
+        return redirect(url_for("workspace.show_workspace", project_id=project_id, work_product=work_product_id))
+
+    flash("New revision created - the previously issued version remains unchanged and recoverable.", "success")
+    return redirect(url_for(
+        "workspace.show_workspace", project_id=project_id, work_product=result["new_work_product"]["id"],
+    ))
+
+
+@workspace_bp.route("/projects/<project_id>/workspace/work-products/<work_product_id>/export.<export_format>")
+@login_required
+def export_work_product_route(project_id, work_product_id, export_format):
+    """A read operation, matching export_rfi_draft's own precedent
+    exactly: Case-visibility-checked but NOT archived-state-checked (an
+    issued work product belonging to an archived Case remains readable/
+    exportable), gated by the same ACTION_EXPORT policy every other
+    export route in this file already uses."""
+    _, store, workspace = _load_workspace_or_404(project_id)
+    case_id = _work_product_case_id(workspace, work_product_id)
+    _require_visible_case(store, workspace, case_id)
+    export_gate = _require_export_allowed(workspace, project_id)
+    if export_gate is not None:
+        return export_gate
+
+    work_product = store.get_work_product(workspace, work_product_id)
+    if work_product is None:
+        abort(404)
+
+    try:
+        buffer, checksum = export_work_product(work_product, export_format)
+    except WorkProductExportError as exc:
+        flash(str(exc), "error")
+        return redirect(url_for("workspace.show_workspace", project_id=project_id, work_product=work_product_id))
+
+    store.record_work_product_export(
+        workspace, work_product_id, export_format=export_format, exported_by=_reviewer(),
+        checksum=checksum, governance_log=_log(),
+    )
+
+    mimetypes_by_format = {
+        "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    }
+    status_label = "issued" if work_product["state"] == "issued" else "draft"
+    return send_file(
+        buffer, mimetype=mimetypes_by_format[export_format], as_attachment=True,
+        download_name=f"{work_product['artifact_type']}-{work_product['id'][:8]}-v{work_product['version']}-{status_label}.{export_format}",
     )
 
 

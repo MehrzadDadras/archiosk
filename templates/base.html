@@ -558,6 +558,37 @@
                                             {% endfor %}
                                         </ul>
                                     </li>
+                                    {# CLAUDE-MM8: Work Products - unlike an RFI draft, a WorkProduct
+                                       DOES have a standalone content page of its own (?work_product=<id>,
+                                       same convention ?source=<id> already established for Documents) -
+                                       it is an editable artifact in its own right, not a marker pointing
+                                       back at an Investigation. #}
+                                    <li class="tree-node" data-tree-node>
+                                        <button type="button" class="tree-toggle launcher-link" data-tree-parent data-ui-ref="lists.project.work-products" aria-expanded="false">
+                                            <span class="tree-label">Work Products <span class="launcher-count">{{ work_products_view|length }}</span></span>
+                                        </button>
+                                        <ul class="tree-children">
+                                            <li class="tree-node" data-tree-node>
+                                                <form method="post" action="{{ url_for('workspace.create_work_product', project_id=project_id) }}" style="padding:0.3rem 0.6rem;">
+                                                    <input type="text" name="title" placeholder="New work product title" required style="width:100%;margin-bottom:0.2rem;font-size:0.78rem;">
+                                                    <select name="artifact_type" style="width:100%;margin-bottom:0.2rem;font-size:0.78rem;">
+                                                        <option value="report">Report</option>
+                                                        <option value="risk_register">Risk register</option>
+                                                        <option value="team_list">Team list</option>
+                                                    </select>
+                                                    {% if active_case %}<input type="hidden" name="case_id" value="{{ active_case.id }}">{% endif %}
+                                                    <button type="submit" class="tree-leaf-action" data-ui-ref="lists.project.work-products.new" style="width:100%;">+ New Work Product</button>
+                                                </form>
+                                            </li>
+                                            {% for w in work_products_view %}
+                                            <li class="tree-node" data-tree-node>
+                                                <a class="tree-leaf launcher-link{% if selected_work_product and selected_work_product.id == w.id %} active{% endif %}" data-ui-ref="lists.project.work-products.leaf"{% if selected_work_product and selected_work_product.id == w.id %} aria-current="page"{% endif %} href="{{ url_for('workspace.show_workspace', project_id=project_id, work_product=w.id) }}">{{ w.title }} <span class="pane-note">({{ w.state }})</span></a>
+                                            </li>
+                                            {% else %}
+                                            <li class="tree-node-empty"><span class="pane-note" data-ui-ref="lists.project.work-products.empty">No Work Products yet.</span></li>
+                                            {% endfor %}
+                                        </ul>
+                                    </li>
                                     {# Communications: omitted outright - no honest existing listing
                                        exists anywhere in this codebase to show (CLAUDE-P40-E3A,
                                        Section 4's own "only if an honest existing listing exists"

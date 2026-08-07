@@ -1309,6 +1309,142 @@
         <a class="btn btn-ghost workspace-link" href="{{ url_for('workspace.show_workspace', project_id=project_id, view='overview') }}">&larr; Back to Overview</a>
     </section>
 
+{% elif selected_work_product %}
+    {# ---------------- CLAUDE-MM8: a selected Work Product -------------
+       Classic server-rendered forms throughout (Section 21's own "use
+       existing... surfaces where practical" - RFI's own established
+       precedent, not MM6/MM7's fetch()-based JSON convention) - every
+       action here works with JavaScript disabled. #}
+    <section class="workspace-pane workspace-pane-work-product">
+        <h2>{{ selected_work_product.title }}</h2>
+        <p class="workspace-pane-label">
+            {{ selected_work_product.artifact_type }} &middot; v{{ selected_work_product.version }} &middot;
+            <span class="review-btn {{ selected_work_product_status.status }}">{{ selected_work_product_status.status }}</span>
+            {% if selected_work_product.sensitivity_classification %}&middot; {{ selected_work_product.sensitivity_classification }}{% endif %}
+        </p>
+
+        {% if selected_work_product_status.status == 'superseded' %}
+        <p class="pane-note">
+            A newer revision of this work product exists.
+            <a href="{{ url_for('workspace.show_workspace', project_id=project_id, work_product=selected_work_product_status.superseded_by_work_product_id, case=selected_work_product.case_id) }}">Open the current revision</a>.
+        </p>
+        {% endif %}
+
+        {% if selected_work_product_stale and selected_work_product_stale.has_stale_or_broken_evidence %}
+        <p class="pane-note" style="color:var(--attention-amber);">
+            Warning: {{ selected_work_product_stale.stale_links|length }} cited evidence item(s) are now stale or no
+            longer resolve - the issued content above is unchanged, but the underlying evidence may have moved on.
+        </p>
+        {% endif %}
+
+        {% if selected_work_product.source_finding_id %}
+        <p class="pane-note">Started from Finding {{ selected_work_product.source_finding_id[:8] }}&hellip;</p>
+        {% endif %}
+
+        <h3>Sections</h3>
+        {% for section in selected_work_product.sections|selectattr('removed', 'equalto', false)|sort(attribute='order_index') %}
+        <div class="rfi-draft-card">
+            <p class="workspace-pane-label">
+                {{ section.section_type }} &middot; <em>{{ section.content_class.replace('_', ' ') }}</em>
+                {% if section.accepted_by %}&middot; accepted by {{ section.accepted_by }}{% endif %}
+            </p>
+            {% for key, value in section.content.items() %}
+            <div class="finding-provenance"><span>{{ key.replace('_', ' ') }}:</span> {{ value }}</div>
+            {% endfor %}
+            {% if section.evidence_links %}
+            <div class="finding-provenance"><span>cites:</span>
+                {% for link in section.evidence_links %}{{ link.object_type }} {{ link.object_id[:8] }}&hellip;{% if not loop.last %}, {% endif %}{% endfor %}
+            </div>
+            {% endif %}
+
+            {% if selected_work_product.state != 'issued' %}
+            <details>
+                <summary class="pane-note">Edit this section</summary>
+                <form method="post" action="{{ url_for('workspace.edit_work_product_section', project_id=project_id, work_product_id=selected_work_product.id, section_id=section.id) }}">
+                    {% for field in ('description', 'probability', 'impact', 'mitigation', 'owner', 'name', 'role', 'company', 'contact') %}
+                    <input type="text" name="{{ field }}" placeholder="{{ field.replace('_', ' ')|title }}" value="{{ section.content.get(field, '') }}" style="width:100%;margin-bottom:0.3rem;">
+                    {% endfor %}
+                    <textarea name="text" placeholder="Text" style="width:100%;font-family:var(--font-body);background:var(--surface-primary);border:1px solid var(--border);color:var(--text-primary);border-radius:3px;padding:0.5rem;">{{ section.content.get('text', '') }}</textarea>
+                    <input type="text" name="reason" placeholder="Reason for this edit (optional)" style="width:100%;margin-top:0.3rem;">
+                    <button type="submit" class="review-btn needs_evidence">Save edit</button>
+                </form>
+            </details>
+            {% if section.content_class in ('ai_proposed', 'edited_ai_proposal') and not section.accepted_by %}
+            <form method="post" action="{{ url_for('workspace.accept_work_product_section', project_id=project_id, work_product_id=selected_work_product.id, section_id=section.id) }}">
+                <button type="submit" class="review-btn correct">Accept AI proposal</button>
+            </form>
+            {% endif %}
+            <form method="post" action="{{ url_for('workspace.remove_work_product_section', project_id=project_id, work_product_id=selected_work_product.id, section_id=section.id) }}">
+                <button type="submit" class="review-btn incorrect">Remove</button>
+            </form>
+            {% endif %}
+        </div>
+        {% else %}
+        <p class="pane-note">No sections yet.</p>
+        {% endfor %}
+
+        {% if selected_work_product.state != 'issued' %}
+        <h3>Add a section</h3>
+        <form method="post" action="{{ url_for('workspace.add_work_product_section', project_id=project_id, work_product_id=selected_work_product.id) }}">
+            <select name="section_type">
+                <option value="narrative">Narrative</option>
+                <option value="risk">Risk</option>
+                <option value="team_member">Team member</option>
+            </select>
+            <select name="content_class">
+                {% for c in known_content_classes %}<option value="{{ c }}">{{ c.replace('_', ' ') }}</option>{% endfor %}
+            </select>
+            <br>
+            {% for field in ('description', 'probability', 'impact', 'mitigation', 'owner', 'name', 'role', 'company', 'contact') %}
+            <input type="text" name="{{ field }}" placeholder="{{ field.replace('_', ' ')|title }}" style="width:100%;margin-bottom:0.3rem;">
+            {% endfor %}
+            <textarea name="text" placeholder="Narrative text" style="width:100%;font-family:var(--font-body);background:var(--surface-primary);border:1px solid var(--border);color:var(--text-primary);border-radius:3px;padding:0.5rem;"></textarea>
+            <p class="pane-note">Cite evidence (optional):</p>
+            <input type="text" name="evidence_type" placeholder="Evidence type (e.g. evidence_item)" style="width:48%;">
+            <input type="text" name="evidence_id" placeholder="Evidence id" style="width:48%;">
+            <button type="submit" class="review-btn needs_evidence">Add section</button>
+        </form>
+
+        <h3>Review</h3>
+        <form method="post" action="{{ url_for('workspace.review_work_product', project_id=project_id, work_product_id=selected_work_product.id) }}">
+            <select name="decision">
+                <option value="reviewed">Reviewed - ready to move toward issue</option>
+                <option value="revisions_required">Revisions required</option>
+            </select>
+            <textarea name="comments" placeholder="Review comments" style="width:100%;font-family:var(--font-body);background:var(--surface-primary);border:1px solid var(--border);color:var(--text-primary);border-radius:3px;padding:0.5rem;"></textarea>
+            <label class="pane-note"><input type="checkbox" name="unresolved_contradiction" value="1"> Unresolved contradiction remains</label>
+            <button type="submit" class="review-btn needs_evidence">Record review</button>
+        </form>
+
+        {% if selected_work_product.state == 'reviewed' %}
+        <form method="post" action="{{ url_for('workspace.approve_work_product_for_issue', project_id=project_id, work_product_id=selected_work_product.id) }}">
+            <button type="submit" class="apply-button">Approve for issue</button>
+        </form>
+        {% endif %}
+        {% if selected_work_product.state == 'approved_for_issue' %}
+        <form method="post" action="{{ url_for('workspace.issue_work_product', project_id=project_id, work_product_id=selected_work_product.id) }}">
+            <button type="submit" class="apply-button">Issue</button>
+        </form>
+        {% endif %}
+        {% else %}
+        <p class="consistency-clean">Issued {{ selected_work_product.issued_at }} by {{ selected_work_product.issued_by }}. Checksum: {{ selected_work_product.issued_checksum[:16] }}&hellip;</p>
+        <form method="post" action="{{ url_for('workspace.revise_work_product', project_id=project_id, work_product_id=selected_work_product.id) }}">
+            <input type="text" name="reason" placeholder="Reason for revision" style="width:70%;">
+            <button type="submit" class="review-btn needs_evidence">Revise</button>
+        </form>
+        {% endif %}
+
+        <p style="margin-top:0.6rem;">
+            <a class="btn btn-ghost" href="{{ url_for('workspace.export_work_product_route', project_id=project_id, work_product_id=selected_work_product.id, export_format='docx') }}">Download .docx</a>
+            <a class="btn btn-ghost" href="{{ url_for('workspace.export_work_product_route', project_id=project_id, work_product_id=selected_work_product.id, export_format='xlsx') }}">Download .xlsx</a>
+        </p>
+        {% if selected_work_product.exports %}
+        <p class="pane-note">Exported {{ selected_work_product.exports|length }} time(s); latest: {{ selected_work_product.exports[-1].format }} at {{ selected_work_product.exports[-1].exported_at }}.</p>
+        {% endif %}
+
+        <a class="btn btn-ghost workspace-link" href="{{ url_for('workspace.show_workspace', project_id=project_id, view='overview') }}">&larr; Back to Overview</a>
+    </section>
+
 {% elif directory_view == 'overview' %}
     {# CLAUDE-P40-E3A, Section 5: "opening a document does not add another
        composer" - the single conversation dock lives inside Overview's

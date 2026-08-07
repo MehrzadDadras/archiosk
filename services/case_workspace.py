@@ -31,6 +31,7 @@ Finding. Apply requires a Disposition of "Confirmed" already on record.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import threading
@@ -300,6 +301,13 @@ OBJECT_KIND_TASK = "task"
 # own predecessor/successor pair can be recorded the same way a
 # corrected Relationship already is (see supersede_claim).
 OBJECT_KIND_CLAIM = "claim"
+# CLAUDE-MM8: an editable, governed professional artifact (see class
+# WorkProduct below) - Supersession's fourth real consumer (after Source,
+# Relationship, and Claim), so a revision's own predecessor/successor pair
+# is recorded the same non-destructive way. Also citable the same way a
+# Claim's own evidence_links cite real objects - a report section can
+# reference another WorkProduct (e.g. "based_on" an earlier risk register).
+OBJECT_KIND_WORK_PRODUCT = "work_product"
 
 KNOWN_OBJECT_KINDS = (
     OBJECT_KIND_SOURCE,
@@ -334,6 +342,7 @@ KNOWN_OBJECT_KINDS = (
     OBJECT_KIND_DERIVED_OBSERVATION,
     OBJECT_KIND_TASK,
     OBJECT_KIND_CLAIM,
+    OBJECT_KIND_WORK_PRODUCT,
 )
 
 # -- Typed relationship vocabulary (Prompt 8 #1) -----------------------------
@@ -385,6 +394,14 @@ RELATIONSHIP_TYPE_ASSOCIATED_WITH = "associated_with"
 RELATIONSHIP_TYPE_OBSERVES = "observes"  # field-reality evidence (image/photo) observing a design-intent or coordination condition - Section 4's own tributary distinction, not the same claim as CORRESPONDS_TO (which makes no field-vs-design claim)
 RELATIONSHIP_TYPE_DEVIATES_FROM = "deviates_from"  # a built/observed condition diverges from what a requirement or specification calls for - distinct from CONTRADICTS (evidence vs. evidence), this is condition vs. requirement
 RELATIONSHIP_TYPE_REQUIRES_FOLLOW_UP = "requires_follow_up"  # evidence/observation/Finding -> Task, the one governed action-chain edge this stage adds
+# CLAUDE-MM8 Section 31: four genuinely new types for the relationships
+# nothing existing already names honestly - every other Section-31
+# candidate word is mapped onto an already-existing type instead (see the
+# fuller comment on KNOWN_CONTENT_CLASSES/WORK_PRODUCT_STATE_* below).
+RELATIONSHIP_TYPE_BASED_ON = "based_on"
+RELATIONSHIP_TYPE_SUMMARIZES = "summarizes"
+RELATIONSHIP_TYPE_RESPONDS_TO = "responds_to"
+RELATIONSHIP_TYPE_RESOLVES = "resolves"
 
 KNOWN_RELATIONSHIP_TYPES = (
     RELATIONSHIP_TYPE_SUPPORTS,
@@ -409,6 +426,10 @@ KNOWN_RELATIONSHIP_TYPES = (
     RELATIONSHIP_TYPE_OBSERVES,
     RELATIONSHIP_TYPE_DEVIATES_FROM,
     RELATIONSHIP_TYPE_REQUIRES_FOLLOW_UP,
+    RELATIONSHIP_TYPE_BASED_ON,
+    RELATIONSHIP_TYPE_SUMMARIZES,
+    RELATIONSHIP_TYPE_RESPONDS_TO,
+    RELATIONSHIP_TYPE_RESOLVES,
 )
 
 # CLAUDE-MM6 Section 6: a Relationship's own validation state, ADDITIVE to
@@ -590,6 +611,66 @@ KNOWN_CLAIM_ADOPTION_STATES = (
     CLAIM_ADOPTION_DISPUTED,
     CLAIM_ADOPTION_REQUIRES_SPECIALIST,
     CLAIM_ADOPTION_REQUIRES_AUTHORITY,
+)
+
+# -- CLAUDE-MM8: Governed Creation, Editing, Review, and Accountable --------
+# Work Products. Backs `WorkProduct` (defined near Claim/Finding) - Section
+# 5's own strict distinction ("work product is not evidence") means a
+# WorkProduct never becomes an EvidenceItem merely by existing; it CITES
+# evidence (and Claims/Findings/DerivedObservations) the same validated way
+# a Claim does, via the same `_MM6_ENDPOINT_LISTS` (extended below to also
+# accept `claim`/`work_product` themselves as citable/relatable objects).
+
+# Section 17's lifecycle - six stored states (the "proposed"/"rejected"/
+# "returned for revision" extras Section 17 mentions "where useful" are
+# folded into this same set: revisions_required already IS "returned for
+# revision"; a rejected/proposed WHOLE work product has no real use case
+# yet distinct from simply not creating or not yet submitting one).
+# "superseded" is deliberately NOT stored here - exactly like Claim/
+# Relationship, it is derived at read time from a real Supersession record
+# (see resolve_work_product_status), never a value this field is directly
+# set to.
+WORK_PRODUCT_STATE_DRAFT = "draft"
+WORK_PRODUCT_STATE_NEEDS_REVIEW = "needs_review"
+WORK_PRODUCT_STATE_REVIEWED = "reviewed"
+WORK_PRODUCT_STATE_REVISIONS_REQUIRED = "revisions_required"
+WORK_PRODUCT_STATE_APPROVED_FOR_ISSUE = "approved_for_issue"
+WORK_PRODUCT_STATE_ISSUED = "issued"
+# Derived-only, never stored - see resolve_work_product_status.
+WORK_PRODUCT_STATE_SUPERSEDED = "superseded"
+KNOWN_WORK_PRODUCT_STATES = (
+    WORK_PRODUCT_STATE_DRAFT,
+    WORK_PRODUCT_STATE_NEEDS_REVIEW,
+    WORK_PRODUCT_STATE_REVIEWED,
+    WORK_PRODUCT_STATE_REVISIONS_REQUIRED,
+    WORK_PRODUCT_STATE_APPROVED_FOR_ISSUE,
+    WORK_PRODUCT_STATE_ISSUED,
+)
+
+# Section 8's seven required content-provenance classes for one structured
+# section of a work product - deliberately a DIFFERENT, work-product-scoped
+# vocabulary from Claim's own KNOWN_CLAIM_CLASSES (a section answers "who/
+# what put this text here", a Claim answers "what kind of assertion is
+# this" - related questions, not the same one). `edited_ai_proposal` is
+# the concrete answer to Section 8's "AI content must not become human-
+# approved simply because a user opens the document": editing a section
+# whose CURRENT class is ai_proposed transitions it here automatically
+# (see edit_work_product_section), never silently to human_authored.
+CONTENT_CLASS_HUMAN_AUTHORED = "human_authored"
+CONTENT_CLASS_AI_PROPOSED = "ai_proposed"
+CONTENT_CLASS_IMPORTED = "imported"
+CONTENT_CLASS_DETERMINISTIC_CALCULATION = "deterministic_calculation"
+CONTENT_CLASS_DIRECT_EVIDENCE_REFERENCE = "direct_evidence_reference"
+CONTENT_CLASS_EDITED_AI_PROPOSAL = "edited_ai_proposal"
+CONTENT_CLASS_TEMPLATE_CONTENT = "template_content"
+KNOWN_CONTENT_CLASSES = (
+    CONTENT_CLASS_HUMAN_AUTHORED,
+    CONTENT_CLASS_AI_PROPOSED,
+    CONTENT_CLASS_IMPORTED,
+    CONTENT_CLASS_DETERMINISTIC_CALCULATION,
+    CONTENT_CLASS_DIRECT_EVIDENCE_REFERENCE,
+    CONTENT_CLASS_EDITED_AI_PROPOSAL,
+    CONTENT_CLASS_TEMPLATE_CONTENT,
 )
 
 # -- Temporal Obligation vocabulary (Prompt 8 #5/#9/#10) ---------------------
@@ -1714,6 +1795,142 @@ class Claim:
     adoption_reason: Optional[str] = None
     derived_observation_id: Optional[str] = None
     finding_id: Optional[str] = None
+
+
+@dataclass
+class WorkProductSection:
+    """
+    CLAUDE-MM8 Section 10: "avoid reducing every professional artifact to
+    one giant rich-text box" - one structured, individually addressable
+    unit of a WorkProduct's own content. `section_type` is open-world
+    (e.g. "narrative"/"risk"/"team_member"/"citation"/"finding_summary") -
+    the SAME object shape serves a risk register's own rows, an RFI's own
+    question/background blocks, and a report's own narrative paragraphs,
+    distinguished only by `section_type` and whatever keys `content`
+    happens to carry for that type - not a family of subclasses.
+
+    `content_class` (KNOWN_CONTENT_CLASSES, closed) is Section 8's own
+    provenance answer for THIS section specifically - never inferred from
+    the parent WorkProduct's own author. `evidence_links` are validated
+    exactly like Claim's own (real, already-governed objects only, via
+    `_resolve_mm6_endpoint`) - a section can cite an EvidenceItem, a
+    Claim, a Finding, another WorkProduct, etc.
+
+    `accepted_by`/`accepted_at` are DELIBERATELY separate from
+    `content_class`: accepting an AI-proposed section as good-enough-to-
+    keep is a human sign-off, but it does NOT rewrite the section's own
+    honest origin - `content_class` stays `ai_proposed` (or becomes
+    `edited_ai_proposal` if it was also edited) forever, satisfying
+    Section 8's "AI content must not become human-approved simply because
+    a user opens the document" literally: acceptance and authorship are
+    two different facts, never conflated into one field.
+
+    `edit_history` records before/after (Section 16: "record before/after
+    values for structured edits") - append-only, never trimmed.
+
+    `removed` is a soft-delete flag (Section 16: "do not hard-delete
+    consequential records without existing governance") - a removed
+    section is excluded from rendering/export but never actually deleted
+    from the list, so its own history remains inspectable.
+    """
+
+    id: str
+    section_type: str
+    content: dict
+    content_class: str  # KNOWN_CONTENT_CLASSES (closed)
+    author: str
+    created_at: str
+    order_index: int
+    evidence_links: list = field(default_factory=list)  # [{"object_type","object_id"}]
+    modified_at: Optional[str] = None
+    accepted_by: Optional[str] = None
+    accepted_at: Optional[str] = None
+    edit_history: list = field(default_factory=list)  # [{"before","after","actor","at","reason"}]
+    removed: bool = False
+    removed_by: Optional[str] = None
+    removed_at: Optional[str] = None
+
+
+@dataclass
+class WorkProductExportRecord:
+    """One real export event (Section 19) - never inferred from the
+    WorkProduct's own state, always an explicit record of an actual
+    export call. `checksum` is of the EXPORTED FILE BYTES themselves,
+    distinct from WorkProduct.issued_checksum (of the governed section
+    content) - the two answer different integrity questions ("does this
+    downloaded file match what I have on record" vs. "has the issued
+    content itself been tampered with")."""
+
+    format: str
+    exported_at: str
+    exported_by: str
+    checksum: str
+
+
+@dataclass
+class WorkProductReview:
+    """Section 17's own required review record - reviewer/date/role/
+    comments/conditions/evidence version/unresolved contradiction, all
+    preserved (never overwritten by a later review - see
+    record_work_product_review, append-only like ReviewerValidation)."""
+
+    reviewer: str
+    role: str
+    decision: str  # WORK_PRODUCT_STATE_REVIEWED | WORK_PRODUCT_STATE_REVISIONS_REQUIRED
+    reviewed_at: str
+    comments: Optional[str] = None
+    conditions: Optional[str] = None
+    unresolved_contradiction: bool = False
+
+
+@dataclass
+class WorkProduct:
+    """
+    CLAUDE-MM8: a mutable, editable, governed professional artifact -
+    Section 5's own strict distinction ("work product is not evidence")
+    means this object is NEVER itself an EvidenceItem, no matter how many
+    other objects cite it; `_MM6_ENDPOINT_LISTS` makes it CITABLE (a
+    Relationship/Claim/another WorkProduct may point at it), which is a
+    different, one-way fact from being evidence.
+
+    `sections` are embedded directly (asdict(WorkProductSection) dicts) -
+    a WorkProduct is always read/written as one governed unit, the same
+    single-owner-object pattern Case.conversation/Case.finding_ids
+    already use, not a second top-level `ProjectWorkspace` list requiring
+    its own cross-referencing.
+
+    `case_id` is OPTIONAL (mirrors record_analysis's own Project-vs-Case
+    duality) - a work product started from a Case-scoped Finding/
+    Investigation naturally inherits that case_id, but a Project-level
+    artifact (e.g. a project-wide team list) is equally legitimate with
+    none.
+
+    `issued_checksum` is set exactly once, at `issue_work_product` time,
+    and never changes afterward - Section 18's own "frozen, identifiable
+    output" guarantee. `version` starts at 1 and increments only when
+    `revise_work_product` creates a NEW WorkProduct - the original's own
+    `version` field never changes after it is set.
+    """
+
+    id: str
+    project_id: str
+    artifact_type: str  # open-world: "report"/"risk_register"/"team_list"/...
+    title: str
+    created_by: str
+    created_at: str
+    modified_at: str
+    case_id: Optional[str] = None
+    source_finding_id: Optional[str] = None
+    source_investigation_step_id: Optional[str] = None
+    sensitivity_classification: Optional[str] = None
+    state: str = WORK_PRODUCT_STATE_DRAFT
+    version: int = 1
+    sections: list = field(default_factory=list)  # [asdict(WorkProductSection)]
+    reviews: list = field(default_factory=list)  # [asdict(WorkProductReview)]
+    exports: list = field(default_factory=list)  # [asdict(WorkProductExportRecord)]
+    issued_at: Optional[str] = None
+    issued_by: Optional[str] = None
+    issued_checksum: Optional[str] = None
 
 
 @dataclass
@@ -3555,6 +3772,11 @@ class ProjectWorkspace:
     # stage simply lacks this key and loads with the empty-list
     # default). See Claim above.
     claims: list[dict] = field(default_factory=list)
+
+    # CLAUDE-MM8: Governed Creation, Editing, Review, and Accountable Work
+    # Products - purely additive, same backward-compatible pattern as
+    # every list field above. See WorkProduct above.
+    work_products: list[dict] = field(default_factory=list)
 
 
 def _snapshot_reference_lists(workspace: ProjectWorkspace) -> dict:
@@ -7218,6 +7440,531 @@ class CaseWorkspaceStore:
             "downstream_requires_review": downstream_requires_review or None,
         }
 
+    # -- CLAUDE-MM8: Governed Creation, Editing, Review, and Accountable -------
+    # Work Products. WorkProduct is the one genuinely new domain object
+    # (Section 6/9); every lifecycle method below follows the same
+    # "validate real references, mutate one governed record, save, log"
+    # shape every prior MM stage's own write paths already use.
+
+    def create_work_product(
+        self,
+        workspace: ProjectWorkspace,
+        artifact_type: str,
+        title: str,
+        created_by: str,
+        case_id: Optional[str] = None,
+        source_finding_id: Optional[str] = None,
+        source_investigation_step_id: Optional[str] = None,
+        sensitivity_classification: Optional[str] = None,
+        governance_log: Optional[GovernanceLog] = None,
+    ) -> dict:
+        """
+        `case_id` is optional (Section 6, mirroring record_analysis's own
+        Project-vs-Case duality) - a Project-level work product (e.g. a
+        project-wide team list) is legitimate with none. When given, must
+        be a real, non-archived Case. `source_finding_id`/
+        `source_investigation_step_id`, when given, must each be real -
+        Section 4's own "start from evidence, a Finding, investigation,
+        task, or existing work product" traceability requirement,
+        enforced structurally rather than merely documented.
+        """
+        if not title or not title.strip():
+            raise CaseWorkspaceError("A work product requires a title.")
+        if case_id is not None:
+            case = self._find(workspace.cases, case_id)
+            if case is None:
+                raise CaseWorkspaceError(f"Case {case_id} was not found.")
+            self._require_case_not_archived(workspace, case_id)
+        if source_finding_id is not None and self._find(workspace.findings, source_finding_id) is None:
+            raise CaseWorkspaceError(f"Finding {source_finding_id} was not found.")
+        if source_investigation_step_id is not None and self._find(
+            workspace.investigation_steps, source_investigation_step_id,
+        ) is None:
+            raise CaseWorkspaceError(f"Investigation step {source_investigation_step_id} was not found.")
+
+        now = _now()
+        work_product = WorkProduct(
+            id=_new_id(), project_id=workspace.project_id, artifact_type=artifact_type, title=title.strip(),
+            created_by=created_by, created_at=now, modified_at=now, case_id=case_id,
+            source_finding_id=source_finding_id, source_investigation_step_id=source_investigation_step_id,
+            sensitivity_classification=sensitivity_classification,
+        )
+        workspace.work_products.append(asdict(work_product))
+        self.save(workspace)
+
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id, event_type="work_product_created", actor=created_by, role="human",
+                payload={"work_product_id": work_product.id, "artifact_type": artifact_type, "title": title},
+                correlation_id=work_product.id,
+            )
+        return asdict(work_product)
+
+    def work_products_for_project(self, workspace: ProjectWorkspace, case_id: Optional[str] = None) -> list[dict]:
+        if case_id is not None:
+            return [w for w in workspace.work_products if w.get("case_id") == case_id]
+        return list(workspace.work_products)
+
+    def get_work_product(self, workspace: ProjectWorkspace, work_product_id: str) -> Optional[dict]:
+        return self._find(workspace.work_products, work_product_id)
+
+    def _require_work_product_editable(self, work_product: dict) -> None:
+        """Section 18/7's own immutability guarantee: an ISSUED work
+        product can never be silently mutated - the only path forward for
+        an issued artifact is revise_work_product, which creates a NEW
+        draft rather than reopening the old one."""
+        if work_product["state"] == WORK_PRODUCT_STATE_ISSUED:
+            raise CaseWorkspaceError(
+                "This work product has already been issued and cannot be edited - "
+                "use revise_work_product to create an editable successor revision."
+            )
+
+    def add_work_product_section(
+        self,
+        workspace: ProjectWorkspace,
+        work_product_id: str,
+        section_type: str,
+        content: dict,
+        content_class: str,
+        author: str,
+        evidence_links: Optional[list[dict]] = None,
+        governance_log: Optional[GovernanceLog] = None,
+    ) -> dict:
+        """Section 9/23: `evidence_links` validated exactly like Claim's
+        own (real, already-governed objects only) - the same structural
+        no-citation-laundering guarantee MM7 established, reused unchanged
+        here rather than re-implemented."""
+        work_product = self._find(workspace.work_products, work_product_id)
+        if work_product is None or work_product["project_id"] != workspace.project_id:
+            raise CaseWorkspaceError(f"Work product {work_product_id} was not found.")
+        self._require_work_product_editable(work_product)
+        if content_class not in KNOWN_CONTENT_CLASSES:
+            raise CaseWorkspaceError(
+                f"'{content_class}' is not a recognized content class. Use one of: {', '.join(KNOWN_CONTENT_CLASSES)}."
+            )
+        evidence_links = evidence_links or []
+        for link in evidence_links:
+            if self._resolve_mm6_endpoint(workspace, link.get("object_type"), link.get("object_id")) is None:
+                raise CaseWorkspaceError(
+                    f"Section evidence link ({link.get('object_type')} {link.get('object_id')}) "
+                    "was not found in this project."
+                )
+
+        now = _now()
+        order_index = sum(1 for s in work_product["sections"] if not s["removed"])
+        section = WorkProductSection(
+            id=_new_id(), section_type=section_type, content=content, content_class=content_class,
+            author=author, created_at=now, order_index=order_index, evidence_links=evidence_links,
+        )
+        work_product["sections"].append(asdict(section))
+        work_product["modified_at"] = now
+        self.save(workspace)
+
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id, event_type="work_product_section_added", actor=author, role="human",
+                payload={"work_product_id": work_product_id, "section_id": section.id, "section_type": section_type,
+                         "content_class": content_class},
+                correlation_id=work_product_id,
+            )
+        return work_product
+
+    def edit_work_product_section(
+        self,
+        workspace: ProjectWorkspace,
+        work_product_id: str,
+        section_id: str,
+        content: dict,
+        actor: str,
+        reason: Optional[str] = None,
+        governance_log: Optional[GovernanceLog] = None,
+    ) -> dict:
+        """
+        Section 16's own "record before/after values for structured
+        edits" - `edit_history` gains one entry per call, never trimmed.
+        Section 8's own "AI content must not become human-approved simply
+        because a user opens the document": if this section's CURRENT
+        content_class is `ai_proposed`, editing it transitions the class
+        to `edited_ai_proposal` automatically - never silently to
+        `human_authored`, and never left claiming to be an unedited AI
+        proposal once it has genuinely been changed.
+        """
+        work_product = self._find(workspace.work_products, work_product_id)
+        if work_product is None or work_product["project_id"] != workspace.project_id:
+            raise CaseWorkspaceError(f"Work product {work_product_id} was not found.")
+        self._require_work_product_editable(work_product)
+
+        section = next((s for s in work_product["sections"] if s["id"] == section_id and not s["removed"]), None)
+        if section is None:
+            raise CaseWorkspaceError(f"Section {section_id} was not found on this work product.")
+
+        now = _now()
+        section["edit_history"].append({
+            "before": section["content"], "after": content, "actor": actor, "at": now, "reason": reason,
+        })
+        section["content"] = content
+        section["modified_at"] = now
+        if section["content_class"] == CONTENT_CLASS_AI_PROPOSED:
+            section["content_class"] = CONTENT_CLASS_EDITED_AI_PROPOSAL
+        work_product["modified_at"] = now
+        self.save(workspace)
+
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id, event_type="work_product_section_edited", actor=actor, role="human",
+                payload={"work_product_id": work_product_id, "section_id": section_id, "reason": reason},
+                correlation_id=work_product_id,
+            )
+        return work_product
+
+    def accept_work_product_section(
+        self, workspace: ProjectWorkspace, work_product_id: str, section_id: str, actor: str,
+        governance_log: Optional[GovernanceLog] = None,
+    ) -> dict:
+        """Section 8's "accepted text becomes part of the work product" -
+        a human sign-off recorded WITHOUT rewriting the section's own
+        `content_class` (see WorkProductSection's own docstring on why
+        acceptance and authorship are deliberately two different facts)."""
+        work_product = self._find(workspace.work_products, work_product_id)
+        if work_product is None or work_product["project_id"] != workspace.project_id:
+            raise CaseWorkspaceError(f"Work product {work_product_id} was not found.")
+        self._require_work_product_editable(work_product)
+
+        section = next((s for s in work_product["sections"] if s["id"] == section_id and not s["removed"]), None)
+        if section is None:
+            raise CaseWorkspaceError(f"Section {section_id} was not found on this work product.")
+
+        section["accepted_by"] = actor
+        section["accepted_at"] = _now()
+        self.save(workspace)
+
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id, event_type="work_product_section_accepted", actor=actor, role="human",
+                payload={"work_product_id": work_product_id, "section_id": section_id},
+                correlation_id=work_product_id,
+            )
+        return work_product
+
+    def remove_work_product_section(
+        self, workspace: ProjectWorkspace, work_product_id: str, section_id: str, actor: str,
+        reason: Optional[str] = None, governance_log: Optional[GovernanceLog] = None,
+    ) -> dict:
+        """Soft-delete only (Section 16: "do not hard-delete consequential
+        records without existing governance") - a removed section is
+        excluded from rendering/export/reorder but never actually deleted
+        from `sections`, so its own edit_history stays inspectable."""
+        work_product = self._find(workspace.work_products, work_product_id)
+        if work_product is None or work_product["project_id"] != workspace.project_id:
+            raise CaseWorkspaceError(f"Work product {work_product_id} was not found.")
+        self._require_work_product_editable(work_product)
+
+        section = next((s for s in work_product["sections"] if s["id"] == section_id and not s["removed"]), None)
+        if section is None:
+            raise CaseWorkspaceError(f"Section {section_id} was not found on this work product.")
+
+        section["removed"] = True
+        section["removed_by"] = actor
+        section["removed_at"] = _now()
+        work_product["modified_at"] = _now()
+        self.save(workspace)
+
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id, event_type="work_product_section_removed", actor=actor, role="human",
+                payload={"work_product_id": work_product_id, "section_id": section_id, "reason": reason},
+                correlation_id=work_product_id,
+            )
+        return work_product
+
+    def reorder_work_product_sections(
+        self, workspace: ProjectWorkspace, work_product_id: str, section_id_order: list[str], actor: str,
+        governance_log: Optional[GovernanceLog] = None,
+    ) -> dict:
+        work_product = self._find(workspace.work_products, work_product_id)
+        if work_product is None or work_product["project_id"] != workspace.project_id:
+            raise CaseWorkspaceError(f"Work product {work_product_id} was not found.")
+        self._require_work_product_editable(work_product)
+
+        active_ids = {s["id"] for s in work_product["sections"] if not s["removed"]}
+        if set(section_id_order) != active_ids:
+            raise CaseWorkspaceError("The given section order must name exactly the work product's own active sections.")
+
+        order_by_id = {sid: idx for idx, sid in enumerate(section_id_order)}
+        for section in work_product["sections"]:
+            if not section["removed"]:
+                section["order_index"] = order_by_id[section["id"]]
+        work_product["modified_at"] = _now()
+        self.save(workspace)
+
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id, event_type="work_product_sections_reordered", actor=actor, role="human",
+                payload={"work_product_id": work_product_id}, correlation_id=work_product_id,
+            )
+        return work_product
+
+    def record_work_product_review(
+        self, workspace: ProjectWorkspace, work_product_id: str, reviewer: str, role: str, decision: str,
+        comments: Optional[str] = None, conditions: Optional[str] = None, unresolved_contradiction: bool = False,
+        governance_log: Optional[GovernanceLog] = None,
+    ) -> dict:
+        """Section 17: reviewer/date/role/comments/conditions/unresolved-
+        contradiction, append-only (a later review never overwrites an
+        earlier one - see ReviewerValidation's own precedent). `decision`
+        is a closed choice between the two review outcomes Section 17
+        actually distinguishes: reviewed (ready to move toward issue) or
+        revisions_required (sent back)."""
+        work_product = self._find(workspace.work_products, work_product_id)
+        if work_product is None or work_product["project_id"] != workspace.project_id:
+            raise CaseWorkspaceError(f"Work product {work_product_id} was not found.")
+        self._require_work_product_editable(work_product)
+        if decision not in (WORK_PRODUCT_STATE_REVIEWED, WORK_PRODUCT_STATE_REVISIONS_REQUIRED):
+            raise CaseWorkspaceError(
+                f"'{decision}' is not a valid review decision. Use '{WORK_PRODUCT_STATE_REVIEWED}' or "
+                f"'{WORK_PRODUCT_STATE_REVISIONS_REQUIRED}'."
+            )
+
+        review = WorkProductReview(
+            reviewer=reviewer, role=role, decision=decision, reviewed_at=_now(), comments=comments,
+            conditions=conditions, unresolved_contradiction=unresolved_contradiction,
+        )
+        work_product["reviews"].append(asdict(review))
+        work_product["state"] = decision
+        work_product["modified_at"] = _now()
+        self.save(workspace)
+
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id, event_type="work_product_reviewed", actor=reviewer, role="human",
+                payload={"work_product_id": work_product_id, "decision": decision,
+                         "unresolved_contradiction": unresolved_contradiction},
+                correlation_id=work_product_id,
+            )
+        return work_product
+
+    def approve_work_product_for_issue(
+        self, workspace: ProjectWorkspace, work_product_id: str, actor: str,
+        governance_log: Optional[GovernanceLog] = None,
+    ) -> dict:
+        """Section 17: reuses existing project role/action-evaluation
+        mechanisms rather than inventing new approval authority - THIS
+        method only enforces the state machine (must already be
+        `reviewed`); who is allowed to call it at all is the route
+        layer's own responsibility, matching every other consequential
+        action in this codebase (Approval Gate / admin role), not a
+        second authority system defined here."""
+        work_product = self._find(workspace.work_products, work_product_id)
+        if work_product is None or work_product["project_id"] != workspace.project_id:
+            raise CaseWorkspaceError(f"Work product {work_product_id} was not found.")
+        self._require_work_product_editable(work_product)
+        if work_product["state"] != WORK_PRODUCT_STATE_REVIEWED:
+            raise CaseWorkspaceError(
+                "A work product must be reviewed (state='reviewed') before it can be approved for issue."
+            )
+
+        work_product["state"] = WORK_PRODUCT_STATE_APPROVED_FOR_ISSUE
+        work_product["modified_at"] = _now()
+        self.save(workspace)
+
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id, event_type="work_product_approved_for_issue", actor=actor,
+                role="human", payload={"work_product_id": work_product_id}, correlation_id=work_product_id,
+            )
+        return work_product
+
+    @staticmethod
+    def _work_product_content_checksum(work_product: dict) -> str:
+        """Section 6/18: a checksum of the GOVERNED content (active
+        sections only, in stable id order) - deliberately independent of
+        any one export format's own byte-for-byte rendering (that is
+        WorkProductExportRecord.checksum's own, separate job)."""
+        active_sections = sorted(
+            (s for s in work_product["sections"] if not s["removed"]), key=lambda s: s["id"],
+        )
+        canonical = json.dumps(
+            [{"id": s["id"], "section_type": s["section_type"], "content": s["content"]} for s in active_sections],
+            sort_keys=True,
+        )
+        return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+    def issue_work_product(
+        self, workspace: ProjectWorkspace, work_product_id: str, actor: str,
+        governance_log: Optional[GovernanceLog] = None,
+    ) -> dict:
+        """
+        Section 7/18's own point of no return: requires `approved_for_
+        issue` first (the full review -> approve -> issue chain Section
+        17 lists), computes and permanently stores `issued_checksum`, and
+        locks the work product - every subsequent add/edit/remove/reorder
+        call on THIS record raises (see _require_work_product_editable).
+        The only way forward from here is `revise_work_product`, which
+        creates a NEW record; this one is never reopened.
+        """
+        work_product = self._find(workspace.work_products, work_product_id)
+        if work_product is None or work_product["project_id"] != workspace.project_id:
+            raise CaseWorkspaceError(f"Work product {work_product_id} was not found.")
+        if work_product["state"] != WORK_PRODUCT_STATE_APPROVED_FOR_ISSUE:
+            raise CaseWorkspaceError(
+                "A work product must be approved for issue (state='approved_for_issue') before it can be issued."
+            )
+
+        now = _now()
+        work_product["state"] = WORK_PRODUCT_STATE_ISSUED
+        work_product["issued_at"] = now
+        work_product["issued_by"] = actor
+        work_product["issued_checksum"] = self._work_product_content_checksum(work_product)
+        work_product["modified_at"] = now
+        self.save(workspace)
+
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id, event_type="work_product_issued", actor=actor, role="human",
+                payload={"work_product_id": work_product_id, "version": work_product["version"],
+                         "issued_checksum": work_product["issued_checksum"]},
+                correlation_id=work_product_id,
+            )
+        return work_product
+
+    def revise_work_product(
+        self, workspace: ProjectWorkspace, work_product_id: str, actor: str, reason: Optional[str] = None,
+        governance_log: Optional[GovernanceLog] = None,
+    ) -> dict:
+        """
+        Section 18: "Creating Revision B must not rewrite Revision A" -
+        the original ISSUED work product is never mutated or deleted; a
+        genuinely NEW WorkProduct is created (a deep copy of the issued
+        sections, `state=draft`, `version=original.version + 1`) and
+        linked back via Supersession (WorkProduct's own fourth real
+        consumer, after Source/Relationship/Claim). The new draft's own
+        sections are copies with fresh ids (so editing the revision can
+        never mutate the original's own section records by shared
+        reference) but preserve their own original content_class/
+        evidence_links/edit_history verbatim - a revision starts from
+        exactly what was issued, not blank.
+        """
+        original = self._find(workspace.work_products, work_product_id)
+        if original is None or original["project_id"] != workspace.project_id:
+            raise CaseWorkspaceError(f"Work product {work_product_id} was not found.")
+        if original["state"] != WORK_PRODUCT_STATE_ISSUED:
+            raise CaseWorkspaceError("Only an issued work product can be revised.")
+
+        now = _now()
+        copied_sections = []
+        for s in original["sections"]:
+            copied = dict(s)
+            copied["id"] = _new_id()
+            copied_sections.append(copied)
+
+        new_work_product = WorkProduct(
+            id=_new_id(), project_id=workspace.project_id, artifact_type=original["artifact_type"],
+            title=original["title"], created_by=actor, created_at=now, modified_at=now,
+            case_id=original.get("case_id"), source_finding_id=original.get("source_finding_id"),
+            source_investigation_step_id=original.get("source_investigation_step_id"),
+            sensitivity_classification=original.get("sensitivity_classification"),
+            state=WORK_PRODUCT_STATE_DRAFT, version=original["version"] + 1,
+        )
+        new_dict = asdict(new_work_product)
+        new_dict["sections"] = copied_sections
+        workspace.work_products.append(new_dict)
+
+        supersession = self.record_supersession(
+            workspace, predecessor_type=OBJECT_KIND_WORK_PRODUCT, predecessor_id=work_product_id,
+            successor_type=OBJECT_KIND_WORK_PRODUCT, successor_id=new_work_product.id, actor=actor,
+            reason=reason, authority_class="approval_gate:work_product_revision",
+        )
+        self.save(workspace)
+
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id, event_type="work_product_revised", actor=actor, role="human",
+                payload={"original_work_product_id": work_product_id, "new_work_product_id": new_work_product.id,
+                         "reason": reason},
+                correlation_id=new_work_product.id,
+            )
+        return {"original_work_product_id": work_product_id, "new_work_product": new_dict, "supersession": supersession}
+
+    def resolve_work_product_status(self, workspace: ProjectWorkspace, work_product_id: str) -> dict:
+        """Read-time-derived status, mirroring resolve_claim_status/
+        resolve_relationship_status exactly - `superseded` is never a
+        stored value, always recomputed from a real Supersession record
+        naming this work product as predecessor."""
+        work_product = self._find(workspace.work_products, work_product_id)
+        if work_product is None:
+            return {"status": "unresolved", "work_product_id": work_product_id}
+
+        successor_supersession = next(
+            (s for s in workspace.supersessions
+             if s["predecessor_type"] == OBJECT_KIND_WORK_PRODUCT and s["predecessor_id"] == work_product_id),
+            None,
+        )
+        status = WORK_PRODUCT_STATE_SUPERSEDED if successor_supersession is not None else work_product["state"]
+        result = {
+            "status": status, "work_product_id": work_product_id, "artifact_type": work_product["artifact_type"],
+            "version": work_product["version"], "issued_checksum": work_product.get("issued_checksum"),
+        }
+        if successor_supersession is not None:
+            result["superseded_by_work_product_id"] = successor_supersession["successor_id"]
+        return result
+
+    def stale_evidence_for_work_product(self, workspace: ProjectWorkspace, work_product_id: str) -> dict:
+        """
+        Section 23: "If source evidence later becomes stale, the work
+        product should be able to warn... without silently rewriting the
+        issued artifact" - a pure, read-time check over every active
+        section's own evidence_links, reusing the SAME staleness
+        derivation `resolve_claim_status`/`resolve_relationship_status`
+        already use. Never mutates the work product, issued or not.
+        """
+        work_product = self._find(workspace.work_products, work_product_id)
+        if work_product is None or work_product["project_id"] != workspace.project_id:
+            return {"status": "unavailable", "work_product_id": work_product_id}
+
+        stale_links = []
+        for section in work_product["sections"]:
+            if section["removed"]:
+                continue
+            for link in section["evidence_links"]:
+                info = self._resolve_mm6_endpoint_status(workspace, link["object_type"], link["object_id"])
+                if not info["resolved"] or info.get("stale"):
+                    stale_links.append({"section_id": section["id"], **info})
+        return {
+            "status": "assembled", "work_product_id": work_product_id,
+            "has_stale_or_broken_evidence": len(stale_links) > 0, "stale_links": stale_links,
+        }
+
+    def record_work_product_export(
+        self, workspace: ProjectWorkspace, work_product_id: str, export_format: str, exported_by: str,
+        checksum: str, governance_log: Optional[GovernanceLog] = None,
+    ) -> dict:
+        """Section 19: one real export EVENT per call - never inferred
+        from state, always an explicit record that an export actually
+        happened, with the real checksum of the bytes produced (computed
+        by the caller, services.work_product_export.export_work_product,
+        never re-derived here from something that could drift). Exporting
+        is a READ of governed content, not itself gated by _require_
+        work_product_editable - an issued OR a draft work product may
+        both be exported (a draft export is for internal review, an
+        issued export is the controlled output Section 19 describes)."""
+        work_product = self._find(workspace.work_products, work_product_id)
+        if work_product is None or work_product["project_id"] != workspace.project_id:
+            raise CaseWorkspaceError(f"Work product {work_product_id} was not found.")
+
+        record = WorkProductExportRecord(
+            format=export_format, exported_at=_now(), exported_by=exported_by, checksum=checksum,
+        )
+        work_product["exports"].append(asdict(record))
+        self.save(workspace)
+
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id, event_type="work_product_exported", actor=exported_by, role="human",
+                payload={"work_product_id": work_product_id, "format": export_format, "checksum": checksum},
+                correlation_id=work_product_id,
+            )
+        return work_product
+
     # -- investigation hypothesis survival / quality signal (CLAUDE-P11) -----------
 
     def record_case_outcome(
@@ -8506,6 +9253,13 @@ class CaseWorkspaceStore:
         OBJECT_KIND_SOURCE: "sources",
         OBJECT_KIND_TASK: "tasks",
         OBJECT_KIND_FINDING: "findings",
+        # CLAUDE-MM8: both added here for the first time - a work-product
+        # section can now cite a Claim directly (Section 24: "claim
+        # classifications must not disappear" when an MM7 answer is
+        # promoted into a document) and a WorkProduct can cite/relate to
+        # another WorkProduct (Section 31's based_on/cites/etc.).
+        OBJECT_KIND_CLAIM: "claims",
+        OBJECT_KIND_WORK_PRODUCT: "work_products",
     }
 
     def _resolve_mm6_endpoint(self, workspace: ProjectWorkspace, object_type: str, object_id: str) -> Optional[dict]:
