@@ -82,8 +82,22 @@
                        ("Switch Project") since the visible text alone
                        (just the Project's own name) would not otherwise
                        communicate that activating it navigates away, not
-                       merely identifies where you are. #}
-                    <a class="workspace-topbar-project" data-ui-ref="menu.context.switch-project" href="{{ url_for('portal.choose_project', current=project_id) }}" aria-label="{{ (workspace.display_title or document.filename) }} — Switch Project" title="Switch Project">{{ workspace.display_title or document.filename }}</a>
+                       merely identifies where you are.
+
+                       CLAUDE-POSTCAMEL-TOPMENU-FIX1: that aria-label/title
+                       pair is screen-reader/tooltip-only - a sighted user
+                       moving at normal speed has no resting-state visual
+                       signal that this is a control rather than plain
+                       breadcrumb text (a real product-owner finding
+                       during the P01 founder sanity-check). The trailing
+                       chevron below is the fix - `aria-hidden="true"`
+                       and inside this SAME link (the CLAUDE-P40-BRAND1
+                       brand-link precedent above: one tab stop, one
+                       accessible control, never a second adjacent
+                       element), so the existing aria-label remains the
+                       link's whole accessible name, unchanged, and no
+                       new accessibility surface is introduced. #}
+                    <a class="workspace-topbar-project" data-ui-ref="menu.context.switch-project" href="{{ url_for('portal.choose_project', current=project_id) }}" aria-label="{{ (workspace.display_title or document.filename) }} — Switch Project" title="Switch Project">{{ workspace.display_title or document.filename }}<span class="workspace-topbar-project-chevron" aria-hidden="true">&#9662;</span></a>
                     {% if active_case %}
                     <span class="workspace-topbar-sep" aria-hidden="true">/</span>
                     <span class="workspace-topbar-doc">{{ active_case.title }}</span>

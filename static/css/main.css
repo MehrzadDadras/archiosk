@@ -1730,6 +1730,22 @@ main {
     outline-offset: 2px;
     border-radius: 2px;
 }
+/* CLAUDE-POSTCAMEL-TOPMENU-FIX1: the link above deliberately keeps the
+   SAME text color/weight as its plain-text neighbors (see that rule's
+   own comment) - this chevron is the one visual signal that it's a
+   control, not a second color decision. var(--text-secondary) is the
+   same "less prominent than the primary reading" token .workspace-
+   topbar-sep/.workspace-topbar-doc already use immediately below, not a
+   new one; sized down and given breathing room so it reads as a small
+   indicator, never competing with the project name itself for
+   attention. */
+.workspace-topbar-project-chevron {
+    display: inline-block;
+    margin-left: 0.3rem;
+    font-size: 0.65em;
+    color: var(--text-secondary);
+    vertical-align: middle;
+}
 .workspace-topbar-sep { color: var(--text-secondary); margin: 0 0.3rem; }
 .workspace-topbar-doc { color: var(--text-secondary); }
 .workspace-topbar-badge {
