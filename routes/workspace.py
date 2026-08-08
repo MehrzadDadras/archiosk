@@ -51,6 +51,7 @@ from services.case_workspace import (
     BUILT_IN_TAGS,
     CASE_OUTCOME_STATES,
     CASE_ORIGIN_AUTONOMOUS,
+    CASE_STATUS_ARCHIVED,
     CONVERSATION_ANCHOR_SCOPE_CASE,
     CONVERSATION_ANCHOR_SCOPE_GUIDANCE,
     CONVERSATION_ANCHOR_SCOPE_PROJECT,
@@ -95,6 +96,7 @@ from services.environment_capabilities import (
 from services.conversation_interpreter import _looks_like_project_question, interpret_message
 from services.governance import GovernanceLog
 from services.ingestion import UploadError, document_source_payload, get_registry, reject_if_display_name_taken
+from services.investigation_snapshot import build_archive_snapshot
 from services.project_clock import open_project
 from services.rfi_export import RFIExportError, build_rfi_docx, build_rfi_draft_docx
 from services.work_product_export import WorkProductExportError, export_work_product
@@ -532,6 +534,12 @@ def show_workspace(project_id):
     # comment above this one already establishes. Same precedence rules
     # as directory_view below (a real ?case=/?source= selection wins).
     show_new_case_form = request.args.get("view") == "new-case"
+    # CLAUDE-POSTCAMEL-INVESTIGATION-AR1: same shape as show_new_case_form
+    # immediately above - a focused CHOOSER, not a browsable directory,
+    # so it stays its own flag rather than a directory_view value (see
+    # that flag's own comment on why "+ New Investigation" already
+    # avoided directory_view for exactly this reason).
+    show_continue_from_archive = request.args.get("view") == "continue-from-archive"
     if directory_view not in STABLE_DIRECTORY_KINDS:
         directory_view = None
     # CLAUDE-P40-VW8-QA1: the one shared label breadcrumb/division-header
@@ -613,6 +621,7 @@ def show_workspace(project_id):
         directory_view = None
         directory_view_label = None
         show_new_case_form = False
+        show_continue_from_archive = False
 
     # CLAUDE-P40-VW9: Files - the Design-Builder Workspace's own
     # "which folder is currently open" browsing state, resolved only
@@ -711,6 +720,20 @@ def show_workspace(project_id):
     # findings_view ordering question below: which Finding matters most
     # is a review-state judgment call, not a geometry one.
     open_visible_cases = [c for c in visible_cases if c["status"] != "archived"]
+
+    # CLAUDE-POSTCAMEL-INVESTIGATION-AR1: the "Continue from Archive"
+    # chooser's own list - archived Cases this reviewer can see (already
+    # Case-privacy-filtered by visible_cases_for above). `workspace` is
+    # already this one Project's own loaded CaseWorkspaceStore state, so
+    # there is structurally no query here that could reach an archived
+    # Case belonging to a different Project. A cheap finding count per
+    # archived Case, computed once here rather than once per template row.
+    archived_visible_cases = [c for c in visible_cases if c["status"] == CASE_STATUS_ARCHIVED]
+    case_finding_counts = {
+        c["id"]: sum(1 for f in workspace.findings if f["case_id"] == c["id"])
+        for c in archived_visible_cases
+    }
+
     needs_attention_view = []
     for case in open_visible_cases:
         case_unresolved = [
@@ -1354,6 +1377,9 @@ def show_workspace(project_id):
         document=document,
         workspace=workspace,
         visible_cases=visible_cases,
+        open_visible_cases=open_visible_cases,
+        archived_visible_cases=archived_visible_cases,
+        case_finding_counts=case_finding_counts,
         active_case=active_case,
         selected_source=selected_source,
         directory_view=directory_view,
@@ -1364,6 +1390,7 @@ def show_workspace(project_id):
         design_builder_move_targets=design_builder_move_targets,
         data_room_sources=data_room_sources,
         show_new_case_form=show_new_case_form,
+        show_continue_from_archive=show_continue_from_archive,
         needs_attention_view=needs_attention_view,
         findings_view=findings_view,
         focused_finding_id=focused_finding_id,
@@ -2259,6 +2286,40 @@ def retract_case(project_id, case_id):
     return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
 
 
+@workspace_bp.route("/projects/<project_id>/workspace/cases/<case_id>/archive/confirm", methods=["GET"])
+@login_required
+def confirm_archive_case(project_id, case_id):
+    """CLAUDE-POSTCAMEL-INVESTIGATION-AR1: the discoverable "Archive
+    Investigation" affordance's confirmation step. Deliberately a
+    separate GET route rendering its own page, rather than adding a
+    confirm=yes/no parameter to the existing POST /archive route below -
+    that route is also the Attention-Capacity dialog's "Conclude"
+    trigger (CLAUDE-P40-VW7B), and that existing path must keep working
+    exactly as it does today (Section 14: "one archive mechanism,
+    multiple legitimate triggers", not one mechanism whose contract
+    changes for every caller). This page's own form posts to that same
+    unmodified /archive route.
+
+    Not itself the authority check (archive_case below still owns
+    that) - only decides whether to show the button as actionable, so a
+    reviewer who cannot actually archive this Case is told so before
+    clicking through rather than after."""
+    _, store, workspace = _load_workspace_or_404(project_id)
+    _require_visible_case(store, workspace, case_id)
+
+    case = next((c for c in workspace.cases if c["id"] == case_id), None)
+    if case is None or case.get("status") == CASE_STATUS_ARCHIVED:
+        abort(404)
+
+    is_owner = case.get("created_by") is not None and _reviewer() == case["created_by"]
+    is_admin = session.get("role") == "admin"
+
+    return render_template(
+        "confirm_archive_case.html", project_id=project_id, case=case,
+        can_archive=(is_owner or is_admin),
+    )
+
+
 @workspace_bp.route("/projects/<project_id>/workspace/cases/<case_id>/archive", methods=["POST"])
 @login_required
 def archive_case(project_id, case_id):
@@ -2323,6 +2384,41 @@ def derive_case(project_id, case_id):
 
     flash("New active Case derived from archive.", "success")
     return redirect(url_for("workspace.show_workspace", project_id=project_id, case=new_case["id"]))
+
+
+@workspace_bp.route("/projects/<project_id>/workspace/cases/<case_id>/snapshot", methods=["POST"])
+@login_required
+def snapshot_archived_case(project_id, case_id):
+    """CLAUDE-POSTCAMEL-INVESTIGATION-AR1 Smart Snapshot: a read-only,
+    ephemeral orientation recap of an ARCHIVED Case, requested from the
+    "Continue from Archive" chooser before a reviewer decides whether to
+    derive from it. See services.investigation_snapshot's own docstring
+    for the grounding/non-mutation contract this route must preserve.
+
+    Deliberately writes NOTHING - no ConversationMessage (this never
+    calls _run_conversation_turn/add_message), no Finding, no Task, no
+    Work Product, no GovernanceLog entry (Section 10: "Snapshot assists
+    recall; it does not create authority" - requesting a recap is not
+    itself a governed action). The response is JSON, rendered into an
+    ephemeral page fragment by the caller and never persisted."""
+    _, store, workspace = _load_workspace_or_404(project_id)
+    _require_visible_case(store, workspace, case_id)
+
+    case = next((c for c in workspace.cases if c["id"] == case_id), None)
+    if case is None or case.get("status") != CASE_STATUS_ARCHIVED:
+        abort(404)
+
+    findings = [f for f in workspace.findings if f["case_id"] == case_id]
+    conversation = case.get("conversation", [])
+
+    result = build_archive_snapshot(case, findings, conversation)
+    return jsonify({
+        "ran": result.ran,
+        "summary": result.summary,
+        "grounded_in": result.grounded_in,
+        "not_covered": result.not_covered,
+        "skipped_reason": result.skipped_reason,
+    })
 
 
 @workspace_bp.route("/projects/<project_id>/workspace/cases/<case_id>/outcome", methods=["POST"])

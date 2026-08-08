@@ -4621,6 +4621,19 @@ main::-webkit-scrollbar-corner,
 .new-case-form-heading { font-family: var(--font-display); font-size: 1.3rem; font-weight: 500; margin: 0 0 0.8rem; }
 .new-case-form-actions { display: flex; gap: 0.6rem; align-items: center; margin-top: 0.3rem; }
 
+/* CLAUDE-POSTCAMEL-INVESTIGATION-AR1: "Continue from Archive" chooser -
+   reuses .project-home/.new-case-form-panel/.source-list/.source-item/
+   .pane-note/.link-button/.btn wholesale (same panel this stage's
+   "focused form/chooser, never a management page" precedent already
+   established for New Investigation); only the row's own internal
+   layout (header + trailing actions + an initially-hidden Snapshot
+   output) is genuinely new geometry. */
+.archive-chooser-row { display: grid; gap: 0.35rem; }
+.archive-chooser-row-header { display: flex; align-items: baseline; gap: 0.5rem; flex-wrap: wrap; }
+.archive-chooser-row-actions { display: flex; align-items: center; gap: 0.8rem; }
+.archive-chooser-continue-form { display: inline; }
+.archive-chooser-snapshot { border-left: 2px solid var(--border); padding-left: 0.6rem; margin-top: 0.2rem; }
+
 /* CLAUDE-P40-VW9 (Governed Files Display and Project File Architecture):
    the two governed sibling roots read as different GOVERNANCE SPACES
    without inventing a new color distinction (this file's own header

@@ -1,0 +1,37 @@
+{# CLAUDE-POSTCAMEL-INVESTIGATION-AR1: the discoverable Archive
+   confirmation step - see routes/workspace.py's confirm_archive_case
+   for why this is its own page rather than a confirm=yes/no parameter
+   on the existing /archive route (that route is also the Attention-
+   Capacity dialog's own "Conclude" trigger and must keep its current,
+   single-step contract). Plain, honest, product language - Section 3's
+   own "do not overburden the user with kernel terminology". #}
+{% extends "confirm_base.html" %}
+
+{% block confirm_title %}Archive Investigation{% endblock %}
+{% block confirm_label %}Archive{% endblock %}
+{% block confirm_heading %}Archive &ldquo;{{ case.title }}&rdquo;?{% endblock %}
+{% block confirm_body %}
+<p style="color:var(--text-primary);">
+    This Investigation will leave the active Investigations list. Its Findings,
+    Discussion, evidence relationships, and history are preserved exactly as they
+    are - archiving does not delete or change anything. It remains available as
+    archived history, and future work may continue from it later through a new,
+    separate Investigation started from this archive.
+</p>
+{% if not can_archive %}
+<p style="color:var(--seal-red);">
+    Only this Investigation&rsquo;s own creator, or a project admin, may archive it.
+</p>
+{% endif %}
+{% endblock %}
+{% block confirm_actions %}
+{% if can_archive %}
+<form method="post" action="{{ url_for('workspace.archive_case', project_id=project_id, case_id=case.id) }}" class="approval-gate-actions">
+    <button type="submit" class="btn btn-primary" data-ui-ref="lists.project.investigations.leaf.archive.confirm">
+        Yes &mdash; Archive this Investigation
+    </button>
+</form>
+{% endif %}
+{% endblock %}
+{% block confirm_back_url %}{{ url_for('workspace.show_workspace', project_id=project_id, case=case.id) }}{% endblock %}
+{% block confirm_back_label %}Keep this Investigation active{% endblock %}

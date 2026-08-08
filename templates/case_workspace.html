@@ -34,7 +34,7 @@
         {% if not panel_only %}
         <div class="display-division-header">
             <span class="display-division-header-name">
-                {% if active_case %}{{ active_case.title }}{% elif selected_source %}{{ selected_source.name }}{% elif directory_view_label %}{{ directory_view_label }}{% elif show_new_case_form %}New Investigation{% endif %}
+                {% if active_case %}{{ active_case.title }}{% elif selected_source %}{{ selected_source.name }}{% elif directory_view_label %}{{ directory_view_label }}{% elif show_new_case_form %}New Investigation{% elif show_continue_from_archive %}Continue from Archive{% endif %}
             </span>
         </div>
         {# ---------------- Document tab strip (CLAUDE-P40-DTAB1) --------------------
@@ -2179,6 +2179,60 @@
             </div>
         </form>
     </div>
+{% elif show_continue_from_archive %}
+    {# CLAUDE-POSTCAMEL-INVESTIGATION-AR1: a focused CHOOSER only, same
+       shape as show_new_case_form's own focused CREATE form immediately
+       above - never a general archive-management page (Section 17: "no
+       separate Archive department"). Lists only THIS Project's own
+       archived Cases this reviewer can see (archived_visible_cases,
+       already Case-privacy- and project-scoped by visible_cases_for in
+       the route). Each row offers a read-only, non-mutating Snapshot
+       (static/js/investigation_snapshot.js) and a real "Continue from
+       this Archive" form posting to the existing, unmodified
+       workspace.derive_case route. #}
+    <div class="project-home new-case-form-panel">
+        {% if not panel_only %}
+        <p class="project-home-back">
+            <a href="{{ url_for('workspace.show_workspace', project_id=project_id, view='overview') }}">&larr; Overview</a>
+        </p>
+        {% endif %}
+        <h1 class="new-case-form-heading">Continue from Archive</h1>
+        <p class="pane-note">
+            Choose an archived Investigation from this Project to continue from. The
+            archive itself stays exactly as it is &mdash; continuing creates a new,
+            separate active Investigation that starts from it.
+        </p>
+        {% with flashed = get_flashed_messages(with_categories=true) %}
+        {% if flashed %}
+        <div class="flash-stack">
+            {% for category, message in flashed %}
+            <div class="flash-message flash-{{ category }}">{{ message }}</div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% endwith %}
+        {% if archived_visible_cases %}
+        <ul class="source-list" data-ui-ref="lists.project.investigations.continue-from-archive.list">
+            {% for c in archived_visible_cases %}
+            <li class="source-item archive-chooser-row" data-ui-ref="lists.project.investigations.continue-from-archive.row" data-archive-case-id="{{ c.id }}">
+                <div class="archive-chooser-row-header">
+                    <strong>{{ c.title }}</strong>
+                    <span class="pane-note">Archived {{ c.archived_at }} &middot; {{ case_finding_counts.get(c.id, 0) }} Finding(s){% if c.derived_from_case_id %} &middot; itself derived from an earlier archive{% endif %}</span>
+                </div>
+                <div class="archive-chooser-row-actions">
+                    <button type="button" class="link-button" data-snapshot-trigger data-case-id="{{ c.id }}" data-snapshot-url="{{ url_for('workspace.snapshot_archived_case', project_id=project_id, case_id=c.id) }}" data-ui-ref="lists.project.investigations.continue-from-archive.snapshot">Request Snapshot</button>
+                    <form method="post" action="{{ url_for('workspace.derive_case', project_id=project_id, case_id=c.id) }}" class="archive-chooser-continue-form">
+                        <button type="submit" class="btn btn-primary" data-ui-ref="lists.project.investigations.continue-from-archive.continue">Continue from this Archive</button>
+                    </form>
+                </div>
+                <div class="archive-chooser-snapshot" data-snapshot-output hidden></div>
+            </li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <p class="pane-note" data-ui-ref="lists.project.investigations.continue-from-archive.empty">No archived Investigations in this Project yet.</p>
+        {% endif %}
+    </div>
 {% else %}
     {# CLAUDE-P40-E3A, Section 5: "if no leaf or action is selected,
        Display must be blank" - no Project cards, no UUIDs, no search
@@ -2846,6 +2900,7 @@
 <script src="{{ url_for('static', filename='js/pdf_viewer.js') }}?v={{ static_version }}"></script>
 <script src="{{ url_for('static', filename='js/drawing_image_viewer.js') }}?v={{ static_version }}"></script>
 <script src="{{ url_for('static', filename='js/document_structure_registration.js') }}?v={{ static_version }}"></script>
+<script src="{{ url_for('static', filename='js/investigation_snapshot.js') }}?v={{ static_version }}"></script>
 <script src="{{ url_for('static', filename='js/case_workspace.js') }}?v={{ static_version }}"></script>
 <script src="{{ url_for('static', filename='js/files_folder_menus.js') }}?v={{ static_version }}"></script>
 {% endblock %}

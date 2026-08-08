@@ -527,10 +527,10 @@
                                         <a class="tree-leaf launcher-link{% if directory_view == 'files' %} active{% endif %}" data-ui-ref="lists.project.files" data-view="files"{% if directory_view == 'files' %} aria-current="page"{% endif %} href="{{ url_for('workspace.show_workspace', project_id=project_id, view='files') }}">Files</a>
                                     </li>
                                     <li class="tree-node" data-tree-node>
-                                        <button type="button" class="tree-toggle launcher-link" data-tree-parent data-tree-owns="case" data-ui-ref="lists.project.investigations" aria-expanded="{{ 'true' if (active_case or show_new_case_form) else 'false' }}">
-                                            <span class="tree-label">Investigations <span class="launcher-count">{{ visible_cases|length }}</span></span>
+                                        <button type="button" class="tree-toggle launcher-link" data-tree-parent data-tree-owns="case" data-ui-ref="lists.project.investigations" aria-expanded="{{ 'true' if (active_case or show_new_case_form or show_continue_from_archive) else 'false' }}">
+                                            <span class="tree-label">Investigations <span class="launcher-count">{{ open_visible_cases|length }}</span></span>
                                         </button>
-                                        <ul class="tree-children"{% if active_case or show_new_case_form %} data-tree-open{% endif %}>
+                                        <ul class="tree-children"{% if active_case or show_new_case_form or show_continue_from_archive %} data-tree-open{% endif %}>
                                             {# CLAUDE-P40-VW8-QA (New Investigation Action in Lists): an
                                                accessible action row, not a radio button (radios mean
                                                mutually-exclusive choices, which this isn't - it's a
@@ -540,13 +540,40 @@
                                                navigation to the standalone ?view=new-case form) that
                                                the same click-interceptor below also intercepts to
                                                project into the active Display instead, exactly like
-                                               every other data-*-id leaf already does. #}
+                                               every other data-*-id leaf already does.
+
+                                               CLAUDE-POSTCAMEL-INVESTIGATION-AR1: relabeled "+ New
+                                               Investigation" -> "Start New Investigation" (mechanism,
+                                               href, and data-new-case interception all UNCHANGED - see
+                                               static/js/case_workspace.js's own 'new-case' projection
+                                               entry, which matches on the attribute/query value, never
+                                               the visible text) and paired with a second, always-visible
+                                               sibling action, "Continue from Archive" - two real
+                                               top-level rows, not one hidden behind a hover/toggle,
+                                               per this stage's own "avoid a hover-only invisible
+                                               affordance" instruction. The second link is a plain
+                                               navigation (no data-new-case/data-view) - it deliberately
+                                               does not join the multi-Display projection system, which
+                                               this stage does not touch. #}
                                             <li class="tree-node" data-tree-node>
-                                                <a class="tree-leaf launcher-link tree-leaf-action{% if show_new_case_form %} active{% endif %}" data-ui-ref="lists.project.investigations.new" data-new-case{% if show_new_case_form %} aria-current="page"{% endif %} href="{{ url_for('workspace.show_workspace', project_id=project_id, view='new-case') }}">+ New Investigation</a>
+                                                <a class="tree-leaf launcher-link tree-leaf-action{% if show_new_case_form %} active{% endif %}" data-ui-ref="lists.project.investigations.new" data-new-case{% if show_new_case_form %} aria-current="page"{% endif %} href="{{ url_for('workspace.show_workspace', project_id=project_id, view='new-case') }}">Start New Investigation</a>
                                             </li>
-                                            {% for c in visible_cases %}
                                             <li class="tree-node" data-tree-node>
-                                                <a class="tree-leaf launcher-link{% if active_case and active_case.id == c.id %} active{% endif %}" data-ui-ref="lists.project.investigations.leaf" data-case-id="{{ c.id }}" data-case-title="{{ c.title }}"{% if active_case and active_case.id == c.id %} aria-current="page"{% endif %} href="{{ url_for('workspace.show_workspace', project_id=project_id, case=c.id) }}">{{ c.title }}</a>
+                                                <a class="tree-leaf launcher-link tree-leaf-action{% if show_continue_from_archive %} active{% endif %}" data-ui-ref="lists.project.investigations.continue-from-archive"{% if show_continue_from_archive %} aria-current="page"{% endif %} href="{{ url_for('workspace.show_workspace', project_id=project_id, view='continue-from-archive') }}">Continue from Archive</a>
+                                            </li>
+                                            {% for c in open_visible_cases %}
+                                            <li class="tree-node" data-tree-node>
+                                                {# CLAUDE-POSTCAMEL-INVESTIGATION-AR1: the same in-flow
+                                                   details/summary "..." disclosure already established
+                                                   for Files' own folder-row actions (see
+                                                   .files-folder-actions in main.css and this same idiom
+                                                   in case_workspace.html's Design-Builder folder list) -
+                                                   a real, always-focusable, click-to-open trigger, never
+                                                   a hover-only affordance. #}
+                                                <div class="launcher-task-row">
+                                                    <a class="tree-leaf launcher-link{% if active_case and active_case.id == c.id %} active{% endif %}" data-ui-ref="lists.project.investigations.leaf" data-case-id="{{ c.id }}" data-case-title="{{ c.title }}"{% if active_case and active_case.id == c.id %} aria-current="page"{% endif %} href="{{ url_for('workspace.show_workspace', project_id=project_id, case=c.id) }}">{{ c.title }}</a>
+                                                    <a class="link-button" aria-label="Archive {{ c.title }}" data-ui-ref="lists.project.investigations.leaf.archive" href="{{ url_for('workspace.confirm_archive_case', project_id=project_id, case_id=c.id) }}">Archive</a>
+                                                </div>
                                             </li>
                                             {% else %}
                                             <li class="tree-node-empty"><span class="pane-note" data-ui-ref="lists.project.investigations.empty">No Investigations yet.</span></li>
