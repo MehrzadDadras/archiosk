@@ -734,6 +734,15 @@ def show_workspace(project_id):
         for c in archived_visible_cases
     }
 
+    # CLAUDE-POSTCAMEL-PROJECT-CONTEXT-01: computed unconditionally, like
+    # open_visible_cases/archived_visible_cases above - the top-bar
+    # Project Context control (templates/base.html) must stay reachable
+    # from every workspace surface, not just Overview, so every render
+    # of this route needs these two view-model values available.
+    project_context_entries = store.project_context_entries_for(workspace)
+    current_project_context = project_context_entries[-1] if project_context_entries else None
+    project_context_history = list(reversed(project_context_entries[:-1]))
+
     needs_attention_view = []
     for case in open_visible_cases:
         case_unresolved = [
@@ -1391,6 +1400,8 @@ def show_workspace(project_id):
         data_room_sources=data_room_sources,
         show_new_case_form=show_new_case_form,
         show_continue_from_archive=show_continue_from_archive,
+        current_project_context=current_project_context,
+        project_context_history=project_context_history,
         needs_attention_view=needs_attention_view,
         findings_view=findings_view,
         focused_finding_id=focused_finding_id,
@@ -1818,6 +1829,61 @@ def edit_operating_instructions(project_id):
     )
     flash("Project Operating Instructions updated.", "success")
     return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
+
+
+@workspace_bp.route("/projects/<project_id>/workspace/context", methods=["POST"])
+@login_required
+def add_project_context_entry_route(project_id):
+    """CLAUDE-POSTCAMEL-PROJECT-CONTEXT-01: records a new CURRENT Project
+    Context entry - see CaseWorkspaceStore.add_project_context_entry.
+    Reachable from the top-bar Project Context control on every
+    workspace page (templates/base.html), so this always redirects back
+    to Overview afterward - the same "land somewhere the reviewer can
+    actually see the result" convention edit_operating_instructions
+    above already follows, not a new pattern. Open to any authenticated
+    Project member, same authority level as Operating Instructions -
+    Project Context is collaborative orientation, not owner-locked
+    evidence."""
+    _, store, workspace = _load_workspace_or_404(project_id)
+    try:
+        store.add_project_context_entry(
+            workspace,
+            text=(request.form.get("text") or ""),
+            actor=_reviewer(),
+            actor_role=session.get("role"),
+            governance_log=_log(),
+        )
+    except CaseWorkspaceError as exc:
+        flash(str(exc), "error")
+        return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
+
+    flash("Project Context updated.", "success")
+    return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
+
+
+@workspace_bp.route("/projects/<project_id>/workspace/sources/<source_id>/context", methods=["POST"])
+@login_required
+def set_document_context_route(project_id, source_id):
+    """CLAUDE-POSTCAMEL-PROJECT-CONTEXT-01: Document Context - human-
+    supplied orientation on ONE Source, kept explicitly independent of
+    Project Context (see CaseWorkspaceStore.set_source_note's own
+    docstring). Open to any authenticated Project member, matching
+    Operating Instructions/Project Context's own authority level -
+    annotative/descriptive text, not a lifecycle action like Remove
+    Document (which stays owner-or-admin, unchanged)."""
+    _, store, workspace = _load_workspace_or_404(project_id)
+    try:
+        store.set_source_note(
+            workspace, source_id=source_id,
+            text=(request.form.get("text") or ""),
+            actor=_reviewer(), governance_log=_log(),
+        )
+    except CaseWorkspaceError as exc:
+        flash(str(exc), "error")
+        return redirect(url_for("workspace.show_workspace", project_id=project_id, source=source_id))
+
+    flash("Document Context updated.", "success")
+    return redirect(url_for("workspace.show_workspace", project_id=project_id, source=source_id))
 
 
 @workspace_bp.route("/projects/<project_id>/workspace/classify-environment", methods=["POST"])

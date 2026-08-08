@@ -2992,6 +2992,27 @@ class CaseOutcome:
 
 
 @dataclass
+class ProjectContextEntry:
+    """
+    CLAUDE-POSTCAMEL-PROJECT-CONTEXT-01: one recorded statement of the
+    Project's current direction/orientation. Append-only, exactly like
+    CaseOutcome above - a later entry is the CURRENT one in effect
+    (ProjectWorkspace.project_context_entries[-1]), but every earlier
+    entry remains on the record, with its own text/author/role/
+    timestamp, never mutated or removed. See
+    ProjectWorkspace.project_context_entries' own docstring for why this
+    shape rather than a new versioning subsystem.
+    """
+
+    id: str
+    project_id: str
+    text: str
+    created_at: str
+    created_by: str
+    created_by_role: Optional[str] = None
+
+
+@dataclass
 class Table:
     """
     Prompt 18 / Batch J: structured tabular evidence, first-class rather
@@ -3711,6 +3732,25 @@ class ProjectWorkspace:
     project_briefing: Optional[dict] = None
     project_briefing_generated_at: Optional[str] = None
     project_briefing_generated_by: Optional[str] = None
+    # Project Context (CLAUDE-POSTCAMEL-PROJECT-CONTEXT-01): the Project's
+    # own current, human-declared orientation/direction - what the
+    # Project is about right now, and why, as distinct from
+    # operating_instructions above (terminology/convention/reviewer-
+    # guidance text, explicitly NOT project direction). Direction
+    # legitimately changes during design/pursuit (a client dropping a
+    # ramp/parking concept for office space, say) - a later entry must
+    # never silently erase an earlier one, so this is an APPEND-ONLY list
+    # (ProjectContextEntry, below), the same "a later record supersedes
+    # an earlier one IN EFFECT, never overwrites or deletes it" shape
+    # already used throughout this module for ReviewerValidation/
+    # Disposition/CaseOutcome - not a new versioning subsystem. The
+    # CURRENT entry is always simply the last one; "history" is every
+    # entry before it. Project Context is human-supplied orientation,
+    # never itself treated as verified evidence - nothing in this module
+    # reads it to decide Source authority, Stone Wall, or any
+    # constitutional rule, the same subordination operating_instructions
+    # already documents.
+    project_context_entries: list[dict] = field(default_factory=list)
     project_briefing_source_signature: Optional[str] = None
     # CLAUDE-P38-D2: duplicate-call/idempotency guard for automatic
     # generation - set immediately before the real Anthropic call
@@ -4730,6 +4770,99 @@ class CaseWorkspaceStore:
                 payload={"length": len(text)},
             )
         return workspace
+
+    def project_context_entries_for(self, workspace: ProjectWorkspace) -> list[dict]:
+        """Every recorded Project Context entry, oldest first - the
+        authoritative history. Callers wanting only the current one
+        should use current_project_context below rather than indexing
+        this list directly."""
+        return list(workspace.project_context_entries)
+
+    def current_project_context(self, workspace: ProjectWorkspace) -> Optional[dict]:
+        """The Project's current direction/orientation - simply the last
+        recorded entry, or None if nothing has ever been recorded. Never
+        a separately-stored "current" field that could drift from the
+        history - there is exactly one list, and current is always
+        derived from it."""
+        entries = workspace.project_context_entries
+        return entries[-1] if entries else None
+
+    def add_project_context_entry(
+        self,
+        workspace: ProjectWorkspace,
+        text: str,
+        actor: str,
+        actor_role: Optional[str] = None,
+        governance_log: Optional[GovernanceLog] = None,
+    ) -> dict:
+        """
+        Records a NEW current Project Context - see
+        ProjectWorkspace.project_context_entries' own docstring. Never
+        edits or removes any prior entry; the previous current entry
+        simply becomes history the moment a new one is appended. Empty
+        text is rejected outright rather than silently accepted - an
+        append-only history has no way to later distinguish "someone
+        meant to clear it" from "someone submitted the form empty by
+        mistake", so recording nothing is the only honest response
+        here (see routes/workspace.py's own caller for how this is
+        surfaced to the reviewer).
+        """
+        clean_text = text.strip()
+        if not clean_text:
+            raise CaseWorkspaceError("Project Context text cannot be empty.")
+
+        entry = ProjectContextEntry(
+            id=_new_id(), project_id=workspace.project_id, text=clean_text,
+            created_at=_now(), created_by=actor, created_by_role=actor_role,
+        )
+        workspace.project_context_entries.append(asdict(entry))
+        self.save(workspace)
+
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id, event_type="project_context_updated",
+                actor=actor, role="system",
+                payload={"entry_id": entry.id, "length": len(clean_text)},
+            )
+        return asdict(entry)
+
+    def set_source_note(
+        self,
+        workspace: ProjectWorkspace,
+        source_id: str,
+        text: str,
+        actor: str,
+        governance_log: Optional[GovernanceLog] = None,
+    ) -> dict:
+        """
+        Document Context (CLAUDE-POSTCAMEL-PROJECT-CONTEXT-01): human-
+        supplied orientation attached to ONE Source - what it is, why
+        it's present, its status, caveats, or intended use - reusing
+        Source's own pre-existing `note` field (Prompt-era, never before
+        wired to a route). Deliberately a plain overwrite (like
+        operating_instructions), not an append-only history like Project
+        Context - this stage's own governing prompt scopes history/non-
+        overwrite specifically to Project Context, and a per-Document
+        note carries no comparable "don't lose the earlier client
+        direction" requirement. Explicitly independent of Project
+        Context in both directions: setting this never touches
+        project_context_entries, and vice versa.
+        """
+        source = self._find(workspace.sources, source_id)
+        if source is None:
+            raise CaseWorkspaceError(f"Source {source_id} was not found.")
+
+        source["note"] = text.strip() or None
+        self.save(workspace)
+
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id, event_type="document_context_updated",
+                actor=actor, role="system",
+                payload={"source_id": source_id, "length": len(text.strip())},
+                correlation_id=source_id,
+            )
+        return source
 
     @staticmethod
     def source_signature_for(workspace: "ProjectWorkspace") -> str:

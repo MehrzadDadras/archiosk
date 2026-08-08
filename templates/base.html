@@ -339,6 +339,66 @@
                         <p class="appearance-mixed-note" id="appearance-mixed-note" role="status" aria-live="polite" hidden>Mixed &mdash; not every surface currently shares one mode.</p>
                     </div>
                 </details>
+
+                {# ---------------- Project Context (CLAUDE-POSTCAMEL-PROJECT-CONTEXT-01) --
+                   Persistently reachable from every workspace surface - sits
+                   inside the SAME {% if project_id is defined and workspace
+                   is defined %} gate as Display Layout/Appearance above,
+                   which is already rendered on every Document/Investigation/
+                   Finding/Work Product/Chat page (base.html is the one
+                   shared shell), not a new conditional. The helm/steering-
+                   wheel glyph (a real Unicode character, no new icon asset
+                   or library - see tools/dependency_fit.py's no-new-
+                   dependency discipline) plus a visible text label, per this
+                   stage's own "icon with the visible label" requirement.
+                   Compact control that opens for review/editing - never a
+                   permanently-expanded editor. #}
+                <details class="workspace-project-context-menu" id="workspace-project-context-menu" data-ui-ref="menu.project-context">
+                    <summary class="workspace-topbar-btn"><span aria-hidden="true">&#9784;</span> Project Context</summary>
+                    <div class="workspace-project-context-options" role="group" aria-label="Project Context">
+                        {% if current_project_context %}
+                        <p class="workspace-project-context-text" data-ui-ref="menu.project-context.current-text">{{ current_project_context.text }}</p>
+                        <p class="pane-note">
+                            Set by {{ current_project_context.created_by }}{% if current_project_context.created_by_role %} ({{ current_project_context.created_by_role.replace('_', ' ') }}){% endif %}
+                            &middot; {{ current_project_context.created_at }}
+                        </p>
+                        {% else %}
+                        <p class="pane-note" data-ui-ref="menu.project-context.empty">No Project Context set yet.</p>
+                        {% endif %}
+
+                        {# Human-supplied orientation, never itself verified evidence -
+                           the same distinction Snapshot (CLAUDE-POSTCAMEL-INVESTIGATION-
+                           AR1) already states for its own AI-generated summaries, stated
+                           here for this human-authored one. #}
+                        <p class="pane-note">This records the Project&rsquo;s own current, human-declared direction &mdash; not independently verified evidence. A cited source (a by-law, a client letter) remains its own separate, authoritative record.</p>
+
+                        <details class="workspace-project-context-subsection">
+                            <summary>Update Project Context</summary>
+                            <form class="workspace-form" method="post" action="{{ url_for('workspace.add_project_context_entry_route', project_id=project_id) }}" data-ui-ref="menu.project-context.form">
+                                <textarea name="text" placeholder="Record the Project's current direction, a change in client instructions, or a change in assumptions or priorities&hellip;" data-ui-ref="menu.project-context.textarea" required></textarea>
+                                <button type="submit" data-ui-ref="menu.project-context.submit">Save as current direction</button>
+                            </form>
+                            <p class="pane-note">This adds a new current direction &mdash; it never edits or erases the history below.</p>
+                        </details>
+
+                        {% if project_context_history %}
+                        <details class="workspace-project-context-subsection">
+                            <summary>History ({{ project_context_history|length }})</summary>
+                            <ul class="workspace-project-context-history" data-ui-ref="menu.project-context.history">
+                                {% for entry in project_context_history %}
+                                <li data-ui-ref="menu.project-context.history.entry">
+                                    <p>{{ entry.text }}</p>
+                                    <p class="pane-note">
+                                        {{ entry.created_by }}{% if entry.created_by_role %} ({{ entry.created_by_role.replace('_', ' ') }}){% endif %}
+                                        &middot; {{ entry.created_at }}
+                                    </p>
+                                </li>
+                                {% endfor %}
+                            </ul>
+                        </details>
+                        {% endif %}
+                    </div>
+                </details>
                 {% endif %}
 
                 {# ---------------- User three-dot menu (CLAUDE-P40-E3A, Section 3) -------
@@ -1830,14 +1890,14 @@
         })();
     </script>
     <script>
-        // CLAUDE-P40-E3A, Section 3/6: close the three top-bar <details>
-        // menus (Display Layout, Appearance, Account) on outside click or
-        // Escape - the native <details> element has no such behaviour on
-        // its own, and leaving one open after a click elsewhere would sit
-        // on top of Display indefinitely.
+        // CLAUDE-P40-E3A, Section 3/6: close the top-bar <details>
+        // menus (Display Layout, Appearance, Project Context, Account) on
+        // outside click or Escape - the native <details> element has no
+        // such behaviour on its own, and leaving one open after a click
+        // elsewhere would sit on top of Display indefinitely.
         (function () {
             var menus = Array.prototype.slice.call(
-                document.querySelectorAll('.workspace-layout-menu, .workspace-appearance-menu, .workspace-user-menu')
+                document.querySelectorAll('.workspace-layout-menu, .workspace-appearance-menu, .workspace-project-context-menu, .workspace-user-menu')
             );
             if (!menus.length) return;
 

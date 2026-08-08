@@ -1237,6 +1237,27 @@
             {% if selected_source.superseded_by_source_id %}&middot; superseded by a later revision{% endif %}
             {% if selected_source.removed_at %}&middot; removed{% endif %}
         </p>
+        {# CLAUDE-POSTCAMEL-PROJECT-CONTEXT-01: Document Context - human-
+           supplied orientation on THIS Source only (what it is, why it's
+           present, its status, caveats, or intended use), reusing
+           Source's own pre-existing `note` field. Deliberately separate
+           from Project Context (top bar, base.html) in both directions -
+           editing one never touches the other. A plain current value,
+           not a history - see CaseWorkspaceStore.set_source_note's own
+           docstring for why Document Context doesn't carry the same
+           non-overwrite requirement Project Context does. #}
+        <details class="document-context-panel" data-ui-ref="display.document.context">
+            <summary>Document Context</summary>
+            {% if selected_source.note %}
+            <p class="document-context-text" data-ui-ref="display.document.context-text">{{ selected_source.note }}</p>
+            {% else %}
+            <p class="pane-note" data-ui-ref="display.document.context-empty">No Document Context set yet.</p>
+            {% endif %}
+            <form class="workspace-form" method="post" action="{{ url_for('workspace.set_document_context_route', project_id=project_id, source_id=selected_source.id) }}" data-ui-ref="display.document.context-form">
+                <textarea name="text" placeholder="What is this document, why is it present, its status, caveats, or intended use&hellip;" data-ui-ref="display.document.context-textarea">{{ selected_source.note or '' }}</textarea>
+                <button type="submit" data-ui-ref="display.document.context-submit">Save Document Context</button>
+            </form>
+        </details>
         {% if selected_source.removed_at %}
         {# CLAUDE-P40-E2A, Section A: "ordinary document-viewer... routes
            must not treat it as active" - a removed Document's own

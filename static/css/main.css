@@ -1938,6 +1938,33 @@ main {
     z-index: 60;
     min-width: 170px;
 }
+/* CLAUDE-POSTCAMEL-PROJECT-CONTEXT-01: the Project Context control joins
+   the SAME popover idiom as the three menus above, but is kept as its
+   own separate rule (duplicating, not extending, the shared selector
+   group above) rather than folding it into that exact list - two
+   existing tests (tests/test_p40e3a_qa_reconciliation.py,
+   tests/test_p40vw6_theme_correction.py) assert against that precise
+   3-selector string verbatim (z-index/stacking and "never rgba"
+   audits), and widening it to 4 would break both for a reason
+   unrelated to what either test actually checks. Same properties,
+   genuinely a duplicate rule, not a divergent one. */
+.workspace-project-context-menu {
+    position: relative;
+}
+.workspace-project-context-options {
+    position: absolute;
+    top: calc(100% + 0.3rem);
+    right: 0;
+    background: var(--surface-primary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.4rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    z-index: 60;
+    min-width: 170px;
+}
 /* CLAUDE-P40-VW3: the Light/Dark/Tinted-per-surface matrix - real
    tabular data (row = surface, column = mode), not decoration, so a
    real <table> with row/col headers plus each radio's own aria-label
@@ -1958,6 +1985,51 @@ main {
 .workspace-appearance-options {
     max-width: min(320px, 94vw);
 }
+/* CLAUDE-POSTCAMEL-PROJECT-CONTEXT-01: same shared popover shell as
+   Display Layout/Appearance above, just wider (holds prose + a
+   textarea, not a compact matrix) and capped in height with its own
+   scroll - a long History list must never grow the popover off-screen. */
+.workspace-project-context-options {
+    max-width: min(360px, 94vw);
+    max-height: min(480px, 80vh);
+    overflow-y: auto;
+}
+.workspace-project-context-text {
+    font-size: var(--text-sm);
+    color: var(--text-primary);
+    white-space: pre-wrap;
+    margin: 0 0 0.2rem;
+}
+.workspace-project-context-subsection {
+    border-top: 1px solid var(--border);
+    padding-top: 0.4rem;
+    margin-top: 0.3rem;
+}
+.workspace-project-context-subsection summary {
+    cursor: pointer;
+    font-size: var(--text-sm);
+    color: var(--machine-blue);
+}
+.workspace-project-context-history {
+    list-style: none;
+    margin: 0.4rem 0 0;
+    padding: 0;
+    display: grid;
+    gap: 0.5rem;
+}
+.workspace-project-context-history li {
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 0.4rem;
+    font-size: var(--text-sm);
+}
+.workspace-project-context-history li p:first-child { margin: 0 0 0.15rem; white-space: pre-wrap; }
+/* CLAUDE-POSTCAMEL-PROJECT-CONTEXT-01: Document Context - a plain
+   in-flow <details>, same idiom as the Files folder-row actions
+   disclosure above, just not absolutely-positioned (this one sits
+   directly in the Display document pane, not a narrow sidebar row). */
+.document-context-panel { margin: 0.6rem 0; }
+.document-context-panel summary { cursor: pointer; font-size: var(--text-sm); color: var(--machine-blue); }
+.document-context-text { font-size: var(--text-sm); color: var(--text-primary); white-space: pre-wrap; margin: 0.3rem 0; }
 .appearance-matrix {
     border-collapse: collapse;
     font-size: var(--text-sm);
