@@ -69,7 +69,9 @@ from services.case_workspace import (
     OBJECT_KIND_FINDING,
     OBJECT_KIND_REQUIREMENT,
     PERSPECTIVE_ORIGIN_HUMAN,
+    REQUIREMENT_ADJUDICATION_NOT_SATISFIED,
     REQUIREMENT_ADJUDICATION_OUTCOMES,
+    REQUIREMENT_ADJUDICATION_PARTIALLY_SATISFIED,
     REQUIREMENT_ADJUDICATION_STATE_NOT_YET_ASSESSED,
     REQUIREMENT_REGISTRATION_HUMAN_REGISTERED,
     REQUIREMENT_STATUS_SUPERSEDED,
@@ -1125,6 +1127,78 @@ def show_workspace(project_id):
     # own conclusions" at a glance.
     revisited_requirements_count = sum(1 for row in requirements_view if len(row["adjudication_history"]) > 1)
 
+    # CLAUDE-POSTCAMEL-ROOT-I2: Requirements 3.3 Compliance rollup - a
+    # projection over the SAME requirements_view/compliance_rollup already
+    # computed above, never a second compliance record and never a new
+    # field on Requirement. Two buckets, kept explicitly separate per
+    # ROOT-A2's own "unknown is not non-compliant" rule: awaiting_review
+    # (no RequirementAdjudication on file yet) must never be folded into
+    # attention (an adverse/uncertain human determination - Not Satisfied/
+    # Partially Satisfied). Satisfied/Not Applicable/Accepted Alternative
+    # are settled and deliberately get no source breakdown of their own -
+    # only the two buckets a reviewer actually needs to act on do (source
+    # awareness scoped to what's operationally useful, not applied
+    # everywhere merely because it's possible).
+    _COMPLIANCE_ATTENTION_OUTCOMES = (
+        REQUIREMENT_ADJUDICATION_NOT_SATISFIED,
+        REQUIREMENT_ADJUDICATION_PARTIALLY_SATISFIED,
+    )
+    _compliance_source_lookup = {s["id"]: s for s in store.active_sources(workspace)}
+
+    def _compliance_source_breakdown(rows):
+        counts: dict[str, int] = {}
+        for row in rows:
+            source_id = row["requirement"]["source_id"]
+            counts[source_id] = counts.get(source_id, 0) + 1
+        breakdown = [
+            {
+                "source_id": source_id,
+                "name": _compliance_source_lookup[source_id]["name"]
+                if source_id in _compliance_source_lookup else "(removed Source)",
+                "count": count,
+            }
+            for source_id, count in counts.items()
+        ]
+        breakdown.sort(key=lambda entry: entry["count"], reverse=True)
+        return breakdown
+
+    _awaiting_review_rows = [
+        row for row in requirements_view
+        if row["adjudication_state"] == REQUIREMENT_ADJUDICATION_STATE_NOT_YET_ASSESSED
+    ]
+    _attention_rows = [
+        row for row in requirements_view
+        if row["adjudication_state"] in _COMPLIANCE_ATTENTION_OUTCOMES
+    ]
+    compliance_view = {
+        "total": len(requirements_view),
+        "awaiting_review_count": len(_awaiting_review_rows),
+        "attention_count": len(_attention_rows),
+        "awaiting_review_by_source": _compliance_source_breakdown(_awaiting_review_rows),
+        "attention_by_source": _compliance_source_breakdown(_attention_rows),
+        # The exact, real vocabulary values (never re-typed literals in the
+        # template) - a drill-through link built from these always matches
+        # a real requirement_adjudication_state exactly.
+        "awaiting_review_state": REQUIREMENT_ADJUDICATION_STATE_NOT_YET_ASSESSED,
+        "attention_states": list(_COMPLIANCE_ATTENTION_OUTCOMES),
+    }
+
+    # Drill-through (compliance summary -> underlying Requirements): an
+    # optional ?status= filter narrows which rows the "Governed
+    # Requirements" detail list below actually renders. compliance_view/
+    # compliance_rollup above always reflect the TRUE, unfiltered project
+    # totals regardless of this filter, so the summary can never be made
+    # to lie by a stale filter link. Absent ?status=, every governed
+    # Requirement renders exactly as before this change - ROOT-I1's own
+    # existing tests depend on that default being unchanged.
+    compliance_status_filter = request.args.get("status")
+    if compliance_status_filter:
+        requirements_view_display = [
+            row for row in requirements_view if row["adjudication_state"] == compliance_status_filter
+        ]
+    else:
+        requirements_view_display = requirements_view
+
     # Recent provenance, visible from inside the workspace itself rather
     # than only on the separate legacy dashboard - most-recent-first,
     # capped so the sidebar stays scannable rather than becoming its own
@@ -1434,7 +1508,10 @@ def show_workspace(project_id):
         activities=store.activities_for_case(workspace, active_case["id"]) if active_case else [],
         unpromoted_requirement_items=unpromoted_requirement_items,
         requirements_view=requirements_view,
+        requirements_view_display=requirements_view_display,
         compliance_rollup=compliance_rollup,
+        compliance_view=compliance_view,
+        compliance_status_filter=compliance_status_filter,
         revisited_requirements_count=revisited_requirements_count,
         adjudication_outcomes=REQUIREMENT_ADJUDICATION_OUTCOMES,
         recent_governance_events=recent_governance_events,

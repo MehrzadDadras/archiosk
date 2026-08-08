@@ -1899,6 +1899,46 @@
         {% endcall %}
 
         {% if requirements_view %}
+        {# CLAUDE-POSTCAMEL-ROOT-I2: Requirements 3.3 Compliance rollup -
+           a projection over the exact same requirements_view/
+           compliance_rollup this page already computed for the summary
+           paragraph below (ROOT-I1's own, unchanged) - no new canonical
+           state, no second compliance record. "Awaiting review" and
+           "needing attention" are kept in two separate sentences on
+           purpose (never merged into one count) so an un-adjudicated
+           Requirement is never misread as a compliance failure. Both
+           link through real ?status= URLs into the SAME "Governed
+           Requirements" list below (requirements_view_display, plain
+           server-side filter - no new JS, no new page). #}
+        <div class="compliance-rollup" id="requirements-compliance" data-ui-ref="display.requirements.compliance">
+            <p class="workspace-pane-label">Compliance</p>
+            {% if compliance_view.attention_count %}
+            <p class="pane-note">
+                {% for state in compliance_view.attention_states %}
+                <a href="{{ url_for('workspace.show_workspace', project_id=project_id, view='requirements', status=state) }}#governed-requirements"><span class="review-state-badge">{{ state }}</span></a>{% if not loop.last %} {% endif %}
+                {% endfor %}
+                — {{ compliance_view.attention_count }} Requirement(s) need attention
+                {%- if compliance_view.attention_by_source %} — from
+                {% for entry in compliance_view.attention_by_source %}{{ entry.name }} ({{ entry.count }}){% if not loop.last %}, {% endif %}{% endfor -%}
+                {% endif %}.
+            </p>
+            {% endif %}
+            {% if compliance_view.awaiting_review_count %}
+            <p class="pane-note">
+                <a href="{{ url_for('workspace.show_workspace', project_id=project_id, view='requirements', status=compliance_view.awaiting_review_state) }}#governed-requirements">{{ compliance_view.awaiting_review_count }} awaiting review</a>
+                — not yet adjudicated; this is not a finding of non-compliance
+                {%- if compliance_view.awaiting_review_by_source %} — from
+                {% for entry in compliance_view.awaiting_review_by_source %}{{ entry.name }} ({{ entry.count }}){% if not loop.last %}, {% endif %}{% endfor -%}
+                {% endif %}.
+            </p>
+            {% endif %}
+            {% if compliance_status_filter %}
+            <p class="pane-note">
+                Showing only <span class="review-state-badge">{{ compliance_status_filter }}</span> Requirements below.
+                <a href="{{ url_for('workspace.show_workspace', project_id=project_id, view='requirements') }}#governed-requirements">Clear filter</a>
+            </p>
+            {% endif %}
+        </div>
         <p class="pane-note">
             {{ requirements_view|length }} governed Requirement(s) —
             {% for state, count in compliance_rollup.items() %}
@@ -1908,8 +1948,8 @@
             <br><small style="color:var(--text-metadata);">{{ revisited_requirements_count }} Requirement(s) have needed more than one Adjudication — this project has already had to revisit its own conclusion at least once.</small>
             {% endif %}
         </p>
-        {% call macros.subdisclosure('Governed Requirements (' ~ requirements_view|length ~ ')', html_id='governed-requirements') %}
-            {% for row in requirements_view %}
+        {% call macros.subdisclosure('Governed Requirements (' ~ requirements_view_display|length ~ ')', html_id='governed-requirements') %}
+            {% for row in requirements_view_display %}
             {% set requirement = row.requirement %}
             {# Visual pressure ("stable geometry, variable emphasis" - see
                routes/workspace.py's own comment for the settled/old-news/
