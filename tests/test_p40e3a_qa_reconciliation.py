@@ -116,7 +116,7 @@ class RFIsBranchAlwaysRendersTests(_BaseTestCase):
         # showing "RFIs (0)" like its siblings always do at any count.
         client = self._client_as("e3aqa_owner", 1)
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
-        self.assertIn(">RFIs <span class=\"launcher-count\">0</span>", body)
+        self.assertIn(">RFI Correspondence <span class=\"launcher-count\">0</span>", body)
 
     def test_rfis_branch_count_reflects_real_drafts_and_filters_unauthorized(self):
         # Same hermetic setup pattern as tests/test_capability_architecture.py's
@@ -145,7 +145,7 @@ class RFIsBranchAlwaysRendersTests(_BaseTestCase):
 
         client = self._client_as("e3aqa_owner", 1)
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
-        self.assertIn(">RFIs <span class=\"launcher-count\">1</span>", body)
+        self.assertIn(">RFI Correspondence <span class=\"launcher-count\">1</span>", body)
 
 
 # ---------------------------------------------------------------------------

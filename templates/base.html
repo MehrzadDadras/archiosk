@@ -660,9 +660,16 @@
                                        silently lost the whole RFIs row instead of showing "RFIs
                                        (0)" like every other branch. Matches the sibling pattern
                                        now: always present, count reflects reality. #}
-                                    <li class="tree-node" data-tree-node data-root-branch="6.3" data-root-label="RFIs">
+                                    {# CLAUDE-POSTCAMEL-ROOT-I3: relabeled from "RFIs" - ROOT-A2 found
+                                       that grouping this correspondence-status cross-cut at 6.3, right
+                                       beside "Work Products" (6), read as if an RFI were a kind of
+                                       Work Product rather than outgoing/incoming correspondence with
+                                       the Owner. Canonical ownership (RFIDraft on its Investigation)
+                                       and the 6.3 position are both unchanged - only the visible text
+                                       now names the category first. #}
+                                    <li class="tree-node" data-tree-node data-root-branch="6.3" data-root-label="RFI Correspondence">
                                         <button type="button" class="tree-toggle launcher-link" data-tree-parent data-ui-ref="lists.project.rfis" aria-expanded="false">
-                                            <span class="tree-label">RFIs <span class="launcher-count">{{ rfi_drafts_view|length }}</span></span>
+                                            <span class="tree-label">RFI Correspondence <span class="launcher-count">{{ rfi_drafts_view|length }}</span></span>
                                         </button>
                                         <ul class="tree-children">
                                             {# An RFI draft has no standalone content page of its own - it
@@ -721,8 +728,19 @@
                                        (matching Documents/Investigations/Tasks/Tags's own
                                        <span class="launcher-count"> convention) is the ONE place it
                                        appears now, not duplicated near the composer too. #}
-                                    <li class="tree-node" data-tree-node>
-                                        <a class="tree-leaf launcher-link{% if directory_view is none and not active_case and not selected_source %} active{% endif %}" data-ui-ref="lists.project.chats"{% if directory_view is none and not active_case and not selected_source %} aria-current="page"{% endif %} href="{{ url_for('workspace.show_workspace', project_id=project_id) }}">Chats <span class="launcher-count">{{ project_conversation_count }}</span></a>
+                                    {# CLAUDE-POSTCAMEL-ROOT-I3: relabeled from "Chats" to match ROOT-A1's
+                                       canonical root branch 7 - the Filing-Ontology addendum (ROOT-A2)
+                                       already established that what's governed here is the project's own
+                                       persisted, append-only ConversationMessage record (workspace.
+                                       project_conversation), authored through a chat-shaped composer -
+                                       not several separate, disposable "chats." "Conversation" (singular)
+                                       names the one continuous log honestly without implying the
+                                       decision-authority of a governed Finding/Decision, and without
+                                       silently promising the more structured ReviewThread mechanism
+                                       lives here too (it doesn't - this leaf reaches the plain project
+                                       conversation dock only, unchanged). #}
+                                    <li class="tree-node" data-tree-node data-root-branch="7" data-root-label="Conversation">
+                                        <a class="tree-leaf launcher-link{% if directory_view is none and not active_case and not selected_source %} active{% endif %}" data-ui-ref="lists.project.chats"{% if directory_view is none and not active_case and not selected_source %} aria-current="page"{% endif %} href="{{ url_for('workspace.show_workspace', project_id=project_id) }}">Conversation <span class="launcher-count">{{ project_conversation_count }}</span></a>
                                     </li>
                                     {# ---------------- Tasks (CLAUDE-P40-VW7) --------------------------
                                        Real, persisted project Tasks created via "Make Task" on a

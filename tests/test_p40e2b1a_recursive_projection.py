@@ -183,7 +183,7 @@ class NoDuplicatedChildHierarchyTests(_BaseTestCase):
         panel_html = body[launcher_start:launcher_end]
         self.assertIn("Documents", panel_html)
         self.assertIn("Investigations", panel_html)
-        self.assertIn("Chats", panel_html)
+        self.assertIn("Conversation", panel_html)
         self.assertIn("rfp.txt", panel_html)
 
     def test_panel_content_differs_between_home_and_an_open_workspace(self):

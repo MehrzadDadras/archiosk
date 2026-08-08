@@ -74,12 +74,14 @@ class RootI1NavigationTests(unittest.TestCase):
         for branch, label in [
             ("1.1", "Identity &amp; Overview"),
             ("1.2", "Project Context"),
+            ("1.3", "Access &amp; Operating Environment"),
             ("2.1", "Documents"),
             ("2.2", "Files"),
             ("3", "Requirements"),
             ("4", "Investigations"),
             ("6", "Work Products"),
-            ("6.3", "RFIs"),
+            ("6.3", "RFI Correspondence"),
+            ("7", "Conversation"),
             ("8", "Action"),
         ]:
             self.assertIn(f'data-root-branch="{branch}"', body)

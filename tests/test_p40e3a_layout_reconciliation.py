@@ -275,7 +275,7 @@ class DisplayBlankByDefaultTests(_BaseTestCase):
         body = client.get(f"/projects/{self.project_id}/workspace?view=overview").get_data(as_text=True)
         self.assertIn('id="project-overview"', body)
         self.assertIn("Project Instructions", body)
-        self.assertIn(">RFIs<", body)
+        self.assertIn(">RFI Correspondence<", body)
 
     def test_document_leaf_projects_its_content(self):
         client = self._client_as("e3a_owner", 1)

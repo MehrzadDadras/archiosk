@@ -70,7 +70,7 @@ class ChatsListsRowCarriesTheCountTests(unittest.TestCase):
     def test_chats_row_renders_a_launcher_count_span(self):
         idx = self.base_html.index('data-ui-ref="lists.project.chats"')
         row = self.base_html[idx: idx + 300]
-        self.assertIn("Chats <span class=\"launcher-count\">", row)
+        self.assertIn("Conversation <span class=\"launcher-count\">", row)
         self.assertIn("{{ project_conversation_count }}", row)
 
     def test_chats_row_identifier_retained(self):

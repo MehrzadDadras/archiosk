@@ -129,6 +129,18 @@
        decided silently. #}
     {% if directory_view == 'overview' %}
         <div id="project-overview" data-ui-ref="display.overview">
+        {# CLAUDE-POSTCAMEL-ROOT-I3: canonical root branch 1.3 (ROOT-A1's
+           "Access & Governance") is these two existing sections - Project
+           Operating Environment and Access - never a separate page of
+           their own. ROOT-A2 found the word "Governance" oversold what's
+           actually here (plain access control + a one-time environment
+           lock, no procurement-governance content exists to show); the
+           corrected label is attribute-only here, matching the same
+           "tag an existing, already-accurate element" pattern Project
+           Context (1.2) already used - no new heading text is added,
+           since both sections below already describe themselves
+           correctly on their own. #}
+        <div data-root-branch="1.3" data-root-label="Access &amp; Operating Environment">
         {# CLAUDE-P29: Project Operating Environment -- locked, never an
            edit control once set. Deliberately no form/button anywhere in
            this branch; see CaseWorkspaceStore.set_operating_environment's
@@ -202,6 +214,7 @@
             {% endfor %}
         </details>
         {% endif %}
+        </div>
         </div>
 
         {# CLAUDE-P38-C: Lifecycle and Display Layers previously rendered
@@ -645,7 +658,11 @@
            which Case drafted it, with the consistency-flag-driven
            project export kept as one entry point among others, not the
            section's whole identity. #}
-        {% call macros.accordion('RFIs', status=(rfi_drafts_view|length ~ ' total' if rfi_drafts_view else None), group='left', id='rfi-export') %}
+        {# CLAUDE-POSTCAMEL-ROOT-I3: same relabeling as the Lists sidebar's
+           6.3 branch (base.html) - this is the identical project-wide RFI
+           register, just rendered a second place; the two must read as
+           the same thing, not two differently-named concepts. #}
+        {% call macros.accordion('RFI Correspondence', status=(rfi_drafts_view|length ~ ' total' if rfi_drafts_view else None), group='left', id='rfi-export') %}
         {% if rfi_drafts_view %}
         <ul class="source-list">
             {% for row in rfi_drafts_view %}

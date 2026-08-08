@@ -139,7 +139,7 @@ class ConversationApertureRouteTests(unittest.TestCase):
         # too as a duplicate of the Lists panel's own "Chats" row, which
         # now carries the count instead - see base.html's own
         # lists.project.chats row).
-        self.assertIn('Chats <span class="launcher-count">2</span>', body)
+        self.assertIn('Conversation <span class="launcher-count">2</span>', body)
         self.assertNotIn("Project Conversation (2)", body)
         self.assertIn("Any update?", body)
         # CLAUDE-POSTCAMEL-ROOT-I1: the per-Requirement "Discuss this
@@ -437,7 +437,7 @@ class RecentFocusTests(unittest.TestCase):
         # that stays project-wide - just not in owner2's OWN focus trail.
         # CLAUDE-P40-VW7A-QA: the count now lives on the Lists "Chats"
         # row, not a "Project Conversation (N)" heading (removed).
-        self.assertIn('Chats <span class="launcher-count">2</span>', body)
+        self.assertIn('Conversation <span class="launcher-count">2</span>', body)
 
     def test_recent_focus_deduplicates_by_anchor_keeping_only_the_latest(self):
         requirement = self._register_requirement(self.client)

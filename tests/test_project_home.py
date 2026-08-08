@@ -122,7 +122,7 @@ class ProjectHomeTests(unittest.TestCase):
         body = response.get_data(as_text=True)
 
         self.assertIn("Project Instructions", body)
-        self.assertIn(">RFIs<", body)
+        self.assertIn(">RFI Correspondence<", body)
         self.assertIn("History (", body)
 
         self.assertIn('Documents <span class="launcher-count">1</span>', body)
