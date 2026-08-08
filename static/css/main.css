@@ -564,7 +564,7 @@ html.launcher-hidden .launcher-panel { display: none; }
 .launcher-heading {
     font-family: var(--font-body);
     font-weight: 600;
-    font-size: 0.82rem;
+    font-size: var(--text-sm);
     text-transform: uppercase;
     letter-spacing: 0.06em;
     color: var(--text-metadata);
@@ -578,7 +578,7 @@ html.launcher-hidden .launcher-panel { display: none; }
     border-radius: 5px;
     color: var(--text-secondary);
     font-family: var(--font-body);
-    font-size: 0.82rem;
+    font-size: var(--text-sm);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -1094,7 +1094,7 @@ main {
     text-overflow: ellipsis;
     white-space: nowrap;
 }
-.project-card-id { font-size: 0.82rem; color: var(--text-metadata); }
+.project-card-id { font-size: var(--text-sm); color: var(--text-metadata); }
 .project-card-meta {
     font-family: var(--font-body);
     font-size: 0.85rem;
@@ -1248,7 +1248,7 @@ main {
     justify-content: center;
     text-align: center;
     font-family: var(--font-body);
-    font-size: 0.82rem;
+    font-size: var(--text-sm);
     color: var(--text-metadata);
     padding: 0.4rem;
     position: relative;
@@ -1338,11 +1338,11 @@ main {
     padding: 1.2rem 1.4rem;
 }
 .flag-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 0.8rem; }
-.flag-req { font-size: 0.88rem; color: var(--text-primary); padding: 0.6rem 0.8rem; background: var(--surface-secondary); border-radius: 3px; }
+.flag-req { font-size: var(--text-sm); color: var(--text-primary); padding: 0.6rem 0.8rem; background: var(--surface-secondary); border-radius: 3px; }
 .flag-req-label {
     display: block;
     font-family: var(--font-body);
-    font-size: 0.82rem;
+    font-size: var(--text-sm);
     color: var(--text-metadata);
     text-transform: uppercase;
     letter-spacing: 0.06em;
@@ -1378,7 +1378,7 @@ main {
     font-weight: 700;
 }
 .gateway-brand h1 { font-family: var(--font-display); font-size: 1.8rem; font-weight: 300; margin: 0; color: var(--text-primary); }
-.gateway-subtitle { margin: 0.3rem 0 0; color: var(--text-secondary); font-size: 0.82rem; }
+.gateway-subtitle { margin: 0.3rem 0 0; color: var(--text-secondary); font-size: var(--text-sm); }
 .gateway-divider { height: 1px; margin: 0 2rem; background: var(--border); }
 .gateway-section { padding: 1.6rem 2rem 2rem; }
 .gateway-section-label {
@@ -1555,7 +1555,7 @@ main {
 .flash-error { color: var(--failure-red); border-color: var(--failure-red); background: var(--failure-red-tint); }
 .flash-success { color: var(--accepted-green); border-color: var(--accepted-green); background: var(--accepted-green-tint); }
 
-.workspace-link { margin-top: 0.8rem; font-size: 0.88rem; padding: 0.5rem 1rem; }
+.workspace-link { margin-top: 0.8rem; font-size: var(--text-sm); padding: 0.5rem 1rem; }
 
 /* ============================================================
    Workspace top bar (CLAUDE-P40-E2B, Section A)
@@ -1707,6 +1707,14 @@ main {
    repaints correctly per Appearance for free, the same way every
    other token-driven rule in this file does. */
 .workspace-topbar-context {
+    /* CLAUDE-P40-BRAND1: deliberately kept as its own literal value, not
+       var(--text-sm) - this rule's own size is verified elsewhere
+       (test_p40brand1_brand_mark.py) to sit in a specific relationship
+       to the brand text's own size and the 14-16px secondary-text
+       range; consolidating it into the shared token would be a genuine
+       (if tiny) value change to a pairing already deliberately tuned,
+       not a no-op rename like the CLAUDE-POSTCAMEL-P02-ST1 consolidation
+       elsewhere in this file. */
     font-size: 0.88rem;
     color: var(--text-primary);
     white-space: nowrap;
@@ -1876,7 +1884,7 @@ main {
 }
 .workspace-topbar-btn {
     font-family: var(--font-body);
-    font-size: 0.82rem;
+    font-size: var(--text-sm);
     color: var(--text-secondary);
     background: none;
     border: 1px solid var(--border);
@@ -2013,7 +2021,7 @@ main {
 }
 .workspace-overflow-item {
     font-family: var(--font-body);
-    font-size: 0.82rem;
+    font-size: var(--text-sm);
     color: var(--text-primary);
     background: none;
     border: none;
@@ -2103,7 +2111,7 @@ main {
 }
 .workspace-layout-apply {
     font-family: var(--font-body);
-    font-size: 0.82rem;
+    font-size: var(--text-sm);
     width: 100%;
     padding: 0.4rem 0.5rem;
     margin-top: 0.2rem;
@@ -2123,7 +2131,7 @@ main {
     align-items: center;
     gap: 0.5rem;
     font-family: var(--font-body);
-    font-size: 0.82rem;
+    font-size: var(--text-sm);
     color: var(--text-primary);
     padding: 0.3rem 0.5rem;
     cursor: pointer;
@@ -2469,7 +2477,7 @@ html.toolbox-hidden .workspace-right-column {
     box-shadow: 0 4px 14px rgba(0, 0, 0, 0.22);
     padding: 0.4rem;
     min-width: 180px;
-    font-size: 0.82rem;
+    font-size: var(--text-sm);
 }
 .document-tab-menu-item,
 .document-tab-color-option,
@@ -2483,7 +2491,7 @@ html.toolbox-hidden .workspace-right-column {
     border: none;
     color: var(--text-primary);
     font-family: var(--font-body);
-    font-size: 0.82rem;
+    font-size: var(--text-sm);
     padding: 0.35rem 0.5rem;
     border-radius: 4px;
     cursor: pointer;
@@ -2749,7 +2757,7 @@ html.toolbox-hidden .workspace-right-column {
 }
 .display-context-item {
     font-family: var(--font-body);
-    font-size: 0.82rem;
+    font-size: var(--text-sm);
     color: var(--text-primary);
     background: none;
     border: none;
@@ -3577,7 +3585,7 @@ main::-webkit-scrollbar-corner,
     flex-direction: column;
     gap: 0.5rem;
 }
-.relationship-river-panel h4 { margin: 0; font-size: 0.82rem; color: var(--text-primary); }
+.relationship-river-panel h4 { margin: 0; font-size: var(--text-sm); color: var(--text-primary); }
 .relationship-trust-summary { margin: 0; color: var(--text-secondary); }
 .relationship-river-empty { margin: 0; color: var(--text-disabled); font-style: italic; }
 .relationship-river-list { display: flex; flex-direction: column; gap: 0.4rem; }
@@ -3702,7 +3710,7 @@ main::-webkit-scrollbar-corner,
 .source-list, .case-list { list-style: none; margin: 0 0 0.7rem; padding: 0; display: grid; }
 .source-item, .case-item {
     display: block;
-    font-size: 0.82rem;
+    font-size: var(--text-sm);
     padding: 0.45rem 0.1rem;
     color: var(--text-primary);
     border-bottom: 1px solid var(--border);
@@ -3736,7 +3744,7 @@ main::-webkit-scrollbar-corner,
 }
 .workspace-form button {
     font-family: var(--font-body);
-    font-size: 0.88rem;
+    font-size: var(--text-sm);
     padding: 0.5rem 0.8rem;
     border-radius: 3px;
     border: 1px solid var(--border-strong);
@@ -4106,7 +4114,7 @@ main::-webkit-scrollbar-corner,
    .conversation-thread's own shared inset above. */
 .conversation-message {
     padding: 0.3rem 0;
-    font-size: 0.88rem;
+    font-size: var(--text-sm);
     line-height: 1.45;
     color: var(--text-primary);
 }
@@ -4199,7 +4207,7 @@ main::-webkit-scrollbar-corner,
 }
 .conversation-input-form button {
     font-family: var(--font-body);
-    font-size: 0.82rem;
+    font-size: var(--text-sm);
     padding: 0.7rem 1.1rem;
     border-radius: 4px;
     border: 1px solid var(--text-primary);
@@ -4433,7 +4441,7 @@ main::-webkit-scrollbar-corner,
     gap: 0.5rem;
     margin-top: 0.3rem;
 }
-.conv-dialog-actions .btn { padding: 0.5rem 1rem; font-size: 0.82rem; }
+.conv-dialog-actions .btn { padding: 0.5rem 1rem; font-size: var(--text-sm); }
 
 /* CLAUDE-P40-VW8, renamed and reused CLAUDE-P40-VW7B: the same fixed/
    centered/solid-background/high-z-index dialog idiom .conv-dialog
@@ -4478,7 +4486,7 @@ main::-webkit-scrollbar-corner,
     flex-wrap: wrap;
     gap: 0.5rem;
 }
-.attention-capacity-dialog-actions .btn { padding: 0.5rem 0.8rem; font-size: 0.82rem; }
+.attention-capacity-dialog-actions .btn { padding: 0.5rem 0.8rem; font-size: var(--text-sm); }
 .attention-capacity-dialog-note {
     font-size: var(--text-xs);
     color: var(--attention-amber);
@@ -4587,7 +4595,7 @@ main::-webkit-scrollbar-corner,
 .accordion-section[open] > .accordion-summary { margin-bottom: 0.5rem; }
 .collapse-all-btn {
     font-family: var(--font-body);
-    font-size: 0.82rem;
+    font-size: var(--text-sm);
     color: var(--text-metadata);
     background: transparent;
     border: 1px solid var(--border);
@@ -4602,7 +4610,7 @@ main::-webkit-scrollbar-corner,
    wrapper carries the plain/neutral Display surface - see its own
    comment above), inside division 0's own .display-division-content. */
 .project-home { max-width: 760px; padding: 0.25rem 0 1.5rem; }
-.project-home-back { font-size: 0.88rem; color: var(--text-secondary); margin: 0 0 0.6rem; }
+.project-home-back { font-size: var(--text-sm); color: var(--text-secondary); margin: 0 0 0.6rem; }
 .project-home-back a { color: var(--text-secondary); }
 .project-home-back a:hover { color: var(--text-primary); }
 
@@ -4784,7 +4792,7 @@ main::-webkit-scrollbar-corner,
 .finding-statement { font-size: 0.9rem; color: var(--text-primary); margin: 0 0 0.5rem; }
 .finding-confidence {
     font-family: var(--font-body);
-    font-size: 0.82rem;
+    font-size: var(--text-sm);
     color: var(--machine-blue);
     text-transform: uppercase;
     letter-spacing: 0.05em;
@@ -4800,7 +4808,7 @@ main::-webkit-scrollbar-corner,
 
 .finding-provenance {
     font-family: var(--font-mono);
-    font-size: 0.82rem;
+    font-size: var(--text-sm);
     color: var(--text-metadata);
     background: var(--surface-primary);
     border: 1px solid var(--border);
@@ -4874,7 +4882,7 @@ main::-webkit-scrollbar-corner,
 }
 
 .correction-note {
-    font-size: 0.82rem;
+    font-size: var(--text-sm);
     color: var(--text-primary);
     background: var(--surface-secondary);
     border-left: 3px solid var(--text-metadata);
@@ -4910,7 +4918,7 @@ main::-webkit-scrollbar-corner,
 }
 .apply-button:disabled { background: transparent; color: var(--text-disabled); border-color: var(--border); cursor: not-allowed; }
 
-.findings-empty { color: var(--text-secondary); font-size: 0.88rem; padding: 2rem 0; text-align: center; }
+.findings-empty { color: var(--text-secondary); font-size: var(--text-sm); padding: 2rem 0; text-align: center; }
 
 /* -- Reviewer Validation / Disposition / review_state badges --------------
    Three separate concepts, three separate badge families - never merged
@@ -5002,7 +5010,7 @@ main::-webkit-scrollbar-corner,
     padding: 0.9rem 1.1rem;
     margin-bottom: 1rem;
 }
-.revision-notice strong { color: var(--attention-amber); text-transform: uppercase; font-family: var(--font-body); font-size: 0.88rem; letter-spacing: 0.05em; }
+.revision-notice strong { color: var(--attention-amber); text-transform: uppercase; font-family: var(--font-body); font-size: var(--text-sm); letter-spacing: 0.05em; }
 .revision-notice p { color: var(--text-primary); font-size: 0.85rem; margin: 0.4rem 0 0.6rem; }
 .region-status { font-family: var(--font-mono); }
 .region-status-unchanged { color: var(--accepted-green); }

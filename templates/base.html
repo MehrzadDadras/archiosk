@@ -254,7 +254,15 @@
                    back to Black - true #000000 - per explicit product-
                    owner follow-up: "Do not use Graphite... must appear
                    flat and matte"), Tinted to Midnight Blue, and added
-                   Deep Forest as a fourth choice) --------
+                   Deep Forest as a fourth choice; CLAUDE-POSTCAMEL-P02-
+                   ST1 renamed Light to Titanium - same restraint-through-
+                   relabeling precedent as Dark->Graphite->Black above:
+                   mode_value stays 'light', ref_suffix stays 'light',
+                   only mode_label changes; tokens.css's own :root
+                   material-scale values (previously a warm sand/
+                   parchment family) were replaced with a desaturated,
+                   restrained warm-neutral "Titanium" character in the
+                   same commit) --------
                    Five independently configurable surfaces (Menu - this bar
                    itself, plus Lists/Display/Toolbox/Chat), four mutually
                    exclusive choices each - real radio semantics (one <input
@@ -284,11 +292,11 @@
                     <summary class="workspace-topbar-btn">Appearance</summary>
                     <div class="workspace-appearance-options" role="group" aria-label="Appearance">
                         <table class="appearance-matrix">
-                            <caption class="visually-hidden">Per-surface appearance - choose Light, Black, Midnight Blue, or Deep Forest for each surface, or All to set every surface at once</caption>
+                            <caption class="visually-hidden">Per-surface appearance - choose Titanium, Black, Midnight Blue, or Deep Forest for each surface, or All to set every surface at once</caption>
                             <thead>
                                 <tr>
                                     <th scope="col"><span class="visually-hidden">Surface</span></th>
-                                    <th scope="col">Light</th>
+                                    <th scope="col">Titanium</th>
                                     <th scope="col">Black</th>
                                     <th scope="col">Midnight Blue</th>
                                     <th scope="col">Deep Forest</th>
@@ -304,7 +312,7 @@
                                    state. */ #}
                                 <tr class="appearance-matrix-all-row" data-ui-ref="menu.appearance.all">
                                     <th scope="row">All</th>
-                                    {% for mode_value, mode_label, ref_suffix in [('light', 'Light', 'light'), ('black', 'Black', 'dark'), ('midnight-blue', 'Midnight Blue', 'tinted'), ('deep-forest', 'Deep Forest', 'deep-forest')] %}
+                                    {% for mode_value, mode_label, ref_suffix in [('light', 'Titanium', 'light'), ('black', 'Black', 'dark'), ('midnight-blue', 'Midnight Blue', 'tinted'), ('deep-forest', 'Deep Forest', 'deep-forest')] %}
                                     <td>
                                         <input type="radio" name="appearance-all" id="appearance-all-{{ ref_suffix }}"
                                                data-appearance-all-mode="{{ mode_value }}"
@@ -316,7 +324,7 @@
                                 {% for surface_key, surface_label in [('menu', 'Menu'), ('lists', 'Lists'), ('display', 'Display'), ('toolbox', 'Toolbox'), ('chat', 'Chat')] %}
                                 <tr data-ui-ref="menu.appearance.{{ surface_key }}">
                                     <th scope="row">{{ surface_label }}</th>
-                                    {% for mode_value, mode_label, ref_suffix in [('light', 'Light', 'light'), ('black', 'Black', 'dark'), ('midnight-blue', 'Midnight Blue', 'tinted'), ('deep-forest', 'Deep Forest', 'deep-forest')] %}
+                                    {% for mode_value, mode_label, ref_suffix in [('light', 'Titanium', 'light'), ('black', 'Black', 'dark'), ('midnight-blue', 'Midnight Blue', 'tinted'), ('deep-forest', 'Deep Forest', 'deep-forest')] %}
                                     <td>
                                         <input type="radio" name="appearance-{{ surface_key }}" id="appearance-{{ surface_key }}-{{ ref_suffix }}"
                                                data-appearance-target="{{ surface_key }}" data-appearance-mode="{{ mode_value }}"

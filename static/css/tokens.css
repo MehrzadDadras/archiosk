@@ -64,26 +64,73 @@
    should survive a future palette change too, not just this one.
    ============================================================ */
 :root {
-    /* -- material scale (warm architectural neutrals) --------------------
-       Hue held at ~38-42deg throughout - same sand family, not a
-       different palette. text-primary's relationship to canvas is what
-       produces the letterpress/ink-on-paper quality - the single most
-       load-bearing contrast pairing in the app. */
-    --canvas: #F4F0E9;            /* Sand Cotton - main app background */
-    --surface-primary: #FBFAF8;   /* Alabaster - panels, cards, dialogs */
-    --surface-secondary: #E1D7C1; /* Limestone - nav surfaces, grouped controls */
-    --surface-hover: #D9CBAF;     /* Warm Stone (lighter) - hover */
-    --surface-selected: #DCC89C;  /* Warm Stone (deeper) - selected / current */
-    --border: #BFAB7D;            /* Desert Dust - quiet dividers */
-    --border-strong: #B39D6C;     /* structural border where clarity is needed */
+    /* -- material scale (CLAUDE-POSTCAMEL-P02-ST1: Titanium) --------------
+       This surface (the mode still internally identified as "light" -
+       ref_suffix/mode_value unchanged, see base.html's own Appearance-
+       matrix comment on why a label revision never renumbers the
+       underlying choice) was originally a warm sand/parchment family
+       (hue ~38-42deg, named Sand Cotton/Alabaster/Limestone/Desert
+       Dust). Product-owner direction: replace it with a restrained,
+       precise, premium-instrument "Titanium" character. A first pass
+       kept the original warm hue anchor at lower saturation - live-
+       browser review found that still read as parchment/sandstone, not
+       titanium. Corrected to a genuinely COOL, near-neutral grey/steel/
+       graphite family (hue anchor now ~200-210deg, a whisper of cool
+       rather than the prior warm ~38-42deg) - no faux sheen, shine,
+       chrome, reflection, or metallic texture anywhere (Surface Trust's
+       own "borrow the principle - restraint, coherence, precision -
+       never the literal skin"). A third pass widened the surface steps
+       themselves (canvas/surface-primary unchanged - "do not darken the
+       entire theme" - but surface-secondary/-hover/-selected/border/
+       border-strong re-spaced into clearer, more evenly-graduated flat
+       steps) so panel/nav/selected-row boundaries read as distinct
+       machined layers instead of blurring into one another. A fourth
+       pass then found the resulting surface was still too FAINT in its
+       foreground, not its surface: text-secondary/-metadata/-disabled
+       were all substantially darkened (text-primary was already dark
+       enough) so labels, counts, placeholder/help copy, and menu text
+       are comfortably legible in normal use, not merely AA-legal. A
+       fifth pass, benchmarked explicitly against a familiar high-
+       contrast light UI (ChatGPT's light theme) rather than a numeric
+       floor, found even the fourth pass's values still read as "gray
+       text on gray surfaces" at normal viewing distance - technically
+       AA-legal is not the same as effortlessly readable. text-secondary/
+       -metadata/-disabled were darkened again, materially closer to
+       text-primary than before, so the app now leans on genuinely dark
+       ink for anything a user actually reads, reserving lighter gray
+       only for the truly decorative/disabled case - most pairings below
+       clear 7:1+ (AAA), not just the 4.5:1 (AA) floor. text-primary's
+       relationship to canvas is still what produces the letterpress/
+       ink-on-metal quality - the single most load-bearing contrast
+       pairing in the app, verified via tools/check_contrast.py and the
+       full per-surface matrix in
+       tests/test_p40vw8qa_theme_foreground_contrast.py after every one
+       of these passes, unchanged in kind throughout. */
+    --canvas: #EFF0F0;            /* Titanium Gray (lightest) - main app background */
+    --surface-primary: #F8F9F9;   /* Titanium White - panels, cards, dialogs */
+    --surface-secondary: #D8DADB; /* Steel Gray (mid) - nav surfaces, grouped controls */
+    --surface-hover: #C6C8CA;     /* Steel Gray (hover) */
+    --surface-selected: #BABCBE;  /* Steel Gray (deeper) - selected / current */
+    --border: #8A8D8F;            /* Graphite (border) - quiet dividers, strengthened for clarity */
+    --border-strong: #737679;     /* structural border where clarity is needed */
     /* Readability is the floor, not the target - every text token below
        is deliberately darker than WCAG AA's 4.5:1 minimum, not tuned to
-       just clear it. --text-metadata in particular was measured too
-       faint in practice (~4.3:1) and is darkened substantially. */
-    --text-primary: #2B1D12;      /* Basalt Ink */
-    --text-secondary: #453D2E;    /* Weathered Basalt */
-    --text-metadata: #5A5140;     /* Stone Grey - timestamps, ids, labels - still clearly readable, not decorative */
-    --text-disabled: #857A64;     /* Stone Grey - disabled controls - dimmer than metadata, never illegible */
+       just clear it. --text-metadata must stay strictly quieter (lower
+       contrast against --surface-primary) than --text-secondary
+       (tests/test_p40vw8qa_theme_foreground_contrast.py's
+       test_metadata_tier_still_visibly_dimmer_than_secondary_tier) even
+       as both get darkened for readability - "quieter" is a relative,
+       not absolute, requirement. --text-disabled (placeholder/help/
+       disabled-control copy) is not covered by that ordering test but
+       was darkened the most of the four in this pass - it had drifted
+       faint enough in live use (~3-4:1 against panels) to read as
+       nearly invisible, which is a readability defect even where a
+       disabled/placeholder role would otherwise tolerate lower
+       contrast. */
+    --text-primary: #191B1C;      /* Graphite Ink - near-black */
+    --text-secondary: #26282B;    /* Graphite Ink (secondary) - deliberately close to text-primary, not a mid-gray, per the ChatGPT-benchmarked fifth pass */
+    --text-metadata: #323436;     /* Graphite (text) - timestamps, ids, labels - still clearly readable, not decorative; darkened to clear 4.5:1 against --surface-selected too, not just --canvas/--surface-primary (tests/test_p40vw8qa_theme_foreground_contrast.py checks every text tier against every surface layer), while staying strictly lighter/quieter than --text-secondary */
+    --text-disabled: #454749;     /* Graphite (disabled) - dimmer than metadata, still clearly readable rather than merely "not illegible" - clears 4.5:1 against every surface layer including --surface-selected */
 
     /* -- identity + authority (used rarely, by design) -------------------- */
     --bee-yellow: #FFC400;

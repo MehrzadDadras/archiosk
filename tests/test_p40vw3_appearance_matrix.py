@@ -195,10 +195,12 @@ class MatrixStructureTests(_BaseTestCase):
         # CLAUDE-P40-VW8-QA (Approved Theme Set): Dark relabeled Black
         # (a brief interim "Graphite" was itself corrected back to
         # Black), Tinted relabeled Midnight Blue, Deep Forest added.
+        # CLAUDE-POSTCAMEL-P02-ST1: Light relabeled Titanium (mode_value/
+        # ref_suffix stay 'light' - see base.html's own comment).
         client = self._client_as("vw3_owner", 1)
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
         menu = self._appearance_html(body)
-        self.assertIn(">Light<", menu)
+        self.assertIn(">Titanium<", menu)
         self.assertIn(">Black<", menu)
         self.assertIn(">Midnight Blue<", menu)
         self.assertIn(">Deep Forest<", menu)

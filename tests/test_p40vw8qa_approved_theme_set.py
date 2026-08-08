@@ -240,7 +240,8 @@ class AppearanceMatrixLabelTests(unittest.TestCase):
         self.source = _BASE_HTML_PATH.read_text(encoding="utf-8")
 
     def test_four_column_header_present(self):
-        idx = self.source.index('<th scope="col">Light</th>')
+        # CLAUDE-POSTCAMEL-P02-ST1: Light relabeled Titanium.
+        idx = self.source.index('<th scope="col">Titanium</th>')
         body = self.source[idx: idx + 300]
         self.assertIn("Black", body)
         self.assertIn("Midnight Blue", body)
@@ -267,7 +268,7 @@ class AppearanceMatrixLabelTests(unittest.TestCase):
         self.assertEqual(self.source.count('data-appearance-target="{{ surface_key }}"'), 1)
         self.assertEqual(self.source.count('data-appearance-mode="{{ mode_value }}"'), 1)
         self.assertEqual(self.source.count('data-appearance-all-mode="{{ mode_value }}"'), 1)
-        mode_tuple = "[('light', 'Light', 'light'), ('black', 'Black', 'dark'), ('midnight-blue', 'Midnight Blue', 'tinted'), ('deep-forest', 'Deep Forest', 'deep-forest')]"
+        mode_tuple = "[('light', 'Titanium', 'light'), ('black', 'Black', 'dark'), ('midnight-blue', 'Midnight Blue', 'tinted'), ('deep-forest', 'Deep Forest', 'deep-forest')]"
         self.assertEqual(self.source.count(mode_tuple), 2)  # All row + per-surface row loops share the identical 4-choice list
 
 
