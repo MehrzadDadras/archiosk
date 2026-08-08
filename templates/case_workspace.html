@@ -307,7 +307,14 @@
             <ul class="source-list">
                 {% for row in recent_focus_view %}
                 <li class="source-item">
-                    <a href="{% if row.case_id %}{{ url_for('workspace.show_workspace', project_id=project_id, case=row.case_id) }}{% else %}{{ url_for('workspace.show_workspace', project_id=project_id) }}#requirement-{{ row.anchor.anchor_id }}{% endif %}">
+                    {# CLAUDE-POSTCAMEL-ROOT-I1: the #requirement-<id> anchor
+                       target now lives on the Requirements page
+                       (directory_view == 'requirements'), not bare
+                       show_workspace - this link previously omitted
+                       view=requirements entirely (a pre-existing gap:
+                       the target only ever rendered on ?view=overview,
+                       which this link never requested either). #}
+                    <a href="{% if row.case_id %}{{ url_for('workspace.show_workspace', project_id=project_id, case=row.case_id) }}{% else %}{{ url_for('workspace.show_workspace', project_id=project_id, view='requirements') }}#requirement-{{ row.anchor.anchor_id }}{% endif %}">
                         {{ row.label }}
                     </a>
                     {% if row.current_state %}<span class="review-state-badge">{{ row.current_state }}</span>{% endif %}
@@ -589,7 +596,18 @@
        selected_source branch. #}
 
     {% if directory_view == 'overview' %}
-        {% call macros.accordion('Requirement Compliance', status=(requirements_view|length ~ ' governed' if requirements_view else None), group='left', id='requirement-compliance') %}
+        {# CLAUDE-POSTCAMEL-ROOT-I1: Requirement Compliance and the full
+           Requirements accordion (governed list, candidate promotion,
+           registration) relocated to their own stable Display surface
+           (directory_view == 'requirements', below Key Dates/History in
+           this same file) - the "one canonical home, not a second
+           appearance without a label" principle ROOT-A1's own audit
+           found this page violating (two accordions, same page,
+           overlapping content). This is a RELOCATION of the exact same
+           macros/variables, not a reimplementation - see that block for
+           the real content. Overview keeps only this short projection
+           pointer. #}
+        {% call macros.accordion('Requirements', status=(requirements_view|length ~ ' governed' if requirements_view else None), group='left', id='requirement-compliance') %}
         {% if requirements_view %}
         <p class="pane-note">
             {{ requirements_view|length }} governed Requirement(s) —
@@ -599,34 +617,21 @@
             {% if revisited_requirements_count %}
             <br><small style="color:var(--text-metadata);">{{ revisited_requirements_count }} Requirement(s) have needed more than one Adjudication — this project has already had to revisit its own conclusion at least once.</small>
             {% endif %}
-            <br><a href="#governed-requirements">View Requirements &darr;</a>
+            {% if unpromoted_requirement_items %}
+            <br>{{ unpromoted_requirement_items|length }} more candidate item(s) extracted, not yet reviewed.
+            {% endif %}
         </p>
-        {% if unpromoted_requirement_items %}
-        <p class="pane-note" style="margin-top:0.4rem;">
-            {{ unpromoted_requirement_items|length }} more candidate item(s) extracted, not yet reviewed.
-            <br><a href="#requirements">Review candidate requirements &darr;</a>
-        </p>
-        {% endif %}
         {% else %}
-        {# CLAUDE-P38 (OBS-07/OBS-10): a governed-requirement count of
-           zero next to Sources' own extracted-item count, with no
-           explanation, was a real, reported gap - the candidate ->
-           governed transition (below, in Requirements) exists and
-           works, it just wasn't visible from here. unpromoted_
-           requirement_items is the same list the Requirements
-           accordion already renders - no new computation, just no
-           longer hidden from the one place a reviewer would naturally
-           look first. #}
         {% if unpromoted_requirement_items %}
         <p class="pane-note">
             No Requirements confirmed as governed yet — {{ unpromoted_requirement_items|length }}
             candidate item(s) extracted from the source document are awaiting review.
-            <br><a href="#requirements">Review candidate requirements &darr;</a>
         </p>
         {% else %}
         <p class="pane-note">No Requirements have been confirmed as governed yet, and no candidate items have been extracted from this Project's source document.</p>
         {% endif %}
         {% endif %}
+        <a href="{{ url_for('workspace.show_workspace', project_id=project_id, view='requirements') }}" data-ui-ref="display.overview.requirements-link">Open Requirements &rarr;</a>
         {% endcall %}
 
         {# CLAUDE-P38 (OBS-08): renamed from "RFI Export" - that name and
@@ -691,222 +696,6 @@
         <p class="pane-note">The consistency check hasn't run for this Project yet.</p>
         {% endif %}
         {% endcall %}
-        {% endcall %}
-
-        {% call macros.accordion('Requirements (' ~ requirements_view|length ~ ')', group='left', id='requirements', html_id='requirements') %}
-        {% if unpromoted_requirement_items %}
-        {% call macros.subdisclosure('Extracted, not yet governed (' ~ unpromoted_requirement_items|length ~ ')') %}
-            {% for item in unpromoted_requirement_items %}
-            <p class="unpromoted-requirement" style="color:var(--text-secondary);font-size:0.88rem;">
-                {{ item.text }}
-                <br><small>{{ item.category.replace('_', ' ') }} &middot; confidence {{ (item.confidence * 100)|round|int }}%</small>
-            </p>
-            {% if active_case %}
-            <form class="workspace-form" method="post"
-                  action="{{ url_for('workspace.promote_requirement_item_route', project_id=project_id, case_id=active_case.id, requirement_item_id=item.id) }}">
-                <select name="source_id" required>
-                    {% for source in active_sources %}
-                    <option value="{{ source.id }}"{% if source.kind == 'rfq_rfp_document' %} selected{% endif %}>{{ source.name }} ({{ source.kind|source_kind_label }})</option>
-                    {% endfor %}
-                </select>
-                <button type="submit">Promote to governed Requirement</button>
-            </form>
-            {% else %}
-            <p style="color:var(--text-secondary);font-size:0.85rem;">Select or create an Investigation to promote this item.</p>
-            {% endif %}
-            {% endfor %}
-        {% endcall %}
-        {% endif %}
-
-        {% call macros.subdisclosure('+ Register a Requirement') %}
-            <p class="pane-note">
-                For a Requirement's text that lives in a Source the legacy extraction pipeline
-                never saw - any governed Source, drawing or document. No Investigation needed;
-                a Requirement belongs to the Project, not to an Investigation.
-            </p>
-            <form class="workspace-form" method="post"
-                  action="{{ url_for('workspace.register_requirement_route', project_id=project_id) }}">
-                <select name="source_id" required>
-                    <option value="" disabled selected>Which Source states this?</option>
-                    {% for source in active_sources %}
-                    <option value="{{ source.id }}">{{ source.name }} ({{ source.kind|source_kind_label }})</option>
-                    {% endfor %}
-                </select>
-                <input type="text" name="original_requirement_identifier" placeholder="Clause/identifier (e.g. ADD-04-2, Section 3.1)" required>
-                <textarea name="text_reference" placeholder="Requirement text, as stated in the Source" required></textarea>
-                <button type="submit">Register Requirement</button>
-            </form>
-        {% endcall %}
-
-        {% if requirements_view %}
-        {% call macros.subdisclosure('Governed Requirements (' ~ requirements_view|length ~ ')', html_id='governed-requirements') %}
-            {% for row in requirements_view %}
-            {% set requirement = row.requirement %}
-            {# Visual pressure ("stable geometry, variable emphasis" - see
-               routes/workspace.py's own comment for the settled/old-news/
-               not-currently-focused rule behind row.quiet): only the
-               neutral text below ever changes class - the badge two lines
-               down keeps its own explicit color regardless, by
-               construction (see .pressure-quiet-text's own comment in
-               main.css on why this can never be done via a shared
-               ancestor's opacity). Nothing here changes position, order,
-               or whether this Requirement renders at all. #}
-            <div id="requirement-{{ requirement.id }}" style="border-top:1px solid var(--border);padding:0.5rem 0;">
-                <p class="{{ 'pressure-quiet-text' if row.quiet }}" style="font-size:0.88rem;margin:0 0 0.3rem;">{{ requirement.text_reference }}</p>
-                <p class="{{ 'pressure-quiet-text' if row.quiet else 'text-muted' }}" style="font-size:0.85rem;margin:0 0 0.4rem;">
-                    {{ requirement.original_requirement_identifier }}
-                    {% if requirement.subject_domain %} &middot; {{ requirement.subject_domain.replace('_', ' ') }}{% endif %}
-                    &middot; <span class="review-state-badge">{{ row.adjudication_state }}</span>
-                    {% if row.perspective and (row.perspective.machine or row.perspective.human) %}
-                    {% set primary_perspective = row.perspective.machine or row.perspective.human %}
-                    <span class="review-state-badge review-state-{{ primary_perspective.polarity }}" data-layer="risk">{{ primary_perspective.polarity }}</span>
-                    {% if row.perspective.agree is not none and not row.perspective.agree %}
-                    <span class="review-state-badge" data-layer="risk">disagreement</span>
-                    {% endif %}
-                    {% endif %}
-                    {% if row.adjudication_history|length == 1 %}
-                    <br>{{ row.latest_adjudication.outcome }} by {{ row.latest_adjudication.adjudicator }} &mdash; {{ row.latest_adjudication.reasoning }}
-                    {% endif %}
-                </p>
-
-                {% if row.adjudication_history|length > 1 %}
-                {% call macros.subdisclosure('Adjudication history (' ~ row.adjudication_history|length ~ ') — this Requirement has been re-examined') %}
-                    {% for a in row.adjudication_history %}
-                    <p class="history-entry">
-                        <span class="review-state-badge">{{ a.outcome }}</span> by {{ a.adjudicator }} &middot; {{ a.adjudicated_at }}
-                        <br>{{ a.reasoning }}
-                    </p>
-                    {% endfor %}
-                {% endcall %}
-                {% endif %}
-
-                {% if row.latest_adjudication %}
-                <div style="font-size:0.85rem;color:var(--text-secondary);margin:0 0 0.5rem;">
-                    {% if row.evidence_findings %}
-                    <strong>Evidence Findings:</strong><br>
-                    {% for ef in row.evidence_findings %}
-                    {% if ef.visible %}
-                    <span class="review-state-badge">{{ ef.claim_status }}</span> {{ ef.statement[:60] }} <em>({{ ef.case_title }})</em><br>
-                    {% else %}
-                    <span>Evidence from an Investigation you don't have access to.</span><br>
-                    {% endif %}
-                    {% endfor %}
-                    {% endif %}
-                    {% if row.evidence_relationships %}
-                    <strong>Evidence Relationships:</strong><br>
-                    {% for er in row.evidence_relationships %}
-                    <span class="evidence-badge evidence-{{ er.color_class }}">{{ er.relationship_type.replace('_', ' ') }}</span> ({{ er.from_type }} &rarr; {{ er.to_type }})<br>
-                    {% endfor %}
-                    {% endif %}
-                    {% if row.accepted_knowledge %}
-                    <strong>Accepted Knowledge linked:</strong><br>
-                    {% for k in row.accepted_knowledge %}
-                    {{ k.statement[:60] }}<br>
-                    {% endfor %}
-                    {% endif %}
-                    {% if not row.evidence_findings and not row.evidence_relationships and not row.accepted_knowledge %}
-                    No connected Findings or Accepted Knowledge cited as evidence yet.
-                    {% endif %}
-                </div>
-                {% endif %}
-
-                <form class="workspace-form" method="post" action="{{ url_for('workspace.adjudicate_requirement', project_id=project_id, requirement_id=requirement.id) }}">
-                    <input type="hidden" name="case_id" value="{{ active_case.id if active_case else '' }}">
-                    <select name="outcome" required>
-                        {% for outcome in adjudication_outcomes %}
-                        <option value="{{ outcome }}">{{ outcome }}</option>
-                        {% endfor %}
-                    </select>
-                    <input type="text" name="reasoning" placeholder="Reasoning (required)" required>
-                    {% if active_case and findings_view %}
-                    <span style="color:var(--text-secondary);font-size:0.85rem;">Evidence Findings:</span>
-                    {% for row2 in findings_view %}
-                    <label style="display:block;font-size:0.85rem;color:var(--text-secondary);">
-                        <input type="checkbox" name="evidence_finding_id" value="{{ row2.finding.id }}">
-                        {{ row2.finding.statement[:60] }}
-                    </label>
-                    {% endfor %}
-                    {% endif %}
-                    <button type="submit">Adjudicate</button>
-                </form>
-
-                {% if row.revision_history %}
-                {% call macros.subdisclosure('Revision history (' ~ row.revision_history|length ~ ') — this Requirement\'s wording has changed') %}
-                    {% for entry in row.revision_history %}
-                    <p class="history-entry">
-                        {{ entry.requirement.text_reference }}
-                        <br>Revised by {{ entry.supersession.actor }} on {{ entry.supersession.authorized_at }}
-                        {% if entry.supersession.authority_class %} &middot; {{ entry.supersession.authority_class }}{% endif %}
-                        {% if entry.supersession.reason %}<br>{{ entry.supersession.reason }}{% endif %}
-                    </p>
-                    {% endfor %}
-                {% endcall %}
-                {% endif %}
-
-                {% call macros.subdisclosure('+ Revise (Addendum)') %}
-                    <p class="pane-note">
-                        Records a governed correction to this Requirement's own stated text -
-                        the original remains, superseded and still reconstructable, exactly
-                        like a Source revision. Use this when an Addendum (or similar) changes
-                        what was actually required, not to fix a typo in how it was transcribed.
-                    </p>
-                    <form class="workspace-form" method="post" action="{{ url_for('workspace.revise_requirement_route', project_id=project_id, requirement_id=requirement.id) }}">
-                        <textarea name="text_reference" placeholder="The Requirement's new text, as stated in the Source" required>{{ requirement.text_reference }}</textarea>
-                        <input type="text" name="reason" placeholder="Reason (e.g. Addendum 2, Section 4.3)" required>
-                        <input type="text" name="authority_class" placeholder="Authority (optional, e.g. addendum)">
-                        <button type="submit">Revise Requirement</button>
-                    </form>
-                {% endcall %}
-
-                {{ macros.aperture(project_id, 'requirement', requirement.id, requirement.original_requirement_identifier, label='Discuss this Requirement') }}
-
-                {# CLAUDE-P12R: never renders a color, never rewrites the Requirement
-                   above - a plain, attributed record of what this looks like FROM
-                   whoever you've said you represent, alongside the machine's own
-                   independently-reached mark for the same party, if any. #}
-                {% call macros.subdisclosure('Perspective' ~ (' (' ~ represented_party.name ~ ')' if represented_party else '')) %}
-                    {% if represented_party %}
-                    {% set perspective = row.perspective %}
-                    <p class="pane-note">
-                        The governed Requirement above is unchanged by this - this is only what
-                        it looks like from {{ represented_party.name }}'s position.
-                    </p>
-                    <p class="history-entry">
-                        <strong>You:</strong>
-                        {% if perspective.human %}{{ perspective.human.polarity }} &mdash; {{ perspective.human.reasoning }}{% else %}not marked yet{% endif %}
-                    </p>
-                    <p class="history-entry">
-                        <strong>Machine:</strong>
-                        {% if perspective.machine %}
-                        {{ perspective.machine.polarity }} (confidence {{ (perspective.machine.confidence * 100)|round|int }}%) &mdash; {{ perspective.machine.reasoning }}
-                        {% else %}
-                        no independent assessment yet - ask an Investigation-shaped question anchored to this Requirement
-                        {% endif %}
-                    </p>
-                    {% if perspective.agree is not none %}
-                    <p class="history-entry">
-                        <span class="review-state-badge">{{ 'Agree' if perspective.agree else 'Disagreement' }}</span>
-                    </p>
-                    {% endif %}
-                    <form class="workspace-form" method="post" action="{{ url_for('workspace.record_perspective_assessment_route', project_id=project_id, requirement_id=requirement.id) }}">
-                        <select name="polarity" required>
-                            {% for polarity in perspective_polarity_options %}
-                            <option value="{{ polarity }}">{{ polarity }}</option>
-                            {% endfor %}
-                        </select>
-                        <input type="text" name="reasoning" placeholder="Why, from your position (required)" required>
-                        <button type="submit">Mark Perspective</button>
-                    </form>
-                    {% else %}
-                    <p style="color:var(--text-secondary);font-size:0.88rem;">
-                        Set who you represent (Participants &amp; Perspective, above) to mark this.
-                    </p>
-                    {% endif %}
-                {% endcall %}
-            </div>
-            {% endfor %}
-        {% endcall %}
-        {% endif %}
         {% endcall %}
 
         {% call macros.accordion('Key Dates (' ~ temporal_obligations_view|length ~ ')', group='left', id='temporal-obligations', html_id='temporal-obligations') %}
@@ -1785,7 +1574,11 @@
                navigation destination, just a link that actually points
                at something. Labels also made truthful about what they
                do (jump to the full list, not "open" a separate view). #}
-            <p style="font-size:0.78rem;"><a href="#requirements">View all {{ briefing_deterministic.technical_submission_items|length }} technical submission items &darr;</a></p>
+            {# CLAUDE-POSTCAMEL-ROOT-I1: the Requirements accordion (and its
+               own html_id='requirements') relocated off this page - this
+               link now targets the real Requirements page directly,
+               landing on its "Governed Requirements" subdisclosure. #}
+            <p style="font-size:0.78rem;"><a href="{{ url_for('workspace.show_workspace', project_id=project_id, view='requirements') }}#governed-requirements">View all {{ briefing_deterministic.technical_submission_items|length }} technical submission items &darr;</a></p>
             {% else %}
             <p style="font-size:0.85rem;color:var(--text-secondary);">No Technical Submission requirements were found in the extracted evidence.</p>
             {% endif %}
@@ -1794,7 +1587,7 @@
             {% if briefing_deterministic.financial_submission_items %}
             <p style="font-size:0.78rem;color:var(--text-secondary);margin:-0.3rem 0 0.3rem;">Candidate Financial Submission Items: {{ briefing_deterministic.financial_submission_items[:5]|length }} of {{ briefing_deterministic.financial_submission_items|length }} shown</p>
             <ul class="source-list">{% for item in briefing_deterministic.financial_submission_items[:5] %}<li class="source-item">{{ item.text }}</li>{% endfor %}</ul>
-            <p style="font-size:0.78rem;"><a href="#requirements">View all {{ briefing_deterministic.financial_submission_items|length }} financial submission items &darr;</a></p>
+            <p style="font-size:0.78rem;"><a href="{{ url_for('workspace.show_workspace', project_id=project_id, view='requirements') }}#governed-requirements">View all {{ briefing_deterministic.financial_submission_items|length }} financial submission items &darr;</a></p>
             {% else %}
             <p style="font-size:0.85rem;color:var(--text-secondary);">No Financial Submission requirements were found in the extracted evidence &mdash; nothing is assumed here.</p>
             {% endif %}
@@ -1814,7 +1607,7 @@
                 {% for step in briefing_deterministic.reading_path %}
                 <li>{{ step.label }} ({{ step.item_count }})
                     {% if step.category == 'schedule_milestone' %}<a href="#temporal-obligations">&darr;</a>
-                    {% else %}<a href="#requirements">&darr;</a>{% endif %}
+                    {% else %}<a href="{{ url_for('workspace.show_workspace', project_id=project_id, view='requirements') }}#governed-requirements">&darr;</a>{% endif %}
                 </li>
                 {% endfor %}
             </ol>
@@ -2028,6 +1821,263 @@
                .case-workspace grid closes, below), not here - see
                macros.conversation_dock and its call site. #}
         </div>
+    </div>
+{% elif directory_view == 'requirements' %}
+    {# CLAUDE-POSTCAMEL-ROOT-I1 (branch 3 of the ROOT-A1 canonical root):
+       Requirements' own stable Display surface - same shape as Files
+       below ("back to Overview" + heading + panel-suppression). This is
+       a RELOCATION of the exact accordion markup that used to render
+       unconditionally inside Overview (two separate accordions there,
+       flagged as an existing duplication by ROOT-A1's own audit) - same
+       macros, same view-model variables (requirements_view/
+       compliance_rollup/unpromoted_requirement_items/
+       revisited_requirements_count/adjudication_outcomes), already
+       computed unconditionally by this route before this change, so no
+       new computation was needed to give Requirements a real URL.
+       Requirement/RequirementAdjudication themselves are completely
+       untouched - this is navigation only. #}
+    <div class="project-home requirements-surface" data-ui-ref="display.requirements">
+        {% if not panel_only %}
+        <p class="project-home-back">
+            <a href="{{ url_for('workspace.show_workspace', project_id=project_id, view='overview') }}">&larr; Overview</a>
+        </p>
+        {% endif %}
+        <h1 class="new-case-form-heading">Requirements</h1>
+
+        {% with flashed = get_flashed_messages(with_categories=true) %}
+        {% if flashed %}
+        <div class="flash-stack">
+            {% for category, message in flashed %}
+            <div class="flash-message flash-{{ category }}">{{ message }}</div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% endwith %}
+
+        {% if unpromoted_requirement_items %}
+        {% call macros.subdisclosure('Extracted, not yet governed (' ~ unpromoted_requirement_items|length ~ ')') %}
+            {% for item in unpromoted_requirement_items %}
+            <p class="unpromoted-requirement" style="color:var(--text-secondary);font-size:0.88rem;">
+                {{ item.text }}
+                <br><small>{{ item.category.replace('_', ' ') }} &middot; confidence {{ (item.confidence * 100)|round|int }}%</small>
+            </p>
+            {% if active_case %}
+            <form class="workspace-form" method="post"
+                  action="{{ url_for('workspace.promote_requirement_item_route', project_id=project_id, case_id=active_case.id, requirement_item_id=item.id) }}">
+                <select name="source_id" required>
+                    {% for source in active_sources %}
+                    <option value="{{ source.id }}"{% if source.kind == 'rfq_rfp_document' %} selected{% endif %}>{{ source.name }} ({{ source.kind|source_kind_label }})</option>
+                    {% endfor %}
+                </select>
+                <button type="submit">Promote to governed Requirement</button>
+            </form>
+            {% else %}
+            <p style="color:var(--text-secondary);font-size:0.85rem;">Select or create an Investigation to promote this item.</p>
+            {% endif %}
+            {% endfor %}
+        {% endcall %}
+        {% endif %}
+
+        {% call macros.subdisclosure('+ Register a Requirement') %}
+            <p class="pane-note">
+                For a Requirement's text that lives in a Source the legacy extraction pipeline
+                never saw - any governed Source, drawing or document. No Investigation needed;
+                a Requirement belongs to the Project, not to an Investigation.
+            </p>
+            <form class="workspace-form" method="post"
+                  action="{{ url_for('workspace.register_requirement_route', project_id=project_id) }}">
+                <select name="source_id" required>
+                    <option value="" disabled selected>Which Source states this?</option>
+                    {% for source in active_sources %}
+                    <option value="{{ source.id }}">{{ source.name }} ({{ source.kind|source_kind_label }})</option>
+                    {% endfor %}
+                </select>
+                <input type="text" name="original_requirement_identifier" placeholder="Clause/identifier (e.g. ADD-04-2, Section 3.1)" required>
+                <textarea name="text_reference" placeholder="Requirement text, as stated in the Source" required></textarea>
+                <button type="submit">Register Requirement</button>
+            </form>
+        {% endcall %}
+
+        {% if requirements_view %}
+        <p class="pane-note">
+            {{ requirements_view|length }} governed Requirement(s) —
+            {% for state, count in compliance_rollup.items() %}
+            <span class="review-state-badge">{{ count }} {{ state }}</span>{% if not loop.last %} {% endif %}
+            {% endfor %}
+            {% if revisited_requirements_count %}
+            <br><small style="color:var(--text-metadata);">{{ revisited_requirements_count }} Requirement(s) have needed more than one Adjudication — this project has already had to revisit its own conclusion at least once.</small>
+            {% endif %}
+        </p>
+        {% call macros.subdisclosure('Governed Requirements (' ~ requirements_view|length ~ ')', html_id='governed-requirements') %}
+            {% for row in requirements_view %}
+            {% set requirement = row.requirement %}
+            {# Visual pressure ("stable geometry, variable emphasis" - see
+               routes/workspace.py's own comment for the settled/old-news/
+               not-currently-focused rule behind row.quiet): only the
+               neutral text below ever changes class - the badge two lines
+               down keeps its own explicit color regardless, by
+               construction (see .pressure-quiet-text's own comment in
+               main.css on why this can never be done via a shared
+               ancestor's opacity). Nothing here changes position, order,
+               or whether this Requirement renders at all. #}
+            <div id="requirement-{{ requirement.id }}" style="border-top:1px solid var(--border);padding:0.5rem 0;">
+                <p class="{{ 'pressure-quiet-text' if row.quiet }}" style="font-size:0.88rem;margin:0 0 0.3rem;">{{ requirement.text_reference }}</p>
+                <p class="{{ 'pressure-quiet-text' if row.quiet else 'text-muted' }}" style="font-size:0.85rem;margin:0 0 0.4rem;">
+                    {{ requirement.original_requirement_identifier }}
+                    {% if requirement.subject_domain %} &middot; {{ requirement.subject_domain.replace('_', ' ') }}{% endif %}
+                    &middot; <span class="review-state-badge">{{ row.adjudication_state }}</span>
+                    {% if row.perspective and (row.perspective.machine or row.perspective.human) %}
+                    {% set primary_perspective = row.perspective.machine or row.perspective.human %}
+                    <span class="review-state-badge review-state-{{ primary_perspective.polarity }}" data-layer="risk">{{ primary_perspective.polarity }}</span>
+                    {% if row.perspective.agree is not none and not row.perspective.agree %}
+                    <span class="review-state-badge" data-layer="risk">disagreement</span>
+                    {% endif %}
+                    {% endif %}
+                    {% if row.adjudication_history|length == 1 %}
+                    <br>{{ row.latest_adjudication.outcome }} by {{ row.latest_adjudication.adjudicator }} &mdash; {{ row.latest_adjudication.reasoning }}
+                    {% endif %}
+                </p>
+
+                {% if row.adjudication_history|length > 1 %}
+                {% call macros.subdisclosure('Adjudication history (' ~ row.adjudication_history|length ~ ') — this Requirement has been re-examined') %}
+                    {% for a in row.adjudication_history %}
+                    <p class="history-entry">
+                        <span class="review-state-badge">{{ a.outcome }}</span> by {{ a.adjudicator }} &middot; {{ a.adjudicated_at }}
+                        <br>{{ a.reasoning }}
+                    </p>
+                    {% endfor %}
+                {% endcall %}
+                {% endif %}
+
+                {% if row.latest_adjudication %}
+                <div style="font-size:0.85rem;color:var(--text-secondary);margin:0 0 0.5rem;">
+                    {% if row.evidence_findings %}
+                    <strong>Evidence Findings:</strong><br>
+                    {% for ef in row.evidence_findings %}
+                    {% if ef.visible %}
+                    <span class="review-state-badge">{{ ef.claim_status }}</span> {{ ef.statement[:60] }} <em>({{ ef.case_title }})</em><br>
+                    {% else %}
+                    <span>Evidence from an Investigation you don't have access to.</span><br>
+                    {% endif %}
+                    {% endfor %}
+                    {% endif %}
+                    {% if row.evidence_relationships %}
+                    <strong>Evidence Relationships:</strong><br>
+                    {% for er in row.evidence_relationships %}
+                    <span class="evidence-badge evidence-{{ er.color_class }}">{{ er.relationship_type.replace('_', ' ') }}</span> ({{ er.from_type }} &rarr; {{ er.to_type }})<br>
+                    {% endfor %}
+                    {% endif %}
+                    {% if row.accepted_knowledge %}
+                    <strong>Accepted Knowledge linked:</strong><br>
+                    {% for k in row.accepted_knowledge %}
+                    {{ k.statement[:60] }}<br>
+                    {% endfor %}
+                    {% endif %}
+                    {% if not row.evidence_findings and not row.evidence_relationships and not row.accepted_knowledge %}
+                    No connected Findings or Accepted Knowledge cited as evidence yet.
+                    {% endif %}
+                </div>
+                {% endif %}
+
+                <form class="workspace-form" method="post" action="{{ url_for('workspace.adjudicate_requirement', project_id=project_id, requirement_id=requirement.id) }}">
+                    <input type="hidden" name="case_id" value="{{ active_case.id if active_case else '' }}">
+                    <select name="outcome" required>
+                        {% for outcome in adjudication_outcomes %}
+                        <option value="{{ outcome }}">{{ outcome }}</option>
+                        {% endfor %}
+                    </select>
+                    <input type="text" name="reasoning" placeholder="Reasoning (required)" required>
+                    {% if active_case and findings_view %}
+                    <span style="color:var(--text-secondary);font-size:0.85rem;">Evidence Findings:</span>
+                    {% for row2 in findings_view %}
+                    <label style="display:block;font-size:0.85rem;color:var(--text-secondary);">
+                        <input type="checkbox" name="evidence_finding_id" value="{{ row2.finding.id }}">
+                        {{ row2.finding.statement[:60] }}
+                    </label>
+                    {% endfor %}
+                    {% endif %}
+                    <button type="submit">Adjudicate</button>
+                </form>
+
+                {% if row.revision_history %}
+                {% call macros.subdisclosure('Revision history (' ~ row.revision_history|length ~ ') — this Requirement\'s wording has changed') %}
+                    {% for entry in row.revision_history %}
+                    <p class="history-entry">
+                        {{ entry.requirement.text_reference }}
+                        <br>Revised by {{ entry.supersession.actor }} on {{ entry.supersession.authorized_at }}
+                        {% if entry.supersession.authority_class %} &middot; {{ entry.supersession.authority_class }}{% endif %}
+                        {% if entry.supersession.reason %}<br>{{ entry.supersession.reason }}{% endif %}
+                    </p>
+                    {% endfor %}
+                {% endcall %}
+                {% endif %}
+
+                {% call macros.subdisclosure('+ Revise (Addendum)') %}
+                    <p class="pane-note">
+                        Records a governed correction to this Requirement's own stated text -
+                        the original remains, superseded and still reconstructable, exactly
+                        like a Source revision. Use this when an Addendum (or similar) changes
+                        what was actually required, not to fix a typo in how it was transcribed.
+                    </p>
+                    <form class="workspace-form" method="post" action="{{ url_for('workspace.revise_requirement_route', project_id=project_id, requirement_id=requirement.id) }}">
+                        <textarea name="text_reference" placeholder="The Requirement's new text, as stated in the Source" required>{{ requirement.text_reference }}</textarea>
+                        <input type="text" name="reason" placeholder="Reason (e.g. Addendum 2, Section 4.3)" required>
+                        <input type="text" name="authority_class" placeholder="Authority (optional, e.g. addendum)">
+                        <button type="submit">Revise Requirement</button>
+                    </form>
+                {% endcall %}
+
+                {{ macros.aperture(project_id, 'requirement', requirement.id, requirement.original_requirement_identifier, label='Discuss this Requirement') }}
+
+                {# CLAUDE-P12R: never renders a color, never rewrites the Requirement
+                   above - a plain, attributed record of what this looks like FROM
+                   whoever you've said you represent, alongside the machine's own
+                   independently-reached mark for the same party, if any. #}
+                {% call macros.subdisclosure('Perspective' ~ (' (' ~ represented_party.name ~ ')' if represented_party else '')) %}
+                    {% if represented_party %}
+                    {% set perspective = row.perspective %}
+                    <p class="pane-note">
+                        The governed Requirement above is unchanged by this - this is only what
+                        it looks like from {{ represented_party.name }}'s position.
+                    </p>
+                    <p class="history-entry">
+                        <strong>You:</strong>
+                        {% if perspective.human %}{{ perspective.human.polarity }} &mdash; {{ perspective.human.reasoning }}{% else %}not marked yet{% endif %}
+                    </p>
+                    <p class="history-entry">
+                        <strong>Machine:</strong>
+                        {% if perspective.machine %}
+                        {{ perspective.machine.polarity }} (confidence {{ (perspective.machine.confidence * 100)|round|int }}%) &mdash; {{ perspective.machine.reasoning }}
+                        {% else %}
+                        no independent assessment yet - ask an Investigation-shaped question anchored to this Requirement
+                        {% endif %}
+                    </p>
+                    {% if perspective.agree is not none %}
+                    <p class="history-entry">
+                        <span class="review-state-badge">{{ 'Agree' if perspective.agree else 'Disagreement' }}</span>
+                    </p>
+                    {% endif %}
+                    <form class="workspace-form" method="post" action="{{ url_for('workspace.record_perspective_assessment_route', project_id=project_id, requirement_id=requirement.id) }}">
+                        <select name="polarity" required>
+                            {% for polarity in perspective_polarity_options %}
+                            <option value="{{ polarity }}">{{ polarity }}</option>
+                            {% endfor %}
+                        </select>
+                        <input type="text" name="reasoning" placeholder="Why, from your position (required)" required>
+                        <button type="submit">Mark Perspective</button>
+                    </form>
+                    {% else %}
+                    <p style="color:var(--text-secondary);font-size:0.88rem;">
+                        Set who you represent (Participants &amp; Perspective, above) to mark this.
+                    </p>
+                    {% endif %}
+                {% endcall %}
+            </div>
+            {% endfor %}
+        {% endcall %}
+        {% else %}
+        <p class="pane-note">No Requirements have been confirmed as governed yet.</p>
+        {% endif %}
     </div>
 {% elif directory_view == 'files' %}
     {# CLAUDE-P40-VW9 (Governed Files Display and Project File

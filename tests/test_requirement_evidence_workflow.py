@@ -147,7 +147,8 @@ class RequirementEvidenceWorkflowTests(unittest.TestCase):
         requirement = self._promote_requirement()
         self._adjudicate(requirement["id"], "Not Applicable", "This clause does not apply to this scope.")
 
-        response = self.owner_client.get(f"/projects/{self.project_id}/workspace?view=overview")
+        # CLAUDE-POSTCAMEL-ROOT-I1: Requirements render on their own page.
+        response = self.owner_client.get(f"/projects/{self.project_id}/workspace?view=requirements")
         body = response.get_data(as_text=True)
         self.assertIn("No connected Findings or Accepted Knowledge cited as evidence yet.", body)
 
@@ -216,7 +217,8 @@ class RequirementEvidenceWorkflowTests(unittest.TestCase):
         finding_id = self._create_finding(self.case["id"], "Certificates confirm current labor licensure.")
         self._adjudicate(requirement["id"], "Satisfied", "Confirmed via submitted certificates.", [finding_id])
 
-        response = self.other_client.get(f"/projects/{self.project_id}/workspace?view=overview")
+        # CLAUDE-POSTCAMEL-ROOT-I1: Requirements render on their own page.
+        response = self.other_client.get(f"/projects/{self.project_id}/workspace?view=requirements")
         body = response.get_data(as_text=True)
         self.assertIn("Satisfied", body)  # the adjudication outcome/reasoning is project-wide, unchanged
         self.assertIn("Evidence from an Investigation you don't have access to.", body)

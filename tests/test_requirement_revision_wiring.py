@@ -78,8 +78,10 @@ class RequirementRevisionWiringTests(unittest.TestCase):
         self.assertEqual(new["original_requirement_identifier"], "3.1")
 
     def test_superseded_requirement_no_longer_shown_as_a_separate_current_entry(self):
+        # CLAUDE-POSTCAMEL-ROOT-I1: Requirements moved from Overview to
+        # its own stable Display surface - same markup, real URL.
         self._revise()
-        resp = self.client.get(f"/projects/{self.project_id}/workspace?view=overview")
+        resp = self.client.get(f"/projects/{self.project_id}/workspace?view=requirements")
         body = resp.get_data(as_text=True)
         self.assertIn("Revised wording", body)
         # "Original wording" legitimately still appears once, inside the
@@ -90,8 +92,9 @@ class RequirementRevisionWiringTests(unittest.TestCase):
         self.assertEqual(body.count("Original wording"), 1)
 
     def test_revision_history_shows_the_prior_text_and_reason(self):
+        # CLAUDE-POSTCAMEL-ROOT-I1: Requirements moved to its own page.
         self._revise()
-        resp = self.client.get(f"/projects/{self.project_id}/workspace?view=overview")
+        resp = self.client.get(f"/projects/{self.project_id}/workspace?view=requirements")
         body = resp.get_data(as_text=True)
         self.assertIn("Revision history (1)", body)
         # only visible once the disclosure is opened, but the content is

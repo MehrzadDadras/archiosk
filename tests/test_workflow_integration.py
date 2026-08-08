@@ -98,8 +98,10 @@ class EndToEndWorkflowTests(unittest.TestCase):
     # -- requirement promotion reachable from the workspace page ---------------
 
     def test_workspace_shows_unpromoted_requirement_items(self):
+        # CLAUDE-POSTCAMEL-ROOT-I1: candidate items now render on
+        # Requirements' own page - Overview keeps only a summary count.
         self._create_case()
-        response = self.client.get(f"/projects/{self.project_id}/workspace?view=overview")
+        response = self.client.get(f"/projects/{self.project_id}/workspace?view=requirements")
         body = response.get_data(as_text=True)
         self.assertIn(self.item_a.text, body)
         self.assertIn(self.item_b.text, body)
@@ -130,7 +132,7 @@ class EndToEndWorkflowTests(unittest.TestCase):
             data={"source_id": source_id}, follow_redirects=True,
         )
 
-        response = self.client.get(f"/projects/{self.project_id}/workspace?view=overview")
+        response = self.client.get(f"/projects/{self.project_id}/workspace?view=requirements")
         body = response.get_data(as_text=True)
         # item_b is still unpromoted and still listed; item_a's own RequirementItem
         # id should no longer appear as an unpromoted candidate.

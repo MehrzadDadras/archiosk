@@ -318,10 +318,15 @@ class ProjectBriefingRouteTests(unittest.TestCase):
         self.assertLess(briefing_pos, composer_pos)
 
     def test_deterministic_sections_available_with_no_briefing_generated_yet(self):
+        # CLAUDE-POSTCAMEL-ROOT-I1: the scope_of_work candidate item's
+        # text is unpromoted_requirement_items content (raw ParsedDocument
+        # RequirementItems), which relocated to Requirements' own page -
+        # Overview keeps the deterministic briefing sections themselves.
         body = self._page()
         self.assertIn("No narrative briefing generated yet", body)
-        self.assertIn(_CANDIDATE_ITEMS[0]["text"], body)  # scope item, via reading path/technical section
         self.assertIn("No Financial Submission requirements were found", body)
+        requirements_body = self.client.get(f"/projects/{self.project_id}/workspace?view=requirements").get_data(as_text=True)
+        self.assertIn(_CANDIDATE_ITEMS[0]["text"], requirements_body)
 
     def test_generating_persists_and_displays_the_briefing(self):
         with patch("anthropic.Anthropic") as MockClient, \
@@ -516,7 +521,10 @@ class ProjectBriefingLifecycleTests(unittest.TestCase):
         self.assertNotIn("AI Project Briefing awaits approval", body)
         # The no-AI-mode fallback content (deterministic sections) is
         # still there - denial degrades the narrative, not the whole pane.
-        self.assertIn(_CANDIDATE_ITEMS[0]["text"], body)
+        # CLAUDE-POSTCAMEL-ROOT-I1: the candidate item's own text lives on
+        # Requirements' own page now (see the sibling test above).
+        requirements_body = self.client.get(f"/projects/{self.project_id}/workspace?view=requirements").get_data(as_text=True)
+        self.assertIn(_CANDIDATE_ITEMS[0]["text"], requirements_body)
 
     # -- Idempotency / duplicate-call guard --
 

@@ -166,8 +166,13 @@ class ExactlyOneComposerTests(_BaseSingleComposerTestCase):
             f"/projects/{self.project_id}/workspace/requirements/register",
             data={"source_id": source_id, "original_requirement_identifier": "4.2", "text_reference": "The system shall do X."},
         )
+        # CLAUDE-POSTCAMEL-ROOT-I1: the Requirement's own aperture link
+        # relocated to Requirements' own page along with the rest of the
+        # accordion; the shared composer dock (checked below) is
+        # unaffected - it renders once regardless of which view is open.
+        requirements_body = client.get(f"/projects/{self.project_id}/workspace?view=requirements").get_data(as_text=True)
+        self.assertIn("aperture-link", requirements_body)
         body = client.get(f"/projects/{self.project_id}/workspace?view=overview").get_data(as_text=True)
-        self.assertIn("aperture-link", body)
         self.assertEqual(body.count('class="conversation-input-form conversation-dock-composer"'), 1)
 
 

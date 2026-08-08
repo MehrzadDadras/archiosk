@@ -256,9 +256,14 @@ class PerspectiveRouteAndRenderTests(unittest.TestCase):
             data={"polarity": PERSPECTIVE_POLARITY_RISK, "reasoning": "This falls on us if conditions differ."},
         )
 
-        page = self.client.get(f"/projects/{self.project_id}/workspace?view=overview")
+        # CLAUDE-POSTCAMEL-ROOT-I1: the Requirement's own perspective
+        # content now renders on Requirements' own page, not Overview -
+        # "Cedar Harbour DB JV" (a Participant, unrelated to Requirements)
+        # still shows on Overview.
+        overview_body = self.client.get(f"/projects/{self.project_id}/workspace?view=overview").get_data(as_text=True)
+        self.assertIn("Cedar Harbour DB JV", overview_body)
+        page = self.client.get(f"/projects/{self.project_id}/workspace?view=requirements")
         body = page.get_data(as_text=True)
-        self.assertIn("Cedar Harbour DB JV", body)
         self.assertIn("This falls on us if conditions differ.", body)
         self.assertIn(PERSPECTIVE_POLARITY_RISK, body)
 
@@ -418,7 +423,9 @@ class NavigationMembraneLayerTests(unittest.TestCase):
             f"/projects/{self.project_id}/workspace/requirements/{requirement['id']}/perspective",
             data={"polarity": PERSPECTIVE_POLARITY_OPPORTUNITY, "reasoning": "Favorable to us."},
         )
-        body = self.client.get(f"/projects/{self.project_id}/workspace?view=overview").get_data(as_text=True)
+        # CLAUDE-POSTCAMEL-ROOT-I1: per-Requirement perspective badges
+        # render on Requirements' own page now.
+        body = self.client.get(f"/projects/{self.project_id}/workspace?view=requirements").get_data(as_text=True)
         self.assertIn('data-layer="risk"', body)
         self.assertIn(f'review-state-{PERSPECTIVE_POLARITY_OPPORTUNITY}', body)
 
@@ -444,7 +451,9 @@ class NavigationMembraneLayerTests(unittest.TestCase):
             participant_id=participant["id"], polarity=PERSPECTIVE_POLARITY_RISK,
             origin=PERSPECTIVE_ORIGIN_MACHINE, reasoning="Machine side.", confidence=0.6,
         )
-        body = self.client.get(f"/projects/{self.project_id}/workspace?view=overview").get_data(as_text=True)
+        # CLAUDE-POSTCAMEL-ROOT-I1: per-Requirement disagreement badge
+        # renders on Requirements' own page now.
+        body = self.client.get(f"/projects/{self.project_id}/workspace?view=requirements").get_data(as_text=True)
         self.assertIn("disagreement", body)
 
 

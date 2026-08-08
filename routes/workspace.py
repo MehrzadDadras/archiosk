@@ -144,6 +144,20 @@ STABLE_DIRECTORY_KINDS = {
     # branch below (`directory_view == 'files'`) renders the two
     # governed sibling roots (Data Room, Design-Builder Workspace).
     "files": "Files",
+    # CLAUDE-POSTCAMEL-ROOT-I1: Requirements was a real, fully governed,
+    # already-IMPLEMENTED project object (register/promote/adjudicate/
+    # revise all pre-existing and unchanged by this stage) with NO
+    # navigable home of its own - reachable only by scrolling Overview's
+    # own accordion stack. Same stable-singleton shape as Files above
+    # (Project-scoped, no per-instance id, no duplicate-open concept).
+    # Its own content branch below (`directory_view == 'requirements'`)
+    # is the exact same accordion markup Overview used to render
+    # in-place - a relocation, not a reimplementation; every view
+    # variable (requirements_view/compliance_rollup/
+    # unpromoted_requirement_items/revisited_requirements_count) was
+    # already computed unconditionally on every render, so no new
+    # computation was needed to give it a real URL.
+    "requirements": "Requirements",
 }
 
 # Requirement-evidence explainability: maps the EXISTING, already-governed

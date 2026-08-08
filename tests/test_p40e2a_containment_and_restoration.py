@@ -299,7 +299,9 @@ class RemovedDocumentContainmentTests(_BaseTestCase):
         store.remove_source(workspace, source_id=source_id, actor="p40e2a_owner", actor_role="admin")
 
         client = self._client_as("p40e2a_owner", 1)
-        body = client.get(f"/projects/{self.project_id}/workspace?view=overview").get_data(as_text=True)
+        # CLAUDE-POSTCAMEL-ROOT-I1: Requirements render on their own
+        # page now, not Overview.
+        body = client.get(f"/projects/{self.project_id}/workspace?view=requirements").get_data(as_text=True)
         # the pre-existing Requirement citing the removed Source must
         # still be present and renderable, not silently dropped/broken
         self.assertIn("Some clause", body)

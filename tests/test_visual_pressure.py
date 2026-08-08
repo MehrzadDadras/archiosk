@@ -66,12 +66,16 @@ class VisualPressureTests(unittest.TestCase):
         )
 
     def test_not_yet_assessed_requirement_never_quiets(self):
+        # CLAUDE-POSTCAMEL-ROOT-I1: row.quiet renders on Requirements'
+        # own page now - checking view=overview here would trivially
+        # pass regardless of the real behavior (the class never appears
+        # there anymore), which is not a meaningful test.
         self._register_requirement()
         # First visit establishes the marker; a Requirement that has
         # never been adjudicated stays at full strength no matter how
         # many subsequent visits pass - "settled" is a precondition.
         self.client.get(f"/projects/{self.project_id}/workspace?view=overview")
-        resp = self.client.get(f"/projects/{self.project_id}/workspace?view=overview")
+        resp = self.client.get(f"/projects/{self.project_id}/workspace?view=requirements")
         self.assertNotIn("pressure-quiet-text", resp.get_data(as_text=True))
 
     def test_settled_requirement_stays_full_strength_until_a_visit_has_passed(self):
@@ -80,14 +84,19 @@ class VisualPressureTests(unittest.TestCase):
         # This is the SAME visit the adjudication happened in (no fresh
         # page load establishing a new last-visited marker afterward) -
         # brand new news must never be presented as already-quiet.
-        resp = self.client.get(f"/projects/{self.project_id}/workspace?view=overview")
+        resp = self.client.get(f"/projects/{self.project_id}/workspace?view=requirements")
         self.assertNotIn("pressure-quiet-text", resp.get_data(as_text=True))
 
     def test_settled_requirement_quiets_after_a_later_visit(self):
+        # CLAUDE-POSTCAMEL-ROOT-I1: requirements_view/row.quiet are
+        # computed unconditionally (like before this stage) - only the
+        # page they render on moved, to view=requirements. Visiting
+        # records a visit whenever active_case is None, so view=overview
+        # still works for the "records a visit" step.
         requirement = self._register_requirement()
         self._adjudicate(requirement)
         self.client.get(f"/projects/{self.project_id}/workspace?view=overview")  # records a visit AFTER the adjudication
-        resp = self.client.get(f"/projects/{self.project_id}/workspace?view=overview")
+        resp = self.client.get(f"/projects/{self.project_id}/workspace?view=requirements")
         self.assertIn("pressure-quiet-text", resp.get_data(as_text=True))
 
     def test_requirement_still_renders_in_full_when_quiet(self):
@@ -95,7 +104,7 @@ class VisualPressureTests(unittest.TestCase):
         requirement = self._register_requirement()
         self._adjudicate(requirement)
         self.client.get(f"/projects/{self.project_id}/workspace?view=overview")
-        resp = self.client.get(f"/projects/{self.project_id}/workspace?view=overview")
+        resp = self.client.get(f"/projects/{self.project_id}/workspace?view=requirements")
         body = resp.get_data(as_text=True)
         self.assertIn("Contractor shall provide as-built drawings.", body)
         self.assertIn("Satisfied", body)
@@ -114,7 +123,7 @@ class VisualPressureTests(unittest.TestCase):
                 "anchor_description": "Section 3.1",
             },
         )
-        resp = self.client.get(f"/projects/{self.project_id}/workspace?view=overview")
+        resp = self.client.get(f"/projects/{self.project_id}/workspace?view=requirements")
         self.assertNotIn("pressure-quiet-text", resp.get_data(as_text=True))
 
     def test_pressure_is_per_reviewer(self):
@@ -131,7 +140,7 @@ class VisualPressureTests(unittest.TestCase):
         # owner2's own first-ever visit - no established "old news"
         # boundary yet, so nothing quiets for them regardless of owner1's
         # visit history.
-        resp = other_client.get(f"/projects/{self.project_id}/workspace?view=overview")
+        resp = other_client.get(f"/projects/{self.project_id}/workspace?view=requirements")
         self.assertNotIn("pressure-quiet-text", resp.get_data(as_text=True))
 
 

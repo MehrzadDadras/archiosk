@@ -142,7 +142,11 @@ class ConversationApertureRouteTests(unittest.TestCase):
         self.assertIn('Chats <span class="launcher-count">2</span>', body)
         self.assertNotIn("Project Conversation (2)", body)
         self.assertIn("Any update?", body)
-        self.assertIn("Discuss this Requirement", body)
+        # CLAUDE-POSTCAMEL-ROOT-I1: the per-Requirement "Discuss this
+        # Requirement" aperture link relocated along with the rest of
+        # the Requirements accordion, to Requirements' own page.
+        requirements_body = self.client.get(f"/projects/{self.project_id}/workspace?view=requirements").get_data(as_text=True)
+        self.assertIn("Discuss this Requirement", requirements_body)
 
     def test_project_conversation_not_shown_inside_an_open_case(self):
         self.client.post(

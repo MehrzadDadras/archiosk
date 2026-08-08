@@ -248,12 +248,19 @@ class ComplianceRollupTests(unittest.TestCase):
         self.assertIn("1 Satisfied", body)
 
     def test_drill_down_link_present(self):
+        # CLAUDE-POSTCAMEL-ROOT-I1: Requirements now has its own stable
+        # Display surface - Overview's own accordion carries a real
+        # cross-page link into it (not a same-page anchor anymore, since
+        # the target itself moved off the Overview page), and the
+        # governed-requirements anchor lives on that new page.
         case = self._create_case()
         self._promote(case["id"], self.item_a)
-        response = self.client.get(f"/projects/{self.project_id}/workspace?view=overview")
-        body = response.get_data(as_text=True)
-        self.assertIn('href="#governed-requirements"', body)
-        self.assertIn('id="governed-requirements"', body)
+        overview = self.client.get(f"/projects/{self.project_id}/workspace?view=overview")
+        overview_body = overview.get_data(as_text=True)
+        self.assertIn('view=requirements', overview_body)
+        requirements_page = self.client.get(f"/projects/{self.project_id}/workspace?view=requirements")
+        requirements_body = requirements_page.get_data(as_text=True)
+        self.assertIn('id="governed-requirements"', requirements_body)
 
 
 class ApplyFeedbackTests(unittest.TestCase):

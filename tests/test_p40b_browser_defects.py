@@ -150,18 +150,28 @@ class ProjectHomeBrowserDefectTests(unittest.TestCase):
     # -- 3.3: View-all controls actually resolve --------------------------
 
     def test_requirements_and_key_dates_accordions_have_real_html_ids(self):
+        # CLAUDE-POSTCAMEL-ROOT-I1: Requirements relocated to its own
+        # page (view=requirements) - this fixture has no governed
+        # Requirement yet (only extracted candidates), so
+        # id="governed-requirements" (rendered only when
+        # requirements_view is non-empty) isn't expected here; the page
+        # itself and its stable data-ui-ref are what this test confirms.
         body = self._page()
-        self.assertIn('id="requirements"', body)
         self.assertIn('id="temporal-obligations"', body)
+        requirements_response = self.client.get(f"/projects/{self.project_id}/workspace?view=requirements")
+        self.assertEqual(requirements_response.status_code, 200)
+        self.assertIn('data-ui-ref="display.requirements"', requirements_response.get_data(as_text=True))
         # CLAUDE-P40-E1A: the conversation dock's own html_id is now the
         # single shared "conversation-dock" (was "project-conversation")
         # - see macros.conversation_dock.
         self.assertIn('id="conversation-dock"', body)
 
     def test_view_all_technical_link_uses_a_truthful_count_label(self):
+        # CLAUDE-POSTCAMEL-ROOT-I1: this now links cross-page to
+        # Requirements' own stable Display surface, not a same-page hash.
         body = self._page()
         self.assertIn("View all 8 technical submission items", body)
-        self.assertIn('href="#requirements"', body)
+        self.assertIn('view=requirements#governed-requirements', body)
         self.assertNotIn("Open Technical Submission", body)
 
     # -- 3.8: header controls ----------------------------------------------
