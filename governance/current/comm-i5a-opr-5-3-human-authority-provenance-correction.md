@@ -10,6 +10,20 @@ human-authored adjudication from an agent-authored assessment — the
 four COMM-I3 adjudications demonstrated this in real operation. This is
 the second COMM-stage to change application code, after COMM-I4A.
 
+> **Product Owner confirmation (2026-08-09):** the Product Owner
+> reviewed this stage's own Section N agent reassessment and confirmed
+> it unchanged — **OPR-5.3: Satisfied, developmental classification
+> Late Correction** — the same genuine confirmation pattern already
+> used for OPR-2.5 after COMM-I4A. No new `RequirementAdjudication` was
+> persisted on the Product Owner's behalf; this confirmation is
+> recorded in governance only, for the same honestly-reported reason
+> COMM-I3B/COMM-I4A/COMM-I5A already established: this session cannot
+> authenticate as the real Product Owner, so no product-level record
+> can truthfully carry their personal attribution. The commissioning
+> sequence does not proceed to the final OPR-6.x/OPR-7.x tranche
+> automatically from this confirmation alone — that requires its own
+> separate authorization, per this stage's own explicit instruction.
+
 ---
 
 ## A. Starting state
