@@ -180,7 +180,10 @@ class ComplianceRollupTests(unittest.TestCase):
 
         self.client.post(
             f"/projects/{self.project_id}/workspace/requirements/{req_a['id']}/adjudicate",
-            data={"outcome": "Satisfied", "reasoning": "Labor licensure confirmed.", "case_id": case["id"]},
+            data={
+                "outcome": "Satisfied", "reasoning": "Labor licensure confirmed.", "case_id": case["id"],
+                "attribution": "human_reviewed",
+            },
             follow_redirects=True,
         )
 
@@ -196,11 +199,14 @@ class ComplianceRollupTests(unittest.TestCase):
 
         self.client.post(
             f"/projects/{self.project_id}/workspace/requirements/{req_a['id']}/adjudicate",
-            data={"outcome": "Satisfied", "reasoning": "Confirmed.", "case_id": case["id"]}, follow_redirects=True,
+            data={"outcome": "Satisfied", "reasoning": "Confirmed.", "case_id": case["id"], "attribution": "human_reviewed"}, follow_redirects=True,
         )
         self.client.post(
             f"/projects/{self.project_id}/workspace/requirements/{req_b['id']}/adjudicate",
-            data={"outcome": "Not Satisfied", "reasoning": "Materials do not comply.", "case_id": case["id"]},
+            data={
+                "outcome": "Not Satisfied", "reasoning": "Materials do not comply.", "case_id": case["id"],
+                "attribution": "human_reviewed",
+            },
             follow_redirects=True,
         )
 
@@ -215,7 +221,7 @@ class ComplianceRollupTests(unittest.TestCase):
         req_a = self._promote(case["id"], self.item_a)
         self.client.post(
             f"/projects/{self.project_id}/workspace/requirements/{req_a['id']}/adjudicate",
-            data={"outcome": "Satisfied", "reasoning": "Confirmed.", "case_id": case["id"]}, follow_redirects=True,
+            data={"outcome": "Satisfied", "reasoning": "Confirmed.", "case_id": case["id"], "attribution": "human_reviewed"}, follow_redirects=True,
         )
 
         response = self.client.get(f"/projects/{self.project_id}/workspace?case={case['id']}")
@@ -234,7 +240,7 @@ class ComplianceRollupTests(unittest.TestCase):
         req_a = self._promote(case["id"], self.item_a)
         self.client.post(
             f"/projects/{self.project_id}/workspace/requirements/{req_a['id']}/adjudicate",
-            data={"outcome": "Satisfied", "reasoning": "Confirmed.", "case_id": case["id"]}, follow_redirects=True,
+            data={"outcome": "Satisfied", "reasoning": "Confirmed.", "case_id": case["id"], "attribution": "human_reviewed"}, follow_redirects=True,
         )
 
         fresh_client = self.flask_app.test_client()

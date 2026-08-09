@@ -110,7 +110,12 @@ class RequirementEvidenceWorkflowTests(unittest.TestCase):
         return analysis["finding_ids"][0]
 
     def _adjudicate(self, requirement_id, outcome, reasoning, evidence_finding_ids=None):
-        data = {"outcome": outcome, "reasoning": reasoning, "case_id": self.case["id"]}
+        # CLAUDE-POSTCAMEL-COMM-I5A: attribution is now a mandatory,
+        # never-defaulted explicit choice at this route.
+        data = {
+            "outcome": outcome, "reasoning": reasoning, "case_id": self.case["id"],
+            "attribution": "human_reviewed",
+        }
         response = self.owner_client.post(
             f"/projects/{self.project_id}/workspace/requirements/{requirement_id}/adjudicate",
             data=data if not evidence_finding_ids else {**data, "evidence_finding_id": evidence_finding_ids},

@@ -454,7 +454,12 @@ class RecentFocusTests(unittest.TestCase):
 
         self.client.post(
             f"/projects/{self.project_id}/workspace/requirements/{requirement['id']}/adjudicate",
-            data={"outcome": "Satisfied", "reasoning": "As-built set received.", "case_id": ""},
+            # CLAUDE-POSTCAMEL-COMM-I5A: attribution is now a mandatory,
+            # never-defaulted explicit choice at this route.
+            data={
+                "outcome": "Satisfied", "reasoning": "As-built set received.", "case_id": "",
+                "attribution": "human_reviewed",
+            },
         )
 
         resp = self.client.get(f"/projects/{self.project_id}/workspace?view=overview")

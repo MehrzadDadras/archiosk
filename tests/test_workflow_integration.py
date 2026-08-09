@@ -156,8 +156,10 @@ class EndToEndWorkflowTests(unittest.TestCase):
 
         response = self.client.post(
             f"/projects/{self.project_id}/workspace/requirements/{requirement_id}/adjudicate",
+            # CLAUDE-POSTCAMEL-COMM-I5A: attribution is now a mandatory,
+            # never-defaulted explicit choice at this route.
             data={"outcome": "Satisfied", "reasoning": "Labor licensure confirmed via submitted certificates.",
-                  "case_id": case["id"]},
+                  "case_id": case["id"], "attribution": "human_reviewed"},
             follow_redirects=True,
         )
         self.assertEqual(response.status_code, 200)
@@ -182,7 +184,12 @@ class EndToEndWorkflowTests(unittest.TestCase):
         )["id"]
         self.client.post(
             f"/projects/{self.project_id}/workspace/requirements/{requirement_id}/adjudicate",
-            data={"outcome": "Satisfied", "reasoning": "Confirmed.", "case_id": case["id"]},
+            # CLAUDE-POSTCAMEL-COMM-I5A: attribution is now a mandatory,
+            # never-defaulted explicit choice at this route.
+            data={
+                "outcome": "Satisfied", "reasoning": "Confirmed.", "case_id": case["id"],
+                "attribution": "human_reviewed",
+            },
             follow_redirects=True,
         )
 

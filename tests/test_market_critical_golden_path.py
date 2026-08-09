@@ -206,7 +206,12 @@ class MarketCriticalGoldenPathTests(unittest.TestCase):
 
         adjudicate_response = self.alice.post(
             f"/projects/{document.project_id}/workspace/requirements/{governed_requirement['id']}/adjudicate",
-            data={"outcome": "Satisfied", "reasoning": "Structural spec matches CSA G40.21 350W as required.", "case_id": case["id"]},
+            # CLAUDE-POSTCAMEL-COMM-I5A: attribution is now a mandatory,
+            # never-defaulted explicit choice at this route.
+            data={
+                "outcome": "Satisfied", "reasoning": "Structural spec matches CSA G40.21 350W as required.",
+                "case_id": case["id"], "attribution": "human_reviewed",
+            },
         )
         self.assertIn(adjudicate_response.status_code, (302, 303))
         workspace = store.get(document.project_id)

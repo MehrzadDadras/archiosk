@@ -304,7 +304,12 @@ class RequirementRouteWiringTests(unittest.TestCase):
 
         response = self.client.post(
             self._adjudicate_url(requirement_id),
-            data={"outcome": "Satisfied", "reasoning": "Verified against as-built drawings."},
+            # CLAUDE-POSTCAMEL-COMM-I5A: attribution is now a mandatory,
+            # never-defaulted explicit choice at this route.
+            data={
+                "outcome": "Satisfied", "reasoning": "Verified against as-built drawings.",
+                "attribution": "human_reviewed",
+            },
             follow_redirects=True,
         )
         self.assertEqual(response.status_code, 200)

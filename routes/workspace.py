@@ -47,6 +47,8 @@ from werkzeug.utils import secure_filename
 
 from services.auth import admin_required, login_required
 from services.case_workspace import (
+    ADJUDICATION_ATTRIBUTION_AGENT_ASSESSMENT,
+    ADJUDICATION_ATTRIBUTION_HUMAN_REVIEWED,
     ANALYSIS_TRIGGER_USER_INITIATED,
     BUILT_IN_TAGS,
     CASE_OUTCOME_STATES,
@@ -59,6 +61,7 @@ from services.case_workspace import (
     FOLDER_ROOT_DATA_ROOM,
     FOLDER_ROOT_DESIGN_BUILDER,
     GO_NO_GO_DECISIONS,
+    KNOWN_ADJUDICATION_ATTRIBUTIONS,
     KNOWN_CONTENT_CLASSES,
     KNOWN_CONVERSATION_ANCHOR_SCOPES,
     KNOWN_PARTICIPANT_ROLES,
@@ -87,6 +90,7 @@ from services.case_workspace import (
     DISPOSITIONS,
     OperatingEnvironmentAlreadySetError,
     REVIEWER_VALIDATION_STATES,
+    resolve_requirement_adjudication_attribution,
 )
 from services.environment_capabilities import (
     OPERATING_ENVIRONMENT_LABELS,
@@ -185,6 +189,22 @@ _RELATIONSHIP_COLOR_CLASS = {
     "derived_from": "cyan",
     "carried_forward_from": "cyan",
 }
+
+# CLAUDE-POSTCAMEL-COMM-I5A: display-only labels for
+# resolve_requirement_adjudication_attribution's three real return
+# values - never a fourth "looks human by default" option.
+_ADJUDICATION_ATTRIBUTION_LABELS = {
+    ADJUDICATION_ATTRIBUTION_HUMAN_REVIEWED: "Human-reviewed",
+    ADJUDICATION_ATTRIBUTION_AGENT_ASSESSMENT: "Agent assessment",
+}
+
+
+def _with_attribution_label(adjudication: dict) -> dict:
+    attribution = resolve_requirement_adjudication_attribution(adjudication)
+    return {
+        **adjudication,
+        "attribution_label": _ADJUDICATION_ATTRIBUTION_LABELS.get(attribution, "Unknown/legacy provenance"),
+    }
 
 
 def _store() -> CaseWorkspaceStore:
@@ -1082,7 +1102,9 @@ def show_workspace(project_id):
             "requirement": requirement,
             "revision_history": _requirement_revision_history(requirement["id"]),
             "adjudication_state": store.requirement_adjudication_state(workspace, requirement["id"]),
-            "latest_adjudication": evidence["adjudication"],
+            "latest_adjudication": (
+                _with_attribution_label(evidence["adjudication"]) if evidence["adjudication"] else None
+            ),
             # Full history, not just latest - the data was always
             # non-destructively preserved (requirement_adjudications_for
             # already existed, unused by any route or template); this was
@@ -1090,7 +1112,10 @@ def show_workspace(project_id):
             # "what has this project already taught us to re-check" view:
             # honest re-display of what actually happened, not a new
             # inferred pattern/suggestion layered on top of it.
-            "adjudication_history": store.requirement_adjudications_for(workspace, requirement["id"]),
+            "adjudication_history": [
+                _with_attribution_label(a)
+                for a in store.requirement_adjudications_for(workspace, requirement["id"])
+            ],
             "evidence_findings": evidence_findings_view,
             "evidence_relationships": evidence_relationships_view,
             # AcceptedKnowledge is deliberately project-wide, not Case-gated,
@@ -3860,17 +3885,36 @@ def register_requirement_route(project_id):
 @workspace_bp.route("/projects/<project_id>/workspace/requirements/<requirement_id>/adjudicate", methods=["POST"])
 @login_required
 def adjudicate_requirement(project_id, requirement_id):
-    """Records a RequirementAdjudication (Foundation Batch K) - the human
+    """Records a RequirementAdjudication (Foundation Batch K) - the
     compliance determination against a governed Requirement, distinct
     from Finding Disposition. See
-    CaseWorkspaceStore.record_requirement_adjudication."""
+    CaseWorkspaceStore.record_requirement_adjudication.
+
+    CLAUDE-POSTCAMEL-COMM-I5A: `attribution` is REQUIRED here, at the
+    real product-facing route, even though the store method itself
+    treats it as optional (backward-compatible with pre-existing direct
+    callers) - this is the actual boundary this correction enforces: no
+    adjudication reaches governed state through the ordinary pathway
+    without an explicit, self-declared choice between "I am a human
+    reviewer personally recording my own judgment" and "this is an
+    agent/automated assessment", never a silent default to either.
+    """
     _, store, workspace = _load_workspace_or_404(project_id)
 
     outcome = request.form.get("outcome")
     reasoning = request.form.get("reasoning")
     case_id = request.form.get("case_id")
+    attribution = request.form.get("attribution")
     evidence_finding_ids = [v for v in request.form.getlist("evidence_finding_id") if v]
     evidence_relationship_ids = [v for v in request.form.getlist("evidence_relationship_id") if v]
+
+    if attribution not in KNOWN_ADJUDICATION_ATTRIBUTIONS:
+        flash(
+            "An adjudication must explicitly state whether it reflects your own "
+            "personal review or an agent/automated assessment - choose one.",
+            "error",
+        )
+        return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
 
     try:
         store.record_requirement_adjudication(
@@ -3881,6 +3925,7 @@ def adjudicate_requirement(project_id, requirement_id):
             reasoning=reasoning,
             evidence_finding_ids=evidence_finding_ids or None,
             evidence_relationship_ids=evidence_relationship_ids or None,
+            attribution=attribution,
             governance_log=_log(),
         )
     except CaseWorkspaceError as exc:

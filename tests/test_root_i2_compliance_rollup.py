@@ -84,7 +84,9 @@ class ComplianceRollupTestCase(unittest.TestCase):
     def _adjudicate(self, requirement_id, outcome, reasoning="Reviewed."):
         response = self.client.post(
             f"/projects/{self.project_id}/workspace/requirements/{requirement_id}/adjudicate",
-            data={"outcome": outcome, "reasoning": reasoning, "case_id": ""},
+            # CLAUDE-POSTCAMEL-COMM-I5A: attribution is now a mandatory,
+            # never-defaulted explicit choice at this route.
+            data={"outcome": outcome, "reasoning": reasoning, "case_id": "", "attribution": "human_reviewed"},
             follow_redirects=True,
         )
         self.assertEqual(response.status_code, 200)
@@ -226,7 +228,10 @@ class ComplianceRollupTestCase(unittest.TestCase):
         requirement = self._register(source_id, "3.1", "Contractor shall provide as-built drawings.")
         response = self.client.post(
             f"/projects/{self.project_id}/workspace/requirements/{requirement['id']}/adjudicate",
-            data={"outcome": "Satisfied", "reasoning": "As-built set received.", "case_id": ""},
+            data={
+                "outcome": "Satisfied", "reasoning": "As-built set received.", "case_id": "",
+                "attribution": "human_reviewed",
+            },
         )
         self.assertIn(response.status_code, (200, 302))
         adjudications = self.store.requirement_adjudications_for(self._fresh_workspace(), requirement["id"])

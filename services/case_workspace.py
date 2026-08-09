@@ -137,6 +137,63 @@ REQUIREMENT_ADJUDICATION_OUTCOMES = (
 # saying so, just this computed answer.
 REQUIREMENT_ADJUDICATION_STATE_NOT_YET_ASSESSED = "Not Yet Assessed"
 
+# CLAUDE-POSTCAMEL-COMM-I5A: content-provenance for RequirementAdjudication
+# (OPR-5.3's own corrective tranche). RequirementAdjudication's own
+# docstring has always called this object "a human's answer", but until
+# this addition nothing on the record itself distinguished a personally-
+# formed human judgment from an agent/automation's assessment entered
+# through the same real route - both were structurally identical, a
+# username and free text. These two are the only real INPUT choices a
+# caller may declare; UNKNOWN_LEGACY is a DERIVED label only (see
+# resolve_requirement_adjudication_attribution below), mirroring
+# REQUIREMENT_ADJUDICATION_STATE_NOT_YET_ASSESSED's own
+# derived-never-stored pattern - a record predating this field is never
+# silently relabeled as either real choice.
+ADJUDICATION_ATTRIBUTION_HUMAN_REVIEWED = "human_reviewed"
+ADJUDICATION_ATTRIBUTION_AGENT_ASSESSMENT = "agent_assessment"
+ADJUDICATION_ATTRIBUTION_UNKNOWN_LEGACY = "unknown_legacy"
+
+KNOWN_ADJUDICATION_ATTRIBUTIONS = (
+    ADJUDICATION_ATTRIBUTION_HUMAN_REVIEWED,
+    ADJUDICATION_ATTRIBUTION_AGENT_ASSESSMENT,
+)
+
+# The four RequirementAdjudication records CLAUDE-POSTCAMEL-COMM-I3
+# created against the real ARCHIOSK commissioning specimen, before this
+# field existed. Never mutated to add attribution retroactively -
+# ADR-032-R06's "human-adjudication-as-evidence", append-only,
+# never-overwrite principle applies to this addition too, not only to
+# outcome/reasoning/timestamp. Their agent origin is instead truthfully
+# resolved BY REFERENCE, directly evidenced by
+# governance/current/comm-i3-first-developmental-commissioning-tranche.md
+# (commit 678c692) and this session's own contemporaneous script output
+# recording exactly these ids at the moment they were created.
+LEGACY_AGENT_ATTRIBUTED_ADJUDICATION_IDS = frozenset({
+    "4e5d2482-3219-4df4-a3b2-e23666dd8f99",
+    "6e7680a5-abf8-4a64-a410-436a0a6a0c60",
+    "5d1a7860-cbf5-4d7d-b38f-cc78afbcc43e",
+    "1c93d749-5c7c-44d5-921f-8df0c03a19d5",
+})
+
+
+def resolve_requirement_adjudication_attribution(record: dict) -> str:
+    """
+    Read-time resolution only - never stored, never backfilled onto the
+    record itself. A record's own `attribution` field wins if present;
+    otherwise a record is checked against the small, explicit, named
+    LEGACY_AGENT_ATTRIBUTED_ADJUDICATION_IDS reference above (never a
+    guess - only these four specific, governance-documented ids ever
+    resolve to agent_assessment this way); anything else predating the
+    field resolves honestly to UNKNOWN_LEGACY, never defaulted to
+    "human" merely because it is old.
+    """
+    attribution = record.get("attribution")
+    if attribution:
+        return attribution
+    if record.get("id") in LEGACY_AGENT_ATTRIBUTED_ADJUDICATION_IDS:
+        return ADJUDICATION_ATTRIBUTION_AGENT_ASSESSMENT
+    return ADJUDICATION_ATTRIBUTION_UNKNOWN_LEGACY
+
 RFI_STATUS_DRAFT = "draft"
 RFI_STATUS_ISSUED = "issued"
 # CLAUDE-P30: the Client/Owner-side counterpart action to issuing -- an
@@ -1589,6 +1646,18 @@ class RequirementAdjudication:
     compliance denylist) - governed Requirement lifecycle state and
     adjudicated compliance outcome remain two separate, never-merged
     layers.
+
+    CLAUDE-POSTCAMEL-COMM-I5A: `attribution` (Optional,
+    KNOWN_ADJUDICATION_ATTRIBUTIONS) distinguishes a personally-formed
+    human judgment from an agent/automation's assessment entered through
+    this same object - the gap this docstring's own long-standing "a
+    human's answer" claim never actually enforced. `adjudicator` alone
+    (a username) was never sufficient: it says WHO/WHAT ACCOUNT performed
+    the write, never whether the judgment itself was a human's own. A
+    legacy record predating this field simply lacks the key (the same
+    honest-absence pattern every prior additive field on this codebase
+    uses) - see resolve_requirement_adjudication_attribution for how that
+    absence is read, never silently defaulted to "human".
     """
 
     id: str
@@ -1600,6 +1669,7 @@ class RequirementAdjudication:
     reasoning: str
     evidence_finding_ids: list[str] = field(default_factory=list)
     evidence_relationship_ids: list[str] = field(default_factory=list)
+    attribution: Optional[str] = None  # KNOWN_ADJUDICATION_ATTRIBUTIONS
 
 
 @dataclass
@@ -8865,11 +8935,12 @@ class CaseWorkspaceStore:
         reasoning: str,
         evidence_finding_ids: Optional[list[str]] = None,
         evidence_relationship_ids: Optional[list[str]] = None,
+        attribution: Optional[str] = None,
         governance_log: Optional[GovernanceLog] = None,
     ) -> dict:
         """
-        Records a human's Requirement-level compliance determination.
-        Append-only - always creates a new record; see
+        Records a Requirement-level compliance determination. Append-only
+        - always creates a new record; see
         latest_requirement_adjudication_for/requirement_adjudication_state
         for the current effective outcome. `reasoning` is required, not
         optional (ADR-032-R05/R06: reviewer reasoning is preserved as
@@ -8885,6 +8956,17 @@ class CaseWorkspaceStore:
         contribution to the Requirement's own governed record, a
         genuinely different object from the Case whose evidence it cites.
         Counting it would blur two distinct objects' provenance together.
+
+        CLAUDE-POSTCAMEL-COMM-I5A: `attribution` is Optional HERE
+        (backward-compatible with every pre-existing direct caller of
+        this method, matching this codebase's own established pattern
+        for every prior additive field) - it is the real product route
+        (`adjudicate_requirement`) that makes an explicit choice
+        mandatory, not this store method. When supplied, it must be one
+        of KNOWN_ADJUDICATION_ATTRIBUTIONS; nothing here infers or
+        defaults it from `adjudicator`'s own identity, since a username
+        alone was exactly the insufficiency this correction exists to
+        fix.
         """
         requirement = self._find(workspace.requirements, requirement_id)
         if requirement is None:
@@ -8900,6 +8982,12 @@ class CaseWorkspaceStore:
             raise CaseWorkspaceError(
                 "A Requirement Adjudication requires reasoning - the human basis "
                 "for the determination must be recorded, not just its outcome."
+            )
+
+        if attribution is not None and attribution not in KNOWN_ADJUDICATION_ATTRIBUTIONS:
+            raise CaseWorkspaceError(
+                f"'{attribution}' is not a recognized adjudication attribution. "
+                f"Use one of: {', '.join(KNOWN_ADJUDICATION_ATTRIBUTIONS)}."
             )
 
         for finding_id in evidence_finding_ids or []:
@@ -8920,6 +9008,7 @@ class CaseWorkspaceStore:
             reasoning=reasoning,
             evidence_finding_ids=list(evidence_finding_ids or []),
             evidence_relationship_ids=list(evidence_relationship_ids or []),
+            attribution=attribution,
         )
         workspace.requirement_adjudications.append(asdict(record))
         self.save(workspace)
@@ -8927,10 +9016,17 @@ class CaseWorkspaceStore:
         if governance_log is not None:
             governance_log.append(
                 project_id=workspace.project_id, event_type="requirement_adjudicated",
-                actor=adjudicator, role="human",
+                # CLAUDE-POSTCAMEL-COMM-I5A: this previously hardcoded
+                # role="human" unconditionally, regardless of who/what
+                # actually performed the write - a false claim for every
+                # agent-entered adjudication (see the four legacy
+                # COMM-I3 records this same correction addresses).
+                # Derived honestly from the real attribution now, not
+                # asserted independently of it.
+                actor=adjudicator, role=(attribution or "unspecified"),
                 payload={
                     "requirement_adjudication_id": record.id, "requirement_id": requirement_id,
-                    "outcome": outcome,
+                    "outcome": outcome, "attribution": attribution,
                 },
                 correlation_id=record.id,
             )

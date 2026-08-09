@@ -62,7 +62,12 @@ class VisualPressureTests(unittest.TestCase):
     def _adjudicate(self, requirement):
         self.client.post(
             f"/projects/{self.project_id}/workspace/requirements/{requirement['id']}/adjudicate",
-            data={"outcome": "Satisfied", "reasoning": "As-built set received.", "case_id": ""},
+            # CLAUDE-POSTCAMEL-COMM-I5A: attribution is now a mandatory,
+            # never-defaulted explicit choice at this route.
+            data={
+                "outcome": "Satisfied", "reasoning": "As-built set received.", "case_id": "",
+                "attribution": "human_reviewed",
+            },
         )
 
     def test_not_yet_assessed_requirement_never_quiets(self):

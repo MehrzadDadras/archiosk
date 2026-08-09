@@ -129,7 +129,12 @@ class RequirementAdjudicationTests(unittest.TestCase):
         )
         events = [e for e in self.gov.read(self.project_id) if e.event_type == "requirement_adjudicated"]
         self.assertEqual(len(events), 1)
-        self.assertEqual(events[0].role, "human")
+        # CLAUDE-POSTCAMEL-COMM-I5A: this previously hardcoded "human"
+        # unconditionally regardless of who/what actually performed the
+        # write - a false claim whenever the caller was really an agent.
+        # This call passes no `attribution`, so the honest, corrected
+        # value is "unspecified", not a default of "human".
+        self.assertEqual(events[0].role, "unspecified")
 
     # G - citing a nonexistent Finding is rejected, not silently accepted
     def test_g_unknown_evidence_finding_rejected(self):

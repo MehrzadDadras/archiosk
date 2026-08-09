@@ -1991,7 +1991,9 @@
                     {% endif %}
                     {% endif %}
                     {% if row.adjudication_history|length == 1 %}
-                    <br>{{ row.latest_adjudication.outcome }} by {{ row.latest_adjudication.adjudicator }} &mdash; {{ row.latest_adjudication.reasoning }}
+                    <br>{{ row.latest_adjudication.outcome }} by {{ row.latest_adjudication.adjudicator }}
+                    <span class="review-state-badge" data-ui-ref="display.requirements.adjudication-attribution">{{ row.latest_adjudication.attribution_label }}</span>
+                    &mdash; {{ row.latest_adjudication.reasoning }}
                     {% endif %}
                 </p>
 
@@ -1999,7 +2001,9 @@
                 {% call macros.subdisclosure('Adjudication history (' ~ row.adjudication_history|length ~ ') — this Requirement has been re-examined') %}
                     {% for a in row.adjudication_history %}
                     <p class="history-entry">
-                        <span class="review-state-badge">{{ a.outcome }}</span> by {{ a.adjudicator }} &middot; {{ a.adjudicated_at }}
+                        <span class="review-state-badge">{{ a.outcome }}</span> by {{ a.adjudicator }}
+                        <span class="review-state-badge" data-ui-ref="display.requirements.adjudication-attribution">{{ a.attribution_label }}</span>
+                        &middot; {{ a.adjudicated_at }}
                         <br>{{ a.reasoning }}
                     </p>
                     {% endfor %}
@@ -2044,6 +2048,19 @@
                         {% endfor %}
                     </select>
                     <input type="text" name="reasoning" placeholder="Reasoning (required)" required>
+                    {# CLAUDE-POSTCAMEL-COMM-I5A: mandatory, never-defaulted
+                       self-declaration - no radio is pre-checked, so an
+                       adjudication cannot be submitted without an explicit
+                       choice. #}
+                    <span style="display:block;font-size:0.85rem;color:var(--text-secondary);">This adjudication is:</span>
+                    <label style="font-size:0.85rem;color:var(--text-secondary);">
+                        <input type="radio" name="attribution" value="human_reviewed" required>
+                        My own personal review
+                    </label>
+                    <label style="font-size:0.85rem;color:var(--text-secondary);">
+                        <input type="radio" name="attribution" value="agent_assessment" required>
+                        An agent/automated assessment (not a personal human judgment)
+                    </label>
                     {% if active_case and findings_view %}
                     <span style="color:var(--text-secondary);font-size:0.85rem;">Evidence Findings:</span>
                     {% for row2 in findings_view %}
