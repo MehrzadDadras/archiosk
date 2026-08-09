@@ -181,7 +181,11 @@ class UploadEntryPointCopyTests(unittest.TestCase):
     def test_upload_page_states_territory_before_ontology_framing(self):
         client = self._client()
         body = client.get("/upload").get_data(as_text=True)
-        self.assertIn("Open a Project", body)
+        # CLAUDE-POSTCAMEL-META-T01-RC1: "Open a Project" was corrected to
+        # "Establish a Project" - it collided with the actual mechanism
+        # ("+ New Project" always creates a fresh record, never reopens
+        # an existing one).
+        self.assertIn("Establish a Project", body)
         # Reformatted onto several source lines in the template - checked
         # as fragments guaranteed to be on one source line each (see the
         # same note on the Overview/Files assertions above).

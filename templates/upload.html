@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Open a Project &mdash; Archiosk{% endblock %}
+{% block title %}Establish a Project &mdash; Archiosk{% endblock %}
 
 {% block content %}
 <section class="hero">
@@ -10,14 +10,26 @@
        project moves into Archiosk, the opposite of the governing
        principle ("Archiosk enters the project," not the reverse). No
        mechanism changed - this is still the same one-founding-document
-       upload that creates a project; only the copy around it changed. #}
-    <h1>Open a Project</h1>
+       upload that creates a project; only the copy around it changed.
+
+       CLAUDE-POSTCAMEL-META-T01-RC1: "Open a Project" (this stage's own
+       first attempt) was found, on reassessment, to collide with the
+       actual mechanism - the only real discovery path to this page is
+       the sidebar's own "+ New Project" link (base.html,
+       data-ui-ref="lists.new-project"), and this route always creates a
+       brand-new Project record with a fresh id, never reopens or resumes
+       an existing one. "Open" risks implying the latter. Corrected to
+       "Establish a Project" - the Product Owner's own alternate
+       candidate wording (META-T01's own Section 4), consistent with
+       "+ New Project," and still carrying the Territory framing (a
+       project is established IN Archiosk, not moved into it). #}
+    <h1>Establish a Project</h1>
     <p class="hero-copy" data-ui-ref="upload.limits">
         Archiosk works alongside your project's existing material &mdash; it
         does not take the place of it, and your files stay wherever they
         already are. Add one document to begin (a founding record Archiosk
-        will use to open this project); more Documents, Text Records, and
-        governed intelligence can be added afterward.
+        will use to establish this project); more Documents, Text Records,
+        and governed intelligence can be added afterward.
     </p>
     <p class="hero-copy" data-ui-ref="upload.limits.formats">
         Accepted formats: PDF, DOCX, TXT, CSV, MD. Maximum size {{ max_upload_mb }}MB.
