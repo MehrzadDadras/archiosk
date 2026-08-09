@@ -396,8 +396,16 @@ composer to see real context resolution directly.
 
 ## Z. Commits / HEAD / origin/main / working tree
 
-See the final chat report for exact values, recorded after this
-document and the code/test changes are committed together.
+Committed as `da544881952008688ca27ad0f13dc415a737c081`
+("CLAUDE-POSTCAMEL-CA1A: Conversational Context Completion"), covering
+`services/case_workspace.py`, `services/project_qa.py`,
+`services/conversation_interpreter.py`, `routes/workspace.py`,
+`templates/_macros.html`, `templates/case_workspace.html`, this
+document, `governance/STATUS.md`, and
+`tests/test_ca1a_context_completion.py`. Pushed to `origin/main`
+(`edcd9dd..da54488`). `HEAD == origin/main == da54488`. Working tree
+clean afterward except the pre-existing untracked
+`tests/fixtures/nreocrc/_lab_instance_scratch_002/` fixture.
 
 ## AA. Remaining conversational limitations
 
