@@ -119,6 +119,7 @@ def interpret_message(
     governance_log=None,
     current_view: Optional[str] = None,
     selected_source_id: Optional[str] = None,
+    selected_object: Optional[dict] = None,
 ) -> InterpretationResult:
     """
     `case` is now optional (a project-level aperture - no Investigation
@@ -135,6 +136,19 @@ def interpret_message(
     reply for anything unrecognized: acknowledging the anchor by name
     is an honest demonstration that the context was actually captured
     and carried through, not a claim that the message was understood.
+
+    CLAUDE-POSTCAMEL-CA1B (Sections 4/5): `selected_object` (same shape
+    as `anchor` - anchor_type/anchor_id) is the caller's persisted
+    "professional context" slot (Requirement/Finding/Source), read from
+    session, ALREADY superseded by `anchor` whenever this specific
+    message carries one (the caller sets/reads persisted state in that
+    order - see routes/workspace.py's own _run_conversation_turn).
+    Deliberately NOT consulted by the pre-existing needs_case/
+    is_requirement_investigation_question/anchor_acknowledged grammar
+    below, which remains exactly as anchor-only as it always was - only
+    the CA1A contextual-reference layer (Section 12: "extend the
+    existing mechanism," not build a second one) honors it, via
+    `effective_referent` below.
     """
     lowered = text.strip().lower()
 
@@ -246,6 +260,21 @@ def interpret_message(
         (s for s in workspace.sources if s["id"] == selected_source_id), None,
     ) if selected_source_id else None
 
+    # CLAUDE-POSTCAMEL-CA1B (Section 5, context precedence): the
+    # CA1A contextual-reference layer's own referent, extended -
+    # THIS message's own explicit anchor always wins (freshest, most
+    # explicit signal); otherwise the persisted "professional context"
+    # slot (Requirement/Finding/Source, whichever was selected most
+    # recently by anchor or by a real ?requirement=/?finding=/?source=
+    # visit); a stale/foreign persisted id degrades to None exactly like
+    # anchor already does (_resolve_anchor_object's own real per-
+    # workspace lookup, not trusted merely because it's in session). A
+    # persisted Source falls through to validated_selected_source below
+    # only when even the persisted slot is empty, per this stage's own
+    # explicit "current selected object" > "current view context"
+    # ordering.
+    effective_referent = anchor if anchor is not None else selected_object
+
     # CLAUDE-POSTCAMEL-CA1A (Section 10): "what should I do next" gets
     # its own dedicated handler, checked ahead of the generic anchor
     # fallback, so it can use whatever real context IS available
@@ -254,7 +283,7 @@ def interpret_message(
     # nothing more specific is selected - never generic PM advice
     # invented without grounding.
     if _looks_like_what_next(lowered):
-        return _handle_what_should_i_do_next(workspace, anchor, validated_selected_source)
+        return _handle_what_should_i_do_next(workspace, effective_referent, validated_selected_source)
 
     # CLAUDE-POSTCAMEL-CA1A (Sections 2/4/12/18): a bounded set of
     # pronoun-dependent phrasings ("tell me about this", "show me the
@@ -271,7 +300,9 @@ def interpret_message(
     # this check runs first deliberately, so an ambiguous "this" is
     # never silently handed to the model to guess at.
     if _looks_like_contextual_reference(lowered):
-        return _handle_contextual_reference(workspace, anchor, validated_selected_source, triggering_message_id, case)
+        return _handle_contextual_reference(
+            workspace, effective_referent, validated_selected_source, triggering_message_id, case,
+        )
 
     if anchor is not None:
         return InterpretationResult(

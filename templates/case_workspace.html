@@ -2824,6 +2824,7 @@
        share state across blocks - the cheapest correct fix, not a new
        mechanism. #}
     {% set drawing_sources = active_sources|selectattr("kind", "equalto", "drawing")|selectattr("id", "in", active_case.source_ids)|list %}
+    {{ macros.context_indicator(project_id, current_context) }}
     {% call macros.conversation_dock(
         active_case.title,
         active_case.conversation|length,
@@ -2918,6 +2919,7 @@
         {% endif %}
     {% endcall %}
     {% else %}
+    {{ macros.context_indicator(project_id, current_context) }}
     {% call macros.conversation_dock(
         'Project Conversation',
         project_conversation_view|length,

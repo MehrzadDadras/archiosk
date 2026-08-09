@@ -86,6 +86,16 @@ def log_out() -> None:
     session.pop("user_id", None)
     session.pop("username", None)
     session.pop("role", None)
+    # CLAUDE-POSTCAMEL-CA1B (Section 11, persistence boundary): this
+    # function previously popped only the three auth keys, leaving any
+    # `selected_object:{project_id}`/`focused_finding:{project_id}`
+    # session state in place - since the browser's session cookie itself
+    # isn't cleared, a fresh sign-in in the same browser would silently
+    # inherit the PREVIOUS session's "professional context" for any
+    # matching project id. A real, found gap: sign-out is meant to be a
+    # clean boundary, not merely an auth boundary.
+    for key in [k for k in session.keys() if k.startswith("selected_object:") or k.startswith("focused_finding:")]:
+        session.pop(key, None)
     if username is not None:
         logger.info("User %r logged out.", username)
 

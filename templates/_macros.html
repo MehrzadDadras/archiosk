@@ -264,3 +264,21 @@
 </div>
 {% endif %}
 {% endmacro %}
+
+{# CLAUDE-POSTCAMEL-CA1B (Section 8, selection visibility): a small,
+   truthful label naming whatever ARCHIOSK currently considers the PM's
+   "professional context" (Requirement/Finding/Source) - resolved fresh
+   on every render (routes/workspace.py's own read-time lookup), never
+   shown for a stale/deleted selection. A real "Clear" control posts to
+   the one explicit clear-selection route (Section 9) - no large visual
+   footprint, one line, no icon set, no Surface Trust redesign. #}
+{% macro context_indicator(project_id, current_context) %}
+{% if current_context %}
+<div class="conv-context-indicator" data-ui-ref="chat.context-indicator">
+    <span>Currently working with: <strong>{{ current_context.type }}</strong> — {{ current_context.label }}</span>
+    <form method="post" action="{{ url_for('workspace.clear_selected_context', project_id=project_id) }}" style="display:inline;">
+        <button type="submit" class="link-button">Clear</button>
+    </form>
+</div>
+{% endif %}
+{% endmacro %}

@@ -105,6 +105,7 @@ from services.conversation_interpreter import (
     _looks_like_orientation_request,
     _looks_like_project_question,
     _looks_like_what_next,
+    _resolve_anchor_object,
     interpret_message,
 )
 from services.governance import GovernanceLog
@@ -536,6 +537,56 @@ def show_workspace(project_id):
     selected_source = next(
         (s for s in workspace.sources if s["id"] == selected_source_id), None,
     ) if selected_source_id else None
+
+    # CLAUDE-POSTCAMEL-CA1B (Section 2/3): same "?<id> selection, resolved
+    # only against THIS already-authorized project's own workspace list,
+    # None for an unknown/foreign id" convention as ?source= above -
+    # gives Requirement/Finding the same real, bookmarkable, project-
+    # scoped selection Source already had, rather than a second, bespoke
+    # mechanism.
+    selected_requirement_id = request.args.get("requirement")
+    selected_requirement = next(
+        (r for r in workspace.requirements if r["id"] == selected_requirement_id), None,
+    ) if selected_requirement_id else None
+
+    selected_finding_id = request.args.get("finding")
+    selected_finding = next(
+        (f for f in workspace.findings if f["id"] == selected_finding_id), None,
+    ) if selected_finding_id else None
+
+    # CLAUDE-POSTCAMEL-CA1B (Section 5, context precedence): visiting a
+    # real ?source=/?requirement=/?finding= URL is an explicit current
+    # selection - it persists as this Project's "professional context"
+    # (session-scoped, mirroring the pre-existing focused_finding:
+    # pattern) so it survives ordinary navigation away and back, not
+    # merely this one request. Only one wins per visit - Source first
+    # (existing precedent), matching this route's own established "a
+    # real selection always wins over ?view=" precedence note below.
+    if selected_source is not None:
+        _set_persisted_selection(project_id, "source", selected_source["id"])
+    elif selected_requirement is not None:
+        _set_persisted_selection(project_id, "requirement", selected_requirement["id"])
+    elif selected_finding is not None:
+        _set_persisted_selection(project_id, "finding", selected_finding["id"])
+
+    # CLAUDE-POSTCAMEL-CA1B (Section 8, selection visibility): a small,
+    # truthful "what does ARCHIOSK consider selected" label - resolved
+    # read-time, every render, through the same real per-workspace
+    # lookup the conversational layer itself uses
+    # (_resolve_anchor_object), so a stale/deleted persisted selection
+    # never renders as if it still existed (Section 2's own "does not
+    # silently preserve stale selection after deletion/removal").
+    current_context = None
+    _persisted = _get_persisted_selection(project_id)
+    if _persisted:
+        _ctx_type, _ctx_object = _resolve_anchor_object(workspace, _persisted)
+        if _ctx_object is not None:
+            if _ctx_type == "requirement":
+                current_context = {"type": "Requirement", "label": _ctx_object["original_requirement_identifier"]}
+            elif _ctx_type == "finding":
+                current_context = {"type": "Finding", "label": _ctx_object["statement"][:60]}
+            elif _ctx_type == "source":
+                current_context = {"type": "Source", "label": _ctx_object["name"]}
 
     # CLAUDE-MM8: ?work_product=<id> opens a governed work product
     # directly inside the Workspace pane, same "?<id> selection, resolved
@@ -1511,6 +1562,7 @@ def show_workspace(project_id):
         case_finding_counts=case_finding_counts,
         active_case=active_case,
         selected_source=selected_source,
+        current_context=current_context,
         directory_view=directory_view,
         directory_view_label=directory_view_label,
         open_folder=open_folder,
@@ -3209,6 +3261,40 @@ def revise_document_source(project_id, source_id):
     return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
 
 
+# CLAUDE-POSTCAMEL-CA1B (Section 4, unified professional-context
+# envelope): a single, project-scoped "what is the PM currently working
+# with" slot - deliberately ONE slot, not one per object type, so a new
+# explicit selection of any kind naturally replaces whatever was there
+# before (Section 6's own "Finding B wins" requirement) rather than
+# requiring separate stale-vs-fresh reconciliation logic. Session-based,
+# same persistence characteristics as the pre-existing
+# focused_finding:{project_id} key this mirrors - not a governed
+# CaseWorkspaceStore field, because a selection is emphatically not
+# Project truth (Section 17). Stored in the same shape as Anchor
+# (anchor_type/anchor_id) so it can be passed anywhere an anchor already
+# is, without a second shape.
+_SELECTABLE_OBJECT_TYPES = frozenset({"requirement", "finding", "source"})
+
+
+def _selected_object_session_key(project_id: str) -> str:
+    return f"selected_object:{project_id}"
+
+
+def _get_persisted_selection(project_id: str) -> Optional[dict]:
+    return session.get(_selected_object_session_key(project_id))
+
+
+def _set_persisted_selection(project_id: str, anchor_type: str, anchor_id: str) -> None:
+    if anchor_type in _SELECTABLE_OBJECT_TYPES and anchor_id:
+        session[_selected_object_session_key(project_id)] = {
+            "anchor_type": anchor_type, "anchor_id": anchor_id,
+        }
+
+
+def _clear_persisted_selection(project_id: str) -> None:
+    session.pop(_selected_object_session_key(project_id), None)
+
+
 def _run_conversation_turn(
     project_id: str, store: CaseWorkspaceStore, workspace, case: Optional[dict], text: str,
     anchor: Optional[dict] = None, current_view: Optional[str] = None,
@@ -3242,6 +3328,13 @@ def _run_conversation_turn(
     against THIS workspace before trusting either; never assume a
     client-submitted hidden field is honest just because this route
     happened to render it that way originally).
+
+    CLAUDE-POSTCAMEL-CA1B (Section 5, context precedence): an anchor
+    attached to THIS message is the freshest, most explicit signal, so
+    it both answers this turn AND becomes the persisted "professional
+    context" for whatever comes next (Section 6's own "a new explicit
+    selection replaces the old one" requirement) - never the reverse
+    (a stale persisted selection never overrides a fresh anchor).
     """
     case_id = case["id"] if case is not None else None
     human_message = store.add_message(
@@ -3251,6 +3344,10 @@ def _run_conversation_turn(
 
     artifacts_dir = Path(current_app.config["REGISTRY_STORE_PATH"]) / "workspace_artifacts"
     focused_finding_id = session.get(f"focused_finding:{project_id}")
+
+    if anchor is not None:
+        _set_persisted_selection(project_id, anchor.get("anchor_type"), anchor.get("anchor_id"))
+    persisted_selection = _get_persisted_selection(project_id)
 
     result = interpret_message(
         text=text,
@@ -3265,6 +3362,7 @@ def _run_conversation_turn(
         governance_log=_log(),
         current_view=current_view,
         selected_source_id=selected_source_id,
+        selected_object=persisted_selection,
     )
 
     store.add_message(
@@ -3721,6 +3819,22 @@ def discuss_object(project_id):
     # script, the same mechanism Batch A's "View all" links now rely on -
     # not a new destination-tracking system, the same one used twice.
     return redirect(url_for("workspace.show_workspace", project_id=project_id) + "#conversation-dock")
+
+
+@workspace_bp.route("/projects/<project_id>/workspace/context/clear", methods=["POST"])
+@login_required
+def clear_selected_context(project_id):
+    """
+    CLAUDE-POSTCAMEL-CA1B (Section 9, clear-selection behavior): the
+    one explicit, PM-initiated way to clear the persisted "professional
+    context" slot (Requirement/Finding/Source) - _load_workspace_or_404
+    is the entire authorization boundary here, same as every other
+    project-scoped route; there is nothing else to validate since
+    clearing a session key cannot leak or corrupt anything.
+    """
+    _load_workspace_or_404(project_id)
+    _clear_persisted_selection(project_id)
+    return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
 
 
 @workspace_bp.route("/projects/<project_id>/workspace/apertures/<message_id>/start-investigation", methods=["POST"])
