@@ -866,27 +866,111 @@ document.addEventListener('DOMContentLoaded', () => {
     // and "preserve chat draft and position" (Section G) both hinge on
     // this same continuity.
     const draftInput = document.querySelector('[data-conversation-draft]');
+    const conversationScopeForDraft = draftInput ? draftInput.dataset.conversationDraft : null;
     if (draftInput) {
-        const draftKey = `beehive:conversation:draft:${draftInput.dataset.conversationDraft}`;
+        const draftKey = `beehive:conversation:draft:${conversationScopeForDraft}`;
         const savedDraft = window.sessionStorage.getItem(draftKey);
         if (savedDraft) draftInput.value = savedDraft;
         draftInput.addEventListener('input', () => {
             if (draftInput.value) window.sessionStorage.setItem(draftKey, draftInput.value);
             else window.sessionStorage.removeItem(draftKey);
         });
+        // CLAUDE-CA1C-UX-FIX-01: mark this scope "just sent" right before the
+        // full-page-reload POST fires, so the very next DOMContentLoaded
+        // (this same code, on the reloaded page) knows to land on the newest
+        // exchange rather than restore whatever mid-history scroll position
+        // happened to be saved from before this send - "after the user
+        // themselves sends a new message, return them to the newest
+        // exchange" is a real product requirement, not the general
+        // navigation-preserving case this sessionStorage restore mechanism
+        // otherwise exists for (see the scroll-restore block below).
         draftInput.closest('form').addEventListener('submit', () => {
             window.sessionStorage.removeItem(draftKey);
+            if (conversationScopeForDraft) {
+                window.sessionStorage.setItem(`beehive:conversation:justSent:${conversationScopeForDraft}`, '1');
+            }
         });
     }
 
+    // CLAUDE-CA1C-UX-FIX-01: root cause of the live-reported "conversation
+    // starts too high, scrolls down, stops short of the newest exchange"
+    // defect - routes/workspace.py used to redirect back here with a
+    // "#conversation-dock" fragment, which triggered the BROWSER'S OWN
+    // native anchor-scroll (targeting this sticky, bottom-pinned panel's
+    // own top edge - not the newest message) racing against this exact
+    // block's own scrollTop assignment, on a container with `scroll-
+    // behavior: smooth` (main.css) - two competing smooth-scrolls settling
+    // wherever the last one happened to finish. That fragment is gone now
+    // (it was already vestigial - the hash-driven "open the collapsed
+    // ancestor" logic above only matches `details.accordion-section`, and
+    // this dock has been a plain, always-open <div> since P40-E2B). This
+    // block is now the SOLE owner of this container's scroll position.
     const conversationThread = document.querySelector('.conversation-thread[data-conversation-scope]');
     if (conversationThread) {
-        const scrollKey = `beehive:conversation:scroll:${conversationThread.dataset.conversationScope}`;
-        const savedScroll = window.sessionStorage.getItem(scrollKey);
-        if (savedScroll) conversationThread.scrollTop = parseInt(savedScroll, 10) || 0;
-        else conversationThread.scrollTop = conversationThread.scrollHeight;
+        const scope = conversationThread.dataset.conversationScope;
+        const scrollKey = `beehive:conversation:scroll:${scope}`;
+        const justSentKey = `beehive:conversation:justSent:${scope}`;
+        // How close to the bottom (in px) counts as "the reviewer was
+        // already following the newest messages" - a decision threshold
+        // for CHOOSING to auto-follow, not a scroll destination in itself,
+        // so this isn't the "arbitrary hard-coded pixel offset" the fix
+        // needs to avoid (the actual destination is always computed from
+        // the live scrollHeight/clientHeight below, never a fixed number).
+        const NEAR_BOTTOM_TOLERANCE_PX = 48;
+
+        const justSent = window.sessionStorage.getItem(justSentKey) === '1';
+        window.sessionStorage.removeItem(justSentKey);
+
+        const applyScrollPosition = () => {
+            if (justSent) {
+                conversationThread.scrollTop = conversationThread.scrollHeight;
+                return;
+            }
+            const saved = window.sessionStorage.getItem(scrollKey);
+            if (!saved) {
+                // First-ever view of this scope this session - show the
+                // newest exchange, not the (empty) top of history.
+                conversationThread.scrollTop = conversationThread.scrollHeight;
+                return;
+            }
+            let distanceFromBottom = null;
+            try {
+                const parsed = JSON.parse(saved);
+                distanceFromBottom = typeof parsed.distanceFromBottom === 'number' ? parsed.distanceFromBottom : null;
+            } catch (err) {
+                // Pre-fix sessions stored a bare scrollTop number, not JSON -
+                // fall through to the legacy-format branch below.
+            }
+            if (distanceFromBottom !== null) {
+                if (distanceFromBottom <= NEAR_BOTTOM_TOLERANCE_PX) {
+                    // Was already following along near the bottom - keep
+                    // following the (now possibly taller) newest content,
+                    // exactly like a reviewer watching a live thread would
+                    // expect, rather than freezing at a stale offset.
+                    conversationThread.scrollTop = conversationThread.scrollHeight;
+                } else {
+                    // A deliberate mid-history read - restore it relative to
+                    // the CURRENT scrollHeight, so genuine navigation (not a
+                    // send) preserves where they actually were.
+                    conversationThread.scrollTop = Math.max(
+                        0,
+                        conversationThread.scrollHeight - conversationThread.clientHeight - distanceFromBottom
+                    );
+                }
+            } else {
+                conversationThread.scrollTop = parseInt(saved, 10) || conversationThread.scrollHeight;
+            }
+        };
+
+        // Scroll only once this reload's layout has actually settled (text
+        // wrapping/fonts) - a double rAF waits for the next two painted
+        // frames rather than guessing a fixed delay, so this never races
+        // layout regardless of how long it takes to finish.
+        window.requestAnimationFrame(() => window.requestAnimationFrame(applyScrollPosition));
+
         conversationThread.addEventListener('scroll', () => {
-            window.sessionStorage.setItem(scrollKey, String(conversationThread.scrollTop));
+            const distanceFromBottom = conversationThread.scrollHeight - conversationThread.scrollTop - conversationThread.clientHeight;
+            window.sessionStorage.setItem(scrollKey, JSON.stringify({ distanceFromBottom }));
         });
     }
 
@@ -916,6 +1000,106 @@ document.addEventListener('DOMContentLoaded', () => {
             composerInput.focus();
         });
     });
+
+    // CLAUDE-POSTCAMEL-VOICE1-PRE: Push-to-Talk voice input - "the
+    // microphone is merely another door into ARCHIOSK Go." Deliberately
+    // uses the browser's own built-in SpeechRecognition (Web Speech
+    // API) rather than a hosted transcription provider: this stage's
+    // own governing prompt required either a real Product Owner
+    // decision (vendor, API key, cost) or a path that needs none - the
+    // browser-native API is the only option that needs neither, so it
+    // is what VOICE1-PRE actually implements (see the governance record
+    // for the full provider audit and the adapter boundary this choice
+    // preserves for a future hosted-provider swap).
+    //
+    // Deliberately minimal: no manual getUserMedia/MediaRecorder/audio-
+    // blob handling anywhere in this file - SpeechRecognition captures
+    // and discards its own internal audio entirely inside the browser
+    // and only ever hands this code a text transcript. There is no
+    // audio blob here to accidentally persist (Section 5's own
+    // "transient audio, discard after transcription" requirement is
+    // satisfied by construction, not by remembering to delete a file).
+    //
+    // Never auto-submits: the transcript only ever fills the existing
+    // #dock-composer-input field, exactly as if the reviewer had typed
+    // it - the PM still reviews/edits and clicks the real Send button
+    // themselves (Section 6, review-before-send). Every existing hidden
+    // field (anchor/current_view/selected_source_id) on the same <form>
+    // is submitted unchanged, so voice inherits the exact same Project
+    // context, selection, and permission path text already has - never
+    // a second conversational system.
+    (function setUpVoiceInput() {
+        const micButton = document.getElementById('dock-composer-voice');
+        const composerInput = document.getElementById('dock-composer-input');
+        if (!micButton || !composerInput) return;
+
+        const SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SpeechRecognitionCtor) {
+            // Graceful degradation (Section 8): unsupported browser -
+            // the button stays hidden (its own default state), typing
+            // remains the only, fully-equivalent input path.
+            return;
+        }
+
+        micButton.hidden = false;
+
+        let recognition = null;
+        let listening = false;
+
+        function stopListening() {
+            listening = false;
+            micButton.classList.remove('voice-input-listening');
+            micButton.setAttribute('aria-pressed', 'false');
+        }
+
+        micButton.addEventListener('click', () => {
+            if (listening) {
+                // Push-to-Talk, not push-to-toggle-forever: a second
+                // press stops listening early, same as releasing a
+                // physical push-to-talk button.
+                if (recognition) recognition.stop();
+                stopListening();
+                return;
+            }
+
+            recognition = new SpeechRecognitionCtor();
+            recognition.lang = document.documentElement.lang || 'en-US';
+            recognition.interimResults = true;
+            recognition.maxAlternatives = 1;
+
+            recognition.addEventListener('result', (event) => {
+                let transcript = '';
+                for (let i = 0; i < event.results.length; i += 1) {
+                    transcript += event.results[i][0].transcript;
+                }
+                composerInput.value = transcript;
+            });
+
+            recognition.addEventListener('error', () => {
+                // CLAUDE-POSTCAMEL-VOICE1-PRE (Section 8): denied
+                // permission, no microphone, or any other capture
+                // failure - fail back to plain typing silently rather
+                // than blocking the composer or fabricating a
+                // transcript. The reviewer's own typed text (if any)
+                // already in the field is left untouched.
+                stopListening();
+            });
+
+            recognition.addEventListener('end', () => {
+                stopListening();
+                composerInput.focus();
+            });
+
+            try {
+                recognition.start();
+                listening = true;
+                micButton.classList.add('voice-input-listening');
+                micButton.setAttribute('aria-pressed', 'true');
+            } catch (err) {
+                stopListening();
+            }
+        });
+    })();
 
     // CLAUDE-P40-VW7: OneNote-style selection toolbar for Project
     // Conversation text -> Tags/Highlights/Tasks, plus the Lists Tasks/

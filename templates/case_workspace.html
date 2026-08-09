@@ -2875,6 +2875,14 @@
                 {% endif %}
             </p>
             {% endfor %}
+            {# CLAUDE-CA1C-UX-FIX-01: a stable, zero-height anchor at the true
+               end of the message list - static/js/case_workspace.js's own
+               scroll-to-newest logic scrolls this container's scrollTop to
+               scrollHeight (which already reaches past this element), but a
+               named element here also gives the auto-scroll regression test
+               something concrete to assert "is visible above the composer"
+               against, rather than inferring it from scrollHeight math alone. #}
+            <div class="conversation-thread-bottom" data-conversation-bottom-sentinel aria-hidden="true"></div>
         </div>
 
         {% if pending_rfi_finding_id and can_originate_rfi %}
@@ -2997,6 +3005,9 @@
             {% else %}
             <p class="conversation-empty">No Project Conversation yet.</p>
             {% endfor %}
+            {# CLAUDE-CA1C-UX-FIX-01: see the matching Investigation-scoped
+               sentinel's own comment above - same purpose, project-level thread. #}
+            <div class="conversation-thread-bottom" data-conversation-bottom-sentinel aria-hidden="true"></div>
         </div>
     {% endcall %}
     {% endif %}

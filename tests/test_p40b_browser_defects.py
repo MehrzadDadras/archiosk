@@ -397,7 +397,17 @@ class ProjectQAContinuityTests(unittest.TestCase):
                 data={"text": "What is the name of the RFP?"},
             )
         self.assertEqual(resp.status_code, 302)
-        self.assertTrue(resp.headers["Location"].endswith("#conversation-dock"))
+        # CLAUDE-CA1C-UX-FIX-01: the "#conversation-dock" fragment this
+        # redirect used to carry was removed - it was a stale relic of a
+        # pre-P40-E2B <details>-based dock (the anchor-open script it
+        # relied on only matches `details.accordion-section`, and the dock
+        # has been a plain, always-visible <div> since P40-E2B), and its
+        # only live effect was a native browser scroll-into-view that
+        # raced the JS's own deliberate scroll-to-newest-message logic on
+        # a `scroll-behavior: smooth` container - the live-reported "starts
+        # too high, stops short of the newest exchange" bug. Scrolling to
+        # the newest message is now owned solely by client-side JS.
+        self.assertFalse(resp.headers["Location"].endswith("#conversation-dock"))
 
     # -- 3.5: a plain question does not silently create a Case -------------
 
@@ -412,7 +422,8 @@ class ProjectQAContinuityTests(unittest.TestCase):
                 data={"text": "What is the name of this document?"},
             )
         self.assertEqual(resp.status_code, 302)
-        self.assertTrue(resp.headers["Location"].endswith("#conversation-dock"))
+        # CLAUDE-CA1C-UX-FIX-01: see the matching assertion's own comment above.
+        self.assertFalse(resp.headers["Location"].endswith("#conversation-dock"))
         workspace = self.store.get(self.project_id)
         self.assertEqual(workspace.cases, [])
         self.assertEqual(len(workspace.project_conversation), 2)  # human + system

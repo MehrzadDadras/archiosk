@@ -3551,7 +3551,21 @@ def quick_start(project_id):
             project_id, store, workspace, None, text, anchor=anchor,
             current_view=current_view, selected_source_id=selected_source_id,
         )
-        return redirect(url_for("workspace.show_workspace", project_id=project_id) + "#conversation-dock")
+        # CLAUDE-CA1C-UX-FIX-01: no "#conversation-dock" fragment - it used
+        # to (per this route's sibling below) rely on a browser-native
+        # anchor-scroll to reveal the reply, but the dock stopped being a
+        # <details> element back in P40-E2B (it's a plain <div> now), so
+        # static/js/case_workspace.js's own hash-driven "open the collapsed
+        # ancestor" logic (which only matches `details.accordion-section`)
+        # never actually fired for it - the fragment was purely triggering
+        # the browser's own default scroll-into-view, which targets this
+        # panel's own (sticky, bottom-pinned) top edge, not the newest
+        # message. That native scroll raced the JS's own deliberate
+        # scroll-to-newest logic below, on a container with `scroll-
+        # behavior: smooth` - two competing smooth-scrolls landing short of
+        # the real bottom (the live-reported bug). One explicit owner now:
+        # the JS's own justSent-flagged scroll-to-bottom, nothing native.
+        return redirect(url_for("workspace.show_workspace", project_id=project_id))
 
     title = text if len(text) <= 80 else text[:77] + "..."
     case = store.create_case(workspace, title=title, objective="", created_by=_reviewer())
@@ -3849,15 +3863,19 @@ def discuss_object(project_id):
         selected_source_id=request.form.get("selected_source_id"),
     )
 
-    # CLAUDE-P40-B (3.5): without a fragment, a plain redirect lands the
-    # reviewer at the top of Project Home with no indication a reply
-    # exists or where to find it - the conversation dock is collapsed by
-    # default. The #conversation-dock fragment (CLAUDE-P40-E1A: the ONE
-    # shared dock html_id, was #project-conversation) makes the browser
-    # scroll there AND triggers the already-built auto-open-on-anchor
-    # script, the same mechanism Batch A's "View all" links now rely on -
-    # not a new destination-tracking system, the same one used twice.
-    return redirect(url_for("workspace.show_workspace", project_id=project_id) + "#conversation-dock")
+    # CLAUDE-P40-B (3.5)'s original rationale here (a "#conversation-dock"
+    # fragment, so the reviewer lands on the reply instead of the top of
+    # Project Home) stopped being true once P40-E2B turned the dock from a
+    # collapsible <details> into an always-visible <div> - the fragment's
+    # only remaining effect was the browser's own native anchor-scroll,
+    # which targets this sticky, bottom-pinned panel's own top edge, not
+    # the newest message, and fights the JS's own scroll-to-newest logic
+    # on a `scroll-behavior: smooth` container (CLAUDE-CA1C-UX-FIX-01: the
+    # live-reported "starts too high, stops short" bug). Removed - the
+    # dock is always on screen already (nothing to "land on" it for), and
+    # static/js/case_workspace.js's own justSent-flagged logic is now the
+    # one, sole owner of scrolling this conversation to its newest entry.
+    return redirect(url_for("workspace.show_workspace", project_id=project_id))
 
 
 @workspace_bp.route("/projects/<project_id>/workspace/context/clear", methods=["POST"])
