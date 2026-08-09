@@ -1,11 +1,25 @@
 {% extends "base.html" %}
 
-{% block title %}Ingest a document &mdash; Archiosk{% endblock %}
+{% block title %}Open a Project &mdash; Archiosk{% endblock %}
 
 {% block content %}
 <section class="hero">
-    <h1>Ingest a project document</h1>
+    {# CLAUDE-POSTCAMEL-META-T01 (Territory Before Ontology): reframed
+       from "Ingest a project document" - that heading and the founder-
+       centric "put your document into Archiosk" framing implied the
+       project moves into Archiosk, the opposite of the governing
+       principle ("Archiosk enters the project," not the reverse). No
+       mechanism changed - this is still the same one-founding-document
+       upload that creates a project; only the copy around it changed. #}
+    <h1>Open a Project</h1>
     <p class="hero-copy" data-ui-ref="upload.limits">
+        Archiosk works alongside your project's existing material &mdash; it
+        does not take the place of it, and your files stay wherever they
+        already are. Add one document to begin (a founding record Archiosk
+        will use to open this project); more Documents, Text Records, and
+        governed intelligence can be added afterward.
+    </p>
+    <p class="hero-copy" data-ui-ref="upload.limits.formats">
         Accepted formats: PDF, DOCX, TXT, CSV, MD. Maximum size {{ max_upload_mb }}MB.
         Text-based project material &mdash; RFPs, RFQs, specs, contracts, reports, meeting
         minutes, with exhibits &mdash; is supported today. Scanned drawing packages, native

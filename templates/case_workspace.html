@@ -265,6 +265,37 @@
         {% endcall %}
     {% endif %}
 
+    {# CLAUDE-POSTCAMEL-META-T01 (Territory Before Ontology): "Where am I? /
+       What is here?" answered BEFORE any governed-intelligence content
+       (Needs Attention through History, below) - Overview's own accordion
+       order previously jumped straight from Access/Environment to Needs
+       Attention, meaning a brand-new project's first screen said nothing
+       at all about the reviewer's own registered material. This is a
+       projection pointer into the real `display.files` surface (branch
+       2.2), the same relocation-not-reimplementation shape ROOT-I1 already
+       used for the Requirements pointer below - no new domain object, no
+       fabricated hierarchy, honest counts only. #}
+    {% if directory_view == 'overview' %}
+        {% call macros.accordion('Project Territory', status=(active_sources|length ~ ' registered' if active_sources else None), group='left', id='project-territory', html_id='project-territory', open=True) %}
+        {% if active_sources %}
+        <p class="pane-note">
+            {{ active_sources|length }} Document(s)/Source(s) registered with Archiosk for this Project.
+            Your project's own files remain wherever they already are &mdash;
+            Archiosk does not require you to move, duplicate, or reorganize
+            them to work here.
+        </p>
+        {% else %}
+        <p class="pane-note">
+            No Documents registered yet. Archiosk does not require you to
+            move or duplicate your project's files here &mdash; add one via
+            Files or the Lists panel's "+ Add Documents" whenever you're
+            ready.
+        </p>
+        {% endif %}
+        <a href="{{ url_for('workspace.show_workspace', project_id=project_id, view='files') }}" data-ui-ref="display.overview.files-link">Open Files &rarr;</a>
+        {% endcall %}
+    {% endif %}
+
     {# CLAUDE-P40-E3A: the Investigations directory (list + Share/Retract/
        Archive/Derive/Record-Outcome actions) that used to live here as its
        own ?view=investigations Display body is removed outright - Section
@@ -2239,6 +2270,24 @@
                 </p>
 
                 {% call macros.subdisclosure('+ New Folder', ui_ref='display.files.design-builder.new-folder') %}
+                {# CLAUDE-POSTCAMEL-META-T01 (Territory Before Ontology,
+                   Section 13's own failure criterion): stated here, at the
+                   exact moment a reviewer is about to create ARCHIOSK-side
+                   structure, rather than as always-visible intro copy above
+                   - a real-browser regression test in this codebase
+                   (test_p40vw9a_files_cockpit_closeout.py) proves the two
+                   folder rows' own click-reachability against this exact
+                   page's real rendered height, and any added always-visible
+                   text above the folder list pushed the second row's
+                   trigger just far enough to break that proof. This
+                   disclosure is collapsed by default and adds no visible
+                   height until a reviewer opens it, so it carries the
+                   reassurance without that risk. #}
+                <p class="pane-note" style="margin-top:0;">
+                    This is optional - nothing about working in Archiosk
+                    requires recreating your project's real Data Room or
+                    file server here.
+                </p>
                 <form class="workspace-form" method="post" action="{{ url_for('workspace.create_folder_route', project_id=project_id) }}">
                     <input type="hidden" name="parent_folder_id" value="{{ open_folder.id if open_folder else '' }}">
                     <input type="text" name="name" placeholder="Folder name" required data-ui-ref="display.files.design-builder.new-folder.name">
