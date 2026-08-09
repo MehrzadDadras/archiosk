@@ -1,5 +1,22 @@
 # Final Current-Baseline Commissioning Tranche (CLAUDE-POSTCAMEL-COMM-I6)
 
+> **Correction notice (CLAUDE-POSTCAMEL-CONTINUE-01, a fresh-session
+> independent audit):** Section F's own OPR-7.2 conclusion below —
+> "Satisfied, with an honest methodological caveat" — was re-examined
+> under explicit instruction not to preserve it merely because this
+> document already stated it, and was found too generous. On rigorous
+> re-reading, the caveat itself (every walkthrough performed by the
+> Builder, never an independent representative user) is disqualifying
+> against the Requirement's own literal text ("without **creator**
+> intervention"), not a mere footnote to an otherwise-earned Satisfied.
+> **Corrected to Partially Satisfied.** See
+> `continue-01-opr-7-2-evidence-boundary-audit.md` for the full,
+> separately-conducted audit and reasoning. Section F below is left
+> exactly as originally written, not silently edited, per this
+> repository's own established practice of recording a correction
+> forward rather than rewriting history — the same pattern already used
+> for COMM-I3/COMM-I3A.
+
 **Status: CURRENT-BASELINE DEVELOPMENTAL COMMISSIONING COMPLETE —
 PRODUCT OWNER COMPLETION REVIEW REQUIRED.** Authorized following the
 Product Owner's confirmation of OPR-5.3 (Satisfied, Late Correction),
