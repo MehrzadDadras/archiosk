@@ -11,6 +11,26 @@ developmental/formative conformance (the eleven-field, evidence-graded
 method COMM-I2 recorded) — to prove the method before any decision to
 scale it to the remaining 30.
 
+> **Correction notice (CLAUDE-POSTCAMEL-COMM-I3A):** two framings below
+> overstated this stage's own authority and
+> have been corrected, not retracted — the evidence-based conclusions
+> (all four outcomes and developmental classifications) stand unchanged.
+> (1) Part 7's "explicitly accepted as a residual" language asserted a
+> Product Owner acceptance decision that was never actually made by the
+> Product Owner — no such decision existed then or exists now; see
+> `comm-i3a-human-authority-and-residual-governance-seal.md` Part B/F for
+> the corrected status and the decision package now put to the Product
+> Owner. (2) The four `Satisfied` adjudications are accurately stored
+> (an honest `adjudicator` field, no impersonation) and were performed
+> under real, explicit Product-Owner authorization to take exactly this
+> action — but `RequirementAdjudication`'s own docstring defines the
+> object as recording "a human's answer," and no human personally
+> reviewed each of these four specific conclusions before persistence.
+> See COMM-I3A Part D for the full authority-model analysis. Both
+> corrections are documentation-only — no stored record was altered,
+> consistent with `RequirementAdjudication`'s own append-only,
+> never-overwrite design.
+
 ---
 
 ## Governing-input check
