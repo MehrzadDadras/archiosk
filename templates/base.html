@@ -893,6 +893,22 @@
                                                         <button type="submit">Add Record</button>
                                                     </form>
                                                 {% endcall %}
+                                                {% set revisable_document_sources = active_sources|rejectattr("kind", "equalto", "drawing")|rejectattr("superseded_by_source_id")|list %}
+                                                {% call macros.subdisclosure('+ Register a Document Revision', html_id='project-sources-revise-document') %}
+                                                    {% if revisable_document_sources %}
+                                                    {% for source in revisable_document_sources %}
+                                                    <form class="workspace-form" method="post" enctype="multipart/form-data"
+                                                          action="{{ url_for('workspace.revise_document_source', project_id=project_id, source_id=source.id) }}"
+                                                          data-ui-ref="lists.project.tools.revise-document">
+                                                        <label style="font-family:var(--font-mono);font-size:0.85rem;color:var(--text-secondary);">{{ source.name }}</label>
+                                                        <input type="file" name="document" accept=".pdf,.docx,.txt,.csv,.md,.xlsx" required>
+                                                        <button type="submit">Register Revision</button>
+                                                    </form>
+                                                    {% endfor %}
+                                                    {% else %}
+                                                    <p class="pane-note" data-ui-ref="lists.project.tools.revise-document.empty">No revisable documents (add one via "+ Add Documents" or "+ Add Text Record" first).</p>
+                                                    {% endif %}
+                                                {% endcall %}
                                                 {% call macros.subdisclosure('+ Add External Source') %}
                                                     <p style="font-size:0.85rem;color:var(--text-secondary);" data-ui-ref="lists.project.tools.add-external-source">
                                                         Not yet available &mdash; no external source connector is configured for this deployment.

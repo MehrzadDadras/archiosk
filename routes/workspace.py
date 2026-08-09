@@ -75,6 +75,7 @@ from services.case_workspace import (
     REQUIREMENT_ADJUDICATION_STATE_NOT_YET_ASSESSED,
     REQUIREMENT_REGISTRATION_HUMAN_REGISTERED,
     REQUIREMENT_STATUS_SUPERSEDED,
+    SOURCE_KIND_DRAWING,
     SOURCE_KIND_PROJECT_DOCUMENT,
     SOURCE_KIND_TEXT_RECORD,
     TAG_COLOR_PALETTE,
@@ -3060,6 +3061,97 @@ def revise_source(project_id, source_id):
             file_path=str(stored_path),
             width=width,
             height=height,
+            actor=_reviewer(),
+        )
+    except CaseWorkspaceError as exc:
+        flash(str(exc), "error")
+        return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
+
+    _log().append(
+        project_id=project_id,
+        event_type="source_revised",
+        actor=_reviewer(),
+        role=session.get("role") or "unspecified",
+        payload={"old_source_id": source_id, "new_source_id": new_source["id"]},
+        state_predecessor_version=predecessor_version,
+        state_successor_version=workspace.version,
+        authority_class="approval_gate:source_revision",
+        correlation_id=supersession["id"],
+    )
+
+    flash(
+        f"New revision registered as a separate Source. {len(notices)} Case(s) "
+        "now show a Reference Update notice - nothing was silently replaced.",
+        "success",
+    )
+    return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
+
+
+@workspace_bp.route("/projects/<project_id>/workspace/sources/<source_id>/revise-document", methods=["POST"])
+@login_required
+def revise_document_source(project_id, source_id):
+    """
+    CLAUDE-POSTCAMEL-COMM-I4A: OPR-2.5's own corrective tranche. Mirrors
+    `revise_source` above exactly (never replaces the old Source, only
+    registers a new one and a Supersession record; gated behind the same
+    Approval Gate action class since it is the same governance-affecting
+    action) but for the three Source kinds `revise_source` cannot serve
+    at all - `project_document`, `rfq_rfp_document`, `text_record` - a
+    revised RFP/specification/addendum, not a revised drawing. Source is
+    project-scoped, not Case-scoped (its own docstring), so this route
+    deliberately does not require a `case_id` the way the drawing route
+    does; any Case that already cites the old Source still gets a
+    RevisionNotice regardless, via register_source_revision's own
+    Case-lookup, unchanged.
+    """
+    _, store, workspace = _load_workspace_or_404(project_id)
+    case_id = request.form.get("case_id") or None
+
+    existing_source = next((s for s in workspace.sources if s["id"] == source_id), None)
+    if existing_source is None:
+        abort(404)
+    if existing_source.get("removed_at"):
+        flash("This Source has been removed. Restore it before registering a new revision.", "error")
+        return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
+    if existing_source["kind"] == SOURCE_KIND_DRAWING:
+        flash("Use the drawing revision control for this Source.", "error")
+        return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
+
+    gate = _require_approval(
+        "source_revision",
+        "Register a new revision of this document Source. The original Source "
+        "and every Finding/Requirement/Case that cites it will be preserved "
+        "unchanged; a Reference Update notice will be added to any Case that "
+        "used it instead.",
+        project_id,
+        case_id,
+    )
+    if gate is not None:
+        return gate
+
+    file_storage = request.files.get("document")
+    if file_storage is None or not file_storage.filename:
+        flash("Choose a document for the new revision.", "error")
+        return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
+
+    ext = Path(file_storage.filename).suffix.lower()
+    if ext not in ALLOWED_DOCUMENT_EXTENSIONS:
+        flash(f"Unsupported document format '{ext}'.", "error")
+        return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
+
+    sources_dir = Path(current_app.config["REGISTRY_STORE_PATH"]) / "workspace_sources" / project_id
+    sources_dir.mkdir(parents=True, exist_ok=True)
+    safe_name = secure_filename(file_storage.filename)
+    stored_path = sources_dir / f"{uuid.uuid4().hex}_{safe_name}"
+    stored_path.write_bytes(file_storage.read())
+
+    predecessor_version = workspace.version
+    try:
+        new_source, notices, supersession = store.register_source_revision(
+            workspace,
+            old_source_id=source_id,
+            name=safe_name,
+            file_path=str(stored_path),
             actor=_reviewer(),
         )
     except CaseWorkspaceError as exc:

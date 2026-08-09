@@ -5414,9 +5414,10 @@ class CaseWorkspaceStore:
         old_source_id: str,
         name: str,
         file_path: str,
-        width: int,
-        height: int,
         actor: str,
+        width: Optional[int] = None,
+        height: Optional[int] = None,
+        kind: Optional[str] = None,
         reason: Optional[str] = None,
     ) -> tuple[dict, list[dict], dict]:
         """
@@ -5434,15 +5435,38 @@ class CaseWorkspaceStore:
         the same in-memory mutation, persisted by the same save() call -
         is the authoritative one; the two can never drift apart because
         nothing here can commit one without the other.
+
+        CLAUDE-POSTCAMEL-COMM-I4A: originally drawing-only
+        (`kind` hardcoded to `SOURCE_KIND_DRAWING`, `width`/`height`
+        required) - a real OPR-2.5 gap, since no other Source kind could
+        be formally revised/superseded at all. `kind` now defaults to
+        the OLD Source's own kind (a revision of a text_record stays a
+        text_record, a revision of a project_document stays a
+        project_document; drawing callers are unaffected since they
+        pass `kind=SOURCE_KIND_DRAWING` explicitly or supersede a
+        drawing, which resolves to the same value either way).
+        `width`/`height` are drawing/image-specific and now Optional -
+        every other Source kind simply has no pixel dimensions, the
+        same honest-absence pattern every other optional Source field
+        already uses. `region_statuses`/`compare_region` below remain
+        unconditionally exercised for parity with the pre-existing
+        drawing path, but are naturally inert for any Source with no
+        crop-bearing Artifacts (true for every non-drawing kind today) -
+        no kind-specific branching was needed there.
         """
         old_source = self._find(workspace.sources, old_source_id)
         if old_source is None:
             raise CaseWorkspaceError(f"Source {old_source_id} was not found.")
+        if old_source.get("superseded_by_source_id"):
+            raise CaseWorkspaceError(
+                f"Source {old_source_id} has already been superseded by "
+                f"{old_source['superseded_by_source_id']} - revise that Source instead."
+            )
 
         new_source = Source(
             id=_new_id(),
             project_id=workspace.project_id,
-            kind=SOURCE_KIND_DRAWING,
+            kind=kind or old_source["kind"],
             name=name,
             added_at=_now(),
             file_path=file_path,
