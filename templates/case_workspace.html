@@ -2830,6 +2830,8 @@
         url_for('workspace.post_message', project_id=project_id, case_id=active_case.id),
         'case-' ~ active_case.id,
         ('Analyze this drawing for datum inconsistencies…' if drawing_sources else 'Ask a question or investigate this Source…'),
+        current_view=directory_view,
+        selected_source_id=(selected_source.id if selected_source else None),
     ) %}
         <div class="conversation-thread" data-conversation-scope="case-{{ active_case.id }}" data-anchor-scope="case" data-anchor-case-id="{{ active_case.id }}" data-ui-ref="chat.thread">
             {% for message in active_case.conversation %}
@@ -2923,6 +2925,8 @@
         'project',
         'Ask a question, or describe what you want to work on…',
         include_anchor_fields=True,
+        current_view=directory_view,
+        selected_source_id=(selected_source.id if selected_source else None),
     ) %}
         {# CLAUDE-P40-VW8-QA: the explanatory sentence that used to live
            here ("Talk to the Project itself...") is deleted outright,

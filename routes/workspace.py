@@ -101,8 +101,10 @@ from services.environment_capabilities import (
     is_valid_operating_environment,
 )
 from services.conversation_interpreter import (
+    _looks_like_contextual_reference,
     _looks_like_orientation_request,
     _looks_like_project_question,
+    _looks_like_what_next,
     interpret_message,
 )
 from services.governance import GovernanceLog
@@ -3209,7 +3211,8 @@ def revise_document_source(project_id, source_id):
 
 def _run_conversation_turn(
     project_id: str, store: CaseWorkspaceStore, workspace, case: Optional[dict], text: str,
-    anchor: Optional[dict] = None,
+    anchor: Optional[dict] = None, current_view: Optional[str] = None,
+    selected_source_id: Optional[str] = None,
 ) -> None:
     """
     Posts a human message (into `case`'s conversation, or
@@ -3230,10 +3233,20 @@ def _run_conversation_turn(
     ConversationMessage's own docstring. Only ever set on the human
     message; the system's reply isn't "about" anything itself, it's a
     response to one.
+
+    CLAUDE-POSTCAMEL-CA1A (Sections 2/3): `current_view`/
+    `selected_source_id` are the real, already-project-scoped
+    `directory_view`/`selected_source.id` values `show_workspace` itself
+    computed for the page the composer was submitted from - passed
+    through here unvalidated (interpret_message re-validates both
+    against THIS workspace before trusting either; never assume a
+    client-submitted hidden field is honest just because this route
+    happened to render it that way originally).
     """
     case_id = case["id"] if case is not None else None
     human_message = store.add_message(
         workspace, case_id, role="human", text=text, anchor=anchor, actor=_reviewer(),
+        selected_source_id=selected_source_id,
     )
 
     artifacts_dir = Path(current_app.config["REGISTRY_STORE_PATH"]) / "workspace_artifacts"
@@ -3250,6 +3263,8 @@ def _run_conversation_turn(
         triggering_message_id=human_message["id"],
         anchor=anchor,
         governance_log=_log(),
+        current_view=current_view,
+        selected_source_id=selected_source_id,
     )
 
     store.add_message(
@@ -3302,7 +3317,11 @@ def post_message(project_id, case_id):
     if not text:
         return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
 
-    _run_conversation_turn(project_id, store, workspace, case, text)
+    _run_conversation_turn(
+        project_id, store, workspace, case, text,
+        current_view=request.form.get("current_view"),
+        selected_source_id=request.form.get("selected_source_id"),
+    )
 
     return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
 
@@ -3373,9 +3392,28 @@ def quick_start(project_id):
     # create a brand-new Case/Investigation titled "orient me", the same
     # kind of surprise this route's own docstring already names for
     # plain factual questions.
+    current_view = request.form.get("current_view")
+    selected_source_id = request.form.get("selected_source_id")
+
+    # CLAUDE-POSTCAMEL-CA1A: a contextual-reference phrase ("tell me
+    # about this", "show me the evidence for this", ...) or a "what
+    # should I do next" question is exactly as read-only/project-level
+    # as orientation already is - without this, typing either into the
+    # main composer would silently create a brand-new surprise Case
+    # (found live, during this stage's own Walkthrough B), the same
+    # class of bug CA1 already fixed once for orientation itself.
     lowered_text = text.lower()
-    if anchor is not None or _looks_like_project_question(lowered_text) or _looks_like_orientation_request(lowered_text):
-        _run_conversation_turn(project_id, store, workspace, None, text, anchor=anchor)
+    if (
+        anchor is not None
+        or _looks_like_project_question(lowered_text)
+        or _looks_like_orientation_request(lowered_text)
+        or _looks_like_contextual_reference(lowered_text)
+        or _looks_like_what_next(lowered_text)
+    ):
+        _run_conversation_turn(
+            project_id, store, workspace, None, text, anchor=anchor,
+            current_view=current_view, selected_source_id=selected_source_id,
+        )
         return redirect(url_for("workspace.show_workspace", project_id=project_id) + "#conversation-dock")
 
     title = text if len(text) <= 80 else text[:77] + "..."
@@ -3389,7 +3427,10 @@ def quick_start(project_id):
         payload={"case_id": case["id"], "title": title, "visibility": case["visibility"]},
     )
 
-    _run_conversation_turn(project_id, store, workspace, case, text)
+    _run_conversation_turn(
+        project_id, store, workspace, case, text,
+        current_view=current_view, selected_source_id=selected_source_id,
+    )
 
     return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case["id"]))
 
@@ -3665,7 +3706,11 @@ def discuss_object(project_id):
             description=(request.form.get("anchor_description") or None),
         ))
 
-    _run_conversation_turn(project_id, store, workspace, None, text, anchor=anchor)
+    _run_conversation_turn(
+        project_id, store, workspace, None, text, anchor=anchor,
+        current_view=request.form.get("current_view"),
+        selected_source_id=request.form.get("selected_source_id"),
+    )
 
     # CLAUDE-P40-B (3.5): without a fragment, a plain redirect lands the
     # reviewer at the top of Project Home with no indication a reply
@@ -3716,7 +3761,18 @@ def start_investigation_from_aperture(project_id, message_id):
         payload={"case_id": case["id"], "title": title, "visibility": case["visibility"]},
     )
 
-    _run_conversation_turn(project_id, store, workspace, case, message["text"], anchor=anchor)
+    # CLAUDE-POSTCAMEL-CA1A: the original message's own selected_source_id
+    # (if any) must be replayed the same way its anchor already is -
+    # found live, during this stage's own Walkthrough A, that omitting
+    # this silently changed the answer on re-run (a Source-selection-
+    # grounded reply became an honest-but-wrong "nothing selected" reply
+    # the second time, purely because this one field wasn't carried
+    # forward - exactly the "inconsistent action availability" this
+    # stage's own Latent Regression Watch warns against).
+    _run_conversation_turn(
+        project_id, store, workspace, case, message["text"], anchor=anchor,
+        selected_source_id=message.get("selected_source_id"),
+    )
 
     return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case["id"]))
 

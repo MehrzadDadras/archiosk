@@ -1538,6 +1538,17 @@ class ConversationMessage:
     actor: Optional[str] = None  # who sent it, when role == "human" - see recent_anchors_for
     action_taken: Optional[str] = None
     anchor: Optional[dict] = None  # asdict(Anchor) - what was in view when this was sent
+    # CLAUDE-POSTCAMEL-CA1A: the real, already-validated Source id (if
+    # any) the sender was viewing via ?source= when THIS human message
+    # was sent - only ever set on a human message, same as `anchor`.
+    # Persisted for the same reason `anchor` is: without it,
+    # start_investigation_from_aperture's own re-run of this exact
+    # message text into a new Case would silently lose the original
+    # Source-selection context and answer differently the second time -
+    # found live, during this stage's own Walkthrough A, not assumed.
+    # Optional/defaulted so old saved ConversationMessage JSON (pre-
+    # CA1A) deserializes unchanged.
+    selected_source_id: Optional[str] = None
     # CLAUDE-P40-B (3.6): grounded Project Q&A's supporting citations,
     # kept SEPARATE from `text` rather than concatenated into it - a
     # real product-owner walkthrough found a long "Grounded in: ..."
@@ -6728,7 +6739,7 @@ class CaseWorkspaceStore:
         self, workspace: ProjectWorkspace, case_id: Optional[str], role: str, text: str,
         action_taken: Optional[str] = None, anchor: Optional[dict] = None,
         actor: Optional[str] = None, grounded_in: Optional[list[str]] = None,
-        next_steps: Optional[list[dict]] = None,
+        next_steps: Optional[list[dict]] = None, selected_source_id: Optional[str] = None,
     ) -> dict:
         """
         case_id=None posts into ProjectWorkspace.project_conversation
@@ -6742,6 +6753,7 @@ class CaseWorkspaceStore:
                 id=_new_id(), role=role, text=text, created_at=_now(),
                 actor=actor, action_taken=action_taken, anchor=anchor,
                 grounded_in=grounded_in or [], next_steps=next_steps or [],
+                selected_source_id=selected_source_id,
             )
             workspace.project_conversation.append(asdict(message))
             self.save(workspace)
@@ -6762,6 +6774,7 @@ class CaseWorkspaceStore:
             anchor=anchor,
             grounded_in=grounded_in or [],
             next_steps=next_steps or [],
+            selected_source_id=selected_source_id,
         )
         case["conversation"].append(asdict(message))
         self.save(workspace)

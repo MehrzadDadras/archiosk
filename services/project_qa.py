@@ -44,12 +44,26 @@ PROVIDER_NAME = "anthropic"
 # as services/requirement_investigation.py's INVESTIGATION_PROMPT_VERSION.
 # CLAUDE-POSTCAMEL-CA1: bumped (p38a -> ca1a) for the new system-role
 # behavioral contract and the optional recent-history section below.
-PROJECT_QA_PROMPT_VERSION = "ca1a"
+# CLAUDE-POSTCAMEL-CA1A: bumped again (ca1a -> ca1b) for the new
+# current-UI-context section and the token-aware (not fixed-count)
+# history bounding.
+PROJECT_QA_PROMPT_VERSION = "ca1b"
 
 _MAX_CANDIDATE_ITEMS_IN_PROMPT = 40
 _MAX_GOVERNED_REQUIREMENTS_IN_PROMPT = 40
 _MAX_MILESTONES_IN_PROMPT = 20
-_MAX_RECENT_HISTORY_MESSAGES = 6
+# CLAUDE-POSTCAMEL-CA1A (Section 5, token-aware continuity): CA1's own
+# fixed 6-message cap is replaced by a character-budget walk - a long
+# single message could previously still consume the whole window: this
+# instead bounds total transmitted continuity by size, not by count,
+# while still capping the message COUNT too (_MAX_RECENT_HISTORY_MESSAGES)
+# so a long run of very short messages can't produce an unbounded list.
+# No new tokenizer dependency - a deterministic character budget, per
+# this stage's own "approximate character/token budget rather than a
+# large dependency" instruction.
+_RECENT_HISTORY_CHAR_BUDGET = 2000
+_MAX_RECENT_HISTORY_MESSAGES = 20
+_MAX_HISTORY_MESSAGE_CHARS = 300
 
 # CLAUDE-POSTCAMEL-CA1 (Section 6, Behavioral instruction layer): one
 # centralized system-role contract for this codebase's real, grounded
@@ -79,6 +93,19 @@ BEHAVIORAL_CONTRACT = (
     "perform.\n"
     "- Never reveal your own private step-by-step reasoning process - state "
     "only your conclusion and the evidence behind it.\n"
+    # CLAUDE-POSTCAMEL-CA1A (Section 12, behavioral-contract update):
+    # what a PM is currently looking at in the application is advisory
+    # context only, never authority - it may resolve what "this"/"it"
+    # refers to, but the governed evidence given in this request always
+    # outranks it and outranks any conversational assumption. Every
+    # object this context ever names has already been validated to
+    # belong to the active Project before reaching this prompt (see
+    # conversation_interpreter.py's own per-workspace lookups) - never
+    # trust a different id if you are ever shown one.\n"
+    "- If a \"currently looking at\" context is given below, treat it as "
+    "advisory only: it may tell you what \"this\"/\"it\" refers to, but the "
+    "governed project evidence always outranks it, and it never outranks "
+    "governed evidence or authorizes an action on its own.\n"
     "- Respond only in the exact JSON schema requested, with no prose "
     "outside it."
 )
@@ -114,6 +141,7 @@ def answer_project_question(
     timeout: Optional[float] = None,
     display_title: Optional[str] = None,
     recent_history: Optional[list[dict]] = None,
+    ui_context: Optional[dict] = None,
 ) -> ProjectQAResult:
     api_key = api_key or os.getenv("ANTHROPIC_API_KEY", "")
     if not api_key:
@@ -133,7 +161,7 @@ def answer_project_question(
     client = anthropic.Anthropic(api_key=api_key, timeout=timeout)
     prompt = _build_prompt(
         question, document_filename, candidate_requirements, governed_requirements, milestones,
-        display_title, recent_history,
+        display_title, recent_history, ui_context,
     )
 
     try:
@@ -172,10 +200,37 @@ def answer_project_question(
     )
 
 
+def _select_bounded_history(recent_history: list[dict]) -> list[dict]:
+    """
+    CLAUDE-POSTCAMEL-CA1A (Section 5): walk backwards from the most
+    recent message, keeping whole messages (never truncating a message
+    mid-sentence just to hit the budget exactly) until either the
+    character budget or the message-count cap is reached, then restore
+    chronological order. Recent turns are always favored - the OLDEST
+    messages are the ones dropped first when the budget is exceeded.
+    """
+    selected: list[dict] = []
+    total_chars = 0
+    for message in reversed(recent_history):
+        text = (message.get("text") or "").strip()[:_MAX_HISTORY_MESSAGE_CHARS]
+        if not text:
+            continue
+        if selected and (
+            total_chars + len(text) > _RECENT_HISTORY_CHAR_BUDGET
+            or len(selected) >= _MAX_RECENT_HISTORY_MESSAGES
+        ):
+            break
+        selected.append({"role": message.get("role"), "text": text})
+        total_chars += len(text)
+    selected.reverse()
+    return selected
+
+
 def _build_prompt(
     question: str, document_filename: str, candidate_requirements: list[dict],
     governed_requirements: list[dict], milestones: list[dict],
     display_title: Optional[str] = None, recent_history: Optional[list[dict]] = None,
+    ui_context: Optional[dict] = None,
 ) -> str:
     lines = [
         "You are assisting a construction/design professional with a read-only "
@@ -212,6 +267,22 @@ def _build_prompt(
         "and offer the filename as a fallback, clearly labeled as a filename, "
         "not asserted as the document's own title."
     )
+    # CLAUDE-POSTCAMEL-CA1A (Section 6, context priority): explicit
+    # current-UI context is placed BEFORE the evidence sections below -
+    # it helps interpret the question, but the evidence, not this
+    # context, is what answers it (governing principle: "Conversation
+    # helps interpret the question. Project evidence answers it.").
+    # Only ever real, already-validated labels (never raw ids) - see
+    # conversation_interpreter.py's own resolution, which never trusts a
+    # client-submitted id without checking it against this Project's own
+    # workspace first.
+    if ui_context and (ui_context.get("current_view") or ui_context.get("selected_source_name")):
+        lines.append("\nWhat the reviewer is currently looking at in the application (advisory context, not evidence):")
+        if ui_context.get("current_view"):
+            lines.append(f"- Current Display view: {ui_context['current_view']}")
+        if ui_context.get("selected_source_name"):
+            lines.append(f"- Currently open Source: {ui_context['selected_source_name']}")
+
     lines.append(f"\nSource document: {document_filename}")
 
     if candidate_requirements:
@@ -252,18 +323,17 @@ def _build_prompt(
     # BEHAVIORAL_CONTRACT's own system-role instruction - a prior turn
     # (including this model's own prior reply) must never be treated as
     # newly-established Project truth.
-    if recent_history:
+    bounded_history = _select_bounded_history(recent_history) if recent_history else []
+    if bounded_history:
         lines.append(
             "\nRecent conversation in this project (most recent last) - for "
             "conversational continuity only, NOT additional project evidence. "
             "A prior reply, including your own, is not guaranteed correct and "
             "is never itself proof of anything:"
         )
-        for m in recent_history[-_MAX_RECENT_HISTORY_MESSAGES:]:
+        for m in bounded_history:
             speaker = "Reviewer" if m.get("role") == "human" else "ARCHIOSK Go"
-            snippet = (m.get("text") or "").strip()[:300]
-            if snippet:
-                lines.append(f"- {speaker}: {snippet}")
+            lines.append(f"- {speaker}: {m.get('text', '')}")
 
     lines.append(f"\nThe reviewer's question: \"{question}\"")
     lines.append(

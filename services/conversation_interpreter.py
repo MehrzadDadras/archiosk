@@ -117,6 +117,8 @@ def interpret_message(
     triggering_message_id: Optional[str] = None,
     anchor: Optional[dict] = None,
     governance_log=None,
+    current_view: Optional[str] = None,
+    selected_source_id: Optional[str] = None,
 ) -> InterpretationResult:
     """
     `case` is now optional (a project-level aperture - no Investigation
@@ -232,6 +234,45 @@ def interpret_message(
     if is_quantitative_question:
         return _handle_quantitative_investigation(text, workspace, case, store, reviewer, triggering_message_id)
 
+    # CLAUDE-POSTCAMEL-CA1A (Sections 2/3): never trust a client-
+    # submitted current_view/selected_source_id blindly - re-validate
+    # both against THIS workspace before they influence anything.
+    # current_view against a fixed allowlist; selected_source_id by a
+    # real per-workspace lookup, exactly the same "None for a stale/
+    # foreign id, never an error" convention routes/workspace.py's own
+    # show_workspace already uses for ?source=.
+    validated_current_view = current_view if current_view in _KNOWN_CURRENT_VIEWS else None
+    validated_selected_source = next(
+        (s for s in workspace.sources if s["id"] == selected_source_id), None,
+    ) if selected_source_id else None
+
+    # CLAUDE-POSTCAMEL-CA1A (Section 10): "what should I do next" gets
+    # its own dedicated handler, checked ahead of the generic anchor
+    # fallback, so it can use whatever real context IS available
+    # (anchor, selected Source) and honestly fall back to Project
+    # Orientation (itself real, deterministic, evidence-based) when
+    # nothing more specific is selected - never generic PM advice
+    # invented without grounding.
+    if _looks_like_what_next(lowered):
+        return _handle_what_should_i_do_next(workspace, anchor, validated_selected_source)
+
+    # CLAUDE-POSTCAMEL-CA1A (Sections 2/4/12/18): a bounded set of
+    # pronoun-dependent phrasings ("tell me about this", "show me the
+    # evidence for this", ...) - checked unconditionally (whether or not
+    # a real referent exists), because _handle_contextual_reference
+    # itself already gives the correct answer either way: a real,
+    # factual description when an anchor or genuinely selected Source is
+    # available, or Section 18's own required honest "I don't have
+    # anything specific selected" reply when neither is - never a
+    # guessed answer, and never an unnecessary, ungroundable model call
+    # for a question this module already knows it cannot ground.
+    # Several of these phrases would otherwise also match
+    # _looks_like_project_question's own starters ("what", "tell me") -
+    # this check runs first deliberately, so an ambiguous "this" is
+    # never silently handed to the model to guess at.
+    if _looks_like_contextual_reference(lowered):
+        return _handle_contextual_reference(workspace, anchor, validated_selected_source, triggering_message_id, case)
+
     if anchor is not None:
         return InterpretationResult(
             action_taken="anchor_acknowledged",
@@ -256,7 +297,13 @@ def interpret_message(
         return _handle_project_orientation(workspace)
 
     if _looks_like_project_question(lowered):
-        return _handle_project_question(text, workspace, case, store, reviewer, triggering_message_id)
+        return _handle_project_question(
+            text, workspace, case, store, reviewer, triggering_message_id,
+            ui_context={
+                "current_view": validated_current_view,
+                "selected_source_name": validated_selected_source["name"] if validated_selected_source else None,
+            },
+        )
 
     # CLAUDE-P40-B (3.7): "Analyze this drawing for..." was suggested
     # unconditionally, regardless of whether this Case has any drawing
@@ -619,6 +666,215 @@ def _handle_project_orientation(workspace: ProjectWorkspace) -> InterpretationRe
 
     return InterpretationResult(
         action_taken="project_orientation", reply_text=reply, next_steps=next_steps,
+    )
+
+
+# CLAUDE-POSTCAMEL-CA1A (Section 2): the same allowlist as routes/
+# workspace.py's own STABLE_DIRECTORY_KINDS keys - duplicated rather
+# than imported to avoid a circular import (routes/workspace.py already
+# imports FROM this module). Any value outside this set is treated as
+# no selection at all, never trusted or passed through, matching this
+# module's own "None for a stale/foreign value, never an error"
+# convention used throughout.
+_KNOWN_CURRENT_VIEWS = frozenset({"overview", "files", "requirements"})
+
+# CLAUDE-POSTCAMEL-CA1A (Section 10): a deliberately narrow, exact-ish
+# phrase set for "what should I do next" - same deterministic-keyword
+# discipline as every other trigger in this module.
+_WHAT_NEXT_PHRASES = (
+    "what should i do next", "what should i do", "what do i do next", "what next",
+)
+
+
+def _looks_like_what_next(lowered: str) -> bool:
+    stripped = lowered.strip().rstrip("?")
+    return stripped in _WHAT_NEXT_PHRASES
+
+
+# CLAUDE-POSTCAMEL-CA1A (Sections 2/4/12): a bounded set of pronoun-
+# dependent phrasings this module can now resolve against a real
+# referent (an anchor, or a genuinely viewed Source) - still keyword
+# matching, still honest about not understanding anything beyond this
+# fixed list, per this file's own long-standing design note.
+_CONTEXTUAL_REFERENCE_PHRASES = (
+    "what am i looking at", "tell me about this", "what does this mean",
+    "show me the evidence for this", "what should i do with this",
+    "what can i do with this", "where did this come from",
+)
+
+
+def _looks_like_contextual_reference(lowered: str) -> bool:
+    return any(phrase in lowered for phrase in _CONTEXTUAL_REFERENCE_PHRASES)
+
+
+def _resolve_anchor_object(workspace: ProjectWorkspace, anchor: Optional[dict]):
+    """
+    CLAUDE-POSTCAMEL-CA1A (Section 3): cross-project-safe by
+    construction - every lookup is a real, direct search against THIS
+    workspace's own already-project-scoped lists, never a raw id
+    trusted on its own. A stale, deleted, or cross-project id simply
+    resolves to (anchor_type, None), the same honest "no longer exists"
+    convention _handle_investigate_requirement's own Requirement lookup
+    already uses - never an error, never a guess.
+    """
+    if anchor is None:
+        return None, None
+    anchor_type = anchor.get("anchor_type")
+    anchor_id = anchor.get("anchor_id")
+    if anchor_type == "requirement":
+        return anchor_type, next((r for r in workspace.requirements if r["id"] == anchor_id), None)
+    if anchor_type == "finding":
+        return anchor_type, next((f for f in workspace.findings if f["id"] == anchor_id), None)
+    if anchor_type == "source":
+        return anchor_type, next((s for s in workspace.sources if s["id"] == anchor_id), None)
+    return anchor_type, None
+
+
+def _handle_what_should_i_do_next(
+    workspace: ProjectWorkspace, anchor: Optional[dict], selected_source: Optional[dict],
+) -> InterpretationResult:
+    """
+    CLAUDE-POSTCAMEL-CA1A (Section 10): considers whatever real referent
+    is actually available (an anchor first, then a genuinely selected
+    Source) before ever falling back to Project Orientation - never
+    generic, ungrounded PM advice. No model call anywhere in this path -
+    fully deterministic, same discipline as _handle_project_orientation.
+    """
+    anchor_type, anchor_object = _resolve_anchor_object(workspace, anchor)
+    if anchor_type is not None and anchor_object is None:
+        return InterpretationResult(
+            action_taken="what_next_stale_reference",
+            reply_text=(
+                f"That {anchor_type.replace('_', ' ')} no longer exists in this Project, so I can't "
+                "offer anything specific about it. Ask a general project question, or open Files/"
+                "Requirements to pick something current."
+            ),
+            next_steps=[{"label": "Open Files", "view": "files"}],
+        )
+    if anchor_type == "requirement" and anchor_object is not None:
+        return InterpretationResult(
+            action_taken="what_next_requirement",
+            reply_text=(
+                f"You're looking at {anchor_object['original_requirement_identifier']}. I can show its "
+                "source evidence, its adjudication history, or you can ask a direct question about it."
+            ),
+            next_steps=[{"label": "Open Requirements", "view": "requirements"}],
+        )
+    if anchor_type == "finding" and anchor_object is not None:
+        return InterpretationResult(
+            action_taken="what_next_finding",
+            reply_text=(
+                "You're looking at a Finding. I can start an Investigation from it if one isn't open "
+                "yet, or you can ask what it's grounded in."
+            ),
+            next_steps=[{"label": "Open Files", "view": "files"}],
+        )
+    if selected_source is not None:
+        return InterpretationResult(
+            action_taken="what_next_source",
+            reply_text=(
+                f"You're currently viewing \"{selected_source['name']}\". I can help you map its "
+                "contents, suggest a Project structure around it (advisory only), or start an "
+                "Investigation on it."
+            ),
+            next_steps=[{"label": "Open Files", "view": "files"}],
+        )
+    return _handle_project_orientation(workspace)
+
+
+def _handle_contextual_reference(
+    workspace: ProjectWorkspace, anchor: Optional[dict], selected_source: Optional[dict],
+    triggering_message_id: Optional[str], case: Optional[dict] = None,
+) -> InterpretationResult:
+    """
+    CLAUDE-POSTCAMEL-CA1A (Sections 2/4/12/18): a real, factual,
+    deterministic description of whatever the reviewer's "this"/"it"
+    actually refers to - an anchor first (a click is a stronger signal
+    than a merely-open Source), else a genuinely selected Source. Never
+    hallucinates a referent: with neither, says so plainly and offers a
+    real way to establish one, instead of guessing (Section 18).
+
+    Where a real Investigation-starting affordance is genuinely useful
+    (a Requirement/Finding/Source, and NO Case is already open - `case`
+    is passed through only to gate this), this reuses the EXISTING
+    `needs_case:` escalation mechanism - the same "Start an
+    Investigation from this" button already rendered and tested
+    elsewhere on this page - rather than building a second, parallel
+    action-execution path (Section 8's own "preserve that lesson" about
+    never creating a surprise Investigation from ambiguous language;
+    this offer is a button the PM must still click, never automatic).
+    Offering to "start" one while a Case is ALREADY open would be
+    semantically wrong (and template dead weight - the escalation
+    button only renders in the project-level conversation loop), so
+    that offer is only ever made when `case is None`.
+    """
+    anchor_type, anchor_object = _resolve_anchor_object(workspace, anchor)
+    offer_investigation = case is None and triggering_message_id is not None
+
+    if anchor_type is not None and anchor_object is None:
+        return InterpretationResult(
+            action_taken="contextual_reference_stale",
+            reply_text=(
+                f"That {anchor_type.replace('_', ' ')} no longer exists in this Project - I can't "
+                "describe it. Open Files or Requirements to find something current."
+            ),
+            next_steps=[{"label": "Open Files", "view": "files"}],
+        )
+
+    def _closing(subject: str) -> str:
+        if offer_investigation:
+            return f" Start an Investigation below if you want to look into {subject} further, or ask a direct question about it."
+        return f" Ask a direct question about {subject} if you'd like."
+
+    if anchor_type == "requirement" and anchor_object is not None:
+        return InterpretationResult(
+            action_taken=f"needs_case:{triggering_message_id}" if offer_investigation else "contextual_reference",
+            reply_text=(
+                f"You're looking at {anchor_object['original_requirement_identifier']} "
+                f"(status: {anchor_object['status']}): \"{anchor_object['text_reference'][:200]}\"."
+                f"{_closing('it')}"
+            ),
+            next_steps=[{"label": "Open Requirements", "view": "requirements"}],
+        )
+
+    if anchor_type == "finding" and anchor_object is not None:
+        return InterpretationResult(
+            action_taken=f"needs_case:{triggering_message_id}" if offer_investigation else "contextual_reference",
+            reply_text=(
+                f"You're looking at a Finding: \"{anchor_object['statement'][:200]}\"."
+                f"{_closing('what it is grounded in')}"
+            ),
+        )
+
+    if anchor_type == "source" and anchor_object is not None:
+        return InterpretationResult(
+            action_taken=f"needs_case:{triggering_message_id}" if offer_investigation else "contextual_reference",
+            reply_text=(
+                f"You're looking at the Source \"{anchor_object['name']}\" ({anchor_object['kind']})."
+                f"{_closing('its contents')}"
+            ),
+            next_steps=[{"label": "Open Files", "view": "files"}],
+        )
+
+    if selected_source is not None:
+        return InterpretationResult(
+            action_taken=f"needs_case:{triggering_message_id}" if offer_investigation else "contextual_reference",
+            reply_text=(
+                f"You're currently viewing the Source \"{selected_source['name']}\" "
+                f"({selected_source['kind']})."
+                f"{_closing('it')}"
+            ),
+            next_steps=[{"label": "Open Files", "view": "files"}],
+        )
+
+    return InterpretationResult(
+        action_taken="contextual_reference_unavailable",
+        reply_text=(
+            "I don't have anything specific selected right now, so I can't tell what \"this\" "
+            "refers to. Open a Source or Requirement, or use \"Discuss this...\" where you see it, "
+            "then ask again - or ask a general project question instead."
+        ),
+        next_steps=[{"label": "Open Files", "view": "files"}],
     )
 
 
@@ -990,6 +1246,7 @@ def _handle_project_question(
     store: CaseWorkspaceStore,
     reviewer: str,
     triggering_message_id: Optional[str],
+    ui_context: Optional[dict] = None,
 ) -> InterpretationResult:
     """
     CLAUDE-P38 (OBS-01): a real, grounded read-only answer via
@@ -1059,6 +1316,7 @@ def _handle_project_question(
         # nothing else was ever offered to it.
         display_title=workspace.display_title,
         recent_history=recent_history,
+        ui_context=ui_context,
     )
 
     if not result.ran:

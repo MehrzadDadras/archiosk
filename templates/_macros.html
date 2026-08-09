@@ -161,7 +161,7 @@
    information; those remain genuinely unbuilt (CLAUDE-P40-E3A, Section
    13's own exclusion list), nothing here claims otherwise by staying
    silent about them. #}
-{% macro conversation_dock(heading, message_count, post_url, scope_key, placeholder, include_anchor_fields=False) %}
+{% macro conversation_dock(heading, message_count, post_url, scope_key, placeholder, include_anchor_fields=False, current_view=None, selected_source_id=None) %}
 <div class="accordion-section conversation-dock-panel" id="conversation-dock" role="region" aria-label="{{ heading }} conversation">
     <div class="conversation-dock-resize-handle" id="conversation-dock-resize-handle"
          role="separator" aria-orientation="horizontal" aria-label="Resize conversation panel"
@@ -199,6 +199,16 @@
         <input type="hidden" name="anchor_description" id="dock-composer-anchor-description" value="">
         <span class="dock-composer-anchor-label" id="dock-composer-anchor-label" hidden></span>
         {% endif %}
+        {# CLAUDE-POSTCAMEL-CA1A (Sections 2/15): the real, already-
+           project-scoped current Display view / currently-open Source
+           this page was rendered with (show_workspace's own
+           directory_view/selected_source - never a raw, newly-invented
+           id) - carried into whichever route this composer posts to,
+           which re-validates both before trusting either. One small,
+           reusable context envelope on the ONE shared composer, not
+           three separate ad hoc mechanisms per route. #}
+        <input type="hidden" name="current_view" value="{{ current_view or '' }}">
+        <input type="hidden" name="selected_source_id" value="{{ selected_source_id or '' }}">
         {# CLAUDE-P40-VW7A-QA: aria-label, not a visible <label> - the
            input's accessible name must not rely on placeholder text
            alone (still true), but a visible "Chat (N)"/"Message" label
