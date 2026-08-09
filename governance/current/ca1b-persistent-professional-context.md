@@ -369,8 +369,15 @@ the same object is still understood.
 
 ## Z. Commits / HEAD / origin/main / working tree
 
-See the final chat report for exact values, recorded after this
-document and the code/test changes are committed together.
+Committed as `57bf368d89221caf969e02d7a0219c100485725c`
+("CLAUDE-POSTCAMEL-CA1B: Persistent Professional Context"), covering
+`routes/workspace.py`, `services/auth.py`,
+`services/conversation_interpreter.py`, `templates/_macros.html`,
+`templates/case_workspace.html`, `UI_REFERENCE_MAP.md`, this document,
+`governance/STATUS.md`, and `tests/test_ca1b_persistent_context.py`.
+Pushed to `origin/main` (`99f6e85..57bf368`). `HEAD == origin/main ==
+57bf368`. Working tree clean afterward except the pre-existing
+untracked `tests/fixtures/nreocrc/_lab_instance_scratch_002/` fixture.
 
 ## AA. Remaining context limitations
 
