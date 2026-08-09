@@ -2849,6 +2849,7 @@
                     <ul class="source-list">{% for g in message.grounded_in %}<li class="source-item">{{ g }}</li>{% endfor %}</ul>
                 {% endcall %}
                 {% endif %}
+                {% if loop.last %}{{ macros.next_step_offers(project_id, message.next_steps) }}{% endif %}
             </div>
             {% else %}
             {# CLAUDE-P40-B (3.7): this example previously always
@@ -2958,6 +2959,7 @@
                     <ul class="source-list">{% for g in message.grounded_in %}<li class="source-item">{{ g }}</li>{% endfor %}</ul>
                 {% endcall %}
                 {% endif %}
+                {% if loop.last %}{{ macros.next_step_offers(project_id, message.next_steps) }}{% endif %}
                 {# The "conversation -> Investigation" escalation offer: only for the
                    MOST RECENT message, and only when interpret_message actually
                    recognized an Investigation-shaped action (needs_case) - never for

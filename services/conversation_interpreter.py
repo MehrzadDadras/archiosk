@@ -58,6 +58,13 @@ class InterpretationResult:
     # kept separate from reply_text - see ConversationMessage.grounded_in's
     # own comment for why. Only ever set by _handle_project_question.
     grounded_in: list[str] = field(default_factory=list)
+    # CLAUDE-POSTCAMEL-CA1 (Section 9/10): a small, deterministic,
+    # server-computed list of real next-step offers, each
+    # {"label": str, "view": str} where `view` is always an existing
+    # Display view name - never model-generated prose interpreted as a
+    # command. Only ever set by _handle_project_orientation and
+    # _handle_project_question (and the final unrecognized fallback).
+    next_steps: list[dict] = field(default_factory=list)
 
 
 _FINDING_NUMBER_PATTERN = re.compile(r"finding\s*#?\s*(\d+)", re.IGNORECASE)
@@ -241,8 +248,15 @@ def interpret_message(
     # _looks_like_project_question) so an unrelated stray message still
     # gets the honest "unrecognized" reply rather than a real,
     # billed model call for something that was never a question at all.
+    # CLAUDE-POSTCAMEL-CA1 (Section 4): checked before the generic
+    # project-question branch below - see _ORIENTATION_PHRASES' own
+    # comment for why. No Case requirement (orientation is always
+    # Project-level) and no external-AI policy gate (no model call).
+    if _looks_like_orientation_request(lowered):
+        return _handle_project_orientation(workspace)
+
     if _looks_like_project_question(lowered):
-        return _handle_project_question(text, workspace, store, reviewer, triggering_message_id)
+        return _handle_project_question(text, workspace, case, store, reviewer, triggering_message_id)
 
     # CLAUDE-P40-B (3.7): "Analyze this drawing for..." was suggested
     # unconditionally, regardless of whether this Case has any drawing
@@ -296,9 +310,13 @@ def interpret_message(
             "\"Show me the evidence supporting Finding N\", "
             "\"Compare ... with ...\", \"Draft an RFI from this accepted issue\", "
             "a direct question about this project (e.g. \"What are the "
-            "objectives of this RFP?\"), or, with a Finding focused, a direct "
+            "objectives of this RFP?\"), \"orient me\" for a summary of what's "
+            "registered here, or, with a Finding focused, a direct "
             f"correction (e.g. {correction_example}"
         ),
+        # CLAUDE-POSTCAMEL-CA1 (Section 23): a dead end still leaves a
+        # real, concrete, one-click way forward rather than only prose.
+        next_steps=[{"label": "Open Files", "view": "files"}],
     )
 
 
@@ -529,6 +547,79 @@ _PROJECT_QUESTION_STARTERS = (
 def _looks_like_project_question(lowered: str) -> bool:
     stripped = lowered.strip()
     return stripped.endswith("?") or stripped.startswith(_PROJECT_QUESTION_STARTERS)
+
+
+# CLAUDE-POSTCAMEL-CA1 (Section 4, Project orientation): a deliberately
+# narrow, deterministic phrase set - same discipline as
+# _looks_like_project_question above, not an attempt at real language
+# understanding. Checked BEFORE _looks_like_project_question so "what's
+# here"/"what do I have" (which would otherwise match that generic
+# "what..." starter) gets the dedicated, no-model-call orientation
+# handler instead of a real, billed Project Q&A request for a question
+# that isn't actually about any specific evidence.
+_ORIENTATION_PHRASES = (
+    "orient me", "orient us", "what's here", "whats here", "what is here",
+    "what do i have", "what do we have", "what's in this project",
+    "what is in this project", "give me an overview", "give an overview",
+    "where do i start", "where should i start", "where do we start",
+    "what's the state of this project", "what is the state of this project",
+)
+
+
+def _looks_like_orientation_request(lowered: str) -> bool:
+    return any(phrase in lowered for phrase in _ORIENTATION_PHRASES)
+
+
+def _handle_project_orientation(workspace: ProjectWorkspace) -> InterpretationResult:
+    """
+    CLAUDE-POSTCAMEL-CA1 (Section 4): real, deterministic Project
+    orientation from actual workspace state - no model call, so this
+    works even when ANTHROPIC_API_KEY is absent or the external-AI
+    policy denies transmission (see _handle_project_question below for
+    the contrast). Never fabricates structure and never treats a sparse
+    Project as defective (this stage's own explicit instruction) -
+    "sparse" here is an honest, evidenced, stated heuristic (few
+    registered Sources AND no governed Requirements yet), not a claim
+    of understanding the Project's actual maturity.
+
+    next_steps are real navigable Display views only, per Section 9/10's
+    own "do not offer actions that do not exist" - "map its contents" /
+    "suggest a project structure" (the sparse example's own prose) are
+    named as things a reviewer can ask for in conversation, not rendered
+    as chips, because neither is a distinct existing view or action.
+    """
+    active_sources = CaseWorkspaceStore.active_sources(workspace)
+    source_count = len(active_sources)
+    requirement_count = len(workspace.requirements)
+    is_sparse = source_count <= 2 and requirement_count == 0
+
+    if is_sparse:
+        source_word = "one registered project source" if source_count == 1 else (
+            f"{source_count} registered project sources" if source_count else "no registered project sources yet"
+        )
+        reply = (
+            f"I see {source_word}. I can inspect it, help you map its contents, "
+            "suggest a Project structure around it (advisory only - nothing "
+            "physical is created or moved), or leave it exactly as it is. "
+            "Open Files below to look at what's registered, or ask something else."
+        )
+        next_steps = [{"label": "Open Files", "view": "files"}]
+    else:
+        reply = (
+            f"This Project has {source_count} registered source(s) and "
+            f"{requirement_count} governed Requirement(s) on record. I can help "
+            "you survey the Project Territory, review what needs attention, "
+            "review Requirements, or continue previous work - or ask something else."
+        )
+        next_steps = [
+            {"label": "Open Files", "view": "files"},
+            {"label": "Open Requirements", "view": "requirements"},
+            {"label": "Open Overview", "view": "overview"},
+        ]
+
+    return InterpretationResult(
+        action_taken="project_orientation", reply_text=reply, next_steps=next_steps,
+    )
 
 
 def _handle_investigate_requirement(
@@ -895,6 +986,7 @@ def _handle_draft_rfi_intent(focused_finding_id: Optional[str]) -> Interpretatio
 def _handle_project_question(
     text: str,
     workspace: ProjectWorkspace,
+    case: Optional[dict],
     store: CaseWorkspaceStore,
     reviewer: str,
     triggering_message_id: Optional[str],
@@ -912,6 +1004,16 @@ def _handle_project_question(
     _evaluate_external_ai_policy this module already defines for that
     call site) - this is the second real external-AI transmission this
     file can trigger, and it must not bypass the same governed action.
+
+    CLAUDE-POSTCAMEL-CA1 (Section 5): `case` (optional, matching
+    interpret_message's own param) selects which real conversation
+    thread the bounded recent-history window is drawn from - this
+    Case's own `conversation` list, or `workspace.project_conversation`
+    when case is None - so a Requirement/Investigation-scoped question
+    never sees another Case's or another Project's history. The current
+    human message (already persisted by the caller before this runs) is
+    excluded from the window since it is passed separately as
+    `question`.
     """
     policy_decision = _evaluate_external_ai_policy(store, workspace)
     if policy_decision.decision not in (DECISION_ALLOW, DECISION_ALLOW_APPROVED_ROUTE):
@@ -935,6 +1037,15 @@ def _handle_project_question(
     milestones = list(document.milestones) if document else []
     document_filename = document.filename if document else "(unknown source document)"
 
+    # CLAUDE-POSTCAMEL-CA1 (Section 5): the same conversation thread this
+    # reply will itself be appended to, minus the just-persisted current
+    # human message (it is passed separately as `question` below) -
+    # never another Case's or Project's messages.
+    thread = case["conversation"] if case is not None else workspace.project_conversation
+    recent_history = [
+        {"role": m.get("role"), "text": m.get("text")} for m in thread[:-1]
+    ] if thread else []
+
     result = answer_project_question(
         question=text,
         document_filename=document_filename,
@@ -947,6 +1058,7 @@ def _handle_project_question(
         # Project's name" from "the raw uploaded filename" because
         # nothing else was ever offered to it.
         display_title=workspace.display_title,
+        recent_history=recent_history,
     )
 
     if not result.ran:
@@ -956,6 +1068,9 @@ def _handle_project_question(
                 f"I can't answer that from this project's evidence right now: "
                 f"{result.skipped_reason} Nothing was fabricated."
             ),
+            # CLAUDE-POSTCAMEL-CA1 (Section 23): a dead end still offers a
+            # real, concrete next step rather than only prose.
+            next_steps=[{"label": "Open Requirements", "view": "requirements"}],
         )
 
     # CLAUDE-P40-B (3.6): reply_text is now the direct answer plus only

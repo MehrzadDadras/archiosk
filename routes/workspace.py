@@ -100,7 +100,11 @@ from services.environment_capabilities import (
     decision_stages_for_environment,
     is_valid_operating_environment,
 )
-from services.conversation_interpreter import _looks_like_project_question, interpret_message
+from services.conversation_interpreter import (
+    _looks_like_orientation_request,
+    _looks_like_project_question,
+    interpret_message,
+)
 from services.governance import GovernanceLog
 from services.ingestion import UploadError, document_source_payload, get_registry, reject_if_display_name_taken
 from services.investigation_snapshot import build_archive_snapshot
@@ -3255,6 +3259,7 @@ def _run_conversation_turn(
         text=result.reply_text,
         action_taken=result.action_taken,
         grounded_in=result.grounded_in,
+        next_steps=result.next_steps,
     )
 
     if result.focused_finding_id is not None:
@@ -3362,7 +3367,14 @@ def quick_start(project_id):
             description=(request.form.get("anchor_description") or None),
         ))
 
-    if anchor is not None or _looks_like_project_question(text.lower()):
+    # CLAUDE-POSTCAMEL-CA1: an orientation request ("orient me", "what's
+    # here") is exactly as read-only/project-level as a plain question -
+    # without this, typing it into the main composer would silently
+    # create a brand-new Case/Investigation titled "orient me", the same
+    # kind of surprise this route's own docstring already names for
+    # plain factual questions.
+    lowered_text = text.lower()
+    if anchor is not None or _looks_like_project_question(lowered_text) or _looks_like_orientation_request(lowered_text):
         _run_conversation_turn(project_id, store, workspace, None, text, anchor=anchor)
         return redirect(url_for("workspace.show_workspace", project_id=project_id) + "#conversation-dock")
 

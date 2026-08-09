@@ -42,11 +42,46 @@ PROVIDER_NAME = "anthropic"
 
 # CLAUDE-P38: a real, bump-on-meaningful-change marker, same discipline
 # as services/requirement_investigation.py's INVESTIGATION_PROMPT_VERSION.
-PROJECT_QA_PROMPT_VERSION = "p38a"
+# CLAUDE-POSTCAMEL-CA1: bumped (p38a -> ca1a) for the new system-role
+# behavioral contract and the optional recent-history section below.
+PROJECT_QA_PROMPT_VERSION = "ca1a"
 
 _MAX_CANDIDATE_ITEMS_IN_PROMPT = 40
 _MAX_GOVERNED_REQUIREMENTS_IN_PROMPT = 40
 _MAX_MILESTONES_IN_PROMPT = 20
+_MAX_RECENT_HISTORY_MESSAGES = 6
+
+# CLAUDE-POSTCAMEL-CA1 (Section 6, Behavioral instruction layer): one
+# centralized system-role contract for this codebase's real, grounded
+# Project Q&A path - deliberately not duplicated per call site. Also
+# carries Section 3 (human authority: a suggestion is never an
+# instruction, this agent never creates governed records itself) and
+# Section 19 (recent conversation is continuity, never Project truth).
+BEHAVIORAL_CONTRACT = (
+    "You are ARCHIOSK Go, a project-aware assistant embedded in the ARCHIOSK "
+    "application, helping a construction/design project professional. Follow "
+    "these rules at all times:\n"
+    "- Answer only from the project evidence given in this request. Never "
+    "invent facts, files, views, or application capabilities that are not "
+    "described here.\n"
+    "- If the evidence is genuinely insufficient, say so plainly rather than "
+    "guessing.\n"
+    "- Distinguish stated fact from your own interpretation.\n"
+    "- Recent conversation history, if given, is for conversational "
+    "continuity only. It is not additional project evidence, and a prior "
+    "reply - including your own - is never to be treated as newly-"
+    "established project truth.\n"
+    "- You may suggest that something become a governed Requirement, "
+    "Finding, Task, or Decision, but you never create one yourself - only "
+    "the human project manager does that, through ARCHIOSK's own governed "
+    "controls.\n"
+    "- Never claim to perform an application action you cannot actually "
+    "perform.\n"
+    "- Never reveal your own private step-by-step reasoning process - state "
+    "only your conclusion and the evidence behind it.\n"
+    "- Respond only in the exact JSON schema requested, with no prose "
+    "outside it."
+)
 
 
 @dataclass
@@ -78,6 +113,7 @@ def answer_project_question(
     model: Optional[str] = None,
     timeout: Optional[float] = None,
     display_title: Optional[str] = None,
+    recent_history: Optional[list[dict]] = None,
 ) -> ProjectQAResult:
     api_key = api_key or os.getenv("ANTHROPIC_API_KEY", "")
     if not api_key:
@@ -95,11 +131,15 @@ def answer_project_question(
     import anthropic  # imported lazily so the dep is optional in dev
 
     client = anthropic.Anthropic(api_key=api_key, timeout=timeout)
-    prompt = _build_prompt(question, document_filename, candidate_requirements, governed_requirements, milestones, display_title)
+    prompt = _build_prompt(
+        question, document_filename, candidate_requirements, governed_requirements, milestones,
+        display_title, recent_history,
+    )
 
     try:
         response = client.messages.create(
-            model=model, max_tokens=1500, messages=[{"role": "user", "content": prompt}],
+            model=model, max_tokens=1500, system=BEHAVIORAL_CONTRACT,
+            messages=[{"role": "user", "content": prompt}],
         )
     except anthropic.APITimeoutError:
         logger.warning("Project Q&A timed out after %.0fs.", timeout)
@@ -135,7 +175,7 @@ def answer_project_question(
 def _build_prompt(
     question: str, document_filename: str, candidate_requirements: list[dict],
     governed_requirements: list[dict], milestones: list[dict],
-    display_title: Optional[str] = None,
+    display_title: Optional[str] = None, recent_history: Optional[list[dict]] = None,
 ) -> str:
     lines = [
         "You are assisting a construction/design professional with a read-only "
@@ -203,6 +243,27 @@ def _build_prompt(
 
     if not candidate_requirements and not governed_requirements and not milestones:
         lines.append("\nNo requirements or milestones have been extracted from this document yet.")
+
+    # CLAUDE-POSTCAMEL-CA1 (Section 5, bounded multi-turn continuity): a
+    # small, fixed-size recent window of THIS SAME project/case
+    # conversation only - the caller (conversation_interpreter.py) is
+    # responsible for never mixing messages across Projects or Cases.
+    # Explicitly framed as continuity, not evidence, both here and in
+    # BEHAVIORAL_CONTRACT's own system-role instruction - a prior turn
+    # (including this model's own prior reply) must never be treated as
+    # newly-established Project truth.
+    if recent_history:
+        lines.append(
+            "\nRecent conversation in this project (most recent last) - for "
+            "conversational continuity only, NOT additional project evidence. "
+            "A prior reply, including your own, is not guaranteed correct and "
+            "is never itself proof of anything:"
+        )
+        for m in recent_history[-_MAX_RECENT_HISTORY_MESSAGES:]:
+            speaker = "Reviewer" if m.get("role") == "human" else "ARCHIOSK Go"
+            snippet = (m.get("text") or "").strip()[:300]
+            if snippet:
+                lines.append(f"- {speaker}: {snippet}")
 
     lines.append(f"\nThe reviewer's question: \"{question}\"")
     lines.append(

@@ -236,3 +236,21 @@
         data-aperture-anchor-description="{{ description }}"
         data-aperture-anchor-label="{{ label }}">{{ label }}</button>
 {% endmacro %}
+
+{# CLAUDE-POSTCAMEL-CA1 (Section 9, Contextual Next-Step Offering):
+   renders a small, real, deterministic, server-computed set of next-
+   step offers attached to a ConversationMessage - each `step.view` is
+   always an existing Display view name, so every rendered link is a
+   real, reachable navigation, never a fabricated action. Free-form
+   typing in the composer remains available regardless - these are
+   offers, not a replacement for it (governing principle: "ARCHIOSK
+   proposes; the PM chooses"). #}
+{% macro next_step_offers(project_id, next_steps) %}
+{% if next_steps %}
+<div class="conv-next-steps" data-ui-ref="chat.next-step">
+    {% for step in next_steps %}
+    <a class="review-btn" href="{{ url_for('workspace.show_workspace', project_id=project_id, view=step.view) }}">{{ step.label }}</a>
+    {% endfor %}
+</div>
+{% endif %}
+{% endmacro %}

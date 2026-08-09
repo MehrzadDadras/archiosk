@@ -1547,6 +1547,16 @@ class ConversationMessage:
     # Optional/defaulted so old saved ConversationMessage JSON (pre-
     # P40-B) deserializes unchanged.
     grounded_in: list[str] = field(default_factory=list)
+    # CLAUDE-POSTCAMEL-CA1: a small, deterministic, server-computed list
+    # of real next-step offers ({"label": ..., "view": ...}, `view`
+    # always an existing Display view name) - never model-generated
+    # prose parsed as a command (Section 10's own "structured action
+    # envelopes, not arbitrary model prose"). Only ever set for
+    # project_orientation/project_qa_answered/project_qa_unavailable/
+    # unrecognized replies; every other reply leaves this empty.
+    # Optional/defaulted so old saved ConversationMessage JSON (pre-CA1)
+    # deserializes unchanged.
+    next_steps: list[dict] = field(default_factory=list)
 
 
 @dataclass
@@ -6718,6 +6728,7 @@ class CaseWorkspaceStore:
         self, workspace: ProjectWorkspace, case_id: Optional[str], role: str, text: str,
         action_taken: Optional[str] = None, anchor: Optional[dict] = None,
         actor: Optional[str] = None, grounded_in: Optional[list[str]] = None,
+        next_steps: Optional[list[dict]] = None,
     ) -> dict:
         """
         case_id=None posts into ProjectWorkspace.project_conversation
@@ -6730,7 +6741,7 @@ class CaseWorkspaceStore:
             message = ConversationMessage(
                 id=_new_id(), role=role, text=text, created_at=_now(),
                 actor=actor, action_taken=action_taken, anchor=anchor,
-                grounded_in=grounded_in or [],
+                grounded_in=grounded_in or [], next_steps=next_steps or [],
             )
             workspace.project_conversation.append(asdict(message))
             self.save(workspace)
@@ -6750,6 +6761,7 @@ class CaseWorkspaceStore:
             action_taken=action_taken,
             anchor=anchor,
             grounded_in=grounded_in or [],
+            next_steps=next_steps or [],
         )
         case["conversation"].append(asdict(message))
         self.save(workspace)
