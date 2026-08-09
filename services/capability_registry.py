@@ -112,11 +112,23 @@ CAPABILITIES: dict[str, Capability] = {
         "Delegation is a named future programme (\"Delegation First\") - "
         "no Delegation object or mechanism exists in this codebase today.",
     ),
+    # CLAUDE-VOICE1-DIAG-01: updated from FUTURE after VOICE1-PRE's own
+    # push-to-talk button and browser-Web-Speech-API wiring landed - PARTIAL
+    # (not IMPLEMENTED) because full end-to-end capture-to-transcript could
+    # not be conclusively proven in this sandbox (no confirmed microphone
+    # hardware/permission grant), only the button, feature-detection, and
+    # event wiring. ARCHIOSK never continuously listens, and has no voice
+    # OUTPUT (text-to-speech) of its own replies - that is a separate,
+    # unimplemented capability, not part of this entry.
     "voice_input": Capability(
-        "voice_input", CAPABILITY_STATUS_FUTURE,
-        "Voice input (VOICE-1, Push-to-Talk) has been audited as a "
-        "future capability but is not implemented - conversation is "
-        "text-only today.",
+        "voice_input", CAPABILITY_STATUS_PARTIAL,
+        "ARCHIOSK has a Push-to-Talk microphone button (press, speak, "
+        "release) that fills the message composer with a transcript you "
+        "can edit before sending - it uses your browser's own built-in "
+        "speech recognition, never uploads or stores audio, and only "
+        "activates when you press it. ARCHIOSK does not continuously "
+        "listen, and cannot speak its own replies aloud or otherwise "
+        "process ambient sound.",
     ),
     "biometric_recognition": Capability(
         "biometric_recognition", CAPABILITY_STATUS_FUTURE,
@@ -156,6 +168,15 @@ _PHRASE_TO_CAPABILITY_KEY: tuple[tuple[str, str], ...] = (
     ("voice", "voice_input"),
     ("microphone", "voice_input"),
     ("speak", "voice_input"),
+    # CLAUDE-VOICE1-DIAG-01: a real Product Owner asked "Are you capable
+    # of hearing sound?" and "hear me" in the same session - without these,
+    # the question fell through to the generic project-QA path and produced
+    # a category-confused non-answer instead of a truthful capability one.
+    ("hearing sound", "voice_input"),
+    ("hear sound", "voice_input"),
+    ("capable of hearing", "voice_input"),
+    ("process audio", "voice_input"),
+    ("process sound", "voice_input"),
     ("recognize my voice", "biometric_recognition"),
     ("recognize me", "biometric_recognition"),
     ("face recognition", "biometric_recognition"),

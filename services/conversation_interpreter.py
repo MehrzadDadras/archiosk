@@ -962,6 +962,11 @@ def _handle_contextual_reference(
 _CAPABILITY_SELF_REFERENCE_PHRASES = (
     "can you", "can archiosk", "does archiosk", "are you able to",
     "is archiosk able to", "do you support", "does this application support",
+    # CLAUDE-VOICE1-DIAG-01: a real Product Owner asked "Are you capable
+    # of ..." - a natural synonym for "are you able to" the original list
+    # missed, sending the question to the generic project-QA path instead
+    # of this deterministic capability-question handler.
+    "are you capable of", "is archiosk capable of",
 )
 
 
@@ -1001,6 +1006,14 @@ _ORGANIZE_QUESTION_PHRASES = (
     "should i organize", "how should i organize", "organize this into folders",
     "organize this rfp", "organize it into folders", "organize this document",
     "should this be organized", "how do i organize",
+    # CLAUDE-VOICE1-DIAG-01: real Product Owner usage asked this with
+    # "divide"/"split", never the literal word "organize" - without
+    # these, the question silently fell through to the older, generic
+    # project-QA path instead of this handler.
+    "divide this into", "divide the main file", "divide it into different folder",
+    "into different folder", "into a different folder", "how to divide the main file",
+    "suggest how to divide", "should i divide", "how should i divide",
+    "split this into", "split it into folders", "how do i split",
 )
 
 

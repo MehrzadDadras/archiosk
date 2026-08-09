@@ -4300,6 +4300,22 @@ main::-webkit-scrollbar-corner,
     font-weight: 600;
     cursor: pointer;
 }
+/* CLAUDE-POSTCAMEL-VOICE1-PRE: a secondary, visually distinct control
+   from Send (outline, not filled) - it never submits the form, so it
+   must never look like the primary action. voice-input-listening is
+   the ONLY visual state change while capturing - no separate "recording
+   timer" or waveform UI, matching this stage's own "no audio permanence,
+   no new conversation system" minimalism. */
+.voice-input-button {
+    background: transparent !important;
+    color: var(--text-primary) !important;
+    padding: 0.7rem 0.9rem !important;
+}
+.voice-input-button.voice-input-listening {
+    background: var(--attention-amber) !important;
+    color: var(--surface-primary) !important;
+    border-color: var(--attention-amber) !important;
+}
 
 /* CLAUDE-P40-VW7: OneNote-style selection toolbar for Project
    Conversation text -> Tags/Highlights/Tasks (static/js/case_workspace.js

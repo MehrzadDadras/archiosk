@@ -215,6 +215,17 @@
            here would recreate exactly the "duplicate label beside the
            composer" defect this correction removes. #}
         <input type="text" name="text" id="dock-composer-input" data-ui-ref="chat.composer.input" data-conversation-draft="{{ scope_key }}" placeholder="{{ placeholder }}" aria-label="Message" autocomplete="off" required>
+        {# CLAUDE-POSTCAMEL-VOICE1-PRE: "the microphone is merely another
+           door into ARCHIOSK Go" - this button never submits anything
+           itself (type="button", outside any conversational logic of
+           its own); it only ever fills #dock-composer-input, the exact
+           same field typing already fills, so voice rides the ONE
+           existing composer/route/context-envelope unchanged. Hidden by
+           static/js/case_workspace.js at load time when the browser has
+           no SpeechRecognition support at all - never shown as a false
+           promise. #}
+        <button type="button" id="dock-composer-voice" class="voice-input-button" data-ui-ref="chat.composer.voice"
+                aria-label="Press and speak - audio is processed by your browser only and is never saved" hidden>🎙️</button>
         <button type="submit" data-ui-ref="chat.composer.send">Send</button>
     </form>
 </div>
