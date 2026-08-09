@@ -42,6 +42,13 @@ from services.case_workspace import (
     CaseWorkspaceStore,
     ProjectWorkspace,
 )
+from services.capability_registry import (
+    CAPABILITY_STATUS_FUTURE,
+    CAPABILITY_STATUS_IMPLEMENTED,
+    CAPABILITY_STATUS_PARTIAL,
+    CAPABILITIES,
+    find_capability_by_phrase,
+)
 from services.drawing_analysis import analyze_drawing, make_comparison_artifact
 from services.project_qa import answer_project_question
 from services.requirement_investigation import investigate_requirement
@@ -65,6 +72,14 @@ class InterpretationResult:
     # command. Only ever set by _handle_project_orientation and
     # _handle_project_question (and the final unrecognized fallback).
     next_steps: list[dict] = field(default_factory=list)
+    # CLAUDE-POSTCAMEL-CA1C (Section 6/17): set only by
+    # _handle_organize_advice, when a real, safe "Create this structure"
+    # action genuinely exists for a real, currently-referenced Source -
+    # a structured action envelope (a Source id, never free model
+    # prose), rendered by the template as one real POST button that
+    # creates real, governed Design-Builder Workspace folders. None
+    # whenever no such offer applies.
+    organize_source_id: Optional[str] = None
 
 
 _FINDING_NUMBER_PATTERN = re.compile(r"finding\s*#?\s*(\d+)", re.IGNORECASE)
@@ -284,6 +299,35 @@ def interpret_message(
     # invented without grounding.
     if _looks_like_what_next(lowered):
         return _handle_what_should_i_do_next(workspace, effective_referent, validated_selected_source)
+
+    # CLAUDE-POSTCAMEL-CA1C (Sections 3/4/13): a question about
+    # ARCHIOSK's OWN capability ("Can you create folders?") must be
+    # answered from Application Capability Knowledge, never from
+    # Project evidence - answering "not covered by the Project
+    # evidence" here would be a category error (Section 4's own named
+    # example). Only intercepts when a self-referential phrase AND a
+    # positively-identified capability keyword both match - if the
+    # phrase merely LOOKS self-referential ("Can you tell me...") but no
+    # specific capability is identified, this falls through to ordinary
+    # handling below rather than forcing a wrong answer.
+    if _looks_like_capability_question(lowered):
+        matched_capability = find_capability_by_phrase(lowered)
+        if matched_capability is not None:
+            return _handle_capability_question(matched_capability)
+
+    # CLAUDE-POSTCAMEL-CA1C (Sections 1/2/6/9/19): "should I organize
+    # this into folders" is a professional-advice question, not an
+    # evidence lookup - answered with a constructive recommendation
+    # first, a real vertical structure grounded in this Project's own
+    # already-extracted candidate items (never a hardcoded universal
+    # taxonomy), and a real, truthful next action. Resolves the Source
+    # to organize from whatever real referent is available (an anchor,
+    # or CA1B's own persisted/URL selection) - asks which Source if none
+    # exists, never guesses (Section 19).
+    if _looks_like_organize_question(lowered):
+        referent_type, referent_object = _resolve_anchor_object(workspace, effective_referent)
+        source_for_organize = referent_object if referent_type == "source" else validated_selected_source
+        return _handle_organize_advice(store, workspace, source_for_organize)
 
     # CLAUDE-POSTCAMEL-CA1A (Sections 2/4/12/18): a bounded set of
     # pronoun-dependent phrasings ("tell me about this", "show me the
@@ -906,6 +950,156 @@ def _handle_contextual_reference(
             "then ask again - or ask a general project question instead."
         ),
         next_steps=[{"label": "Open Files", "view": "files"}],
+    )
+
+
+# CLAUDE-POSTCAMEL-CA1C (Section 3/13): self-referential phrasing - the
+# question is about ARCHIOSK itself, not this Project's own material.
+# Deliberately checked ALONGSIDE (not instead of) a real capability-
+# keyword match (see interpret_message's own call site) so a genuine
+# project question that merely happens to start "Can you tell me..."
+# is never hijacked into a capability answer it doesn't deserve.
+_CAPABILITY_SELF_REFERENCE_PHRASES = (
+    "can you", "can archiosk", "does archiosk", "are you able to",
+    "is archiosk able to", "do you support", "does this application support",
+)
+
+
+def _looks_like_capability_question(lowered: str) -> bool:
+    return any(phrase in lowered for phrase in _CAPABILITY_SELF_REFERENCE_PHRASES)
+
+
+def _handle_capability_question(capability) -> InterpretationResult:
+    """
+    CLAUDE-POSTCAMEL-CA1C (Sections 4/5/13): answered ENTIRELY from
+    Application Capability Knowledge (services/capability_registry.py) -
+    no workspace, no Source, no Project evidence of any kind is ever
+    consulted here, by construction (this function receives only the
+    already-matched Capability, nothing else). Truthful per status:
+    never claims an unavailable/future capability is available, never
+    hedges an implemented one with unnecessary disclaimers.
+    """
+    if capability.status == CAPABILITY_STATUS_IMPLEMENTED:
+        reply = capability.description
+    elif capability.status == CAPABILITY_STATUS_PARTIAL:
+        reply = capability.description
+    elif capability.status == CAPABILITY_STATUS_FUTURE:
+        reply = f"Not yet. {capability.description}"
+    else:
+        reply = f"No. {capability.description}"
+        if capability.alternative:
+            alternative = CAPABILITIES[capability.alternative]
+            reply += f" What I can do instead: {alternative.description}"
+    return InterpretationResult(action_taken=f"capability_question:{capability.key}", reply_text=reply)
+
+
+# CLAUDE-POSTCAMEL-CA1C (Sections 1/2/6/9): a deliberately narrow
+# phrase set for "should I organize this" - the exact live scenario
+# that triggered this tranche, per this file's own long-standing
+# deterministic-keyword discipline.
+_ORGANIZE_QUESTION_PHRASES = (
+    "should i organize", "how should i organize", "organize this into folders",
+    "organize this rfp", "organize it into folders", "organize this document",
+    "should this be organized", "how do i organize",
+)
+
+
+def _looks_like_organize_question(lowered: str) -> bool:
+    return any(phrase in lowered for phrase in _ORGANIZE_QUESTION_PHRASES)
+
+
+# CLAUDE-POSTCAMEL-CA1C (Section 20): maps the REAL, already-extracted
+# candidate-Requirement category vocabulary (services/bhive_parser.py's
+# own REQUIREMENT_CATEGORIES - never a new document-analysis engine) to
+# a small set of readable organizational group names. Only groups with
+# at least one real extracted item are ever proposed - never a
+# hardcoded universal construction taxonomy (Section 6's own explicit
+# instruction).
+_CATEGORY_GROUP_LABELS = {
+    "submission_instruction": "Procurement",
+    "evaluation_criteria": "Procurement",
+    "scope_of_work": "Technical / Scope",
+    "technical_specification": "Technical / Scope",
+    "compliance_legal": "Commercial / Legal",
+    "budget_commercial": "Commercial / Legal",
+    "schedule_milestone": "Schedule / Milestones",
+    "other": "Appendices",
+}
+_ORGANIZE_GROUP_ORDER = [
+    "Procurement", "Technical / Scope", "Commercial / Legal", "Schedule / Milestones", "Appendices",
+]
+
+
+def compute_organize_groups(store: CaseWorkspaceStore, workspace: ProjectWorkspace) -> list[str]:
+    """
+    CLAUDE-POSTCAMEL-CA1C (Section 20): the one, shared, real
+    computation behind both the conversational proposal
+    (_handle_organize_advice) and the real "Create this structure"
+    action (routes/workspace.py's own apply_organize_structure) - a
+    single source of truth, so what the PM is shown is always exactly
+    what would be created, never a mismatch between promise and result.
+    """
+    from services.requirements_registry import RequirementsRegistry
+
+    document = RequirementsRegistry(store.store_path).get(workspace.project_id)
+    candidate_items = document.requirements if document else []
+
+    return [
+        group for group in _ORGANIZE_GROUP_ORDER
+        if any(_CATEGORY_GROUP_LABELS.get(item.category, "Appendices") == group for item in candidate_items)
+    ]
+
+
+def _handle_organize_advice(
+    store: CaseWorkspaceStore, workspace: ProjectWorkspace, source: Optional[dict],
+) -> InterpretationResult:
+    """
+    CLAUDE-POSTCAMEL-CA1C (Sections 1/6/8/9/19): "Answer first, explain
+    only what matters, offer the next action" - a constructive
+    recommendation, a real project-grounded vertical structure, and a
+    truthful next action, never a defensive "only you can decide"
+    opener for what is plainly an advice-seeking question. Territory
+    Before Ontology is preserved throughout: the original Source is
+    never touched, moved, or duplicated by this function - only a real,
+    recoverable, governed Design-Builder Workspace Folder structure is
+    ever proposed or (on a later, explicit "Create this structure"
+    click) created.
+    """
+    if source is None:
+        return InterpretationResult(
+            action_taken="organize_advice_no_referent",
+            reply_text=(
+                "Which Source should I organize? Open it, or use \"Discuss this Source\" where you "
+                "see it, then ask again."
+            ),
+            next_steps=[{"label": "Open Files", "view": "files"}],
+        )
+
+    present_groups = compute_organize_groups(store, workspace)
+
+    if not present_groups:
+        return InterpretationResult(
+            action_taken="organize_advice_insufficient_structure",
+            reply_text=(
+                f"Keep \"{source['name']}\" intact - there isn't enough extracted structure from it yet "
+                "for a grounded recommendation. Ask me a specific question about it, or register "
+                "governed Requirements from it first, then ask again."
+            ),
+        )
+
+    structure_lines = "\n".join(f"- {group}" for group in present_groups)
+    reply = (
+        f"Yes. Keep \"{source['name']}\" intact and organize it virtually first - nothing physical is "
+        "created or moved unless you ask.\n\n"
+        "Recommended structure (based on what's actually extracted from this project so far):\n"
+        f"{structure_lines}\n\n"
+        "This creates a real, governed Design-Builder Workspace structure, not a change to the "
+        "original document."
+    )
+    return InterpretationResult(
+        action_taken=f"organize_advice:{source['id']}",
+        reply_text=reply,
+        organize_source_id=source["id"],
     )
 
 

@@ -4190,6 +4190,18 @@ main::-webkit-scrollbar-corner,
     line-height: 1.45;
     color: var(--text-primary);
 }
+/* CLAUDE-POSTCAMEL-CA1C (Section 6/7): a real ConversationMessage reply
+   can now contain deliberate embedded line breaks (a vertical, copy-
+   paste-ready structure proposal) - the default browser white-space
+   behavior collapses them to a single line, which would otherwise
+   silently defeat the entire point of proposing a structure "vertically
+   and hierarchically, not buried in prose". pre-wrap preserves both
+   line breaks and indentation while still wrapping long lines (never
+   forcing horizontal scroll) - every existing single-line reply is
+   visually unaffected. */
+.conv-message-text {
+    white-space: pre-wrap;
+}
 .conversation-message .role-label {
     display: block;
     font-family: var(--font-body);

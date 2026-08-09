@@ -106,6 +106,7 @@ from services.conversation_interpreter import (
     _looks_like_project_question,
     _looks_like_what_next,
     _resolve_anchor_object,
+    compute_organize_groups,
     interpret_message,
 )
 from services.governance import GovernanceLog
@@ -2311,6 +2312,43 @@ def create_folder_route(project_id):
         return _files_redirect(project_id, parent_folder_id)
 
 
+@workspace_bp.route("/projects/<project_id>/workspace/organize/create-structure", methods=["POST"])
+@login_required
+def apply_organize_structure(project_id):
+    """
+    CLAUDE-POSTCAMEL-CA1C (Sections 5/6/17): the real action behind
+    conversation_interpreter.py's own "Create this structure" offer -
+    recomputes the EXACT SAME real, project-grounded group list
+    (compute_organize_groups, the one shared source of truth also used
+    for the conversational proposal, so what was shown is exactly what
+    gets created) and creates each one as a real, governed Design-
+    Builder Workspace Folder via the existing, unmodified
+    store.create_folder. Idempotent by design: a group whose name is
+    already taken (CaseWorkspaceError) is silently skipped rather than
+    failing the whole batch, so re-clicking this after a partial
+    success (or after manually creating one of the same names) is safe.
+    Never touches the Data Room, never touches the originating Source -
+    the same governed-Folder mechanism "+ New Folder" already uses.
+    """
+    _, store, workspace = _load_workspace_or_404(project_id)
+    groups = compute_organize_groups(store, workspace)
+    created, skipped = [], []
+    for group_name in groups:
+        try:
+            store.create_folder(workspace, name=group_name, actor=_reviewer(), governance_log=_log())
+            created.append(group_name)
+        except CaseWorkspaceError:
+            skipped.append(group_name)
+
+    if created:
+        flash(f"Created {len(created)} folder(s): {', '.join(created)}.", "success")
+    if skipped:
+        flash(f"Already existed, left unchanged: {', '.join(skipped)}.", "error")
+    if not created and not skipped:
+        flash("No grounded structure was available to create.", "error")
+    return _files_redirect(project_id)
+
+
 @workspace_bp.route("/projects/<project_id>/workspace/folders/<folder_id>/rename", methods=["POST"])
 @login_required
 def rename_folder_route(project_id, folder_id):
@@ -3373,6 +3411,7 @@ def _run_conversation_turn(
         action_taken=result.action_taken,
         grounded_in=result.grounded_in,
         next_steps=result.next_steps,
+        organize_source_id=result.organize_source_id,
     )
 
     if result.focused_finding_id is not None:

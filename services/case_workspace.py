@@ -1568,6 +1568,13 @@ class ConversationMessage:
     # Optional/defaulted so old saved ConversationMessage JSON (pre-CA1)
     # deserializes unchanged.
     next_steps: list[dict] = field(default_factory=list)
+    # CLAUDE-POSTCAMEL-CA1C (Section 6/17): a real Source id, set only
+    # when interpret_message's own _handle_organize_advice determined a
+    # real, safe "Create this structure" action genuinely applies -
+    # never model-generated, always a real, already-validated Source id.
+    # Optional/defaulted so old saved ConversationMessage JSON (pre-
+    # CA1C) deserializes unchanged.
+    organize_source_id: Optional[str] = None
 
 
 @dataclass
@@ -6740,6 +6747,7 @@ class CaseWorkspaceStore:
         action_taken: Optional[str] = None, anchor: Optional[dict] = None,
         actor: Optional[str] = None, grounded_in: Optional[list[str]] = None,
         next_steps: Optional[list[dict]] = None, selected_source_id: Optional[str] = None,
+        organize_source_id: Optional[str] = None,
     ) -> dict:
         """
         case_id=None posts into ProjectWorkspace.project_conversation
@@ -6753,7 +6761,7 @@ class CaseWorkspaceStore:
                 id=_new_id(), role=role, text=text, created_at=_now(),
                 actor=actor, action_taken=action_taken, anchor=anchor,
                 grounded_in=grounded_in or [], next_steps=next_steps or [],
-                selected_source_id=selected_source_id,
+                selected_source_id=selected_source_id, organize_source_id=organize_source_id,
             )
             workspace.project_conversation.append(asdict(message))
             self.save(workspace)
@@ -6774,7 +6782,7 @@ class CaseWorkspaceStore:
             anchor=anchor,
             grounded_in=grounded_in or [],
             next_steps=next_steps or [],
-            selected_source_id=selected_source_id,
+            selected_source_id=selected_source_id, organize_source_id=organize_source_id,
         )
         case["conversation"].append(asdict(message))
         self.save(workspace)

@@ -47,7 +47,9 @@ PROVIDER_NAME = "anthropic"
 # CLAUDE-POSTCAMEL-CA1A: bumped again (ca1a -> ca1b) for the new
 # current-UI-context section and the token-aware (not fixed-count)
 # history bounding.
-PROJECT_QA_PROMPT_VERSION = "ca1b"
+# CLAUDE-POSTCAMEL-CA1C: bumped again (ca1b -> ca1c) for the
+# constructive-advice / capability-category-error / concision rules.
+PROJECT_QA_PROMPT_VERSION = "ca1c"
 
 _MAX_CANDIDATE_ITEMS_IN_PROMPT = 40
 _MAX_GOVERNED_REQUIREMENTS_IN_PROMPT = 40
@@ -106,6 +108,34 @@ BEHAVIORAL_CONTRACT = (
     "advisory only: it may tell you what \"this\"/\"it\" refers to, but the "
     "governed project evidence always outranks it, and it never outranks "
     "governed evidence or authorizes an action on its own.\n"
+    # CLAUDE-POSTCAMEL-CA1C (Sections 1/2/3/4/11/12): a live Product
+    # Owner interaction found this agent answering an ordinary advice-
+    # seeking question too defensively (opening with "only you can
+    # decide" instead of a recommendation) and mixing Project evidence
+    # with knowledge of ARCHIOSK's own capabilities. These two rules are
+    # the general-path fix; the specific, highest-value case (organizing
+    # a Source into folders) additionally has its own real, deterministic
+    # handler (services/conversation_interpreter.py's own
+    # _handle_organize_advice) that never reaches this model call at all.
+    "- If the reviewer is clearly asking for your professional judgment "
+    "or recommendation (not asking what the governing Source explicitly "
+    "states), give a constructive recommendation first, then only the "
+    "reasoning that materially matters. Do not open with \"only you can "
+    "decide\" or similar disclaimers for an ordinary advice-seeking "
+    "question - human authority still means the reviewer decides whether "
+    "to act on it, but that does not require you to be timid in offering "
+    "it. Reserve authority disclaimers for moments where a real governed "
+    "decision or consequential state change is actually at stake.\n"
+    "- This prompt is about the Project only. If the reviewer's question "
+    "is actually about what ARCHIOSK itself can do (an application "
+    "capability, not this Project's content), you have been routed here "
+    "in error - say you're not sure and suggest they ask about the "
+    "specific capability directly, rather than answering from this "
+    "Project's evidence (doing so would be a category error).\n"
+    "- Be concise: prefer a direct recommendation or answer, short "
+    "material reasoning, and (if genuinely useful) a next step - not a "
+    "restated question, a long introduction, or generic project-"
+    "management prose.\n"
     "- Respond only in the exact JSON schema requested, with no prose "
     "outside it."
 )

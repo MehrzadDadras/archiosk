@@ -2853,6 +2853,11 @@
                 {% endcall %}
                 {% endif %}
                 {% if loop.last %}{{ macros.next_step_offers(project_id, message.next_steps) }}{% endif %}
+                {% if loop.last and message.role == "system" and message.organize_source_id %}
+                <form method="post" action="{{ url_for('workspace.apply_organize_structure', project_id=project_id) }}">
+                    <button type="submit" class="review-btn needs_evidence">Create this structure</button>
+                </form>
+                {% endif %}
             </div>
             {% else %}
             {# CLAUDE-P40-B (3.7): this example previously always
@@ -2976,6 +2981,16 @@
                 {% if loop.last and message.role == "system" and message.action_taken and message.action_taken.startswith("needs_case:") %}
                 <form method="post" action="{{ url_for('workspace.start_investigation_from_aperture', project_id=project_id, message_id=message.action_taken.split(':', 1)[1]) }}">
                     <button type="submit" class="review-btn needs_evidence">Start an Investigation from this</button>
+                </form>
+                {% endif %}
+                {# CLAUDE-POSTCAMEL-CA1C (Section 6/17): a real, structured
+                   action envelope - message.organize_source_id is only ever
+                   set by _handle_organize_advice's own real, already-
+                   validated Source id, never model-generated prose. Posts to
+                   the real, unmodified store.create_folder-backed route. #}
+                {% if loop.last and message.role == "system" and message.organize_source_id %}
+                <form method="post" action="{{ url_for('workspace.apply_organize_structure', project_id=project_id) }}">
+                    <button type="submit" class="review-btn needs_evidence">Create this structure</button>
                 </form>
                 {% endif %}
             </div>
