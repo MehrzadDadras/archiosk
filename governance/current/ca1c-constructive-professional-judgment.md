@@ -471,8 +471,18 @@ real alternative, never a reference to the RFP's own content.
 
 ## AC. Commits / HEAD / origin/main / working tree
 
-See the final chat report for exact values, recorded after this
-document and the code/test changes are committed together.
+Committed as `fea048ac47033d147902075cf2cf791eac79f86b`
+("CLAUDE-POSTCAMEL-CA1C: Constructive Professional Judgment"), covering
+`services/capability_registry.py` (new), `services/conversation_interpreter.py`,
+`services/case_workspace.py`, `services/project_qa.py`,
+`routes/workspace.py`, `templates/case_workspace.html`,
+`static/css/main.css`, this document, `governance/STATUS.md`, and
+`tests/test_ca1c_constructive_response.py`. `.env`'s own `STATIC_VERSION`
+bump (69 → 70) is not part of this commit - `.env` is git-ignored by
+design, per this repository's own standing rule. Pushed to `origin/main`
+(`2ac387e..fea048a`). `HEAD == origin/main == fea048a`. Working tree
+clean afterward except the pre-existing untracked
+`tests/fixtures/nreocrc/_lab_instance_scratch_002/` fixture.
 
 ## AD. Remaining conversational limitations
 
