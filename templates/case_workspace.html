@@ -2071,6 +2071,16 @@
                 </div>
                 {% endif %}
 
+                {# CLAUDE-POSTCAMEL-WB1 (Aggressive Overflow, Founder Focus
+                   Test): this form previously rendered unconditionally on
+                   every one of a project's Requirement rows - the one
+                   always-visible control block on this page not already
+                   behind a subdisclosure (Revise/Perspective below it both
+                   already use this exact mechanism). Wrapping it here
+                   removes no capability - only permanent visual residency -
+                   and reuses a pattern already proven safe on this same
+                   page. #}
+                {% call macros.subdisclosure('Adjudicate this Requirement') %}
                 <form class="workspace-form" method="post" action="{{ url_for('workspace.adjudicate_requirement', project_id=project_id, requirement_id=requirement.id) }}">
                     <input type="hidden" name="case_id" value="{{ active_case.id if active_case else '' }}">
                     <select name="outcome" required>
@@ -2103,6 +2113,7 @@
                     {% endif %}
                     <button type="submit">Adjudicate</button>
                 </form>
+                {% endcall %}
 
                 {% if row.revision_history %}
                 {% call macros.subdisclosure('Revision history (' ~ row.revision_history|length ~ ') — this Requirement\'s wording has changed') %}
