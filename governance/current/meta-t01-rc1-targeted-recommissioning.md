@@ -196,8 +196,18 @@ touched. Full suite re-run genuinely fresh after the naming fix:
 
 ## J. Commits / HEAD / origin/main / working tree
 
-See the final chat report for exact values, recorded after this
-document and the naming-fix code/test changes are committed together.
+Committed as `ae5e11109e907a12e30bcbe94005ba8f93d50ad7` ("CLAUDE-POSTCAMEL-META-T01-RC1:
+targeted recommissioning of the four Territory-affected Requirements"),
+covering `templates/upload.html` (the "Establish a Project" correction),
+`tests/test_meta_t01_territory_before_ontology.py` (the matching
+assertion update), this document, and the `governance/STATUS.md` row.
+Pushed to `origin/main` (`6d9faff..ae5e111`). Working tree clean
+afterward except the pre-existing untracked
+`tests/fixtures/nreocrc/_lab_instance_scratch_002/` fixture. The
+`2997 passed, 0 failed, 65 subtests passed` result recorded in Section
+I above (895.83s / 14m55s) is the genuinely fresh full-suite run
+verified against this exact commit's own tree, confirmed clean before
+finalizing this record.
 
 ## K. Whether Territory Before Ontology remains safely established
 
