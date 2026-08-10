@@ -5128,6 +5128,17 @@ main:hover,
 }
 .conv-operational-action-form { display: inline-flex; }
 .conv-operational-action-form button[disabled] { opacity: 0.6; cursor: default; }
+/* CLAUDE-CA1D-RIVER-03: a quiet, one-time teaching line, not a second
+   toolbar - deliberately plain text (no border/background/icon), the
+   same restraint .conv-next-steps's own plain <a> row already uses.
+   [hidden] (native, not a class) is the actual on/off switch - this
+   rule only styles it for the one time it IS shown. */
+.conv-selection-hint {
+    font-size: var(--text-xs);
+    color: var(--text-metadata);
+    font-style: italic;
+    margin: 0.3rem 0 0;
+}
 
 .review-decision-badge {
     display: inline-block;

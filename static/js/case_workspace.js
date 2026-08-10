@@ -1290,6 +1290,32 @@ document.addEventListener('DOMContentLoaded', () => {
         const BUILT_IN_TAG_QUESTION = 'built-in:question';
         const BUILT_IN_TAG_HIGHLIGHT = 'built-in:highlight';
 
+        // CLAUDE-CA1D-RIVER-03 (Make the River Visible): a real Product
+        // Owner could not discover this whole toolbar through ordinary
+        // use, despite it being fully implemented (CA1D-RIVER-01's own
+        // audit) - macros.operational_action_offers renders a server-
+        // hidden #conv-selection-hint next to a genuinely actionable
+        // answer (never a permanent toolbar - only appears where the
+        // fourth beat itself already appears). Revealed here, once,
+        // whenever this browser has never actually used the toolbar
+        // before; hidden for good - and the localStorage flag set - the
+        // very first time a real selection actually opens it (below,
+        // inside handleSelectionMaybeChanged) - "once learned, quiet
+        // again," never re-coaching an experienced reviewer. A single
+        // global flag (not per-project): the mechanism itself is not
+        // project-specific, so neither is having learned it.
+        const SELECTION_HINT_SEEN_KEY = 'beehive:selectionHintSeen';
+        function markSelectionHintLearned() {
+            try { window.localStorage.setItem(SELECTION_HINT_SEEN_KEY, '1'); } catch (e) { /* ignore */ }
+            document.querySelectorAll('.conv-selection-hint').forEach((el) => { el.hidden = true; });
+        }
+        (function revealSelectionHintIfNeverLearned() {
+            let alreadyLearned = false;
+            try { alreadyLearned = window.localStorage.getItem(SELECTION_HINT_SEEN_KEY) === '1'; } catch (e) { alreadyLearned = false; }
+            if (alreadyLearned) return;
+            document.querySelectorAll('.conv-selection-hint').forEach((el) => { el.hidden = false; });
+        })();
+
         let currentAnchor = null; // last computed anchor (or {ambiguous:true,...}), from the most recent meaningful selection
         let currentQuoteText = '';
         let pendingAnchor = null; // anchor captured at the moment a dialog opened - selection may already be gone by submit time
@@ -1734,6 +1760,11 @@ document.addEventListener('DOMContentLoaded', () => {
             positionToolbar(range.getBoundingClientRect());
             applyToolbarAvailability(anchor);
             refreshAppliedTagState(anchor);
+            // CLAUDE-CA1D-RIVER-03: the toolbar genuinely opened for a
+            // real selection - the reviewer has now demonstrably learned
+            // this mechanism, whether or not they ever saw the hint text
+            // (e.g. it wasn't rendered on this particular message).
+            markSelectionHintLearned();
         }
 
         document.addEventListener('selectionchange', () => {

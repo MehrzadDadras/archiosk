@@ -337,6 +337,20 @@
     {% endif %}
     {% endfor %}
 </div>
+{# CLAUDE-CA1D-RIVER-03 (Make the River Visible): the selection-to-action
+   toolbar (static/js/case_workspace.js's own setUpConversationTagsAndTasks
+   - CA1D-RIVER-01's own audit found it fully implemented, never dormant)
+   had no visible teaching moment at all - a real Product Owner could not
+   discover it through ordinary use. This is that moment: attached ONLY
+   to a genuinely actionable answer (the same condition that gates the
+   fourth beat above - "at the moment it becomes useful"), never a
+   permanent toolbar. Server-rendered hidden - static/js/case_workspace.js
+   decides whether to reveal it (a real localStorage "already learned"
+   flag, same truthful-default-hidden discipline the mic button/voice-
+   status already established) and hides it for good the first time the
+   reviewer actually makes a real selection anywhere in this dock - "once
+   learned, quiet again," never re-coaching an experienced user. #}
+<p class="conv-selection-hint" id="conv-selection-hint" data-ui-ref="chat.selection-hint" hidden>Tip: you can select part of this answer to Tag it, Highlight it, or make a Task from it.</p>
 {% endif %}
 {% endmacro %}
 
