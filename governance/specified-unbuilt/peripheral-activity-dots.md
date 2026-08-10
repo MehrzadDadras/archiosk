@@ -141,3 +141,35 @@ point) with a coarse, disclosed "seen" granularity (e.g. per-branch, not per-tas
 placement, `--machine-blue` for ordinary/new, reusing the existing `[data-state]`-conditional-color
 CSS idiom — before generalizing to every entity family or attempting the collapsed-parent aggregate
 case.
+
+## Close-out (CLAUDE-CA1D, sealed and held)
+
+Accepted as specified-but-unbuilt; not picked up again until separately prompted. Standing
+design conclusion, recorded here as the governing constraint on this whole feature, not just this
+document's own recommendation:
+
+> GO may only express a sensitive surface when the underlying project state can support that
+> signal truthfully.
+
+This is a genuine **blocker**, not merely a scheduling deferral: Open Question 1 above (`last_viewed_by`
+is per-project-per-reviewer, not per-item) means the visual states this document specifies —
+colored item name, dot, and any aggregate/parent roll-up — currently have no truthful per-item data
+to render. Building the CSS/markup before that data model exists would mean inventing cosmetic
+state that reacts to nothing real, which this project has deliberately declined to do.
+
+**The next authorized step, when it comes, is investigation, not implementation**: a
+repository-grounded pass into the smallest trustworthy per-item attention/review state model —
+distinct from, and prerequisite to, anything in this document's own "Smallest future first slice"
+above — scoped so its result could later support, without confusing selected/changed/
+attention-needed/blocker states:
+
+- colored item name + activity dot (this document's own spec, above);
+- collapsed-parent aggregation (Open Question 3, above);
+- a **"PM Situational Gauge" roll-up** — a named future consumer of this same per-item state.
+  Confirmed absent from this codebase by direct search at the time of this entry (no file
+  references it) — recorded here as a real, stated future dependency, not an existing mechanism
+  this document is quietly assuming.
+
+Until that per-item model is investigated and grounded, this document's own designs stay
+specified-but-unbuilt exactly as they are now — nothing here should be treated as unblocked by a
+future session without that investigation happening first.
