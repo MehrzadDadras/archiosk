@@ -76,9 +76,10 @@ class ActionControlChromeTests(unittest.TestCase):
 
 
 class ComposerChromeTests(unittest.TestCase):
-    """Section 18: the input reads as a lane (bottom rule only), Send
-    stays a real, filled commit control - "make the smallest shared
-    styling correction," not a full composer redesign."""
+    """Section 18: the input reads as a lane (top+bottom rule only,
+    CLAUDE-CA1D-COMPOSER-LINE-01 - was bottom-only), Send stays a real,
+    filled commit control - "make the smallest shared styling
+    correction," not a full composer redesign."""
 
     def setUp(self):
         self.css = _CSS_PATH.read_text(encoding="utf-8")
@@ -88,14 +89,34 @@ class ComposerChromeTests(unittest.TestCase):
         block = self.css[start:]
         block = block[: block.index("}") + 1]
         self.assertIn("border: none", block)
-        self.assertIn("border-bottom: 1px solid var(--border)", block)
+        # CLAUDE-CA1D-COMPOSER-LINE-01: a live product-owner refinement -
+        # the lane's top and bottom rules now reuse --machine-blue (the
+        # existing ARCHIOSK chat-identity color, already used elsewhere
+        # on this same Chat surface) instead of the neutral --border,
+        # and gained a matching top rule (was bottom-only).
+        self.assertIn('border-top: 1px solid var(--machine-blue)', block)
+        self.assertIn('border-bottom: 1px solid var(--machine-blue)', block)
         self.assertIn("border-radius: 0", block)
+        # Still just two thin hairlines, never a filled/tinted surface.
+        self.assertIn("background: transparent", block)
 
-    def test_composer_input_focus_state_still_exists(self):
-        start = self.css.index('.conversation-input-form input[type="text"]:focus')
+    def test_composer_input_focus_still_visually_indicated(self):
+        # CLAUDE-CA1D-COMPOSER-LINE-01: the composer's own dedicated
+        # `:focus { border-bottom-color: var(--machine-blue) }` override
+        # is gone - now genuinely redundant, since the lane's resting
+        # state is already permanently --machine-blue (top AND bottom).
+        # Focus is still visually indicated, just via the pre-existing
+        # GLOBAL input:focus-visible outline rule this file already
+        # declares for every input/button/link, unchanged by this
+        # correction.
+        start = self.css.index("a:focus-visible, button:focus-visible, input:focus-visible")
         block = self.css[start:]
         block = block[: block.index("}") + 1]
-        self.assertIn("border-bottom-color", block)
+        self.assertIn("outline: 2px solid var(--machine-blue)", block)
+        # And the composer-specific override is genuinely gone, not just
+        # renamed - the resting-state assertion above is what carries
+        # this rule's old job now.
+        self.assertNotIn('.conversation-input-form input[type="text"]:focus', self.css)
 
     def test_send_button_remains_a_real_filled_commit_control(self):
         # Section 19's own restraint: only the input needed correcting -

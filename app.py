@@ -395,11 +395,13 @@ def _register_blueprints(app: Flask) -> None:
     from routes.api import api_bp
     from routes.workspace import workspace_bp
     from routes.security import security_bp
+    from routes.operations import operations_bp
 
     app.register_blueprint(portal_bp)
     app.register_blueprint(api_bp, url_prefix="/api/v1")
     app.register_blueprint(workspace_bp)
     app.register_blueprint(security_bp)
+    app.register_blueprint(operations_bp)
 
 
 def _register_error_handlers(app: Flask) -> None:
@@ -519,6 +521,13 @@ def _register_context_processors(app: Flask) -> None:
             "static_version": app.config["STATIC_VERSION"],
             "authenticated": authenticated,
             "is_admin": is_admin() and not on_standalone_auth_page,
+            # CLAUDE-CA1D-INSTRUMENT-RAIL-01: the one quiet global machine
+            # fact proven this tranche -- reads the exact same
+            # AI_CALLS_DISABLED env var services/bhive_parser.py's own
+            # kill switch already reads (CLAUDE-P27-B), live per request,
+            # never cached. Admin-gated in the template, not here (same
+            # split every other is_admin-conditioned template block uses).
+            "ai_calls_disabled": os.getenv("AI_CALLS_DISABLED", "false").strip().lower() == "true",
             "nav_recent_projects": _nav_recent_projects(app) if (authenticated and not skip_project_listing) else [],
             # CLAUDE-P40-E2B1, Section B: the single launcher panel's
             # identity/menu anchored at the bottom needs the reviewer's

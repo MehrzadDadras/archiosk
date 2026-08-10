@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% import "_macros.html" as macros %}
+
+{% block title %}Operations &mdash; Archiosk{% endblock %}
+
+{% block content %}
+<section class="hero">
+    <h1>Operations</h1>
+    <p class="hero-copy">
+        Persistent, deployment-wide admin machinery &mdash; kept out of Conversation,
+        Eye, Toolbox, and project content, reached the same way Security Department
+        already is. This is a smallest-proof-slice page: it wires one previously-unwired
+        backend diagnostic primitive into a real admin surface, not a full machinery
+        programme.
+    </p>
+</section>
+
+{% call macros.accordion('System Telemetry', group='left', id='telemetry', open=True, ui_ref='operations.telemetry') %}
+<p class="pane-note">
+    Structurally content-free technical telemetry (<code>services/diagnostics.py</code>,
+    built CLAUDE-P31) &mdash; every field here is a closed/structural value, never
+    project content.
+</p>
+<ul class="source-list">
+    <li class="source-item"><strong>App version</strong><br><small class="text-muted">{{ telemetry.app_version }}</small></li>
+    <li class="source-item"><strong>Parser version</strong><br><small class="text-muted">{{ telemetry.parser_version }}</small></li>
+    <li class="source-item"><strong>Generated at</strong><br><small class="text-muted">{{ telemetry.generated_at }}</small></li>
+    <li class="source-item"><strong>Diagnostic id</strong><br><small class="text-muted">{{ telemetry.diagnostic_id }}</small></li>
+    <li class="source-item"><strong>Route</strong><br><small class="text-muted">{{ telemetry.route }}</small></li>
+</ul>
+{% endcall %}
+
+{% call macros.accordion('AI Calls Kill Switch', group='left', id='ai-calls', ui_ref='operations.ai-calls') %}
+<p class="pane-note">
+    The <code>AI_CALLS_DISABLED</code> environment-variable kill switch (CLAUDE-P27-B) &mdash;
+    read live, not cached. When set, every external-AI call site (classification,
+    consistency-check, Project Q&amp;A, briefing generation) degrades to its existing
+    graceful fallback instead of calling out.
+</p>
+<p class="workspace-pane-label">
+    {% if ai_calls_disabled %}AI calls are currently <strong>disabled</strong>.
+    {% else %}AI calls are currently enabled.{% endif %}
+</p>
+{% endcall %}
+{% endblock %}

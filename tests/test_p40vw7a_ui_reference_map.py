@@ -62,6 +62,12 @@ _APP_PY_PATH = _REPO_ROOT / "app.py"
 # either; extending the scan here rather than leaving this template's
 # own new refs silently unchecked.
 _CONFIRM_DELETE_FOLDER_HTML_PATH = _REPO_ROOT / "templates" / "confirm_delete_folder.html"
+# CLAUDE-CA1D-INSTRUMENT-RAIL-01: operations.html passes its two refs as
+# macro CALL arguments (ui_ref='operations.telemetry'), the exact same
+# security_department.html shape the comment above this one already
+# documents - added to the scanned list from the start, not left as a
+# second silent blind spot.
+_OPERATIONS_HTML_PATH = _REPO_ROOT / "templates" / "operations.html"
 _MAIN_CSS_PATH = _REPO_ROOT / "static" / "css" / "main.css"
 _REFERENCE_MAP_PATH = _REPO_ROOT / "UI_REFERENCE_MAP.md"
 
@@ -156,7 +162,7 @@ def _all_template_refs() -> set[str]:
         _GATEWAY_HTML_PATH, _GATEWAY_SHELL_HTML_PATH, _PROJECT_CHOOSER_HTML_PATH,
         _LOGIN_HTML_PATH, _UPLOAD_HTML_PATH, _UPLOAD_CONFIRM_HTML_PATH, _ERROR_HTML_PATH,
         _SECURITY_DEPARTMENT_HTML_PATH, _PROJECTS_HTML_PATH, _REMOVED_PROJECTS_HTML_PATH, _APP_PY_PATH,
-        _CONFIRM_DELETE_FOLDER_HTML_PATH,
+        _CONFIRM_DELETE_FOLDER_HTML_PATH, _OPERATIONS_HTML_PATH,
     ):
         text = path.read_text(encoding="utf-8")
         refs |= set(_DATA_REF_RE.findall(text))
@@ -219,11 +225,14 @@ class RegistryConsistencyTests(unittest.TestCase):
         # CLAUDE-P40-EYE1 added "eye" - the new structural-scaffold pane
         # in the right column (see UI_REFERENCE_MAP.md's own "Right
         # column: Toolbox above Eye" section).
+        # CLAUDE-CA1D-INSTRUMENT-RAIL-01 added "operations" - the
+        # admin-page half of the four-part Instrument Rail spatial
+        # model (see UI_REFERENCE_MAP.md's own "Operations" section).
         for ref in _all_template_refs():
             self.assertRegex(
                 ref,
                 r"^(menu|lists|display|toolbox|chat|eye|shell|gateway|auth|upload|errors|"
-                r"security|projects-directory|removed-projects)\.[a-z0-9._\-]+$",
+                r"security|operations|projects-directory|removed-projects)\.[a-z0-9._\-]+$",
                 ref,
             )
 

@@ -238,6 +238,18 @@
            Empty and invisible (main.css's own :empty rule) whenever
            voice input is idle or unused. #}
         <span class="voice-input-status" id="dock-composer-voice-status" data-ui-ref="chat.composer.voice.status" aria-live="polite"></span>
+        {# CLAUDE-CA1D-INSTRUMENT-RAIL-01: the "transient, command-specific
+           execution state" half of the four-part Instrument Rail split
+           (Plan-Mode report, Section D.3) -- scoped to THIS instruction,
+           not the perimeter/admin page. static/js/case_workspace.js sets
+           this text right before the composer's own classic form-POST
+           fires (not intercepted -- no fetch/AJAX added here), so it
+           stays visible for the real duration of the server round trip
+           and disappears the moment the response replaces this page,
+           with no new backend/async infrastructure. Same aria-live/
+           :empty-hides idiom as #dock-composer-voice-status directly
+           above, not a new pattern. #}
+        <span class="composer-execution-status" id="dock-composer-execution-status" data-ui-ref="chat.composer.execution-status" aria-live="polite"></span>
         <button type="submit" data-ui-ref="chat.composer.send">Send</button>
     </form>
 </div>

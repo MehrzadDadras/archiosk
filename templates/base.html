@@ -401,6 +401,21 @@
                 </details>
                 {% endif %}
 
+                {# CLAUDE-CA1D-INSTRUMENT-RAIL-01: the "quiet global machine fact"
+                   half of the four-part Instrument Rail split (Plan-Mode report,
+                   Section D.2) -- the Menu top bar is the one shell region genuinely
+                   global across every page and Display division, unlike Lists (which
+                   navigates away once a Project opens). Deliberately renders NOTHING
+                   in the ordinary case (AI calls enabled, the default) -- only an
+                   admin-relevant anomaly is worth ambient visibility; this is the
+                   proof that a real global fact can live here without adding clutter
+                   to a top bar that already holds five other controls. Links through
+                   to Operations (D.1) for detail, same "ambient signal -> detail page"
+                   relationship the plan specifies. #}
+                {% if is_admin and ai_calls_disabled %}
+                <a class="workspace-topbar-status" data-ui-ref="menu.status" href="{{ url_for('operations.department_home') }}" title="AI calls are disabled (AI_CALLS_DISABLED) &mdash; see Operations for detail">AI calls disabled</a>
+                {% endif %}
+
                 {# ---------------- User three-dot menu (CLAUDE-P40-E3A, Section 3) -------
                    Username + Sign out (its child) live here now, not the
                    Lists panel's own identity block - Security stays in
@@ -992,6 +1007,16 @@
                     {% if is_admin %}
                     <li class="tree-node" data-tree-node>
                         <a class="tree-leaf launcher-link" data-ui-ref="lists.security" href="{{ url_for('security.department_home') }}">Security</a>
+                    </li>
+                    {# CLAUDE-CA1D-INSTRUMENT-RAIL-01: Operations is the admin-page
+                       half of the four-part Instrument Rail split (Plan-Mode report,
+                       Section D.1) -- persistent, deployment-wide machinery, reached
+                       exactly the same way Security already is (same is_admin gate,
+                       same "reachable whether or not a Project is open" placement),
+                       not a new rail column. Deliberately minimal this tranche -- see
+                       routes/operations.py's own docstring for exact scope. #}
+                    <li class="tree-node" data-tree-node>
+                        <a class="tree-leaf launcher-link" data-ui-ref="lists.operations" href="{{ url_for('operations.department_home') }}">Operations</a>
                     </li>
                     {# CLAUDE-P40-VW7B: Security/Project Data Management are admin
                        TOOLS, not portfolio Project-selection surfaces or "Project

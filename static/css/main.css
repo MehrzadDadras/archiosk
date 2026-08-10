@@ -2070,6 +2070,29 @@ main {
     color: var(--text-primary);
     border-color: var(--border-strong);
 }
+/* CLAUDE-CA1D-INSTRUMENT-RAIL-01: the "quiet global machine fact" line
+   (Plan-Mode report, Section D.2) - deliberately NOT a peer of
+   .workspace-topbar-btn above: no border/background at rest, matching
+   the de-boxing discipline's "ending-line / side separation rather than
+   top-and-bottom boxing" idiom already established for
+   .conv-operational-actions .review-btn - a single underline appears on
+   hover/focus, quiet metadata color at rest, same font-size as
+   .doc-zoom-level's own plain status text. Only ever rendered for an
+   admin-relevant anomaly (see base.html), so at rest this adds nothing
+   to an already-busy top bar. */
+.workspace-topbar-status {
+    font-family: var(--font-body);
+    font-size: 0.78rem;
+    color: var(--text-metadata);
+    text-decoration: none;
+    border-bottom: 1px solid transparent;
+    padding-bottom: 0.1rem;
+}
+.workspace-topbar-status:hover,
+.workspace-topbar-status:focus-visible {
+    color: var(--text-primary);
+    border-bottom-color: currentColor;
+}
 /* The top-bar dropdown menus (Display Layout, Appearance, Account) are
    real interactive control surfaces, not decorative Display background
    - the same exemption Section E already grants the composer/focus
@@ -4595,16 +4618,27 @@ main:hover,
        the existing global input:focus-visible outline (unchanged) -
        both survive dark/tinted/forest since --border already carries
        per-theme contrast the same as every other divider in this
-       file. */
+       file.
+
+       CLAUDE-CA1D-COMPOSER-LINE-01: a live product-owner refinement -
+       the lane's top and bottom rules now reuse --machine-blue (the
+       SAME token already used, conditionally, for this exact input's
+       own :focus state below, and permanently for this same Chat
+       surface's .conversation-message.system .role-label - i.e.
+       already ARCHIOSK's chat/machine identity color, not a new one).
+       Only these two hairlines change color; surface stays
+       transparent, placeholder/mic/Send are untouched, so this reads
+       as the lane's own quiet identity marker, never a tinted
+       composer. Kept thin (1px, unchanged weight) and theme-aware for
+       free, since --machine-blue is already redefined per Appearance
+       mode (dark/tinted/forest) elsewhere in this file. */
     padding: 0.7rem 0.2rem;
     background: transparent;
     border: none;
-    border-bottom: 1px solid var(--border);
+    border-top: 1px solid var(--machine-blue);
+    border-bottom: 1px solid var(--machine-blue);
     border-radius: 0;
     color: var(--text-primary);
-}
-.conversation-input-form input[type="text"]:focus {
-    border-bottom-color: var(--machine-blue);
 }
 .conversation-input-form button {
     font-family: var(--font-body);
@@ -4645,6 +4679,22 @@ main:hover,
     color: var(--text-metadata);
 }
 .voice-input-status:empty {
+    display: none;
+}
+/* CLAUDE-CA1D-INSTRUMENT-RAIL-01: the composer-adjacent execution strip
+   proof (Plan-Mode report, Section D.3) - identical shape to
+   .voice-input-status directly above (same flex-basis/font/color/:empty
+   idiom), deliberately not a new visual pattern. static/js/case_workspace.js
+   sets this text right before the composer's own classic form-POST fires
+   and never clears it client-side - the next page load starts empty, so
+   :empty below hides it again with no extra code. */
+.composer-execution-status {
+    flex-basis: 100%;
+    font-family: var(--font-body);
+    font-size: 0.78rem;
+    color: var(--text-metadata);
+}
+.composer-execution-status:empty {
     display: none;
 }
 /* --failure-red per tokens.css's own grammar: "contradiction / failure" -

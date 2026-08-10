@@ -884,11 +884,26 @@ document.addEventListener('DOMContentLoaded', () => {
         // exchange" is a real product requirement, not the general
         // navigation-preserving case this sessionStorage restore mechanism
         // otherwise exists for (see the scroll-restore block below).
-        draftInput.closest('form').addEventListener('submit', () => {
+        draftInput.closest('form').addEventListener('submit', (e) => {
             window.sessionStorage.removeItem(draftKey);
             if (conversationScopeForDraft) {
                 window.sessionStorage.setItem(`beehive:conversation:justSent:${conversationScopeForDraft}`, '1');
             }
+            // CLAUDE-CA1D-INSTRUMENT-RAIL-01: composer-adjacent execution
+            // strip proof (Plan-Mode report, Section D.3/K.4) - this is a
+            // classic, un-intercepted form submit (no preventDefault
+            // anywhere on this form), so the browser keeps the current DOM
+            // rendered exactly as-is for the real duration of the server
+            // round trip, then replaces it wholesale once the response
+            // arrives. Setting the status text and disabling Send here is
+            // therefore both real (visible for the actual wait) and
+            // self-clearing (the next page load has neither, since this is
+            // never persisted anywhere) - no fetch/AJAX, no new backend
+            // endpoint, no async infrastructure added.
+            const executionStatus = document.getElementById('dock-composer-execution-status');
+            if (executionStatus) executionStatus.textContent = 'Working on your request…';
+            const sendBtn = e.target.querySelector('button[type="submit"]');
+            if (sendBtn) sendBtn.disabled = true;
         });
     }
 
