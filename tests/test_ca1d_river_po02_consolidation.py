@@ -76,10 +76,12 @@ class ActionControlChromeTests(unittest.TestCase):
 
 
 class ComposerChromeTests(unittest.TestCase):
-    """Section 18: the input reads as a lane (top+bottom rule only,
-    CLAUDE-CA1D-COMPOSER-LINE-01 - was bottom-only), Send stays a real,
-    filled commit control - "make the smallest shared styling
-    correction," not a full composer redesign."""
+    """Section 18: the input reads as a lane (bottom rule on the input
+    itself; the top rule moved onto .composer-context-rule,
+    CLAUDE-CA1D-COMPOSER-CONTEXT-LABEL-01, so it can host the repositioned
+    work-context label), Send stays a real, filled commit control -
+    "make the smallest shared styling correction," not a full composer
+    redesign."""
 
     def setUp(self):
         self.css = _CSS_PATH.read_text(encoding="utf-8")
@@ -90,15 +92,26 @@ class ComposerChromeTests(unittest.TestCase):
         block = block[: block.index("}") + 1]
         self.assertIn("border: none", block)
         # CLAUDE-CA1D-COMPOSER-LINE-01: a live product-owner refinement -
-        # the lane's top and bottom rules now reuse --machine-blue (the
-        # existing ARCHIOSK chat-identity color, already used elsewhere
-        # on this same Chat surface) instead of the neutral --border,
-        # and gained a matching top rule (was bottom-only).
-        self.assertIn('border-top: 1px solid var(--machine-blue)', block)
+        # the lane's rules reuse --machine-blue (the existing ARCHIOSK
+        # chat-identity color, already used elsewhere on this same Chat
+        # surface) instead of the neutral --border.
         self.assertIn('border-bottom: 1px solid var(--machine-blue)', block)
         self.assertIn("border-radius: 0", block)
-        # Still just two thin hairlines, never a filled/tinted surface.
+        # Still just a thin hairline, never a filled/tinted surface.
         self.assertIn("background: transparent", block)
+
+    def test_composer_top_rule_lives_on_the_context_rule_not_the_input(self):
+        # CLAUDE-CA1D-COMPOSER-CONTEXT-LABEL-01: an <input> can't contain
+        # the embedded work-context label's child markup, so the top
+        # rule moved onto .composer-context-rule-line instead.
+        start = self.css.index('.conversation-input-form input[type="text"] {')
+        block = self.css[start:]
+        block = block[: block.index("}") + 1]
+        self.assertNotIn("border-top", block)
+        rule_line_start = self.css.index(".composer-context-rule-line {")
+        rule_line_block = self.css[rule_line_start:]
+        rule_line_block = rule_line_block[: rule_line_block.index("}") + 1]
+        self.assertIn("border-top: 1px solid var(--machine-blue)", rule_line_block)
 
     def test_composer_input_focus_still_visually_indicated(self):
         # CLAUDE-CA1D-COMPOSER-LINE-01: the composer's own dedicated

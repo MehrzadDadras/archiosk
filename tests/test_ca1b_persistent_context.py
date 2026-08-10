@@ -165,17 +165,24 @@ class QueryParamSelectionTests(_BaseTestCase):
 
 
 class ContextIndicatorTests(_BaseTestCase):
+    """CLAUDE-CA1D-COMPOSER-CONTEXT-LABEL-01: the indicator was
+    repositioned from a standalone "Currently working with" div above
+    the composer into a compact label embedded in the composer's own
+    upper rule (data-ui-ref="chat.context-indicator" is unchanged, only
+    its DOM position/text moved) - assertions updated to match the new
+    text, not reverted to the old wording."""
+
     def test_indicator_shows_current_selection(self):
         req_id = self._register_requirement("REQ-IND")
         client = self._client()
         body = client.get(f"/projects/{self.project_id}/workspace?requirement={req_id}").get_data(as_text=True)
-        self.assertIn("Currently working with", body)
+        self.assertIn('data-ui-ref="chat.context-indicator"', body)
         self.assertIn("REQ-IND", body)
 
     def test_no_indicator_when_nothing_selected(self):
         client = self._client()
         body = client.get(f"/projects/{self.project_id}/workspace?view=overview").get_data(as_text=True)
-        self.assertNotIn("Currently working with", body)
+        self.assertNotIn('data-ui-ref="chat.context-indicator"', body)
 
     def test_clear_route_removes_the_indicator(self):
         req_id = self._register_requirement("REQ-CLR")
@@ -184,7 +191,7 @@ class ContextIndicatorTests(_BaseTestCase):
         resp = client.post(f"/projects/{self.project_id}/workspace/context/clear")
         self.assertEqual(resp.status_code, 302)
         body = client.get(f"/projects/{self.project_id}/workspace?view=overview").get_data(as_text=True)
-        self.assertNotIn("Currently working with", body)
+        self.assertNotIn('data-ui-ref="chat.context-indicator"', body)
 
     def test_stale_selection_never_shown_as_current(self):
         """A deleted/foreign persisted selection must never render as if
@@ -193,7 +200,24 @@ class ContextIndicatorTests(_BaseTestCase):
         with client.session_transaction() as sess:
             sess[f"selected_object:{self.project_id}"] = {"anchor_type": "requirement", "anchor_id": "not-a-real-id"}
         body = client.get(f"/projects/{self.project_id}/workspace?view=overview").get_data(as_text=True)
-        self.assertNotIn("Currently working with", body)
+        self.assertNotIn('data-ui-ref="chat.context-indicator"', body)
+
+    def test_clear_button_uses_formaction_not_a_nested_form(self):
+        """The label is now embedded inside the composer's own <form> -
+        a nested <form> for Clear would be invalid HTML, so it must use
+        formaction on a real <button> instead (still a genuine POST to
+        the same, pre-existing clear-selection route)."""
+        req_id = self._register_requirement("REQ-FA")
+        client = self._client()
+        body = client.get(f"/projects/{self.project_id}/workspace?requirement={req_id}").get_data(as_text=True)
+        self.assertIn("composer-context-clear", body)
+        self.assertIn("workspace/context/clear", body)
+        # Only ONE <form> should wrap the composer region - confirm the
+        # clear control did not introduce a second, nested one.
+        composer_start = body.index('data-ui-ref="chat.composer"')
+        clear_idx = body.index("composer-context-clear", composer_start)
+        between = body[composer_start:clear_idx]
+        self.assertNotIn("<form", between)
 
 
 class ExplicitReselectionTests(_BaseTestCase):

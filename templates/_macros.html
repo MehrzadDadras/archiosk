@@ -161,7 +161,7 @@
    information; those remain genuinely unbuilt (CLAUDE-P40-E3A, Section
    13's own exclusion list), nothing here claims otherwise by staying
    silent about them. #}
-{% macro conversation_dock(heading, message_count, post_url, scope_key, placeholder, include_anchor_fields=False, current_view=None, selected_source_id=None) %}
+{% macro conversation_dock(heading, message_count, post_url, scope_key, placeholder, include_anchor_fields=False, current_view=None, selected_source_id=None, project_id=None, current_context=None) %}
 <div class="accordion-section conversation-dock-panel" id="conversation-dock" role="region" aria-label="{{ heading }} conversation">
     <div class="conversation-dock-resize-handle" id="conversation-dock-resize-handle"
          role="separator" aria-orientation="horizontal" aria-label="Resize conversation panel"
@@ -193,6 +193,36 @@
     </div>
     {{ caller() }}
     <form class="conversation-input-form conversation-dock-composer" method="post" action="{{ post_url }}" data-ui-ref="chat.composer">
+        {# CLAUDE-CA1D-COMPOSER-CONTEXT-LABEL-01: a live product-owner
+           refinement - the work-context indicator (formerly a separate
+           `context_indicator` macro, a standalone div rendered ABOVE this
+           whole composer) is repositioned to read as a small tab/folder
+           caption cut directly into the composer's own upper blue rule -
+           "blue upper rule -> embedded context label -> blue upper rule."
+           An `<input>` cannot contain child markup, which is why the top
+           rule moved off that element (static/css/main.css) onto this
+           row instead; the input's own bottom rule is completely
+           untouched - still a single continuous line. Two flex-basis:1
+           line segments sit adjacent with no gap when current_context is
+           unset, reading as ONE continuous rule (same "uninterrupted when
+           empty" behavior the lower rule already has); the label - when
+           present - inserts a visual gap on each side purely via its own
+           padding, no background-matching/notch trickery needed. Clear
+           posts via `formaction` (a real, valid HTML5 multi-destination
+           submit target) rather than a nested `<form>`, which the HTML
+           spec forbids inside another `<form>` - this used to be its own
+           sibling `<form>` outside the composer entirely, so nesting was
+           never a problem before this repositioning. #}
+        <div class="composer-context-rule">
+            <span class="composer-context-rule-line" aria-hidden="true"></span>
+            {% if current_context %}
+            <span class="composer-context-label" data-ui-ref="chat.context-indicator">
+                <span class="composer-context-label-text" title="{{ current_context.type }} — {{ current_context.label }}">{{ current_context.type }} — {{ current_context.label }}</span>
+                <button type="submit" formaction="{{ url_for('workspace.clear_selected_context', project_id=project_id) }}" formmethod="post" class="composer-context-clear" aria-label="Clear work context ({{ current_context.type }} — {{ current_context.label }})" title="Clear work context">&times;</button>
+            </span>
+            {% endif %}
+            <span class="composer-context-rule-line" aria-hidden="true"></span>
+        </div>
         {% if include_anchor_fields %}
         <input type="hidden" name="anchor_type" id="dock-composer-anchor-type" value="">
         <input type="hidden" name="anchor_id" id="dock-composer-anchor-id" value="">
@@ -427,20 +457,16 @@
 {% endif %}
 {% endmacro %}
 
-{# CLAUDE-POSTCAMEL-CA1B (Section 8, selection visibility): a small,
+{# CLAUDE-POSTCAMEL-CA1B (Section 8, selection visibility) / retired as a
+   standalone macro CLAUDE-CA1D-COMPOSER-CONTEXT-LABEL-01: a small,
    truthful label naming whatever ARCHIOSK currently considers the PM's
    "professional context" (Requirement/Finding/Source) - resolved fresh
    on every render (routes/workspace.py's own read-time lookup), never
-   shown for a stale/deleted selection. A real "Clear" control posts to
-   the one explicit clear-selection route (Section 9) - no large visual
-   footprint, one line, no icon set, no Surface Trust redesign. #}
-{% macro context_indicator(project_id, current_context) %}
-{% if current_context %}
-<div class="conv-context-indicator" data-ui-ref="chat.context-indicator">
-    <span>Currently working with: <strong>{{ current_context.type }}</strong> — {{ current_context.label }}</span>
-    <form method="post" action="{{ url_for('workspace.clear_selected_context', project_id=project_id) }}" style="display:inline;">
-        <button type="submit" class="link-button">Clear</button>
-    </form>
-</div>
-{% endif %}
-{% endmacro %}
+   shown for a stale/deleted selection. Used to be its own standalone
+   `context_indicator` macro/div rendered above the whole composer; a
+   live product-owner refinement repositioned it INTO
+   conversation_dock's own composer form (see that macro's own
+   `.composer-context-rule` markup/comment above) so it reads as a tab/
+   folder caption cut into the composer's upper blue rule rather than a
+   floating label - chat.context-indicator is unchanged as a UI
+   reference, only its DOM position and visual treatment moved. #}

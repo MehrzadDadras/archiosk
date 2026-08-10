@@ -2870,7 +2870,6 @@
        share state across blocks - the cheapest correct fix, not a new
        mechanism. #}
     {% set drawing_sources = active_sources|selectattr("kind", "equalto", "drawing")|selectattr("id", "in", active_case.source_ids)|list %}
-    {{ macros.context_indicator(project_id, current_context) }}
     {% call macros.conversation_dock(
         active_case.title,
         active_case.conversation|length,
@@ -2879,6 +2878,8 @@
         ('Analyze this drawing for datum inconsistencies…' if drawing_sources else 'Ask a question or investigate this Source…'),
         current_view=directory_view,
         selected_source_id=(selected_source.id if selected_source else None),
+        project_id=project_id,
+        current_context=current_context,
     ) %}
         <div class="conversation-thread" data-conversation-scope="case-{{ active_case.id }}" data-anchor-scope="case" data-anchor-case-id="{{ active_case.id }}" data-ui-ref="chat.thread">
             {% for message in active_case.conversation %}
@@ -2980,7 +2981,6 @@
         {% endif %}
     {% endcall %}
     {% else %}
-    {{ macros.context_indicator(project_id, current_context) }}
     {% call macros.conversation_dock(
         'Project Conversation',
         project_conversation_view|length,
@@ -2990,6 +2990,8 @@
         include_anchor_fields=True,
         current_view=directory_view,
         selected_source_id=(selected_source.id if selected_source else None),
+        project_id=project_id,
+        current_context=current_context,
     ) %}
         {# CLAUDE-P40-VW8-QA: the explanatory sentence that used to live
            here ("Talk to the Project itself...") is deleted outright,

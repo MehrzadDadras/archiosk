@@ -4631,14 +4631,91 @@ main:hover,
        as the lane's own quiet identity marker, never a tinted
        composer. Kept thin (1px, unchanged weight) and theme-aware for
        free, since --machine-blue is already redefined per Appearance
-       mode (dark/tinted/forest) elsewhere in this file. */
+       mode (dark/tinted/forest) elsewhere in this file.
+
+       CLAUDE-CA1D-COMPOSER-CONTEXT-LABEL-01: the top rule moved OFF this
+       element onto .composer-context-rule directly below (an <input>
+       cannot contain the embedded work-context label's child markup) -
+       this input keeps only its own bottom rule, completely unchanged. */
     padding: 0.7rem 0.2rem;
     background: transparent;
     border: none;
-    border-top: 1px solid var(--machine-blue);
     border-bottom: 1px solid var(--machine-blue);
     border-radius: 0;
     color: var(--text-primary);
+}
+/* CLAUDE-CA1D-COMPOSER-CONTEXT-LABEL-01: "blue upper rule -> embedded
+   context label -> blue upper rule" - the composer's own upper line,
+   now hosting the repositioned work-context indicator (formerly a
+   separate `context_indicator` macro/div rendered above the whole
+   composer). Two flex:1 line segments carry the actual --machine-blue
+   rule; with no current_context they sit directly adjacent (gap: 0),
+   reading as ONE continuous line - the exact same "uninterrupted when
+   empty" behavior the lower rule already has, just applied to the
+   upper one now that it can host content. */
+.composer-context-rule {
+    display: flex;
+    align-items: center;
+    gap: 0;
+}
+.composer-context-rule-line {
+    flex: 1 1 auto;
+    height: 0;
+    border-top: 1px solid var(--machine-blue);
+}
+/* The label itself: text only, --attention-amber (ARCHIOSK's existing
+   restrained amber/orange accent - "needs evidence / pending attention"
+   per tokens.css's own semantic grammar, reused here for "this is the
+   active work lane," not a new color). Deliberately no background/fill/
+   radius - reads as a tab/folder name cut directly into the rule, not a
+   pill or badge; its own left/right padding is what pushes the two rule
+   segments apart, so the "gap" is real spacing, not a background-
+   masking trick that would need to match every theme's own surface
+   color to look right. */
+.composer-context-label {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0 0.5rem;
+    min-width: 0;
+    flex: 0 1 auto;
+    font-family: var(--font-body);
+    font-size: 0.72rem;
+    color: var(--attention-amber);
+    background: transparent;
+    white-space: nowrap;
+}
+.composer-context-label-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 220px;
+}
+.composer-context-label-text strong {
+    font-weight: 600;
+}
+/* A real, focusable, keyboard-operable <button> (not a link styled to
+   look like one) - reuses the existing supported clear-context route
+   via `formaction`, no new switching/navigation mechanism introduced.
+   Deliberately quiet/subordinate to the label text itself. */
+.composer-context-clear {
+    font-family: var(--font-body);
+    font-size: 0.85rem;
+    line-height: 1;
+    color: var(--attention-amber);
+    background: transparent;
+    border: none;
+    padding: 0 0.1rem;
+    cursor: pointer;
+    opacity: 0.75;
+}
+.composer-context-clear:hover,
+.composer-context-clear:focus-visible {
+    opacity: 1;
+}
+.composer-context-clear:focus-visible {
+    outline: 2px solid var(--machine-blue);
+    outline-offset: 1px;
 }
 .conversation-input-form button {
     font-family: var(--font-body);
