@@ -1711,7 +1711,23 @@ def _handle_project_question(
     # field, rendered behind a collapsed disclosure by the template.
     reply_parts = [result.answer]
     if result.not_covered:
-        reply_parts.append("Not covered by this project's extracted evidence: " + result.not_covered)
+        # CLAUDE-CA1D-RIVER-PO-02 (Section A, "compress missing-evidence
+        # notices"): a River Action Stack answer already carries the
+        # granular version of this gap inside whichever action's own
+        # "uncertainty" field it belongs to (see _build_prompt's own
+        # instruction to put it there, not in not_covered, when
+        # river_actions is populated) - repeating the full sentence
+        # again in the primary scan path was exactly the "long opening
+        # caveat" reported live. Use the model's own compact summary
+        # when it provided one; if it didn't (missing_evidence_summary
+        # empty), fall back to the full sentence rather than silently
+        # dropping material uncertainty - a real Product Owner rule
+        # ("do not suppress material uncertainty"), not a cosmetic
+        # nicety with an unsafe failure mode.
+        if result.river_actions and result.missing_evidence_summary:
+            reply_parts.append("Missing evidence: " + result.missing_evidence_summary + ".")
+        else:
+            reply_parts.append("Not covered by this project's extracted evidence: " + result.not_covered)
     if result.needs_clarification:
         reply_parts.append(
             "This evidence alone isn't enough to answer fully - treat this as a "

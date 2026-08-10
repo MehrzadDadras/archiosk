@@ -121,22 +121,32 @@ class PdfDetectionRenderingTests(_BaseTestCase):
         self.assertIn(f"/projects/{doc.project_id}/workspace/sources/{source['id']}/file", tag)
         self.assertIn('data-pdf-filename="RFP.pdf"', tag)
 
-    def test_txt_source_keeps_the_plain_iframe_unchanged(self):
+    def test_txt_source_does_not_get_the_pdf_canvas(self):
+        # CLAUDE-CA1D-RIVER-PO-02 CONSOLIDATION (Section B, "internal-
+        # first document opening"): a .txt Source used to fall back to
+        # the SAME <iframe> PDF/XLSX use, which silently triggered an OS
+        # download since browsers can't render .txt inline - replaced
+        # with the calm display.document.no-preview card. This test's
+        # own real job (confirming PDF detection doesn't misfire for a
+        # non-PDF Source) is unchanged; only the specific non-PDF
+        # rendering mechanism it asserts against was ever incidental.
         doc = self._ingest("TXT Project", "notes.txt")
         source = self._first_source(doc.project_id)
         client = self._client()
         body = client.get(f"/projects/{doc.project_id}/workspace?source={source['id']}").get_data(as_text=True)
-        self.assertIn("document-viewer-frame", body)
+        self.assertIn('data-ui-ref="display.document.no-preview"', body)
         self.assertNotIn("document-viewer-pdf-canvas", body)
 
-    def test_drawing_source_keeps_the_plain_img_unchanged(self):
+    def test_drawing_source_without_real_drawing_kind_does_not_get_the_pdf_canvas(self):
+        # CLAUDE-CA1D-RIVER-PO-02 CONSOLIDATION: same rendering-mechanism
+        # update as the txt case above.
         doc = self._ingest("Drawing Project", "plan.txt")  # kind is set by route, not filename, for drawings normally - see store-level test below for a real drawing kind
         source = self._first_source(doc.project_id)
         client = self._client()
         body = client.get(f"/projects/{doc.project_id}/workspace?source={source['id']}").get_data(as_text=True)
         # Not a drawing in this fixture (ingest_upload doesn't produce SOURCE_KIND_DRAWING) -
-        # this just re-confirms the non-pdf iframe path, complementing the txt case above.
-        self.assertIn("document-viewer-frame", body)
+        # this just re-confirms the non-pdf path, complementing the txt case above.
+        self.assertIn('data-ui-ref="display.document.no-preview"', body)
 
     def test_pdf_detection_is_case_insensitive_on_extension(self):
         doc = self._ingest("PDF Upper Project", "Drawing.PDF")

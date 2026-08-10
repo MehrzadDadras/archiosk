@@ -3728,6 +3728,29 @@ main:hover,
     border: 1px solid var(--border);
     display: block;
 }
+/* CLAUDE-CA1D-RIVER-PO-02 CONSOLIDATION (Section B, "internal-first
+   document opening"): a format with no in-app renderer (.docx/.txt/
+   anything without its own branch above) used to fall back to the
+   SAME .document-viewer-frame iframe as PDF/XLSX - which those two
+   formats' own browser-native handling can actually render, but this
+   catch-all case cannot, so the iframe silently triggered an OS
+   download the instant the Source was selected. This calm card
+   replaces that: the same bordered "real boundary" idiom as
+   .document-viewer-frame (a genuine functional edge, not decoration),
+   holding an honest explanation plus the two explicit secondary
+   actions that are now the ONLY way this reaches OS-level open/
+   download behavior. */
+.document-unavailable-preview {
+    border: 1px solid var(--border);
+    background: var(--surface-primary);
+    border-radius: 4px;
+    padding: 1.2rem;
+}
+.document-unavailable-preview-actions {
+    display: flex;
+    gap: 0.6rem;
+    margin-top: 0.8rem;
+}
 /* CLAUDE-P40-VW7A-QA (Move Document Controls into the Top Application
    Menu): PDF Sources render here instead of .document-viewer-frame -
    same box (width/height/border/background all unchanged from the old

@@ -1187,9 +1187,32 @@
                 src="{{ url_for('workspace.source_file', project_id=project_id, source_id=selected_source.id) }}"
                 title="{{ selected_source.name }}"></iframe>
         {% else %}
-        <iframe class="document-viewer-frame"
-                src="{{ url_for('workspace.source_file', project_id=project_id, source_id=selected_source.id) }}"
-                title="{{ selected_source.name }}"></iframe>
+        {# CLAUDE-CA1D-RIVER-PO-02 CONSOLIDATION (Section B, "internal-
+           first document opening"): this format (.docx/.txt/anything
+           without a dedicated branch above) has no in-app renderer -
+           Chrome (and most browsers) cannot display it inline, so the
+           iframe this used to be silently triggered an OS download or
+           rendered blank the moment the document was selected, exactly
+           the "browser/OS behavior interrupts forward movement" defect
+           reported live. Replaced with an honest in-app card - the
+           Source is still fully selected/displayed inside ARCHIOSK
+           (Document Context above still works; Lists still shows this
+           as the active leaf) - and the OS-level open/download only
+           ever happens through one of these two explicit,
+           user-initiated secondary actions. #}
+        <div class="document-unavailable-preview" data-ui-ref="display.document.no-preview">
+            <p class="pane-note">
+                This file type isn't previewable inside ARCHIOSK yet - the document itself
+                is safely registered and untouched.
+            </p>
+            <div class="document-unavailable-preview-actions">
+                <a class="btn btn-ghost" data-ui-ref="display.document.open-externally"
+                   href="{{ url_for('workspace.source_file', project_id=project_id, source_id=selected_source.id) }}"
+                   target="_blank" rel="noopener">Open externally</a>
+                <a class="btn btn-ghost" data-ui-ref="display.document.download"
+                   href="{{ url_for('workspace.source_file', project_id=project_id, source_id=selected_source.id, download=1) }}">Download</a>
+            </div>
+        </div>
         {% endif %}
         {% else %}
         <p style="color:var(--text-secondary);font-size:0.85rem;">

@@ -51,7 +51,10 @@ PROVIDER_NAME = "anthropic"
 # constructive-advice / capability-category-error / concision rules.
 # CLAUDE-CA1D-RIVER-PO-01: bumped again (ca1c -> ca1d) for the optional
 # river_actions structured field and its own gating rule.
-PROJECT_QA_PROMPT_VERSION = "ca1d"
+# CLAUDE-CA1D-RIVER-PO-02 (Section A, "compress missing-evidence
+# notices"): bumped again (ca1d -> ca1d-po02) for the optional
+# missing_evidence_summary field below.
+PROJECT_QA_PROMPT_VERSION = "ca1d-po02"
 
 # CLAUDE-CA1D-RIVER-PO-01: a defensive ceiling on the model's own
 # river_actions array, independent of the prompt's own "normally 1-5"
@@ -181,6 +184,18 @@ class ProjectQAResult:
     answer: Optional[str] = None
     grounded_in: list[str] = field(default_factory=list)
     not_covered: Optional[str] = None
+    # CLAUDE-CA1D-RIVER-PO-02 (Section A): a SHORT, compact companion to
+    # not_covered - a noun-phrase-style summary ("current extended
+    # submission deadline and full RFP Data Sheet"), never a full
+    # sentence - populated by the model itself only when river_actions
+    # is also populated. not_covered itself is unchanged and still
+    # carries the full explanation; this field exists purely so the
+    # primary scan path can show a compact line instead of that full
+    # sentence when a River Action Stack is present (see
+    # conversation_interpreter.py's own use of this field - "keep [full
+    # detail] out of the primary scan path unless it changes the
+    # immediate decision," never silently dropped).
+    missing_evidence_summary: Optional[str] = None
     needs_clarification: bool = False
     skipped_reason: Optional[str] = None
     provider: Optional[str] = None
@@ -259,11 +274,15 @@ def answer_project_question(
         return ProjectQAResult(ran=False, skipped_reason="Model returned malformed output.")
 
     not_covered = parsed.get("not_covered")
+    missing_evidence_summary = parsed.get("missing_evidence_summary")
     return ProjectQAResult(
         ran=True,
         answer=str(parsed.get("answer", "")).strip(),
         grounded_in=[str(g) for g in parsed.get("grounded_in", [])],
         not_covered=(str(not_covered).strip() or None) if not_covered else None,
+        missing_evidence_summary=(
+            (str(missing_evidence_summary).strip() or None) if missing_evidence_summary else None
+        ),
         needs_clarification=bool(parsed.get("needs_clarification", False)),
         river_actions=_parse_river_actions(parsed.get("river_actions")),
         provider=PROVIDER_NAME, model=model, requested_at=requested_at,
@@ -464,8 +483,17 @@ def _build_prompt(
         'river_actions is populated, keep "answer" to one short framing sentence '
         "at most (the ranked list itself carries the substance) and put each "
         'action\'s own supporting evidence in that action\'s own "evidence" field '
-        'rather than repeating it all in the top-level "grounded_in". If the '
-        'evidence given is insufficient, say so plainly in "answer" and list what '
-        'is missing in "not_covered" - do not guess.'
+        'rather than repeating it all in the top-level "grounded_in"; likewise, '
+        'put action-specific evidence GAPS in that action\'s own "uncertainty" '
+        'field rather than repeating them in "not_covered". If the evidence '
+        'given is insufficient, say so plainly in "answer" and list what is '
+        'missing in "not_covered" - do not guess. When river_actions is '
+        'populated AND something is genuinely missing, ALSO provide '
+        '"missing_evidence_summary": a SHORT, compact, noun-phrase-style '
+        'summary of what is missing (e.g. "current extended submission '
+        'deadline and full RFP Data Sheet") - never a full sentence, never a '
+        "restatement of not_covered's own wording, suitable for a single "
+        'scan-path line. Leave "missing_evidence_summary" as an empty string '
+        "when nothing is missing, or when river_actions is empty."
     )
     return "\n".join(lines)

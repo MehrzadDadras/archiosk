@@ -3095,6 +3095,18 @@ def source_file(project_id, source_id):
     empty file) when the Source has no stored file at all - true for
     every legacy-ingested document from before services/ingestion.py
     started persisting the original upload.
+
+    CLAUDE-CA1D-RIVER-PO-02 CONSOLIDATION (Section B, "internal-first
+    document opening"): `?download=1` is the one explicit, deliberate
+    way to get `as_attachment=True` (a real Content-Disposition:
+    attachment, forcing a Save dialog) from this same route/file -
+    used only by the Display pane's own "Download" secondary action for
+    a format with no in-app viewer (see case_workspace.html's document
+    branch). The default (no query param) stays `as_attachment=False`
+    exactly as before, for the genuinely in-app viewers (image/PDF/
+    XLSX embeds) and for the new "Open externally" secondary action,
+    which deliberately leaves the browser's own handling in charge
+    rather than forcing a download it might not need.
     """
     _, _, workspace = _load_workspace_or_404(project_id)
 
@@ -3118,7 +3130,7 @@ def source_file(project_id, source_id):
     return send_file(
         file_path,
         mimetype=mimetype or "application/octet-stream",
-        as_attachment=False,
+        as_attachment=bool(request.args.get("download")),
         download_name=source["name"],
     )
 
