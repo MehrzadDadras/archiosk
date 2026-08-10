@@ -102,6 +102,7 @@ from services.environment_capabilities import (
 )
 from services.conversation_interpreter import (
     _looks_like_contextual_reference,
+    _looks_like_conversational_utterance,
     _looks_like_orientation_request,
     _looks_like_project_question,
     _looks_like_what_next,
@@ -3539,9 +3540,22 @@ def quick_start(project_id):
     # main composer would silently create a brand-new surprise Case
     # (found live, during this stage's own Walkthrough B), the same
     # class of bug CA1 already fixed once for orientation itself.
+    # CLAUDE-CA1C-CONV-FIX-02: checked FIRST in this OR-chain, deliberately
+    # ahead of `anchor is not None` too - a real Product Owner typed
+    # "hello"/"hello hello" into this exact composer and watched it create
+    # a brand-new Investigation, which then immediately tripped the four-
+    # Investigation attention limit's own "Attention is full" dialog, just
+    # to say hello. None of the FOUR existing exemptions below recognize a
+    # bare greeting (they are all specifically about questions/
+    # orientation/contextual-reference/next-steps) - this is the durable
+    # gate that principle was missing, not one more literal phrase bolted
+    # onto an unrelated existing check. "Conversation != Investigation":
+    # an Investigation requires actual investigative intent, never merely
+    # any text typed into this composer.
     lowered_text = text.lower()
     if (
-        anchor is not None
+        _looks_like_conversational_utterance(lowered_text)
+        or anchor is not None
         or _looks_like_project_question(lowered_text)
         or _looks_like_orientation_request(lowered_text)
         or _looks_like_contextual_reference(lowered_text)

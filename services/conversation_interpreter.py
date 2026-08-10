@@ -173,6 +173,15 @@ def interpret_message(
             reply_text="No instruction was recognized in an empty message.",
         )
 
+    # CLAUDE-CA1C-CONV-FIX-02: checked FIRST, before ANY Investigation-
+    # shaped routing below (needs_case, is_requirement_investigation_
+    # question, is_quantitative_question) - a greeting must never be
+    # evaluated against "does this need a Case" logic at all, not merely
+    # win a tiebreak against it once evaluated. Anchor is deliberately
+    # ignored here - an anchored "hello" is still just a greeting.
+    if _looks_like_conversational_utterance(lowered):
+        return _handle_conversational_utterance(reviewer)
+
     is_requirement_investigation_question = (
         anchor is not None
         and anchor.get("anchor_type") == "requirement"
@@ -610,6 +619,74 @@ def _handle_compare(
             "A mock comparison Artifact was generated — illustrative only, "
             "not a claim of real pixel-level comparison in this prototype."
         ),
+    )
+
+
+# CLAUDE-CA1C-CONV-FIX-02 (Greetings Must Not Enter Investigation
+# Attention): a real Product Owner typed "hello"/"hello hello" into
+# Project Home's composer and watched GO create a brand-new Investigation
+# for it, which then immediately tripped the four-Investigation attention
+# limit's own "Attention is full" dialog - a greeting matched NONE of
+# quick_start's existing "stay conversational" exemptions (project
+# question, orientation, contextual-reference, what-next), so it fell
+# through to the same case-creation path as a real work request.
+# "Conversation != Investigation" is the durable principle this stage
+# names explicitly - an Investigation requires actual investigative
+# intent, not merely any typed message. Deliberately exact-phrase, same
+# discipline as every other trigger in this module (still not an attempt
+# at general language understanding) - but normalized first (trailing
+# punctuation stripped, immediately-repeated words collapsed) so "hello
+# hello" and "how are you?" match the same short canonical phrase list
+# a raw substring check would otherwise need dozens of literal variants
+# to cover.
+_CONVERSATIONAL_UTTERANCE_PHRASES = (
+    "hello", "hi", "hey", "hiya", "yo",
+    "hello there", "hi there", "hey there",
+    "good morning", "good afternoon", "good evening", "good night",
+    "how are you", "how are things", "how is everything", "how's everything",
+    "hows everything", "how's it going", "hows it going",
+    "what's up", "whats up", "how do you do",
+    "do you hear me", "can you hear me", "are you there", "you there",
+    "thanks", "thank you", "thx", "cheers", "much appreciated",
+    "ok", "okay", "got it", "sounds good", "cool", "great", "nice",
+    "alright", "all right",
+    "bye", "goodbye", "see you", "see ya", "take care",
+)
+
+
+def _normalize_for_conversational_check(lowered: str) -> str:
+    stripped = lowered.strip().strip("!?.,;:~ ")
+    tokens = stripped.split()
+    deduped: list[str] = []
+    for token in tokens:
+        if not deduped or deduped[-1] != token:
+            deduped.append(token)
+    return " ".join(deduped)
+
+
+def _looks_like_conversational_utterance(lowered: str) -> bool:
+    return _normalize_for_conversational_check(lowered) in _CONVERSATIONAL_UTTERANCE_PHRASES
+
+
+def _handle_conversational_utterance(reviewer: str) -> InterpretationResult:
+    """
+    The dedicated destination for a greeting/acknowledgment/social check-
+    in - never Project evidence, never an Investigation, never an
+    attention slot. Personalizes with the reviewer's own name when it's
+    a real one (never "Anonymous" or a raw session placeholder), per the
+    governing report's own preferred wording ("Hello Mehrzad. What are
+    you working on?").
+    """
+    reviewer_stripped = (reviewer or "").strip()
+    display_name = (
+        reviewer_stripped.split()[0].capitalize()
+        if reviewer_stripped and reviewer_stripped.lower() != "anonymous"
+        else None
+    )
+    greeting = f"Hello {display_name}." if display_name else "Hello."
+    return InterpretationResult(
+        action_taken="conversational_utterance",
+        reply_text=f"{greeting} What are you working on?",
     )
 
 
