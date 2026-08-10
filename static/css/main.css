@@ -4316,6 +4316,26 @@ main::-webkit-scrollbar-corner,
     color: var(--surface-primary) !important;
     border-color: var(--attention-amber) !important;
 }
+/* CLAUDE-VOICE1-LIVE-FIX-01: the one visible outcome surface for voice
+   input - flex-basis:100% (same pattern as .dock-composer-anchor-label
+   above) drops it onto its own line below input/mic/Send rather than
+   cramming into that row or reflowing it. Empty and invisible via :empty
+   whenever voice input is idle - never a permanent reserved-space line. */
+.voice-input-status {
+    flex-basis: 100%;
+    font-family: var(--font-body);
+    font-size: 0.78rem;
+    color: var(--text-metadata);
+}
+.voice-input-status:empty {
+    display: none;
+}
+/* --failure-red per tokens.css's own grammar: "contradiction / failure" -
+   a denied permission, missing microphone, or unavailable recognition
+   service are real failures, not neutral status text like "Listening…". */
+.voice-input-status[data-state="error"] {
+    color: var(--failure-red);
+}
 
 /* CLAUDE-P40-VW7: OneNote-style selection toolbar for Project
    Conversation text -> Tags/Highlights/Tasks (static/js/case_workspace.js

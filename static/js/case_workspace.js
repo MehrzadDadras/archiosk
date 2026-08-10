@@ -1031,20 +1031,56 @@ document.addEventListener('DOMContentLoaded', () => {
     (function setUpVoiceInput() {
         const micButton = document.getElementById('dock-composer-voice');
         const composerInput = document.getElementById('dock-composer-input');
+        const statusEl = document.getElementById('dock-composer-voice-status');
         if (!micButton || !composerInput) return;
 
         const SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
         if (!SpeechRecognitionCtor) {
             // Graceful degradation (Section 8): unsupported browser -
             // the button stays hidden (its own default state), typing
-            // remains the only, fully-equivalent input path.
+            // remains the only, fully-equivalent input path. Nothing to
+            // show here - there is no button to press in the first place.
             return;
         }
 
         micButton.hidden = false;
 
+        // CLAUDE-VOICE1-LIVE-FIX-01: a real Product Owner pressed the mic
+        // in their own browser and saw NOTHING - not an error, not a
+        // "listening" indicator, nothing - because the previous version of
+        // this code (see git history) swallowed every outcome into a bare
+        // stopListening() with no visible trace. "Silent failure is
+        // unacceptable" (this stage's own governing instruction). Every
+        // reachable outcome now sets one line of real, specific text via
+        // setStatus - never left to the reviewer to guess at.
+        function setStatus(message, isError) {
+            if (!statusEl) return;
+            statusEl.textContent = message || '';
+            if (isError) statusEl.setAttribute('data-state', 'error');
+            else statusEl.removeAttribute('data-state');
+        }
+
+        // event.error values a real SpeechRecognition implementation uses
+        // (https://wicg.github.io/speech-api/#speechreco-error) - mapped to
+        // the specific, actionable wording this stage's governing prompt
+        // requires, not a generic "something went wrong". "aborted" is
+        // deliberately NOT in this map - it fires on our OWN recognition.stop()
+        // call below (the Push-to-Talk release), which is normal operation,
+        // not a failure to report as one.
+        const ERROR_MESSAGES = {
+            'not-allowed': 'Microphone permission denied',
+            'service-not-allowed': 'Microphone permission denied',
+            'permission-denied': 'Microphone permission denied',
+            'audio-capture': 'No microphone available',
+            'no-speech': 'No speech detected',
+            'network': 'Speech recognition unavailable in this browser',
+            'language-not-supported': 'Speech recognition unavailable in this browser',
+        };
+
         let recognition = null;
         let listening = false;
+        let userInitiatedStop = false;
+        let gotFinalResult = false;
 
         function stopListening() {
             listening = false;
@@ -1056,37 +1092,63 @@ document.addEventListener('DOMContentLoaded', () => {
             if (listening) {
                 // Push-to-Talk, not push-to-toggle-forever: a second
                 // press stops listening early, same as releasing a
-                // physical push-to-talk button.
+                // physical push-to-talk button - not a failure, so
+                // "aborted" (fired by this same .stop() call, below) must
+                // not be reported as one.
+                userInitiatedStop = true;
                 if (recognition) recognition.stop();
                 stopListening();
                 return;
             }
+
+            userInitiatedStop = false;
+            gotFinalResult = false;
+            setStatus('Listening…', false);
 
             recognition = new SpeechRecognitionCtor();
             recognition.lang = document.documentElement.lang || 'en-US';
             recognition.interimResults = true;
             recognition.maxAlternatives = 1;
 
+            // onstart/onaudiostart confirm the browser actually opened the
+            // microphone (distinct from onspeechstart, which needs a real
+            // voice-shaped signal, not just an open mic) - kept as a single
+            // "Listening…" message rather than three near-identical ones,
+            // since the reviewer only needs to know capture has begun.
+            recognition.addEventListener('speechstart', () => {
+                setStatus('Transcribing…', false);
+            });
+
             recognition.addEventListener('result', (event) => {
                 let transcript = '';
                 for (let i = 0; i < event.results.length; i += 1) {
                     transcript += event.results[i][0].transcript;
+                    if (event.results[i].isFinal) gotFinalResult = true;
                 }
                 composerInput.value = transcript;
+                setStatus('Transcribing…', false);
             });
 
-            recognition.addEventListener('error', () => {
-                // CLAUDE-POSTCAMEL-VOICE1-PRE (Section 8): denied
-                // permission, no microphone, or any other capture
-                // failure - fail back to plain typing silently rather
-                // than blocking the composer or fabricating a
-                // transcript. The reviewer's own typed text (if any)
-                // already in the field is left untouched.
+            recognition.addEventListener('error', (event) => {
+                if (event.error === 'aborted' && userInitiatedStop) {
+                    setStatus('Recognition stopped', false);
+                } else {
+                    setStatus(ERROR_MESSAGES[event.error] || 'Speech recognition unavailable in this browser', true);
+                }
                 stopListening();
             });
 
             recognition.addEventListener('end', () => {
                 stopListening();
+                // A clean end with no error already shown and no speech
+                // ever recognized (the exact "detects sound but transcribes
+                // nothing" case this stage's own diagnosis reproduced) is
+                // still a real, reportable outcome - not silence.
+                if (!gotFinalResult && (!statusEl || !statusEl.getAttribute('data-state'))) {
+                    setStatus(userInitiatedStop ? 'Recognition stopped' : 'No speech detected', !userInitiatedStop);
+                } else if (gotFinalResult) {
+                    setStatus('', false);
+                }
                 composerInput.focus();
             });
 
@@ -1097,6 +1159,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 micButton.setAttribute('aria-pressed', 'true');
             } catch (err) {
                 stopListening();
+                setStatus('Speech recognition unavailable in this browser', true);
             }
         });
     })();

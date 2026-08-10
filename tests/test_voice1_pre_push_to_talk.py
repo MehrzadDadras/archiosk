@@ -120,6 +120,26 @@ class VoiceButtonRenderingTests(unittest.TestCase):
         self.assertIn('name="selected_source_id"', body)
         self.assertIn('id="dock-composer-input"', body)
 
+    def test_voice_status_element_renders_empty_with_live_region(self):
+        """CLAUDE-VOICE1-LIVE-FIX-01: 'silent failure is unacceptable' -
+        this is the one server-rendered surface static/js/case_workspace.js
+        writes every reachable voice-input outcome to (Listening…,
+        Transcribing…, or a specific failure). Must start genuinely empty
+        (no pre-baked placeholder text a screen reader would announce on
+        load) and carry aria-live so a real outcome IS announced once JS
+        sets one."""
+        client = self._client()
+        body = client.get(f"/projects/{self.project_id}/workspace?view=overview").get_data(as_text=True)
+        status_start = body.index('id="dock-composer-voice-status"')
+        tag_start = body.rindex('<span', 0, status_start)
+        tag_end = body.index('</span>', status_start)
+        tag = body[tag_start:tag_end]
+        self.assertIn('aria-live="polite"', tag)
+        self.assertIn('data-ui-ref="chat.composer.voice.status"', tag)
+        # Genuinely empty - no whitespace-only "loading" text either.
+        inner_text = body[body.index('>', status_start) + 1:tag_end]
+        self.assertEqual(inner_text.strip(), "")
+
 
 if __name__ == "__main__":
     unittest.main()

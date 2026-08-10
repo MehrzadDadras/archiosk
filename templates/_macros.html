@@ -226,6 +226,18 @@
            promise. #}
         <button type="button" id="dock-composer-voice" class="voice-input-button" data-ui-ref="chat.composer.voice"
                 aria-label="Press and speak - audio is processed by your browser only and is never saved" hidden>🎙️</button>
+        {# CLAUDE-VOICE1-LIVE-FIX-01: "silent failure is unacceptable" - a
+           real Product Owner pressed the mic and saw nothing happen at
+           all, with no way to tell why. This is the ONE visible outcome
+           surface for every state static/js/case_workspace.js's voice
+           input can reach - "Listening…"/"Transcribing…" while active, or
+           a specific, actionable failure (permission denied, no
+           microphone, no speech detected, recognition unavailable,
+           recognition stopped) when it isn't. aria-live so a screen
+           reader announces the outcome too, not just a sighted user.
+           Empty and invisible (main.css's own :empty rule) whenever
+           voice input is idle or unused. #}
+        <span class="voice-input-status" id="dock-composer-voice-status" data-ui-ref="chat.composer.voice.status" aria-live="polite"></span>
         <button type="submit" data-ui-ref="chat.composer.send">Send</button>
     </form>
 </div>
