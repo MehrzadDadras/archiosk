@@ -1,0 +1,28 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      { "hooks": [ { "type": "command", "command": "\"C:\\Archiosk\\Research\\archiosk\\venv\\Scripts\\python.exe\" \"C:\\Archiosk\\Research\\archiosk\\tools\\write_dev_session_status.py\" UserPromptSubmit", "timeout": 10 } ] }
+    ],
+    "PreToolUse": [
+      { "hooks": [ { "type": "command", "command": "\"C:\\Archiosk\\Research\\archiosk\\venv\\Scripts\\python.exe\" \"C:\\Archiosk\\Research\\archiosk\\tools\\write_dev_session_status.py\" PreToolUse", "timeout": 10 } ] }
+    ],
+    "PostToolUse": [
+      { "hooks": [ { "type": "command", "command": "\"C:\\Archiosk\\Research\\archiosk\\venv\\Scripts\\python.exe\" \"C:\\Archiosk\\Research\\archiosk\\tools\\write_dev_session_status.py\" PostToolUse", "timeout": 10 } ] }
+    ],
+    "PostToolUseFailure": [
+      { "hooks": [ { "type": "command", "command": "\"C:\\Archiosk\\Research\\archiosk\\venv\\Scripts\\python.exe\" \"C:\\Archiosk\\Research\\archiosk\\tools\\write_dev_session_status.py\" PostToolUseFailure", "timeout": 10 } ] }
+    ],
+    "SubagentStart": [
+      { "hooks": [ { "type": "command", "command": "\"C:\\Archiosk\\Research\\archiosk\\venv\\Scripts\\python.exe\" \"C:\\Archiosk\\Research\\archiosk\\tools\\write_dev_session_status.py\" SubagentStart", "timeout": 10 } ] }
+    ],
+    "SubagentStop": [
+      { "hooks": [ { "type": "command", "command": "\"C:\\Archiosk\\Research\\archiosk\\venv\\Scripts\\python.exe\" \"C:\\Archiosk\\Research\\archiosk\\tools\\write_dev_session_status.py\" SubagentStop", "timeout": 10 } ] }
+    ],
+    "Stop": [
+      { "hooks": [ { "type": "command", "command": "\"C:\\Archiosk\\Research\\archiosk\\venv\\Scripts\\python.exe\" \"C:\\Archiosk\\Research\\archiosk\\tools\\write_dev_session_status.py\" Stop", "timeout": 10 } ] }
+    ],
+    "Notification": [
+      { "hooks": [ { "type": "command", "command": "\"C:\\Archiosk\\Research\\archiosk\\venv\\Scripts\\python.exe\" \"C:\\Archiosk\\Research\\archiosk\\tools\\write_dev_session_status.py\" Notification", "timeout": 10 } ] }
+    ]
+  }
+}
