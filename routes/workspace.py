@@ -3413,6 +3413,7 @@ def _run_conversation_turn(
         grounded_in=result.grounded_in,
         next_steps=result.next_steps,
         organize_source_id=result.organize_source_id,
+        operational_actions=result.operational_actions,
     )
 
     if result.focused_finding_id is not None:

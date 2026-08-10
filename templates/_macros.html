@@ -288,6 +288,58 @@
 {% endif %}
 {% endmacro %}
 
+{# CLAUDE-CA1D-RIVER-01 (Project Gravity, "the fourth beat"): a
+   genuinely evidence-grounded answer's own real, already-implemented
+   next actions - never model-generated prose interpreted as a command
+   (message.operational_actions is a structured envelope, set only by
+   services/conversation_interpreter.py's own _handle_project_question,
+   same discipline as next_steps/organize_source_id above). Reuses the
+   EXISTING create_task_route/add_tag_occurrence_route completely
+   unchanged - no new backend mechanism (Section 7's own "reuse existing
+   mechanisms, do not create a parallel subsystem"). The anchor covers
+   the WHOLE answer message (start_offset=0 through its own real length,
+   capped at 2000 - store.create_task's own real validation ceiling) -
+   durable provenance (Section 8) is the same project_id (the route's
+   own URL)/case_id/message_id/quote/actor/timestamp shape a text-
+   selection anchor already carries, just computed from the whole
+   message instead of a sub-range. Capability truth (Section 9): only
+   "task" and "tag" ever appear here, because those are the only two
+   candidate actions from Section 5's own list that are genuinely
+   IMPLEMENTED end-to-end today - Create Finding/Add to Risk Register/
+   Delegate are deliberately never offered, not merely disabled. #}
+{% macro operational_action_offers(project_id, message, anchor_scope, case_id) %}
+{% if message.operational_actions %}
+{% set quote = message.text[:2000] %}
+<div class="conv-operational-actions" data-ui-ref="chat.operational-actions">
+    {% for action in message.operational_actions %}
+    {% if action.kind == "task" %}
+    <form method="post" action="{{ url_for('workspace.create_task_route', project_id=project_id) }}" class="conv-operational-action-form">
+        <input type="hidden" name="anchor_scope" value="{{ anchor_scope }}">
+        <input type="hidden" name="anchor_case_id" value="{{ case_id or '' }}">
+        <input type="hidden" name="anchor_message_id" value="{{ message.id }}">
+        <input type="hidden" name="anchor_start_offset" value="0">
+        <input type="hidden" name="anchor_end_offset" value="{{ quote|length }}">
+        <input type="hidden" name="anchor_quote" value="{{ quote }}">
+        <input type="hidden" name="title" value="{{ action.default_title }}">
+        <button type="submit" class="review-btn needs_evidence">{{ action.label }}</button>
+    </form>
+    {% elif action.kind == "tag" %}
+    <form method="post" action="{{ url_for('workspace.add_tag_occurrence_route', project_id=project_id) }}" class="conv-operational-action-form">
+        <input type="hidden" name="anchor_scope" value="{{ anchor_scope }}">
+        <input type="hidden" name="anchor_case_id" value="{{ case_id or '' }}">
+        <input type="hidden" name="anchor_message_id" value="{{ message.id }}">
+        <input type="hidden" name="anchor_start_offset" value="0">
+        <input type="hidden" name="anchor_end_offset" value="{{ quote|length }}">
+        <input type="hidden" name="anchor_quote" value="{{ quote }}">
+        <input type="hidden" name="tag_id" value="{{ action.tag_id }}">
+        <button type="submit" class="review-btn needs_evidence">{{ action.label }}</button>
+    </form>
+    {% endif %}
+    {% endfor %}
+</div>
+{% endif %}
+{% endmacro %}
+
 {# CLAUDE-POSTCAMEL-CA1B (Section 8, selection visibility): a small,
    truthful label naming whatever ARCHIOSK currently considers the PM's
    "professional context" (Requirement/Finding/Source) - resolved fresh

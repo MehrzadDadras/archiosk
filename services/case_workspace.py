@@ -1575,6 +1575,14 @@ class ConversationMessage:
     # Optional/defaulted so old saved ConversationMessage JSON (pre-
     # CA1C) deserializes unchanged.
     organize_source_id: Optional[str] = None
+    # CLAUDE-CA1D-RIVER-01: the fourth beat - a small, deterministic list
+    # of real, already-implemented next-action offers ({"kind": "task" |
+    # "tag", "label": str, "tag_id": str (tag only)}), never model-
+    # generated prose. Only ever set for a project_qa_answered reply
+    # whose own answer was genuinely evidence-grounded; every other reply
+    # leaves this empty. Optional/defaulted so old saved ConversationMessage
+    # JSON (pre-CA1D) deserializes unchanged.
+    operational_actions: list[dict] = field(default_factory=list)
 
 
 @dataclass
@@ -6747,7 +6755,7 @@ class CaseWorkspaceStore:
         action_taken: Optional[str] = None, anchor: Optional[dict] = None,
         actor: Optional[str] = None, grounded_in: Optional[list[str]] = None,
         next_steps: Optional[list[dict]] = None, selected_source_id: Optional[str] = None,
-        organize_source_id: Optional[str] = None,
+        organize_source_id: Optional[str] = None, operational_actions: Optional[list[dict]] = None,
     ) -> dict:
         """
         case_id=None posts into ProjectWorkspace.project_conversation
@@ -6762,6 +6770,7 @@ class CaseWorkspaceStore:
                 actor=actor, action_taken=action_taken, anchor=anchor,
                 grounded_in=grounded_in or [], next_steps=next_steps or [],
                 selected_source_id=selected_source_id, organize_source_id=organize_source_id,
+                operational_actions=operational_actions or [],
             )
             workspace.project_conversation.append(asdict(message))
             self.save(workspace)
@@ -6783,6 +6792,7 @@ class CaseWorkspaceStore:
             grounded_in=grounded_in or [],
             next_steps=next_steps or [],
             selected_source_id=selected_source_id, organize_source_id=organize_source_id,
+            operational_actions=operational_actions or [],
         )
         case["conversation"].append(asdict(message))
         self.save(workspace)

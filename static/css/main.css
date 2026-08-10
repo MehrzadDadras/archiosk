@@ -5114,6 +5114,20 @@ main:hover,
    sealing-wax accent, used only here, extremely sparingly. */
 .review-btn.seal { border: 1px solid var(--seal-red); color: var(--seal-red); }
 .review-btn.seal:hover { background: var(--seal-red-tint); }
+/* CLAUDE-CA1D-RIVER-01 (the "fourth beat"): each real action is its own
+   <form> (create_task_route/add_tag_occurrence_route both require a
+   real POST, unlike .conv-next-steps' plain <a> navigation links) - a
+   compact horizontal row, same idiom as this stage's own Section 3
+   example ("Prepare deadlines · Make tasks · Check conflict"), not a
+   stacked list. */
+.conv-operational-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+}
+.conv-operational-action-form { display: inline-flex; }
+.conv-operational-action-form button[disabled] { opacity: 0.6; cursor: default; }
 
 .review-decision-badge {
     display: inline-block;

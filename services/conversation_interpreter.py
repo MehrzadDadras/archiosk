@@ -80,9 +80,51 @@ class InterpretationResult:
     # creates real, governed Design-Builder Workspace folders. None
     # whenever no such offer applies.
     organize_source_id: Optional[str] = None
+    # CLAUDE-CA1D-RIVER-01 (Project Gravity / River Continuity): the
+    # "fourth beat" - a meaningful, evidence-grounded answer should not
+    # end as inert prose when a safe, ALREADY-IMPLEMENTED next
+    # professional action is available (Section 2's own "River
+    # Continuity Rule"). Each entry is a structured envelope, never
+    # model-generated prose interpreted as a command (same discipline
+    # organize_source_id above already established): {"kind": "task" |
+    # "tag", "label": str, "tag_id": str (kind="tag" only)}. Rendered by
+    # the template as a real POST button reusing the EXISTING create_task_
+    # route/add_tag_occurrence_route unchanged - no new backend mechanism,
+    # per Section 7's own "reuse existing mechanisms, do not create a
+    # parallel subsystem." Only ever set by _handle_project_question, and
+    # only when result.grounded_in is genuinely non-empty (a real,
+    # evidence-backed answer - "a response earns an operational
+    # continuation only when there is genuine work to continue," Section
+    # 10) - never for a "not covered"/policy-denied/unavailable reply,
+    # and never reachable at all for a conversational utterance (CA1C-
+    # CONV-FIX-02's own gate intercepts those before this handler ever
+    # runs - Conversation != Investigation holds by construction, not by
+    # a second check here).
+    operational_actions: list[dict] = field(default_factory=list)
 
 
 _FINDING_NUMBER_PATTERN = re.compile(r"finding\s*#?\s*(\d+)", re.IGNORECASE)
+
+# CLAUDE-CA1D-RIVER-01: a deliberately narrow, deterministic phrase set -
+# same discipline as every other trigger in this module - used only to
+# CONTEXTUALIZE the fourth beat's own label (Section 3's own "the fourth
+# beat should be contextual and operational"), never to decide WHETHER
+# one is offered at all (that's result.grounded_in alone, checked by the
+# caller). A question naming none of these still gets the generic label.
+_DEADLINE_TOPIC_PHRASES = (
+    "deadline", "due date", "due by", "milestone", "schedule", "timeline", "submission date",
+)
+_RISK_TOPIC_PHRASES = (
+    "risk", "concern", "conflict", "issue", "problem",
+)
+
+
+def _operational_action_label(question_lowered: str) -> str:
+    if any(phrase in question_lowered for phrase in _DEADLINE_TOPIC_PHRASES):
+        return "Make a Task to track these deadlines"
+    if any(phrase in question_lowered for phrase in _RISK_TOPIC_PHRASES):
+        return "Make a Task to address this"
+    return "Make a Task from this"
 
 
 def _evaluate_external_ai_policy(store: CaseWorkspaceStore, workspace: ProjectWorkspace):
@@ -1664,10 +1706,36 @@ def _handle_project_question(
             "starting point, not a complete answer."
         )
 
+    # CLAUDE-CA1D-RIVER-01: the fourth beat, offered only for a genuinely
+    # evidence-grounded answer (grounded_in non-empty) - a "not covered"/
+    # unclear reply has no real work to continue and gets none. "Make a
+    # Task" and "Highlight this answer" are the two candidate actions
+    # Section 5's own list names that are ALREADY genuinely implemented
+    # end-to-end today (create_task_route, add_tag_occurrence_route) -
+    # every other candidate in that list (Create Finding, Add to Risk
+    # Register, Delegate) is deliberately omitted, not merely disabled,
+    # per Section 9's own "never show an action GO cannot actually
+    # perform" capability-truth requirement.
+    operational_actions: list[dict] = []
+    if result.grounded_in:
+        # Same truncation convention routes/workspace.py's own quick_start
+        # already uses for a Case title - "Follow up: " names what the
+        # Task is actually about (the question), never the full answer
+        # text, which the Task's own anchor/provenance already preserves
+        # in full via anchor_quote.
+        follow_up_title = f"Follow up: {text}"
+        if len(follow_up_title) > 80:
+            follow_up_title = follow_up_title[:77] + "..."
+        operational_actions = [
+            {"kind": "task", "label": _operational_action_label(text.lower()), "default_title": follow_up_title},
+            {"kind": "tag", "label": "Highlight this answer", "tag_id": "built-in:highlight"},
+        ]
+
     return InterpretationResult(
         action_taken="project_qa_answered",
         reply_text=" ".join(reply_parts),
         grounded_in=result.grounded_in,
+        operational_actions=operational_actions,
     )
 
 

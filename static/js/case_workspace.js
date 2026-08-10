@@ -1894,6 +1894,43 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         });
 
+        // CLAUDE-CA1D-RIVER-01 (the "fourth beat"): server-rendered
+        // .conv-operational-action-form elements (macros.operational_
+        // action_offers) post to these EXACT same create_task_route/
+        // add_tag_occurrence_route endpoints, which only ever answer
+        // JSON - a plain, un-intercepted form submission would navigate
+        // the whole page to a bare JSON response. Delegated (not bound
+        // by id) because a fresh one of these can render on every new
+        // evidence-grounded answer, same reasoning as the Tag-removal
+        // buttons' own delegated handler elsewhere in this file.
+        document.addEventListener('submit', (e) => {
+            const form = e.target.closest('.conv-operational-action-form');
+            if (!form) return;
+            e.preventDefault();
+            const btn = form.querySelector('button[type="submit"]');
+            const originalLabel = btn ? btn.textContent : '';
+            if (btn) { btn.disabled = true; }
+            const isTag = form.action.indexOf('/tags') !== -1;
+            postForm(form.action, Object.fromEntries(new FormData(form))).then(({ ok, data }) => {
+                if (!ok || !data.ok) {
+                    showStatus((data && data.error) || 'Something went wrong.', true);
+                    if (btn) { btn.disabled = false; }
+                    return;
+                }
+                if (isTag) {
+                    patchTagsListOnAdd(data.occurrence, data.tag, data.counts);
+                    showStatus(`Tagged as ${data.tag.name}.`, true);
+                } else {
+                    patchTasksListOnCreate(data.task, data.counts);
+                    showStatus('Task created.', true);
+                }
+                if (btn) { btn.textContent = isTag ? 'Tagged' : 'Task created'; }
+            }).catch(() => {
+                showStatus('Network error \u2014 please try again.', true);
+                if (btn) { btn.disabled = false; btn.textContent = originalLabel; }
+            });
+        });
+
         // -------- Toolbar button handling ---------------------------------
         toolbar.addEventListener('mousedown', (e) => {
             // Preserve the live text selection through the click - a plain

@@ -2881,6 +2881,7 @@
                     <button type="submit" class="review-btn needs_evidence">Create this structure</button>
                 </form>
                 {% endif %}
+                {% if loop.last and message.role == "system" %}{{ macros.operational_action_offers(project_id, message, "case", active_case.id) }}{% endif %}
             </div>
             {% else %}
             {# CLAUDE-P40-B (3.7): this example previously always
@@ -3024,6 +3025,7 @@
                     <button type="submit" class="review-btn needs_evidence">Create this structure</button>
                 </form>
                 {% endif %}
+                {% if loop.last and message.role == "system" %}{{ macros.operational_action_offers(project_id, message, "project", None) }}{% endif %}
             </div>
             {% else %}
             <p class="conversation-empty">No Project Conversation yet.</p>
