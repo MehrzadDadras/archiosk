@@ -1088,27 +1088,59 @@ document.addEventListener('DOMContentLoaded', () => {
             micButton.setAttribute('aria-pressed', 'false');
         }
 
-        micButton.addEventListener('click', () => {
-            if (listening) {
-                // Push-to-Talk, not push-to-toggle-forever: a second
-                // press stops listening early, same as releasing a
-                // physical push-to-talk button - not a failure, so
-                // "aborted" (fired by this same .stop() call, below) must
-                // not be reported as one.
-                userInitiatedStop = true;
-                if (recognition) recognition.stop();
-                stopListening();
-                return;
+        // CLAUDE-VOICE1-LIVE-FIX-02: this build's own SpeechRecognition
+        // exposes the real, standardized on-device extension - confirmed
+        // live (available() genuinely resolves "downloadable" for en-US
+        // here, install() genuinely exists and genuinely enforces its own
+        // spec-required user-gesture check, not stubs). processLocally
+        // means audio never leaves the device at all - strictly MORE
+        // private than the previous implicit default (which this build,
+        // like most Chrome installs, resolves to a server-based
+        // recognizer unless explicitly told otherwise), and doesn't
+        // depend on whatever network path was the leading suspect behind
+        // "detects speech, returns nothing" (this stage's own prior
+        // finding). Feature-detected, not assumed - a browser without
+        // this extension (any non-Chromium engine, or an older Chrome)
+        // takes the `hasOnDeviceApi` false branch below and behaves
+        // exactly as before this stage.
+        const hasOnDeviceApi = typeof SpeechRecognitionCtor.available === 'function'
+            && typeof SpeechRecognitionCtor.install === 'function';
+
+        // Resolves true if the caller should proceed with
+        // `recognition.processLocally = true`, false to fall back to this
+        // engine's own implicit default (never blocks the mic entirely on
+        // a capability-detection failure - Section 8's own graceful-
+        // degradation ethos). Must be called synchronously from within
+        // the real click handler's own call stack up to its first
+        // `await` - install() enforces "handling a user gesture" itself
+        // (confirmed live: it throws NotAllowedError without one), so
+        // this cannot be deferred or pre-fetched earlier.
+        async function ensureOnDeviceReady(lang) {
+            if (!hasOnDeviceApi) return false;
+            let state;
+            try {
+                state = await SpeechRecognitionCtor.available({ langs: [lang], processLocally: true });
+            } catch (err) {
+                return false;
             }
+            if (state === 'available') return true;
+            if (state === 'unavailable') return false;
+            // "downloadable" or "downloading" - install() is idempotent
+            // for an already-in-progress download per its own spec.
+            setStatus('Downloading speech model…', false);
+            try {
+                return await SpeechRecognitionCtor.install({ langs: [lang] });
+            } catch (err) {
+                return false;
+            }
+        }
 
-            userInitiatedStop = false;
-            gotFinalResult = false;
-            setStatus('Listening…', false);
-
+        function beginListening(useOnDevice) {
             recognition = new SpeechRecognitionCtor();
             recognition.lang = document.documentElement.lang || 'en-US';
             recognition.interimResults = true;
             recognition.maxAlternatives = 1;
+            if (useOnDevice) recognition.processLocally = true;
 
             // onstart/onaudiostart confirm the browser actually opened the
             // microphone (distinct from onspeechstart, which needs a real
@@ -1157,10 +1189,41 @@ document.addEventListener('DOMContentLoaded', () => {
                 listening = true;
                 micButton.classList.add('voice-input-listening');
                 micButton.setAttribute('aria-pressed', 'true');
+                setStatus('Listening…', false);
             } catch (err) {
                 stopListening();
                 setStatus('Speech recognition unavailable in this browser', true);
             }
+        }
+
+        micButton.addEventListener('click', async () => {
+            if (listening) {
+                // Push-to-Talk, not push-to-toggle-forever: a second
+                // press stops listening early, same as releasing a
+                // physical push-to-talk button - not a failure, so
+                // "aborted" (fired by this same .stop() call, below) must
+                // not be reported as one.
+                userInitiatedStop = true;
+                if (recognition) recognition.stop();
+                stopListening();
+                return;
+            }
+
+            userInitiatedStop = false;
+            gotFinalResult = false;
+            setStatus('Listening…', false);
+
+            const lang = document.documentElement.lang || 'en-US';
+            const useOnDevice = await ensureOnDeviceReady(lang);
+            // A press-and-release before the (usually near-instant, but
+            // occasionally slow on first-ever install) availability check
+            // resolves must not start a session the reviewer already
+            // abandoned - `listening` only flips true inside
+            // beginListening() itself, so a stop click that arrived during
+            // this await already reset the button/status and this simply
+            // no-ops instead of starting late.
+            if (userInitiatedStop) return;
+            beginListening(useOnDevice);
         });
     })();
 
