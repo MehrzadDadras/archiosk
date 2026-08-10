@@ -289,15 +289,17 @@ a:focus-visible, button:focus-visible, input:focus-visible {
     overflow-y: auto;
     display: flex;
     flex-direction: column;
-    /* CLAUDE-P40-VW7A-QA2 (product-owner browser correction): "Appearance
-       All must govern... the scrollbar track" - a Firefox-supported
-       token pair (thumb, track); WebKit/Chromium has no CSS scrollbar-
-       color equivalent that reaches this level of control, so this is
-       the honest ceiling of what a plain-CSS, no-client-build app can
-       do here, not a partial implementation of something more is
-       possible for. Both values are tokens, so all four Appearance
-       modes repaint this for free like everything else in this file. */
-    scrollbar-color: var(--border-strong) var(--surface-primary);
+    /* CLAUDE-LEFTPANEL-CALM-01 / CLAUDE-PANEL-CALM-02: quiet/transparent
+       by default, revealed only on :hover - a real Product Owner report
+       named this panel "too agitated," then confirmed the fix and asked
+       for the SAME treatment on every other panel (see the shared
+       ":hover" rule and the shared WebKit block below, which now cover
+       Thumbnails/Toolbox/Eye/Display/Chat/tab-strips too - this is no
+       longer this ONE panel's special case). `transparent transparent`
+       keeps the SAME reserved gutter width overflow-y:auto already
+       allocates (no layout shift - the scrollbar still exists and still
+       functions, it's simply invisible until hovered). */
+    scrollbar-color: transparent transparent;
 }
 .lists-thumbnails-divider {
     flex-shrink: 0;
@@ -406,7 +408,7 @@ a:focus-visible, button:focus-visible, input:focus-visible {
     flex-direction: column;
     gap: 0.5rem;
     padding: 0.6rem;
-    scrollbar-color: var(--border-strong) var(--surface-primary);
+    scrollbar-color: transparent transparent;
 }
 /* CLAUDE-P40-VW7A-QA2, Section 3: one real page per row - a <button>
    (not a decorative <div>) so click-to-navigate is a real activate-able
@@ -568,13 +570,18 @@ html.launcher-hidden .launcher-panel { display: none; }
     text-transform: uppercase;
     letter-spacing: 0.06em;
     color: var(--text-metadata);
-    padding: 0.35rem 0.55rem;
+    /* CLAUDE-LEFTPANEL-DENSITY-03: left inset only reduced (var(--tree-
+       row-inset), was a symmetric 0.55rem baked into every side) - the
+       right side keeps its own original 0.55rem unchanged, since
+       nothing to the right (chevron/count badge) was reported too
+       loose, only the left margin before a row's own content was. */
+    padding: 0.35rem 0.55rem 0.35rem var(--tree-row-inset);
     border-radius: 5px;
 }
 .launcher-heading:hover, .launcher-heading:focus-visible { background: var(--surface-hover); color: var(--text-primary); text-decoration: none; }
 .launcher-link {
     display: block;
-    padding: 0.45rem 0.55rem;
+    padding: 0.45rem 0.55rem 0.45rem var(--tree-row-inset);
     border-radius: 5px;
     color: var(--text-secondary);
     font-family: var(--font-body);
@@ -607,7 +614,11 @@ html.launcher-hidden .launcher-panel { display: none; }
     font-weight: 600;
     color: var(--text-primary);
     border-left: 3px solid var(--border-strong);
-    padding-left: calc(0.55rem - 3px);
+    /* CLAUDE-LEFTPANEL-DENSITY-03: compensates against the SAME
+       --tree-row-inset .launcher-link's own base rule now uses (was a
+       hardcoded 0.55rem) - the 3px accent border must still visually
+       replace, not add to, this row's own left inset. */
+    padding-left: calc(var(--tree-row-inset) - 3px);
 }
 .launcher-new-project { color: var(--machine-blue); }
 
@@ -624,6 +635,18 @@ html.launcher-hidden .launcher-panel { display: none; }
     list-style: none;
     margin: 0;
     padding: 0;
+    /* CLAUDE-LEFTPANEL-DENSITY-03: shared spacing variables, declared
+       once here (inherited by every nested .tree-children) rather than
+       repeating a literal value at each of the two places that used
+       one - a real Product Owner report found the panel's cumulative
+       indentation too wide, wasting working width. --tree-indent-step
+       is the recursive per-level step (.tree-children's own padding-
+       left, below); --tree-row-inset is the constant left inset of
+       every row's own text (.launcher-heading/.launcher-link, further
+       below) - previously 0.75rem and 0.55rem respectively, now a
+       visibly tighter but still legible VS-Code-Explorer-scale step. */
+    --tree-indent-step: 0.4rem;
+    --tree-row-inset: 0.4rem;
 }
 /* CLAUDE-P40-VW7A-QA (Clarify Project Hierarchy and Selection State),
    Section 4: "the rendered hierarchy must visibly and semantically
@@ -638,7 +661,7 @@ html.launcher-hidden .launcher-panel { display: none; }
    Chats, and any further nesting below those) rather than a Project-
    specific special case. */
 .tree-children {
-    padding-left: 0.75rem;
+    padding-left: var(--tree-indent-step);
     border-left: 1px solid var(--border);
 }
 .tree-children:not([data-tree-open]) {
@@ -709,14 +732,16 @@ html.launcher-hidden .launcher-panel { display: none; }
     text-transform: uppercase;
     letter-spacing: 0.05em;
     color: var(--text-metadata);
-    padding: 0.35rem 0.55rem 0.15rem;
+    /* CLAUDE-LEFTPANEL-DENSITY-03: same tightened left inset as every
+       other tree row (.launcher-heading/.launcher-link, above). */
+    padding: 0.35rem 0.55rem 0.15rem var(--tree-row-inset);
     margin: 0;
     display: flex;
     align-items: center;
     gap: 0.35rem;
 }
 .tree-node-group { margin: 0; }
-.tree-node-empty { padding: 0.2rem 0.55rem; }
+.tree-node-empty { padding: 0.2rem 0.55rem 0.2rem var(--tree-row-inset); }
 .tree-node-empty .pane-note { margin: 0; font-size: var(--text-xs); }
 .launcher-task-row {
     display: flex;
@@ -895,7 +920,7 @@ main {
     max-width: 1180px;
     margin: 0 auto;
     width: 100%;
-    scrollbar-color: var(--border-strong) var(--surface-primary);
+    scrollbar-color: transparent transparent;
 }
 
 @media (max-width: 720px) {
@@ -2425,21 +2450,12 @@ html.toolbox-hidden .workspace-right-column {
     min-width: 0;
     overflow-x: auto;
     overflow-y: hidden;
-    scrollbar-color: var(--border-strong) var(--surface-primary);
+    scrollbar-color: transparent transparent;
 }
-.document-tab-list::-webkit-scrollbar { height: 8px; }
-.document-tab-list::-webkit-scrollbar-track { background: var(--surface-primary); }
-.document-tab-list::-webkit-scrollbar-thumb {
-    background-color: var(--border-strong);
-    border-radius: 6px;
-    border: 1px solid transparent;
-    background-clip: padding-box;
-}
-.document-tab-list::-webkit-scrollbar-thumb:hover,
-.document-tab-list::-webkit-scrollbar-thumb:active {
-    background-color: var(--machine-blue);
-    background-clip: padding-box;
-}
+/* CLAUDE-PANEL-CALM-02: this rail's own WebKit scrollbar rules moved
+   into the shared, hover-gated block further below (with .attention-
+   strip-list, which uses the identical pattern) - see that block's own
+   comment. */
 /* CLAUDE-P40-DTAB1, Section 3/13: a real, keyboard-operable tab, never a
    decorative div - color (data-tab-color, below) is an accent stripe
    only; the ACTIVE tab's own non-color cues (background, bottom-border
@@ -2619,7 +2635,7 @@ html.toolbox-hidden .workspace-right-column {
     right: 0;
     max-height: 60vh;
     overflow-y: auto;
-    scrollbar-color: var(--border-strong) var(--surface-primary);
+    scrollbar-color: transparent transparent;
 }
 .document-hidden-tabs-heading {
     font-family: var(--font-body);
@@ -2668,20 +2684,45 @@ html.toolbox-hidden .workspace-right-column {
     min-width: 0;
     overflow-x: auto;
     overflow-y: hidden;
-    scrollbar-color: var(--border-strong) var(--surface-primary);
+    scrollbar-color: transparent transparent;
 }
-.attention-strip-list::-webkit-scrollbar { height: 8px; }
-.attention-strip-list::-webkit-scrollbar-track { background: var(--surface-primary); }
-.attention-strip-list::-webkit-scrollbar-thumb {
-    background-color: var(--border-strong);
+/* CLAUDE-PANEL-CALM-02: this rail's own WebKit scrollbar rules moved
+   into the shared, hover-gated block further below (with .document-
+   tab-list, which uses the identical pattern) - see that block's own
+   comment. */
+/* CLAUDE-INVESTIGATION-ATTENTION-02: deliberately NOT position:fixed/
+   role=dialog like .attention-capacity-dialog below - this sits in
+   normal document flow, right where the attention strip would have
+   shown a fifth position, and never steals focus or blocks the page
+   underneath it. Neutral/informational, not --failure-red or
+   --attention-amber (tokens.css's own grammar: those mean a real
+   contradiction/pending-evidence state, and "you have more saved work
+   than fits in Attention" is neither). */
+.attention-overflow-notice {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    font-size: var(--text-sm);
+    color: var(--text-secondary);
+    background: var(--surface-secondary);
+    border: 1px solid var(--border);
     border-radius: 6px;
-    border: 1px solid transparent;
-    background-clip: padding-box;
+    padding: 0.5rem 0.7rem;
+    margin-bottom: 0.6rem;
 }
-.attention-strip-list::-webkit-scrollbar-thumb:hover,
-.attention-strip-list::-webkit-scrollbar-thumb:active {
-    background-color: var(--machine-blue);
-    background-clip: padding-box;
+.attention-overflow-notice[hidden] { display: none; }
+.attention-overflow-notice #attention-overflow-notice-text { flex: 1 1 auto; }
+.attention-overflow-notice .btn { padding: 0.3rem 0.6rem; font-size: var(--text-xs); flex-shrink: 0; }
+.attention-overflow-notice-dismiss {
+    background: transparent;
+    border: none;
+    color: var(--text-metadata);
+    font-size: 1rem;
+    line-height: 1;
+    padding: 0.2rem 0.4rem;
+    cursor: pointer;
+    flex-shrink: 0;
 }
 /* Section 6: "selected-page indication that does not rely on color
    alone" applied here too - the focused position's real, visible
@@ -2933,7 +2974,7 @@ html.toolbox-hidden .workspace-right-column {
     min-width: 0;
     min-height: 0;
     overflow-y: auto;
-    scrollbar-color: var(--border-strong) var(--surface-primary);
+    scrollbar-color: transparent transparent;
     /* CLAUDE-P40-EYE1: positioning context for .toolbox-maximize-btn
        (below), which floats over this pane's own top-right corner
        rather than a dedicated header row. */
@@ -3108,7 +3149,7 @@ html.toolbox-hidden .workspace-right-column {
     display: flex;
     flex-direction: column;
     padding: 0 0.7rem 0.7rem;
-    scrollbar-color: var(--border-strong) var(--surface-primary);
+    scrollbar-color: transparent transparent;
 }
 /* CLAUDE-P40-EYE1, Section 4: a real (not decorative) drop target - a
    dashed border reads as "things go here" without implying a filled/
@@ -3233,7 +3274,7 @@ html.toolbox-hidden .workspace-right-column {
     justify-content: center;
     background: var(--surface-primary);
     border-radius: 4px;
-    scrollbar-color: var(--border-strong) var(--surface-primary);
+    scrollbar-color: transparent transparent;
 }
 .eye-canvas-viewport:focus-visible {
     outline: 2px solid var(--machine-blue);
@@ -3320,6 +3361,18 @@ html.toolbox-hidden .workspace-right-column {
    scrollbar-part pseudo-class, so the CONTAINER's own :focus-visible
    outline (already present on the keyboard-focusable ones, e.g.
    .eye-canvas-viewport) is what covers focus instead. */
+/* CLAUDE-PANEL-CALM-02: every panel-scale scroll container (Lists,
+   Thumbnails, Toolbox, Eye's own body and its image-canvas viewport,
+   Display's <main>, its PDF canvas container, Chat's message thread)
+   shares ONE quiet-by-default/hover-reveal treatment now -
+   CLAUDE-LEFTPANEL-CALM-01 built this first for Lists alone after a
+   real Product Owner report named it "too agitated"; the same report
+   then confirmed that fix and asked for it everywhere. Width/height
+   stay unconditional (always reserved, regardless of hover) - that is
+   what guarantees no layout shift when track/thumb color fades in or
+   out. See the separate combined block further below for the two
+   horizontal overflow rails (document/attention tab strips), which
+   share this exact pattern but their own, smaller 8px sizing. */
 .lists-pane::-webkit-scrollbar,
 .thumbnails-list::-webkit-scrollbar,
 .workspace-pane-toolbox::-webkit-scrollbar,
@@ -3339,7 +3392,7 @@ main::-webkit-scrollbar,
 main::-webkit-scrollbar-track,
 .document-viewer-canvas-container::-webkit-scrollbar-track,
 .conversation-thread::-webkit-scrollbar-track {
-    background: var(--surface-primary);
+    background: transparent;
 }
 .lists-pane::-webkit-scrollbar-thumb,
 .thumbnails-list::-webkit-scrollbar-thumb,
@@ -3349,10 +3402,31 @@ main::-webkit-scrollbar-track,
 main::-webkit-scrollbar-thumb,
 .document-viewer-canvas-container::-webkit-scrollbar-thumb,
 .conversation-thread::-webkit-scrollbar-thumb {
-    background-color: var(--border-strong);
+    background-color: transparent;
     border-radius: 6px;
     border: 2px solid transparent;
     background-clip: padding-box;
+    transition: background-color 0.15s ease;
+}
+.lists-pane:hover::-webkit-scrollbar-track,
+.thumbnails-list:hover::-webkit-scrollbar-track,
+.workspace-pane-toolbox:hover::-webkit-scrollbar-track,
+.eye-pane-body:hover::-webkit-scrollbar-track,
+.eye-canvas-viewport:hover::-webkit-scrollbar-track,
+main:hover::-webkit-scrollbar-track,
+.document-viewer-canvas-container:hover::-webkit-scrollbar-track,
+.conversation-thread:hover::-webkit-scrollbar-track {
+    background: var(--surface-primary);
+}
+.lists-pane:hover::-webkit-scrollbar-thumb,
+.thumbnails-list:hover::-webkit-scrollbar-thumb,
+.workspace-pane-toolbox:hover::-webkit-scrollbar-thumb,
+.eye-pane-body:hover::-webkit-scrollbar-thumb,
+.eye-canvas-viewport:hover::-webkit-scrollbar-thumb,
+main:hover::-webkit-scrollbar-thumb,
+.document-viewer-canvas-container:hover::-webkit-scrollbar-thumb,
+.conversation-thread:hover::-webkit-scrollbar-thumb {
+    background-color: var(--border-strong);
 }
 .lists-pane::-webkit-scrollbar-thumb:hover,
 .thumbnails-list::-webkit-scrollbar-thumb:hover,
@@ -3381,7 +3455,62 @@ main::-webkit-scrollbar-thumb:active,
 main::-webkit-scrollbar-corner,
 .document-viewer-canvas-container::-webkit-scrollbar-corner,
 .conversation-thread::-webkit-scrollbar-corner {
+    background: transparent;
+}
+/* CLAUDE-PANEL-CALM-02: the standards-track scrollbar-color property
+   (Firefox) gets the identical hover-reveal treatment, for every
+   container above PLUS the two horizontal overflow rails (their own
+   WebKit sizing stays separate, below, but scrollbar-color doesn't
+   carry a size - one shared rule covers all of them). */
+.lists-pane:hover,
+.thumbnails-list:hover,
+.workspace-pane-toolbox:hover,
+.eye-pane-body:hover,
+.eye-canvas-viewport:hover,
+main:hover,
+.document-viewer-canvas-container:hover,
+.conversation-thread:hover,
+.document-tab-list:hover,
+.attention-strip-list:hover,
+.document-tabs-overflow-panel:hover {
+    scrollbar-color: var(--border-strong) var(--surface-primary);
+}
+/* CLAUDE-PANEL-CALM-02: the two horizontal overflow rails (document/
+   attention tab strips) - same quiet-by-default/hover-reveal pattern as
+   the panel group above, kept in their own block because their WebKit
+   sizing (8px height, 1px thumb inset) has always been smaller/thinner
+   than the 10px/2px panel scrollbars, not because the underlying
+   behavior differs. */
+.document-tab-list::-webkit-scrollbar,
+.attention-strip-list::-webkit-scrollbar {
+    height: 8px;
+}
+.document-tab-list::-webkit-scrollbar-track,
+.attention-strip-list::-webkit-scrollbar-track {
+    background: transparent;
+}
+.document-tab-list::-webkit-scrollbar-thumb,
+.attention-strip-list::-webkit-scrollbar-thumb {
+    background-color: transparent;
+    border-radius: 6px;
+    border: 1px solid transparent;
+    background-clip: padding-box;
+    transition: background-color 0.15s ease;
+}
+.document-tab-list:hover::-webkit-scrollbar-track,
+.attention-strip-list:hover::-webkit-scrollbar-track {
     background: var(--surface-primary);
+}
+.document-tab-list:hover::-webkit-scrollbar-thumb,
+.attention-strip-list:hover::-webkit-scrollbar-thumb {
+    background-color: var(--border-strong);
+}
+.document-tab-list::-webkit-scrollbar-thumb:hover,
+.attention-strip-list::-webkit-scrollbar-thumb:hover,
+.document-tab-list::-webkit-scrollbar-thumb:active,
+.attention-strip-list::-webkit-scrollbar-thumb:active {
+    background-color: var(--machine-blue);
+    background-clip: padding-box;
 }
 
 /* CLAUDE-P40-E1A-VISUAL: was a filled/bordered/rounded "card"
@@ -3473,7 +3602,7 @@ main::-webkit-scrollbar-corner,
     display: flex;
     justify-content: center;
     align-items: flex-start;
-    scrollbar-color: var(--border-strong) var(--surface-primary);
+    scrollbar-color: transparent transparent;
 }
 .document-viewer-canvas { display: block; }
 .document-viewer-load-error {
@@ -4163,7 +4292,7 @@ main::-webkit-scrollbar-corner,
     min-height: 0;
     overflow-y: auto;
     margin-bottom: 1rem;
-    scrollbar-color: var(--border-strong) var(--surface-primary);
+    scrollbar-color: transparent transparent;
     /* CLAUDE-P40-VW7A-QA: the shared --conversation-inset (declared on
        .conversation-dock-panel above) on both sides, superseding the
        old right-only 0.3rem scrollbar-clearance padding - comfortably

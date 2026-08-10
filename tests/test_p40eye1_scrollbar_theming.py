@@ -64,20 +64,27 @@ def _rule_body(css: str, selector: str) -> str:
 
 
 class ScrollbarColorPresentEverywhereTests(unittest.TestCase):
-    """The standards-track property - already present on 4 of the 8
-    containers before this correction; this locks in that the other 4
-    (found via a systematic audit, not just the one reported) got it
-    too."""
+    """The standards-track property - present on all 8 containers since
+    this stage. CLAUDE-LEFTPANEL-CALM-01 then CLAUDE-PANEL-CALM-02 made it
+    quiet-by-default/hover-reveal everywhere (a real Product Owner report
+    named the whole app "too agitated," starting with the left panel and
+    then confirmed extending the same fix to every panel) - see
+    AllPanelsScrollbarHoverRevealTests below for the full hover-reveal
+    assertions; this class now just locks in that the property is still
+    genuinely present (with real theme tokens on the :hover variant, not
+    removed outright) everywhere it always was."""
 
     def setUp(self):
         self.css = _MAIN_CSS_PATH.read_text(encoding="utf-8")
 
-    def test_every_real_scroll_container_has_scrollbar_color(self):
+    def test_every_real_scroll_container_has_transparent_default_and_themed_hover(self):
         for selector in _SCROLL_CONTAINERS:
             body = _rule_body(self.css, selector)
-            self.assertIn("scrollbar-color:", body, selector)
-            self.assertIn("var(--border-strong)", body, selector)
-            self.assertIn("var(--surface-primary)", body, selector)
+            self.assertIn("scrollbar-color: transparent transparent", body, selector)
+            hover_body = _rule_body(self.css, f"{selector}:hover")
+            self.assertIn("scrollbar-color:", hover_body, selector)
+            self.assertIn("var(--border-strong)", hover_body, selector)
+            self.assertIn("var(--surface-primary)", hover_body, selector)
 
 
 class WebkitScrollbarPseudoElementTests(unittest.TestCase):
@@ -94,22 +101,32 @@ class WebkitScrollbarPseudoElementTests(unittest.TestCase):
             self.assertRegex(self.css, re.escape(f"{selector}::-webkit-scrollbar") + r"[,\s]", selector)
 
     def test_track_and_corner_use_theme_tokens_not_hardcoded_white(self):
-        track_rule = re.search(r"::-webkit-scrollbar-track,\s*\n(?:.*::-webkit-scrollbar-track,\s*\n)*.*::-webkit-scrollbar-track\s*\{([^}]*)\}", self.css)
-        self.assertIsNotNone(track_rule, "no combined ::-webkit-scrollbar-track rule found")
-        self.assertIn("var(--surface-primary)", track_rule.group(1))
-        self.assertNotRegex(track_rule.group(1), r"#[0-9a-fA-F]{3,8}")
+        # CLAUDE-PANEL-CALM-02: track is transparent by default now (see
+        # AllPanelsScrollbarHoverRevealTests for that), themed only on
+        # :hover - the "real theme token, never a hardcoded hex" property
+        # this test guards still holds, just on the :hover variant.
+        hover_track_rule = re.search(
+            r":hover::-webkit-scrollbar-track,\s*\n(?:.*:hover::-webkit-scrollbar-track,\s*\n)*.*:hover::-webkit-scrollbar-track\s*\{([^}]*)\}",
+            self.css,
+        )
+        self.assertIsNotNone(hover_track_rule, "no combined :hover::-webkit-scrollbar-track rule found")
+        self.assertIn("var(--surface-primary)", hover_track_rule.group(1))
+        self.assertNotRegex(hover_track_rule.group(1), r"#[0-9a-fA-F]{3,8}")
 
+        # The corner is never revealed on hover (LEFTPANEL-CALM-01's own
+        # original design, kept by PANEL-CALM-02) - it stays transparent
+        # unconditionally, which is itself the point: no hardcoded white.
         corner_rule = re.search(r"::-webkit-scrollbar-corner,\s*\n(?:.*::-webkit-scrollbar-corner,\s*\n)*.*::-webkit-scrollbar-corner\s*\{([^}]*)\}", self.css)
         self.assertIsNotNone(corner_rule, "no combined ::-webkit-scrollbar-corner rule found")
-        self.assertIn("var(--surface-primary)", corner_rule.group(1))
+        self.assertIn("transparent", corner_rule.group(1))
+        self.assertNotRegex(corner_rule.group(1), r"#[0-9a-fA-F]{3,8}")
 
     def test_thumb_uses_theme_token_not_default_gray(self):
-        # Anchored to start searching from this stage's own combined
-        # block (.lists-pane is its first selector) - CLAUDE-P40-DTAB1
-        # later added a SECOND, differently-scoped ::-webkit-scrollbar-
-        # thumb rule (.document-tab-list's own) earlier in the file, so
-        # an unanchored search would otherwise match that one instead.
-        anchor = self.css.index(".lists-pane::-webkit-scrollbar-thumb,")
+        # CLAUDE-PANEL-CALM-02: the thumb is transparent by default now -
+        # themed only on :hover of the panel itself (a separate rule from
+        # the thumb's OWN :hover/:active, tested below). Anchored to this
+        # stage's own combined :hover reveal block specifically.
+        anchor = self.css.index(".lists-pane:hover::-webkit-scrollbar-thumb,")
         thumb_rule = re.search(r"::-webkit-scrollbar-thumb\s*\{([^}]*)\}", self.css[anchor:])
         self.assertIsNotNone(thumb_rule)
         self.assertIn("var(--border-strong)", thumb_rule.group(1))
@@ -121,7 +138,7 @@ class WebkitScrollbarPseudoElementTests(unittest.TestCase):
         # Anchored past CLAUDE-P40-DTAB1's own .document-tab-list hover/
         # active rule (same shape, appears earlier in the file) - see
         # test_thumb_uses_theme_token_not_default_gray's own comment.
-        anchor = self.css.index(".lists-pane::-webkit-scrollbar-thumb,")
+        anchor = self.css.index(".thumbnails-list::-webkit-scrollbar-thumb,")
         hover_active_rule = re.search(
             r"::-webkit-scrollbar-thumb:hover,[\s\S]*?::-webkit-scrollbar-thumb:active\s*\{([^}]*)\}",
             self.css[anchor:],
@@ -135,7 +152,7 @@ class WebkitScrollbarPseudoElementTests(unittest.TestCase):
         # still using the browser's own real, proportional thumb-length
         # calculation (never faked/hardcoded). Anchored the same way as
         # test_thumb_uses_theme_token_not_default_gray above.
-        anchor = self.css.index(".lists-pane::-webkit-scrollbar-thumb,")
+        anchor = self.css.index(".thumbnails-list::-webkit-scrollbar-thumb,")
         thumb_rule = re.search(r"::-webkit-scrollbar-thumb\s*\{([^}]*)\}", self.css[anchor:])
         self.assertIn("background-clip: padding-box", thumb_rule.group(1))
         self.assertIn("border: 2px solid transparent", thumb_rule.group(1))
@@ -176,6 +193,94 @@ class ScrollBehaviorPreservedTests(unittest.TestCase):
         webkit_section_end = self.css.index("}", webkit_section_end)
         section = self.css[webkit_section_start - 200:webkit_section_end]
         self.assertNotIn("opacity", section)
+
+
+class AllPanelsScrollbarHoverRevealTests(unittest.TestCase):
+    """CLAUDE-LEFTPANEL-CALM-01 built this first for .lists-pane alone,
+    after a real Product Owner report named the left panel specifically
+    as "too agitated." CLAUDE-PANEL-CALM-02 then generalized the EXACT
+    same treatment to every other real panel-scale scroll container in
+    the 6-panel shell, after the Product Owner confirmed the left-panel
+    fix and asked for it everywhere - so .lists-pane is no longer a
+    special case split out from the rest; it's one member of one shared
+    group, tested here uniformly with the other 7."""
+
+    PANEL_CONTAINERS = (
+        ".lists-pane", ".thumbnails-list", ".workspace-pane-toolbox",
+        ".eye-pane-body", ".eye-canvas-viewport", "main",
+        ".document-viewer-canvas-container", ".conversation-thread",
+    )
+    RAIL_CONTAINERS = (".document-tab-list", ".attention-strip-list")
+
+    def setUp(self):
+        self.css = _MAIN_CSS_PATH.read_text(encoding="utf-8")
+
+    def test_every_panel_scrollbar_color_is_transparent_by_default(self):
+        for selector in self.PANEL_CONTAINERS:
+            body = _rule_body(self.css, selector)
+            self.assertIn("scrollbar-color: transparent transparent", body, selector)
+            # overflow mechanics must be completely untouched - only the
+            # painting changes.
+            self.assertTrue("overflow-y: auto" in body or "overflow: auto" in body, selector)
+
+    def test_every_panel_hover_reveals_scrollbar_color(self):
+        for selector in self.PANEL_CONTAINERS:
+            body = _rule_body(self.css, f"{selector}:hover")
+            self.assertIn("scrollbar-color: var(--border-strong) var(--surface-primary)", body, selector)
+
+    def test_every_panel_webkit_track_and_thumb_are_transparent_by_default(self):
+        for selector in self.PANEL_CONTAINERS:
+            track_body = _rule_body(self.css, f"{selector}::-webkit-scrollbar-track")
+            self.assertIn("background: transparent", track_body, selector)
+            thumb_body = _rule_body(self.css, f"{selector}::-webkit-scrollbar-thumb")
+            self.assertIn("background-color: transparent", thumb_body, selector)
+
+    def test_every_panel_hover_reveals_webkit_track_and_thumb(self):
+        for selector in self.PANEL_CONTAINERS:
+            track_body = _rule_body(self.css, f"{selector}:hover::-webkit-scrollbar-track")
+            self.assertIn("var(--surface-primary)", track_body, selector)
+            thumb_body = _rule_body(self.css, f"{selector}:hover::-webkit-scrollbar-thumb")
+            self.assertIn("var(--border-strong)", thumb_body, selector)
+
+    def test_panel_thumb_hover_and_active_still_use_accent_color(self):
+        # The thumb's OWN :hover/:active (once it's already visible via
+        # the panel hover above) keeps the same accent-color convention
+        # every container uses - one shared rule covering all of them.
+        anchor = self.css.index(".lists-pane::-webkit-scrollbar-thumb:hover,")
+        rule = re.search(r"\{([^}]*)\}", self.css[anchor:])
+        self.assertIsNotNone(rule)
+        self.assertIn("var(--machine-blue)", rule.group(1))
+        # And every panel selector is genuinely named in that one rule,
+        # not just the first.
+        rule_text = self.css[anchor:anchor + self.css[anchor:].index("{")]
+        for selector in self.PANEL_CONTAINERS:
+            self.assertIn(f"{selector}::-webkit-scrollbar-thumb:hover", rule_text, selector)
+
+    def test_panel_scrollbar_width_unchanged_no_layout_shift(self):
+        # The reserved gutter (width/height) must stay in ONE always-
+        # applied combined rule, completely unaffected by the color-only
+        # hover-reveal change - this is what guarantees no layout shift.
+        idx = self.css.index(".lists-pane::-webkit-scrollbar,")
+        full_rule = self.css[idx:self.css.index("}", idx)]
+        self.assertIn("width: 10px", full_rule)
+        self.assertIn("height: 10px", full_rule)
+        for selector in self.PANEL_CONTAINERS:
+            self.assertIn(f"{selector}::-webkit-scrollbar", full_rule, selector)
+
+    def test_horizontal_rails_share_the_identical_hover_reveal_pattern(self):
+        # CLAUDE-PANEL-CALM-02: the two horizontal overflow rails (tab/
+        # attention strips) behave the same way as vertical scrollbars -
+        # own, smaller sizing (8px/1px inset), same transparent-default/
+        # hover-reveal color treatment.
+        idx = self.css.index(".document-tab-list::-webkit-scrollbar,")
+        width_rule = self.css[idx:self.css.index("}", idx)]
+        self.assertIn("height: 8px", width_rule)
+        for selector in self.RAIL_CONTAINERS:
+            self.assertIn(f"{selector}::-webkit-scrollbar", width_rule, selector)
+            base_thumb = _rule_body(self.css, f"{selector}::-webkit-scrollbar-thumb")
+            self.assertIn("background-color: transparent", base_thumb, selector)
+            hover_thumb = _rule_body(self.css, f"{selector}:hover::-webkit-scrollbar-thumb")
+            self.assertIn("var(--border-strong)", hover_thumb, selector)
 
 
 if __name__ == "__main__":

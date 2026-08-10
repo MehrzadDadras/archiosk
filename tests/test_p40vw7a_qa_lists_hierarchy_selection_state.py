@@ -264,7 +264,10 @@ class CssTierTreatmentTests(unittest.TestCase):
 
 class PanelHideRevealPinUntouchedTests(unittest.TestCase):
     """Section 5's own explicit requirement - none of this correction's
-    changes may alter the existing hide/hover-reveal/pin mechanism."""
+    changes may alter the existing hide/pin mechanism (the hover-REVEAL
+    half of it was later removed outright by CLAUDE-LEFTPANEL-CALM-01 -
+    see PanelCalmNoHoverExpansionTests below for its own dedicated
+    coverage; this class now only guards what's still there)."""
 
     def setUp(self):
         self.html = _BASE_HTML_PATH.read_text(encoding="utf-8")
@@ -273,10 +276,9 @@ class PanelHideRevealPinUntouchedTests(unittest.TestCase):
     def test_launcher_hidden_mechanism_intact(self):
         self.assertIn("html.launcher-hidden .launcher-panel { display: none; }", self.css)
 
-    def test_hover_reveal_and_pin_js_intact(self):
+    def test_pin_via_click_js_intact(self):
         self.assertIn("function isDescendantActive(node)", self.html)
-        self.assertIn("node.addEventListener('mouseenter'", self.html)
-        self.assertIn("node.addEventListener('mouseleave'", self.html)
+        self.assertIn("toggle.addEventListener('click', function () {", self.html)
 
     def test_projects_root_still_opts_out_of_active_descendant_clearing(self):
         self.assertIn("data-tree-no-clear", self.html)

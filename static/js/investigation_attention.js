@@ -88,10 +88,6 @@
         window.location.href = baseUrl + '?case=' + encodeURIComponent(caseId);
     }
 
-    function navigateToEmpty() {
-        window.location.href = baseUrl;
-    }
-
     // -------- Reconciliation (Section 3/11: never an arbitrary guess,
     // never a stale/unauthorized/foreign-Project id) -----------------
     var visibleCases = readVisibleCases();
@@ -101,14 +97,23 @@
     var attention = loadAttention().filter(function (id) { return !!casesById[id]; });
     var attentionChanged = loadAttention().length !== attention.length;
 
-    var capacityDialogNeeded = false;
+    // CLAUDE-INVESTIGATION-ATTENTION-02: Investigation existence !=
+    // Investigation currently held in Attention. Opening/creating a Case
+    // while Attention already holds four others must never block this
+    // page's own real content (already loaded and correct regardless of
+    // any of this - routes/workspace.py's show_workspace has no concept
+    // of Attention at all) - it simply doesn't get auto-pinned. Nothing
+    // already pinned is ever silently evicted to make room; the reviewer
+    // chooses that, later, if they want to (the overflow notice's own
+    // "Pin this instead…" -> the dialog below).
+    var overflowCase = null;
     if (activeCaseId && casesById[activeCaseId]) {
         if (attention.indexOf(activeCaseId) === -1) {
             if (attention.length < MAX_ATTENTION) {
                 attention.push(activeCaseId);
                 attentionChanged = true;
             } else {
-                capacityDialogNeeded = true;
+                overflowCase = casesById[activeCaseId];
             }
         }
     }
@@ -219,12 +224,31 @@
 
     render();
 
-    // -------- Fifth-Investigation capacity dialog (Section 9) -------
+    // -------- Attention-overflow notice (CLAUDE-INVESTIGATION-ATTENTION-02) --
+    // Never blocks - this Case's own real content is already visible on
+    // this same page load regardless of Attention capacity. Purely an
+    // optional, dismissable invitation to manage Attention, never a gate
+    // the reviewer must clear before continuing to work or converse.
     var dialog = document.getElementById('attention-capacity-dialog');
-    if (capacityDialogNeeded && dialog) {
-        openCapacityDialog();
+    var overflowNotice = document.getElementById('attention-overflow-notice');
+    if (overflowCase && overflowNotice) {
+        showOverflowNotice(overflowCase);
+    } else if (overflowNotice) {
+        overflowNotice.hidden = true;
     }
 
+    function showOverflowNotice(caseRecord) {
+        var textEl = document.getElementById('attention-overflow-notice-text');
+        var pinBtn = document.getElementById('attention-overflow-notice-pin');
+        var dismissBtn = document.getElementById('attention-overflow-notice-dismiss');
+        if (!textEl || !pinBtn || !dismissBtn) return;
+        textEl.textContent = caseRecord.title + ' is saved, but 4 Investigations are already pinned to Attention.';
+        overflowNotice.hidden = false;
+        pinBtn.onclick = function () { openCapacityDialog(); };
+        dismissBtn.onclick = function () { overflowNotice.hidden = true; };
+    }
+
+    // -------- Attention-management dialog (Section 9; now voluntary) --
     function openCapacityDialog() {
         var targetNameEl = document.getElementById('attention-capacity-target-name');
         var positionsList = document.getElementById('attention-capacity-dialog-list');
@@ -296,17 +320,18 @@
             document.removeEventListener('keydown', onKeydown);
         }
         function onKeydown(e) {
-            if (e.key === 'Escape') { e.preventDefault(); navigateToEmpty(); }
+            if (e.key === 'Escape') { e.preventDefault(); closeCapacityDialog(); }
         }
         document.addEventListener('keydown', onKeydown);
 
-        // Section 9: "cancel opening the new Investigation" - this page
-        // has ALREADY loaded showing the fifth Investigation's own
-        // content (post-load reconciliation, not a pre-click
-        // intercept - see this file's own header comment), so
-        // cancelling means navigating away from it, back to a neutral
-        // Overview state, not merely hiding the dialog in place.
-        cancelBtn.addEventListener('click', function () { navigateToEmpty(); });
+        // CLAUDE-INVESTIGATION-ATTENTION-02: this dialog is now reached
+        // only by the reviewer's own choice (the overflow notice's "Pin
+        // this instead…"), not forced open automatically - this page's
+        // real content was ALREADY being shown, legitimately, before the
+        // reviewer asked to pin anything. Cancelling therefore means
+        // exactly what it says: stay here, don't pin it - never a forced
+        // navigation away from content the reviewer was already viewing.
+        cancelBtn.addEventListener('click', function () { closeCapacityDialog(); });
     }
 
     // Exposed for tests/future callers - a read-only lookup, never a

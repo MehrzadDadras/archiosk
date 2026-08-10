@@ -207,10 +207,21 @@ class TabStripCssTests(unittest.TestCase):
         self.assertIn("overflow-x: auto", body)
 
     def test_tab_list_uses_themed_scrollbar(self):
+        # CLAUDE-PANEL-CALM-02: quiet/transparent by default now, themed
+        # only on :hover of the rail itself (a real Product Owner report
+        # asked every panel-owned scrollbar/overflow rail to behave this
+        # way) - the real theme token this test guards is still there,
+        # just on the :hover variant. The WebKit rules also moved into a
+        # shared combined block further down the file (with .attention-
+        # strip-list, which uses the identical pattern) rather than
+        # sitting immediately after this base rule.
         body = _rule_body(self.css, ".document-tab-list")
-        self.assertIn("scrollbar-color:", body)
-        self.assertIn("var(--surface-primary)", body)
-        self.assertIn("::-webkit-scrollbar", self.css[self.css.index(".document-tab-list {"):self.css.index(".document-tab-list {") + 1500])
+        self.assertIn("scrollbar-color: transparent transparent", body)
+        hover_body = _rule_body(self.css, ".document-tab-list:hover")
+        self.assertIn("scrollbar-color:", hover_body)
+        self.assertIn("var(--surface-primary)", hover_body)
+        self.assertIn("::-webkit-scrollbar", self.css)
+        self.assertIn(".document-tab-list::-webkit-scrollbar", self.css)
 
     def test_active_tab_has_non_color_cue(self):
         # Section 8: "the active tab must also use shape, underline,

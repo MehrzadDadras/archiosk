@@ -1859,13 +1859,28 @@
     <script src="{{ url_for('static', filename='js/eye_pane.js') }}?v={{ static_version }}"></script>
     {% endif %}
     <script>
-        // CLAUDE-P40-E3A: the recursive Lists hierarchy - hover temporarily
-        // reveals a parent's children; clicking pins them open (persists
-        // regardless of hover); clicking the pinned parent again collapses
-        // it AND, if the collapsed branch owns the query param currently
-        // driving Display (?source=/?case=), navigates to clear it - Section
-        // 4's "collapsing a parent clears an active descendant from
-        // Display." Leaves (plain <a>) always just navigate normally.
+        // CLAUDE-P40-E3A / CLAUDE-LEFTPANEL-CALM-01: the recursive Lists
+        // hierarchy - a branch starts open only if the page rendered it
+        // that way (e.g. it contains the active selection); clicking its
+        // own chevron toggles it open/closed, and clicking the open
+        // parent's chevron again collapses it AND, if the collapsed
+        // branch owns the query param currently driving Display
+        // (?source=/?case=), navigates to clear it - Section 4's
+        // "collapsing a parent clears an active descendant from Display."
+        // Leaves (plain <a>) always just navigate normally.
+        //
+        // CLAUDE-LEFTPANEL-CALM-01: this used to ALSO expand a branch on
+        // mouseenter (temporarily, reverting on mouseleave, unless
+        // "pinned" by a real click) - a real Product Owner report named
+        // the left panel specifically as "too agitated," and structure
+        // silently opening/closing under the mouse without any click is
+        // exactly what "hover may reveal affordances; it must never
+        // reveal structure" (this stage's own governing principle)
+        // prohibits. Removed outright, not merely dampened - expand/
+        // collapse now happens ONLY via the chevron's own click (native
+        // Enter/Space activation on that same real <button>/toggle
+        // element already comes for free from it being a real,
+        // keyboard-focusable control, not a synthesized hover state).
         (function () {
             var root = document.querySelector('[data-tree-root]');
             if (!root) return;
@@ -1886,13 +1901,6 @@
                     toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
                 }
                 setOpen(pinned);
-
-                node.addEventListener('mouseenter', function () {
-                    if (!pinned) setOpen(true);
-                });
-                node.addEventListener('mouseleave', function () {
-                    if (!pinned) setOpen(false);
-                });
 
                 toggle.addEventListener('click', function () {
                     pinned = !pinned;

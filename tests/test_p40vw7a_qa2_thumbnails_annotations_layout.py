@@ -562,11 +562,23 @@ class LeftColumnFullHeightBackgroundTests(unittest.TestCase):
         self.assertIn("var(--surface-primary)", body)
 
     def test_lists_and_thumbnails_scroll_regions_have_themed_scrollbar_color(self):
+        # CLAUDE-LEFTPANEL-CALM-01 / CLAUDE-PANEL-CALM-02: quiet/
+        # transparent by default now, themed only on :hover of the panel
+        # itself (a real Product Owner report asked every panel's own
+        # scrollbar to behave this way) - the real theme token this test
+        # guards is still there, just on the :hover variant.
         for selector in (".lists-pane", ".thumbnails-list"):
             body = _rule_body(self.css, selector)
-            self.assertIn("scrollbar-color:", body)
-            self.assertIn("var(--border-strong)", body)
-            self.assertIn("var(--surface-primary)", body)
+            self.assertIn("scrollbar-color: transparent transparent", body, selector)
+        # The shared :hover reveal rule, anchored specifically (a bare
+        # ".lists-pane:hover" also matches this same panel's OWN, earlier
+        # ::-webkit-scrollbar-track/-thumb :hover rules, which don't
+        # contain scrollbar-color at all - anchoring on the leading pair
+        # of this exact combined selector list disambiguates).
+        hover_body = _rule_body(self.css, ".lists-pane:hover,\n.thumbnails-list:hover,")
+        self.assertIn("scrollbar-color:", hover_body)
+        self.assertIn("var(--border-strong)", hover_body)
+        self.assertIn("var(--surface-primary)", hover_body)
 
 
 class AppearanceControlledSplitterTests(unittest.TestCase):

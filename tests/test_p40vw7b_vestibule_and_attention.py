@@ -398,6 +398,25 @@ class AttentionStripMarkupTests(_BaseTestCase):
         tag = body[body.rindex("<div", 0, idx):body.index(">", idx)]
         self.assertIn(f'data-active-case-id="{case_id}"', tag)
 
+    def test_overflow_notice_renders_hidden_with_pin_and_dismiss(self):
+        """CLAUDE-INVESTIGATION-ATTENTION-02: the non-blocking replacement
+        for the old auto-opening capacity dialog - server-rendered empty/
+        hidden (static/js/investigation_attention.js fills and reveals it
+        only when a real overflow actually occurs), never role="dialog"/
+        aria-modal (it must never block anything the reviewer is doing)."""
+        doc = self._ingest("VW7B Attention Project 6")
+        client = self._client()
+        body = client.get(f"/projects/{doc.project_id}/workspace").get_data(as_text=True)
+        idx = body.index('id="attention-overflow-notice"')
+        tag = body[body.rindex("<div", 0, idx):body.index(">", idx)]
+        self.assertIn("hidden", tag)
+        self.assertNotIn('role="dialog"', tag)
+        self.assertNotIn("aria-modal", tag)
+        self.assertIn('aria-live="polite"', tag)
+        self.assertIn('id="attention-overflow-notice-text"', body)
+        self.assertIn('id="attention-overflow-notice-pin"', body)
+        self.assertIn('id="attention-overflow-notice-dismiss"', body)
+
 
 class AttentionJsSourceTests(unittest.TestCase):
     def setUp(self):
@@ -435,9 +454,20 @@ class AttentionJsSourceTests(unittest.TestCase):
     def test_conclude_passes_next_case_for_smooth_continuation(self):
         self.assertIn("nextCaseInput.value = activeCaseId", self.js)
 
-    def test_cancel_navigates_away_not_just_closes(self):
+    def test_cancel_just_closes_without_navigating_away(self):
+        """CLAUDE-INVESTIGATION-ATTENTION-02: this dialog is no longer
+        forced open automatically on load - it's reached only by the
+        reviewer's own "Pin this instead…" choice from the non-blocking
+        overflow notice, and the Case it would pin was ALREADY being
+        shown, legitimately, before that choice. Cancelling now means
+        exactly what it says (don't pin it, stay here) - it must never
+        navigate away from content the reviewer was already viewing,
+        which is what the OLD, forced-open version of this dialog had to
+        do instead (there was nothing else for Cancel to mean when the
+        whole page load itself was the interruption)."""
         fn = self.js[self.js.index("cancelBtn.addEventListener"):]
-        self.assertIn("navigateToEmpty()", fn[:200])
+        self.assertIn("closeCapacityDialog()", fn[:200])
+        self.assertNotIn("navigateToEmpty", self.js)
 
     def test_only_release_conclude_cancel_offered_as_real_button_labels(self):
         # Grounded in the real Case model (CASE_STATUS_OPEN/ARCHIVED
@@ -459,6 +489,26 @@ class AttentionJsSourceTests(unittest.TestCase):
         # Deliberately no addEventListener('click', ...) on the Lists
         # tree root in this file - see its own header comment for why.
         self.assertNotIn("data-tree-root", self.js)
+
+    def test_overflow_never_auto_opens_the_capacity_dialog(self):
+        """CLAUDE-INVESTIGATION-ATTENTION-02: reconciliation on load must
+        only ever populate the non-blocking overflow notice - the dialog
+        itself is opened exclusively from inside showOverflowNotice's own
+        Pin-button click handler, never unconditionally at load time the
+        way the old capacityDialogNeeded branch used to."""
+        reconciliation = self.js[self.js.index("var overflowCase = null;"):self.js.index("function render()")]
+        self.assertNotIn("openCapacityDialog()", reconciliation)
+        self.assertIn("overflowCase = casesById[activeCaseId];", reconciliation)
+
+    def test_overflow_never_evicts_an_already_pinned_investigation(self):
+        # Reaching capacity must leave the existing `attention` array (and
+        # its saved copy) completely untouched - overflowCase is set and
+        # nothing more; only an explicit Release/Conclude click (inside
+        # the voluntarily-opened dialog) ever removes an existing entry.
+        reconciliation = self.js[self.js.index("var overflowCase = null;"):self.js.index("if (attentionChanged) saveAttention(attention);") + 1]
+        self.assertNotIn("attention.splice", reconciliation)
+        self.assertNotIn("attention.shift", reconciliation)
+        self.assertNotIn("attention.pop", reconciliation)
 
     def test_keyboard_roving_tabindex_present(self):
         start = self.js.index("function onPositionKeydown(")

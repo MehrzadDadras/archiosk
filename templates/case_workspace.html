@@ -82,7 +82,27 @@
         <div class="attention-strip" id="attention-strip" data-ui-ref="display.attention-positions" data-project-id="{{ project_id }}" data-active-case-id="{{ active_case.id if active_case else '' }}" data-base-url="{{ url_for('workspace.show_workspace', project_id=project_id) }}" hidden>
             <div class="attention-strip-list" id="attention-strip-list" role="tablist" aria-label="Investigation Attention Positions"></div>
         </div>
-        {# ---------------- Fifth-Investigation capacity dialog (CLAUDE-P40-VW7B, Section 9) --
+        {# ---------------- Attention-overflow notice (CLAUDE-INVESTIGATION-ATTENTION-02) --
+           Investigation existence != Investigation currently held in
+           Attention: opening/creating a Case while Attention already
+           holds four others must never block viewing or continuing to
+           converse - the fifth-Investigation capacity dialog below used
+           to open AUTOMATICALLY on load and force a Release/Conclude/
+           Cancel choice before the reviewer could do anything else,
+           including simply asking another question (the governing
+           report's own reproduced defect). This is the non-blocking
+           replacement: a small, dismissable, aria-live notice - never a
+           role="dialog", never aria-modal, never focus-stealing. The
+           dialog below still exists for the reviewer who DOES want to
+           pin this one - now reached only by choice (its own "Pin"
+           button here), never forced. #}
+        <div class="attention-overflow-notice" id="attention-overflow-notice" data-ui-ref="display.attention-positions.overflow-notice" aria-live="polite" hidden>
+            <span id="attention-overflow-notice-text"></span>
+            <button type="button" class="btn btn-ghost" id="attention-overflow-notice-pin" data-ui-ref="display.attention-positions.overflow-notice.pin">Pin this instead…</button>
+            <button type="button" class="attention-overflow-notice-dismiss" id="attention-overflow-notice-dismiss" data-ui-ref="display.attention-positions.overflow-notice.dismiss" aria-label="Dismiss">×</button>
+        </div>
+        {# ---------------- Attention-management dialog (CLAUDE-P40-VW7B, Section 9;
+           CLAUDE-INVESTIGATION-ATTENTION-02: voluntary, not automatic) --
            Same role="dialog"/aria-modal idiom as every other real
            dialog in this app (CLAUDE-P40-VW7's .conv-dialog,
            CLAUDE-P40-VW8's now-retired Project-switching dialog - see
@@ -91,11 +111,14 @@
            Content built entirely by static/js/investigation_attention.js
            (which four Investigations are currently attended, and
            whether "Conclude" is even offered per one - a real,
-           authorization-checked action, never fabricated). #}
+           authorization-checked action, never fabricated). Opened only
+           by the overflow notice's own "Pin this instead…" button now -
+           Cancel/Escape simply close it, they no longer navigate away
+           from whatever the reviewer was already legitimately viewing. #}
         <div class="attention-capacity-dialog" id="attention-capacity-dialog" data-ui-ref="display.attention-positions.capacity-dialog" role="dialog" aria-modal="true" aria-labelledby="attention-capacity-dialog-heading" hidden>
             <p class="attention-capacity-dialog-heading" id="attention-capacity-dialog-heading">Attention is full</p>
             <p class="attention-capacity-dialog-body">
-                Up to four Investigations can be held in attention at once. Release or conclude one to open <strong id="attention-capacity-target-name"></strong>, or cancel.
+                Up to four Investigations can be held in Attention at once. Release or conclude one below to pin <strong id="attention-capacity-target-name"></strong>, or cancel - it stays open either way, just not pinned.
             </p>
             <ul class="attention-capacity-dialog-list" id="attention-capacity-dialog-list" role="list" aria-label="Currently attended Investigations"></ul>
             <div class="attention-capacity-dialog-actions">
