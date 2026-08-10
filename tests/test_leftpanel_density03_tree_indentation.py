@@ -88,11 +88,17 @@ class IndentationReducedTests(unittest.TestCase):
         self.assertIn("border-left: 1px solid var(--border)", body)
 
     def test_row_level_selectors_use_the_shared_row_inset_on_the_left_only(self):
+        # CLAUDE-LEFTPANEL-DENSITY-04 own the exact vertical numbers now
+        # (a real, deliberate further tightening - see
+        # ClickTargetAndOverlapPreservedTests below) - this test's own
+        # remaining job is just confirming every row selector still
+        # anchors its LEFT inset to the shared var(--tree-row-inset)
+        # custom property, which is what DENSITY-03 actually introduced.
         cases = {
-            ".launcher-heading {": "padding: 0.35rem 0.55rem 0.35rem var(--tree-row-inset);",
-            ".launcher-link {\n    display: block;": "padding: 0.45rem 0.55rem 0.45rem var(--tree-row-inset);",
-            ".launcher-subheading {": "padding: 0.35rem 0.55rem 0.15rem var(--tree-row-inset);",
-            ".tree-node-empty {": "padding: 0.2rem 0.55rem 0.2rem var(--tree-row-inset);",
+            ".launcher-heading {": "var(--tree-row-inset);",
+            ".launcher-link {\n    display: block;": "var(--tree-row-inset);",
+            ".launcher-subheading {": "var(--tree-row-inset);",
+            ".tree-node-empty {": "padding: 0.16rem 0.55rem 0.16rem var(--tree-row-inset);",
         }
         for selector, expected in cases.items():
             body = _rule_body(self.css, selector)
@@ -125,23 +131,31 @@ class IndentationReducedTests(unittest.TestCase):
 
 
 class ClickTargetAndOverlapPreservedTests(unittest.TestCase):
-    """"No reduction in click target usability" / "no text/chevron
-    overlap" / "no clipping" - the vertical padding (which governs row
-    HEIGHT, the actual click-target size) and the chevron/label layout
-    mechanics are untouched by this stage."""
+    """"No text/chevron overlap" / "no clipping" - the chevron/label
+    layout mechanics are untouched by this stage. Vertical padding
+    itself was DELIBERATELY reduced by the later CLAUDE-LEFTPANEL-
+    DENSITY-04 pass (own explicit Product Owner ask: "top/bottom padding
+    inside each navigational row is thinner") - this class's own name
+    predates that and no longer describes an invariant that holds; the
+    remaining check is that the new, smaller values still clear a real
+    click/tap target, not that the numbers never moved."""
 
     def setUp(self):
         self.css = _MAIN_CSS_PATH.read_text(encoding="utf-8")
 
-    def test_vertical_padding_of_every_row_selector_is_unchanged(self):
+    def test_vertical_padding_still_clears_a_real_click_target(self):
         for selector, expected_vertical in (
-            (".launcher-heading {", ("0.35rem", "0.35rem")),
-            (".launcher-link {\n    display: block;", ("0.45rem", "0.45rem")),
+            (".launcher-heading {", ("0.24rem", "0.24rem")),
+            (".launcher-link {\n    display: block;", ("0.3rem", "0.3rem")),
         ):
             body = _rule_body(self.css, selector)
             top, bottom = expected_vertical
             self.assertIn(f"padding: {top}", body, selector)
             self.assertIn(f"{bottom} var(--tree-row-inset)", body, selector)
+            # Rough floor: 2x vertical padding + a ~13-14px line-height
+            # (var(--text-sm)) should stay comfortably above the usual
+            # ~24px minimum tap-target guidance.
+            self.assertGreaterEqual(float(top.replace("rem", "")) * 2 * 16 + 13, 20)
 
     def test_chevron_and_label_layout_mechanics_untouched(self):
         toggle_body = _rule_body(self.css, ".tree-toggle {")

@@ -19,6 +19,15 @@ of Chat content (role labels, message text, composer input, Send)
 shares the exact same left AND right edges, and the composer input's
 own internal padding goes back to a plain symmetric 0.7rem/0.9rem
 (no longer needs its own asymmetric compensation).
+
+CLAUDE-CA1D-RIVER-PO-02 (Section 18, "composer visual chrome"): the
+input's own all-around border/background box was replaced with a
+single bottom rule ("a disciplined lane, not a boxed widget") - the
+internal horizontal padding dropped from 0.9rem to 0.2rem (there is no
+longer a border to keep text clear of) and the background became
+transparent (the panel's own theme-aware surface shows through). The
+shared-inset mechanism above, which is what actually keeps the
+composer's left/right edges aligned with the thread's, is unchanged.
 """
 from __future__ import annotations
 
@@ -77,12 +86,19 @@ class ComposerTextAlignmentTests(unittest.TestCase):
         self.assertNotIn(".conversation-message.system { margin-right:", self.css)
 
     def test_composer_input_padding_is_symmetric_not_compensating_for_role_margins(self):
+        # CLAUDE-CA1D-RIVER-PO-02 (Section 18, "composer visual chrome"):
+        # the horizontal value dropped from 0.9rem to 0.2rem when the
+        # input's own all-around border/box was replaced with a single
+        # bottom rule (there is no longer a border to keep text clear
+        # of) - the invariant this test actually protects, "symmetric,
+        # not a per-role asymmetric compensation hack," still holds; it
+        # is just a smaller symmetric value now.
         body = self._rule_body('.conversation-input-form input[type="text"] {')
         match = re.search(r"padding:\s*([0-9.]+rem)\s+([0-9.]+rem)\s*;", body)
         self.assertIsNotNone(match, f"expected a plain 2-value padding shorthand, got: {body}")
         top, right = match.groups()
         self.assertEqual(top, "0.7rem")
-        self.assertEqual(right, "0.9rem")
+        self.assertEqual(right, "0.2rem")
 
     def test_composer_input_keeps_flexible_width_send_button_position_unaffected(self):
         body = self._rule_body('.conversation-input-form input[type="text"] {')
@@ -119,12 +135,20 @@ class ComposerTextAlignmentTests(unittest.TestCase):
         self.assertNotIn("conversation-dock-compact-label", macros_source)
         self.assertNotIn("conversation-dock-compact-label", self.css)
 
-    def test_appearance_scoped_input_background_and_text_color_still_theme_aware(self):
-        # The alignment rework must not have disturbed the existing
-        # Light/dark-theme-aware color declarations on the same rule.
+    def test_appearance_scoped_input_text_color_still_theme_aware(self):
+        # CLAUDE-CA1D-RIVER-PO-02 (Section 18): the input's own
+        # background is now deliberately transparent (the "disciplined
+        # lane, not a boxed widget" correction removed the filled box
+        # entirely) rather than an explicit var(--surface-primary) - it
+        # inherits whatever theme surface .conversation-dock-panel/
+        # .chat-region.appearance-* already paint underneath, which stay
+        # theme-aware exactly as before. What must still hold is the
+        # text color itself remaining theme-aware, and the box being
+        # genuinely gone (not a leftover fixed background this stage
+        # forgot to update).
         body = self._rule_body('.conversation-input-form input[type="text"] {')
-        self.assertIn("var(--surface-primary)", body)
         self.assertIn("var(--text-primary)", body)
+        self.assertIn("background: transparent", body)
 
 
 if __name__ == "__main__":

@@ -769,14 +769,17 @@
                                                     {% for task in tasks_open_view %}
                                                     <li class="tree-node" data-tree-node data-task-id="{{ task.id }}">
                                                         <div class="launcher-task-row">
+                                                            <form method="post" action="{{ url_for('workspace.complete_task_route', project_id=project_id, task_id=task.id) }}" class="task-checkbox-form">
+                                                                <label class="task-checkbox-wrap" data-ui-ref="lists.project.tasks.complete">
+                                                                    <input type="checkbox" class="task-checkbox" onchange="this.form.requestSubmit()">
+                                                                    <span class="visually-hidden">Mark "{{ task.title }}" complete</span>
+                                                                </label>
+                                                            </form>
                                                             {% if task.source_available %}
                                                             <a class="tree-leaf launcher-link" data-ui-ref="lists.project.tasks.leaf" href="{{ task.source_url }}">{{ task.title }}</a>
                                                             {% else %}
                                                             <span class="tree-leaf launcher-link launcher-link-unavailable" data-ui-ref="lists.project.tasks.leaf">{{ task.title }} <small>(Source unavailable)</small></span>
                                                             {% endif %}
-                                                            <form method="post" action="{{ url_for('workspace.complete_task_route', project_id=project_id, task_id=task.id) }}">
-                                                                <button type="submit" class="link-button" data-ui-ref="lists.project.tasks.complete">Mark complete</button>
-                                                            </form>
                                                         </div>
                                                     </li>
                                                     {% else %}
@@ -790,14 +793,17 @@
                                                     {% for task in tasks_completed_view %}
                                                     <li class="tree-node" data-tree-node data-task-id="{{ task.id }}">
                                                         <div class="launcher-task-row">
+                                                            <form method="post" action="{{ url_for('workspace.reopen_task_route', project_id=project_id, task_id=task.id) }}" class="task-checkbox-form">
+                                                                <label class="task-checkbox-wrap" data-ui-ref="lists.project.tasks.reopen">
+                                                                    <input type="checkbox" class="task-checkbox" checked onchange="this.form.requestSubmit()">
+                                                                    <span class="visually-hidden">Reopen "{{ task.title }}"</span>
+                                                                </label>
+                                                            </form>
                                                             {% if task.source_available %}
                                                             <a class="tree-leaf launcher-link launcher-task-completed" data-ui-ref="lists.project.tasks.leaf" href="{{ task.source_url }}">{{ task.title }}</a>
                                                             {% else %}
                                                             <span class="tree-leaf launcher-link launcher-link-unavailable" data-ui-ref="lists.project.tasks.leaf">{{ task.title }} <small>(Source unavailable)</small></span>
                                                             {% endif %}
-                                                            <form method="post" action="{{ url_for('workspace.reopen_task_route', project_id=project_id, task_id=task.id) }}">
-                                                                <button type="submit" class="link-button" data-ui-ref="lists.project.tasks.reopen">Reopen</button>
-                                                            </form>
                                                         </div>
                                                     </li>
                                                     {% else %}

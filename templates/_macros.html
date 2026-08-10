@@ -309,9 +309,17 @@
    Delegate are deliberately never offered, not merely disabled. #}
 {% macro operational_action_offers(project_id, message, anchor_scope, case_id) %}
 {% if message.operational_actions %}
-{% set quote = message.text[:2000] %}
+{% set whole_message_quote = message.text[:2000] %}
 <div class="conv-operational-actions" data-ui-ref="chat.operational-actions">
     {% for action in message.operational_actions %}
+    {# CLAUDE-CA1D-RIVER-PO-02 (anchor precision): "prefer the smallest
+       reliable source anchor available" - when this action carries its
+       own anchor_text (set only when a River Action Stack exists -
+       services/conversation_interpreter.py's own _handle_project_
+       question), anchor to THAT action's own text instead of the whole
+       reply. Falls back to the whole message otherwise - a genuine,
+       honest anchor when no finer structure exists, not a regression. #}
+    {% set quote = (action.anchor_text[:2000] if action.anchor_text else whole_message_quote) %}
     {% if action.kind == "task" %}
     <form method="post" action="{{ url_for('workspace.create_task_route', project_id=project_id) }}" class="conv-operational-action-form">
         <input type="hidden" name="anchor_scope" value="{{ anchor_scope }}">
@@ -351,6 +359,59 @@
    reviewer actually makes a real selection anywhere in this dock - "once
    learned, quiet again," never re-coaching an experienced user. #}
 <p class="conv-selection-hint" id="conv-selection-hint" data-ui-ref="chat.selection-hint" hidden>Tip: you can select part of this answer to Tag it, Highlight it, or make a Task from it.</p>
+{% endif %}
+{% endmacro %}
+
+{# CLAUDE-CA1D-RIVER-PO-01 (River Action Stack): a reusable presentation
+   contract for "ARCHIOSK is recommending or surfacing a small ranked set
+   of consequential next moves" - NOT an RFP-specific widget (Section 11's
+   own "prove the abstraction does not depend on RFP-specific language or
+   data" - this macro reads only rank/action/rationale/consequence/
+   uncertainty/evidence, generic fields any future domain can populate
+   the same way). message.river_actions is the model's OWN structured
+   signal (services/project_qa.py's own river_actions schema field, read
+   back verbatim - same "the model's own signal" discipline
+   needs_clarification already uses), gated to apply ONLY when the
+   reviewer was genuinely asking what deserves attention/action next -
+   never forced onto an ordinary explanatory answer (an empty list here
+   renders nothing at all).
+
+   Reuses subdisclosure (this file's own existing, already-accessible
+   <details>/<summary> disclosure primitive - Section 9's own "reuse
+   existing mechanisms, do not create a parallel rendering subsystem")
+   for EACH action's own independent expand/collapse, rather than
+   inventing a second disclosure grammar or a "+"/"-" glyph that would
+   contradict main.css's own existing, deliberate, application-wide
+   "ONE mechanism for every collapse/expand control... never a mix of
+   unrelated arrow glyphs" rule (see that rule's own comment) - Section
+   14 of this stage's own governing prompt explicitly allows deferring
+   to "the current component language" where the two would conflict.
+
+   Rank -> Action (collapsed) -> Expand -> Why it matters/Consequence/
+   Uncertainty -> Evidence (Section 5's own information hierarchy) -
+   never a Make-Task/Tag button per item in this tranche (Section 4's
+   own "do not overload every item with controls" - the existing
+   message-level fourth beat, operational_action_offers above, already
+   covers the whole answer). #}
+{% macro river_action_stack(actions) %}
+{% if actions %}
+<ol class="conv-river-action-stack" data-ui-ref="chat.river-action-stack">
+    {% for action in actions|sort(attribute="rank") %}
+    <li class="conv-river-action">
+        {% call subdisclosure(action.rank|string ~ ". " ~ action.action, ui_ref="chat.river-action-stack.item") %}
+        <div class="conv-river-action-detail">
+            {% if action.rationale %}<p><strong>Why it matters:</strong> {{ action.rationale }}</p>{% endif %}
+            {% if action.consequence %}<p><strong>Consequence:</strong> {{ action.consequence }}</p>{% endif %}
+            {% if action.uncertainty %}<p class="conv-river-action-uncertainty"><strong>Uncertainty:</strong> {{ action.uncertainty }}</p>{% endif %}
+            {% if action.evidence %}
+            <p class="conv-river-action-evidence-label">Evidence:</p>
+            <ul class="source-list">{% for e in action.evidence %}<li class="source-item">{{ e }}</li>{% endfor %}</ul>
+            {% endif %}
+        </div>
+        {% endcall %}
+    </li>
+    {% endfor %}
+</ol>
 {% endif %}
 {% endmacro %}
 

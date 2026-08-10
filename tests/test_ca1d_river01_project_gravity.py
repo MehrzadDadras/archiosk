@@ -126,7 +126,14 @@ class RiverContinuityRouteTests(unittest.TestCase):
         self.assertEqual(len(actions), 2)
         self.assertEqual(actions[0]["kind"], "task")
         self.assertEqual(actions[0]["label"], "Make a Task to track these deadlines")
-        self.assertEqual(actions[1], {"kind": "tag", "label": "Highlight this answer", "tag_id": "built-in:highlight"})
+        # CLAUDE-CA1D-RIVER-PO-02: no River Action Stack here, so
+        # anchor_text is None and the label stays the whole-answer
+        # phrasing - checked field-by-field (not exact dict equality)
+        # since a river-action-stack answer now also carries this key.
+        self.assertEqual(actions[1]["kind"], "tag")
+        self.assertEqual(actions[1]["label"], "Highlight this answer")
+        self.assertEqual(actions[1]["tag_id"], "built-in:highlight")
+        self.assertIsNone(actions[1]["anchor_text"])
 
     def test_ungrounded_answer_offers_no_actions_not_inert_but_not_forced_either(self):
         self._ask("What is the color of the sky in this document?", grounded=False)

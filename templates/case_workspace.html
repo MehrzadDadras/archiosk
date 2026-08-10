@@ -2870,7 +2870,8 @@
                    never a "You"/"Archiosk" label or grounding list text by
                    accident. #}
                 <span class="conv-message-text" data-message-text>{{ message.text|hotlinks(workspace, project_id, message.id, "case", active_case.id) }}</span>
-                {% if message.grounded_in %}
+                {{ macros.river_action_stack(message.river_actions) }}
+                {% if message.grounded_in and not message.river_actions %}
                 {% call macros.subdisclosure('Source grounding') %}
                     <ul class="source-list">{% for g in message.grounded_in %}<li class="source-item">{{ g }}</li>{% endfor %}</ul>
                 {% endcall %}
@@ -2997,7 +2998,8 @@
                 <br><small class="text-muted">Re: {{ message.anchor.anchor_type.replace('_', ' ') }}{% if message.anchor.description %} &mdash; {{ message.anchor.description }}{% endif %}</small>
                 {% endif %}
                 <span class="conv-message-text" data-message-text>{{ message.text|hotlinks(workspace, project_id, message.id, "project") }}</span>
-                {% if message.grounded_in %}
+                {{ macros.river_action_stack(message.river_actions) }}
+                {% if message.grounded_in and not message.river_actions %}
                 {% call macros.subdisclosure('Source grounding') %}
                     <ul class="source-list">{% for g in message.grounded_in %}<li class="source-item">{{ g }}</li>{% endfor %}</ul>
                 {% endcall %}

@@ -227,9 +227,26 @@ class CssTierTreatmentTests(unittest.TestCase):
         self.assertNotIn(".launcher-heading.active", line)
         self.assertIn(".launcher-heading:focus-visible", line)
 
-    def test_launcher_link_active_unchanged_selection_fill(self):
+    def test_launcher_link_active_uses_a_translucent_wash_not_a_solid_fill(self):
+        # CLAUDE-LEFTPANEL-DENSITY-04 (Product Owner refinement, "reduce
+        # the opacity/intensity of the current filled highlight... a
+        # restrained tint... rather than a large solid block"): the flat
+        # 100%-opaque --surface-selected fill from CLAUDE-P40-VW7A-QA is
+        # superseded here, not merely tweaked - a real, deliberate
+        # visual-strength reduction, not a token rename.
         body = self._rule_body(".launcher-link.active {")
-        self.assertIn("background: var(--surface-selected)", body)
+        self.assertIn("color-mix(in srgb, var(--surface-selected)", body)
+        self.assertNotIn("background: var(--surface-selected)", body)
+
+    def test_launcher_link_active_edge_accent_distinguishes_it_from_current_project(self):
+        # Both .active and .current-project now use a left-edge accent
+        # instead of (or alongside) a fill, so "hover, active, and
+        # selected states remain distinguishable" needs its own explicit
+        # check: different color token, and .active keeps a translucent
+        # fill that .current-project deliberately has none of.
+        active_body = self._rule_body(".launcher-link.active {")
+        self.assertIn("border-left: 2px solid var(--machine-blue)", active_body)
+        self.assertNotIn("var(--border-strong)", active_body)
 
     def test_current_project_uses_edge_marker_not_full_fill(self):
         body = self._rule_body(".launcher-link.current-project {")

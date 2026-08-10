@@ -3414,6 +3414,7 @@ def _run_conversation_turn(
         next_steps=result.next_steps,
         organize_source_id=result.organize_source_id,
         operational_actions=result.operational_actions,
+        river_actions=result.river_actions,
     )
 
     if result.focused_finding_id is not None:

@@ -1583,6 +1583,19 @@ class ConversationMessage:
     # leaves this empty. Optional/defaulted so old saved ConversationMessage
     # JSON (pre-CA1D) deserializes unchanged.
     operational_actions: list[dict] = field(default_factory=list)
+    # CLAUDE-CA1D-RIVER-PO-01 (River Action Stack): a small, ranked set
+    # of consequential next moves ({"rank": int, "action": str,
+    # "rationale": str, "consequence": str, "uncertainty": str,
+    # "evidence": list[str]}) - the model's OWN signal, read back
+    # verbatim (same discipline grounded_in/next_steps already use),
+    # never generated or reordered by this application's own code beyond
+    # defensive validation (services/project_qa.py's own
+    # _parse_river_actions). Only ever set for a project_qa_answered
+    # reply the reviewer was genuinely asking "what should I do next" -
+    # every other reply leaves this empty. Optional/defaulted so old
+    # saved ConversationMessage JSON (pre-CA1D-RIVER-PO-01) deserializes
+    # unchanged.
+    river_actions: list[dict] = field(default_factory=list)
 
 
 @dataclass
@@ -6756,6 +6769,7 @@ class CaseWorkspaceStore:
         actor: Optional[str] = None, grounded_in: Optional[list[str]] = None,
         next_steps: Optional[list[dict]] = None, selected_source_id: Optional[str] = None,
         organize_source_id: Optional[str] = None, operational_actions: Optional[list[dict]] = None,
+        river_actions: Optional[list[dict]] = None,
     ) -> dict:
         """
         case_id=None posts into ProjectWorkspace.project_conversation
@@ -6770,7 +6784,7 @@ class CaseWorkspaceStore:
                 actor=actor, action_taken=action_taken, anchor=anchor,
                 grounded_in=grounded_in or [], next_steps=next_steps or [],
                 selected_source_id=selected_source_id, organize_source_id=organize_source_id,
-                operational_actions=operational_actions or [],
+                operational_actions=operational_actions or [], river_actions=river_actions or [],
             )
             workspace.project_conversation.append(asdict(message))
             self.save(workspace)
@@ -6792,7 +6806,7 @@ class CaseWorkspaceStore:
             grounded_in=grounded_in or [],
             next_steps=next_steps or [],
             selected_source_id=selected_source_id, organize_source_id=organize_source_id,
-            operational_actions=operational_actions or [],
+            operational_actions=operational_actions or [], river_actions=river_actions or [],
         )
         case["conversation"].append(asdict(message))
         self.save(workspace)

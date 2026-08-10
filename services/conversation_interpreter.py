@@ -101,6 +101,18 @@ class InterpretationResult:
     # runs - Conversation != Investigation holds by construction, not by
     # a second check here).
     operational_actions: list[dict] = field(default_factory=list)
+    # CLAUDE-CA1D-RIVER-PO-01 (River Action Stack): a small, ranked set
+    # of consequential next moves, read back verbatim from
+    # services/project_qa.py's own ProjectQAResult.river_actions (same
+    # "the model's own signal" discipline needs_clarification already
+    # uses) - never populated by this interpreter's own logic, and
+    # deliberately kept SEPARATE from operational_actions above (a River
+    # Action Stack item is presentation - rank/rationale/consequence/
+    # evidence for a small set of moves - not itself a Make-Task/Tag
+    # button; the existing message-level fourth beat still covers that).
+    # Only ever set by _handle_project_question; every other reply
+    # leaves this empty.
+    river_actions: list[dict] = field(default_factory=list)
 
 
 _FINDING_NUMBER_PATTERN = re.compile(r"finding\s*#?\s*(\d+)", re.IGNORECASE)
@@ -1717,18 +1729,68 @@ def _handle_project_question(
     # per Section 9's own "never show an action GO cannot actually
     # perform" capability-truth requirement.
     operational_actions: list[dict] = []
-    if result.grounded_in:
+    # CLAUDE-CA1D-RIVER-PO-02: a River Action Stack answer may leave the
+    # top-level grounded_in empty on purpose (its own prompt instructions
+    # say each action's evidence belongs in that action's own field
+    # instead) - the fourth beat must still be offered whenever there is
+    # genuinely something to act on, whichever field actually carries it.
+    if result.grounded_in or result.river_actions:
         # Same truncation convention routes/workspace.py's own quick_start
         # already uses for a Case title - "Follow up: " names what the
-        # Task is actually about (the question), never the full answer
-        # text, which the Task's own anchor/provenance already preserves
-        # in full via anchor_quote.
-        follow_up_title = f"Follow up: {text}"
+        # Task is actually about, never the full answer text, which the
+        # Task's own anchor/provenance already preserves in full via
+        # anchor_quote.
+        top_action = result.river_actions[0] if result.river_actions else None
+        # CLAUDE-CA1D-RIVER-PO-02 (anchor precision): "prefer the smallest
+        # reliable source anchor available... the task can reference
+        # Action 1, not merely the assistant message containing Action 1."
+        # When a River Action Stack exists, anchor to its own top-ranked
+        # action's own text (heading + rationale + consequence) instead
+        # of the whole reply - a real Product Owner correction, not a
+        # hypothetical. Falls back to the whole message (still a genuine,
+        # honest "smallest reliable anchor" when no finer structure
+        # exists - Section's own "preserve cases where a task genuinely
+        # originates from a whole answer").
+        if top_action is not None:
+            follow_up_title = f"Follow up: {top_action['action']}"
+            anchor_text = ". ".join(
+                part for part in (top_action["action"], top_action["rationale"], top_action["consequence"]) if part
+            )
+        else:
+            follow_up_title = f"Follow up: {text}"
+            anchor_text = None
         if len(follow_up_title) > 80:
             follow_up_title = follow_up_title[:77] + "..."
+        # CLAUDE-CA1D-RIVER-PO-02 CONSOLIDATION (live-verified correction):
+        # anchor_text is a fine, honest anchor for the TASK's own title
+        # and provenance metadata - nothing renders it back into the
+        # conversation text, so it never needs to BE a substring of
+        # anything. Highlighting is different: app.py's hotlinks() marks
+        # a tagged passage by slicing message.text[start:end] using the
+        # STORED OFFSETS directly - it never searches for the quote's
+        # content. A river action's own text (heading + rationale +
+        # consequence) is model-generated structured data, never a
+        # literal substring of the reply prose, so its length routinely
+        # exceeds len(message.text) entirely; hotlinks()'s own bounds
+        # guard then silently drops the occurrence - a real, persisted
+        # Tag that never highlights anything and never explains why.
+        # Live-verified: "Highlight this action" produced a tag_occurrence
+        # accepted by the route, counted in Tags, and invisible in the
+        # conversation on every subsequent render. "Prefer the smallest
+        # reliable source anchor available" - for highlighting
+        # specifically, the whole message IS the smallest reliable
+        # anchor when no finer text genuinely appears in the reply, so
+        # Highlight always anchors to the whole answer, independent of
+        # whether a River Action Stack exists.
         operational_actions = [
-            {"kind": "task", "label": _operational_action_label(text.lower()), "default_title": follow_up_title},
-            {"kind": "tag", "label": "Highlight this answer", "tag_id": "built-in:highlight"},
+            {
+                "kind": "task", "label": _operational_action_label(text.lower()),
+                "default_title": follow_up_title, "anchor_text": anchor_text,
+            },
+            {
+                "kind": "tag", "label": "Highlight this answer",
+                "tag_id": "built-in:highlight", "anchor_text": None,
+            },
         ]
 
     return InterpretationResult(
@@ -1736,6 +1798,7 @@ def _handle_project_question(
         reply_text=" ".join(reply_parts),
         grounded_in=result.grounded_in,
         operational_actions=operational_actions,
+        river_actions=result.river_actions,
     )
 
 

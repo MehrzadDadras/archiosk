@@ -49,7 +49,16 @@ PROVIDER_NAME = "anthropic"
 # history bounding.
 # CLAUDE-POSTCAMEL-CA1C: bumped again (ca1b -> ca1c) for the
 # constructive-advice / capability-category-error / concision rules.
-PROJECT_QA_PROMPT_VERSION = "ca1c"
+# CLAUDE-CA1D-RIVER-PO-01: bumped again (ca1c -> ca1d) for the optional
+# river_actions structured field and its own gating rule.
+PROJECT_QA_PROMPT_VERSION = "ca1d"
+
+# CLAUDE-CA1D-RIVER-PO-01: a defensive ceiling on the model's own
+# river_actions array, independent of the prompt's own "normally 1-5"
+# guidance - this is what actually protects the UI from an unbounded
+# list, not merely asking nicely. Malformed items (no non-empty "action")
+# are dropped outright rather than rendered as a blank heading.
+_MAX_RIVER_ACTIONS = 8
 
 _MAX_CANDIDATE_ITEMS_IN_PROMPT = 40
 _MAX_GOVERNED_REQUIREMENTS_IN_PROMPT = 40
@@ -136,6 +145,25 @@ BEHAVIORAL_CONTRACT = (
     "material reasoning, and (if genuinely useful) a next step - not a "
     "restated question, a long introduction, or generic project-"
     "management prose.\n"
+    # CLAUDE-CA1D-RIVER-PO-01 (River Action Stack): a live Product Owner
+    # review found a genuinely useful answer to "what should I do next"
+    # rendered as one dense explanatory paragraph - the wrong information
+    # hierarchy for a question asking what deserves attention now. This
+    # is a NARROW, semantically-gated structured-output addition, not a
+    # general summarization instruction - see river_actions in the
+    # requested schema below for exactly when it applies.
+    "- If, and only if, the reviewer is asking what deserves attention or "
+    "action next (not an ordinary factual or explanatory question), "
+    "identify a SMALL set of the most consequential next moves (normally "
+    "1-5 - never pad to a fixed count, and never promote something to "
+    "this list merely because it exists in the source document) and "
+    "return them as river_actions in the schema below, ranked by genuine "
+    "consequence (blocking downstream work, gating human authority, an "
+    "approaching externally meaningful deadline, resolving important "
+    "uncertainty, affecting submission eligibility) - never by document "
+    "order, recency, or verbosity. Leave river_actions empty for every "
+    "other kind of question - do not force this structure onto ordinary "
+    "answers.\n"
     "- Respond only in the exact JSON schema requested, with no prose "
     "outside it."
 )
@@ -158,6 +186,17 @@ class ProjectQAResult:
     provider: Optional[str] = None
     model: Optional[str] = None
     requested_at: Optional[str] = None
+    # CLAUDE-CA1D-RIVER-PO-01 (River Action Stack): the model's OWN
+    # signal, same "read back verbatim" discipline needs_clarification
+    # already uses - empty for every question except one genuinely
+    # asking what deserves attention/action next (see BEHAVIORAL_CONTRACT's
+    # own gating rule and _build_prompt's own schema instructions). Each
+    # item: {"rank": int, "action": str, "rationale": str, "consequence":
+    # str, "uncertainty": str, "evidence": list[str]} - defensively
+    # parsed in answer_project_question (malformed items dropped, never
+    # rendered as a blank heading; capped at _MAX_RIVER_ACTIONS regardless
+    # of what the model returns).
+    river_actions: list[dict] = field(default_factory=list)
 
 
 def answer_project_question(
@@ -226,8 +265,44 @@ def answer_project_question(
         grounded_in=[str(g) for g in parsed.get("grounded_in", [])],
         not_covered=(str(not_covered).strip() or None) if not_covered else None,
         needs_clarification=bool(parsed.get("needs_clarification", False)),
+        river_actions=_parse_river_actions(parsed.get("river_actions")),
         provider=PROVIDER_NAME, model=model, requested_at=requested_at,
     )
+
+
+def _parse_river_actions(raw) -> list[dict]:
+    """Defensive parsing, not trust-on-faith: the model's own JSON is
+    read back, never executed as a template or reinterpreted - a
+    malformed item (no non-empty "action" heading) is dropped outright
+    rather than rendered as a blank/broken row, and the list is
+    hard-capped at _MAX_RIVER_ACTIONS regardless of what the model
+    returned (the prompt's own "normally 1-5" is guidance to the model,
+    this is the actual backstop)."""
+    if not isinstance(raw, list):
+        return []
+    parsed_actions: list[dict] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        action_text = str(item.get("action", "")).strip()
+        if not action_text:
+            continue
+        try:
+            rank = int(item.get("rank"))
+        except (TypeError, ValueError):
+            rank = len(parsed_actions) + 1
+        parsed_actions.append({
+            "rank": rank,
+            "action": action_text,
+            "rationale": str(item.get("rationale", "")).strip(),
+            "consequence": str(item.get("consequence", "")).strip(),
+            "uncertainty": str(item.get("uncertainty", "")).strip(),
+            "evidence": [str(e) for e in item.get("evidence", []) if str(e).strip()],
+        })
+        if len(parsed_actions) >= _MAX_RIVER_ACTIONS:
+            break
+    parsed_actions.sort(key=lambda a: a["rank"])
+    return parsed_actions
 
 
 def _select_bounded_history(recent_history: list[dict]) -> list[dict]:
@@ -374,8 +449,23 @@ def _build_prompt(
         'item(s) above support this>", ...], "not_covered": "<what the question '
         'asked about that this evidence does not cover, or empty string if fully '
         'covered>", "needs_clarification": <true if the evidence is genuinely '
-        "insufficient to answer meaningfully, false otherwise>}. If the evidence "
-        'given is insufficient, say so plainly in "answer" and list what is '
-        'missing in "not_covered" - do not guess.'
+        'insufficient to answer meaningfully, false otherwise>, "river_actions": '
+        '[{"rank": <1-based integer, most consequential first>, "action": '
+        '"<short, concrete action heading - what the reviewer should do, not a '
+        'restated fact>", "rationale": "<why this was surfaced now - the '
+        'consequence signal that earned its rank>", "consequence": "<what this '
+        'is blocking, enabling, or affecting downstream if left unaddressed>", '
+        '"uncertainty": "<anything you genuinely do not know or cannot safely '
+        'infer about this action - empty string if none>", "evidence": ["<short '
+        'citation supporting THIS action specifically>", ...]}, ...]}. '
+        'river_actions MUST be an empty array [] unless the reviewer is genuinely '
+        "asking what deserves attention or action next (see the rule above) - "
+        'never populate it for an ordinary factual/explanatory question. When '
+        'river_actions is populated, keep "answer" to one short framing sentence '
+        "at most (the ranked list itself carries the substance) and put each "
+        'action\'s own supporting evidence in that action\'s own "evidence" field '
+        'rather than repeating it all in the top-level "grounded_in". If the '
+        'evidence given is insufficient, say so plainly in "answer" and list what '
+        'is missing in "not_covered" - do not guess.'
     )
     return "\n".join(lines)

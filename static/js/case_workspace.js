@@ -1934,6 +1934,22 @@ document.addEventListener('DOMContentLoaded', () => {
         // by id) because a fresh one of these can render on every new
         // evidence-grounded answer, same reasoning as the Tag-removal
         // buttons' own delegated handler elsewhere in this file.
+        //
+        // CLAUDE-CA1D-RIVER-PO-02 (Eye/status-surface correction): this
+        // used to ALSO call showStatus(...) - #conv-selection-status's
+        // own CSS is `position: fixed; bottom: 1rem; right: 1rem`
+        // (designed to sit near a live text selection's OWN toolbar,
+        // which is what it was actually built for), not anywhere near
+        // wherever THIS button happens to be clicked. In this app's own
+        // 6-panel shell, that fixed viewport corner visually coincides
+        // with the Eye pane's own screen region - a real Product Owner
+        // report of "task-created feedback flashing in the Eye panel"
+        // was this exact toast rendering on top of it, not any code
+        // actually touching Eye. Eye is for seeing; Tasks are for doing -
+        // feedback for a fourth-beat action now lives ONLY on the
+        // button that was actually clicked (its own label changes, right
+        // where the reviewer is already looking), never a floating
+        // toast anchored to an unrelated part of the screen.
         document.addEventListener('submit', (e) => {
             const form = e.target.closest('.conv-operational-action-form');
             if (!form) return;
@@ -1944,21 +1960,28 @@ document.addEventListener('DOMContentLoaded', () => {
             const isTag = form.action.indexOf('/tags') !== -1;
             postForm(form.action, Object.fromEntries(new FormData(form))).then(({ ok, data }) => {
                 if (!ok || !data.ok) {
-                    showStatus((data && data.error) || 'Something went wrong.', true);
-                    if (btn) { btn.disabled = false; }
+                    if (btn) {
+                        btn.disabled = false;
+                        btn.title = (data && data.error) || 'Something went wrong.';
+                        const previousLabel = btn.textContent;
+                        btn.textContent = 'Error — try again';
+                        window.setTimeout(() => { btn.textContent = previousLabel; }, 2500);
+                    }
                     return;
                 }
                 if (isTag) {
                     patchTagsListOnAdd(data.occurrence, data.tag, data.counts);
-                    showStatus(`Tagged as ${data.tag.name}.`, true);
                 } else {
                     patchTasksListOnCreate(data.task, data.counts);
-                    showStatus('Task created.', true);
                 }
                 if (btn) { btn.textContent = isTag ? 'Tagged' : 'Task created'; }
             }).catch(() => {
-                showStatus('Network error \u2014 please try again.', true);
-                if (btn) { btn.disabled = false; btn.textContent = originalLabel; }
+                if (btn) {
+                    btn.disabled = false;
+                    btn.title = 'Network error \u2014 please try again.';
+                    btn.textContent = 'Error \u2014 try again';
+                    window.setTimeout(() => { btn.textContent = originalLabel; }, 2500);
+                }
             });
         });
 

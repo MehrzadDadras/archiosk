@@ -574,14 +574,27 @@ html.launcher-hidden .launcher-panel { display: none; }
        row-inset), was a symmetric 0.55rem baked into every side) - the
        right side keeps its own original 0.55rem unchanged, since
        nothing to the right (chevron/count badge) was reported too
-       loose, only the left margin before a row's own content was. */
-    padding: 0.35rem 0.55rem 0.35rem var(--tree-row-inset);
+       loose, only the left margin before a row's own content was.
+       CLAUDE-LEFTPANEL-DENSITY-04 (Product Owner refinement, "denser,
+       quieter, more index-like"): top/bottom went from 0.35rem to
+       0.24rem - since .tree-node/.tree-children/.tree carry no margin
+       or gap of their own (checked - all zero), a row's own top/bottom
+       padding IS the entire "space between adjacent rows," so this one
+       change is what actually tightens the whole tree, at every depth,
+       for free. */
+    padding: 0.24rem 0.55rem 0.24rem var(--tree-row-inset);
     border-radius: 5px;
 }
 .launcher-heading:hover, .launcher-heading:focus-visible { background: var(--surface-hover); color: var(--text-primary); text-decoration: none; }
 .launcher-link {
     display: block;
-    padding: 0.45rem 0.55rem 0.45rem var(--tree-row-inset);
+    /* CLAUDE-LEFTPANEL-DENSITY-04: 0.45rem -> 0.3rem, same reasoning as
+       .launcher-heading above. Still clears a real touch/click target
+       (0.3rem*2 + var(--text-sm) line-height is comfortably above the
+       usual ~24px floor) - "navigation can be dense," this is the
+       navigation, not one of the spacious action controls (Send,
+       checkboxes, + disclosure) that stayed untouched by this pass. */
+    padding: 0.3rem 0.55rem 0.3rem var(--tree-row-inset);
     border-radius: 5px;
     color: var(--text-secondary);
     font-family: var(--font-body);
@@ -597,8 +610,34 @@ html.launcher-hidden .launcher-panel { display: none; }
    current Project's own name row (.current-project, below) no longer
    qualifies for this class at all - see templates/base.html's own
    comment on why "Chats" (or whichever child is actually open) is the
-   sole thing allowed to look selected. */
-.launcher-link.active { background: var(--surface-selected); color: var(--text-primary); }
+   sole thing allowed to look selected.
+
+   CLAUDE-LEFTPANEL-DENSITY-04 (Product Owner refinement, "reduce the
+   opacity/intensity of the current filled highlight; prefer a
+   restrained tint, subtle edge, or slim accent rather than a large
+   solid block"): the flat, fully-opaque --surface-selected fill read as
+   too heavy/button-like for a navigation row. Replaced with the SAME
+   translucent color-mix() idiom this stage's highlight/focus work
+   already established (a low-alpha wash, not a solid block) plus a
+   slim 2px left accent - distinct in BOTH weight and color from
+   .current-project's own 3px, fill-less --border-strong landmark just
+   below, so "hover, active, and selected states remain
+   distinguishable" holds: hover is a plain --surface-hover wash with no
+   border; active is a lighter tinted wash WITH a thin --machine-blue
+   edge (machine/system "this is what's displayed" - a genuine semantic
+   match, not --border-strong's own "structural landmark" meaning);
+   current-project is border-only, no fill at all. 35% keeps this
+   comfortably lighter than the already-verified 100% case (--text-
+   primary was contrast-checked against the full --surface-selected
+   fill; a lower-alpha version sits strictly between that and the
+   panel's own resting background, so contrast can only be as good or
+   better). */
+.launcher-link.active {
+    background: color-mix(in srgb, var(--surface-selected) 35%, transparent);
+    color: var(--text-primary);
+    border-left: 2px solid var(--machine-blue);
+    padding-left: calc(var(--tree-row-inset) - 2px);
+}
 /* CLAUDE-P40-VW7A-QA: the current Project's own restrained "you are
    here" marker - Section 3's own "distinct title text... a narrow edge
    indicator... do not reuse the full selected-row fill." A left-edge
@@ -733,15 +772,17 @@ html.launcher-hidden .launcher-panel { display: none; }
     letter-spacing: 0.05em;
     color: var(--text-metadata);
     /* CLAUDE-LEFTPANEL-DENSITY-03: same tightened left inset as every
-       other tree row (.launcher-heading/.launcher-link, above). */
-    padding: 0.35rem 0.55rem 0.15rem var(--tree-row-inset);
+       other tree row (.launcher-heading/.launcher-link, above).
+       CLAUDE-LEFTPANEL-DENSITY-04: top/bottom tightened to match the
+       same pass on .launcher-heading/.launcher-link above. */
+    padding: 0.26rem 0.55rem 0.1rem var(--tree-row-inset);
     margin: 0;
     display: flex;
     align-items: center;
     gap: 0.35rem;
 }
 .tree-node-group { margin: 0; }
-.tree-node-empty { padding: 0.2rem 0.55rem 0.2rem var(--tree-row-inset); }
+.tree-node-empty { padding: 0.16rem 0.55rem 0.16rem var(--tree-row-inset); }
 .tree-node-empty .pane-note { margin: 0; font-size: var(--text-xs); }
 .launcher-task-row {
     display: flex;
@@ -757,6 +798,60 @@ html.launcher-hidden .launcher-panel { display: none; }
 .launcher-task-completed {
     text-decoration: line-through;
     color: var(--text-metadata);
+}
+/* CLAUDE-CA1D-RIVER-PO-02 (Product Owner interaction correction, "task
+   checkbox not a text link"): a conventional checkbox as the PRIMARY
+   completion affordance, replacing the "Mark complete"/"Reopen" text
+   links - restrained (thin square outline; a quiet check, not a large
+   consumer-app control), matching this app's own stated "color appears
+   rarely" discipline. Uses --accepted-green - already the token whose
+   declared meaning in tokens.css is literally "accepted / confirmed,"
+   a genuine semantic match for "this task is done," not a repurposed
+   or newly-invented color. A real <input type="checkbox"> (not a div
+   with aria-checked) so keyboard (Tab + Space) and screen-reader
+   checked/unchecked state come from the browser itself; the visually-
+   hidden label text names the specific task, and the SAME pre-existing
+   complete_task_route/reopen_task_route form-POST this replaces is
+   still what actually runs (on the native "change" event) - this is a
+   new affordance for one existing action, not a second completion
+   mechanism competing with it. */
+.task-checkbox-form { flex: 0 0 auto; margin: 0; }
+.task-checkbox-wrap {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.5rem;
+    height: 1.5rem;
+    cursor: pointer;
+}
+.task-checkbox {
+    appearance: none;
+    -webkit-appearance: none;
+    margin: 0;
+    width: 0.95rem;
+    height: 0.95rem;
+    border: 1.5px solid var(--text-metadata);
+    border-radius: 3px;
+    background: transparent;
+    cursor: pointer;
+    position: relative;
+    flex: 0 0 auto;
+}
+.task-checkbox:hover { border-color: var(--text-secondary); }
+.task-checkbox:checked {
+    border-color: var(--accepted-green);
+    background: color-mix(in srgb, var(--accepted-green) 20%, transparent);
+}
+.task-checkbox:checked::after {
+    content: "";
+    position: absolute;
+    left: 2px;
+    top: -1px;
+    width: 4px;
+    height: 8px;
+    border: solid var(--accepted-green);
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
 }
 .launcher-link-unavailable {
     color: var(--text-disabled);
@@ -782,30 +877,80 @@ html.launcher-hidden .launcher-panel { display: none; }
 /* CLAUDE-P40-VW8-QA, Section 11: the inline tagged-text treatment - a
    real, visible consequence of "Add Tag" on the source text itself
    (app.py's own `hotlinks` filter wraps the exact tagged substring in
-   this <mark>). Deliberately does NOT reuse --tagcolor-* as a fill
-   background - those are raw, saturated swatch-dot colors, never
-   contrast-verified against text, and reusing one directly here could
-   easily fail legibility in at least one of Light/Dark/Tinted. Instead
-   the FILL reuses --surface-selected (already contrast-verified
-   against --text-primary in every mode, the same "selected/current"
-   treatment used elsewhere in this app) and the per-tag color comes
-   through as a border-bottom stripe only - a 2px line has no text-
-   contrast requirement the way a fill does, so the raw swatch color is
-   safe to use there directly. */
+   this <mark>, the ONE shared primitive every tag type - Highlight/
+   Important/Question/a custom color - renders through). Deliberately
+   does NOT reuse --tagcolor-* as a fill background - those are raw,
+   saturated swatch-dot colors, never contrast-verified against text,
+   and reusing one directly here could easily fail legibility in at
+   least one of Light/Dark/Tinted. Instead the FILL reuses
+   --surface-selected (already contrast-verified against --text-primary
+   in every mode, the same "selected/current" treatment used elsewhere
+   in this app) and the per-tag color comes through as a border-bottom
+   stripe only - a 2px line has no text-contrast requirement the way a
+   fill does, so the raw swatch color is safe to use there directly.
+
+   CLAUDE-CA1D-HIGHLIGHT-CONTRAST-01 (Product Owner visual-accessibility
+   correction): `color` was never set here, so a real browser's own
+   built-in default `<mark>` style (background: yellow; color: black -
+   not a leftover from this file, an actual user-agent stylesheet rule,
+   which wins over plain inheritance since inheritance only applies when
+   NOTHING - including the UA sheet - already sets the property on the
+   element itself) silently forced literal black text regardless of
+   theme. Invisible in Light mode (--text-primary is already near-black
+   there, so the wrong value looked almost like the right one) but a
+   real contrast failure in Dark mode specifically: --dark-surface-
+   selected is a dark warm brown and the UA default's literal black
+   text against it is exactly the "dark lettering in a brownish
+   block" reported live. The fix is the same token this rule's own
+   comment already says was chosen for exactly this pairing -
+   --text-primary was already contrast-verified against --surface-
+   selected in every mode; it simply was never actually applied.
+
+   CLAUDE-CA1D-HIGHLIGHT-CONTRAST-02 (Product Owner visual refinement,
+   "translucent focus, not opaque highlight"): the fix above made text
+   readable but the fill was still an OPAQUE, mode-invariant neutral
+   (--surface-selected) - a solid marker block that fully replaces
+   whatever was visually behind it, and looks identical no matter which
+   tag color created it. Replaced with a translucent wash of the tag's
+   OWN color via color-mix() against the element's own background -
+   "content remains primary; highlight is an atmospheric layer behind
+   it," per an editor-diff-highlighting mental model. This is a PERSISTENT
+   state (the user deliberately tagged this text) so the wash does not
+   animate or fade - see .conv-source-flash below for the separate,
+   deliberately-animated TEMPORARY-focus sibling of this same pattern.
+   22% was verified by hand (relative-luminance contrast ratio, WCAG
+   formula) against this app's two extreme surfaces - --canvas (Light,
+   near-white) and --dark-canvas (Dark/Tinted/Deep Forest, all a near-
+   black canvas) - using the DARKEST/most saturated swatch (--tagcolor-
+   red) as the worst case, and cleared 4.5:1 with a wide margin in both
+   directions (>10:1 Light, ~14:1 Dark).
+
+   CLAUDE-CA1D-HIGHLIGHT-CONTRAST-03 (Product Owner visual refinement,
+   "reduce highlight strength"): 22% still read as "a block of color"
+   on a live multi-line passage, not the intended "faint translucent
+   tint" - lowered to 12%. Since a LOWER alpha only pulls the resulting
+   background closer to the surface the CONTRAST-02 math above already
+   verified, contrast can only improve further at 12% than it was at
+   22% - no new verification needed, this is a strictly safer point on
+   the same curve. The border-bottom stripe (full, un-mixed swatch
+   color) is unchanged - it is what still signals "this passage carries
+   tag X" from a glance; the fill's job is now just atmosphere, not
+   identification. */
 .tag-highlight-inline {
-    background: var(--surface-selected);
+    background: color-mix(in srgb, var(--tagcolor-yellow) 12%, transparent);
+    color: var(--text-primary);
     border-bottom: 2px solid var(--tagcolor-yellow);
     border-radius: 2px;
     padding: 0.05em 0.1em;
     box-decoration-break: clone;
     -webkit-box-decoration-break: clone;
 }
-.tag-highlight-inline.conv-tag-color-yellow { border-bottom-color: var(--tagcolor-yellow); }
-.tag-highlight-inline.conv-tag-color-orange { border-bottom-color: var(--tagcolor-orange); }
-.tag-highlight-inline.conv-tag-color-red { border-bottom-color: var(--tagcolor-red); }
-.tag-highlight-inline.conv-tag-color-green { border-bottom-color: var(--tagcolor-green); }
-.tag-highlight-inline.conv-tag-color-blue { border-bottom-color: var(--tagcolor-blue); }
-.tag-highlight-inline.conv-tag-color-purple { border-bottom-color: var(--tagcolor-purple); }
+.tag-highlight-inline.conv-tag-color-yellow { background: color-mix(in srgb, var(--tagcolor-yellow) 12%, transparent); border-bottom-color: var(--tagcolor-yellow); }
+.tag-highlight-inline.conv-tag-color-orange { background: color-mix(in srgb, var(--tagcolor-orange) 12%, transparent); border-bottom-color: var(--tagcolor-orange); }
+.tag-highlight-inline.conv-tag-color-red { background: color-mix(in srgb, var(--tagcolor-red) 12%, transparent); border-bottom-color: var(--tagcolor-red); }
+.tag-highlight-inline.conv-tag-color-green { background: color-mix(in srgb, var(--tagcolor-green) 12%, transparent); border-bottom-color: var(--tagcolor-green); }
+.tag-highlight-inline.conv-tag-color-blue { background: color-mix(in srgb, var(--tagcolor-blue) 12%, transparent); border-bottom-color: var(--tagcolor-blue); }
+.tag-highlight-inline.conv-tag-color-purple { background: color-mix(in srgb, var(--tagcolor-purple) 12%, transparent); border-bottom-color: var(--tagcolor-purple); }
 
 /* A small, quiet text-style action inside a Lists row (Mark complete /
    Reopen / Remove) - .btn's own padding (0.85rem 1.5rem) is sized for a
@@ -4411,12 +4556,32 @@ main:hover,
        longer needs its own asymmetric compensation (CLAUDE-P40-VW8-QA's
        left:1.5rem special case is superseded, not layered on top of,
        the new shared inset - two overlapping fixes for the same
-       alignment would just be a different inconsistency). */
-    padding: 0.7rem 0.9rem;
-    background: var(--surface-primary);
-    border: 1px solid var(--border);
-    border-radius: 4px;
+       alignment would just be a different inconsistency).
+
+       CLAUDE-CA1D-RIVER-PO-02 (Section 18, "composer visual chrome"):
+       a full border+radius+filled-surface box beside a filled Send
+       button read as one heavy search-bar widget, not "a disciplined
+       lane." Replaced the all-around border with a single bottom rule
+       - "input area as a disciplined lane, not a boxed widget," the
+       same parallel-horizontal-structure principle as the operational-
+       action controls above, applied to the one remaining boxed
+       control in this row. Background stays transparent (the panel's
+       own surface shows through) rather than a separate lighter/darker
+       fill, so there is nothing left reading as an enclosure. The
+       clear-editable-region requirement is met by the bottom rule plus
+       the existing global input:focus-visible outline (unchanged) -
+       both survive dark/tinted/forest since --border already carries
+       per-theme contrast the same as every other divider in this
+       file. */
+    padding: 0.7rem 0.2rem;
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid var(--border);
+    border-radius: 0;
     color: var(--text-primary);
+}
+.conversation-input-form input[type="text"]:focus {
+    border-bottom-color: var(--machine-blue);
 }
 .conversation-input-form button {
     font-family: var(--font-body);
@@ -4747,26 +4912,60 @@ main:hover,
    filled cards around ordinary...messages" de-boxing rule above still
    applies to a message's RESTING appearance; this is time-boxed feedback
    that JS removes 2.5s after applying it, not a redesign of that
-   resting state). Uses --highlight-orange-tint, not one of the new
-   --tagcolor-* swatch colors - those are raw, mode-invariant decorative
-   choices never verified as a TEXT background, whereas -tint tokens are
-   built for exactly this (a background wash unmodified text stays
-   readable against, verified per Light/Dark/Tinted the same as every
-   other -tint hover state in this file) and --highlight-orange already
-   means "the one current/active position in a sequence" - a genuine
-   semantic match for "this is what you navigated to," not a
-   repurposing. Respects reduced-motion by skipping the fade and still
-   leaving a brief flat wash. */
+   resting state). Built on --highlight-orange - already means "the one
+   current/active position in a sequence," a genuine semantic match for
+   "this is what you navigated to," not a repurposing.
+
+   CLAUDE-CA1D-HIGHLIGHT-CONTRAST-02 (Product Owner visual refinement,
+   "translucent focus, not opaque highlight"): originally an opaque flat
+   --highlight-orange-tint wash - readable, but a solid block that hid
+   the surrounding cockpit rather than sitting as a layer behind it, and
+   visually indistinguishable in KIND from .tag-highlight-inline's own
+   PERSISTENT state above (same flat fill, just a different hue) even
+   though the two mean different things: this one is a few seconds of
+   "you just arrived here," that one is "the user chose to mark this."
+   Replaced with an actual glow - a translucent color-mix() background
+   wash plus a soft blurred box-shadow aura, both fading to nothing -
+   using the same low-alpha reasoning verified above, so legibility
+   holds at every animation frame, not just at rest.
+
+   CLAUDE-CA1D-HIGHLIGHT-CONTRAST-03 (Product Owner visual refinement,
+   "reduce highlight strength" - explicitly "temporary source-return
+   focus should fade quickly and never resemble a persistent selected
+   block"): the original 22%/35% peak still read as a block on a real
+   multi-line message, the opposite of what a glancing "you arrived
+   here" cue should feel like. Lowered the background peak to 10% (below
+   even the persistent-highlight's own 12%, since this state should
+   read as the quieter of the two - a flash, not a mark) and moved most
+   of the visible effect onto the blurred box-shadow (18% peak, spread
+   over a wide 24px blur so no single pixel is anywhere near that
+   opacity) - an edge glow around the message rather than a fill across
+   it, matching "text -> faint translucent tint -> subtle edge/glow."
+   Both keyframe stops are far below the already-verified 22% case, so
+   contrast only improves further. Reduced-motion keeps a single static
+   low-alpha wash (no shadow, no keyframes) rather than a hard opaque
+   block, so the "soft, restrained" character survives even without
+   animation. */
 .conv-source-flash {
     animation: conv-source-flash-fade 2.5s ease-out;
-    border-radius: 4px;
+    border-radius: 6px;
 }
 @keyframes conv-source-flash-fade {
-    0% { background: var(--highlight-orange-tint); }
-    100% { background: transparent; }
+    0% {
+        background: color-mix(in srgb, var(--highlight-orange) 10%, transparent);
+        box-shadow: 0 0 24px 0 color-mix(in srgb, var(--highlight-orange) 18%, transparent);
+    }
+    100% {
+        background: transparent;
+        box-shadow: 0 0 24px 0 transparent;
+    }
 }
 @media (prefers-reduced-motion: reduce) {
-    .conv-source-flash { animation: none; background: var(--highlight-orange-tint); }
+    .conv-source-flash {
+        animation: none;
+        background: color-mix(in srgb, var(--highlight-orange) 8%, transparent);
+        box-shadow: none;
+    }
 }
 
 /* -- disclosure grammar (application-wide) ---------------------------------
@@ -4797,6 +4996,33 @@ main:hover,
     transition: transform 0.12s ease;
 }
 .add-source-details[open] > summary::before { transform: rotate(90deg); }
+
+/* CLAUDE-CA1D-RIVER-PO-01 (River Action Stack): each item reuses
+   .add-source-details itself (subdisclosure, above) for its own
+   independent expand/collapse - the SAME rotating-triangle disclosure
+   grammar every other collapsible surface in this app already uses, per
+   that rule's own "never a mix of unrelated arrow glyphs" comment. This
+   block only styles the list container and the item's own expanded
+   content, never a second disclosure mechanism. */
+.conv-river-action-stack {
+    list-style: none;
+    margin: 0.5rem 0 0;
+    padding: 0;
+}
+.conv-river-action + .conv-river-action { margin-top: 0.4rem; }
+.conv-river-action-detail {
+    padding-left: 1.2rem;
+    font-size: var(--text-sm);
+    color: var(--text-secondary);
+}
+.conv-river-action-detail p { margin: 0.3rem 0; }
+.conv-river-action-uncertainty { color: var(--attention-amber); }
+.conv-river-action-evidence-label {
+    font-size: var(--text-xs);
+    color: var(--text-metadata);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
 
 /* -- Case Workspace accordion/focus sections ------------------------------- */
 .accordion-section {
@@ -5128,6 +5354,36 @@ main:hover,
 }
 .conv-operational-action-form { display: inline-flex; }
 .conv-operational-action-form button[disabled] { opacity: 0.6; cursor: default; }
+/* CLAUDE-CA1D-RIVER-PO-02 (Section 17, "action control visual chrome"):
+   these two buttons shared .review-btn.needs_evidence wholesale with
+   Finding review's accept/reject/needs_evidence/correction/seal pills -
+   fine for a deliberate review decision, but the Product Owner found it
+   read as a full enclosed capsule for what is really a light, casual
+   offer ("Make a Task from this"). Scoped to THIS container only (base
+   .review-btn is untouched - Finding review keeps its own pill) so the
+   correction cannot bleed into an unrelated, already-working control.
+   "Ending-line / side separation rather than top-and-bottom boxing":
+   no border/background/radius at rest, a single underline that appears
+   on hover/focus (interactivity is still obvious, just not a standing
+   box), and a hairline left-rule between adjacent actions instead of
+   gap alone - separation without a second enclosure per action. Padding
+   keeps the click/tap target close to .review-btn's own original
+   height even though the visible box is gone. */
+.conv-operational-actions .review-btn {
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    padding: 0.35rem 0.1rem;
+    border-bottom: 1px solid transparent;
+}
+.conv-operational-actions .review-btn:hover {
+    background: transparent;
+    border-bottom-color: currentColor;
+}
+.conv-operational-action-form:not(:first-child) {
+    border-left: 1px solid var(--border);
+    padding-left: 0.5rem;
+}
 /* CLAUDE-CA1D-RIVER-03: a quiet, one-time teaching line, not a second
    toolbar - deliberately plain text (no border/background/icon), the
    same restraint .conv-next-steps's own plain <a> row already uses.
