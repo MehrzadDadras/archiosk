@@ -172,16 +172,82 @@
 
     function randomBetween(min, max) { return min + Math.random() * (max - min); }
 
+    // CLAUDE-CA1D-PUBLIC-LANDING-04: depth + upward-convection model.
+    // A visual metaphor only (Section 1's own "not a literal scientific
+    // simulation") -- two named lower-field regions an upward current
+    // seems to originate from, inferred purely through motion (tighter
+    // spawn spread + faster rise), never rendered as a graphic of any
+    // kind. Kept as a small, named, reusable structure (not inlined
+    // magic numbers) specifically so a future tranche could parameterize
+    // VENTS with a "strength" driven by a live question/interaction
+    // (Section 8's own "do not build that now, but do not prevent it")
+    // without this tranche building that interaction itself.
+    var VENTS = [{ xVw: 22 }, { xVw: 76 }];
+    var IN_CURRENT_PROBABILITY = 0.42;
+
+    // Section 3/4: three perceptual depth layers, weighted so mid-field
+    // stays "the principal readable knowledge layer" (Section 3) --
+    // most items land there; near/far are the minority accents.
+    // scaleRange governs apparent size, peakOpacity governs brightness/
+    // contrast, durationMult scales the rise duration set per spawn()
+    // call (near = shorter = more apparent movement; far = longer =
+    // barely moving, Section 4's own "near = faster... far = slower").
+    var DEPTH_CONFIG = {
+        near: { weight: .18, scaleRange: [1.25, 1.5], peakOpacity: 1, durationMult: .62, className: 'kf-depth-near' },
+        mid: { weight: .54, scaleRange: [.92, 1.05], peakOpacity: .82, durationMult: 1, className: 'kf-depth-mid' },
+        far: { weight: .28, scaleRange: [.6, .8], peakOpacity: .5, durationMult: 1.65, className: 'kf-depth-far' },
+    };
+    function pickDepth() {
+        var r = Math.random();
+        if (r < DEPTH_CONFIG.near.weight) return 'near';
+        if (r < DEPTH_CONFIG.near.weight + DEPTH_CONFIG.mid.weight) return 'mid';
+        return 'far';
+    }
+
     function spawn(className, content, opts) {
         opts = opts || {};
         var el = document.createElement(content === null ? 'div' : 'span');
-        el.className = 'kf-item ' + className;
+        var depth = pickDepth();
+        var depthConfig = DEPTH_CONFIG[depth];
+        var inCurrent = Math.random() < IN_CURRENT_PROBABILITY;
+
+        el.className = 'kf-item ' + className + ' ' + depthConfig.className;
         if (content !== null) el.textContent = content;
-        el.style.left = randomBetween(2, 96) + 'vw';
-        el.style.setProperty('--kf-drift', Math.round(randomBetween(-60, 60)) + 'px');
-        var duration = randomBetween(opts.minDuration || 22, opts.maxDuration || 38);
+
+        if (inCurrent) {
+            // Tight spread around one named vent -- "presence should be
+            // inferred mainly from motion" (Section 2), never a visible
+            // marker at that position.
+            var vent = VENTS[Math.floor(Math.random() * VENTS.length)];
+            el.style.left = Math.min(96, Math.max(2, vent.xVw + randomBetween(-9, 9))) + 'vw';
+        } else {
+            el.style.left = randomBetween(2, 96) + 'vw';
+        }
+
+        // Three independently-randomized drift stops (Section 2's own
+        // "may widen or gently meander as it rises... drift sideways or
+        // spiral slightly as they leave the strongest part of the
+        // current") -- a current member starts tight and widens toward
+        // the top of its rise; an ambient item wanders gently and evenly
+        // throughout, never a rigid vertical column either way.
+        var wander = inCurrent ? [10, 20, 34] : [7, 11, 15];
+        el.style.setProperty('--kf-drift-1', Math.round(randomBetween(-wander[0], wander[0])) + 'px');
+        el.style.setProperty('--kf-drift-2', Math.round(randomBetween(-wander[1], wander[1])) + 'px');
+        el.style.setProperty('--kf-drift-3', Math.round(randomBetween(-wander[2], wander[2])) + 'px');
+
+        el.style.setProperty('--kf-scale', randomBetween(depthConfig.scaleRange[0], depthConfig.scaleRange[1]).toFixed(2));
+        el.style.setProperty('--kf-peak-opacity', depthConfig.peakOpacity);
+
+        // A current accelerates its own members (Section 2: "particles
+        // accelerate slightly upward" within a vent) on top of the
+        // depth-driven speed difference (Section 4).
+        var currentMult = inCurrent ? .78 : 1;
+        var baseMin = (opts.minDuration || 22) * depthConfig.durationMult * currentMult;
+        var baseMax = (opts.maxDuration || 38) * depthConfig.durationMult * currentMult;
+        var duration = randomBetween(baseMin, baseMax);
         el.style.animationDuration = duration.toFixed(1) + 's';
         el.style.animationDelay = '-' + randomBetween(0, duration).toFixed(1) + 's'; // negative delay: mid-flight from first paint, not a synchronized wave
+
         if (opts.size) {
             el.style.width = opts.size + 'px';
             el.style.height = opts.size + 'px';
@@ -189,9 +255,15 @@
         field.appendChild(el);
     }
 
-    // Counts deliberately small -- "few rather than many" (bubbles) and
-    // "sparse" (every text tier). Total field population stays well
-    // under what would read as a screensaver.
+    // Counts deliberately unchanged from the previous tranche -- "few
+    // rather than many" (bubbles), "sparse" (every text tier), and
+    // Section 10's own "prefer a small number of well-behaved objects
+    // over hundreds of decorative elements." Depth/current membership
+    // is decided per-item inside spawn() above, not by adding more
+    // items. Bubbles now run through the exact same spawn() as every
+    // other tier (Section 7: "should not feel like an unrelated
+    // decorative overlay... integrate them into the same circulation
+    // logic") rather than a separate code path.
     for (var b = 0; b < 7; b++) {
         spawn('kf-bubble', null, { size: Math.round(randomBetween(6, 16)), minDuration: 26, maxDuration: 46 });
     }

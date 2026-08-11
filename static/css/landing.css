@@ -72,7 +72,26 @@
    .landing-content at 2) and is entirely inert (pointer-events: none) --
    decorative atmosphere only, never intercepts a click meant for a real
    control. Skipped entirely under prefers-reduced-motion, same as the
-   canvas particle field above. */
+   canvas particle field above.
+
+   CLAUDE-CA1D-PUBLIC-LANDING-04: depth/parallax + upward-convection
+   rework -- same DOM node count and same four content tiers as before
+   (no new particle budget, Section 10's own "prefer a small number of
+   well-behaved objects"), but each item now also carries a depth tier
+   (near/mid/far -- static/js/landing.js's DEPTH_CONFIG) expressed
+   entirely through CSS custom properties (--kf-scale/--kf-peak-opacity)
+   consumed by the ONE shared kfRise keyframe below, and an optional
+   "in a current" membership that tightens its horizontal spawn point
+   toward one of two named VENTS and shortens its rise duration --
+   never a literal vent graphic, only motion (Section 2's own "presence
+   should be inferred mainly from motion"). The three intermediate
+   translateX stops (35%/65%/100%, each independently randomized per
+   item -- --kf-drift-1/-2/-3) replace the old single linear 0%->100%
+   drift, giving a gentle non-monotonic meander instead of a straight
+   diagonal line, with the largest wander reserved for the final stage
+   ("drift sideways or spiral slightly as they leave the strongest part
+   of the current", Section 2). Still pure CSS transform/opacity
+   animation -- no rAF loop, no added DOM nodes, no per-frame JS. */
 .landing-knowledge-field {
     position: fixed;
     inset: 0;
@@ -91,7 +110,17 @@
     animation-name: kfRise;
     animation-timing-function: linear;
     animation-iteration-count: infinite;
+    --kf-scale: 1;
+    --kf-peak-opacity: 1;
+    --kf-drift-1: 0px;
+    --kf-drift-2: 0px;
+    --kf-drift-3: 0px;
 }
+/* Background layer (Section 3): smaller, dimmer, softer, almost
+   atmospheric -- a small blur is the one property that can't be
+   expressed as a --kf-* custom property feeding the shared keyframe,
+   so it stays a real class instead. */
+.kf-depth-far { filter: blur(.5px); }
 /* Tier: sparse rising bubbles (B3) -- plain translucent circles, not
    canvas/emoji "cartoon" bubbles. */
 .kf-bubble {
@@ -120,10 +149,12 @@
     color: rgba(150, 235, 255, .7);
 }
 @keyframes kfRise {
-    0%   { transform: translateY(0) translateX(0); opacity: 0; }
-    8%   { opacity: 1; }
-    88%  { opacity: 1; }
-    100% { transform: translateY(-112vh) translateX(var(--kf-drift, 0px)); opacity: 0; }
+    0%   { transform: translateY(0) translateX(0) scale(var(--kf-scale)); opacity: 0; }
+    8%   { opacity: var(--kf-peak-opacity); }
+    35%  { transform: translateY(-39vh) translateX(var(--kf-drift-1)) scale(var(--kf-scale)); }
+    65%  { transform: translateY(-73vh) translateX(var(--kf-drift-2)) scale(var(--kf-scale)); }
+    88%  { opacity: var(--kf-peak-opacity); }
+    100% { transform: translateY(-112vh) translateX(var(--kf-drift-3)) scale(var(--kf-scale)); opacity: 0; }
 }
 @media (prefers-reduced-motion: reduce) {
     .landing-knowledge-field { display: none; }
