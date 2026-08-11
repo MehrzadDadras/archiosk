@@ -96,31 +96,6 @@
     tick();
 })();
 
-// CLAUDE-CA1D-PUBLIC-LANDING-01 (addendum): the decorative rotating
-// line. Separate IIFE, independent of the canvas above -- naturally a
-// no-op on /explore and /start-trial, neither of which has a
-// #landing-rotator element. Both the outgoing and incoming line get
-// .is-active toggled in the same tick, so their CSS opacity
-// transitions run simultaneously -- a real cross-fade, not a
-// hide-then-show.
-(function () {
-    var rotator = document.getElementById('landing-rotator');
-    if (!rotator) return;
-    var lines = Array.prototype.slice.call(rotator.querySelectorAll('.landing-rotator-line'));
-    if (lines.length < 2) return;
-
-    var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if (reduceMotion) return; // stays on the first (markup-default .is-active) line only
-
-    var index = 0;
-    setInterval(function () {
-        var nextIndex = (index + 1) % lines.length;
-        lines[index].classList.remove('is-active');
-        lines[nextIndex].classList.add('is-active');
-        index = nextIndex;
-    }, 4800);
-})();
-
 // CLAUDE-CA1D-PUBLIC-LANDING-01 consolidated addendum, Sections B3/C1-C3:
 // the ambient knowledge field. Three tiers of sparse, slow-rising
 // elements (plus plain bubbles) generated once at load and appended to
@@ -182,8 +157,27 @@
     // VENTS with a "strength" driven by a live question/interaction
     // (Section 8's own "do not build that now, but do not prevent it")
     // without this tranche building that interaction itself.
-    var VENTS = [{ xVw: 22 }, { xVw: 76 }];
+    var VENTS = [{ xVw: 12 }, { xVw: 88 }];
     var IN_CURRENT_PROBABILITY = 0.42;
+
+    // CLAUDE-CA1D-PUBLIC-LANDING-05, Section 4: "calm center / active
+    // surrounding ocean" -- a quiet horizontal reading column reserved
+    // for ARCHIOSK/the tagline/CTAs/the mic control, kept clear of base
+    // spawn positions AND of how far an item's own drift can carry it
+    // (below), rather than only avoiding the center at spawn time and
+    // letting later movement wander back through it. A soft, viewport-
+    // percentage heuristic (Section 4/5's own "should not pass through
+    // or visually compete," not a literal collision system) -- items
+    // still occasionally graze the edge at maximum wander, which reads
+    // as organic rather than a rigid force field.
+    var CENTER_MIN_VW = 30;
+    var CENTER_MAX_VW = 70;
+    function clampOutsideCenter(xVw) {
+        if (xVw > CENTER_MIN_VW && xVw < CENTER_MAX_VW) {
+            return (xVw - (CENTER_MIN_VW + CENTER_MAX_VW) / 2) < 0 ? CENTER_MIN_VW : CENTER_MAX_VW;
+        }
+        return xVw;
+    }
 
     // Section 3/4: three perceptual depth layers, weighted so mid-field
     // stays "the principal readable knowledge layer" (Section 3) --
@@ -217,11 +211,18 @@
         if (inCurrent) {
             // Tight spread around one named vent -- "presence should be
             // inferred mainly from motion" (Section 2), never a visible
-            // marker at that position.
+            // marker at that position. Both VENTS already sit well
+            // outside the quiet center column; clampOutsideCenter is a
+            // safety net, not the primary mechanism.
             var vent = VENTS[Math.floor(Math.random() * VENTS.length)];
-            el.style.left = Math.min(96, Math.max(2, vent.xVw + randomBetween(-9, 9))) + 'vw';
+            el.style.left = clampOutsideCenter(Math.min(96, Math.max(2, vent.xVw + randomBetween(-8, 8)))) + 'vw';
         } else {
-            el.style.left = randomBetween(2, 96) + 'vw';
+            // Section 4/5: ambient (non-current) items spawn in one of
+            // the two side bands, never inside the quiet center column
+            // at all, so the majority-population "ambient drift" case
+            // never starts inside the reading zone.
+            var leftBand = Math.random() < 0.5;
+            el.style.left = (leftBand ? randomBetween(2, CENTER_MIN_VW - 4) : randomBetween(CENTER_MAX_VW + 4, 96)) + 'vw';
         }
 
         // Three independently-randomized drift stops (Section 2's own
@@ -229,8 +230,11 @@
         // spiral slightly as they leave the strongest part of the
         // current") -- a current member starts tight and widens toward
         // the top of its rise; an ambient item wanders gently and evenly
-        // throughout, never a rigid vertical column either way.
-        var wander = inCurrent ? [10, 20, 34] : [7, 11, 15];
+        // throughout, never a rigid vertical column either way. Ranges
+        // tightened from the LANDING-04 baseline (Section 4/5's own
+        // "should not pass through... the central zone") so drift alone
+        // rarely carries a peripheral spawn back into the quiet center.
+        var wander = inCurrent ? [8, 14, 20] : [5, 7, 9];
         el.style.setProperty('--kf-drift-1', Math.round(randomBetween(-wander[0], wander[0])) + 'px');
         el.style.setProperty('--kf-drift-2', Math.round(randomBetween(-wander[1], wander[1])) + 'px');
         el.style.setProperty('--kf-drift-3', Math.round(randomBetween(-wander[2], wander[2])) + 'px');
@@ -278,6 +282,63 @@
     }
 })();
 
+// CLAUDE-CA1D-PUBLIC-LANDING-05, Sections 2/3: the spoken welcome --
+// carries the same philosophy the visible rotating line used to carry
+// (now removed outright, Section 2's own "do not replace them with
+// another visual text carousel"). Browser-native SpeechSynthesis --
+// no vendor, no API key, no network request, no dependency, exactly
+// the same "browser-native needs no new Product Owner decision"
+// reasoning already established for the mic's own SpeechRecognition
+// (CLAUDE-POSTCAMEL-VOICE1-PRE). Section 3's own explicit browser-
+// autoplay caveat: this makes ONE best-effort attempt shortly after
+// load (works today in most desktop Chrome profiles without a gesture),
+// and ALSO arms a one-time fallback on the very first real user
+// interaction (pointerdown/keydown/touchstart) -- whichever fires
+// first wins, `spoken` makes the two paths mutually exclusive, so a
+// browser that blocks the immediate attempt still greets the visitor
+// at the first meaningful interaction rather than staying silent
+// forever. sessionStorage (not localStorage) -- "do not repeatedly
+// replay it on every navigation or refresh without reason": silent for
+// the rest of THIS tab's session once spoken, but a fresh tab/window
+// (a genuinely new visit) is greeted again. Gated off entirely under
+// prefers-reduced-motion -- this codebase's own established convention
+// treats that preference as "skip non-essential ambient effects
+// outright," and the same meaning remains available in text on
+// /explore.
+(function setUpSpokenWelcome() {
+    if (!window.speechSynthesis || typeof SpeechSynthesisUtterance === 'undefined') return;
+
+    var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduceMotion) return;
+
+    var STORAGE_KEY = 'archiosk-welcome-spoken';
+    var GREETING = 'Welcome to Archiosk. We learn together. From many questions, understanding. From many minds, connected knowledge.';
+    var spoken = false;
+
+    function speakGreeting() {
+        if (spoken) return;
+        try {
+            if (sessionStorage.getItem(STORAGE_KEY)) { spoken = true; return; }
+            sessionStorage.setItem(STORAGE_KEY, '1');
+        } catch (err) {
+            // Private-browsing/storage-denied environments: fall through
+            // and speak once for this page load anyway rather than
+            // silently failing the whole feature over a storage quirk.
+        }
+        spoken = true;
+        var utterance = new SpeechSynthesisUtterance(GREETING);
+        utterance.rate = 0.95;
+        utterance.pitch = 1;
+        window.speechSynthesis.speak(utterance);
+    }
+
+    window.setTimeout(speakGreeting, 900);
+
+    ['pointerdown', 'keydown', 'touchstart'].forEach(function (evt) {
+        document.addEventListener(evt, speakGreeting, { once: true, passive: true });
+    });
+})();
+
 // CLAUDE-CA1D-PUBLIC-LANDING-03, Sections 3-8: "Speak to Archiosk" --
 // the landing page's own bounded voice-entry path. Deliberately mirrors
 // static/js/case_workspace.js's own setUpVoiceInput (CLAUDE-POSTCAMEL-
@@ -289,15 +350,17 @@
 // The one real difference: there is no existing draft/composer field on
 // this public, unauthenticated page to fill, so a final transcript is
 // run through a small, deterministic, client-side-only keyword lookup
-// (CLASSIFIERS below) instead -- never a generative/LLM call, never a
-// network request, never a durable record of any kind. This keeps the
-// landing mic at Level 2 (Suggest) of the future Voice authority ladder
-// (governance/specified-unbuilt/voice-conversational-presence.md,
-// Section 6) at most -- it only ever proposes a real, existing link the
-// visitor can choose to follow, exactly like the ordinary Explore/
-// Request Trial Access/Sign In actions above it, never a silent
-// navigation and never an answer beyond what Archiosk's real public
-// pages already say.
+// instead -- never a generative/LLM call, never a network request,
+// never a durable record of any kind. CLAUDE-CA1D-PUBLIC-LANDING-05,
+// Sections 9/10: a clear, safe, local navigation command (DIRECT_NAV
+// below -- Sign In/Explore/Request Trial Access only) executes directly,
+// no second click and no response card duplicating a button already on
+// the page; anything less direct still gets the small informational
+// response card (INFORMATIONAL below) rather than guessing. This keeps
+// the landing mic at Level 2/3 (Suggest / reversible local navigation)
+// of the future Voice authority ladder (governance/specified-unbuilt/
+// voice-conversational-presence.md, Section 6) at most -- never Level
+// 4/5, never anything destructive/authenticated/consequential.
 (function setUpLandingVoiceInput() {
     var micButton = document.getElementById('landing-voice-button');
     var statusEl = document.getElementById('landing-voice-status');
@@ -332,16 +395,34 @@
         'language-not-supported': 'Speech recognition unavailable in this browser',
     };
 
-    // Section 6: a small, honest, deterministic router -- never an
-    // unconstrained chatbot. First matching pattern wins; falls back to
-    // an honest "not sure" reply pointing at Explore rather than
-    // inventing capability. hrefs are resolved once at load time from
-    // real url_for()-rendered links already on this page (never
-    // hardcoded paths), so this can never drift from the real routes.
+    // hrefs are resolved once at load time from real url_for()-rendered
+    // links already on this page (never hardcoded paths), so this can
+    // never drift from the real routes.
     var EXPLORE_HREF = document.querySelector('[data-ui-ref="landing.explore"]').getAttribute('href');
     var TRIAL_HREF = document.querySelector('[data-ui-ref="landing.start-trial"]').getAttribute('href');
     var SIGNIN_HREF = document.querySelector('[data-ui-ref="landing.sign-in"]').getAttribute('href');
-    var CLASSIFIERS = [
+
+    // CLAUDE-CA1D-PUBLIC-LANDING-05, Sections 9/10: clear, reversible,
+    // local navigation commands execute DIRECTLY -- no second click, no
+    // response card repeating a button already on this page. Checked
+    // BEFORE the informational classifiers below; matches the Product
+    // Owner's own three named examples exactly (the same patterns that,
+    // before this tranche, matched an informational card pointing at
+    // these same three destinations -- Section 9 only changes WHAT
+    // happens on a match, not which utterances are recognized).
+    // Deliberately NOT generalized beyond these three safe, local,
+    // reversible destinations (Section 9's own explicit boundary) --
+    // nothing here ever creates, changes, or sends anything.
+    var DIRECT_NAV = [
+        { pattern: /sign in|log ?in|my account|sign me in/i, href: SIGNIN_HREF, confirmText: 'Opening Sign In…' },
+        { pattern: /trial|try it|get access|get started/i, href: TRIAL_HREF, confirmText: 'Opening Request Trial Access…' },
+        { pattern: /explore|what can archiosk|what does archiosk|how do i start/i, href: EXPLORE_HREF, confirmText: 'Opening Explore…' },
+    ];
+
+    // Section 6/10: genuinely informational asks (not a "go there"
+    // command) still get a small, honest, deterministic response card
+    // -- never an unconstrained chatbot, never a generative/LLM call.
+    var INFORMATIONAL = [
         {
             pattern: /learning holodeck|holodeck/i,
             text: 'The Learning Holodeck is a future initiative and isn’t available yet. Right now, Archiosk turns your project documents into governed, evidence-backed answers.',
@@ -353,24 +434,9 @@
             href: EXPLORE_HREF, label: 'Explore Archiosk',
         },
         {
-            pattern: /sign in|log ?in|my account/i,
-            text: 'Here’s where to sign in to your existing Archiosk account.',
-            href: SIGNIN_HREF, label: 'Sign In',
-        },
-        {
-            pattern: /trial|try it|get access|get started/i,
-            text: 'Self-service trial registration isn’t available yet, but you can request access.',
-            href: TRIAL_HREF, label: 'Request Trial Access',
-        },
-        {
             pattern: /rfp|proposal|procurement|tender/i,
             text: 'It sounds like you’re working with an RFP or similar procurement document — that’s exactly what Archiosk is built for.',
             href: TRIAL_HREF, label: 'Request Trial Access',
-        },
-        {
-            pattern: /explore|what can archiosk|what does archiosk|how do i start/i,
-            text: 'Let’s take a look at what Archiosk does.',
-            href: EXPLORE_HREF, label: 'Explore Archiosk',
         },
     ];
     var FALLBACK = {
@@ -378,15 +444,27 @@
         href: EXPLORE_HREF, label: 'Explore Archiosk',
     };
 
-    function classify(transcript) {
-        for (var i = 0; i < CLASSIFIERS.length; i += 1) {
-            if (CLASSIFIERS[i].pattern.test(transcript)) return CLASSIFIERS[i];
+    // Section 9's own "ambiguous commands should clarify rather than
+    // guess": a transcript only ever executes direct navigation on an
+    // actual pattern match here -- everything else, including anything
+    // ambiguous, falls through to the informational path (a real
+    // response, never a silent/guessed navigation).
+    function classifyDirectNav(transcript) {
+        for (var i = 0; i < DIRECT_NAV.length; i += 1) {
+            if (DIRECT_NAV[i].pattern.test(transcript)) return DIRECT_NAV[i];
+        }
+        return null;
+    }
+
+    function classifyInformational(transcript) {
+        for (var i = 0; i < INFORMATIONAL.length; i += 1) {
+            if (INFORMATIONAL[i].pattern.test(transcript)) return INFORMATIONAL[i];
         }
         return FALLBACK;
     }
 
     function showResult(transcript) {
-        var match = classify(transcript);
+        var match = classifyInformational(transcript);
         resultEl.innerHTML = '';
         var transcriptLine = document.createElement('span');
         transcriptLine.className = 'landing-voice-transcript';
@@ -469,8 +547,21 @@
         recognition.addEventListener('end', function () {
             stopListening();
             if (gotFinalResult && finalTranscript.trim()) {
-                setStatus('', false);
-                showResult(finalTranscript.trim());
+                var transcript = finalTranscript.trim();
+                var navMatch = classifyDirectNav(transcript);
+                if (navMatch) {
+                    // Section 9/10: execute directly, no response card
+                    // duplicating a button already on this page -- the
+                    // brief confirmText (reusing the existing status
+                    // live region) is the only feedback before the real
+                    // navigation happens, so the visitor still perceives
+                    // cause and effect rather than an instant jump.
+                    setStatus(navMatch.confirmText, false);
+                    window.setTimeout(function () { window.location.href = navMatch.href; }, 350);
+                } else {
+                    setStatus('', false);
+                    showResult(transcript);
+                }
             } else if (!statusEl || !statusEl.getAttribute('data-state')) {
                 setStatus(userInitiatedStop ? 'Recognition stopped' : 'No speech detected', !userInitiatedStop);
             }

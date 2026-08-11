@@ -29,20 +29,25 @@ class SignalStreakPreludeTests(unittest.TestCase):
         self.client = self.flask_app.test_client()
 
     def test_streak_elements_present_only_on_landing(self):
+        """CLAUDE-CA1D-PUBLIC-LANDING-05, Section 6: ONE object only --
+        landing-signal-streak-2 removed outright ('no multiple shooting
+        lights')."""
         landing_body = self.client.get("/").get_data(as_text=True)
         self.assertIn('landing-signal-streak-1', landing_body)
-        self.assertIn('landing-signal-streak-2', landing_body)
+        self.assertNotIn('landing-signal-streak-2', landing_body)
+        self.assertEqual(landing_body.count('landing-signal-streak'), 2)  # base class + the -1 modifier, once each
         self.assertIn('aria-hidden="true"', landing_body)
         for path in ("/explore", "/start-trial"):
             body = self.client.get(path).get_data(as_text=True)
             self.assertNotIn('landing-signal-streak', body)
 
-    def test_streak_css_defines_both_streaks_and_their_keyframes(self):
+    def test_streak_css_defines_exactly_one_streak_and_its_keyframe(self):
         css = self.client.get("/static/css/landing.css").get_data(as_text=True)
-        for selector in (".landing-signal-streak", ".landing-signal-streak-1", ".landing-signal-streak-2"):
+        for selector in (".landing-signal-streak", ".landing-signal-streak-1"):
             self.assertIn(selector, css)
         self.assertIn("@keyframes landingSignalStreak1", css)
-        self.assertIn("@keyframes landingSignalStreak2", css)
+        self.assertNotIn(".landing-signal-streak-2", css)
+        self.assertNotIn("@keyframes landingSignalStreak2", css)
 
     def test_streak_hidden_outright_under_reduced_motion(self):
         css = self.client.get("/static/css/landing.css").get_data(as_text=True)
@@ -133,7 +138,8 @@ class SpeakToArchioskTests(unittest.TestCase):
         voice_section_start = js.index("setUpLandingVoiceInput")
         voice_section_end = js.index("})();", voice_section_start) + len("})();")
         voice_section = js[voice_section_start:voice_section_end]
-        self.assertIn("CLASSIFIERS", voice_section)
+        self.assertIn("DIRECT_NAV", voice_section)
+        self.assertIn("INFORMATIONAL", voice_section)
         self.assertIn("FALLBACK", voice_section)
         self.assertNotIn("fetch(", voice_section)
         self.assertNotIn("XMLHttpRequest", voice_section)

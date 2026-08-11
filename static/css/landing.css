@@ -188,25 +188,24 @@
     opacity: 0;
     will-change: transform, opacity;
 }
+/* CLAUDE-CA1D-PUBLIC-LANDING-05, Section 6: ONE object only (was two,
+   landing-signal-streak-2 removed outright -- "no multiple shooting
+   lights"). Redesigned path: originates small/dim off-screen ("from
+   depth/behind"), travels TOWARD the center where ARCHIOSK is about to
+   appear, brightening and lengthening as it approaches, and fades out
+   AT the center rather than continuing past it and off the opposite
+   edge -- "its arrival leads into ARCHIOSK appearing," not a pass-
+   through. Still clearly faster (0.95s) than the wordmark's own 2.8s
+   settle, and still fires before it (150ms vs. the wordmark's 500ms
+   delay) so the contrast (fast signal -> slow arrival) reads plainly. */
 .landing-signal-streak-1 {
-    animation: landingSignalStreak1 1.15s cubic-bezier(0.15, 0.55, 0.25, 1) 150ms forwards;
-}
-.landing-signal-streak-2 {
-    width: 10vw;
-    animation: landingSignalStreak2 1.05s cubic-bezier(0.15, 0.55, 0.25, 1) 430ms forwards;
-    opacity: 0;
+    animation: landingSignalStreak1 .95s cubic-bezier(0.15, 0.55, 0.25, 1) 150ms forwards;
 }
 @keyframes landingSignalStreak1 {
-    0%   { transform: translate3d(-42vw, -26vh, 0) rotate(-22deg) scaleX(.4); opacity: 0; }
-    10%  { opacity: 1; }
-    60%  { opacity: .85; }
-    100% { transform: translate3d(46vw, 24vh, 0) rotate(-22deg) scaleX(1); opacity: 0; }
-}
-@keyframes landingSignalStreak2 {
-    0%   { transform: translate3d(38vw, -30vh, 0) rotate(16deg) scaleX(.4); opacity: 0; }
-    12%  { opacity: .7; }
-    62%  { opacity: .55; }
-    100% { transform: translate3d(-40vw, 22vh, 0) rotate(16deg) scaleX(1); opacity: 0; }
+    0%   { transform: translate3d(-38vw, -22vh, 0) rotate(-16deg) scaleX(.22); opacity: 0; }
+    14%  { opacity: .85; }
+    72%  { opacity: 1; }
+    100% { transform: translate3d(1vw, 0, 0) rotate(-16deg) scaleX(1.05); opacity: 0; }
 }
 
 .landing-content {
@@ -271,55 +270,25 @@
     100% { opacity: 1; transform: scale(1); filter: blur(0); }
 }
 
-/* CLAUDE-CA1D-PUBLIC-LANDING-01 (addendum): decorative rotating line.
-   All lines stack in the same box (position: relative parent, absolute
-   children) so cross-fading never shifts surrounding layout; both the
-   outgoing and incoming line transition opacity at once (landing.js
-   toggles .is-active on both together) for a true simultaneous
-   cross-fade, not a hide-then-show. */
-.landing-rotator {
-    position: relative;
-    margin: 10px 0 0;
-    min-height: 1.3em;
-    max-width: 520px;
-    opacity: 0;
-    animation: landingWordmarkReveal 1.6s ease forwards 2.4s;
-}
-.landing-rotator-line {
-    position: absolute;
-    left: 50%;
-    top: 0;
-    width: 100%;
-    transform: translateX(-50%);
-    color: rgba(200, 255, 248, .68);
-    font-size: clamp(.82rem, 1.3vw, .98rem);
-    font-weight: 500;
-    letter-spacing: .02em;
-    opacity: 0;
-    transition: opacity 1100ms ease;
-    pointer-events: none;
-}
-.landing-rotator-line.is-active { opacity: 1; }
-
-.landing-value-prop {
-    margin: 34px 0 0;
-    max-width: 640px;
-    color: rgba(228, 255, 251, .78);
-    font-size: clamp(.95rem, 1.6vw, 1.15rem);
-    line-height: 1.65;
-    font-weight: 450;
-    opacity: 0;
-    animation: landingWordmarkReveal 1.6s ease forwards 2.6s;
-}
-
+/* CLAUDE-CA1D-PUBLIC-LANDING-05, Sections 1/2: the static explanatory
+   sentence (.landing-value-prop) and the visible rotating philosophical
+   line (.landing-rotator/.landing-rotator-line) that used to live here
+   are both removed outright -- "do not replace them with another
+   visual text carousel." Their meaning now lives in the spoken welcome
+   greeting (static/js/landing.js's setUpSpokenWelcome) and in
+   /explore's own fuller explanation. Removing them also directly
+   satisfies Section 7's "comfortable viewport clearance" requirement --
+   .landing-actions now follows the tagline much more closely, so the
+   settled hero reads as a compact, uncluttered center rather than a
+   tall stack competing for vertical space. */
 .landing-actions {
     display: flex;
     flex-wrap: wrap;
     gap: 16px;
     justify-content: center;
-    margin-top: 44px;
+    margin-top: 48px;
     opacity: 0;
-    animation: landingWordmarkReveal 1.6s ease forwards 2.85s;
+    animation: landingWordmarkReveal 1.6s ease forwards 2.5s;
 }
 .landing-action {
     display: inline-flex;
@@ -354,18 +323,22 @@
     outline-offset: 3px;
 }
 
-/* CLAUDE-CA1D-PUBLIC-LANDING-03, Section 3/7: "Speak to Archiosk" --
-   an additional entry path alongside Explore/Request Trial Access/Sign
-   In, never a replacement for them (Section 9) -- deliberately quieter
-   than .landing-action (no gradient fill, no glow-on-idle) so the
-   commercial CTA row above stays visually primary (Section 7's own
-   hierarchy). Reuses the exact same JS mechanism and consent language
-   as the authenticated composer's own mic button (CLAUDE-POSTCAMEL-
-   VOICE1-PRE, static/js/case_workspace.js) -- same hidden-until-
-   feature-detected default, same push-to-talk model, same
-   voice-input-listening state class name (kept identical rather than
-   inventing a parallel one, even though this file never loads
-   main.css). */
+/* CLAUDE-CA1D-PUBLIC-LANDING-03, Section 3/7 (icon-only per LANDING-05,
+   Section 8): "Speak to Archiosk" -- an additional entry path alongside
+   Explore/Request Trial Access/Sign In, never a replacement for them
+   (Section 9) -- deliberately quieter than .landing-action (no gradient
+   fill, no glow-on-idle) so the commercial CTA row above stays visually
+   primary (Section 7's own hierarchy). Reuses the exact same JS
+   mechanism and consent language as the authenticated composer's own
+   mic button (CLAUDE-POSTCAMEL-VOICE1-PRE, static/js/case_workspace.js)
+   -- same hidden-until-feature-detected default, same push-to-talk
+   model, same voice-input-listening state class name (kept identical
+   rather than inventing a parallel one, even though this file never
+   loads main.css). LANDING-05, Section 8: compact circular icon button
+   -- no visible "Speak to Archiosk" text (the aria-label/title in
+   landing.html carry the same meaning for assistive tech and
+   mouse-hover alike); a real <button>, so keyboard focus/activation
+   need no extra wiring here. */
 .landing-voice {
     margin-top: 28px;
     display: flex;
@@ -373,18 +346,17 @@
     align-items: center;
     gap: 8px;
     opacity: 0;
-    animation: landingWordmarkReveal 1.6s ease forwards 2.85s;
+    animation: landingWordmarkReveal 1.6s ease forwards 2.7s;
 }
 .landing-voice-button {
     display: inline-flex;
     align-items: center;
-    gap: 8px;
-    padding: 10px 20px;
-    border-radius: 999px;
-    font-family: inherit;
-    font-size: .82rem;
-    font-weight: 600;
-    letter-spacing: .04em;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    border-radius: 50%;
+    font-size: 1.05rem;
     color: rgba(210, 255, 248, .75);
     background: transparent;
     border: 1px solid rgba(176, 255, 244, .22);
@@ -528,18 +500,13 @@
    skipped entirely (landing.js checks the same media query before ever
    starting its render loop). */
 @media (prefers-reduced-motion: reduce) {
-    .landing-wordmark, .landing-tagline, .landing-value-prop, .landing-actions, .landing-rotator, .landing-voice {
+    .landing-wordmark, .landing-tagline, .landing-actions, .landing-voice {
         animation: none !important;
         opacity: 1 !important;
         transform: none !important;
         filter: none !important;
     }
     .landing-action { transition: none; }
-    /* landing.js never starts the cycling interval under reduced motion
-       -- the first line's markup-default .is-active state (see
-       landing.html) is what persists, so it just needs to render
-       without waiting on a transition here. */
-    .landing-rotator-line { transition: none; }
     /* CLAUDE-CA1D-PUBLIC-LANDING-03, Section 1: the one-shot prelude
        never even flashes under reduced motion -- display:none, not
        merely animation:none, since the un-animated base state is

@@ -18,74 +18,64 @@
    plain document surfaces, per the Product Owner's own "do not compete
    with comprehension" instruction for anything but the front door
    itself. #}
-{# CLAUDE-CA1D-PUBLIC-LANDING-03, Section 1: the opening signal-streak
-   prelude -- plain, one-shot, server-rendered markup (no JS needed to
+{# CLAUDE-CA1D-PUBLIC-LANDING-03, Section 1 (redesigned by LANDING-05,
+   Section 6): the opening signal-streak prelude -- ONE object only
+   (was two), plain, one-shot, server-rendered markup (no JS needed to
    generate or clean these up, unlike the infinite knowledge field
    below). aria-hidden for the same reason as the rest of this page's
    atmosphere: purely decorative, carries no information not already
    stated in the real, accessible content. #}
 <div class="landing-signal-streak landing-signal-streak-1" aria-hidden="true"></div>
-<div class="landing-signal-streak landing-signal-streak-2" aria-hidden="true"></div>
 <div class="landing-knowledge-field" id="landing-knowledge-field" aria-hidden="true"></div>
 <div class="landing-content">
     <h1 class="landing-wordmark">Archiosk</h1>
     <p class="landing-tagline">Data Room Intelligence</p>
-    {# CLAUDE-CA1D-PUBLIC-LANDING-01 (addendum): a slow, decorative
-       cross-fading line, purely atmospheric alongside the real,
-       accessible value-prop paragraph below -- aria-hidden so a screen
-       reader isn't interrupted every few seconds by ambient text that
-       carries no information not already stated plainly elsewhere.
-       Each line is its own complete span (same "whole sentence, never
-       concatenated fragments" discipline as the rest of this template)
-       so a future EN|FR pass can translate one at a time. Static (no
-       cycling, first line only) under prefers-reduced-motion -- see
-       landing.js. #}
-    <p class="landing-rotator" id="landing-rotator" aria-hidden="true">
-        <span class="landing-rotator-line is-active">Many minds. Shared evidence. One understanding.</span>
-        <span class="landing-rotator-line">We learn together.</span>
-        <span class="landing-rotator-line">Knowledge belongs to all of us.</span>
-        <span class="landing-rotator-line">Every insight strengthens the whole.</span>
-        <span class="landing-rotator-line">From many questions, clearer understanding.</span>
-        <span class="landing-rotator-line">Better questions. Better understanding.</span>
-    </p>
-    {# CLAUDE-CA1D-PUBLIC-LANDING-01 consolidated addendum, Section D:
-       "too long for the reception" - shortened from a four-sentence
-       paragraph to one sentence; the rotator above now carries the
-       philosophy this used to try to fit in permanently. Every fact
-       this page makes (governed evidence, human-supervised, no
-       autonomous claims) still lives on /explore in full. #}
-    <p class="landing-value-prop">
-        Archiosk helps people turn documents, questions, and findings into
-        connected knowledge.
-    </p>
+    {# CLAUDE-CA1D-PUBLIC-LANDING-05, Sections 1/2/3: the static
+       explanatory sentence and the visible rotating philosophical line
+       (both present through LANDING-04) are removed outright -- Section
+       2's own "do not replace them with another visual text carousel."
+       The meaning they carried now lives in the spoken welcome greeting
+       instead (static/js/landing.js's setUpSpokenWelcome) and in
+       /explore's own fuller explanation. #}
     <div class="landing-actions">
         <a class="landing-action landing-action-secondary" href="{{ url_for('portal.explore') }}" data-ui-ref="landing.explore">Explore</a>
         <a class="landing-action landing-action-primary" href="{{ url_for('portal.start_trial') }}" data-ui-ref="landing.start-trial">Request Trial Access</a>
         <a class="landing-action landing-action-secondary" href="{{ url_for('portal.login') }}" data-ui-ref="landing.sign-in">Sign In</a>
     </div>
-    {# CLAUDE-CA1D-PUBLIC-LANDING-03, Section 3/4/5: "Speak to Archiosk"
-       -- an additional entry path, never a replacement for Explore/
-       Request Trial Access/Sign In above (Section 9). Reuses the exact
-       mechanism, consent wording pattern, and hidden-until-feature-
-       detected default already shipped and Product-Owner-tested for the
+    {# CLAUDE-CA1D-PUBLIC-LANDING-03, Section 3/4/5 (icon-only per
+       LANDING-05, Section 8): "Speak to Archiosk" -- an additional
+       entry path, never a replacement for Explore/Request Trial
+       Access/Sign In above (Section 9). Reuses the exact mechanism,
+       consent wording pattern, and hidden-until-feature-detected
+       default already shipped and Product-Owner-tested for the
        authenticated composer's own mic button (CLAUDE-POSTCAMEL-VOICE1-
        PRE, templates/_macros.html) -- the browser's own built-in
        SpeechRecognition (Web Speech API), never a hosted transcription
        provider, so this needs no new Product Owner decision (no vendor,
-       no API key, no cost) per that stage's own governing rule. Unlike
-       the authenticated composer, there is no existing draft field to
-       fill here, so the transcript and a small, truthful, client-side-
-       only routed response render into #landing-voice-result instead
-       (static/js/landing.js) -- a deterministic keyword lookup toward
-       Explore/Request Trial Access/Sign In, never a generative/LLM
-       call, never a durable record, never Level 4/5 of the future Voice
-       authority ladder (governance/specified-unbuilt/voice-
-       conversational-presence.md, Section 6) -- this stays at Level 2
-       (Suggest) at most. #}
+       no API key, no cost) per that stage's own governing rule.
+       LANDING-05, Section 8: no visible "Speak to Archiosk" text --
+       icon only, but the accessible name (aria-label) and a visible-on-
+       hover title carry the same meaning a sighted mouse user and a
+       screen reader user both still get, and the button remains a real
+       <button> (native keyboard focus/activation, no custom handling
+       needed). Unlike the authenticated composer, there is no existing
+       draft field to fill here, so a final transcript either (a)
+       navigates directly for a clear, safe, local Explore/Request Trial
+       Access/Sign In command (LANDING-05, Section 9 -- never a second
+       click, never a redundant response card duplicating a button
+       already on this page, Section 10), or (b) renders a small,
+       truthful, client-side-only routed response into
+       #landing-voice-result for anything less direct (static/js/
+       landing.js) -- never a generative/LLM call, never a durable
+       record, never Level 4/5 of the future Voice authority ladder
+       (governance/specified-unbuilt/voice-conversational-presence.md,
+       Section 6) -- this stays at Level 2/3 (Suggest / reversible local
+       navigation) at most. #}
     <div class="landing-voice" id="landing-voice">
         <button type="button" id="landing-voice-button" class="landing-voice-button" data-ui-ref="landing.voice.button"
-                aria-label="Speak to Archiosk — audio is processed by your browser only and is never saved" hidden>
-            <span aria-hidden="true">&#127908;</span> Speak to Archiosk
+                aria-label="Speak to Archiosk — audio is processed by your browser only and is never saved"
+                title="Speak to Archiosk" hidden>
+            <span aria-hidden="true">&#127908;</span>
         </button>
         <span class="landing-voice-status" id="landing-voice-status" data-ui-ref="landing.voice.status" aria-live="polite"></span>
         <div class="landing-voice-result" id="landing-voice-result" data-ui-ref="landing.voice.result" aria-live="polite" hidden></div>
