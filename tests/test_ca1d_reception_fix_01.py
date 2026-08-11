@@ -63,6 +63,17 @@ class LoginPasswordToggleTests(unittest.TestCase):
         self.assertIn("password-toggle-icon-show", body)
         self.assertIn("password-toggle-icon-hide", body)
 
+    def test_toggle_script_is_external_not_inline(self):
+        # CLAUDE-CA1D-RECEPTION-FIX-01: a live-browser check against the
+        # deployed instance found an inline <script> here silently never
+        # executes -- this app's real CSP (default-src 'self', no
+        # 'unsafe-inline'/nonce) blocks inline script content outright,
+        # with no console error to warn a Flask-test-client-only check.
+        # Locking in the external-file approach so this can't regress.
+        body = self.client.get("/login").get_data(as_text=True)
+        self.assertIn('src="/static/js/login.js', body)
+        self.assertNotIn("<script>\n(function () {\n    var toggle = document.getElementById('password-toggle');", body)
+
     def test_password_toggle_button_is_not_a_submit_button(self):
         # Must never accidentally submit the sign-in form on click/Enter.
         body = self.client.get("/login").get_data(as_text=True)

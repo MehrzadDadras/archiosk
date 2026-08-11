@@ -25,21 +25,9 @@
     <button type="submit" class="btn btn-primary gateway-signin-button" data-ui-ref="auth.signin.submit">Sign in</button>
 </form>
 <p><a href="{{ url_for('portal.forgot_password') }}">Forgot password?</a></p>
-<script>
-(function () {
-    var toggle = document.getElementById('password-toggle');
-    var input = document.getElementById('password');
-    if (!toggle || !input) return;
-    var showIcon = toggle.querySelector('.password-toggle-icon-show');
-    var hideIcon = toggle.querySelector('.password-toggle-icon-hide');
-    toggle.addEventListener('click', function () {
-        var revealed = input.type === 'text';
-        input.type = revealed ? 'password' : 'text';
-        toggle.setAttribute('aria-pressed', String(!revealed));
-        toggle.setAttribute('aria-label', revealed ? 'Show password' : 'Hide password');
-        showIcon.hidden = !revealed;
-        hideIcon.hidden = revealed;
-    });
-})();
-</script>
+{# CLAUDE-CA1D-RECEPTION-FIX-01: external file, not inline - this app's
+   real CSP (default-src 'self', no 'unsafe-inline'/nonce) blocks inline
+   <script> execution; confirmed live that an inline version silently
+   never ran. See static/js/login.js's own comment. #}
+<script src="{{ url_for('static', filename='js/login.js') }}?v={{ static_version }}"></script>
 {% endblock %}
