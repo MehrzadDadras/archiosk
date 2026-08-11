@@ -54,13 +54,17 @@ class SignalStreakPreludeTests(unittest.TestCase):
         reduced_motion_block = css[css.index("@media (prefers-reduced-motion: reduce)"):]
         self.assertIn(".landing-signal-streak { display: none; }", reduced_motion_block)
 
-    def test_wordmark_arrival_delayed_to_let_the_prelude_read_first(self):
+    def test_wordmark_arrival_delayed_until_after_the_prelude_fully_disappears(self):
+        """CLAUDE-CA1D-PUBLIC-LANDING-ANIMATION-CORRECTION-01: the
+        wordmark must not begin emerging until strictly after the streak
+        (150ms delay + .95s duration = fully gone by 1.1s) has finished
+        - a real sequence, not two overlapping effects."""
         css = self.client.get("/static/css/landing.css").get_data(as_text=True)
         rule_start = css.index(".landing-wordmark {")
         rule_end = css.index("}", rule_start)
         wordmark_rule = css[rule_start:rule_end]
         self.assertIn("landingWordmarkArrival", wordmark_rule)
-        self.assertIn("500ms", wordmark_rule)
+        self.assertIn("1.3s", wordmark_rule)
 
 
 class SpeakToArchioskTests(unittest.TestCase):
