@@ -1,11 +1,49 @@
 # Specified But Unbuilt — Per-Item Attention/Review State Model
 
-**Status:** Investigated (CLAUDE-CA1D-ATTENTION-STATE-01), **not implemented**. This is the
-prerequisite `governance/specified-unbuilt/peripheral-activity-dots.md`'s own close-out addendum
-named as blocking that feature: *"GO may only express a sensitive surface when the underlying
-project state can support that signal truthfully."* This document is that investigation's result —
-**conditional GO**, pending one named unresolved check (see L). No code was written under this
-tranche; repository inspection and read-only queries only.
+**Status:** Investigated (CLAUDE-CA1D-ATTENTION-STATE-01, follow-up check
+CLAUDE-CA1D-ATTENTION-STATE-01A), **not implemented**. This is the prerequisite
+`governance/specified-unbuilt/peripheral-activity-dots.md`'s own close-out addendum named as
+blocking that feature: *"GO may only express a sensitive surface when the underlying project state
+can support that signal truthfully."* **Unconditional GO** (see L) — the one named prerequisite
+check (the `ReviewThread`/`Attention` mechanism, below) has now been read directly and confirmed
+not to overlap with the model this document specifies. No code was written under either tranche;
+repository inspection and read-only queries only.
+
+## A0. Follow-up check (CLAUDE-CA1D-ATTENTION-STATE-01A) — the named prerequisite, resolved
+
+The original investigation flagged `review_thread_created/resolved/reopened` and
+`review_attention_requested`/`attention_responded` as unread GovernanceLog event types that might
+already solve part of this problem. Read directly this pass — `ReviewThread`/`ReviewMessage`/
+`Attention` (`services/case_workspace.py:2536-2620`, lifecycle methods ~10289-10635) is a real,
+fully wired, **rendered** feature (`templates/case_workspace.html:944-1070`) — not dormant, not
+UI-less. It is Investigation-scoped human discussion: a `ReviewThread` anchors to a Case or a
+Finding (`create_thread` route only ever sets `anchor_type` to `case`/`finding`, though the
+underlying `Anchor`/`KNOWN_OBJECT_KINDS` vocabulary is generic enough to support more); anyone can
+reply; anyone can explicitly **request Attention** from one specific named person
+(`intended_actor`, constrained to real known usernames by the UI's own `<select>{% for username in
+known_usernames %}`, even though the dataclass field itself is technically unvalidated free text);
+the requesting user's own template already renders `{% if attention.intended_actor ==
+session.username %} (you) {% endif %}` — a direct, reusable precedent for "does this concern the
+current user" comparisons. Clearing an Attention requires posting a real reply message — a
+substantive act, not a lightweight acknowledgment. **`acknowledged_at`/`ATTENTION_STATUS_ACKNOWLEDGED`
+exist in the vocabulary but no method anywhere ever sets them** — this codebase already tried once
+to build a lighter "I saw this" concept and left it unfinished, a real cautionary precedent for how
+non-trivial "meaningful acknowledgment" semantics turn out to be in practice.
+
+**This does not overlap with the ambient "changed since last seen" problem `item_reviewed_at` (D,
+below) solves.** `ReviewThread`/`Attention` is explicit and opt-in — someone must deliberately start
+a discussion and deliberately address it to a named person. It fires as a side effect of nothing:
+ingestion, Source revision, Requirement adjudication, Finding disposition, and Task
+creation/completion never create a `ReviewThread`/`Attention` automatically anywhere in this
+codebase. Most Findings/Requirements/Sources/Tasks will never have one at all. It genuinely,
+fully solves the narrow "attention needed" slice of the six-state model (B, below) for
+explicitly-flagged Case/Finding discussions specifically — and is domain-specific/unsuitable as a
+general substrate for the ambient case the rest of this document addresses. **Verdict: partially
+solves one state (attention-needed, for explicit Case/Finding escalation only); keep separate as
+the primary mechanism for everything else; reuse only its GovernanceLog event stream (already
+planned) and its `(you)`-comparison UI idiom (informs a later UI tranche, not this one) — do not
+extend `ReviewThread`/`Attention` itself to cover ambient per-item change detection, which would
+conflate an explicit escalation with an ordinary, undirected change.**
 
 ## A. Existing mechanisms discovered
 
@@ -189,15 +227,12 @@ No composite "project health" score is invented; it's a count over already-truth
 
 ## K. Risks / counterarguments
 
-- **The single most important open item this investigation did not resolve**: `GovernanceLog`
-  already has `review_thread_created/resolved/reopened/outcome_linked` and
-  `review_attention_requested`/`attention_responded` event types. These names strongly suggest a
-  real, already-implemented "review thread"/attention mechanism somewhere in
-  `services/case_workspace.py` that neither research pass this tranche drilled into. **Before any
-  implementation, this must be read directly** — if it already substantially implements per-item
-  attention/acknowledgment for some entity type, the model in D should integrate with it, not
-  duplicate it.
-- Task's `GovernanceLog` coverage is unconfirmed, not confirmed-absent — a direct grep should
+- **Resolved by CLAUDE-CA1D-ATTENTION-STATE-01A (A0, above)**: the `ReviewThread`/`Attention`
+  mechanism was read directly and confirmed to be a real, fully-wired, rendered feature — but a
+  narrow, explicit/opt-in Case-and-Finding-scoped discussion-escalation tool, not a general
+  ambient-change substrate. It does not overlap with, and does not need to be integrated into, the
+  model in D. No redesign required.
+- Task's `GovernanceLog` coverage is still unconfirmed, not confirmed-absent — a direct grep should
   precede designing Task's own derivation path.
 - **A genuinely smaller alternative exists for Findings specifically**: since `ReviewerValidation`/
   `Disposition` already record `reviewer` + a timestamp whenever a human engages with a Finding, an
@@ -215,14 +250,12 @@ No composite "project health" score is invented; it's a count over already-truth
 
 ## L. GO / NO-GO recommendation
 
-**Conditional GO** — implementation-ready in every dimension investigated (D through J), **pending
-one specific, bounded prerequisite check**: read `services/case_workspace.py`'s actual
-`review_thread`/`attention_requested`/`attention_responded` mechanism directly and confirm whether
-it already solves (fully or partially) what this document designs from scratch. This is not a
-stalling caveat — it is a named, closeable gap this investigation ran out of scope to resolve, and
-skipping it risks building a second, parallel mechanism next to one that may already exist.
+**Unconditional GO.** Implementation-ready in every dimension investigated (D through J); the one
+named prerequisite (A0) has been read directly and confirmed not to require any redesign of this
+document's own model. Still awaiting separate Product Owner authorization to actually begin
+implementation — this document specifies readiness, not authorization.
 
-**If that check confirms no substantial overlap, smallest bounded implementation tranche:**
+**Smallest bounded implementation tranche:**
 
 1. `item_reviewed_at: dict[str, dict[str, str]] = field(default_factory=dict)` on `ProjectWorkspace`.
 2. `CaseWorkspaceStore.record_item_reviewed(workspace, reviewer, object_id)` — mirrors
