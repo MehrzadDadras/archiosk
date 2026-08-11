@@ -1566,6 +1566,12 @@ main {
     box-shadow: 0 24px 60px rgba(42, 36, 30, 0.14);
     overflow: hidden;
 }
+/* CLAUDE-CA1D-RECEPTION-FIX-01 (addendum): upper-left escape action,
+   only present on pages that opt into gateway_base.html's own
+   gateway_back_action block (project_chooser.html) - empty/absent
+   everywhere else, so gateway.html's own layout is unaffected. */
+.gateway-back-action { padding: 1.4rem 2rem 0; }
+.gateway-back-action .btn { padding: 0.4rem 0.9rem; font-size: 0.85rem; }
 .gateway-brand { display: flex; align-items: center; gap: 1.2rem; padding: 2rem 2rem 1.5rem; }
 /* The application's identity mark, flat bee-yellow. */
 .gateway-logo {

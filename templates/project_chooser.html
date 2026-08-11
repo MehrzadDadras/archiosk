@@ -20,6 +20,33 @@
    Project appears here. #}
 {% extends "gateway_base.html" %}
 
+{% block gateway_back_action %}
+{# CLAUDE-CA1D-RECEPTION-FIX-01 (addendum): a live report named this
+   page as somewhere a user can land unintentionally (or find zero
+   Projects) with no visible way back, having to hunt at the bottom of
+   the page. href is a real, safe fallback (works with no JS and no
+   useful history - lands on Gateway, never a dead end); the script
+   below upgrades a real in-app "came from somewhere" visit to actual
+   browser-history back, without ever using history.back() when there's
+   nothing meaningful to return to (a bare direct visit/new tab has no
+   document.referrer at all). #}
+<div class="gateway-back-action">
+    <a href="{{ url_for('portal.gateway') }}" class="btn btn-ghost" id="gateway-back-link" data-ui-ref="gateway.chooser.back-top">&larr; Back</a>
+</div>
+<script>
+(function () {
+    var link = document.getElementById('gateway-back-link');
+    if (!link) return;
+    if (document.referrer && window.history.length > 1) {
+        link.addEventListener('click', function (e) {
+            e.preventDefault();
+            window.history.back();
+        });
+    }
+})();
+</script>
+{% endblock %}
+
 {% block gateway_title %}Open a Project &mdash; Archiosk{% endblock %}
 {% block gateway_subtitle %}<p class="gateway-subtitle">Choose the Project you want to open</p>{% endblock %}
 {% block gateway_section_heading %}<h2 data-ui-ref="gateway.chooser">Open an existing project</h2>{% endblock %}
@@ -125,6 +152,14 @@
     <p>This is your only Project so far.</p>
     {% else %}
     <p>No projects yet. Start one from the Project Gateway.</p>
+    {% if is_admin %}
+    {# CLAUDE-CA1D-PUBLIC-LANDING-01 consolidated addendum, Section A4:
+       a genuine zero-Project state needs a real action, not just text
+       pointing elsewhere -- portal.upload is @admin_required (same gate
+       projects.html's own equivalent CTA already respects), so this
+       must never render for a non-admin reviewer. #}
+    <a class="btn btn-primary" href="{{ url_for('portal.upload') }}" data-ui-ref="gateway.chooser.new-project">New Project</a>
+    {% endif %}
     {% endif %}
 </div>
 {% endif %}
@@ -137,10 +172,17 @@
    (Section 4's own "do not turn this into a second working
    dashboard"), the same "link out to the real page" pattern
    gateway.html's own footer already uses for Removed Projects
-   elsewhere in this family. #}
+   elsewhere in this family.
+
+   CLAUDE-CA1D-RECEPTION-FIX-01 (addendum): the sibling "&larr; Back to
+   Gateway" link that used to sit here is gone - a live report named it
+   confusing/redundant on this exact page (the "Project Gateway" label
+   is right there at the top, now with its own real Back action, see
+   gateway_back_action above) and asked to reconcile rather than have
+   two differently-worded "back" affordances at opposite ends of the
+   page. Removed Projects (a forward/lateral link, not a "back" one)
+   stays exactly as it was. #}
 <p class="gateway-chooser-back">
     <a href="{{ url_for('portal.removed_projects') }}" data-ui-ref="gateway.chooser.removed-projects">Removed Projects</a>
-    &nbsp;&middot;&nbsp;
-    <a href="{{ url_for('portal.gateway') }}" data-ui-ref="gateway.chooser.back">&larr; Back to Gateway</a>
 </p>
 {% endblock %}

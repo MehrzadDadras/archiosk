@@ -594,10 +594,10 @@ redirect-to-Sign-in behavior by explicit Product Owner decision);
 | Ref | Element | Label/text | Notes | Scope | Status |
 |---|---|---|---|---|---|
 | `landing.explore` | `<a>` | "Explore" | Navigates to `portal.explore` | Unauthenticated visitors at `/` | active |
-| `landing.start-trial` | `<a>` | "Start Free Trial" | Navigates to `portal.start_trial` — no billing/self-service registration exists yet, see that route's own honest copy | Same as above | active |
+| `landing.start-trial` | `<a>` | "Request Trial Access" | Navigates to `portal.start_trial` — no billing/self-service registration exists yet, see that route's own honest copy | Same as above | active |
 | `landing.sign-in` | `<a>` | "Sign In" | Navigates to `portal.login` — the existing, unchanged authentication flow | Same as above | active |
 | `explore.back` | `<a>` | "← Archiosk" | Navigates back to `portal.index` (the landing page) | `/explore` | active |
-| `explore.start-trial` | `<a>` | "Start Free Trial" | Same destination as `landing.start-trial` | `/explore` | active |
+| `explore.start-trial` | `<a>` | "Request Trial Access" | Same destination as `landing.start-trial` | `/explore` | active |
 | `explore.sign-in` | `<a>` | "Sign In" | Same destination as `landing.sign-in` | `/explore` | active |
 | `start-trial.back` | `<a>` | "← Archiosk" | Navigates back to `portal.index` | `/start-trial` | active |
 | `start-trial.sign-in` | `<a>` | "Sign In" | Same destination as `landing.sign-in` | `/start-trial` | active |
@@ -627,7 +627,8 @@ references may ever start with `lists.`/`display.`/`toolbox.`/`chat.`/
 | `gateway.chooser.available` | `<p>` (new, CLAUDE-P40-VW7B) | "Available Projects" | Section label shown only alongside `gateway.chooser.current` — the current Project is excluded from this list below it, never duplicated | Every authenticated page | active |
 | `gateway.chooser.removed-projects` | `<a>` (new, CLAUDE-P40-VW7B) | "Removed Projects" | Navigates to `portal.removed_projects` — Section 4's own "Archived or removed Projects... only if this is already a real governed concept," linked out to the real page rather than duplicated inline | Every authenticated page | active |
 | `gateway.chooser.removed-match-hint` | `<a>` (new, CLAUDE-CA1D-RECEPTION-FIX-01) | "Removed Projects" (inline, within "It may be under...") | Only rendered when a `q=` search returns zero active matches AND the same already-access-filtered `_accessible_documents(include_removed=True)` call finds a removed match — never a second, separately-authorized lookup, so this can't surface a Project the current user isn't already authorized to see | Every authenticated page; query-and-outcome-conditional | active |
-| `gateway.chooser.back` | `<a>` | "← Back to Gateway" | Navigates to `portal.gateway` | Every authenticated page | active |
+| `gateway.chooser.back-top` (renamed from the retired gateway.chooser.back ref — CLAUDE-CA1D-RECEPTION-FIX-01 addendum) | `<a>` | "← Back" | Upper-left, in `gateway_base.html`'s new `gateway_back_action` block (empty on `gateway.html` itself). href falls back to `portal.gateway`; JS upgrades to real `history.back()` when `document.referrer` and history both indicate a real prior page. The old bottom "← Back to Gateway" duplicate was removed — a live report named the two differently-worded "back" affordances at opposite ends of the page as confusing | Every authenticated page | active |
+| `gateway.chooser.new-project` (new, CLAUDE-CA1D-PUBLIC-LANDING-01 consolidated addendum, Section A4) | `<a>` | "New Project" | Only rendered in the genuine zero-Project empty state (no Current Project, no Available Projects at all) — navigates to `portal.upload`, the same establishment route `lists.new-project` already uses | **Admin only** — `is_admin` | active |
 
 ## Auth (`templates/auth_shell.html`, `login.html` — CLAUDE-P40-VW8-QA, new surface)
 

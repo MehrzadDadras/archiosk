@@ -278,3 +278,72 @@ class UploadReceptionCopyTests(_BaseReceptionFixTestCase):
         self.assertIn("Scanned drawings", body)
         self.assertIn("native", body)
         self.assertIn("images", body)
+
+
+class ProjectGatewayBackActionTests(_BaseReceptionFixTestCase):
+    """
+    CLAUDE-CA1D-RECEPTION-FIX-01 (addendum) - a live report named
+    project_chooser.html ("the Project Gateway" label rendered at its
+    own top, gateway_base.html's shared gateway-section-label) as
+    somewhere a user can land with no visible way back, forced to hunt
+    at the bottom of the page. Added a real, upper-left Back action
+    (gateway_back_action block) with a safe non-JS fallback and a
+    history-aware JS upgrade; removed the redundant, differently-worded
+    bottom "Back to Gateway" link that used to sit far from the
+    "Project Gateway" label it duplicated.
+    """
+    def test_back_action_present_near_the_top_before_the_project_gateway_label(self):
+        client = self._client_as("rf_owner", 1)
+        body = client.get("/projects/choose").get_data(as_text=True)
+        self.assertIn('data-ui-ref="gateway.chooser.back-top"', body)
+        back_index = body.index('data-ui-ref="gateway.chooser.back-top"')
+        label_index = body.index("Project Gateway")
+        self.assertLess(back_index, label_index, "Back action must render before the 'Project Gateway' label, not after")
+
+    def test_back_action_has_a_safe_non_js_fallback_destination(self):
+        client = self._client_as("rf_owner", 1)
+        body = client.get("/projects/choose").get_data(as_text=True)
+        self.assertIn('href="/gateway"', body)
+
+    def test_redundant_bottom_back_to_gateway_link_is_gone(self):
+        client = self._client_as("rf_owner", 1)
+        body = client.get("/projects/choose").get_data(as_text=True)
+        self.assertNotIn("Back to Gateway", body)
+
+    def test_removed_projects_link_still_present_and_unchanged(self):
+        client = self._client_as("rf_owner", 1)
+        body = client.get("/projects/choose").get_data(as_text=True)
+        self.assertIn('data-ui-ref="gateway.chooser.removed-projects"', body)
+        self.assertIn(">Removed Projects<", body)
+
+    def test_gateway_itself_does_not_render_a_back_action(self):
+        # The block is opt-in (empty by default) - gateway.html is the
+        # top of this family's own hierarchy and must be unaffected.
+        client = self._client_as("rf_owner", 1)
+        body = client.get("/gateway").get_data(as_text=True)
+        self.assertNotIn('data-ui-ref="gateway.chooser.back-top"', body)
+
+    def test_back_action_present_on_zero_projects_state_too(self):
+        client = self._client_as("rf_owner", 1)
+        body = client.get("/projects/choose").get_data(as_text=True)
+        self.assertIn("No projects yet.", body)
+        self.assertIn('data-ui-ref="gateway.chooser.back-top"', body)
+
+    def test_new_project_action_present_on_zero_projects_state_for_admin(self):
+        client = self._client_as("rf_owner", 1, role="admin")
+        body = client.get("/projects/choose").get_data(as_text=True)
+        self.assertIn("No projects yet.", body)
+        self.assertIn('data-ui-ref="gateway.chooser.new-project"', body)
+        self.assertIn('href="/upload"', body)
+
+    def test_new_project_action_hidden_from_non_admin_at_zero_projects_state(self):
+        client = self._client_as("rf_outsider", 2, role="read_only")
+        body = client.get("/projects/choose").get_data(as_text=True)
+        self.assertIn("No projects yet.", body)
+        self.assertNotIn('data-ui-ref="gateway.chooser.new-project"', body)
+
+    def test_new_project_action_absent_once_a_project_exists(self):
+        self._ingest(owner="rf_owner", project_name="Riverside Project")
+        client = self._client_as("rf_owner", 1)
+        body = client.get("/projects/choose").get_data(as_text=True)
+        self.assertNotIn('data-ui-ref="gateway.chooser.new-project"', body)

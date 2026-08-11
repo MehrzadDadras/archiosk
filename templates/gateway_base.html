@@ -21,6 +21,12 @@
 {% block content %}
 <div class="gateway-page">
     <div class="gateway-card gateway-card-wide{% block gateway_card_modifier %}{% endblock %}">
+        {# CLAUDE-CA1D-RECEPTION-FIX-01 (addendum): optional, upper-left
+           escape action - empty by default so gateway.html (the top of
+           this family's own hierarchy, nothing sensible to go "back" to
+           beyond it) is completely unaffected; only project_chooser.html
+           populates it. See that template for the actual link/script. #}
+        {% block gateway_back_action %}{% endblock %}
         <div class="gateway-brand">
             <div class="gateway-logo">A</div>
             <div>

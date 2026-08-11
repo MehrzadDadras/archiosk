@@ -61,6 +61,74 @@
 .landing-field-canvas.is-static { display: none; }
 .landing-page.no-motion .landing-field-canvas { display: none; }
 
+/* CLAUDE-CA1D-PUBLIC-LANDING-01 consolidated addendum, Sections B3/C1-C3:
+   the ambient knowledge field -- sparse rising bubbles, small drifting
+   knowledge-particle glyphs, real (never invented) writing-system
+   fragments, and occasional larger GO domain-signal words. All are
+   plain generated <span>/<div> elements (landing.js), never canvas text
+   -- lets the browser's own font stack handle real Unicode scripts
+   correctly rather than this code trying to render/shape them itself.
+   Sits behind the hero content (z-index 1, between the canvas at 0 and
+   .landing-content at 2) and is entirely inert (pointer-events: none) --
+   decorative atmosphere only, never intercepts a click meant for a real
+   control. Skipped entirely under prefers-reduced-motion, same as the
+   canvas particle field above. */
+.landing-knowledge-field {
+    position: fixed;
+    inset: 0;
+    z-index: 1;
+    overflow: hidden;
+    pointer-events: none;
+}
+.kf-item {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    color: rgba(198, 255, 244, .5);
+    font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+    white-space: nowrap;
+    will-change: transform, opacity;
+    animation-name: kfRise;
+    animation-timing-function: linear;
+    animation-iteration-count: infinite;
+}
+/* Tier: sparse rising bubbles (B3) -- plain translucent circles, not
+   canvas/emoji "cartoon" bubbles. */
+.kf-bubble {
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, rgba(210, 255, 248, .22), rgba(140, 220, 235, .05) 70%);
+    border: 1px solid rgba(190, 255, 244, .10);
+}
+/* Tier: small knowledge particles (C1) -- numbers/math/musical notation/
+   plain letters. */
+.kf-particle { font-size: 1rem; opacity: .16; color: rgba(190, 255, 244, .6); }
+/* Tier: real writing-system fragments (C2) -- see landing.js for the
+   actual character set and its own sourcing note. Slightly larger/more
+   legible than tier 1 particles (still low-opacity, still subordinate),
+   since an unrecognizable single glyph is more legible at this size. */
+.kf-script { font-size: 1.3rem; opacity: .14; color: rgba(205, 255, 246, .62); }
+/* Tier: occasional GO domain-signal words (C3) -- larger, letter-spaced
+   like a signal/label, but NOT a nav menu (no pointer-events, no href,
+   nothing clickable) and still low-opacity/slow -- a recognizable
+   fragment moving through the field, not a button. */
+.kf-term {
+    font-size: .82rem;
+    font-weight: 700;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+    opacity: .12;
+    color: rgba(150, 235, 255, .7);
+}
+@keyframes kfRise {
+    0%   { transform: translateY(0) translateX(0); opacity: 0; }
+    8%   { opacity: 1; }
+    88%  { opacity: 1; }
+    100% { transform: translateY(-112vh) translateX(var(--kf-drift, 0px)); opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .landing-knowledge-field { display: none; }
+}
+
 .landing-content {
     position: relative;
     z-index: 2;
@@ -83,7 +151,15 @@
     text-shadow: 0 0 22px rgba(165, 255, 244, .22), 0 0 54px rgba(79, 255, 231, .10);
     margin: 0;
     opacity: 0;
-    animation: landingWordmarkReveal 1.6s ease forwards .3s;
+    /* CLAUDE-CA1D-PUBLIC-LANDING-01 consolidated addendum, Section B2:
+       a real arrival, not a fade-up -- adapted from archiosk_holodeck_v_3
+       .html's own ah-intro-title (scale(4.4) settling to scale(1) over
+       ~5s, cubic-bezier(0.18, 0.84, 0.22, 1)) and the second reference's
+       ahV3ArchioskArrival. Unlike that source's own intro (which fully
+       fades OUT afterward, making room for a separate scene), ARCHIOSK
+       is this page's permanent identity, so it settles and STAYS
+       visible -- never returns to opacity 0. */
+    animation: landingWordmarkArrival 2.8s cubic-bezier(0.18, 0.84, 0.22, 1) forwards;
 }
 .landing-tagline {
     margin: 14px 0 0;
@@ -96,12 +172,48 @@
     letter-spacing: .26em;
     text-transform: uppercase;
     opacity: 0;
-    animation: landingWordmarkReveal 1.6s ease forwards .55s;
+    animation: landingWordmarkReveal 1.6s ease forwards 1.7s;
 }
 @keyframes landingWordmarkReveal {
     from { opacity: 0; transform: translateY(10px); filter: blur(6px); }
     to   { opacity: 1; transform: translateY(0); filter: blur(0); }
 }
+@keyframes landingWordmarkArrival {
+    0%   { opacity: 0; transform: translateY(0) scale(3.2); filter: blur(16px); }
+    30%  { opacity: 1; filter: blur(3px); }
+    62%  { opacity: 1; transform: scale(1.07); filter: blur(0); }
+    100% { opacity: 1; transform: scale(1); filter: blur(0); }
+}
+
+/* CLAUDE-CA1D-PUBLIC-LANDING-01 (addendum): decorative rotating line.
+   All lines stack in the same box (position: relative parent, absolute
+   children) so cross-fading never shifts surrounding layout; both the
+   outgoing and incoming line transition opacity at once (landing.js
+   toggles .is-active on both together) for a true simultaneous
+   cross-fade, not a hide-then-show. */
+.landing-rotator {
+    position: relative;
+    margin: 10px 0 0;
+    min-height: 1.3em;
+    max-width: 520px;
+    opacity: 0;
+    animation: landingWordmarkReveal 1.6s ease forwards 1.9s;
+}
+.landing-rotator-line {
+    position: absolute;
+    left: 50%;
+    top: 0;
+    width: 100%;
+    transform: translateX(-50%);
+    color: rgba(200, 255, 248, .68);
+    font-size: clamp(.82rem, 1.3vw, .98rem);
+    font-weight: 500;
+    letter-spacing: .02em;
+    opacity: 0;
+    transition: opacity 1100ms ease;
+    pointer-events: none;
+}
+.landing-rotator-line.is-active { opacity: 1; }
 
 .landing-value-prop {
     margin: 34px 0 0;
@@ -111,7 +223,7 @@
     line-height: 1.65;
     font-weight: 450;
     opacity: 0;
-    animation: landingWordmarkReveal 1.6s ease forwards .8s;
+    animation: landingWordmarkReveal 1.6s ease forwards 2.1s;
 }
 
 .landing-actions {
@@ -121,7 +233,7 @@
     justify-content: center;
     margin-top: 44px;
     opacity: 0;
-    animation: landingWordmarkReveal 1.6s ease forwards 1.05s;
+    animation: landingWordmarkReveal 1.6s ease forwards 2.35s;
 }
 .landing-action {
     display: inline-flex;
@@ -240,11 +352,16 @@
    skipped entirely (landing.js checks the same media query before ever
    starting its render loop). */
 @media (prefers-reduced-motion: reduce) {
-    .landing-wordmark, .landing-tagline, .landing-value-prop, .landing-actions {
+    .landing-wordmark, .landing-tagline, .landing-value-prop, .landing-actions, .landing-rotator {
         animation: none !important;
         opacity: 1 !important;
         transform: none !important;
         filter: none !important;
     }
     .landing-action { transition: none; }
+    /* landing.js never starts the cycling interval under reduced motion
+       -- the first line's markup-default .is-active state (see
+       landing.html) is what persists, so it just needs to render
+       without waiting on a transition here. */
+    .landing-rotator-line { transition: none; }
 }
