@@ -129,6 +129,55 @@
     .landing-knowledge-field { display: none; }
 }
 
+/* CLAUDE-CA1D-PUBLIC-LANDING-03, Section 1: the opening signal-streak
+   prelude -- one or two brief, fast luminous traversals that read as
+   "the environment awakens" BEFORE ARCHIOSK's own slower arrival below.
+   Deliberately NOT part of the infinite .kf-item loop above: this is a
+   one-shot event, plain server-rendered markup with a single forwards-
+   filled keyframe (ends at opacity 0 and simply stays there -- no JS
+   timer needed to clean it up, no repeat). A thin gradient line with a
+   soft glow, never a literal object/asset -- Archiosk's own visual
+   language (the same aqueous teal/cyan already used throughout this
+   file), not a franchise reference. Sits above the knowledge field
+   (z-index 1) so it reads clearly against the deep background during
+   the otherwise-quiet opening beat, entirely inert (pointer-events:
+   none). Hidden outright under prefers-reduced-motion, same as every
+   other motion layer on this page. */
+.landing-signal-streak {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    width: 15vw;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, rgba(150, 255, 238, 0) 0%, rgba(190, 255, 244, .9) 55%, rgba(220, 255, 250, 1) 78%, transparent 100%);
+    border-radius: 2px;
+    box-shadow: 0 0 12px rgba(150, 255, 238, .8), 0 0 28px rgba(80, 230, 255, .4);
+    z-index: 1;
+    pointer-events: none;
+    opacity: 0;
+    will-change: transform, opacity;
+}
+.landing-signal-streak-1 {
+    animation: landingSignalStreak1 1.15s cubic-bezier(0.15, 0.55, 0.25, 1) 150ms forwards;
+}
+.landing-signal-streak-2 {
+    width: 10vw;
+    animation: landingSignalStreak2 1.05s cubic-bezier(0.15, 0.55, 0.25, 1) 430ms forwards;
+    opacity: 0;
+}
+@keyframes landingSignalStreak1 {
+    0%   { transform: translate3d(-42vw, -26vh, 0) rotate(-22deg) scaleX(.4); opacity: 0; }
+    10%  { opacity: 1; }
+    60%  { opacity: .85; }
+    100% { transform: translate3d(46vw, 24vh, 0) rotate(-22deg) scaleX(1); opacity: 0; }
+}
+@keyframes landingSignalStreak2 {
+    0%   { transform: translate3d(38vw, -30vh, 0) rotate(16deg) scaleX(.4); opacity: 0; }
+    12%  { opacity: .7; }
+    62%  { opacity: .55; }
+    100% { transform: translate3d(-40vw, 22vh, 0) rotate(16deg) scaleX(1); opacity: 0; }
+}
+
 .landing-content {
     position: relative;
     z-index: 2;
@@ -158,8 +207,14 @@
        ahV3ArchioskArrival. Unlike that source's own intro (which fully
        fades OUT afterward, making room for a separate scene), ARCHIOSK
        is this page's permanent identity, so it settles and STAYS
-       visible -- never returns to opacity 0. */
-    animation: landingWordmarkArrival 2.8s cubic-bezier(0.18, 0.84, 0.22, 1) forwards;
+       visible -- never returns to opacity 0.
+       CLAUDE-CA1D-PUBLIC-LANDING-03, Section 1: start delayed 500ms (was
+       0ms) so the signal-streak prelude above reads as a distinct first
+       beat rather than overlapping ARCHIOSK's own arrival from the very
+       first frame -- every downstream reveal below (tagline/rotator/
+       value-prop/actions) shifted the same +500ms to preserve their
+       existing relative offsets against the wordmark's own arrival. */
+    animation: landingWordmarkArrival 2.8s cubic-bezier(0.18, 0.84, 0.22, 1) 500ms forwards;
 }
 .landing-tagline {
     margin: 14px 0 0;
@@ -172,7 +227,7 @@
     letter-spacing: .26em;
     text-transform: uppercase;
     opacity: 0;
-    animation: landingWordmarkReveal 1.6s ease forwards 1.7s;
+    animation: landingWordmarkReveal 1.6s ease forwards 2.2s;
 }
 @keyframes landingWordmarkReveal {
     from { opacity: 0; transform: translateY(10px); filter: blur(6px); }
@@ -197,7 +252,7 @@
     min-height: 1.3em;
     max-width: 520px;
     opacity: 0;
-    animation: landingWordmarkReveal 1.6s ease forwards 1.9s;
+    animation: landingWordmarkReveal 1.6s ease forwards 2.4s;
 }
 .landing-rotator-line {
     position: absolute;
@@ -223,7 +278,7 @@
     line-height: 1.65;
     font-weight: 450;
     opacity: 0;
-    animation: landingWordmarkReveal 1.6s ease forwards 2.1s;
+    animation: landingWordmarkReveal 1.6s ease forwards 2.6s;
 }
 
 .landing-actions {
@@ -233,7 +288,7 @@
     justify-content: center;
     margin-top: 44px;
     opacity: 0;
-    animation: landingWordmarkReveal 1.6s ease forwards 2.35s;
+    animation: landingWordmarkReveal 1.6s ease forwards 2.85s;
 }
 .landing-action {
     display: inline-flex;
@@ -266,6 +321,96 @@
 .landing-action:focus-visible {
     outline: 2px solid rgba(200, 255, 248, .8);
     outline-offset: 3px;
+}
+
+/* CLAUDE-CA1D-PUBLIC-LANDING-03, Section 3/7: "Speak to Archiosk" --
+   an additional entry path alongside Explore/Request Trial Access/Sign
+   In, never a replacement for them (Section 9) -- deliberately quieter
+   than .landing-action (no gradient fill, no glow-on-idle) so the
+   commercial CTA row above stays visually primary (Section 7's own
+   hierarchy). Reuses the exact same JS mechanism and consent language
+   as the authenticated composer's own mic button (CLAUDE-POSTCAMEL-
+   VOICE1-PRE, static/js/case_workspace.js) -- same hidden-until-
+   feature-detected default, same push-to-talk model, same
+   voice-input-listening state class name (kept identical rather than
+   inventing a parallel one, even though this file never loads
+   main.css). */
+.landing-voice {
+    margin-top: 28px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    opacity: 0;
+    animation: landingWordmarkReveal 1.6s ease forwards 2.85s;
+}
+.landing-voice-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 20px;
+    border-radius: 999px;
+    font-family: inherit;
+    font-size: .82rem;
+    font-weight: 600;
+    letter-spacing: .04em;
+    color: rgba(210, 255, 248, .75);
+    background: transparent;
+    border: 1px solid rgba(176, 255, 244, .22);
+    cursor: pointer;
+    transition: border-color 220ms ease, color 220ms ease, box-shadow 220ms ease;
+}
+.landing-voice-button:hover, .landing-voice-button:focus-visible {
+    color: rgba(230, 255, 251, .95);
+    border-color: rgba(176, 255, 244, .5);
+}
+.landing-voice-button:focus-visible {
+    outline: 2px solid rgba(200, 255, 248, .8);
+    outline-offset: 3px;
+}
+/* Section 7: "restrained aperture pulse... quiet change in microphone
+   state" -- a slow, gentle ring pulse, never a large blob or an
+   equalizer. The ONLY visual state change while listening, matching
+   the authenticated composer's own "no separate recording timer/
+   waveform UI" minimalism. */
+.landing-voice-button.voice-input-listening {
+    color: rgba(230, 255, 251, .98);
+    border-color: rgba(150, 255, 238, .8);
+    box-shadow: 0 0 0 0 rgba(150, 255, 238, .5);
+    animation: landingVoicePulse 1.8s ease-in-out infinite;
+}
+@keyframes landingVoicePulse {
+    0%   { box-shadow: 0 0 0 0 rgba(150, 255, 238, .45); }
+    70%  { box-shadow: 0 0 0 10px rgba(150, 255, 238, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(150, 255, 238, 0); }
+}
+.landing-voice-status {
+    font-size: .74rem;
+    color: rgba(190, 235, 230, .58);
+    min-height: 1em;
+}
+.landing-voice-status[data-state="error"] { color: rgba(255, 200, 170, .8); }
+.landing-voice-result {
+    margin-top: 4px;
+    max-width: 480px;
+    padding: 14px 18px;
+    border-radius: 12px;
+    background: rgba(20, 60, 70, .28);
+    border: 1px solid rgba(176, 255, 244, .18);
+    color: rgba(228, 255, 251, .82);
+    font-size: .88rem;
+    line-height: 1.55;
+}
+.landing-voice-result a {
+    color: rgba(150, 255, 238, .95);
+    font-weight: 700;
+}
+.landing-voice-transcript {
+    display: block;
+    margin-bottom: 6px;
+    color: rgba(190, 235, 230, .62);
+    font-size: .78rem;
+    font-style: italic;
 }
 
 .landing-footer {
@@ -352,7 +497,7 @@
    skipped entirely (landing.js checks the same media query before ever
    starting its render loop). */
 @media (prefers-reduced-motion: reduce) {
-    .landing-wordmark, .landing-tagline, .landing-value-prop, .landing-actions, .landing-rotator {
+    .landing-wordmark, .landing-tagline, .landing-value-prop, .landing-actions, .landing-rotator, .landing-voice {
         animation: none !important;
         opacity: 1 !important;
         transform: none !important;
@@ -364,4 +509,16 @@
        landing.html) is what persists, so it just needs to render
        without waiting on a transition here. */
     .landing-rotator-line { transition: none; }
+    /* CLAUDE-CA1D-PUBLIC-LANDING-03, Section 1: the one-shot prelude
+       never even flashes under reduced motion -- display:none, not
+       merely animation:none, since the un-animated base state is
+       opacity:0 anyway (nothing would be visible either way, but this
+       makes the intent explicit and matches .landing-knowledge-field's
+       own treatment above). */
+    .landing-signal-streak { display: none; }
+    /* Section 7: the listening-state pulse is a genuine animation, not
+       a one-off reveal -- disabled outright; .landing-voice-button
+       still shows its plain border-color state change on click, which
+       needs no motion at all. */
+    .landing-voice-button.voice-input-listening { animation: none; }
 }
