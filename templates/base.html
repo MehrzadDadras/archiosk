@@ -503,7 +503,15 @@
                Investigation or conversation"). #}
             <div class="lists-pane" id="lists-pane">
             <div class="launcher-panel-body">
-                {% set projects_open = project_id is defined or request.path == url_for('portal.projects_list') %}
+                {# CLAUDE-CA1D-RECEPTION-FIX-01: request.path also checked against
+                   removed_projects's own URL, not just projects_list's -- a live
+                   walkthrough found the "Projects" chevron collapsed by default on
+                   /removed-projects while it was already expanded on a single
+                   removed Project's own tombstone page (project_id is defined
+                   there). No repository-documented reason found for that
+                   asymmetry; both are "currently browsing within Projects" in the
+                   same sense projects_list already is. #}
+                {% set projects_open = project_id is defined or request.path == url_for('portal.projects_list') or request.path == url_for('portal.removed_projects') %}
                 <ul class="tree" data-tree-root>
                     {% if project_id is defined and workspace is defined %}
                     {# ---------------- The Foreground Project's own family branch (CLAUDE-P40-VW7B) ---

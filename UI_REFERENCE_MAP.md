@@ -603,6 +603,7 @@ references may ever start with `lists.`/`display.`/`toolbox.`/`chat.`/
 | `gateway.chooser.current.leaf` | `<a>` | Current Project's own card, "Currently entered" badge | Re-enters the same already-open Project via `workspace.show_workspace` — a plain link, no confirmation (workspace state is safely persisted per-Project already; see `menu.context.switch-project`'s own note on why no interruption dialog guards this) | Same as `gateway.chooser.leaf` | active |
 | `gateway.chooser.available` | `<p>` (new, CLAUDE-P40-VW7B) | "Available Projects" | Section label shown only alongside `gateway.chooser.current` — the current Project is excluded from this list below it, never duplicated | Every authenticated page | active |
 | `gateway.chooser.removed-projects` | `<a>` (new, CLAUDE-P40-VW7B) | "Removed Projects" | Navigates to `portal.removed_projects` — Section 4's own "Archived or removed Projects... only if this is already a real governed concept," linked out to the real page rather than duplicated inline | Every authenticated page | active |
+| `gateway.chooser.removed-match-hint` | `<a>` (new, CLAUDE-CA1D-RECEPTION-FIX-01) | "Removed Projects" (inline, within "It may be under...") | Only rendered when a `q=` search returns zero active matches AND the same already-access-filtered `_accessible_documents(include_removed=True)` call finds a removed match — never a second, separately-authorized lookup, so this can't surface a Project the current user isn't already authorized to see | Every authenticated page; query-and-outcome-conditional | active |
 | `gateway.chooser.back` | `<a>` | "← Back to Gateway" | Navigates to `portal.gateway` | Every authenticated page | active |
 
 ## Auth (`templates/auth_shell.html`, `login.html` — CLAUDE-P40-VW8-QA, new surface)
@@ -617,6 +618,7 @@ browser preference, unaffected by sign-out), never sets one.
 |---|---|---|---|---|---|
 | `auth.signin.username` | `<input>` | "Username" | Sign-in form field | Pre-authentication | active |
 | `auth.signin.password` | `<input type="password">` | "Password" | Sign-in form field | Pre-authentication | active |
+| `auth.signin.password-toggle` | `<button>` (new, CLAUDE-CA1D-RECEPTION-FIX-01) | eye / eye-off icon | Toggles `auth.signin.password`'s `type` between `password`/`text`; client-side display only, no effect on the posted credential or `services/auth.py`'s authentication logic | Pre-authentication | active |
 | `auth.signin.submit` | `<button>` | "Sign in" | Submits the sign-in form | Pre-authentication | active |
 
 ## Upload / Project creation (`templates/upload.html`, `templates/errors/error.html` — CLAUDE-P40-VW8-QA, Project-Creation Upload-Capacity Correction)

@@ -5,7 +5,13 @@
 
 {% block content %}
 {% call macros.page_header('Project removed') %}
-    <a class="btn btn-ghost" href="{{ url_for('portal.projects_list') }}">&larr; Back to Projects</a>
+    {# CLAUDE-CA1D-RECEPTION-FIX-01: was "Back to Projects" -- a live
+       walkthrough found that read as returning to this removed Project,
+       when it actually leaves the removed-Projects context entirely for
+       the active directory. "Active Projects" disambiguates against
+       "Removed Projects" (the term this whole page family already uses)
+       without changing the destination. #}
+    <a class="btn btn-ghost" href="{{ url_for('portal.projects_list') }}">&larr; Back to Active Projects</a>
 {% endcall %}
 
 <section class="workspace-pane">

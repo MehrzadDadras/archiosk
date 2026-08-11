@@ -74,11 +74,19 @@
 {% else %}
 <div class="projects-empty">
     {% if query %}
-    <p>No projects match &ldquo;{{ query }}&rdquo;.</p>
+    <p>No active projects match &ldquo;{{ query }}&rdquo;.</p>
+    {% if removed_match %}
+    {# CLAUDE-CA1D-RECEPTION-FIX-01: restrained, query-specific hint --
+       only appears when a removed Project actually matches, not on
+       every miss. See routes/portal.py's choose_project for why this
+       can't leak a Project the current user isn't already authorized
+       to see. #}
+    <p class="pane-note">It may be under <a href="{{ url_for('portal.removed_projects') }}" data-ui-ref="gateway.chooser.removed-match-hint">Removed Projects</a>.</p>
+    {% endif %}
     {% elif current_project %}
     <p>No other projects yet.</p>
     {% else %}
-    <p>No projects yet.</p>
+    <p>No projects yet. Start one from the Project Gateway.</p>
     {% endif %}
 </div>
 {% endif %}

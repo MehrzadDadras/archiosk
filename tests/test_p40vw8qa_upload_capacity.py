@@ -287,9 +287,13 @@ class AuthorizationPreservedTests(_BaseTestCase):
 
 class UploadFormPresentationTests(_BaseTestCase):
     def test_upload_form_states_the_configured_limit_before_any_file_is_chosen(self):
+        # CLAUDE-CA1D-RECEPTION-FIX-01: "Maximum size" merged into the
+        # formats sentence ("up to NMB") for scannability -- the fact
+        # (the configured limit appears before any file is chosen) is
+        # what this test actually checks, not that exact phrase.
         client = self._client_as("vw8qa_admin", 1)
         body = client.get("/upload").get_data(as_text=True)
-        self.assertIn(f"Maximum size {_TEST_MAX_MB}MB", body)
+        self.assertIn(f"up to {_TEST_MAX_MB}MB", body)
 
     def test_upload_form_states_accepted_formats(self):
         client = self._client_as("vw8qa_admin", 1)

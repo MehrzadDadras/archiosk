@@ -458,12 +458,28 @@ def choose_project():
 
     query = request.args.get('q', '').strip()
     documents = _accessible_documents(registry, store)
+    removed_match = False
     if query:
         needle = query.lower()
         documents = [
             d for d in documents
             if needle in d.filename.lower() or needle in d.project_id.lower()
         ]
+        if not documents:
+            # CLAUDE-CA1D-RECEPTION-FIX-01: a live walkthrough found a
+            # user searching a removed Project's name here got a bare
+            # "no match" with no hint it exists under Removed Projects
+            # (the permanent link below is easy to miss when scanning
+            # for a search result specifically). Reuses the same
+            # already-P32-filtered _accessible_documents call this
+            # route already trusts elsewhere -- never a second,
+            # separately-authorized lookup, so this can't surface a
+            # removed Project the current user couldn't already open.
+            removed_documents = _accessible_documents(registry, store, include_removed=True)
+            removed_match = any(
+                needle in d.filename.lower() or needle in d.project_id.lower()
+                for d in removed_documents
+            )
 
     projects = []
     for document in documents:
@@ -482,6 +498,7 @@ def choose_project():
 
     return render_template(
         'project_chooser.html', projects=projects, query=query, current_project=current_project,
+        removed_match=removed_match,
     )
 
 

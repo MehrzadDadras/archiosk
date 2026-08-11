@@ -1176,6 +1176,32 @@ main {
     box-shadow: 0 0 0 3px rgba(44, 96, 121, 0.15);
 }
 
+/* CLAUDE-CA1D-RECEPTION-FIX-01: password reveal toggle (login only). Absolute
+   positioning inside a relative wrapper so it overlays the existing
+   .text-input without changing .gateway-field's grid layout. */
+.password-field { position: relative; display: flex; }
+.password-field .text-input { flex: 1; padding-right: 2.4rem; }
+.password-toggle {
+    position: absolute;
+    right: 0.4rem;
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.3rem;
+    background: none;
+    border: none;
+    border-radius: 3px;
+    color: var(--text-metadata);
+    cursor: pointer;
+}
+.password-toggle:hover { color: var(--text-primary); }
+.password-toggle:focus-visible {
+    outline: 2px solid var(--machine-blue);
+    outline-offset: 1px;
+}
+
 .btn {
     font-family: var(--font-body);
     font-size: 0.85rem;

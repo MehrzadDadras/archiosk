@@ -5,7 +5,9 @@
 
 {% block content %}
 {% call macros.page_header('Removed Projects', subtitle='Moved out of active use - restore any of these any time.') %}
-    <a class="btn btn-ghost" href="{{ url_for('portal.projects_list') }}" data-ui-ref="removed-projects.back-link">&larr; Back to Projects</a>
+    {# CLAUDE-CA1D-RECEPTION-FIX-01: see project_removed.html's identical
+       change for why "Active Projects", not "Projects". #}
+    <a class="btn btn-ghost" href="{{ url_for('portal.projects_list') }}" data-ui-ref="removed-projects.back-link">&larr; Back to Active Projects</a>
 {% endcall %}
 
 {% if removed %}

@@ -11,7 +11,13 @@
     </div>
     <div class="gateway-field">
         <label for="password">Password</label>
-        <input type="password" id="password" name="password" class="text-input" data-ui-ref="auth.signin.password" required>
+        <div class="password-field">
+            <input type="password" id="password" name="password" class="text-input" data-ui-ref="auth.signin.password" required>
+            <button type="button" class="password-toggle" id="password-toggle" aria-controls="password" aria-pressed="false" aria-label="Show password" data-ui-ref="auth.signin.password-toggle">
+                <svg class="password-toggle-icon-show" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/></svg>
+                <svg class="password-toggle-icon-hide" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" hidden><path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a21.8 21.8 0 0 1 5.06-6.06M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a21.8 21.8 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+            </button>
+        </div>
     </div>
     {% if error %}
     <div class="mono form-error">{{ error }}</div>
@@ -19,4 +25,21 @@
     <button type="submit" class="btn btn-primary gateway-signin-button" data-ui-ref="auth.signin.submit">Sign in</button>
 </form>
 <p><a href="{{ url_for('portal.forgot_password') }}">Forgot password?</a></p>
+<script>
+(function () {
+    var toggle = document.getElementById('password-toggle');
+    var input = document.getElementById('password');
+    if (!toggle || !input) return;
+    var showIcon = toggle.querySelector('.password-toggle-icon-show');
+    var hideIcon = toggle.querySelector('.password-toggle-icon-hide');
+    toggle.addEventListener('click', function () {
+        var revealed = input.type === 'text';
+        input.type = revealed ? 'password' : 'text';
+        toggle.setAttribute('aria-pressed', String(!revealed));
+        toggle.setAttribute('aria-label', revealed ? 'Show password' : 'Hide password');
+        showIcon.hidden = !revealed;
+        hideIcon.hidden = revealed;
+    });
+})();
+</script>
 {% endblock %}
