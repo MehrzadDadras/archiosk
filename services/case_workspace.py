@@ -3810,6 +3810,21 @@ class ProjectWorkspace:
     # zero" - callers must check for absence, not default to an ancient
     # timestamp.
     last_viewed_by: dict = field(default_factory=dict)
+    # CLAUDE-CA1D-ATTENTION-STATE-02: per-reviewer, per-item "meaningfully
+    # reviewed at" marker (username -> object_id -> ISO timestamp),
+    # personal/display-only like `last_viewed_by`/`starred` above - no
+    # governance meaning, no event of its own. "Changed since reviewed"
+    # is ALWAYS derived by comparing this against existing governed
+    # evidence (see CaseWorkspaceStore.has_unreviewed_change) - this
+    # field is never itself read as a change signal, only as a review-
+    # boundary marker, exactly mirroring `last_viewed_by`'s own relation
+    # to GovernanceLog for `since_last_visit`. Missing reviewer/object_id
+    # key = never reviewed, not "reviewed at time zero" - callers must
+    # check for absence (has_unreviewed_change already does), never
+    # default to an ancient timestamp. First proof entity is Finding
+    # (object_id = finding_id); nothing here assumes any other entity
+    # type participates yet.
+    item_reviewed_at: dict = field(default_factory=dict)
     # Conversation messages sent from a project-level context - no Case
     # open, nowhere case-shaped for the message to live (see
     # ConversationMessage's own docstring). A genuine second home for
@@ -4786,6 +4801,111 @@ class CaseWorkspaceStore:
             tmp_path.replace(path)
 
         return timestamp
+
+    def record_item_reviewed(self, workspace: ProjectWorkspace, reviewer: str, object_id: str) -> str:
+        """
+        CLAUDE-CA1D-ATTENTION-STATE-02: records that `reviewer` has just
+        meaningfully reviewed `object_id` (a Finding, in this first proof
+        entity) - personal/display-only per-item state, the exact same
+        category as `last_viewed_by`/`starred`, not a second history of
+        what changed. The GOVERNED record of what happened is whichever
+        real act this is called alongside (a Disposition, a Reviewer
+        Validation, and the `finding_reviewed` GovernanceLog event that
+        act already produces) - `has_unreviewed_change` reads THAT
+        existing evidence to derive "changed", never this field, so
+        there is no competing second history to keep in sync by hand.
+
+        Deliberately mirrors `record_last_viewed` exactly: patches ONLY
+        `item_reviewed_at[reviewer][object_id]` directly into the RAW
+        on-disk JSON, never through `save()`'s versioned/`asdict
+        (workspace)` path - this is not a structural write and does not
+        participate in the version counter, for the same reason
+        `record_last_viewed`'s own docstring already gives (a legacy
+        record's absent/renamed keys must never be silently rewritten
+        just because personal view-state was updated). Shares `save()`'s
+        own `_save_lock` for the same same-process-only guarantee that
+        method's docstring already states - no wider concurrency claim
+        made here either.
+
+        Caller-ordering correctness note (not enforced here, since this
+        method has no way to see what a caller already logged): a real
+        review action's own `finding_reviewed` GovernanceLog event and
+        this call are two separate writes with two independently-
+        generated timestamps. `has_unreviewed_change` treats a LATER
+        GovernanceLog event as "changed since reviewed" using a strict
+        `>` comparison - so this must be called AFTER the action's own
+        GovernanceLog event is appended, never before, or the reviewer's
+        own just-completed review would immediately look stale against
+        their own action's own audit trail entry. See the call sites in
+        `routes/workspace.py`'s `validate_finding`/`set_disposition`.
+        """
+        timestamp = datetime.now(timezone.utc).isoformat()
+        workspace.item_reviewed_at.setdefault(reviewer, {})[object_id] = timestamp
+
+        path = self._path_for(workspace.project_id)
+        with self._save_lock:
+            if not path.exists():
+                return timestamp
+            raw = json.loads(path.read_text(encoding="utf-8"))
+            raw.setdefault("item_reviewed_at", {}).setdefault(reviewer, {})[object_id] = timestamp
+            tmp_path = path.with_name(path.name + f".tmp-{uuid.uuid4().hex}")
+            tmp_path.write_text(json.dumps(raw, indent=2), encoding="utf-8")
+            tmp_path.replace(path)
+
+        return timestamp
+
+    def has_unreviewed_change(
+        self, workspace: ProjectWorkspace, governance_log: GovernanceLog, reviewer: str, finding_id: str,
+    ) -> bool:
+        """
+        CLAUDE-CA1D-ATTENTION-STATE-02: derived, never stored - the same
+        "derived, never stored" discipline `review_state_for_finding`
+        above already uses for a different question. Answers "has this
+        Finding materially changed since `reviewer` last meaningfully
+        reviewed it", by comparing `item_reviewed_at` against the
+        existing, already-governed `finding_reviewed` GovernanceLog
+        events for this finding - never a second, competing history of
+        "what changed" invented for this feature's own convenience.
+
+        Conservative by construction, never a guessed richer state:
+        - No recorded review by this reviewer at all (missing key, or
+          the persisted value isn't the plain non-empty string this
+          field has only ever been written as) -> True (unreviewed).
+          Malformed/wrong-typed persisted state fails this same way,
+          never with an exception.
+        - A recorded review exists, but a `finding_reviewed` event for
+          this finding is timestamped AFTER it (by ANY reviewer, not
+          just this one - another user's later disposition/validation
+          is exactly the kind of material change that should make an
+          earlier reviewer's own review stale again) -> True.
+        - A recorded review exists and no later `finding_reviewed` event
+          does -> False (still reviewed).
+
+        First proof entity only: this only ever inspects `finding_reviewed`
+        events. No other entity type's own change signal is implemented
+        here - a Task/Source/Requirement caller would need its own
+        derivation against whatever that entity's own trustworthy change
+        signal turns out to be (see the design record's own Entity
+        Coverage section), not a generalized abstraction invented ahead
+        of a second real caller actually needing one.
+        """
+        per_reviewer = workspace.item_reviewed_at.get(reviewer) if isinstance(workspace.item_reviewed_at, dict) else None
+        reviewed_at = per_reviewer.get(finding_id) if isinstance(per_reviewer, dict) else None
+        if not isinstance(reviewed_at, str) or not reviewed_at:
+            return True
+
+        latest_change_at: Optional[str] = None
+        for event in governance_log.read(workspace.project_id):
+            if event.event_type != "finding_reviewed":
+                continue
+            if event.payload.get("finding_id") != finding_id:
+                continue
+            if latest_change_at is None or event.created_at > latest_change_at:
+                latest_change_at = event.created_at
+
+        if latest_change_at is None:
+            return False
+        return latest_change_at > reviewed_at
 
     def get_or_create(
         self,

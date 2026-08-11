@@ -4009,6 +4009,12 @@ def validate_finding(project_id, finding_id):
         role=session.get("role") or "unspecified",
         payload={"finding_id": finding_id, "reviewer_validation": validation},
     )
+    # CLAUDE-CA1D-ATTENTION-STATE-02: must run AFTER the finding_reviewed
+    # event above, not before - see record_item_reviewed's own docstring
+    # for why the ordering is load-bearing for has_unreviewed_change's
+    # correctness (this reviewer's own action must not immediately look
+    # unreviewed again against their own just-created audit event).
+    store.record_item_reviewed(workspace, reviewer=_reviewer(), object_id=finding_id)
 
     return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
 
@@ -4045,6 +4051,10 @@ def set_disposition(project_id, finding_id):
         role=session.get("role") or "unspecified",
         payload={"finding_id": finding_id, "disposition": disposition},
     )
+    # CLAUDE-CA1D-ATTENTION-STATE-02: must run AFTER the finding_reviewed
+    # event above - see validate_finding's identical comment and
+    # record_item_reviewed's own docstring.
+    store.record_item_reviewed(workspace, reviewer=_reviewer(), object_id=finding_id)
 
     return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
 
