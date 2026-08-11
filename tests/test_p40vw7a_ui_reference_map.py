@@ -439,7 +439,10 @@ class SignInGatewayIsolationTests(_BaseTestCase):
                 ref.startswith(("lists.", "display.", "toolbox.", "chat.", "menu.")),
                 f"Gateway leaked a workspace-shell reference: {ref}",
             )
-        self.assertIn("data-ui-ref=\"gateway.open-existing\"", body)
+        # CLAUDE-CA1D-PROJECT-GATEWAY-LABELS-01: gateway.open-existing
+        # was retired in favor of the two context-scoped refs below.
+        self.assertIn("data-ui-ref=\"gateway.open-existing-client-owner\"", body)
+        self.assertIn("data-ui-ref=\"gateway.open-existing-design-builder\"", body)
 
 
 class UIReferenceModeToggleTests(_BaseTestCase):

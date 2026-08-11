@@ -1651,6 +1651,15 @@ main {
 .gateway-action strong { display: block; margin-bottom: 0.25rem; font-size: 0.85rem; color: var(--text-primary); }
 .gateway-action small { display: block; color: var(--text-secondary); font-size: 0.85rem; line-height: 1.4; }
 
+/* CLAUDE-CA1D-PROJECT-GATEWAY-LABELS-01: two project-context groups
+   (Client/Owner, Design-Builder/Proponent), each containing its own
+   small .gateway-actions row (New Project / Open Existing Project) --
+   reuses that existing auto-fit grid unchanged for the inner row, this
+   only stacks the two context groups themselves. */
+.gateway-context-groups { display: grid; gap: 1.6rem; }
+.gateway-context-group h3 { font-family: var(--font-display); font-size: 1rem; margin: 0 0 0.3rem; color: var(--text-primary); }
+.gateway-context-description { margin: 0 0 0.8rem; color: var(--text-secondary); font-size: 0.85rem; line-height: 1.4; }
+
 /* -- gateway login card (compact) -----------------------------------------
    Geometry/spacing/background mirror the archiosk-explorer (port 5173)
    welcome/sign-in card exactly, scoped to .gateway-card-compact so the

@@ -4,40 +4,56 @@
 {% block gateway_subtitle %}<p class="gateway-subtitle">Architectural Project Investigation Workspace</p>{% endblock %}
 {% block gateway_section_heading %}<h2>Begin a session</h2>{% endblock %}
 {% block gateway_body %}
-<div class="gateway-actions">
-    {% if is_admin %}
-    {# CLAUDE-P29: two entrances into the same /upload route/form, not
-       two duplicated routes -- each deep-links with ?environment= to
-       pre-select the radio there, but the server-side POST validates
-       independently regardless of which entrance was used. #}
-    <a class="gateway-action gateway-action-primary" data-ui-ref="gateway.create-client-owner" href="{{ url_for('portal.upload', environment='client_owner') }}">
-        <span class="gateway-action-icon">+</span>
-        <span>
-            <strong>Create Client / Owner Project</strong>
-            <small>New project in the Client / Owner environment &mdash; locked once created</small>
-        </span>
-    </a>
-    <a class="gateway-action gateway-action-primary" data-ui-ref="gateway.create-design-builder" href="{{ url_for('portal.upload', environment='design_builder_proponent') }}">
-        <span class="gateway-action-icon">+</span>
-        <span>
-            <strong>Create Design-Builder / Proponent Project</strong>
-            <small>New project in the Design-Builder / Proponent environment &mdash; locked once created</small>
-        </span>
-    </a>
-    {% endif %}
-    {# CLAUDE-P40-VW8-QA, Section 12: was portal.projects_list - the
-       full management directory (search/sort/Delete, inside base.html's
-       own authenticated Lists shell). Now the focused chooser
-       (templates/project_chooser.html) - management stays reachable at
-       its own URL, just no longer the FIRST thing "Open an existing
-       project" leads to. #}
-    <a class="gateway-action" data-ui-ref="gateway.open-existing" href="{{ url_for('portal.choose_project') }}">
-        <span class="gateway-action-icon">&#8963;</span>
-        <span>
-            <strong>Open an existing project</strong>
-            <small>Reopen a project you or a teammate already ingested</small>
-        </span>
-    </a>
+{# CLAUDE-CA1D-PROJECT-GATEWAY-LABELS-01: Client/Owner vs Design-
+   Builder/Proponent is a project CONTEXT (which side of the table this
+   Project represents); New vs Open Existing is a project STATE/ACTION.
+   These are two independent dimensions -- a live report found the
+   previous three-flat-card layout (Create Client/Owner, Create Design-
+   Builder/Proponent, Open an existing project) reading as if "Existing
+   Project" were a third context alongside the other two, when in fact
+   either context can have both new and existing Projects. Restructured
+   into two context groups, each offering New Project (unchanged
+   /upload?environment= deep link, still admin-gated exactly as before)
+   and Open Existing Project (routes/portal.py's own choose_project,
+   now filtered by the same ?environment= param -- still @login_required
+   only, unchanged, matching the original ungated "Open an existing
+   project" visibility outside the old is_admin block). No new project-state
+   concept, no new route, no duplicated records -- both entrances still
+   resolve to the exact same underlying /upload and /projects/choose
+   flows every other entrance already uses. #}
+<div class="gateway-context-groups">
+    <section class="gateway-context-group">
+        <h3>Client / Owner Projects</h3>
+        <p class="gateway-context-description">Create a new project or open an existing project from the Client / Owner side.</p>
+        <div class="gateway-actions">
+            {% if is_admin %}
+            <a class="gateway-action gateway-action-primary" data-ui-ref="gateway.create-client-owner" href="{{ url_for('portal.upload', environment='client_owner') }}">
+                <span class="gateway-action-icon">+</span>
+                <span><strong>New Project</strong></span>
+            </a>
+            {% endif %}
+            <a class="gateway-action" data-ui-ref="gateway.open-existing-client-owner" href="{{ url_for('portal.choose_project', environment='client_owner') }}">
+                <span class="gateway-action-icon">&#8963;</span>
+                <span><strong>Open Existing Project</strong></span>
+            </a>
+        </div>
+    </section>
+    <section class="gateway-context-group">
+        <h3>Design-Builder / Proponent Projects</h3>
+        <p class="gateway-context-description">Create a new project or open an existing project from the Design-Builder / Proponent side.</p>
+        <div class="gateway-actions">
+            {% if is_admin %}
+            <a class="gateway-action gateway-action-primary" data-ui-ref="gateway.create-design-builder" href="{{ url_for('portal.upload', environment='design_builder_proponent') }}">
+                <span class="gateway-action-icon">+</span>
+                <span><strong>New Project</strong></span>
+            </a>
+            {% endif %}
+            <a class="gateway-action" data-ui-ref="gateway.open-existing-design-builder" href="{{ url_for('portal.choose_project', environment='design_builder_proponent') }}">
+                <span class="gateway-action-icon">&#8963;</span>
+                <span><strong>Open Existing Project</strong></span>
+            </a>
+        </div>
+    </section>
 </div>
 {% endblock %}
 {% block gateway_footer %}

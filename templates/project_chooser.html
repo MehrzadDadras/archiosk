@@ -49,7 +49,14 @@
 
 {% block gateway_title %}Open a Project &mdash; Archiosk{% endblock %}
 {% block gateway_subtitle %}<p class="gateway-subtitle">Choose the Project you want to open</p>{% endblock %}
-{% block gateway_section_heading %}<h2 data-ui-ref="gateway.chooser">Open an existing project</h2>{% endblock %}
+{# CLAUDE-CA1D-PROJECT-GATEWAY-LABELS-01: the heading names the
+   environment context whenever this chooser was reached through one of
+   the Gateway's own two context-scoped "Open Existing Project" links,
+   so a user browsing here still knows which side of the table they're
+   looking at -- the plain, unfiltered chooser (reached with no
+   ?environment=, e.g. from a direct URL) keeps its original generic
+   heading unchanged. #}
+{% block gateway_section_heading %}<h2 data-ui-ref="gateway.chooser">{% if environment_label %}Open an existing {{ environment_label }} project{% else %}Open an existing project{% endif %}</h2>{% endblock %}
 {% block gateway_body %}
 {% if current_project %}
 {# ---------------- Current Project (CLAUDE-P40-VW7B, Section 4) --------------
@@ -77,6 +84,11 @@
 
 <form class="projects-controls" method="get" action="{{ url_for('portal.choose_project') }}" data-ui-ref="gateway.chooser.search">
     {% if current_project %}<input type="hidden" name="current" value="{{ current_project.project_id }}">{% endif %}
+    {# CLAUDE-CA1D-PROJECT-GATEWAY-LABELS-01: searching within a
+       context-scoped chooser must stay within that context -- same
+       preserve-across-search pattern the `current` hidden field above
+       already established. #}
+    {% if environment_filter %}<input type="hidden" name="environment" value="{{ environment_filter }}">{% endif %}
     <input
         type="search" name="q" value="{{ query }}"
         placeholder="Search your projects" class="text-input projects-search" aria-label="Search your projects">
@@ -133,7 +145,7 @@
 {% else %}
 <div class="projects-empty">
     {% if query %}
-    <p>No active projects match &ldquo;{{ query }}&rdquo;.</p>
+    <p>No active {% if environment_label %}{{ environment_label }} {% endif %}projects match &ldquo;{{ query }}&rdquo;.</p>
     {% if removed_match %}
     {# CLAUDE-CA1D-RECEPTION-FIX-01: restrained, query-specific hint --
        only appears when a removed Project actually matches, not on
@@ -151,14 +163,19 @@
        visibly does. #}
     <p>This is your only Project so far.</p>
     {% else %}
-    <p>No projects yet. Start one from the Project Gateway.</p>
+    <p>No {% if environment_label %}{{ environment_label }} {% endif %}projects yet. Start one from the Project Gateway.</p>
     {% if is_admin %}
     {# CLAUDE-CA1D-PUBLIC-LANDING-01 consolidated addendum, Section A4:
        a genuine zero-Project state needs a real action, not just text
        pointing elsewhere -- portal.upload is @admin_required (same gate
        projects.html's own equivalent CTA already respects), so this
-       must never render for a non-admin reviewer. #}
-    <a class="btn btn-primary" href="{{ url_for('portal.upload') }}" data-ui-ref="gateway.chooser.new-project">New Project</a>
+       must never render for a non-admin reviewer.
+       CLAUDE-CA1D-PROJECT-GATEWAY-LABELS-01: carries the same
+       ?environment= forward when this chooser was reached through one
+       of the Gateway's own context-scoped links, so a zero-state admin
+       lands in /upload with the matching side already pre-selected
+       instead of a generic form. #}
+    <a class="btn btn-primary" href="{{ url_for('portal.upload', environment=environment_filter or None) }}" data-ui-ref="gateway.chooser.new-project">New Project</a>
     {% endif %}
     {% endif %}
 </div>

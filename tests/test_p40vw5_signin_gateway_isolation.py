@@ -307,30 +307,43 @@ class GatewayShellIsolationTests(_BaseTestCase):
 
 class GatewayFunctionalChoicesTests(_BaseTestCase):
     def test_admin_sees_both_create_project_actions(self):
+        """CLAUDE-CA1D-PROJECT-GATEWAY-LABELS-01: Gateway is now two
+        context groups (Client/Owner, Design-Builder/Proponent), each
+        with its own "New Project" action -- the group heading names
+        the context, the action itself no longer repeats it."""
         client = self._client_as("vw5_admin", 1)
         body = client.get("/gateway").get_data(as_text=True)
-        self.assertIn("Create Client / Owner Project", body)
-        self.assertIn("Create Design-Builder / Proponent Project", body)
+        self.assertIn("Client / Owner Projects", body)
+        self.assertIn("Design-Builder / Proponent Projects", body)
+        self.assertIn('data-ui-ref="gateway.create-client-owner"', body)
+        self.assertIn('data-ui-ref="gateway.create-design-builder"', body)
         self.assertIn('href="/upload?environment=client_owner"', body)
         self.assertIn('href="/upload?environment=design_builder_proponent"', body)
 
     def test_non_admin_does_not_see_create_project_actions(self):
         client = self._client_as("vw5_reviewer", 2, role="read_only")
         body = client.get("/gateway").get_data(as_text=True)
-        self.assertNotIn("Create Client / Owner Project", body)
+        self.assertNotIn('data-ui-ref="gateway.create-client-owner"', body)
+        self.assertNotIn('data-ui-ref="gateway.create-design-builder"', body)
         self.assertNotIn("/upload?environment=", body)
 
     def test_open_existing_project_action_present_and_functional(self):
         # CLAUDE-P40-VW8-QA, Section 12: "Open an existing project" now
         # leads to the focused chooser (/projects/choose), not the full
         # management directory (/projects) - the latter is unchanged and
-        # still independently reachable/functional (asserted below), it
-        # is simply no longer Gateway's own first destination.
+        # still independently reachable/functional (asserted below).
+        # CLAUDE-CA1D-PROJECT-GATEWAY-LABELS-01: Gateway's own entrance
+        # is now two context-scoped links (?environment=client_owner /
+        # ?environment=design_builder_proponent), not one environment-
+        # agnostic link.
         client = self._client_as("vw5_admin", 1)
         body = client.get("/gateway").get_data(as_text=True)
-        self.assertIn("Open an existing project", body)
-        self.assertIn('href="/projects/choose"', body)
-        resp = client.get("/projects/choose")
+        self.assertIn('data-ui-ref="gateway.open-existing-client-owner"', body)
+        self.assertIn('data-ui-ref="gateway.open-existing-design-builder"', body)
+        self.assertIn('href="/projects/choose?environment=client_owner"', body)
+        # The fixture project is a Client/Owner project (see _ingest
+        # above) - the matching filtered chooser must still find it.
+        resp = client.get("/projects/choose?environment=client_owner")
         self.assertEqual(resp.status_code, 200)
         self.assertIn(_DISTINCTIVE_PROJECT_NAME, resp.get_data(as_text=True))
         # The management directory itself is unchanged and still works.

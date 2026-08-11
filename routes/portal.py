@@ -20,7 +20,7 @@ from werkzeug.datastructures import FileStorage
 from services.auth import admin_required, check_credentials, is_admin, is_authenticated, log_in, log_out, login_required
 from services.rate_limit import limiter
 from services.case_workspace import CaseWorkspaceStore
-from services.environment_capabilities import OPERATING_ENVIRONMENT_LABELS
+from services.environment_capabilities import OPERATING_ENVIRONMENT_LABELS, is_valid_operating_environment
 from services.governance import GovernanceError
 from services.ingestion import UploadError, get_governance_log, get_registry, ingest_folder_upload, ingest_upload
 from services.drawing_intake import (
@@ -486,6 +486,18 @@ def choose_project():
     store = CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"])
 
     query = request.args.get('q', '').strip()
+    # CLAUDE-CA1D-PROJECT-GATEWAY-LABELS-01: an OPTIONAL ?environment=
+    # deep link from the Gateway's own two context groups (gateway.html)
+    # -- filters the SAME already-access-scoped `documents` list below
+    # by each Project's own locked ProjectWorkspace.operating_environment,
+    # never a second, separately-authorized lookup. Silently ignored
+    # (falls back to the plain, unfiltered chooser) when absent or not
+    # one of the two real environment values -- a soft display filter,
+    # never an authorization boundary of its own, same treatment this
+    # route's own `current` param already gets.
+    environment_filter = request.args.get('environment', '').strip()
+    if not is_valid_operating_environment(environment_filter):
+        environment_filter = ''
     documents = _accessible_documents(registry, store)
     removed_match = False
     if query:
@@ -513,6 +525,8 @@ def choose_project():
     projects = []
     for document in documents:
         workspace = _safe_workspace(store, document.project_id)
+        if environment_filter and (not workspace or workspace.operating_environment != environment_filter):
+            continue
         projects.append({
             "project_id": document.project_id,
             "display_name": (workspace.display_title if workspace else None) or document.filename,
@@ -527,7 +541,8 @@ def choose_project():
 
     return render_template(
         'project_chooser.html', projects=projects, query=query, current_project=current_project,
-        removed_match=removed_match,
+        removed_match=removed_match, environment_filter=environment_filter,
+        environment_label=OPERATING_ENVIRONMENT_LABELS.get(environment_filter),
     )
 
 

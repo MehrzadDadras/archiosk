@@ -233,19 +233,26 @@ class ChooserEmptyStateTests(unittest.TestCase):
 
 
 class GatewayLinkTests(unittest.TestCase):
+    """CLAUDE-CA1D-PROJECT-GATEWAY-LABELS-01: the single environment-
+    agnostic gateway.open-existing ref was retired in favor of two
+    context-scoped ones -- see UI_REFERENCE_MAP.md's own retired-
+    references table."""
+
     def test_gateway_open_existing_points_at_the_chooser_not_management(self):
         source = _GATEWAY_HTML_PATH.read_text(encoding="utf-8")
-        match = re.search(r'data-ui-ref="gateway\.open-existing"[^>]*href="([^"]+)"', source)
-        if match is None:
-            match = re.search(r'href="\{\{ url_for\(\'([^\']+)\'\)[^}]*\}\}"[^>]*data-ui-ref="gateway\.open-existing"', source)
-        self.assertIsNotNone(match, "gateway.open-existing link not found")
+        for ref in ("gateway.open-existing-client-owner", "gateway.open-existing-design-builder"):
+            match = re.search(r'data-ui-ref="' + re.escape(ref) + r'"[^>]*href="([^"]+)"', source)
+            if match is None:
+                match = re.search(r'href="\{\{ url_for\(\'([^\']+)\'[^}]*\}\}"[^>]*data-ui-ref="' + re.escape(ref) + r'"', source)
+            self.assertIsNotNone(match, f"{ref} link not found")
 
     def test_gateway_open_existing_uses_choose_project_endpoint(self):
         source = _GATEWAY_HTML_PATH.read_text(encoding="utf-8")
-        anchor_start = source.index('data-ui-ref="gateway.open-existing"')
-        window = source[max(0, anchor_start - 200):anchor_start + 150]
-        self.assertIn("portal.choose_project", window)
-        self.assertNotIn("portal.projects_list", window)
+        for ref in ("gateway.open-existing-client-owner", "gateway.open-existing-design-builder"):
+            anchor_start = source.index(f'data-ui-ref="{ref}"')
+            window = source[max(0, anchor_start - 200):anchor_start + 150]
+            self.assertIn("portal.choose_project", window)
+            self.assertNotIn("portal.projects_list", window)
 
 
 if __name__ == "__main__":
