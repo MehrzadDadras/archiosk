@@ -1,0 +1,27 @@
+{% extends "landing_shell.html" %}
+
+{% block title %}Start Free Trial &mdash; Archiosk{% endblock %}
+
+{% block landing_body %}
+<div class="landing-doc">
+    <a class="landing-doc-back" href="{{ url_for('portal.index') }}" data-ui-ref="start-trial.back">&larr; Archiosk</a>
+    <span class="landing-doc-kicker">Start Free Trial</span>
+    <h1>Trial access isn&rsquo;t self-serve yet</h1>
+
+    <div class="landing-doc-section">
+        <p>
+            Archiosk is currently in controlled access while the product continues to
+            develop. Public self-service sign-up isn&rsquo;t open yet &mdash; this page
+            will connect directly to that when it is.
+        </p>
+        <p>
+            If you already have an account, sign in below. Otherwise, check back soon.
+        </p>
+    </div>
+
+    <div class="landing-doc-actions">
+        <a class="landing-action landing-action-primary" href="{{ url_for('portal.login') }}" data-ui-ref="start-trial.sign-in">Sign In</a>
+        <a class="landing-action landing-action-secondary" href="{{ url_for('portal.explore') }}" data-ui-ref="start-trial.explore">Explore Archiosk</a>
+    </div>
+</div>
+{% endblock %}

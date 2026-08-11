@@ -582,6 +582,27 @@ already, and remains, fully self-sufficient (copies the complete
 captured selection text), so a reviewer never needs the native popup
 for ordinary copying.
 
+## Public Landing (`templates/landing_shell.html`, `landing.html`, `explore.html`, `start_trial.html` — CLAUDE-CA1D-PUBLIC-LANDING-01, new surface)
+
+Renders inside its own standalone shell (`landing_shell.html`), never
+`base.html`/`gateway_base.html`/`auth_shell.html` — an anonymous public
+visitor has no session context those shells assume. `/` serves this for
+every unauthenticated visitor (superseding CLAUDE-P40-VW5's own
+redirect-to-Sign-in behavior by explicit Product Owner decision);
+`/explore` and `/start-trial` are both public and reachable directly.
+
+| Ref | Element | Label/text | Notes | Scope | Status |
+|---|---|---|---|---|---|
+| `landing.explore` | `<a>` | "Explore" | Navigates to `portal.explore` | Unauthenticated visitors at `/` | active |
+| `landing.start-trial` | `<a>` | "Start Free Trial" | Navigates to `portal.start_trial` — no billing/self-service registration exists yet, see that route's own honest copy | Same as above | active |
+| `landing.sign-in` | `<a>` | "Sign In" | Navigates to `portal.login` — the existing, unchanged authentication flow | Same as above | active |
+| `explore.back` | `<a>` | "← Archiosk" | Navigates back to `portal.index` (the landing page) | `/explore` | active |
+| `explore.start-trial` | `<a>` | "Start Free Trial" | Same destination as `landing.start-trial` | `/explore` | active |
+| `explore.sign-in` | `<a>` | "Sign In" | Same destination as `landing.sign-in` | `/explore` | active |
+| `start-trial.back` | `<a>` | "← Archiosk" | Navigates back to `portal.index` | `/start-trial` | active |
+| `start-trial.sign-in` | `<a>` | "Sign In" | Same destination as `landing.sign-in` | `/start-trial` | active |
+| `start-trial.explore` | `<a>` | "Explore Archiosk" | Same destination as `landing.explore` | `/start-trial` | active |
+
 ## Gateway (`templates/gateway_shell.html`, `gateway.html`, `project_chooser.html` — CLAUDE-P40-VW8-QA, new surface)
 
 Gateway/the chooser render inside `gateway_shell.html`, never `base.html`
@@ -598,7 +619,9 @@ references may ever start with `lists.`/`display.`/`toolbox.`/`chat.`/
 | `gateway.open-existing` | `<a>` | "Open an existing project" | Navigates to `portal.choose_project` (the focused chooser, below) — **CLAUDE-P40-VW8-QA:** previously `portal.projects_list`, the full management directory; that page is unchanged and still reachable directly, just no longer Gateway's own first destination (Section 12) | Every authenticated page | active |
 | `gateway.chooser` | `<h2>` | "Open an existing project" | Section heading, non-interactive | Every authenticated page | active |
 | `gateway.chooser.search` | `<form>` | project search | `?q=` filter, server-side, same `_accessible_documents` matching `projects_list` uses; preserves `?current=` (below) via a hidden field so searching never drops the Current Project context | Every authenticated page (results scoped to `_accessible_documents`) | active |
-| `gateway.chooser.leaf` | `<a>` (pattern) | a Project card | Navigates to `workspace.show_workspace` for that Project — the exact same authorized route every other Project-opening path uses | Filtered to `_accessible_documents` (already access-scoped) | active |
+| `gateway.chooser.leaf` | `<label>` (pattern, was `<a>` — CLAUDE-CA1D-RECEPTION-FIX-01 addendum) | a Project card, wrapping a radio | Select-then-confirm now, not a direct link — see `gateway.chooser.open-button` below. Navigates to the same `workspace.show_workspace` URL for that Project once confirmed, the exact same authorized route every other Project-opening path uses | Filtered to `_accessible_documents` (already access-scoped) | active |
+| `gateway.chooser.open-form` (new, CLAUDE-CA1D-RECEPTION-FIX-01 addendum) | `<form>` | (no visible label) | Wraps the radio group; submit rewrites to the selected Project's real URL client-side (no new backend route) | Same as above | active |
+| `gateway.chooser.open-button` (new, CLAUDE-CA1D-RECEPTION-FIX-01 addendum) | `<button>` | "Open Project" | Disabled until a radio is checked; Enter from a checked radio submits the form natively | Same as above | active |
 | `gateway.chooser.current` | `<section>` (new, CLAUDE-P40-VW7B) | "Current Project" | This route/template is now also the Project Vestibule (Section 4) — only rendered when arriving with a valid, authorized `?current=<project_id>` (set by `menu.context.switch-project`, below); a soft display hint, never a new persisted "current project" concept or an authorization boundary of its own | Every authenticated page; `current` silently ignored if unauthorized/stale/omitted | active |
 | `gateway.chooser.current.leaf` | `<a>` | Current Project's own card, "Currently entered" badge | Re-enters the same already-open Project via `workspace.show_workspace` — a plain link, no confirmation (workspace state is safely persisted per-Project already; see `menu.context.switch-project`'s own note on why no interruption dialog guards this) | Same as `gateway.chooser.leaf` | active |
 | `gateway.chooser.available` | `<p>` (new, CLAUDE-P40-VW7B) | "Available Projects" | Section label shown only alongside `gateway.chooser.current` — the current Project is excluded from this list below it, never duplicated | Every authenticated page | active |
@@ -635,7 +658,13 @@ browser preference, unaffected by sign-out), never sets one.
 | `upload.file` | `<input type="file">` | (file picker) | Carries `data-max-upload-bytes`/`data-max-upload-mb`, read by the client-side size-check script | Same as above | active |
 | `upload.actor` | `<input>` | "Your name" | Optional free-text audit-trail field | Same as above | active |
 | `upload.role` | `<input>` | "Your role" | Optional free-text audit-trail field | Same as above | active |
-| `upload.submit` | `<button>` | "Create project and parse document" | Submits the upload form | Same as above | active |
+| `upload.submit` | `<button>` | "Create project and parse document" | Submits the upload form via its default action (`portal.upload`) — now the secondary path, folder establishment below is primary | Same as above | active |
+| `upload.folder.picker-button` (new, CLAUDE-CA1D-RECEPTION-FIX-01) | `<button>` | "Choose Project Folder…" | Opens the hidden `webkitdirectory` file input | `portal.upload` — **admin only** | active |
+| `upload.folder.picker-input` (new, CLAUDE-CA1D-RECEPTION-FIX-01) | `<input type="file" webkitdirectory>` | (hidden) | Browser-native folder picker — one-shot selection, no live directory handle; every file's own `webkitRelativePath` becomes its renamed `.name` before submission (see `folder_files` below) | Same as above | active |
+| `upload.folder.summary` (new, CLAUDE-CA1D-RECEPTION-FIX-01) | `<div>` | "N file(s) found, M eligible…" | Client-side count of the selected folder's eligible/skipped files, before submission — the server's own `upload_folder` route is the real authority on what's actually skipped | Same as above | active |
+| `upload.folder.founding-picker` (new, CLAUDE-CA1D-RECEPTION-FIX-01) | `<div>` | "Which of these is the principal RFP/document…" | Founding-document confirmation/selection — pre-selects a single unambiguous top-level candidate but never submits without explicit confirmation; zero/multiple candidates require an explicit choice | Same as above | active |
+| `upload.folder.error` (new, CLAUDE-CA1D-RECEPTION-FIX-01) | `<p>` | (client-side folder-selection error) | E.g. "No eligible documents… were found in that folder" | Same as above | active |
+| `upload.folder.submit` (new, CLAUDE-CA1D-RECEPTION-FIX-01) | `<button>` | "Establish Project from Folder" | Submits via `formaction` to `portal.upload_folder` — disabled until a founding document is confirmed | Same as above | active |
 | `errors.upload-too-large` | `<a>` | "Choose a different file" | The 413 error page's own return action, back to `portal.upload` — no Project/Document/workspace is ever created for a request that hits this handler (Werkzeug rejects it before the view function runs) | Every request path (413 can occur pre-authentication-check on a route, though `/upload` itself is admin-only) | active |
 | `upload.confirm.no-native-text-notice` | `<p>` | (image-only-PDF notice) | States that no text could be automatically read (Section 6's honest-degradation report) — never rendered for a document with real extractable text | `portal.upload_confirm` — **admin only** | active |
 | `upload.confirm.no-candidates-notice` | `<p>` | (no-candidates notice) | States that no title-block-style fields were detected, when the file had real text but nothing matched a known field pattern | Same as above | active |

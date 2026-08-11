@@ -12026,6 +12026,74 @@ class CaseWorkspaceStore:
             "evidence_item_ids": evidence_item_ids,
         }
 
+    def register_plain_text_structure(
+        self, workspace: ProjectWorkspace, source_id: str, text: str,
+        extractor_version: Optional[str] = None, actor: str = "system",
+        governance_log: Optional[GovernanceLog] = None,
+    ) -> dict:
+        """
+        CLAUDE-CA1D-RECEPTION-FIX-01 (folder establishment): the non-PDF
+        counterpart to register_pdf_page_structure above, for a Source
+        whose real, addressable subdivision is "the document" itself
+        rather than pages (.txt/.csv/.md/.docx - anything BHiveParser's
+        own _extract already reduces to one plain-text string). One
+        StructuralUnit (unit_type="document", order_index=0) covering
+        the whole Source, then one AddressableRegion + EvidenceItem per
+        non-empty paragraph - the identical blank-line-delimited split
+        register_pdf_page_structure uses per page, applied once to the
+        whole document instead of once per page. Exists so a Source
+        added outside the founding-document path (e.g. every other file
+        in a folder establishment) has real, per-paragraph evidence GO's
+        chat can actually draw on - not merely a registered filename.
+        """
+        source = self._find(workspace.sources, source_id)
+        if source is None or source["project_id"] != workspace.project_id:
+            raise CaseWorkspaceError(f"Source {source_id} was not found.")
+
+        unit = StructuralUnit(
+            id=_new_id(), project_id=workspace.project_id, source_id=source_id,
+            unit_type="document", order_index=0, created_at=_now(), created_by=actor,
+        )
+        workspace.structural_units.append(asdict(unit))
+
+        addressable_region_ids: list[str] = []
+        evidence_item_ids: list[str] = []
+        paragraphs = [p.strip() for p in re.split(r"\n\s*\n", text) if p.strip()]
+        for paragraph_index, paragraph_text in enumerate(paragraphs):
+            region = AddressableRegion(
+                id=_new_id(), project_id=workspace.project_id, structural_unit_id=unit.id,
+                region_type="paragraph", address={"paragraph_index": paragraph_index},
+                created_at=_now(), created_by=actor,
+            )
+            workspace.addressable_regions.append(asdict(region))
+            addressable_region_ids.append(region.id)
+
+            evidence = EvidenceItem(
+                id=_new_id(), project_id=workspace.project_id, source_id=source_id,
+                evidence_class=EVIDENCE_CLASS_DIRECT_SOURCE, content=paragraph_text,
+                content_type="text", created_at=_now(), created_by=actor,
+                region_id=region.id, extractor_version=extractor_version,
+            )
+            workspace.evidence_items.append(asdict(evidence))
+            evidence_item_ids.append(evidence.id)
+
+        self.save(workspace)
+
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id, event_type="plain_text_structure_registered",
+                actor=actor, role="system",
+                payload={"source_id": source_id, "paragraph_count": len(paragraphs)},
+                correlation_id=source_id,
+            )
+
+        return {
+            "paragraph_count": len(paragraphs),
+            "structural_unit_id": unit.id,
+            "addressable_region_ids": addressable_region_ids,
+            "evidence_item_ids": evidence_item_ids,
+        }
+
     # -- CLAUDE-MM3: Spreadsheet and Structured-Data Intelligence --------------
     # Mirrors register_pdf_page_structure's own shape exactly: takes ALREADY-
     # EXTRACTED sheet data (never raw bytes, never an openpyxl/csv call) -

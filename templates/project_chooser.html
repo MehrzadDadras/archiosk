@@ -57,20 +57,52 @@
 
 {% if current_project %}<p class="gateway-vestibule-available-label" data-ui-ref="gateway.chooser.available">Available Projects</p>{% endif %}
 {% if projects %}
-<ul class="project-card-list">
-    {% for p in projects %}
-    <li class="project-card">
-        <a class="project-card-link" data-ui-ref="gateway.chooser.leaf" href="{{ url_for('workspace.show_workspace', project_id=p.project_id) }}">
-            <div class="project-card-main">
-                <span class="project-card-name">{{ p.display_name }}</span>
-            </div>
-            <div class="project-card-meta">
-                <span>Updated {{ p.last_activity | humanize }}</span>
-            </div>
-        </a>
-    </li>
-    {% endfor %}
-</ul>
+{# CLAUDE-CA1D-RECEPTION-FIX-01 (addendum): select-then-confirm, not a
+   direct link per row -- a live report named a missing explicit "Open
+   Project" action and Enter-key completion. A real <form>/radio group
+   gets both natively (Enter submits a form from a checked radio in
+   every evergreen browser) without inventing custom keyboard handling;
+   landing.js's own JS only rewrites the form's action to the selected
+   Project's real URL before submit, exactly the same formaction-style
+   pattern upload.html's own folder-establishment picker already uses.
+   Access control is unchanged -- `projects` is still exactly the same
+   already-authorized list choose_project() has always built. #}
+<form method="get" id="project-open-form" data-ui-ref="gateway.chooser.open-form">
+    <ul class="project-card-list">
+        {% for p in projects %}
+        <li class="project-card">
+            <label class="project-card-link project-card-selectable" data-ui-ref="gateway.chooser.leaf">
+                <input
+                    type="radio" name="project_id" value="{{ p.project_id }}" required
+                    data-open-url="{{ url_for('workspace.show_workspace', project_id=p.project_id) }}">
+                <div class="project-card-main">
+                    <span class="project-card-name">{{ p.display_name }}</span>
+                </div>
+                <div class="project-card-meta">
+                    <span>Updated {{ p.last_activity | humanize }}</span>
+                </div>
+            </label>
+        </li>
+        {% endfor %}
+    </ul>
+    <button type="submit" class="btn btn-primary" id="project-open-button" disabled data-ui-ref="gateway.chooser.open-button">Open Project</button>
+</form>
+<script>
+(function () {
+    var form = document.getElementById('project-open-form');
+    var button = document.getElementById('project-open-button');
+    if (!form || !button) return;
+    form.addEventListener('change', function (e) {
+        if (e.target && e.target.name === 'project_id') button.disabled = false;
+    });
+    form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        var checked = form.querySelector('input[name="project_id"]:checked');
+        if (!checked) return;
+        window.location.href = checked.getAttribute('data-open-url');
+    });
+})();
+</script>
 {% else %}
 <div class="projects-empty">
     {% if query %}
@@ -84,7 +116,13 @@
     <p class="pane-note">It may be under <a href="{{ url_for('portal.removed_projects') }}" data-ui-ref="gateway.chooser.removed-match-hint">Removed Projects</a>.</p>
     {% endif %}
     {% elif current_project %}
-    <p>No other projects yet.</p>
+    {# CLAUDE-CA1D-RECEPTION-FIX-01 (addendum): "other" is load-bearing
+       here -- a live report flagged this as reading like a contradiction
+       next to the real, present Current Project card above. Reworded to
+       remove the word "projects" entirely from the negative statement,
+       so it can never be misread as "no projects exist" while one
+       visibly does. #}
+    <p>This is your only Project so far.</p>
     {% else %}
     <p>No projects yet. Start one from the Project Gateway.</p>
     {% endif %}

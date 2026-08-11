@@ -8,9 +8,7 @@
        from "Ingest a project document" - that heading and the founder-
        centric "put your document into Archiosk" framing implied the
        project moves into Archiosk, the opposite of the governing
-       principle ("Archiosk enters the project," not the reverse). No
-       mechanism changed - this is still the same one-founding-document
-       upload that creates a project; only the copy around it changed.
+       principle ("Archiosk enters the project," not the reverse).
 
        CLAUDE-POSTCAMEL-META-T01-RC1: "Open a Project" (this stage's own
        first attempt) was found, on reassessment, to collide with the
@@ -24,21 +22,24 @@
        "+ New Project," and still carrying the Territory framing (a
        project is established IN Archiosk, not moved into it). #}
     <h1>Establish a Project</h1>
-    {# CLAUDE-CA1D-RECEPTION-FIX-01: tightened for a first-time public
-       reader (shorter sentences, one CTA-adjacent parenthetical
-       removed) -- every fact below (Territory framing, formats, size
-       limit, supported/unsupported material) is unchanged, no
-       capability claim added or removed. #}
+    {# CLAUDE-CA1D-RECEPTION-FIX-01 (folder establishment): a folder is
+       now the primary path - a public stranger should be able to start
+       with the actual RFP package, not learn GO's internal "founding
+       document" concept first. Every eligible file in the chosen folder
+       becomes real, usable project evidence (see upload_folder's own
+       docstring); a single file remains available as a secondary path. #}
     <p class="hero-copy" data-ui-ref="upload.limits">
         Archiosk works alongside your project's existing material &mdash; it
         does not take the place of it, and your files stay wherever they
-        already are. Add one document to begin; more can be added afterward.
+        already are. Choose the folder holding your RFP/pursuit material and
+        Archiosk brings in every eligible document inside it; a single file
+        works too if that's all you have.
     </p>
     <p class="hero-copy" data-ui-ref="upload.limits.formats">
-        Accepted formats: PDF, DOCX, TXT, CSV, MD &mdash; up to {{ max_upload_mb }}MB.
-        Best suited to text-based material such as RFPs, RFQs, specs, contracts,
-        reports, and meeting minutes with exhibits. Scanned drawings, native
-        spreadsheets, and images aren&rsquo;t supported yet.
+        Accepted formats: PDF, DOCX, TXT, CSV, MD &mdash; up to {{ max_upload_mb }}MB
+        each. Best suited to text-based material such as RFPs, RFQs, specs,
+        contracts, reports, and meeting minutes with exhibits. Scanned drawings,
+        native spreadsheets, and images aren&rsquo;t supported yet.
     </p>
 </section>
 
@@ -47,12 +48,14 @@
 {% endif %}
 <p class="mono form-error" id="upload-size-error" data-ui-ref="upload.client-size-error" hidden></p>
 
-<form method="post" enctype="multipart/form-data" class="upload-form" id="project-creation-form">
+<form method="post" enctype="multipart/form-data" class="upload-form" id="project-creation-form" action="{{ url_for('portal.upload') }}">
     {# CLAUDE-P29: Project Operating Environment -- required, locked
        permanently once this project is created. Deliberately radio
        buttons, not a dropdown, and placed first, above project name/
        file -- this is the first decision in project creation, not an
-       incidental option alongside the others. #}
+       incidental option alongside the others. Shared by both the
+       folder and single-file paths below (one decision, however the
+       project ends up being established). #}
     <fieldset class="operating-environment-fieldset">
         <legend>Project Operating Environment <span class="mono">(required)</span></legend>
         <p class="pane-note">
@@ -75,11 +78,7 @@
         type="text" name="project_name" class="text-input" style="max-width:480px;"
         value="{{ request.form.get('project_name', '') }}"
         data-ui-ref="upload.project-name"
-        placeholder="Project name (optional &mdash; defaults to the file name; must be unique)">
-    <input
-        type="file" name="file" required accept=".pdf,.docx,.txt,.csv,.md"
-        id="upload-file-input" data-ui-ref="upload.file"
-        data-max-upload-bytes="{{ max_upload_mb * 1024 * 1024 }}" data-max-upload-mb="{{ max_upload_mb }}">
+        placeholder="Project name (optional &mdash; defaults to the file/folder name; must be unique)">
     <div class="upload-form-optional">
         <input type="text" name="actor" class="text-input" data-ui-ref="upload.actor" placeholder="Your name (optional, for the audit trail)">
         <input type="text" name="role" class="text-input" data-ui-ref="upload.role" placeholder="Your role (optional)">
@@ -90,7 +89,46 @@
         I understand this selection configures the project environment and cannot be changed after creation.
     </label>
 
-    <button type="submit" class="btn btn-primary" data-ui-ref="upload.submit">Create project and parse document</button>
+    <fieldset class="folder-establish-fieldset">
+        <legend>Choose Project Folder</legend>
+        <p class="pane-note">
+            Select the folder containing your RFP/pursuit material. Archiosk brings in every
+            eligible document inside it (subfolders included) and preserves where each one
+            sits relative to the folder you chose.
+        </p>
+        <button type="button" class="btn btn-ghost" id="folder-picker-button" data-ui-ref="upload.folder.picker-button">
+            Choose Project Folder&hellip;
+        </button>
+        <input type="file" id="folder-picker-input" webkitdirectory directory multiple hidden data-ui-ref="upload.folder.picker-input">
+        <input type="file" name="folder_files" id="folder-files-hidden" multiple hidden>
+        <input type="hidden" name="founding_relative_path" id="founding-relative-path-field">
+
+        <div id="folder-selection-summary" data-ui-ref="upload.folder.summary" hidden></div>
+
+        <div id="folder-founding-picker" data-ui-ref="upload.folder.founding-picker" hidden>
+            <p class="pane-note">Which of these is the principal RFP/document for this project?</p>
+            <ul class="folder-founding-candidates" id="folder-founding-candidates"></ul>
+        </div>
+
+        <p class="mono form-error" id="folder-selection-error" data-ui-ref="upload.folder.error" hidden></p>
+
+        <button
+            type="submit" class="btn btn-primary" id="folder-submit-button" disabled
+            formaction="{{ url_for('portal.upload_folder') }}" data-ui-ref="upload.folder.submit">
+            Establish Project from Folder
+        </button>
+    </fieldset>
+
+    <fieldset class="single-file-establish-fieldset">
+        <legend>Or establish from a single file</legend>
+        <input
+            type="file" name="file" accept=".pdf,.docx,.txt,.csv,.md"
+            id="upload-file-input" data-ui-ref="upload.file"
+            data-max-upload-bytes="{{ max_upload_mb * 1024 * 1024 }}" data-max-upload-mb="{{ max_upload_mb }}">
+        <button type="submit" class="btn btn-ghost" id="single-file-submit-button" data-ui-ref="upload.submit">
+            Create project and parse document
+        </button>
+    </fieldset>
 </form>
 
 <script>
@@ -127,7 +165,133 @@
 
         input.addEventListener('change', checkSize);
         form.addEventListener('submit', function (e) {
-            if (!checkSize()) e.preventDefault();
+            if (document.activeElement === document.getElementById('single-file-submit-button') && !checkSize()) {
+                e.preventDefault();
+            }
+        });
+    })();
+
+    // CLAUDE-CA1D-RECEPTION-FIX-01: folder establishment.
+    //
+    // webkitdirectory gives every file in the chosen folder as one
+    // FileList, each File carrying its own webkitRelativePath (e.g.
+    // "RFP Package/exhibits/spec.pdf") - a browser-native mechanism,
+    // never a live directory handle/permission grant (that's the File
+    // System Access API's showDirectoryPicker, deliberately NOT used
+    // here: Chromium-only, built for ongoing sync access, the wrong
+    // tool for a one-shot "establish this project" selection). Nothing
+    // outside the chosen folder can ever appear in this FileList - the
+    // browser itself enforces that, not this script.
+    //
+    // The founding/principal document is never inferred silently: if
+    // exactly one eligible file sits at the folder's own top level, it
+    // is pre-selected but still shown for the reviewer to confirm;
+    // otherwise the reviewer must explicitly choose from the eligible
+    // list. That choice becomes founding_relative_path, matched
+    // server-side against the submitted files' own filenames (see
+    // routes/portal.py's upload_folder).
+    (function () {
+        var ELIGIBLE_EXTENSIONS = ['.pdf', '.docx', '.txt', '.csv', '.md'];
+
+        var pickerButton = document.getElementById('folder-picker-button');
+        var pickerInput = document.getElementById('folder-picker-input');
+        var hiddenFilesInput = document.getElementById('folder-files-hidden');
+        var foundingField = document.getElementById('founding-relative-path-field');
+        var summaryEl = document.getElementById('folder-selection-summary');
+        var foundingPickerEl = document.getElementById('folder-founding-picker');
+        var candidatesListEl = document.getElementById('folder-founding-candidates');
+        var errorEl = document.getElementById('folder-selection-error');
+        var submitButton = document.getElementById('folder-submit-button');
+        if (!pickerButton || !pickerInput || !hiddenFilesInput || !foundingField || !submitButton) return;
+
+        var selectedFiles = [];   // File[], renamed so .name === relative path
+        var eligibleRelativePaths = [];
+
+        function isEligible(relativePath) {
+            var lower = relativePath.toLowerCase();
+            for (var i = 0; i < ELIGIBLE_EXTENSIONS.length; i++) {
+                if (lower.endsWith(ELIGIBLE_EXTENSIONS[i])) return true;
+            }
+            return false;
+        }
+
+        function isTopLevel(relativePath) {
+            // "FolderName/file.ext" has exactly one slash; anything in a
+            // subfolder has more.
+            return relativePath.split('/').length === 2;
+        }
+
+        function setFounding(relativePath) {
+            foundingField.value = relativePath;
+            var items = candidatesListEl.querySelectorAll('input[type="radio"]');
+            items.forEach(function (radio) { radio.checked = (radio.value === relativePath); });
+            submitButton.disabled = !relativePath;
+        }
+
+        function renderFoundingCandidates(candidates, preselected) {
+            candidatesListEl.innerHTML = '';
+            candidates.forEach(function (relativePath) {
+                var li = document.createElement('li');
+                var label = document.createElement('label');
+                var radio = document.createElement('input');
+                radio.type = 'radio';
+                radio.name = 'founding-candidate-display';
+                radio.value = relativePath;
+                radio.checked = (relativePath === preselected);
+                radio.addEventListener('change', function () { setFounding(relativePath); });
+                label.appendChild(radio);
+                label.appendChild(document.createTextNode(' ' + relativePath));
+                li.appendChild(label);
+                candidatesListEl.appendChild(li);
+            });
+        }
+
+        pickerButton.addEventListener('click', function () { pickerInput.click(); });
+
+        pickerInput.addEventListener('change', function () {
+            errorEl.hidden = true;
+            var rawFiles = Array.prototype.slice.call(pickerInput.files || []);
+            if (!rawFiles.length) return;
+
+            selectedFiles = rawFiles.map(function (file) {
+                var relativePath = file.webkitRelativePath || file.name;
+                // Renamed copy so the relative path travels server-side as
+                // this part's own filename - no separate, order-dependent
+                // form field needed to carry it.
+                return new File([file], relativePath, {type: file.type});
+            });
+            eligibleRelativePaths = selectedFiles.map(function (f) { return f.name; }).filter(isEligible);
+
+            var dt = new DataTransfer();
+            selectedFiles.forEach(function (f) { dt.items.add(f); });
+            hiddenFilesInput.files = dt.files;
+
+            var skippedCount = selectedFiles.length - eligibleRelativePaths.length;
+            summaryEl.hidden = false;
+            summaryEl.textContent = selectedFiles.length + ' file(s) found, ' +
+                eligibleRelativePaths.length + ' eligible' +
+                (skippedCount ? ', ' + skippedCount + ' will be skipped (unsupported format)' : '') + '.';
+
+            if (!eligibleRelativePaths.length) {
+                foundingPickerEl.hidden = true;
+                submitButton.disabled = true;
+                errorEl.textContent = 'No eligible documents (PDF, DOCX, TXT, CSV, MD) were found in that folder.';
+                errorEl.hidden = false;
+                return;
+            }
+
+            var topLevelCandidates = eligibleRelativePaths.filter(isTopLevel);
+            foundingPickerEl.hidden = false;
+            if (topLevelCandidates.length === 1) {
+                renderFoundingCandidates(eligibleRelativePaths, topLevelCandidates[0]);
+                setFounding(topLevelCandidates[0]);
+            } else {
+                // Zero or multiple top-level candidates - never guess;
+                // require an explicit choice (submit stays disabled until
+                // one is made).
+                renderFoundingCandidates(eligibleRelativePaths, null);
+                setFounding('');
+            }
         });
     })();
 </script>

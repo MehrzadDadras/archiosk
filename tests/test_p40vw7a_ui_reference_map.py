@@ -47,6 +47,9 @@ _GATEWAY_SHELL_HTML_PATH = _REPO_ROOT / "templates" / "gateway_shell.html"
 _PROJECT_CHOOSER_HTML_PATH = _REPO_ROOT / "templates" / "project_chooser.html"
 _LOGIN_HTML_PATH = _REPO_ROOT / "templates" / "login.html"
 _UPLOAD_HTML_PATH = _REPO_ROOT / "templates" / "upload.html"
+_LANDING_HTML_PATH = _REPO_ROOT / "templates" / "landing.html"
+_EXPLORE_HTML_PATH = _REPO_ROOT / "templates" / "explore.html"
+_START_TRIAL_HTML_PATH = _REPO_ROOT / "templates" / "start_trial.html"
 _UPLOAD_CONFIRM_HTML_PATH = _REPO_ROOT / "templates" / "upload_confirm.html"
 _ERROR_HTML_PATH = _REPO_ROOT / "templates" / "errors" / "error.html"
 _SECURITY_DEPARTMENT_HTML_PATH = _REPO_ROOT / "templates" / "security_department.html"
@@ -163,6 +166,7 @@ def _all_template_refs() -> set[str]:
         _LOGIN_HTML_PATH, _UPLOAD_HTML_PATH, _UPLOAD_CONFIRM_HTML_PATH, _ERROR_HTML_PATH,
         _SECURITY_DEPARTMENT_HTML_PATH, _PROJECTS_HTML_PATH, _REMOVED_PROJECTS_HTML_PATH, _APP_PY_PATH,
         _CONFIRM_DELETE_FOLDER_HTML_PATH, _OPERATIONS_HTML_PATH,
+        _LANDING_HTML_PATH, _EXPLORE_HTML_PATH, _START_TRIAL_HTML_PATH,
     ):
         text = path.read_text(encoding="utf-8")
         refs |= set(_DATA_REF_RE.findall(text))
@@ -228,11 +232,16 @@ class RegistryConsistencyTests(unittest.TestCase):
         # CLAUDE-CA1D-INSTRUMENT-RAIL-01 added "operations" - the
         # admin-page half of the four-part Instrument Rail spatial
         # model (see UI_REFERENCE_MAP.md's own "Operations" section).
+        # CLAUDE-CA1D-PUBLIC-LANDING-01 added "landing"/"explore"/
+        # "start-trial" - the new public front door, its own standalone
+        # shell outside gateway/auth (see UI_REFERENCE_MAP.md's own
+        # "Public Landing" section).
         for ref in _all_template_refs():
             self.assertRegex(
                 ref,
                 r"^(menu|lists|display|toolbox|chat|eye|shell|gateway|auth|upload|errors|"
-                r"security|operations|projects-directory|removed-projects)\.[a-z0-9._\-]+$",
+                r"security|operations|projects-directory|removed-projects|"
+                r"landing|explore|start-trial)\.[a-z0-9._\-]+$",
                 ref,
             )
 

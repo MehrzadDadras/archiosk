@@ -1663,6 +1663,33 @@ def _handle_project_question(
     milestones = list(document.milestones) if document else []
     document_filename = document.filename if document else "(unknown source document)"
 
+    # CLAUDE-CA1D-RECEPTION-FIX-01 (folder establishment): real per-
+    # paragraph text for every Source registered via
+    # register_plain_text_structure (currently: every non-founding file
+    # from a folder establishment) - grouped by source so each document's
+    # excerpts stay attributed to it, never merged into one undifferentiated
+    # blob. Ordinary Sources with no such evidence (the common case today)
+    # contribute nothing here, same as before this change.
+    additional_document_evidence: list[dict] = []
+    if workspace.evidence_items:
+        sources_by_id = {s["id"]: s for s in workspace.sources}
+        excerpts_by_source: dict[str, list[str]] = {}
+        for item in workspace.evidence_items:
+            source_id = item.get("source_id")
+            content = item.get("content")
+            if not source_id or not content:
+                continue
+            excerpts_by_source.setdefault(source_id, []).append(content)
+        for source_id, excerpts in excerpts_by_source.items():
+            source = sources_by_id.get(source_id)
+            if source is None:
+                continue
+            additional_document_evidence.append({
+                "filename": source.get("name"),
+                "relative_path": source.get("origin_reference"),
+                "excerpts": excerpts,
+            })
+
     # CLAUDE-POSTCAMEL-CA1 (Section 5): the same conversation thread this
     # reply will itself be appended to, minus the just-persisted current
     # human message (it is passed separately as `question` below) -
@@ -1686,6 +1713,7 @@ def _handle_project_question(
         display_title=workspace.display_title,
         recent_history=recent_history,
         ui_context=ui_context,
+        additional_document_evidence=additional_document_evidence,
     )
 
     if not result.ran:

@@ -184,6 +184,64 @@ class RemovedProjectDiscoverabilityHintTests(_BaseReceptionFixTestCase):
         self.assertIn("Project Gateway", body)
 
 
+class ProjectSelectorNamingAndCompletionTests(_BaseReceptionFixTestCase):
+    """
+    CLAUDE-CA1D-RECEPTION-FIX-01 (addendum) - a live report named the
+    "Open an existing project" selector as not showing credible names
+    and lacking an explicit completion action. Traced: display_name was
+    always `workspace.display_title or document.filename` (routes/
+    portal.py's choose_project) - a real, human-set name whenever one
+    exists, the uploaded filename otherwise; not a stale label, internal
+    id, or test-fixture artifact. Fixed here: select-then-confirm (radio
+    group + explicit "Open Project" button, disabled until a valid
+    selection exists) replacing the old direct-link-per-row pattern, and
+    reworded empty-state copy that could read as contradicting a visibly
+    present Current Project card.
+    """
+    def test_display_name_is_the_human_set_title_when_one_exists(self):
+        doc = self._ingest(owner="rf_owner", project_name="Riverside Water Treatment RFP", filename="rfp_final_v3.txt")
+        client = self._client_as("rf_owner", 1)
+        body = client.get("/projects/choose").get_data(as_text=True)
+        self.assertIn("Riverside Water Treatment RFP", body)
+        self.assertNotIn("rfp_final_v3.txt", body)
+
+    def test_display_name_falls_back_to_the_real_filename_not_an_internal_id(self):
+        doc = self._ingest(owner="rf_owner", project_name=None, filename="Riverside_RFP_Package.txt")
+        client = self._client_as("rf_owner", 1)
+        body = client.get("/projects/choose").get_data(as_text=True)
+        self.assertIn("Riverside_RFP_Package.txt", body)
+        # The raw internal project_id (a uuid) must never be the only
+        # human-visible label for a card - it's still present as the
+        # radio's own value attribute (needed for selection/navigation),
+        # but never as displayed text.
+        self.assertNotIn(f">{doc.project_id}<", body)
+
+    def test_selector_is_select_then_confirm_not_a_direct_link(self):
+        doc = self._ingest(owner="rf_owner", project_name="Riverside Project")
+        client = self._client_as("rf_owner", 1)
+        body = client.get("/projects/choose").get_data(as_text=True)
+        self.assertIn('data-ui-ref="gateway.chooser.open-form"', body)
+        self.assertIn(f'type="radio" name="project_id" value="{doc.project_id}"', body)
+        self.assertIn('data-ui-ref="gateway.chooser.open-button"', body)
+        self.assertIn("disabled", body)
+        # No longer a plain, immediately-navigating link for this row.
+        self.assertNotIn(f'<a class="project-card-link" data-ui-ref="gateway.chooser.leaf" href="/projects/{doc.project_id}/workspace">', body)
+
+    def test_each_radio_carries_the_correct_real_open_url(self):
+        doc = self._ingest(owner="rf_owner", project_name="Riverside Project")
+        client = self._client_as("rf_owner", 1)
+        body = client.get("/projects/choose").get_data(as_text=True)
+        self.assertIn(f'data-open-url="/projects/{doc.project_id}/workspace"', body)
+
+    def test_current_project_empty_state_no_longer_reads_as_contradiction(self):
+        doc = self._ingest(owner="rf_owner", project_name="Only Project")
+        client = self._client_as("rf_owner", 1)
+        body = client.get(f"/projects/choose?current={doc.project_id}").get_data(as_text=True)
+        self.assertIn("Currently entered", body)
+        self.assertNotIn("No other projects yet.", body)
+        self.assertNotIn("No projects yet.", body)
+
+
 class RemovedProjectNavAndWordingTests(_BaseReceptionFixTestCase):
     def test_removed_projects_list_chevron_expanded(self):
         client = self._client_as("rf_owner", 1)

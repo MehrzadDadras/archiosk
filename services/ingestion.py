@@ -17,7 +17,11 @@ from werkzeug.datastructures import FileStorage
 from werkzeug.utils import secure_filename
 
 from services.bhive_parser import BHiveParser, ParsedDocument, ParserError
-from services.case_workspace import CaseWorkspaceStore
+from services.case_workspace import (
+    SOURCE_KIND_PROJECT_DOCUMENT,
+    SOURCE_ORIGIN_TYPE_UPLOAD,
+    CaseWorkspaceStore,
+)
 from services.governance import GovernanceLog
 from services.requirements_registry import RequirementsRegistry
 from services.security_governance import SecurityGovernanceStore
@@ -332,3 +336,147 @@ def ingest_upload(
         )
 
     return document
+
+
+def ingest_folder_upload(
+    files: list[FileStorage],
+    relative_paths: list[str],
+    founding_index: int,
+    app: Flask,
+    operating_environment: str,
+    owner: str,
+    actor: str | None = None,
+    role: str | None = None,
+    project_name: str | None = None,
+) -> tuple[ParsedDocument, list[dict]]:
+    """
+    CLAUDE-CA1D-RECEPTION-FIX-01 (folder establishment): establishes a
+    project from a folder of files rather than one file. `files` and
+    `relative_paths` are parallel lists (relative_paths[i] is a
+    webkitRelativePath-style path for files[i], e.g. "exhibits/spec.pdf"
+    -- always relative, a local filesystem path on the uploader's own
+    machine that this server never sees or stores). `founding_index`
+    names which file the CLIENT has already confirmed (or the user
+    explicitly picked) as the principal/founding document -- this
+    function never infers that itself.
+
+    The founding file goes through the existing, unchanged ingest_upload
+    above -- same extraction/classification/registry path a single-file
+    establishment always used. Every OTHER eligible file (same
+    ALLOWED_UPLOAD_EXTENSIONS/MAX_CONTENT_LENGTH rules as the founding
+    document -- no separate, looser bar) is registered as a real
+    governed Source (CaseWorkspaceStore.add_source, the same mechanism
+    routes/workspace.py's own add_document_source route already uses)
+    AND has its own text run through BHiveParser's shared extraction
+    stage (_extract -- the same stage the founding document's own
+    parse() already uses internally) and persisted as real per-
+    paragraph EvidenceItems (register_plain_text_structure) -- so its
+    content is genuinely available as project evidence, not a
+    filename-only placeholder. A file that fails this per-file step
+    (unsupported extension, oversize, unreadable) is skipped and
+    reported, never allowed to fail the whole establishment -- the
+    founding document having already succeeded means the project
+    already exists by that point regardless.
+
+    relative_paths are stored only as Source.origin_reference (display/
+    provenance metadata) -- never used to construct an on-disk path;
+    the actual stored file always uses the same opaque UUID-prefixed
+    naming scheme every other Source in this codebase already uses, so
+    a hand-crafted relative_path (".." segments, an absolute path) can
+    never influence where anything is actually written on this server.
+
+    Returns (founding_document, results) -- results has one dict per
+    NON-founding file: {"filename", "relative_path", "status": "added" |
+    "skipped", "reason"} (reason is None when status is "added").
+    """
+    if not files:
+        raise UploadError("No files were provided.")
+    if not (0 <= founding_index < len(files)):
+        raise UploadError("The founding document selection is invalid.")
+
+    # relative_paths[i] is what travels as files[i].filename client-side
+    # (see templates/upload.html's own script - a File is renamed to its
+    # webkitRelativePath before submission, so the relative path arrives
+    # server-side without a second, order-dependent form field). Reset to
+    # just the basename before the founding document goes through the
+    # existing, unmodified ingest_upload -- that function's own filename
+    # handling (document.filename, name-uniqueness, secure_filename) must
+    # see a plain filename here, identical to what a real single-file
+    # upload always gave it, never a path fragment.
+    files[founding_index].filename = Path(relative_paths[founding_index]).name
+
+    founding_document = ingest_upload(
+        files[founding_index], app, operating_environment, owner,
+        actor=actor, role=role, project_name=project_name,
+    )
+
+    store = CaseWorkspaceStore(app.config["REGISTRY_STORE_PATH"])
+    workspace = store.get(founding_document.project_id)
+    governance_log = get_governance_log(app)
+    allowed = app.config["ALLOWED_UPLOAD_EXTENSIONS"]
+    max_bytes = app.config.get("MAX_CONTENT_LENGTH")
+    sources_dir = Path(app.config["REGISTRY_STORE_PATH"]) / "workspace_sources" / founding_document.project_id
+    sources_dir.mkdir(parents=True, exist_ok=True)
+
+    parser = BHiveParser(
+        anthropic_api_key=app.config.get("ANTHROPIC_API_KEY"),
+        model=app.config.get("ANTHROPIC_MODEL"),
+    )
+
+    results: list[dict] = []
+    for index, (file_storage, relative_path) in enumerate(zip(files, relative_paths)):
+        if index == founding_index:
+            continue
+        # The basename only, never the full relative path -- the same
+        # fix as the founding document above. relative_path itself is
+        # preserved separately, below, as Source.origin_reference.
+        filename = Path(relative_path).name if relative_path else "(unnamed file)"
+        if not relative_path:
+            results.append({"filename": filename, "relative_path": relative_path, "status": "skipped", "reason": "No filename."})
+            continue
+
+        ext = Path(filename).suffix.lower()
+        if ext not in allowed:
+            results.append({
+                "filename": filename, "relative_path": relative_path, "status": "skipped",
+                "reason": f"Unsupported file type '{ext}'.",
+            })
+            continue
+
+        raw_bytes = file_storage.read()
+        if max_bytes and len(raw_bytes) > max_bytes:
+            results.append({
+                "filename": filename, "relative_path": relative_path, "status": "skipped",
+                "reason": f"File exceeds the {max_bytes // (1024 * 1024)}MB size limit.",
+            })
+            continue
+
+        safe_name = secure_filename(filename)
+        stored_path = sources_dir / f"{uuid.uuid4().hex}_{safe_name}"
+        stored_path.write_bytes(raw_bytes)
+
+        source = store.add_source(
+            workspace, name=safe_name, file_path=str(stored_path),
+            kind=SOURCE_KIND_PROJECT_DOCUMENT,
+            file_hash=hashlib.sha256(raw_bytes).hexdigest(),
+            origin_type=SOURCE_ORIGIN_TYPE_UPLOAD, origin_reference=relative_path,
+            governance_log=governance_log, actor=actor or _DEFAULT_ACTOR,
+        )
+
+        try:
+            text = parser._extract(raw_bytes, filename)  # noqa: SLF001 - same shared stage ingest_upload's own parse() uses internally
+        except ParserError as exc:
+            results.append({
+                "filename": filename, "relative_path": relative_path, "status": "skipped",
+                "reason": f"Added as a Source, but its content could not be extracted: {exc}",
+            })
+            continue
+
+        store.register_plain_text_structure(
+            workspace, source_id=source["id"], text=text,
+            extractor_version=parser.__class__.__name__, actor=actor or _DEFAULT_ACTOR,
+            governance_log=governance_log,
+        )
+        results.append({"filename": filename, "relative_path": relative_path, "status": "added", "reason": None})
+
+    return founding_document, results

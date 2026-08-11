@@ -1,0 +1,29 @@
+{% extends "landing_shell.html" %}
+
+{% block title %}Archiosk &mdash; Data Room Intelligence{% endblock %}
+
+{% block landing_body %}
+{# CLAUDE-CA1D-PUBLIC-LANDING-01: every visible string below is a whole,
+   self-contained sentence/phrase (never built by concatenating
+   fragments) so a future EN|FR pass (GO-I18N-01/02) can wrap each one
+   in a translation call without restructuring this template -- full
+   bilingual implementation is explicitly out of this tranche's scope,
+   this is only the "don't make it harder later" discipline the
+   Product Owner asked for. #}
+<div class="landing-content">
+    <h1 class="landing-wordmark">Archiosk</h1>
+    <p class="landing-tagline">Data Room Intelligence</p>
+    <p class="landing-value-prop">
+        Archiosk brings governed, evidence-grounded intelligence to RFP, RFQ, and
+        project-document review &mdash; surfacing requirements, ambiguity, and open
+        questions from your own material, with every answer traceable back to its
+        source. Human-supervised throughout, never autonomous.
+    </p>
+    <div class="landing-actions">
+        <a class="landing-action landing-action-secondary" href="{{ url_for('portal.explore') }}" data-ui-ref="landing.explore">Explore</a>
+        <a class="landing-action landing-action-primary" href="{{ url_for('portal.start_trial') }}" data-ui-ref="landing.start-trial">Start Free Trial</a>
+        <a class="landing-action landing-action-secondary" href="{{ url_for('portal.login') }}" data-ui-ref="landing.sign-in">Sign In</a>
+    </div>
+</div>
+<p class="landing-footer">&copy; {{ current_year }} Archiosk</p>
+{% endblock %}

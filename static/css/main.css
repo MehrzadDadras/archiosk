@@ -1277,6 +1277,15 @@ main {
     min-width: 0;
 }
 .project-card-link:hover { border-color: var(--border-strong); text-decoration: none; }
+/* CLAUDE-CA1D-RECEPTION-FIX-01 (addendum): select-then-confirm cards in
+   project_chooser.html -- a <label> wrapping a radio, reusing
+   .project-card-link's own box/hover treatment (cursor: pointer since
+   labels don't get it by default the way anchors do). */
+.project-card-selectable { cursor: pointer; }
+.project-card-selectable input[type="radio"] { margin: 0 0.8rem 0 0; accent-color: var(--machine-blue); flex-shrink: 0; }
+.project-card-selectable:has(input:checked) { border-color: var(--machine-blue); border-width: 2px; }
+#project-open-button { margin-top: 1rem; }
+#project-open-button:disabled { opacity: 0.5; cursor: not-allowed; }
 .project-card-main {
     display: flex;
     flex-direction: column;

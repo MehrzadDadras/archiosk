@@ -66,6 +66,13 @@ _MAX_RIVER_ACTIONS = 8
 _MAX_CANDIDATE_ITEMS_IN_PROMPT = 40
 _MAX_GOVERNED_REQUIREMENTS_IN_PROMPT = 40
 _MAX_MILESTONES_IN_PROMPT = 20
+# CLAUDE-CA1D-RECEPTION-FIX-01 (folder establishment): a folder can
+# contain many non-founding documents, each with many paragraphs -
+# bounded the same way every other prompt section already is, so this
+# can't grow the prompt unboundedly regardless of how large a selected
+# folder was.
+_MAX_ADDITIONAL_DOCUMENTS_IN_PROMPT = 15
+_MAX_EXCERPTS_PER_ADDITIONAL_DOCUMENT = 8
 # CLAUDE-POSTCAMEL-CA1A (Section 5, token-aware continuity): CA1's own
 # fixed 6-message cap is replaced by a character-budget walk - a long
 # single message could previously still consume the whole window: this
@@ -226,6 +233,7 @@ def answer_project_question(
     display_title: Optional[str] = None,
     recent_history: Optional[list[dict]] = None,
     ui_context: Optional[dict] = None,
+    additional_document_evidence: Optional[list[dict]] = None,
 ) -> ProjectQAResult:
     api_key = api_key or os.getenv("ANTHROPIC_API_KEY", "")
     if not api_key:
@@ -245,7 +253,7 @@ def answer_project_question(
     client = anthropic.Anthropic(api_key=api_key, timeout=timeout)
     prompt = _build_prompt(
         question, document_filename, candidate_requirements, governed_requirements, milestones,
-        display_title, recent_history, ui_context,
+        display_title, recent_history, ui_context, additional_document_evidence,
     )
 
     try:
@@ -354,7 +362,7 @@ def _build_prompt(
     question: str, document_filename: str, candidate_requirements: list[dict],
     governed_requirements: list[dict], milestones: list[dict],
     display_title: Optional[str] = None, recent_history: Optional[list[dict]] = None,
-    ui_context: Optional[dict] = None,
+    ui_context: Optional[dict] = None, additional_document_evidence: Optional[list[dict]] = None,
 ) -> str:
     lines = [
         "You are assisting a construction/design professional with a read-only "
@@ -438,6 +446,30 @@ def _build_prompt(
 
     if not candidate_requirements and not governed_requirements and not milestones:
         lines.append("\nNo requirements or milestones have been extracted from this document yet.")
+
+    # CLAUDE-CA1D-RECEPTION-FIX-01 (folder establishment): a Project
+    # established from a folder can have OTHER real documents beyond the
+    # founding one above (e.g. exhibits, addenda) - each item here is
+    # {"filename", "relative_path", "excerpts": [...]}, real extracted
+    # paragraph text (services.case_workspace.register_plain_text_structure),
+    # never the model's own inference about what such a file might
+    # contain. Kept in its own section, clearly distinguished from the
+    # founding document's own requirements/milestones above (those went
+    # through full classification; these did not - "extracted text",
+    # never "requirements", for anything here).
+    if additional_document_evidence:
+        shown = additional_document_evidence[:_MAX_ADDITIONAL_DOCUMENTS_IN_PROMPT]
+        lines.append(
+            f"\nOther project documents (from the same folder establishment as the "
+            f"founding document above; extracted text, not yet run through requirement "
+            f"classification) - {len(additional_document_evidence)} total, showing up to "
+            f"{_MAX_ADDITIONAL_DOCUMENTS_IN_PROMPT}:"
+        )
+        for doc in shown:
+            label = doc.get("relative_path") or doc.get("filename", "")
+            lines.append(f"- {label}:")
+            for excerpt in doc.get("excerpts", [])[:_MAX_EXCERPTS_PER_ADDITIONAL_DOCUMENT]:
+                lines.append(f"  - {excerpt}")
 
     # CLAUDE-POSTCAMEL-CA1 (Section 5, bounded multi-turn continuity): a
     # small, fixed-size recent window of THIS SAME project/case

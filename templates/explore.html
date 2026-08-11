@@ -1,0 +1,67 @@
+{% extends "landing_shell.html" %}
+
+{% block title %}Explore Archiosk{% endblock %}
+
+{% block landing_body %}
+<div class="landing-doc">
+    <a class="landing-doc-back" href="{{ url_for('portal.index') }}" data-ui-ref="explore.back">&larr; Archiosk</a>
+    <span class="landing-doc-kicker">Explore</span>
+    <h1>What Archiosk does</h1>
+
+    <div class="landing-doc-section">
+        <h2>Project-document investigation</h2>
+        <p>
+            Archiosk reads RFPs, RFQs, specs, contracts, reports, and meeting minutes
+            your project already has, and helps a project team investigate them &mdash;
+            identifying requirements, surfacing ambiguity, and organizing findings for
+            human review, rather than asking anyone to read a large document cover to
+            cover from scratch.
+        </p>
+    </div>
+
+    <div class="landing-doc-section">
+        <h2>Two operating environments</h2>
+        <ul>
+            <li><strong>Client / Owner</strong> &mdash; reviewing incoming proposals and project material from the owner's side.</li>
+            <li><strong>Design-Builder / Proponent</strong> &mdash; preparing and organizing material from the proponent's side.</li>
+        </ul>
+    </div>
+
+    <div class="landing-doc-section">
+        <h2>Governed evidence, not guesses</h2>
+        <p>
+            Every answer Archiosk gives is grounded in your project's own extracted
+            evidence, never invented. Requirements, findings, and answers all carry
+            their own provenance back to the source material they came from &mdash;
+            and where the evidence genuinely doesn't cover a question, Archiosk says so
+            rather than filling the gap.
+        </p>
+    </div>
+
+    <div class="landing-doc-section">
+        <h2>Human-supervised, not autonomous</h2>
+        <p>
+            Archiosk surfaces candidate requirements, ambiguities, and findings for a
+            person to confirm, adjust, or reject &mdash; it does not make procurement
+            decisions, commit your organization to anything, or act on your project
+            without a human deciding first.
+        </p>
+    </div>
+
+    <div class="landing-doc-section">
+        <h2>A representative workflow</h2>
+        <p>
+            Establish a project from your RFP package, let Archiosk identify candidate
+            requirements and open questions, review and confirm what's accurate,
+            investigate findings that need attention, and draft RFIs for anything the
+            material leaves genuinely unclear &mdash; with the governing evidence one
+            click away at every step.
+        </p>
+    </div>
+
+    <div class="landing-doc-actions">
+        <a class="landing-action landing-action-primary" href="{{ url_for('portal.start_trial') }}" data-ui-ref="explore.start-trial">Start Free Trial</a>
+        <a class="landing-action landing-action-secondary" href="{{ url_for('portal.login') }}" data-ui-ref="explore.sign-in">Sign In</a>
+    </div>
+</div>
+{% endblock %}

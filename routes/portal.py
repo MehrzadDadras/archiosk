@@ -22,7 +22,7 @@ from services.rate_limit import limiter
 from services.case_workspace import CaseWorkspaceStore
 from services.environment_capabilities import OPERATING_ENVIRONMENT_LABELS
 from services.governance import GovernanceError
-from services.ingestion import UploadError, get_governance_log, get_registry, ingest_upload
+from services.ingestion import UploadError, get_governance_log, get_registry, ingest_folder_upload, ingest_upload
 from services.drawing_intake import (
     CANDIDATE_FIELDS, FIELD_LABELS, PendingUploadStore, STATUS_CONFIRMED, STATUS_CORRECTED, analyze_upload,
 )
@@ -157,18 +157,23 @@ def index():
     _project_summary for the indicator set.
 
     CLAUDE-P40-VW5: an anonymous visit used to render this same
-    template's own "identity line + sign-in link" branch - a real,
-    if minimal, intermediate landing page before Sign-in, not Sign-in
-    itself. Product-owner correction: "a fresh unauthenticated visit
-    to the normal application entry route must begin at Sign-in" -
-    redirects straight to the standalone auth shell (auth_shell.html,
-    never base.html) instead of rendering anything here. No `next=` -
-    the front door isn't a protected resource someone was trying to
-    reach, so login()'s own default post-login destination (the
-    Project Gateway) applies once they do sign in.
+    template's own "identity line + sign-in link" branch, then was
+    changed to redirect straight to Sign-in instead ("a fresh
+    unauthenticated visit to the normal application entry route must
+    begin at Sign-in").
+
+    CLAUDE-CA1D-PUBLIC-LANDING-01: superseded by a new, explicit
+    Product Owner decision - archiosk.com's root now needs to be a real
+    public front door for a first-time stranger, not an immediate
+    redirect to a bare credentials form. Renders the new public landing
+    page (templates/landing.html, its own standalone shell - never
+    base.html/auth_shell.html) instead of redirecting. Authenticated
+    behavior below is completely unchanged; Sign In on that landing
+    page still goes straight to portal.login, so direct /login access
+    and the existing authentication flow are both fully preserved.
     """
     if not is_authenticated():
-        return redirect(url_for('portal.login'))
+        return render_template('landing.html')
 
     registry = get_registry(current_app)
     store = CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"])
@@ -364,6 +369,30 @@ def gateway():
     instead of jumping straight into one, mirroring a project-selection
     style entry point rather than a single default destination."""
     return render_template('gateway.html')
+
+
+@portal_bp.route('/explore')
+def explore():
+    """
+    CLAUDE-CA1D-PUBLIC-LANDING-01: public, unauthenticated - a stranger
+    reads this specifically to decide whether to sign up or sign in, so
+    it can never require either first. Deliberately not gated on
+    is_authenticated() at all (unlike index() above, which branches on
+    it) - there is nothing here an authenticated user shouldn't also be
+    able to read.
+    """
+    return render_template('explore.html')
+
+
+@portal_bp.route('/start-trial')
+def start_trial():
+    """
+    CLAUDE-CA1D-PUBLIC-LANDING-01: public, unauthenticated, deliberately
+    honest about not being self-serve yet - see templates/start_trial.html's
+    own copy. No form, no submission, nothing that could misrepresent an
+    account or a trial as already existing.
+    """
+    return render_template('start_trial.html')
 
 
 _PROJECT_SORT_KEYS = {
@@ -1649,6 +1678,77 @@ def upload():
         entered_project_name=entered_project_name,
     )
     return redirect(url_for('portal.upload_confirm', staging_id=staging_id))
+
+
+@portal_bp.route('/upload/folder', methods=['POST'])
+@admin_required
+@limiter.limit("20 per hour", methods=["POST"])
+def upload_folder():
+    """
+    CLAUDE-CA1D-RECEPTION-FIX-01: establishes a project from a whole
+    folder rather than one file. The browser-side folder picker
+    (webkitdirectory) attaches each file's original relative path as
+    ITS OWN filename before submission (see upload.html's own script) -
+    request.files.getlist('folder_files')[i].filename IS the relative
+    path here, e.g. "RFP Package/exhibits/spec.pdf", never a raw
+    filesystem path this server ever had independent access to. The
+    founding document is never inferred here -- `founding_relative_path`
+    must exactly match one of the submitted files' own filenames,
+    something only the client-side confirmation step could have set;
+    an unmatched value fails closed with a real error, never a guess.
+
+    Deliberately skips the single-file path's scanned-drawing-candidate
+    staging/confirm interstitial (analyze_upload/PendingUploadStore,
+    above) for the founding document -- extending that flow to a
+    multi-file establishment is real additional scope this tranche
+    does not cover; noted as a residual, not a silent behavior change
+    a reviewer would have no way to notice.
+    """
+    max_upload_mb = current_app.config['MAX_CONTENT_LENGTH'] // (1024 * 1024)
+    common_context = dict(
+        max_upload_mb=max_upload_mb,
+        selected_environment=request.form.get('operating_environment'),
+        operating_environments=OPERATING_ENVIRONMENT_LABELS,
+    )
+
+    files = request.files.getlist('folder_files')
+    files = [f for f in files if f and f.filename]
+    if not files:
+        return render_template('upload.html', error="No folder was selected.", **common_context), 400
+
+    relative_paths = [f.filename for f in files]
+    founding_relative_path = request.form.get('founding_relative_path', '')
+    try:
+        founding_index = relative_paths.index(founding_relative_path)
+    except ValueError:
+        return render_template(
+            'upload.html', error="The principal document selection is invalid. Please choose the folder again.",
+            **common_context,
+        ), 400
+
+    try:
+        document, results = ingest_folder_upload(
+            files, relative_paths, founding_index, current_app,
+            operating_environment=request.form.get('operating_environment', ''),
+            owner=session.get('username', ''),
+            actor=request.form.get('actor'), role=request.form.get('role'),
+            project_name=request.form.get('project_name'),
+        )
+    except (UploadError, GovernanceError) as exc:
+        return render_template('upload.html', error=str(exc), **common_context), 400
+
+    added = [r for r in results if r["status"] == "added"]
+    skipped = [r for r in results if r["status"] == "skipped"]
+    if added:
+        flash(f"Established with {len(added)} additional document(s) from the folder.", "success")
+    if skipped:
+        flash(
+            "Not added (" + str(len(skipped)) + "): " +
+            "; ".join(f"{r['relative_path']} - {r['reason']}" for r in skipped),
+            "error",
+        )
+
+    return redirect(url_for('workspace.preparing_project_briefing', project_id=document.project_id))
 
 
 @portal_bp.route('/upload/confirm/<staging_id>', methods=['GET', 'POST'])

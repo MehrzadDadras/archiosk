@@ -38,22 +38,23 @@ class HomeNavigationShellTests(unittest.TestCase):
             sess["username"] = "tester"
             sess["role"] = role
 
-    def test_anonymous_home_redirects_straight_to_sign_in(self):
-        # SUPERSEDED (CLAUDE-P40-VW5): an anonymous "/" visit used to
-        # render this same index.html template's own minimal identity-
-        # line-plus-link branch - a real intermediate landing page, not
-        # Sign-in itself. Product-owner correction: "a fresh
-        # unauthenticated visit to the normal application entry route
-        # must begin at Sign-in" - now a redirect straight to /login,
-        # never rendering index.html for an anonymous visitor at all.
+    def test_anonymous_home_renders_the_public_landing_page(self):
+        # SUPERSEDED twice over:
+        # CLAUDE-P40-VW5: an anonymous "/" visit used to render this same
+        # index.html template's own minimal identity-line-plus-link
+        # branch - "a fresh unauthenticated visit... must begin at
+        # Sign-in" changed that to a redirect straight to /login.
+        # CLAUDE-CA1D-PUBLIC-LANDING-01: superseded again by explicit,
+        # later Product Owner decision - "/" is now a real public front
+        # door (templates/landing.html), not an immediate redirect to a
+        # bare credentials form. 200, not 302; Sign In is one of the
+        # landing page's own actions, still leading to the same /login.
         client = self.flask_app.test_client()
         response = client.get("/", follow_redirects=False)
-        self.assertEqual(response.status_code, 302)
-        self.assertTrue(response.headers["Location"].endswith("/login"))
-
-        followed = client.get("/", follow_redirects=True)
-        body = followed.get_data(as_text=True)
-        self.assertIn("Sign in", body)
+        self.assertEqual(response.status_code, 200)
+        body = response.get_data(as_text=True)
+        self.assertIn("landing-page", body)
+        self.assertIn("Sign In", body)
         self.assertNotIn("New Project", body)
         self.assertNotIn("Open Project", body)
 

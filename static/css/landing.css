@@ -1,0 +1,250 @@
+/*
+ * CLAUDE-CA1D-PUBLIC-LANDING-01: public front door (archiosk.com/,
+ * /explore, /start-trial). Deliberately its OWN, self-contained stylesheet
+ * -- NOT main.css's shared token system. The authenticated app's design
+ * grammar is tonal/restrained-by-design (main.css's own header: color
+ * used only for real semantic meaning); this surface is a different
+ * thing entirely -- an atmospheric public front door descended from the
+ * Archiosk Holodeck lineage (C:\Archiosk\holodeck\archive\
+ * archiosk_holodeck_v_3.html), never the authenticated product itself.
+ * Carried forward from that artifact: the dark aqueous gradient field,
+ * a canvas particle layer that responds to the cursor, a ghost-intro
+ * title reveal, and a glow/hover-brightens-on-focus interaction language.
+ * Deliberately NOT carried forward: the swimming "fish" navigation
+ * words, the PDB/CM/DB environment rooms and their relationship
+ * diagrams/side-lists, and the contact-bubble/mailto form -- those
+ * belonged to the deeper educational Holodeck environment, not a
+ * commercial front door (see the Product Owner's own "do not carry
+ * forward" list).
+ *
+ * CLAUDE-CA1D-PUBLIC-LANDING-01 (background adjustment): base gradient
+ * stops and radial-accent opacity retuned against a second reference --
+ * C:\Archiosk\holodeck\archive\archiosk-holodeck.before-
+ * RESTORE_BASELINE_V3_ATOMIC_HOME_WORDPRESS_BLOCK_ONLY...html, whose own
+ * root background (rgb 2/8/18, rgb 3/23/37, rgb 1/5/10) and later
+ * "arch-navy" constant (rgb 0/8/20) are both much closer to true
+ * navy-black than this file's original, brighter teal-leaning base.
+ * That reference's own radial accents are more saturated in hue but run
+ * at LOW opacity (0.10-0.12) against that near-black base -- restraint
+ * comes from opacity against darkness, not from duller hues. Retuned to
+ * match that principle: darker base stops, radial-accent opacity
+ * roughly halved, hues left as this file's own (more muted than the
+ * reference's) to avoid the bright-cyan-wash/neon look explicitly
+ * ruled out.
+ */
+
+.landing-page {
+    position: relative;
+    min-height: 100vh;
+    width: 100%;
+    overflow-x: hidden;
+    background:
+        radial-gradient(circle at 50% 10%, rgba(33, 112, 132, .14), transparent 30%),
+        radial-gradient(circle at 50% 45%, rgba(8, 55, 68, .12), transparent 42%),
+        linear-gradient(180deg, rgb(2, 8, 18) 0%, rgb(3, 23, 37) 46%, rgb(1, 5, 10) 100%);
+    color: rgb(234, 252, 255);
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    isolation: isolate;
+}
+
+.landing-field-canvas {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 0;
+    display: block;
+}
+/* Static-image fallback shown instead of the canvas when JS never runs
+   (disabled/blocked) or prefers-reduced-motion is set -- never a blank
+   background either way. */
+.landing-field-canvas.is-static { display: none; }
+.landing-page.no-motion .landing-field-canvas { display: none; }
+
+.landing-content {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 8vh 24px 10vh;
+    text-align: center;
+}
+
+.landing-wordmark {
+    font-family: Georgia, "Times New Roman", serif;
+    font-weight: 400;
+    font-size: clamp(2.6rem, 8vw, 5.6rem);
+    letter-spacing: .16em;
+    text-transform: uppercase;
+    color: rgba(230, 255, 251, .92);
+    text-shadow: 0 0 22px rgba(165, 255, 244, .22), 0 0 54px rgba(79, 255, 231, .10);
+    margin: 0;
+    opacity: 0;
+    animation: landingWordmarkReveal 1.6s ease forwards .3s;
+}
+.landing-tagline {
+    margin: 14px 0 0;
+    color: transparent;
+    background: linear-gradient(90deg, rgba(60, 255, 218, 1), rgba(210, 255, 236, .96), rgba(56, 218, 255, 1));
+    -webkit-background-clip: text;
+    background-clip: text;
+    font-size: clamp(.85rem, 1.6vw, 1.05rem);
+    font-weight: 600;
+    letter-spacing: .26em;
+    text-transform: uppercase;
+    opacity: 0;
+    animation: landingWordmarkReveal 1.6s ease forwards .55s;
+}
+@keyframes landingWordmarkReveal {
+    from { opacity: 0; transform: translateY(10px); filter: blur(6px); }
+    to   { opacity: 1; transform: translateY(0); filter: blur(0); }
+}
+
+.landing-value-prop {
+    margin: 34px 0 0;
+    max-width: 640px;
+    color: rgba(228, 255, 251, .78);
+    font-size: clamp(.95rem, 1.6vw, 1.15rem);
+    line-height: 1.65;
+    font-weight: 450;
+    opacity: 0;
+    animation: landingWordmarkReveal 1.6s ease forwards .8s;
+}
+
+.landing-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    justify-content: center;
+    margin-top: 44px;
+    opacity: 0;
+    animation: landingWordmarkReveal 1.6s ease forwards 1.05s;
+}
+.landing-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 14px 30px;
+    border-radius: 999px;
+    font-family: inherit;
+    font-size: .92rem;
+    font-weight: 700;
+    letter-spacing: .06em;
+    text-decoration: none;
+    transition: transform 220ms ease, filter 220ms ease, box-shadow 220ms ease;
+}
+.landing-action-primary {
+    color: rgb(4, 20, 26);
+    background: linear-gradient(120deg, rgba(60, 255, 218, .96), rgba(105, 224, 255, .92));
+    box-shadow: 0 0 24px rgba(79, 255, 231, .22);
+}
+.landing-action-secondary {
+    color: rgba(232, 255, 251, .92);
+    background: rgba(20, 60, 70, .38);
+    border: 1px solid rgba(176, 255, 244, .28);
+}
+.landing-action:hover, .landing-action:focus-visible {
+    transform: translateY(-2px);
+    filter: brightness(1.08);
+    box-shadow: 0 0 34px rgba(100, 255, 236, .28);
+}
+.landing-action:focus-visible {
+    outline: 2px solid rgba(200, 255, 248, .8);
+    outline-offset: 3px;
+}
+
+.landing-footer {
+    position: relative;
+    z-index: 2;
+    text-align: center;
+    padding: 0 24px 32px;
+    color: rgba(180, 230, 226, .42);
+    font-size: .72rem;
+    letter-spacing: .08em;
+}
+.landing-footer a { color: rgba(200, 255, 248, .62); }
+
+/* Explore / Start Trial pages: same field/atmosphere, a plainer
+   document-like content column instead of the centered hero. */
+.landing-doc {
+    position: relative;
+    z-index: 2;
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 10vh 24px 10vh;
+}
+.landing-doc-back {
+    display: inline-block;
+    margin-bottom: 40px;
+    color: rgba(200, 255, 248, .7);
+    font-size: .82rem;
+    font-weight: 700;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    text-decoration: none;
+}
+.landing-doc-back:hover, .landing-doc-back:focus-visible { color: rgba(230, 255, 251, .95); }
+.landing-doc h1 {
+    font-family: Georgia, "Times New Roman", serif;
+    font-weight: 400;
+    font-size: clamp(2rem, 5vw, 3rem);
+    letter-spacing: .04em;
+    color: rgba(230, 255, 251, .94);
+    margin: 0 0 6px;
+}
+.landing-doc-kicker {
+    display: block;
+    margin-bottom: 14px;
+    color: rgba(120, 255, 225, .8);
+    font-size: .74rem;
+    font-weight: 800;
+    letter-spacing: .24em;
+    text-transform: uppercase;
+}
+.landing-doc-section {
+    margin-top: 32px;
+}
+.landing-doc-section h2 {
+    font-size: .82rem;
+    font-weight: 800;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+    color: rgba(185, 255, 245, .68);
+    margin: 0 0 10px;
+}
+.landing-doc-section p, .landing-doc-section li {
+    color: rgba(224, 255, 250, .78);
+    font-size: 1rem;
+    line-height: 1.68;
+}
+.landing-doc-section ul { margin: 0; padding-left: 1.2em; }
+.landing-doc-section li { margin-bottom: 8px; }
+.landing-doc-actions {
+    margin-top: 48px;
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
+@media (max-width: 640px) {
+    .landing-actions { flex-direction: column; width: 100%; max-width: 320px; }
+    .landing-action { width: 100%; }
+}
+
+/* Product Owner's own explicit requirement: respect
+   prefers-reduced-motion -- every animation/transition above disabled
+   outright, not merely shortened, and the canvas particle field is
+   skipped entirely (landing.js checks the same media query before ever
+   starting its render loop). */
+@media (prefers-reduced-motion: reduce) {
+    .landing-wordmark, .landing-tagline, .landing-value-prop, .landing-actions {
+        animation: none !important;
+        opacity: 1 !important;
+        transform: none !important;
+        filter: none !important;
+    }
+    .landing-action { transition: none; }
+}

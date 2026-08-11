@@ -105,23 +105,44 @@ class _BaseTestCase(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# 1. Normal unauthenticated entry begins at Sign-in
+# 1. Normal unauthenticated entry begins at the public landing page
 # ---------------------------------------------------------------------------
 
 class UnauthenticatedEntryTests(_BaseTestCase):
-    def test_fresh_unauthenticated_entry_redirects_to_sign_in(self):
+    def test_fresh_unauthenticated_entry_renders_the_public_landing_page(self):
+        # CLAUDE-CA1D-PUBLIC-LANDING-01: superseded CLAUDE-P40-VW5's own
+        # "redirect straight to Sign-in" behavior by explicit, later
+        # Product Owner decision - archiosk.com's root is now a real
+        # public front door (templates/landing.html), not an immediate
+        # redirect to a bare credentials form. 200, not 302 - the
+        # landing page itself is what's now served at "/".
         client = self.flask_app.test_client()
         resp = client.get("/", follow_redirects=False)
-        self.assertEqual(resp.status_code, 302)
-        self.assertTrue(resp.headers["Location"].endswith("/login"))
+        self.assertEqual(resp.status_code, 200)
+        body = resp.get_data(as_text=True)
+        self.assertIn("landing-page", body)
+        self.assertIn("Archiosk", body)
 
-    def test_following_the_redirect_lands_on_the_standalone_sign_in_page(self):
+    def test_landing_page_sign_in_action_reaches_the_standalone_sign_in_page(self):
+        # The landing page's own "Sign In" action still leads to exactly
+        # the same standalone auth shell this test previously reached via
+        # an automatic redirect - direct /login access is fully preserved,
+        # only the ROOT route's own behavior changed.
         client = self.flask_app.test_client()
-        resp = client.get("/", follow_redirects=True)
+        resp = client.get("/login", follow_redirects=True)
         self.assertEqual(resp.status_code, 200)
         body = resp.get_data(as_text=True)
         self.assertIn("auth-shell-page", body)
         self.assertIn("Sign in", body)
+
+    def test_landing_page_never_shows_authenticated_shell_or_project_data(self):
+        # Same isolation guarantee SignInIsolationTests below already
+        # holds /login to - the new public landing page is an even
+        # earlier, even-more-public surface, so it must clear the same bar.
+        client = self.flask_app.test_client()
+        body = client.get("/", follow_redirects=False).get_data(as_text=True)
+        for marker in ("launcher-panel", "app-shell", "workspace-topbar", _DISTINCTIVE_PROJECT_NAME, self.project_id):
+            self.assertNotIn(marker, body)
 
 
 # ---------------------------------------------------------------------------

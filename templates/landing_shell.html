@@ -1,0 +1,26 @@
+{# CLAUDE-CA1D-PUBLIC-LANDING-01: standalone public shell (/, /explore,
+   /start-trial). Deliberately does NOT extend base.html/gateway_base.html/
+   auth_shell.html -- none of those are right for an anonymous public
+   visitor: base.html/gateway_base.html assume an authenticated session
+   (nav, project tree), and auth_shell.html's own light "gateway card"
+   visual family belongs to the authenticated product's sign-in moment,
+   not this atmospheric public front door. Same "own standalone shell"
+   precedent auth_shell.html itself already established for a different
+   reason -- see that template's own comment. #}
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}Archiosk &mdash; Data Room Intelligence{% endblock %}</title>
+    <meta name="description" content="Archiosk brings governed, evidence-grounded intelligence to RFP, RFQ, and project-document review.">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/landing.css') }}?v={{ static_version }}">
+</head>
+<body>
+<div class="landing-page" id="landing-page">
+    <canvas class="landing-field-canvas" id="landing-field-canvas" aria-hidden="true"></canvas>
+    {% block landing_body %}{% endblock %}
+</div>
+<script src="{{ url_for('static', filename='js/landing.js') }}?v={{ static_version }}"></script>
+</body>
+</html>
