@@ -213,19 +213,28 @@ class KnowledgeFieldQuietCenterTests(unittest.TestCase):
         self.assertIn("clampOutsideCenter", js)
 
     def test_ambient_spawn_uses_side_bands_never_the_center_band_directly(self):
+        """CLAUDE-CA1D-LANDING-BALANCE-01 replaced the single wide
+        uniform-range side band with an equal-thirds AMBIENT_BANDS_LEFT
+        model (see tests/test_ca1d_landing_balance_01.py for that
+        tranche's own dedicated coverage) - this still only needs to
+        confirm the center column itself stays excluded from ambient
+        placement."""
         js = self.client.get("/static/js/landing.js").get_data(as_text=True)
         spawn_start = js.index("function spawn(")
         spawn_end = js.index("field.appendChild(el);", spawn_start)
         spawn_body = js[spawn_start:spawn_end]
         self.assertIn("leftBand", spawn_body)
-        self.assertIn("CENTER_MIN_VW - 4", spawn_body)
-        self.assertIn("CENTER_MAX_VW + 4", spawn_body)
+        self.assertIn("pickAmbientLeftVw()", spawn_body)
+        self.assertIn("CENTER_MIN_VW - 2", js)  # innermost ambient sub-band boundary
 
     def test_vent_positions_sit_outside_the_quiet_center_band(self):
+        """CLAUDE-CA1D-LANDING-BALANCE-01 moved VENTS further toward
+        the true edges (was 12/88) - still just confirming they sit
+        well clear of the CENTER_MIN_VW/CENTER_MAX_VW column."""
         js = self.client.get("/static/js/landing.js").get_data(as_text=True)
         vents_line = js[js.index("var VENTS"):js.index("var VENTS") + 60]
-        self.assertIn("12", vents_line)
-        self.assertIn("88", vents_line)
+        self.assertIn("7", vents_line)
+        self.assertIn("93", vents_line)
 
 
 if __name__ == "__main__":

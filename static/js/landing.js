@@ -157,8 +157,15 @@
     // VENTS with a "strength" driven by a live question/interaction
     // (Section 8's own "do not build that now, but do not prevent it")
     // without this tranche building that interaction itself.
-    var VENTS = [{ xVw: 12 }, { xVw: 88 }];
-    var IN_CURRENT_PROBABILITY = 0.42;
+    // CLAUDE-CA1D-LANDING-BALANCE-01, Section B3: moved further toward
+    // the true edges (was 12/88) and probability lowered (was .42) --
+    // a live report found the previous, tighter/more-frequent vent
+    // cluster reading as an over-dense "hot spot" right at those two
+    // x-positions specifically, on top of (not blended with) the
+    // ambient population's own edge density, making the far left/right
+    // look "programmatically dumped" rather than organic.
+    var VENTS = [{ xVw: 7 }, { xVw: 93 }];
+    var IN_CURRENT_PROBABILITY = 0.3;
 
     // CLAUDE-CA1D-PUBLIC-LANDING-05, Section 4: "calm center / active
     // surrounding ocean" -- a quiet horizontal reading column reserved
@@ -177,6 +184,27 @@
             return (xVw - (CENTER_MIN_VW + CENTER_MAX_VW) / 2) < 0 ? CENTER_MIN_VW : CENTER_MAX_VW;
         }
         return xVw;
+    }
+
+    // CLAUDE-CA1D-LANDING-BALANCE-01, Sections B1/B3: three named
+    // left-side sub-bands (outer edge / mid-field / approaching-center),
+    // each getting an EQUAL share of the ambient population rather than
+    // one wide uniform range. A single uniform [2, CENTER_MIN_VW-4] band
+    // is mathematically even everywhere, but with only ~16 ambient items
+    // split across two sides, pure chance under-populates the innermost
+    // quarter often enough to read as "center too empty" -- a live
+    // report's own words. Explicit equal-thirds guarantees a genuine,
+    // reliably visible "some approaching the central region" population
+    // (Section B1) without ever entering the protected CENTER_MIN_VW/
+    // CENTER_MAX_VW column itself.
+    var AMBIENT_BANDS_LEFT = [
+        [2, 13],                          // outer edge
+        [13, 21],                         // mid-field
+        [21, CENTER_MIN_VW - 2],          // approaching center (21-28)
+    ];
+    function pickAmbientLeftVw() {
+        var band = AMBIENT_BANDS_LEFT[Math.floor(Math.random() * AMBIENT_BANDS_LEFT.length)];
+        return randomBetween(band[0], band[1]);
     }
 
     // Section 3/4: three perceptual depth layers, weighted so mid-field
@@ -217,12 +245,15 @@
             var vent = VENTS[Math.floor(Math.random() * VENTS.length)];
             el.style.left = clampOutsideCenter(Math.min(96, Math.max(2, vent.xVw + randomBetween(-8, 8)))) + 'vw';
         } else {
-            // Section 4/5: ambient (non-current) items spawn in one of
-            // the two side bands, never inside the quiet center column
-            // at all, so the majority-population "ambient drift" case
-            // never starts inside the reading zone.
+            // Section 4/5/B1: ambient (non-current) items pick a side,
+            // then an equal-thirds sub-band on that side (edge/mid-field/
+            // approaching-center, mirrored via 100-x for the right side)
+            // -- never inside the quiet center column, but no longer
+            // left to pure uniform-range chance to populate the region
+            // nearest it either.
             var leftBand = Math.random() < 0.5;
-            el.style.left = (leftBand ? randomBetween(2, CENTER_MIN_VW - 4) : randomBetween(CENTER_MAX_VW + 4, 96)) + 'vw';
+            var leftVw = pickAmbientLeftVw();
+            el.style.left = (leftBand ? leftVw : 100 - leftVw) + 'vw';
         }
 
         // Three independently-randomized drift stops (Section 2's own
