@@ -27,18 +27,14 @@ nothing here duplicates that.
 """
 from __future__ import annotations
 
-import json
 import logging
-import os
-import re
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
 from typing import Optional
 
-logger = logging.getLogger(__name__)
+from services.conversational_turn import build_bounded_history
+from services.llm_gateway import call_llm_json
 
-DEFAULT_TIMEOUT_SECONDS = 30.0
-PROVIDER_NAME = "anthropic"
+logger = logging.getLogger(__name__)
 
 # CLAUDE-P38: a real, bump-on-meaningful-change marker, same discipline
 # as services/requirement_investigation.py's INVESTIGATION_PROMPT_VERSION.
@@ -73,18 +69,11 @@ _MAX_MILESTONES_IN_PROMPT = 20
 # folder was.
 _MAX_ADDITIONAL_DOCUMENTS_IN_PROMPT = 15
 _MAX_EXCERPTS_PER_ADDITIONAL_DOCUMENT = 8
-# CLAUDE-POSTCAMEL-CA1A (Section 5, token-aware continuity): CA1's own
-# fixed 6-message cap is replaced by a character-budget walk - a long
-# single message could previously still consume the whole window: this
-# instead bounds total transmitted continuity by size, not by count,
-# while still capping the message COUNT too (_MAX_RECENT_HISTORY_MESSAGES)
-# so a long run of very short messages can't produce an unbounded list.
-# No new tokenizer dependency - a deterministic character budget, per
-# this stage's own "approximate character/token budget rather than a
-# large dependency" instruction.
-_RECENT_HISTORY_CHAR_BUDGET = 2000
-_MAX_RECENT_HISTORY_MESSAGES = 20
-_MAX_HISTORY_MESSAGE_CHARS = 300
+# CLAUDE-CA1D-COMPOSER-SPINE-01 (Stage 0): the token-aware history-
+# bounding walk (was _select_bounded_history/_RECENT_HISTORY_CHAR_BUDGET
+# etc., originally added here by CLAUDE-POSTCAMEL-CA1A) now lives in
+# services/conversational_turn.py's build_bounded_history, shared by
+# every conversational turn, not just a project question.
 
 # CLAUDE-POSTCAMEL-CA1 (Section 6, Behavioral instruction layer): one
 # centralized system-role contract for this codebase's real, grounded
@@ -235,52 +224,23 @@ def answer_project_question(
     ui_context: Optional[dict] = None,
     additional_document_evidence: Optional[list[dict]] = None,
 ) -> ProjectQAResult:
-    api_key = api_key or os.getenv("ANTHROPIC_API_KEY", "")
-    if not api_key:
-        return ProjectQAResult(
-            ran=False,
-            skipped_reason="No ANTHROPIC_API_KEY configured - real project Q&A cannot run in this deployment.",
-        )
-
-    model = model or os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-6")
-    timeout = timeout if timeout is not None else float(
-        os.getenv("ANTHROPIC_TIMEOUT_SECONDS", DEFAULT_TIMEOUT_SECONDS)
-    )
-    requested_at = datetime.now(timezone.utc).isoformat()
-
-    import anthropic  # imported lazily so the dep is optional in dev
-
-    client = anthropic.Anthropic(api_key=api_key, timeout=timeout)
     prompt = _build_prompt(
         question, document_filename, candidate_requirements, governed_requirements, milestones,
         display_title, recent_history, ui_context, additional_document_evidence,
     )
-
-    try:
-        response = client.messages.create(
-            model=model, max_tokens=1500, system=BEHAVIORAL_CONTRACT,
-            messages=[{"role": "user", "content": prompt}],
-        )
-    except anthropic.APITimeoutError:
-        logger.warning("Project Q&A timed out after %.0fs.", timeout)
-        return ProjectQAResult(ran=False, skipped_reason=f"Request timed out after {timeout:.0f}s.")
-    except Exception:  # noqa: BLE001 - best-effort, mirrors requirement_investigation.py's own discipline
-        logger.warning("Project Q&A failed.", exc_info=True)
-        return ProjectQAResult(ran=False, skipped_reason="An error occurred calling the model.")
-
-    text_out = "".join(
-        block.text for block in response.content if getattr(block, "type", None) == "text"
+    # CLAUDE-CA1D-COMPOSER-SPINE-01 (Stage 0): the client-setup/error-
+    # handling/JSON-parsing boundary this module used to own directly is
+    # now services/llm_gateway.py's call_llm_json - same behavior, one
+    # shared implementation instead of a third independent copy of it.
+    outcome = call_llm_json(
+        user_prompt=prompt, system_prompt=BEHAVIORAL_CONTRACT,
+        api_key=api_key, model=model, timeout=timeout, max_tokens=1500,
+        log_label="Project Q&A",
     )
-    cleaned = re.sub(r"^```(json)?|```$", "", text_out.strip(), flags=re.MULTILINE).strip()
-    try:
-        parsed = json.loads(cleaned)
-    except json.JSONDecodeError:
-        if response.stop_reason == "max_tokens":
-            logger.warning("Project Q&A was truncated at max_tokens: %r", text_out[-200:])
-            return ProjectQAResult(ran=False, skipped_reason="Model's response was cut off before it finished (max_tokens).")
-        logger.warning("Project Q&A returned non-JSON output: %r", text_out[:200])
-        return ProjectQAResult(ran=False, skipped_reason="Model returned malformed output.")
+    if not outcome.ran:
+        return ProjectQAResult(ran=False, skipped_reason=outcome.skipped_reason)
 
+    parsed = outcome.parsed
     not_covered = parsed.get("not_covered")
     missing_evidence_summary = parsed.get("missing_evidence_summary")
     return ProjectQAResult(
@@ -293,7 +253,7 @@ def answer_project_question(
         ),
         needs_clarification=bool(parsed.get("needs_clarification", False)),
         river_actions=_parse_river_actions(parsed.get("river_actions")),
-        provider=PROVIDER_NAME, model=model, requested_at=requested_at,
+        provider=outcome.provider, model=outcome.model, requested_at=outcome.requested_at,
     )
 
 
@@ -330,32 +290,6 @@ def _parse_river_actions(raw) -> list[dict]:
             break
     parsed_actions.sort(key=lambda a: a["rank"])
     return parsed_actions
-
-
-def _select_bounded_history(recent_history: list[dict]) -> list[dict]:
-    """
-    CLAUDE-POSTCAMEL-CA1A (Section 5): walk backwards from the most
-    recent message, keeping whole messages (never truncating a message
-    mid-sentence just to hit the budget exactly) until either the
-    character budget or the message-count cap is reached, then restore
-    chronological order. Recent turns are always favored - the OLDEST
-    messages are the ones dropped first when the budget is exceeded.
-    """
-    selected: list[dict] = []
-    total_chars = 0
-    for message in reversed(recent_history):
-        text = (message.get("text") or "").strip()[:_MAX_HISTORY_MESSAGE_CHARS]
-        if not text:
-            continue
-        if selected and (
-            total_chars + len(text) > _RECENT_HISTORY_CHAR_BUDGET
-            or len(selected) >= _MAX_RECENT_HISTORY_MESSAGES
-        ):
-            break
-        selected.append({"role": message.get("role"), "text": text})
-        total_chars += len(text)
-    selected.reverse()
-    return selected
 
 
 def _build_prompt(
@@ -479,7 +413,7 @@ def _build_prompt(
     # BEHAVIORAL_CONTRACT's own system-role instruction - a prior turn
     # (including this model's own prior reply) must never be treated as
     # newly-established Project truth.
-    bounded_history = _select_bounded_history(recent_history) if recent_history else []
+    bounded_history = build_bounded_history(recent_history) if recent_history else []
     if bounded_history:
         lines.append(
             "\nRecent conversation in this project (most recent last) - for "

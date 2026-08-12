@@ -45,7 +45,7 @@ from services.case_workspace import (
 from services.conversation_interpreter import _looks_like_contextual_reference, _looks_like_what_next
 from services.environment_capabilities import CLIENT_OWNER
 from services.ingestion import ingest_upload
-from services.project_qa import _select_bounded_history
+from services.conversational_turn import build_bounded_history as _select_bounded_history
 
 
 def _fake_file(content: bytes, filename: str) -> FileStorage:
@@ -342,7 +342,7 @@ class WhatShouldIDoNextTests(_BaseTestCase):
 class CurrentViewInPromptTests(_BaseTestCase):
     def test_current_view_appears_in_the_real_prompt(self):
         with patch("anthropic.Anthropic") as MockClient, \
-             patch("services.project_qa.os.getenv", side_effect=lambda k, d="": "fake-key-for-test" if k == "ANTHROPIC_API_KEY" else d):
+             patch("services.llm_gateway.os.getenv", side_effect=lambda k, d="": "fake-key-for-test" if k == "ANTHROPIC_API_KEY" else d):
             MockClient.return_value.messages.create.return_value = _mock_response(
                 '{"answer": "Answer.", "grounded_in": [], "not_covered": "", "needs_clarification": false}'
             )
@@ -354,7 +354,7 @@ class CurrentViewInPromptTests(_BaseTestCase):
 
     def test_unknown_current_view_is_not_trusted(self):
         with patch("anthropic.Anthropic") as MockClient, \
-             patch("services.project_qa.os.getenv", side_effect=lambda k, d="": "fake-key-for-test" if k == "ANTHROPIC_API_KEY" else d):
+             patch("services.llm_gateway.os.getenv", side_effect=lambda k, d="": "fake-key-for-test" if k == "ANTHROPIC_API_KEY" else d):
             MockClient.return_value.messages.create.return_value = _mock_response(
                 '{"answer": "Answer.", "grounded_in": [], "not_covered": "", "needs_clarification": false}'
             )

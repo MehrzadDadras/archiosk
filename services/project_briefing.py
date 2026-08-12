@@ -30,18 +30,16 @@ module's own prompt says so to the model as well, so nothing in
 """
 from __future__ import annotations
 
-import json
 import logging
-import os
 import re
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
 from typing import Optional
+
+from services.llm_gateway import call_llm_json, resolve_timeout_from_env
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_TIMEOUT_SECONDS = 45.0
-PROVIDER_NAME = "anthropic"
 
 # CLAUDE-P38-B: bump on meaningful prompt/schema changes, same
 # discipline as services/requirement_investigation.py's
@@ -104,27 +102,12 @@ def generate_project_briefing(
     model: Optional[str] = None,
     timeout: Optional[float] = None,
 ) -> ProjectBriefingResult:
-    api_key = api_key or os.getenv("ANTHROPIC_API_KEY", "")
-    if not api_key:
-        return ProjectBriefingResult(
-            ran=False,
-            skipped_reason="No ANTHROPIC_API_KEY configured - a real project briefing cannot be generated in this deployment.",
-        )
-
-    model = model or os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-6")
-    base_timeout = timeout if timeout is not None else float(
-        os.getenv("ANTHROPIC_TIMEOUT_SECONDS", DEFAULT_TIMEOUT_SECONDS)
-    )
-    requested_at = datetime.now(timezone.utc).isoformat()
-
-    import anthropic  # imported lazily so the dep is optional in dev
-
     prompt = _build_prompt(document_filename, candidate_requirements, governed_requirements, milestones)
     # CLAUDE-P40-B (3.2): confirmed live via a real product-owner
     # walkthrough - a larger Project's Briefing generation failed with
     # "Request timed out after 30s" while a smaller one succeeded. Root
-    # cause traced precisely: base_timeout above is an APPLICATION
-    # timeout (the Anthropic SDK's own timeout=, sourced from .env's
+    # cause traced precisely: the base timeout is an APPLICATION timeout
+    # (the Anthropic SDK's own timeout=, sourced from .env's
     # ANTHROPIC_TIMEOUT_SECONDS), not an HTTP/provider/job-state one -
     # 30s is comfortably enough for a small prompt but not for a larger,
     # category-diverse document's proportionally larger one. The
@@ -134,33 +117,22 @@ def generate_project_briefing(
     # deploy/gunicorn.conf.py) and nginx proxy_read_timeout (150s,
     # deploy/nginx.conf), so a genuinely slow generation still degrades
     # to this module's own honest timeout message, never a raw 502/504.
+    # CLAUDE-CA1D-COMPOSER-SPINE-01 (Stage 0): resolve_timeout_from_env is
+    # the one piece of env resolution this module still needs directly -
+    # it must scale FROM a base value before call_llm_json ever sees the
+    # final timeout, so call_llm_json must not silently re-derive its own
+    # default and discard this scaling.
+    base_timeout = resolve_timeout_from_env(timeout, DEFAULT_TIMEOUT_SECONDS)
     timeout = _scale_timeout_for_prompt_size(base_timeout, prompt)
-    client = anthropic.Anthropic(api_key=api_key, timeout=timeout)
 
-    try:
-        response = client.messages.create(
-            model=model, max_tokens=2500, messages=[{"role": "user", "content": prompt}],
-        )
-    except anthropic.APITimeoutError:
-        logger.warning("Project briefing generation timed out after %.0fs.", timeout)
-        return ProjectBriefingResult(ran=False, skipped_reason=f"Request timed out after {timeout:.0f}s.")
-    except Exception:  # noqa: BLE001 - best-effort, mirrors project_qa.py's own discipline
-        logger.warning("Project briefing generation failed.", exc_info=True)
-        return ProjectBriefingResult(ran=False, skipped_reason="An error occurred calling the model.")
-
-    text_out = "".join(
-        block.text for block in response.content if getattr(block, "type", None) == "text"
+    outcome = call_llm_json(
+        user_prompt=prompt, api_key=api_key, model=model, timeout=timeout,
+        max_tokens=2500, log_label="Project briefing generation",
     )
-    cleaned = re.sub(r"^```(json)?|```$", "", text_out.strip(), flags=re.MULTILINE).strip()
-    try:
-        parsed = json.loads(cleaned)
-    except json.JSONDecodeError:
-        if response.stop_reason == "max_tokens":
-            logger.warning("Project briefing was truncated at max_tokens: %r", text_out[-200:])
-            return ProjectBriefingResult(ran=False, skipped_reason="Model's response was cut off before it finished (max_tokens).")
-        logger.warning("Project briefing returned non-JSON output: %r", text_out[:200])
-        return ProjectBriefingResult(ran=False, skipped_reason="Model returned malformed output.")
+    if not outcome.ran:
+        return ProjectBriefingResult(ran=False, skipped_reason=outcome.skipped_reason)
 
+    parsed = outcome.parsed
     return ProjectBriefingResult(
         ran=True,
         executive_summary=(str(parsed.get("executive_summary", "")).strip() or None),
@@ -169,7 +141,7 @@ def generate_project_briefing(
         procurement_route=(str(parsed.get("procurement_route", "")).strip() or None),
         matters_requiring_attention=[str(m) for m in parsed.get("matters_requiring_attention", [])],
         grounded_in=[str(g) for g in parsed.get("grounded_in", [])],
-        provider=PROVIDER_NAME, model=model, requested_at=requested_at,
+        provider=outcome.provider, model=outcome.model, requested_at=outcome.requested_at,
     )
 
 

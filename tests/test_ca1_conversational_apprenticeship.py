@@ -196,7 +196,7 @@ class BehavioralContractAndContinuityTests(_BaseTestCase):
             )
             client = self._client()
             self.flask_app.config["ANTHROPIC_API_KEY"] = "fake-key-for-test"
-            with patch("services.project_qa.os.getenv", side_effect=lambda k, d="": "fake-key-for-test" if k == "ANTHROPIC_API_KEY" else d):
+            with patch("services.llm_gateway.os.getenv", side_effect=lambda k, d="": "fake-key-for-test" if k == "ANTHROPIC_API_KEY" else d):
                 self._quick_start(client, "What is this project about?")
 
             call_kwargs = MockClient.return_value.messages.create.call_args.kwargs
@@ -206,7 +206,7 @@ class BehavioralContractAndContinuityTests(_BaseTestCase):
 
     def test_second_question_includes_bounded_recent_history(self):
         with patch("anthropic.Anthropic") as MockClient, \
-             patch("services.project_qa.os.getenv", side_effect=lambda k, d="": "fake-key-for-test" if k == "ANTHROPIC_API_KEY" else d):
+             patch("services.llm_gateway.os.getenv", side_effect=lambda k, d="": "fake-key-for-test" if k == "ANTHROPIC_API_KEY" else d):
             MockClient.return_value.messages.create.return_value = _mock_response(
                 '{"answer": "First answer.", "grounded_in": [], "not_covered": "", "needs_clarification": false}'
             )
@@ -228,7 +228,7 @@ class BehavioralContractAndContinuityTests(_BaseTestCase):
         other_project_id = other_doc.project_id
 
         with patch("anthropic.Anthropic") as MockClient, \
-             patch("services.project_qa.os.getenv", side_effect=lambda k, d="": "fake-key-for-test" if k == "ANTHROPIC_API_KEY" else d):
+             patch("services.llm_gateway.os.getenv", side_effect=lambda k, d="": "fake-key-for-test" if k == "ANTHROPIC_API_KEY" else d):
             MockClient.return_value.messages.create.return_value = _mock_response(
                 '{"answer": "Answer about project A.", "grounded_in": [], "not_covered": "", "needs_clarification": false}'
             )

@@ -78,25 +78,13 @@ in what the model was told NOT to assume, not in what it could see.
 """
 from __future__ import annotations
 
-import json
 import logging
-import os
-import re
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
 from typing import Optional
 
+from services.llm_gateway import call_llm_json
+
 logger = logging.getLogger(__name__)
-
-DEFAULT_TIMEOUT_SECONDS = 30.0
-
-# CLAUDE-P36: the provider boundary's own name for what it called - the
-# ONE place a future second provider would add a second value, not a
-# generalized registry (see this module's own docstring on staying a
-# single request/response round trip; P36's scope explicitly excludes
-# a provider marketplace). Callers persist this instead of assuming
-# "anthropic" themselves.
-PROVIDER_NAME = "anthropic"
 
 # CLAUDE-P19: a real, bump-on-meaningful-change marker for the Golden
 # Laboratory regression suite's own "prompt/configuration version"
@@ -169,67 +157,28 @@ def investigate_requirement(
     model: Optional[str] = None,
     timeout: Optional[float] = None,
 ) -> RequirementInvestigationResult:
-    api_key = api_key or os.getenv("ANTHROPIC_API_KEY", "")
-    if not api_key:
-        return RequirementInvestigationResult(
-            ran=False,
-            skipped_reason="No ANTHROPIC_API_KEY configured - real investigation cannot run in this deployment.",
-        )
-
-    model = model or os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-6")
-    timeout = timeout if timeout is not None else float(
-        os.getenv("ANTHROPIC_TIMEOUT_SECONDS", DEFAULT_TIMEOUT_SECONDS)
-    )
-    requested_at = datetime.now(timezone.utc).isoformat()
-
-    import anthropic  # imported lazily so the dep is optional in dev
-
-    client = anthropic.Anthropic(api_key=api_key, timeout=timeout)
     prompt = _build_prompt(
         question, requirement, adjudication_history, evidence, represented_party, related_requirements,
     )
-
-    try:
-        response = client.messages.create(
-            model=model,
-            # CLAUDE-P17: 1000 was tight enough to sometimes truncate valid
-            # JSON mid-string once represented_party (risk_polarity block)
-            # and a populated suggested_branch are BOTH present in one
-            # response - a real, discovered token-budget bug, not just a
-            # theoretical risk (an early perspective-tier lab run hit
-            # exactly this). 2048 gives room for every optional field this
-            # module can request simultaneously.
-            max_tokens=2048,
-            messages=[{"role": "user", "content": prompt}],
-        )
-    except anthropic.APITimeoutError:
-        logger.warning("Requirement investigation timed out after %.0fs.", timeout)
-        return RequirementInvestigationResult(
-            ran=False, skipped_reason=f"Request timed out after {timeout:.0f}s.",
-        )
-    except Exception:  # noqa: BLE001 - best-effort, mirrors bhive_parser's own consistency-check discipline
-        logger.warning("Requirement investigation failed.", exc_info=True)
-        return RequirementInvestigationResult(
-            ran=False, skipped_reason="An error occurred calling the model.",
-        )
-
-    text_out = "".join(
-        block.text for block in response.content if getattr(block, "type", None) == "text"
+    # CLAUDE-CA1D-COMPOSER-SPINE-01 (Stage 0): the client-setup/error-
+    # handling/JSON-parsing boundary this module used to own directly is
+    # now services/llm_gateway.py's call_llm_json - same behavior, one
+    # shared implementation instead of a second independent copy of it.
+    outcome = call_llm_json(
+        user_prompt=prompt, api_key=api_key, model=model, timeout=timeout,
+        # CLAUDE-P17: 1000 was tight enough to sometimes truncate valid
+        # JSON mid-string once represented_party (risk_polarity block)
+        # and a populated suggested_branch are BOTH present in one
+        # response - a real, discovered token-budget bug, not just a
+        # theoretical risk (an early perspective-tier lab run hit
+        # exactly this). 2048 gives room for every optional field this
+        # module can request simultaneously.
+        max_tokens=2048, log_label="Requirement investigation",
     )
-    cleaned = re.sub(r"^```(json)?|```$", "", text_out.strip(), flags=re.MULTILINE).strip()
-    try:
-        parsed = json.loads(cleaned)
-    except json.JSONDecodeError:
-        if response.stop_reason == "max_tokens":
-            logger.warning("Requirement investigation was truncated at max_tokens: %r", text_out[-200:])
-            return RequirementInvestigationResult(
-                ran=False, skipped_reason="Model's response was cut off before it finished (max_tokens).",
-            )
-        logger.warning("Requirement investigation returned non-JSON output: %r", text_out[:200])
-        return RequirementInvestigationResult(
-            ran=False, skipped_reason="Model returned malformed output.",
-        )
+    if not outcome.ran:
+        return RequirementInvestigationResult(ran=False, skipped_reason=outcome.skipped_reason)
 
+    parsed = outcome.parsed
     result = RequirementInvestigationResult(
         ran=True,
         assessment=str(parsed.get("assessment", "")).strip(),
@@ -237,9 +186,9 @@ def investigate_requirement(
         supporting_points=[str(p) for p in parsed.get("supporting_points", [])],
         open_questions=[str(q) for q in parsed.get("open_questions", [])],
         needs_human_judgment=bool(parsed.get("needs_human_judgment", True)),
-        provider=PROVIDER_NAME,
-        model=model,
-        requested_at=requested_at,
+        provider=outcome.provider,
+        model=outcome.model,
+        requested_at=outcome.requested_at,
     )
     if represented_party is not None and parsed.get("risk_polarity"):
         result.risk_polarity = str(parsed["risk_polarity"]).strip()
