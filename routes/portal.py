@@ -30,6 +30,7 @@ from services.password_reset import (
     complete_password_reset, get_valid_reset_token, is_dev_fallback_active, request_password_reset,
 )
 from services.requirements_registry import RequirementsRegistry
+from services.trial_request import submit_trial_request
 
 portal_bp = Blueprint('portal', __name__)
 
@@ -384,15 +385,42 @@ def explore():
     return render_template('explore.html')
 
 
-@portal_bp.route('/start-trial')
+@portal_bp.route('/start-trial', methods=['GET', 'POST'])
+@limiter.limit("5 per hour", methods=["POST"])
 def start_trial():
     """
-    CLAUDE-CA1D-PUBLIC-LANDING-01: public, unauthenticated, deliberately
-    honest about not being self-serve yet - see templates/start_trial.html's
-    own copy. No form, no submission, nothing that could misrepresent an
-    account or a trial as already existing.
+    CLAUDE-CA1D-PUBLIC-LANDING-01: public, unauthenticated.
+
+    CLAUDE-CA1D-TRIAL-ACCESS-HOTFIX-01: the former version of this page
+    was a dead end -- honest about not being self-serve, but offering no
+    actionable path for an interested visitor. Still deliberately honest
+    (never claims self-service signup or an already-created account
+    exists), but now accepts a real, minimal request (email required;
+    name/message optional) and hands it to services/trial_request.py,
+    which reuses the existing best-effort SMTP transport -- no new
+    persistent PII store, no new external service, no new account
+    creation. Same rate limit as /forgot-password (5 per hour), the
+    established precedent for a public, unauthenticated, spam-prone
+    form on this route file.
     """
-    return render_template('start_trial.html')
+    if request.method == 'GET':
+        return render_template('start_trial.html')
+
+    name = request.form.get('name', '')
+    email = request.form.get('email', '').strip()
+    message = request.form.get('message', '')
+
+    # Deliberately minimal validation -- enough to have a real way to
+    # contact the visitor back, nothing more. No email-format library,
+    # just the same "must actually look like an email" bar this app
+    # already accepts elsewhere for a plain HTML5 email input.
+    if not email or '@' not in email or email.startswith('@') or email.endswith('@'):
+        return render_template(
+            'start_trial.html', error="Enter a valid email address.", name=name, email=email, message=message,
+        ), 400
+
+    submit_trial_request(name=name, email=email, message=message)
+    return render_template('start_trial.html', submitted=True)
 
 
 _PROJECT_SORT_KEYS = {

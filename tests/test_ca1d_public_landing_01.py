@@ -61,12 +61,18 @@ class PublicLandingRouteTests(unittest.TestCase):
         self.assertIn('href="/login"', body)
         self.assertIn('href="/"', body)
 
-    def test_start_trial_page_is_honest_and_has_no_submission_form(self):
+    def test_start_trial_page_is_honest_and_offers_a_real_request_action(self):
+        """CLAUDE-CA1D-TRIAL-ACCESS-HOTFIX-01: the former dead-end
+        headline/no-form page was replaced with a real, minimal request
+        form - still honest (no self-service signup claim, no implied
+        account creation), but no longer a rejection."""
         resp = self.client.get("/start-trial")
         self.assertEqual(resp.status_code, 200)
         body = resp.get_data(as_text=True)
-        self.assertIn("isn&rsquo;t self-serve yet", body)
-        self.assertNotIn("<form", body)
+        self.assertNotIn("isn&rsquo;t self-serve yet", body)
+        self.assertIn("opening trial access gradually", body)
+        self.assertIn("<form", body)
+        self.assertIn('data-ui-ref="start-trial.request-submit"', body)
         self.assertIn('href="/login"', body)
 
     def test_explore_and_start_trial_never_leak_authenticated_shell(self):

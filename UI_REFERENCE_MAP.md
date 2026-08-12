@@ -603,7 +603,10 @@ redirect-to-Sign-in behavior by explicit Product Owner decision);
 | `explore.start-trial` | `<a>` | "Request Trial Access" | Same destination as `landing.start-trial` | `/explore` | active |
 | `explore.sign-in` | `<a>` | "Sign In" | Same destination as `landing.sign-in` | `/explore` | active |
 | `start-trial.back` | `<a>` | "← Archiosk" | Navigates back to `portal.index` | `/start-trial` | active |
-| `start-trial.sign-in` | `<a>` | "Sign In" | Same destination as `landing.sign-in` | `/start-trial` | active |
+| `start-trial.request-form` (new, CLAUDE-CA1D-TRIAL-ACCESS-HOTFIX-01) | `<form method="post">` | (no visible label) | POSTs to the same `/start-trial` route (GET renders it, POST processes it) — `routes/portal.py`'s `start_trial()`, rate-limited 5/hour same as `/forgot-password`. Only rendered pre-submission (`submitted` is falsy) | `/start-trial` | active |
+| `start-trial.request-error` (new, CLAUDE-CA1D-TRIAL-ACCESS-HOTFIX-01) | `<p role="alert">` | (validation error text) | Rendered only when the POST is missing a plausible email address — the one validation this route performs | `/start-trial` | active |
+| `start-trial.request-submit` (new, CLAUDE-CA1D-TRIAL-ACCESS-HOTFIX-01) | `<button type="submit">` | "Request Access" | Submits `start-trial.request-form` — name/message optional, email required. On success, hands the request to `services/trial_request.py` (logs it always; emails `TRIAL_REQUEST_NOTIFY_EMAIL` via the existing SMTP transport when configured) and re-renders this same page with `submitted=True` | `/start-trial` | active |
+| `start-trial.sign-in` | `<a>` | "Already have an account? Sign In" (was "Sign In" — CLAUDE-CA1D-TRIAL-ACCESS-HOTFIX-01, Section 6) | Same destination as `landing.sign-in` | `/start-trial` | active |
 | `start-trial.explore` | `<a>` | "Explore Archiosk" | Same destination as `landing.explore` | `/start-trial` | active |
 
 ## Gateway (`templates/gateway_shell.html`, `gateway.html`, `project_chooser.html` — CLAUDE-P40-VW8-QA, new surface)

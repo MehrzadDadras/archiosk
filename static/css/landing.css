@@ -526,6 +526,52 @@
     flex-wrap: wrap;
 }
 
+/* CLAUDE-CA1D-TRIAL-ACCESS-HOTFIX-01: the Request Trial Access form --
+   same restrained dark/teal language as the rest of this file, high
+   enough contrast on the input text itself (near-white) that the
+   deep-ocean background never competes with actually typing into the
+   field. */
+.landing-request-form {
+    margin-top: 32px;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    max-width: 480px;
+}
+.landing-form-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: .85rem;
+    color: rgba(200, 255, 248, .72);
+}
+.landing-form-field input,
+.landing-form-field textarea {
+    font-family: inherit;
+    font-size: .95rem;
+    color: rgba(234, 255, 251, .95);
+    background: rgba(10, 35, 42, .55);
+    border: 1px solid rgba(176, 255, 244, .28);
+    border-radius: 6px;
+    padding: 10px 12px;
+    resize: vertical;
+}
+.landing-form-field input:focus-visible,
+.landing-form-field textarea:focus-visible {
+    outline: 2px solid rgba(200, 255, 248, .8);
+    outline-offset: 1px;
+    border-color: rgba(176, 255, 244, .6);
+}
+.landing-form-error {
+    margin: 0;
+    padding: 10px 14px;
+    border-radius: 6px;
+    background: rgba(120, 40, 30, .28);
+    border: 1px solid rgba(255, 150, 120, .4);
+    color: rgba(255, 210, 195, .92);
+    font-size: .88rem;
+}
+
 @media (max-width: 640px) {
     .landing-actions { flex-direction: column; width: 100%; max-width: 320px; }
     .landing-action { width: 100%; }

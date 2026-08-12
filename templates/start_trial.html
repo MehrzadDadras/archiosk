@@ -5,22 +5,54 @@
 {% block landing_body %}
 <div class="landing-doc">
     <a class="landing-doc-back" href="{{ url_for('portal.index') }}" data-ui-ref="start-trial.back">&larr; Archiosk</a>
+    {% if submitted %}
+    {# CLAUDE-CA1D-TRIAL-ACCESS-HOTFIX-01, Section 5: truthful
+       acknowledgement only -- never promises a response time, never
+       implies an account already exists. #}
     <span class="landing-doc-kicker">Request Trial Access</span>
-    <h1>Trial access isn&rsquo;t self-serve yet</h1>
-
+    <h1>Request received</h1>
     <div class="landing-doc-section">
         <p>
-            Archiosk is currently in controlled access while the product continues to
-            develop. Public self-service sign-up isn&rsquo;t open yet &mdash; this page
-            will connect directly to that when it is.
+            Archiosk trial access is currently provisioned through controlled access.
+            We&rsquo;ll use your request to continue the access process.
         </p>
+    </div>
+    {% else %}
+    <span class="landing-doc-kicker">Request Trial Access</span>
+    <h1>Request Trial Access</h1>
+    <div class="landing-doc-section">
+        {# CLAUDE-CA1D-TRIAL-ACCESS-HOTFIX-01, Section 2: leads with what
+           Archiosk offers, not what it lacks -- the old headline ("Trial
+           access isn't self-serve yet") is retired. Still honest: no
+           self-service signup claim, no implied instant account. #}
         <p>
-            If you already have an account, sign in below. Otherwise, check back soon.
+            Archiosk is opening trial access gradually while the live product continues
+            to be validated. Request access and we&rsquo;ll use the current
+            controlled-access process to get you started.
         </p>
     </div>
 
+    <form class="landing-request-form" method="post" data-ui-ref="start-trial.request-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        {% if error %}<p class="landing-form-error" role="alert" data-ui-ref="start-trial.request-error">{{ error }}</p>{% endif %}
+        <label class="landing-form-field">
+            <span>Name</span>
+            <input type="text" name="name" value="{{ name or '' }}" autocomplete="name">
+        </label>
+        <label class="landing-form-field">
+            <span>Email <span aria-hidden="true">*</span></span>
+            <input type="email" name="email" value="{{ email or '' }}" required autocomplete="email">
+        </label>
+        <label class="landing-form-field">
+            <span>What are you hoping to use Archiosk for? (optional)</span>
+            <textarea name="message" rows="3">{{ message or '' }}</textarea>
+        </label>
+        <button type="submit" class="landing-action landing-action-primary" data-ui-ref="start-trial.request-submit">Request Access</button>
+    </form>
+    {% endif %}
+
     <div class="landing-doc-actions">
-        <a class="landing-action landing-action-primary" href="{{ url_for('portal.login') }}" data-ui-ref="start-trial.sign-in">Sign In</a>
+        <a class="landing-action landing-action-secondary" href="{{ url_for('portal.login') }}" data-ui-ref="start-trial.sign-in">Already have an account? Sign In</a>
         <a class="landing-action landing-action-secondary" href="{{ url_for('portal.explore') }}" data-ui-ref="start-trial.explore">Explore Archiosk</a>
     </div>
 </div>

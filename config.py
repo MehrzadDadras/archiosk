@@ -71,6 +71,17 @@ class BaseConfig:
     # setups (SMTP_USE_TLS's own default) are completely unaffected.
     SMTP_USE_SSL = os.getenv("SMTP_USE_SSL", "false").strip().lower() == "true"
 
+    # -- Trial access request notification (optional) ----------------------
+    # CLAUDE-CA1D-TRIAL-ACCESS-HOTFIX-01: where a public /start-trial
+    # request gets emailed via the same SMTP transport above. Blank is a
+    # valid, supported state (services/trial_request.py degrades to
+    # logging only) -- never a hard dependency, matching SMTP_HOST's own
+    # "optional, best-effort" shape immediately above. Must be set in
+    # production for a human to actually receive these requests by email;
+    # every request is also always logged regardless, as a second,
+    # zero-configuration trace.
+    TRIAL_REQUEST_NOTIFY_EMAIL = os.getenv("TRIAL_REQUEST_NOTIFY_EMAIL", "")
+
     # HTTPOnly/SameSite are safe in every environment; Secure requires HTTPS,
     # which only nginx terminates in production — off in dev so the login
     # cookie still works over plain http://127.0.0.1.
@@ -109,6 +120,9 @@ class TestingConfig(BaseConfig):
     # whatever the developer's local .env happens to have configured -
     # same reasoning as app.py's ANTHROPIC_API_KEY clearing for "testing".
     SMTP_HOST = ""
+    # Same hermeticity reasoning as SMTP_HOST directly above -- a test
+    # must never attempt a real send based on a developer's local .env.
+    TRIAL_REQUEST_NOTIFY_EMAIL = ""
     # CLAUDE-P27-B: Flask-Limiter's default in-memory storage is a single
     # process-wide singleton (services/rate_limit.py) -- without this,
     # every test method's real HTTP requests against /login,
