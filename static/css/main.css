@@ -1158,6 +1158,42 @@ main {
     font-size: var(--text-sm);
     color: var(--text-secondary);
 }
+/* CLAUDE-CA1D-FOLDER-ESTABLISH-CLARITY-01: this whole folder-
+   establishment fieldset (upload.html) had zero CSS of its own until
+   now - most concretely, #folder-submit-button:disabled looked
+   pixel-identical to its own enabled state (no app-wide .btn:disabled
+   rule exists; every other disabled submit button in this app has its
+   own explicit override, e.g. #project-open-button:disabled above).
+   A live user report ("Establish Project from Folder does nothing")
+   traced to exactly that: with multiple eligible top-level files (a
+   real RFP folder with both a .docx/.pdf pair and a Schedule), nothing
+   is auto-selected, so the button silently stays disabled until one of
+   the plain, unstyled radio candidates below is clicked - a control
+   that gave no visual signal it was interactive or required at all. */
+#folder-submit-button:disabled { opacity: 0.5; cursor: not-allowed; }
+#folder-selection-summary { margin: 0.8rem 0 0.4rem; color: var(--text-secondary); font-size: var(--text-sm); }
+.folder-founding-candidates {
+    list-style: none;
+    margin: 0.6rem 0 1.2rem;
+    padding: 0;
+    display: grid;
+    gap: 0.5rem;
+    max-width: 480px;
+}
+.folder-founding-candidates label {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.6rem 0.9rem;
+    background: var(--surface-primary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: var(--text-sm);
+}
+.folder-founding-candidates label:hover { border-color: var(--border-strong); }
+.folder-founding-candidates label:has(input:checked) { border-color: var(--machine-blue); border-width: 2px; }
+.folder-founding-candidates input[type="radio"] { accent-color: var(--machine-blue); flex-shrink: 0; }
 .text-input {
     font-family: var(--font-body);
     font-size: 0.85rem;
