@@ -26,6 +26,13 @@
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/tokens.css') }}?v={{ static_version }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v={{ static_version }}">
+    {# CLAUDE-CA1D-SIGNIN-VISUAL-CONTINUITY-01: reuses the exact same
+       deep-ocean background system already shared by /, /explore,
+       /start-trial (landing.css's .landing-page/.landing-field-canvas)
+       rather than a second background implementation -- loaded after
+       main.css so its more specific .gateway-card-compact overrides
+       below still win. #}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/landing.css') }}?v={{ static_version }}">
     <script>
         {# CLAUDE-P40-VW8-QA, Section 4: "must work on Sign-in, Gateway,
            Project workspace, popups and dialogs" - a reviewer who
@@ -48,8 +55,16 @@
     </script>
 </head>
 <body>
-    <div class="blueprint-grid"></div>
-    <div class="auth-shell-page">
+    {# CLAUDE-CA1D-SIGNIN-VISUAL-CONTINUITY-01: landing-page replaces
+       this shell's own former light "blueprint-grid on sand" backdrop
+       -- the SAME wrapper class/canvas element landing_shell.html
+       already uses (canvas as .landing-page's own first child, so
+       .landing-page's own `isolation: isolate` stacking context and
+       z-index layering apply exactly as they do on /, /explore,
+       /start-trial), so landing.css's existing background rules apply
+       here unchanged, no new background CSS written. #}
+    <div class="auth-shell-page landing-page" id="landing-page">
+        <canvas class="landing-field-canvas" id="landing-field-canvas" aria-hidden="true"></canvas>
         <div class="gateway-card{% block gateway_card_modifier %}{% endblock %}">
             <div class="gateway-brand">
                 <div class="gateway-logo">A</div>
@@ -74,5 +89,14 @@
     </div>
     {% endif %}
     {% endwith %}
+    {# CLAUDE-CA1D-SIGNIN-VISUAL-CONTINUITY-01: the shared background
+       script -- deliberately ocean_field.js only, never landing.js
+       itself (which also contains the knowledge field, spoken welcome
+       greeting, and voice input -- none of which belong on a sign-in
+       page). Loaded after each child template's own block content, so
+       login.html's static/js/login.js (password toggle) has already
+       run/registered first, matching this shell's existing script-
+       ordering pattern. #}
+    <script src="{{ url_for('static', filename='js/ocean_field.js') }}?v={{ static_version }}"></script>
 </body>
 </html>

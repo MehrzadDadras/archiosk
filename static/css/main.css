@@ -1661,16 +1661,50 @@ main {
 .gateway-context-description { margin: 0 0 0.8rem; color: var(--text-secondary); font-size: 0.85rem; line-height: 1.4; }
 
 /* -- gateway login card (compact) -----------------------------------------
-   Geometry/spacing/background mirror the archiosk-explorer (port 5173)
-   welcome/sign-in card exactly, scoped to .gateway-card-compact so the
-   post-login .gateway-card (gateway.html) keeps its original spacious
-   layout untouched. */
+   Geometry/spacing from the archiosk-explorer (port 5173) welcome/sign-in
+   card, scoped to .gateway-card-compact so the post-login .gateway-card
+   (gateway.html) keeps its original spacious layout untouched.
+
+   CLAUDE-CA1D-SIGNIN-VISUAL-CONTINUITY-01: the card's own former light
+   "sand" panel is replaced with a dark, translucent glass treatment that
+   sits naturally on the new deep-ocean background (auth_shell.html).
+   Every color inside this card (.text-input, .gateway-field label,
+   .btn-primary, .form-error, links) was already driven by this app's
+   shared design tokens (--text-primary/--surface-primary/--border/etc.)
+   -- rather than overriding each individual rule, this redefines those
+   SAME custom properties scoped to .gateway-card-compact only, so every
+   descendant re-themes correctly with no other edits, including
+   .btn-primary's already-inverted `background: var(--text-primary);
+   color: var(--surface-primary);` relationship, which self-corrects
+   into a still-legible light button once those two tokens swap roles.
+   Nothing outside this one scoped card is affected -- the rest of the
+   authenticated app keeps its existing light theme exactly as before. */
 .gateway-card-compact {
-    background-color: rgba(251, 248, 242, 0.75);
-    -webkit-backdrop-filter: blur(12px);
-    backdrop-filter: blur(12px);
-    border: 1px solid rgba(42, 36, 30, 0.1);
-    box-shadow: 0 24px 70px rgba(42, 36, 30, 0.16);
+    --text-primary: rgb(230, 255, 251);
+    --text-secondary: rgba(228, 255, 251, .82);
+    --text-metadata: rgba(200, 255, 248, .72);
+    --text-disabled: rgba(200, 255, 248, .4);
+    --surface-primary: rgba(10, 35, 42, .55);
+    --border: rgba(176, 255, 244, .28);
+    --border-strong: rgba(176, 255, 244, .5);
+    --machine-blue: rgba(200, 255, 248, .8);
+    --failure-red: rgba(255, 170, 150, .95);
+    background-color: rgba(8, 28, 36, .72);
+    -webkit-backdrop-filter: blur(14px);
+    backdrop-filter: blur(14px);
+    border: 1px solid rgba(176, 255, 244, .22);
+    box-shadow: 0 24px 70px rgba(1, 8, 14, .5);
+}
+/* The card and footer must paint above the fixed, z-index:0 ocean
+   canvas beneath them -- same explicit position/z-index treatment
+   landing.css's own .landing-content already uses for the identical
+   reason, scoped here to only this shell (gateway.html/project_chooser
+   .html's own .gateway-card/.gateway-card-wide, which never sit inside
+   .auth-shell-page, are unaffected). */
+.auth-shell-page .gateway-card,
+.auth-shell-page .auth-shell-footer {
+    position: relative;
+    z-index: 2;
 }
 .gateway-card-compact .gateway-brand {
     gap: 9.6px;
@@ -1746,7 +1780,13 @@ main {
     padding: 1.75rem 1rem;
 }
 .auth-shell-footer {
-    color: var(--text-metadata);
+    /* CLAUDE-CA1D-SIGNIN-VISUAL-CONTINUITY-01: not var(--text-metadata)
+       -- that token is scoped to .gateway-card-compact's own re-theme
+       above, and this footer sits outside the card, directly on the
+       new dark ocean background, so it needs its own explicit light
+       color rather than inheriting the (still light-theme) global
+       token value. */
+    color: rgba(190, 235, 230, .5);
     font-family: var(--font-body);
     font-size: 0.78rem;
     letter-spacing: 0.02em;

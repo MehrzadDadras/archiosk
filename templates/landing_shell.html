@@ -21,6 +21,7 @@
     <canvas class="landing-field-canvas" id="landing-field-canvas" aria-hidden="true"></canvas>
     {% block landing_body %}{% endblock %}
 </div>
+<script src="{{ url_for('static', filename='js/ocean_field.js') }}?v={{ static_version }}"></script>
 <script src="{{ url_for('static', filename='js/landing.js') }}?v={{ static_version }}"></script>
 </body>
 </html>
