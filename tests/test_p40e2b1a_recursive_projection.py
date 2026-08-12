@@ -387,7 +387,16 @@ class StableUrlRestorationTests(_BaseTestCase):
         # segment (before the first ".") is asserted identical below in
         # both requests every time - only the re-signed wrapper around it
         # changes, never the underlying token itself.
+        #
+        # CLAUDE-CA1D-CSP-INLINE-SCRIPT-FIX-01: every inline <script>
+        # tag now also carries nonce="{{ csp_nonce }}" (app.py's
+        # get_csp_nonce - a fresh, unguessable value every request, by
+        # design, so a leaked nonce can never be replayed against a
+        # later response). That's an even more variable per-request
+        # value than the CSRF token's timestamp - normalized out here
+        # for the identical reason.
         csrf_re = re.compile(r'<meta name="csrf-token" content="([^"]+)">')
+        nonce_re = re.compile(r'nonce="[^"]+"')
 
         def csrf_secret_segment(html: str) -> str:
             match = csrf_re.search(html)
@@ -402,6 +411,8 @@ class StableUrlRestorationTests(_BaseTestCase):
         self.assertEqual(csrf_secret_segment(docs_before), csrf_secret_segment(docs_after_navigating_away_and_back))
         normalized_before = csrf_re.sub('<meta name="csrf-token" content="NORMALIZED">', docs_before)
         normalized_after = csrf_re.sub('<meta name="csrf-token" content="NORMALIZED">', docs_after_navigating_away_and_back)
+        normalized_before = nonce_re.sub('nonce="NORMALIZED"', normalized_before)
+        normalized_after = nonce_re.sub('nonce="NORMALIZED"', normalized_after)
         self.assertEqual(normalized_before, normalized_after)
 
 

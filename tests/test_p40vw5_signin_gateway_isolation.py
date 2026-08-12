@@ -484,8 +484,16 @@ class PriorStagePreservationTests(_BaseTestCase):
         second = client.get(f"/projects/{self.project_id}/workspace?view=documents").get_data(as_text=True)
         import re
         csrf_re = re.compile(r'<meta name="csrf-token" content="([^"]+)">')
+        # CLAUDE-CA1D-CSP-INLINE-SCRIPT-FIX-01: every inline <script> tag
+        # now also carries a fresh per-request nonce (app.py's
+        # get_csp_nonce) - same reasoning as the CSRF token normalization
+        # below (test_p40e2b1a_recursive_projection.py's own
+        # StableUrlRestorationTests has the fuller explanation).
+        nonce_re = re.compile(r'nonce="[^"]+"')
         normalized_first = csrf_re.sub('<meta name="csrf-token" content="NORMALIZED">', first)
         normalized_second = csrf_re.sub('<meta name="csrf-token" content="NORMALIZED">', second)
+        normalized_first = nonce_re.sub('nonce="NORMALIZED"', normalized_first)
+        normalized_second = nonce_re.sub('nonce="NORMALIZED"', normalized_second)
         self.assertEqual(normalized_first, normalized_second)
 
 

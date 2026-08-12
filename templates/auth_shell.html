@@ -33,7 +33,7 @@
        main.css so its more specific .gateway-card-compact overrides
        below still win. #}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/landing.css') }}?v={{ static_version }}">
-    <script>
+    <script nonce="{{ csp_nonce }}">
         {# CLAUDE-P40-VW8-QA, Section 4: "must work on Sign-in, Gateway,
            Project workspace, popups and dialogs" - a reviewer who
            enabled UI Reference Mode while authenticated keeps that

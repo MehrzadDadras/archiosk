@@ -39,7 +39,7 @@
        -- loaded after main.css so main.css's own more specific
        .gateway-shell overrides below still win. #}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/landing.css') }}?v={{ static_version }}">
-    <script>
+    <script nonce="{{ csp_nonce }}">
         {# CLAUDE-P40-VW8-QA, Section 4: same reasoning as
            auth_shell.html's own copy of this script - Gateway/the
            existing-Project chooser render inside THIS shell, not
@@ -98,7 +98,7 @@
 
         {% block content %}{% endblock %}
     </div>
-    <script>
+    <script nonce="{{ csp_nonce }}">
         // Same outside-click/Escape-closes idiom base.html's own top-bar
         // <details> menus use (CLAUDE-P40-E3A, Section 3/6) - kept
         // consistent even though this shell is otherwise standalone.

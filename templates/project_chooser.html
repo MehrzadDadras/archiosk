@@ -33,7 +33,7 @@
 <div class="gateway-back-action">
     <a href="{{ url_for('portal.gateway') }}" class="btn btn-ghost" id="gateway-back-link" data-ui-ref="gateway.chooser.back-top">&larr; Back</a>
 </div>
-<script>
+<script nonce="{{ csp_nonce }}">
 (function () {
     var link = document.getElementById('gateway-back-link');
     if (!link) return;
@@ -126,7 +126,7 @@
     </ul>
     <button type="submit" class="btn btn-primary" id="project-open-button" disabled data-ui-ref="gateway.chooser.open-button">Open Project</button>
 </form>
-<script>
+<script nonce="{{ csp_nonce }}">
 (function () {
     var form = document.getElementById('project-open-form');
     var button = document.getElementById('project-open-button');

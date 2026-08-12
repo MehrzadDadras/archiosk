@@ -7,7 +7,7 @@
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/tokens.css') }}?v={{ static_version }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v={{ static_version }}">
-    <script>
+    <script nonce="{{ csp_nonce }}">
         {# CLAUDE-P40-VW7B: templates/base.html's own pre-paint script has
            three concerns (Lists hidden, Toolbox hidden, UI Reference
            Mode) - only the third applies here, since this document has
@@ -40,7 +40,7 @@
         </main>
     </div>
 
-    <script>
+    <script nonce="{{ csp_nonce }}">
         {# CLAUDE-P40-VW7B: this panel is always the content of exactly
            one Display division - only .app-main's own appearance mode
            is relevant here (there is no Menu/Lists/Toolbox/Chat surface
@@ -58,7 +58,7 @@
             el.classList.toggle('appearance-tinted', mode === 'tinted');
         })();
     </script>
-    <script>
+    <script nonce="{{ csp_nonce }}">
         {# CLAUDE-P27-B's own CSRF auto-inject, duplicated rather than
            shared - this codebase's established convention is one
            inline script per template, not a factored-out partial for a

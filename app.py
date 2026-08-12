@@ -9,6 +9,7 @@ Run in production via Gunicorn (see deploy/gunicorn.service):
 """
 import logging
 import os
+import secrets
 
 from flask import Flask
 from flask_wtf import CSRFProtect
@@ -57,6 +58,7 @@ def create_app(config_name: str | None = None) -> Flask:
     _register_rate_limiter(app)
     _register_blueprints(app)
     _register_csrf(app)
+    _register_security_headers(app)
     _register_error_handlers(app)
     _register_context_processors(app)
     _register_template_filters(app)
@@ -376,6 +378,46 @@ def _register_csrf(app: Flask) -> None:
     csrf.exempt(api_bp)
 
 
+def get_csp_nonce() -> str:
+    """
+    CLAUDE-CA1D-CSP-INLINE-SCRIPT-FIX-01: one fresh, unguessable value per
+    request, cached on flask.g so every template/script tag in the same
+    response shares the identical nonce the response header advertises.
+
+    Root cause this exists to fix: deploy/nginx.conf's own
+    Content-Security-Policy header (default-src 'self', no
+    'unsafe-inline') was blocking every inline <script> tag on every page
+    in production, silently and with no console error -- confirmed by a
+    live-browser comparison (works with no CSP on the local dev server,
+    fails identically to a real user report against archiosk.com) and
+    already independently diagnosed once before for a narrower case
+    (tests/test_ca1d_reception_fix_01.py's login-password-toggle fix).
+    That fix externalized one small script to a static file; this one
+    generalizes properly instead of externalizing all ~18 remaining
+    inline scripts (several of which interpolate a Jinja value like
+    project_id directly into the script body, which a static file
+    can't do) -- CSP ownership moves from nginx (which can't vary
+    per-request) to Flask, which can mint a fresh nonce every request.
+    """
+    from flask import g
+
+    if not hasattr(g, "csp_nonce"):
+        g.csp_nonce = secrets.token_urlsafe(16)
+    return g.csp_nonce
+
+
+def _register_security_headers(app: Flask) -> None:
+    @app.after_request
+    def set_csp_header(response):
+        nonce = get_csp_nonce()
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; base-uri 'self'; form-action 'self'; "
+            "frame-ancestors 'none'; object-src 'none'; "
+            f"script-src 'self' 'nonce-{nonce}'"
+        )
+        return response
+
+
 def _register_rate_limiter(app: Flask) -> None:
     from services.rate_limit import limiter
 
@@ -519,6 +561,12 @@ def _register_context_processors(app: Flask) -> None:
         return {
             "current_year": datetime.now(timezone.utc).year,
             "static_version": app.config["STATIC_VERSION"],
+            # CLAUDE-CA1D-CSP-INLINE-SCRIPT-FIX-01: every inline <script>
+            # tag needs this exact request's nonce (set_csp_header, above,
+            # puts the same value in the response's own CSP header) or
+            # the browser silently refuses to run it -- see get_csp_nonce's
+            # own docstring for the incident this fixes.
+            "csp_nonce": get_csp_nonce(),
             "authenticated": authenticated,
             "is_admin": is_admin() and not on_standalone_auth_page,
             # CLAUDE-CA1D-INSTRUMENT-RAIL-01: the one quiet global machine

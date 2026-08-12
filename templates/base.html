@@ -8,7 +8,7 @@
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/tokens.css') }}?v={{ static_version }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v={{ static_version }}">
-    <script>
+    <script nonce="{{ csp_nonce }}">
         // Applied before first paint (inline, in <head>) so panel show/hide
         // state never flashes the wrong layout on a fresh page load - a
         // full server-rendered page reload per navigation, not an SPA.
@@ -1300,7 +1300,7 @@
         {% endif %}
     </div>
 
-    <script>
+    <script nonce="{{ csp_nonce }}">
         // CLAUDE-P40-VW8-QA (Approved Theme Set): resolves and applies
         // each surface's appearance class as early as this app's plain-
         // script, no-build architecture allows - immediately after the
@@ -1401,7 +1401,7 @@
             });
         })();
     </script>
-    <script>
+    <script nonce="{{ csp_nonce }}">
         // CLAUDE-P40-E3A, Section 7: the panel-dividing lines are the
         // collapse controls - a plain class toggle on <html>, never DOM
         // removal (every form/draft/scroll position inside a hidden panel
@@ -1479,7 +1479,7 @@
             }
         })();
     </script>
-    <script>
+    <script nonce="{{ csp_nonce }}">
         // CLAUDE-P40-VW7A-QA2, Section 3: draggable divider between Lists
         // and the Page Thumbnails pane - same pointerdown/pointermove/
         // pointerup + CSS-custom-property + persistence pattern as
@@ -1599,7 +1599,7 @@
         })();
     </script>
     {% if project_id is defined and workspace is defined %}
-    <script>
+    <script nonce="{{ csp_nonce }}">
         // CLAUDE-P40-EYE1, Section 2: draggable divider between Toolbox
         // and Eye - the SAME percentage-based pointer-drag/keyboard-step/
         // double-click-restore pattern as the Lists/Thumbnails divider
@@ -1749,7 +1749,7 @@
             }
         })();
     </script>
-    <script>
+    <script nonce="{{ csp_nonce }}">
         // CLAUDE-P40-EYE1 (product-owner browser correction), Section 1:
         // the Toolbox/right-column divider (#toolbox-divider - already
         // click-to-toggle, CLAUDE-P40-E3A Section 7 above) is now ALSO a
@@ -1897,7 +1897,7 @@
     <script src="{{ url_for('static', filename='js/drawing_image_viewer.js') }}?v={{ static_version }}"></script>
     <script src="{{ url_for('static', filename='js/eye_pane.js') }}?v={{ static_version }}"></script>
     {% endif %}
-    <script>
+    <script nonce="{{ csp_nonce }}">
         // CLAUDE-P40-E3A / CLAUDE-LEFTPANEL-CALM-01: the recursive Lists
         // hierarchy - a branch starts open only if the page rendered it
         // that way (e.g. it contains the active selection); clicking its
@@ -1983,7 +1983,7 @@
             });
         })();
     </script>
-    <script>
+    <script nonce="{{ csp_nonce }}">
         // CLAUDE-P40-E3A, Section 3/6: close the top-bar <details>
         // menus (Display Layout, Appearance, Project Context, Account) on
         // outside click or Escape - the native <details> element has no
@@ -2215,7 +2215,7 @@
             syncAllRow();
         })();
     </script>
-    <script>
+    <script nonce="{{ csp_nonce }}">
         // CLAUDE-P27-B: centralized CSRF token injection -- every POST
         // <form> on every page gets a hidden csrf_token field added here,
         // once, rather than a per-template edit repeated at every one of
