@@ -153,7 +153,11 @@ class EyeMaximizeTwoDimensionalTests(unittest.TestCase):
         self.assertIn("window.ArchioskRightColumnWidth.apply(window.ArchioskRightColumnWidth.maxForMaximize(), false, true);", fn)
 
     def test_restore_eye_button_provides_a_clear_way_out(self):
-        self.assertIn("eyeMaximizeBtn.textContent = 'Restore Eye';", self.html)
+        # CLAUDE-CA1D-PANEL-LABEL-CLARITY-01: the visible button text is now
+        # an icon glyph, not the redundant word "Restore Eye" - the
+        # accessible name (aria-label) is what still carries that meaning,
+        # which is what this test actually guards.
+        self.assertIn("eyeMaximizeBtn.textContent = '⤡';", self.html)
         self.assertIn("eyeMaximizeBtn.setAttribute('aria-label', 'Restore Eye');", self.html)
 
     def test_conflicting_toolbox_maximize_is_reset_first(self):

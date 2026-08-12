@@ -150,7 +150,7 @@ document.addEventListener('DOMContentLoaded', () => {
         function syncSizeToggle(px) {
             if (!sizeToggle) return;
             const isExpanded = px > SIZE_MIDPOINT;
-            sizeToggle.textContent = isExpanded ? 'Compact' : 'Expand';
+            sizeToggle.textContent = isExpanded ? '⤡' : '⤢';
             sizeToggle.setAttribute('aria-pressed', String(isExpanded));
             sizeToggle.setAttribute('aria-label', isExpanded ? 'Compact the conversation panel' : 'Expand the conversation panel');
         }

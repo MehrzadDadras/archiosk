@@ -189,7 +189,7 @@
        scoped call site's own message_count means something different:
        that Investigation's own conversation length, not the Project's). #}
     <div class="conversation-dock-header">
-        <button type="button" class="conversation-size-toggle" id="conversation-size-toggle" aria-pressed="false">Expand</button>
+        <button type="button" class="conversation-size-toggle" id="conversation-size-toggle" aria-pressed="false" aria-label="Expand the conversation panel">&#10530;</button>
     </div>
     {{ caller() }}
     <form class="conversation-input-form conversation-dock-composer" method="post" action="{{ post_url }}" data-ui-ref="chat.composer">

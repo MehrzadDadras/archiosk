@@ -1078,7 +1078,7 @@
             <div class="thumbnails-pane" id="thumbnails-pane" data-ui-ref="lists.thumbnails-pane" aria-label="Page thumbnails">
                 <div class="thumbnails-pane-header">
                     <h2>Thumbnails</h2>
-                    <button type="button" class="thumbnails-maximize-btn" id="thumbnails-maximize-btn" data-ui-ref="lists.thumbnails-pane.maximize" aria-pressed="false" aria-label="Maximize the Thumbnails pane">Maximize</button>
+                    <button type="button" class="thumbnails-maximize-btn" id="thumbnails-maximize-btn" data-ui-ref="lists.thumbnails-pane.maximize" aria-pressed="false" aria-label="Maximize the Thumbnails pane">&#10530;</button>
                 </div>
                 <p class="thumbnails-empty-state" id="thumbnails-empty-state" data-ui-ref="lists.thumbnails-pane.empty">Open a Document to view its pages.</p>
                 <div class="thumbnails-list" id="thumbnails-list" role="list" aria-label="Page thumbnails" data-ui-ref="lists.thumbnails-pane.list"></div>
@@ -1205,7 +1205,7 @@
                    <h2 data-ui-ref="toolbox.heading">Toolbox</h2> as its
                    first child - this deliberately does not duplicate or
                    wrap that heading. #}
-                <button type="button" class="toolbox-maximize-btn" id="toolbox-maximize-btn" data-ui-ref="toolbox.maximize" aria-pressed="false" aria-label="Maximize Toolbox">Maximize Toolbox</button>
+                <button type="button" class="toolbox-maximize-btn" id="toolbox-maximize-btn" data-ui-ref="toolbox.maximize" aria-pressed="false" aria-label="Maximize Toolbox">&#10530;</button>
                 {% block toolbox %}{% endblock %}
             </aside>
             {# CLAUDE-P40-EYE1, Section 2: draggable horizontal divider
@@ -1239,7 +1239,7 @@
             <div class="eye-pane" id="eye-pane" data-ui-ref="eye.panel" aria-label="Eye">
                 <div class="eye-pane-header">
                     <h2 data-ui-ref="eye.heading">Eye</h2>
-                    <button type="button" class="eye-maximize-btn" id="eye-maximize-btn" data-ui-ref="eye.maximize" aria-pressed="false" aria-label="Maximize Eye">Maximize Eye</button>
+                    <button type="button" class="eye-maximize-btn" id="eye-maximize-btn" data-ui-ref="eye.maximize" aria-pressed="false" aria-label="Maximize Eye">&#10530;</button>
                 </div>
                 <div class="eye-pane-body">
                     {# CLAUDE-P40-EYE1 (product-owner browser correction),
@@ -1584,13 +1584,13 @@
                     if (isMaximized) {
                         applyPct(preMaximizePct != null ? preMaximizePct : DEFAULT_PCT);
                         maximizeBtn.setAttribute('aria-pressed', 'false');
-                        maximizeBtn.textContent = 'Maximize';
+                        maximizeBtn.textContent = '⤢';
                         maximizeBtn.setAttribute('aria-label', 'Maximize the Thumbnails pane');
                     } else {
                         preMaximizePct = parseFloat(getComputedStyle(panel).getPropertyValue('--lists-height')) || DEFAULT_PCT;
                         applyPct(MIN_PCT);
                         maximizeBtn.setAttribute('aria-pressed', 'true');
-                        maximizeBtn.textContent = 'Restore';
+                        maximizeBtn.textContent = '⤡';
                         maximizeBtn.setAttribute('aria-label', 'Restore the Lists/Thumbnails split');
                     }
                 });
@@ -1690,13 +1690,13 @@
                 if (isMaximized) {
                     applyPct(preMaximizePct != null ? preMaximizePct : DEFAULT_PCT);
                     btn.setAttribute('aria-pressed', 'false');
-                    btn.textContent = actionLabel;
+                    btn.textContent = '⤢';
                     btn.setAttribute('aria-label', actionLabel + ' the right column');
                 } else {
                     preMaximizePct = parseFloat(getComputedStyle(column).getPropertyValue('--toolbox-height')) || DEFAULT_PCT;
                     applyPct(targetPct);
                     btn.setAttribute('aria-pressed', 'true');
-                    btn.textContent = restoreLabel;
+                    btn.textContent = '⤡';
                     btn.setAttribute('aria-label', restoreLabel + ' the Toolbox/Eye split');
                 }
             }
@@ -1725,7 +1725,7 @@
                         window.ArchioskRightColumnWidth.apply(preMaximizeWidth != null ? preMaximizeWidth : window.ArchioskRightColumnWidth.DEFAULT_WIDTH, true);
                     }
                     eyeMaximizeBtn.setAttribute('aria-pressed', 'false');
-                    eyeMaximizeBtn.textContent = 'Maximize Eye';
+                    eyeMaximizeBtn.textContent = '⤢';
                     eyeMaximizeBtn.setAttribute('aria-label', 'Maximize Eye');
                 } else {
                     // Avoid two conflicting "maximize" states fighting
@@ -1740,7 +1740,7 @@
                         window.ArchioskRightColumnWidth.apply(window.ArchioskRightColumnWidth.maxForMaximize(), false, true);
                     }
                     eyeMaximizeBtn.setAttribute('aria-pressed', 'true');
-                    eyeMaximizeBtn.textContent = 'Restore Eye';
+                    eyeMaximizeBtn.textContent = '⤡';
                     eyeMaximizeBtn.setAttribute('aria-label', 'Restore Eye');
                 }
             }
