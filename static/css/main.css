@@ -1763,6 +1763,55 @@ main {
    .gateway-card-compact (auth_shell.html) is completely untouched. */
 .gateway-card-wide { width: min(920px, 100%); }
 
+/* CLAUDE-CA1D-GATEWAY-VISUAL-CONTINUITY-01: same deep-ocean background
+   as Explore/Sign In, reusing the SAME token-redefinition technique
+   .gateway-card-compact already established above -- .gateway-shell
+   (templates/gateway_shell.html's own exclusive wrapper class, confirmed
+   via `grep -rln "gateway-shell" templates/` to appear nowhere else)
+   redefines the shared design tokens once, cascading automatically into
+   every descendant that already consumes them: .workspace-topbar-brand's
+   --brand-gold, the account-menu dropdown's --surface-primary/--border
+   (.workspace-user-options, .workspace-overflow-item), and .gateway-card
+   (via .gateway-card-wide, which sits inside this shell and has no own
+   background/border rule to override). base.html's own separate,
+   app-wide .workspace-topbar usage is never nested inside .gateway-shell,
+   so it keeps its existing light theme untouched. */
+.gateway-shell {
+    --text-primary: rgb(230, 255, 251);
+    --text-secondary: rgba(228, 255, 251, .82);
+    --text-metadata: rgba(200, 255, 248, .72);
+    --text-disabled: rgba(200, 255, 248, .4);
+    --surface-primary: rgba(10, 35, 42, .55);
+    --surface-secondary: rgba(14, 45, 54, .5);
+    --surface-hover: rgba(176, 255, 244, .12);
+    --surface-selected: rgba(176, 255, 244, .18);
+    --border: rgba(176, 255, 244, .28);
+    --border-strong: rgba(176, 255, 244, .5);
+    --divider-strong: rgba(176, 255, 244, .32);
+    --brand-gold: var(--bee-yellow);
+    --machine-blue: rgba(200, 255, 248, .8);
+    --failure-red: rgba(255, 170, 150, .95);
+}
+.gateway-shell .gateway-card-wide {
+    background-color: rgba(8, 28, 36, .72);
+    -webkit-backdrop-filter: blur(14px);
+    backdrop-filter: blur(14px);
+    border: 1px solid rgba(176, 255, 244, .22);
+    box-shadow: 0 24px 70px rgba(1, 8, 14, .5);
+}
+/* The card and flash messages must paint above the fixed, z-index:0
+   ocean canvas beneath them -- same pattern as the .auth-shell-page
+   rule above. .workspace-topbar already carries its own
+   position:relative/z-index:31 (unrelated, pre-existing reasons) which
+   is more than enough to also clear the canvas once .gateway-shell
+   becomes the isolated stacking context via its landing-page class, so
+   it deliberately isn't repeated here. */
+.gateway-shell .gateway-page,
+.gateway-shell > .flash-stack {
+    position: relative;
+    z-index: 2;
+}
+
 /* CLAUDE-P40-D1: the standalone authentication shell (auth_shell.html
    - /login, /forgot-password, /reset-password). Reuses .gateway-card
    and its children as-is for visual consistency with the post-login

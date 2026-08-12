@@ -33,6 +33,12 @@
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/tokens.css') }}?v={{ static_version }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v={{ static_version }}">
+    {# CLAUDE-CA1D-GATEWAY-VISUAL-CONTINUITY-01: reuses the same deep-
+       ocean background already shared by /, /explore, /start-trial, and
+       (since CLAUDE-CA1D-SIGNIN-VISUAL-CONTINUITY-01) the sign-in family
+       -- loaded after main.css so main.css's own more specific
+       .gateway-shell overrides below still win. #}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/landing.css') }}?v={{ static_version }}">
     <script>
         {# CLAUDE-P40-VW8-QA, Section 4: same reasoning as
            auth_shell.html's own copy of this script - Gateway/the
@@ -49,8 +55,12 @@
     </script>
 </head>
 <body>
-    <div class="blueprint-grid"></div>
-    <div class="gateway-shell">
+    {# CLAUDE-CA1D-GATEWAY-VISUAL-CONTINUITY-01: landing-page replaces
+       this shell's own former light "blueprint-grid on sand" backdrop
+       -- the SAME wrapper class/canvas element landing_shell.html and
+       (now) auth_shell.html already use. #}
+    <div class="gateway-shell landing-page" id="landing-page">
+        <canvas class="landing-field-canvas" id="landing-field-canvas" aria-hidden="true"></canvas>
         <div class="workspace-topbar">
             <div class="workspace-topbar-identity">
                 <a class="workspace-topbar-brand" href="{{ url_for('portal.index') }}">Archiosk</a>
@@ -124,5 +134,11 @@
             });
         })();
     </script>
+    {# CLAUDE-CA1D-GATEWAY-VISUAL-CONTINUITY-01: the shared background
+       script -- ocean_field.js only, never landing.js itself (which
+       also contains the knowledge field, spoken welcome greeting, and
+       voice input -- none of which belong on this authenticated
+       shell). #}
+    <script src="{{ url_for('static', filename='js/ocean_field.js') }}?v={{ static_version }}"></script>
 </body>
 </html>

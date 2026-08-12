@@ -296,7 +296,10 @@ class GatewayShellIsolationTests(_BaseTestCase):
     def test_gateway_uses_the_standalone_shell_and_wide_centered_card(self):
         client = self._client_as("vw5_admin", 1)
         body = client.get("/gateway").get_data(as_text=True)
-        self.assertIn('class="gateway-shell"', body)
+        # CLAUDE-CA1D-GATEWAY-VISUAL-CONTINUITY-01 added the shared
+        # deep-ocean background (landing-page) alongside gateway-shell -
+        # unrelated to the shell-isolation property this test guards.
+        self.assertIn('class="gateway-shell landing-page"', body)
         self.assertIn("gateway-card-wide", body)
         self.assertIn('class="gateway-page"', body)
 

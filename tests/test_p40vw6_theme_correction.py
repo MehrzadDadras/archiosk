@@ -690,7 +690,10 @@ class Vw5ShellBoundaryUnaffectedTests(_BaseTestCase):
         body = client.get("/gateway").get_data(as_text=True)
         self.assertNotIn("appearance-matrix", body)
         self.assertNotIn("workspace-appearance-menu", body)
-        self.assertIn('class="gateway-shell"', body)
+        # CLAUDE-CA1D-GATEWAY-VISUAL-CONTINUITY-01 added the shared
+        # deep-ocean background (landing-page) alongside gateway-shell -
+        # unrelated to the appearance-matrix work this test guards.
+        self.assertIn('class="gateway-shell landing-page"', body)
 
     def test_auth_shell_and_gateway_shell_templates_untouched_by_this_stage(self):
         auth_shell = _AUTH_SHELL_HTML_PATH.read_text(encoding="utf-8")
