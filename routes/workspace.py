@@ -54,6 +54,8 @@ from services.case_workspace import (
     CASE_OUTCOME_STATES,
     CASE_ORIGIN_AUTONOMOUS,
     CASE_STATUS_ARCHIVED,
+    CONTENT_CLASS_DETERMINISTIC_CALCULATION,
+    CONTENT_CLASS_HUMAN_AUTHORED,
     CONVERSATION_ANCHOR_SCOPE_CASE,
     CONVERSATION_ANCHOR_SCOPE_GUIDANCE,
     CONVERSATION_ANCHOR_SCOPE_PROJECT,
@@ -3390,7 +3392,7 @@ def _run_conversation_turn(
     case_id = case["id"] if case is not None else None
     human_message = store.add_message(
         workspace, case_id, role="human", text=text, anchor=anchor, actor=_reviewer(),
-        selected_source_id=selected_source_id,
+        selected_source_id=selected_source_id, content_class=CONTENT_CLASS_HUMAN_AUTHORED,
     )
 
     artifacts_dir = Path(current_app.config["REGISTRY_STORE_PATH"]) / "workspace_artifacts"
@@ -3427,6 +3429,7 @@ def _run_conversation_turn(
         organize_source_id=result.organize_source_id,
         operational_actions=result.operational_actions,
         river_actions=result.river_actions,
+        content_class=result.content_class,
     )
 
     if result.focused_finding_id is not None:
@@ -4466,7 +4469,10 @@ def apply_findings(project_id, case_id):
 def cancel_rfi_intent(project_id, case_id):
     _, store, workspace = _load_workspace_or_404(project_id)
     _require_visible_case(store, workspace, case_id)
-    store.add_message(workspace, case_id, role="system", text="RFI draft request cancelled.", action_taken="rfi_cancelled")
+    store.add_message(
+        workspace, case_id, role="system", text="RFI draft request cancelled.",
+        action_taken="rfi_cancelled", content_class=CONTENT_CLASS_DETERMINISTIC_CALCULATION,
+    )
     return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
 
 
@@ -4486,7 +4492,7 @@ def preview_rfi_draft(project_id, case_id):
         workspace, case_id, role="system",
         text="Here is the reference bundle BEEHIVE would inherit for this RFI draft. "
              "Review it below, then create the draft if it looks right.",
-        action_taken="rfi_preview_shown",
+        action_taken="rfi_preview_shown", content_class=CONTENT_CLASS_DETERMINISTIC_CALCULATION,
     )
     return redirect(
         url_for("workspace.show_workspace", project_id=project_id, case=case_id, preview_finding_id=finding_id)
@@ -4524,7 +4530,7 @@ def create_rfi_draft(project_id, case_id):
     store.add_message(
         workspace, case_id, role="system",
         text="RFI draft created with inherited references. Edit the question and issue when ready.",
-        action_taken=f"rfi_draft_created:{draft['id']}",
+        action_taken=f"rfi_draft_created:{draft['id']}", content_class=CONTENT_CLASS_DETERMINISTIC_CALCULATION,
     )
 
     _log().append(

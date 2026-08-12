@@ -34,6 +34,9 @@ from typing import Optional
 from services.case_workspace import (
     ANALYSIS_TRIGGER_USER_INITIATED,
     AUTONOMOUS_BRANCH_CONFIDENCE_THRESHOLD,
+    CONTENT_CLASS_AI_PROPOSED,
+    CONTENT_CLASS_DETERMINISTIC_CALCULATION,
+    CONTENT_CLASS_DIRECT_EVIDENCE_REFERENCE,
     INVESTIGATION_STEP_KIND_REQUIREMENT_INVESTIGATION,
     OBJECT_KIND_REQUIREMENT,
     PERSPECTIVE_ORIGIN_MACHINE,
@@ -113,6 +116,18 @@ class InterpretationResult:
     # Only ever set by _handle_project_question; every other reply
     # leaves this empty.
     river_actions: list[dict] = field(default_factory=list)
+    # CLAUDE-CA1D-COMPOSER-SPINE-01 (Stage 1): provenance for the reply
+    # this result produces, using the SAME closed KNOWN_CONTENT_CLASSES
+    # vocabulary WorkProductSection already uses (case_workspace.py).
+    # Defaults to CONTENT_CLASS_DETERMINISTIC_CALCULATION because most
+    # handlers are deterministic; only handlers that genuinely call a
+    # real LLM (_handle_investigate_requirement, _handle_project_question)
+    # or that quote stored evidence verbatim (_handle_contextual_reference's
+    # resolved-anchor branches) override this at their own construction
+    # site. Not inferred post-hoc from action_taken - that string is
+    # provably ambiguous (e.g. "analysis:{id}" is produced by both a
+    # deterministic and an LLM-backed handler).
+    content_class: str = CONTENT_CLASS_DETERMINISTIC_CALCULATION
 
 
 _FINDING_NUMBER_PATTERN = re.compile(r"finding\s*#?\s*(\d+)", re.IGNORECASE)
@@ -1041,6 +1056,7 @@ def _handle_contextual_reference(
                 f"{_closing('it')}"
             ),
             next_steps=[{"label": "Open Requirements", "view": "requirements"}],
+            content_class=CONTENT_CLASS_DIRECT_EVIDENCE_REFERENCE,
         )
 
     if anchor_type == "finding" and anchor_object is not None:
@@ -1050,6 +1066,7 @@ def _handle_contextual_reference(
                 f"You're looking at a Finding: \"{anchor_object['statement'][:200]}\"."
                 f"{_closing('what it is grounded in')}"
             ),
+            content_class=CONTENT_CLASS_DIRECT_EVIDENCE_REFERENCE,
         )
 
     if anchor_type == "source" and anchor_object is not None:
@@ -1060,6 +1077,7 @@ def _handle_contextual_reference(
                 f"{_closing('its contents')}"
             ),
             next_steps=[{"label": "Open Files", "view": "files"}],
+            content_class=CONTENT_CLASS_DIRECT_EVIDENCE_REFERENCE,
         )
 
     if selected_source is not None:
@@ -1071,6 +1089,7 @@ def _handle_contextual_reference(
                 f"{_closing('it')}"
             ),
             next_steps=[{"label": "Open Files", "view": "files"}],
+            content_class=CONTENT_CLASS_DIRECT_EVIDENCE_REFERENCE,
         )
 
     return InterpretationResult(
@@ -1540,6 +1559,7 @@ def _handle_investigate_requirement(
     return InterpretationResult(
         action_taken=f"analysis:{analysis['id']}",
         reply_text=" ".join(reply_parts),
+        content_class=CONTENT_CLASS_AI_PROPOSED,
     )
 
 
@@ -1843,6 +1863,7 @@ def _handle_project_question(
         grounded_in=result.grounded_in,
         operational_actions=operational_actions,
         river_actions=result.river_actions,
+        content_class=CONTENT_CLASS_AI_PROPOSED,
     )
 
 

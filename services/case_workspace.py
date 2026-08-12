@@ -1596,6 +1596,29 @@ class ConversationMessage:
     # saved ConversationMessage JSON (pre-CA1D-RIVER-PO-01) deserializes
     # unchanged.
     river_actions: list[dict] = field(default_factory=list)
+    # CLAUDE-CA1D-COMPOSER-SPINE-01 (Stage 1): provenance for a
+    # conversational turn, reusing the SAME KNOWN_CONTENT_CLASSES closed
+    # vocabulary WorkProductSection already uses (see add_message's own
+    # validation, mirroring _add_work_product_section's) - never a new,
+    # Conversation-specific vocabulary. None for every message persisted
+    # before this stage existed (old saved ConversationMessage JSON
+    # deserializes unchanged); every message persisted from this stage
+    # forward gets a real value from add_message's own required-ish
+    # stamping discipline (see routes/workspace.py's _run_conversation_
+    # turn and each conversation_interpreter.py handler for which value
+    # applies to which reply).
+    content_class: Optional[str] = None
+    # CLAUDE-CA1D-COMPOSER-SPINE-01 (Stage 1, greenfield): disambiguation
+    # candidates a conversational turn's own reply offered
+    # ({"anchor_type": str, "anchor_id": str, "description": str}, the
+    # same shape Anchor's own fields already use - never a new object-
+    # identity model), so a later turn's "no, I meant the other one" can
+    # resolve against what was actually offered rather than re-deriving
+    # candidates from raw history text. Only ever set on a system reply
+    # that genuinely presented more than one plausible referent; every
+    # other message leaves this empty. Optional/defaulted so old saved
+    # ConversationMessage JSON (pre-Stage-1) deserializes unchanged.
+    candidate_referents: list[dict] = field(default_factory=list)
 
 
 @dataclass
@@ -6889,7 +6912,8 @@ class CaseWorkspaceStore:
         actor: Optional[str] = None, grounded_in: Optional[list[str]] = None,
         next_steps: Optional[list[dict]] = None, selected_source_id: Optional[str] = None,
         organize_source_id: Optional[str] = None, operational_actions: Optional[list[dict]] = None,
-        river_actions: Optional[list[dict]] = None,
+        river_actions: Optional[list[dict]] = None, content_class: Optional[str] = None,
+        candidate_referents: Optional[list[dict]] = None,
     ) -> dict:
         """
         case_id=None posts into ProjectWorkspace.project_conversation
@@ -6897,7 +6921,17 @@ class CaseWorkspaceStore:
         home for a message sent with no Investigation open (see
         ConversationMessage's own docstring for why this is a second
         list, not a migration of the existing one).
+
+        CLAUDE-CA1D-COMPOSER-SPINE-01 (Stage 1): content_class, when
+        given, must be one of KNOWN_CONTENT_CLASSES - same closed-
+        vocabulary validation _add_work_product_section already applies
+        to its own content_class parameter, reused here rather than a
+        second, Conversation-specific check.
         """
+        if content_class is not None and content_class not in KNOWN_CONTENT_CLASSES:
+            raise CaseWorkspaceError(
+                f"'{content_class}' is not a recognized content class. Use one of: {', '.join(KNOWN_CONTENT_CLASSES)}."
+            )
         if case_id is None:
             message = ConversationMessage(
                 id=_new_id(), role=role, text=text, created_at=_now(),
@@ -6905,6 +6939,7 @@ class CaseWorkspaceStore:
                 grounded_in=grounded_in or [], next_steps=next_steps or [],
                 selected_source_id=selected_source_id, organize_source_id=organize_source_id,
                 operational_actions=operational_actions or [], river_actions=river_actions or [],
+                content_class=content_class, candidate_referents=candidate_referents or [],
             )
             workspace.project_conversation.append(asdict(message))
             self.save(workspace)
@@ -6927,6 +6962,7 @@ class CaseWorkspaceStore:
             next_steps=next_steps or [],
             selected_source_id=selected_source_id, organize_source_id=organize_source_id,
             operational_actions=operational_actions or [], river_actions=river_actions or [],
+            content_class=content_class, candidate_referents=candidate_referents or [],
         )
         case["conversation"].append(asdict(message))
         self.save(workspace)
@@ -8535,7 +8571,13 @@ class CaseWorkspaceStore:
         """
         case = self.create_case(workspace, title=title, objective=objective, created_by=AUTONOMOUS_INVESTIGATOR_ACTOR)
         action_taken = f"autonomous_branch:{spawned_from_step_id}" if spawned_from_step_id else "autonomous_branch"
-        self.add_message(workspace, case["id"], role="system", text=objective, anchor=anchor, action_taken=action_taken)
+        # `objective` is `result.suggested_branch` from a real LLM
+        # investigation call (services/requirement_investigation.py) -
+        # this is model output, not a deterministic template string.
+        self.add_message(
+            workspace, case["id"], role="system", text=objective, anchor=anchor,
+            action_taken=action_taken, content_class=CONTENT_CLASS_AI_PROPOSED,
+        )
 
         if governance_log is not None:
             governance_log.append(
