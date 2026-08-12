@@ -53,6 +53,7 @@ from services.capability_registry import (
     find_capability_by_phrase,
 )
 from services.drawing_analysis import analyze_drawing, make_comparison_artifact
+from services.conversational_turn import gather_project_evidence
 from services.project_qa import answer_project_question
 from services.requirement_investigation import investigate_requirement
 from services.security_policy import DECISION_ALLOW, DECISION_ALLOW_APPROVED_ROUTE
@@ -1674,41 +1675,12 @@ def _handle_project_question(
             reply_text=denial_reason,
         )
 
-    from services.requirements_registry import RequirementsRegistry
-
-    document = RequirementsRegistry(store.store_path).get(workspace.project_id)
-    candidate_requirements = (
-        [{"text": r.text, "category": r.category} for r in document.requirements] if document else []
-    )
-    milestones = list(document.milestones) if document else []
-    document_filename = document.filename if document else "(unknown source document)"
-
-    # CLAUDE-CA1D-RECEPTION-FIX-01 (folder establishment): real per-
-    # paragraph text for every Source registered via
-    # register_plain_text_structure (currently: every non-founding file
-    # from a folder establishment) - grouped by source so each document's
-    # excerpts stay attributed to it, never merged into one undifferentiated
-    # blob. Ordinary Sources with no such evidence (the common case today)
-    # contribute nothing here, same as before this change.
-    additional_document_evidence: list[dict] = []
-    if workspace.evidence_items:
-        sources_by_id = {s["id"]: s for s in workspace.sources}
-        excerpts_by_source: dict[str, list[str]] = {}
-        for item in workspace.evidence_items:
-            source_id = item.get("source_id")
-            content = item.get("content")
-            if not source_id or not content:
-                continue
-            excerpts_by_source.setdefault(source_id, []).append(content)
-        for source_id, excerpts in excerpts_by_source.items():
-            source = sources_by_id.get(source_id)
-            if source is None:
-                continue
-            additional_document_evidence.append({
-                "filename": source.get("name"),
-                "relative_path": source.get("origin_reference"),
-                "excerpts": excerpts,
-            })
+    # CLAUDE-CA1D-COMPOSER-SPINE-01 (Stage 2): this evidence-assembly
+    # block used to live here directly - now shared with the new
+    # conversational_turn.py orchestrator's own build_context_envelope
+    # via gather_project_evidence, so there is one implementation of
+    # "what counts as this project's evidence" instead of two.
+    evidence = gather_project_evidence(workspace, store)
 
     # CLAUDE-POSTCAMEL-CA1 (Section 5): the same conversation thread this
     # reply will itself be appended to, minus the just-persisted current
@@ -1721,19 +1693,19 @@ def _handle_project_question(
 
     result = answer_project_question(
         question=text,
-        document_filename=document_filename,
-        candidate_requirements=candidate_requirements,
-        governed_requirements=list(workspace.requirements),
-        milestones=milestones,
+        document_filename=evidence.document_filename,
+        candidate_requirements=evidence.candidate_requirements,
+        governed_requirements=evidence.governed_requirements,
+        milestones=evidence.milestones,
         # CLAUDE-P40-B (3.6): the Project's own human-assigned display
         # name (services.case_workspace.set_project_details) was never
         # passed here before - the model had no way to distinguish "the
         # Project's name" from "the raw uploaded filename" because
         # nothing else was ever offered to it.
-        display_title=workspace.display_title,
+        display_title=evidence.display_title,
         recent_history=recent_history,
         ui_context=ui_context,
-        additional_document_evidence=additional_document_evidence,
+        additional_document_evidence=evidence.additional_document_evidence,
     )
 
     if not result.ran:
