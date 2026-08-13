@@ -1265,6 +1265,12 @@ main {
     display: none;
 }
 
+/* CLAUDE-VOICE-CONSISTENCY-01: pre-authentication voice control - a
+   small icon + inline status, no separate composer/text field on this
+   page (see login.js's own comment on why). .voice-input-button/
+   .voice-input-status reused unchanged from the in-project composer. */
+.signin-voice-row { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.4rem; }
+
 .btn {
     font-family: var(--font-body);
     font-size: 0.85rem;
@@ -1668,6 +1674,21 @@ main {
     margin: 0 0 0.3rem;
 }
 .gateway-section h2 { font-family: var(--font-display); font-size: 1.15rem; margin: 0 0 1.2rem; color: var(--text-primary); }
+/* CLAUDE-VOICE-CONSISTENCY-01: the Gateway orientation composer - a
+   single compact row (input + mic + Ask), deliberately not the full
+   resizable in-project .conversation-dock-panel machinery (there is no
+   project/case here to give it a thread) - see gateway.html's own
+   template comment. .voice-input-button/.voice-input-status reused
+   unchanged from the in-project composer (main.css, "CLAUDE-POSTCAMEL-
+   VOICE1-PRE" above) - one visual language, not a second one. */
+.gateway-orientation-form { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem; flex-wrap: wrap; }
+.gateway-orientation-form .text-input { flex: 1; min-width: 220px; max-width: none; }
+.gateway-orientation-reply {
+    margin: -0.6rem 0 1.2rem;
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    color: var(--text-secondary);
+}
 
 .gateway-field { display: grid; gap: 0.35rem; margin-bottom: 1rem; }
 .gateway-field label {

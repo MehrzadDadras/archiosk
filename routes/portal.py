@@ -7,6 +7,7 @@ import hashlib
 import io
 import json
 import os
+import re
 import shutil
 import time
 import uuid
@@ -421,6 +422,71 @@ def gateway():
         client_owner_projects=_environment_projects(registry, store, 'client_owner'),
         design_builder_projects=_environment_projects(registry, store, 'design_builder_proponent'),
     )
+
+
+_GATEWAY_NEW_PROJECT_PATTERN = re.compile(r"new project|create a project|start a project", re.IGNORECASE)
+
+
+def _classify_gateway_orientation(message: str, projects: list[dict], can_create_project: bool) -> dict:
+    """CLAUDE-VOICE-CONSISTENCY-01: a small, deterministic, rule-based
+    orientation responder for the Project Gateway's own composer -
+    Level 2/3 of the future Voice authority ladder only (governance/
+    specified-unbuilt/voice-conversational-presence.md, Section 6:
+    Suggest / Reversible local action - "navigate, open, scroll, select
+    ... no durable mutation"). Deliberately NOT services/
+    conversation_interpreter.py's interpret_message: that function
+    requires an already-open project's own CaseWorkspaceStore and
+    speaks with real project evidence/authority. Nothing here ever
+    opens one or claims project truth - constitutional-invariants.md
+    #8 ("project boundaries are strict") holds by construction, not by
+    convention. `projects` is the same access-scoped list `gateway()`
+    itself renders (`_environment_projects`) - matching against it,
+    never a second listing/authorization mechanism.
+
+    Returns {"kind": "navigate"|"info", "url": ..., "text": ...}.
+    """
+    lowered = message.strip().lower()
+    if not lowered:
+        return {"kind": "info", "text": "Say a project name to open it, or “new project” to start one."}
+
+    for project in projects:
+        name = project["display_name"].lower()
+        if name and (name in lowered or lowered in name):
+            return {
+                "kind": "navigate",
+                "url": url_for('workspace.show_workspace', project_id=project["project_id"]),
+                "text": f"Opening {project['display_name']}…",
+            }
+
+    if can_create_project and _GATEWAY_NEW_PROJECT_PATTERN.search(lowered):
+        return {"kind": "navigate", "url": url_for('portal.upload'), "text": "Opening New Project…"}
+
+    return {
+        "kind": "info",
+        "text": "I can help you open an existing project or start a new one here. Open a project to ask about its documents.",
+    }
+
+
+@portal_bp.route('/gateway/orientation', methods=['POST'])
+@login_required
+def gateway_orientation():
+    """CLAUDE-VOICE-CONSISTENCY-01: backend for the Project Gateway's
+    voice/text composer - see _classify_gateway_orientation's own
+    comment for the authority-ladder/scope reasoning. Authenticated
+    (matches every other Gateway route) but deliberately requires no
+    project_id - this is the one Gateway-level, project-less
+    conversational surface, and it stays that way by never touching
+    CaseWorkspaceStore's conversational path.
+    """
+    message = (request.form.get('message') or '')[:500]
+    registry = get_registry(current_app)
+    store = CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"])
+    projects = (
+        _environment_projects(registry, store, 'client_owner')
+        + _environment_projects(registry, store, 'design_builder_proponent')
+    )
+    reply = _classify_gateway_orientation(message, projects, can_create_project=is_admin())
+    return jsonify(reply)
 
 
 @portal_bp.route('/explore')

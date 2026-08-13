@@ -97,6 +97,15 @@
         {% endif %}
         {% endwith %}
 
+        {# CLAUDE-VOICE-CONSISTENCY-01: shared voice-input engine
+           (window.ArchioskVoiceInput) - loaded BEFORE {% block content
+           %} so gateway.html's own inline script (which lives inside
+           that block and calls it synchronously at parse time) always
+           finds it already defined; loading it after content, like
+           ocean_field.js below, would leave the mic silently unwired
+           on every browser, not just unsupported ones. Harmless no-op
+           on any other page in this family that doesn't call it. #}
+        <script src="{{ url_for('static', filename='js/voice_input.js') }}?v={{ static_version }}"></script>
         {% block content %}{% endblock %}
     </div>
     <script nonce="{{ csp_nonce }}">

@@ -3,7 +3,28 @@
 
 {% block gateway_title %}Project Gateway &mdash; Archiosk{% endblock %}
 {% block gateway_subtitle %}<p class="gateway-subtitle">Architectural Project Investigation Workspace</p>{% endblock %}
-{% block gateway_section_heading %}<h2>Begin a session</h2>{% endblock %}
+{% block gateway_section_heading %}<h2>Begin a session</h2>
+{# CLAUDE-VOICE-CONSISTENCY-01: a small, project-less orientation
+   composer - reuses the SAME voice engine (static/js/voice_input.js's
+   window.ArchioskVoiceInput) and .voice-input-button/.voice-input-
+   status visual language the in-project Chat composer already
+   established, so the mic reads as the same ARCHIOSK control, not a
+   second one. Backed by routes/portal.py's gateway_orientation() - a
+   small, rule-based responder (never interpret_message, never opens a
+   CaseWorkspaceStore) - see that function's own comment. Voice only
+   ever fills #gateway-orientation-input, exactly like typing would;
+   the reviewer still clicks Ask themselves (same review-before-send
+   principle as the in-project composer) - nothing here auto-submits
+   from speech alone. #}
+<form class="gateway-orientation-form" id="gateway-orientation-form" data-ui-ref="gateway.orientation.form">
+    <input type="text" class="text-input" id="gateway-orientation-input" name="message" placeholder="Open a project, or ask what you can do here" aria-label="Ask Archiosk">
+    <button type="button" id="gateway-orientation-voice" class="voice-input-button" data-ui-ref="gateway.orientation.voice"
+            aria-label="Press and speak - audio is processed by your browser only and is never saved" hidden>🎙️</button>
+    <button type="submit" class="btn btn-ghost" data-ui-ref="gateway.orientation.submit">Ask</button>
+    <span class="voice-input-status" id="gateway-orientation-voice-status" data-ui-ref="gateway.orientation.voice.status" aria-live="polite"></span>
+</form>
+<p class="gateway-orientation-reply" id="gateway-orientation-reply" data-ui-ref="gateway.orientation.reply" aria-live="polite" hidden></p>
+{% endblock %}
 {% block gateway_body %}
 {# CLAUDE-CA1D-PROJECT-GATEWAY-LABELS-01: Client/Owner vs Design-
    Builder/Proponent is a project CONTEXT (which side of the table this
@@ -160,6 +181,65 @@
             });
         });
     });
+})();
+</script>
+<script nonce="{{ csp_nonce }}">
+// CLAUDE-VOICE-CONSISTENCY-01: the Gateway orientation composer - see
+// this block's own template-side comment for the full reasoning.
+(function () {
+    var form = document.getElementById('gateway-orientation-form');
+    var input = document.getElementById('gateway-orientation-input');
+    var replyEl = document.getElementById('gateway-orientation-reply');
+    if (!form || !input) return;
+
+    function csrfToken() {
+        var meta = document.querySelector('meta[name="csrf-token"]');
+        return meta ? meta.content : '';
+    }
+
+    function showReply(text) {
+        if (!replyEl) return;
+        replyEl.textContent = text || '';
+        replyEl.hidden = !text;
+    }
+
+    function ask(message) {
+        var formData = new FormData();
+        formData.append('message', message);
+        fetch('{{ url_for("portal.gateway_orientation") }}', {
+            method: 'POST',
+            body: formData,
+            headers: { 'X-CSRFToken': csrfToken() },
+            credentials: 'same-origin',
+        }).then(function (resp) {
+            return resp.json();
+        }).then(function (data) {
+            showReply(data.text || '');
+            if (data.kind === 'navigate' && data.url) {
+                window.setTimeout(function () { window.location.href = data.url; }, 350);
+            }
+        }).catch(function () {
+            showReply('Something went wrong - try again.');
+        });
+    }
+
+    form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        var message = input.value.trim();
+        if (!message) return;
+        ask(message);
+    });
+
+    // Voice only ever fills the input (same as typing) - never
+    // auto-submits. The reviewer still clicks Ask themselves.
+    if (window.ArchioskVoiceInput) {
+        window.ArchioskVoiceInput({
+            buttonId: 'gateway-orientation-voice',
+            statusId: 'gateway-orientation-voice-status',
+            onTranscript: function (transcript) { input.value = transcript; },
+            onEnd: function () { input.focus(); },
+        });
+    }
 })();
 </script>
 {% endblock %}

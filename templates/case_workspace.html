@@ -3424,6 +3424,10 @@
 <script src="{{ url_for('static', filename='js/drawing_image_viewer.js') }}?v={{ static_version }}"></script>
 <script src="{{ url_for('static', filename='js/document_structure_registration.js') }}?v={{ static_version }}"></script>
 <script src="{{ url_for('static', filename='js/investigation_snapshot.js') }}?v={{ static_version }}"></script>
+{# CLAUDE-VOICE-CONSISTENCY-01: shared voice-input engine (window.ArchioskVoiceInput),
+   loaded before case_workspace.js so its DOMContentLoaded handler can call
+   it - see voice_input.js's own header comment. #}
+<script src="{{ url_for('static', filename='js/voice_input.js') }}?v={{ static_version }}"></script>
 <script src="{{ url_for('static', filename='js/case_workspace.js') }}?v={{ static_version }}"></script>
 <script src="{{ url_for('static', filename='js/files_folder_menus.js') }}?v={{ static_version }}"></script>
 {% endblock %}
