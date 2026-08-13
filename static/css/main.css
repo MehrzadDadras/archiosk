@@ -1206,6 +1206,13 @@ main {
     max-width: 320px;
     transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
+/* CLAUDE-GATEWAY-UI-GRAMMAR-01: a real, class-based width variant -
+   was a one-off inline style="max-width:480px" on upload.html's own
+   project-name field (its placeholder text is meaningfully longer than
+   the actor/role fields beside it, a genuine reason for a wider field,
+   not arbitrary page-by-page convenience) - reusable now instead of a
+   value only that one page could see or reuse. */
+.text-input-wide { max-width: 480px; }
 .text-input::placeholder { color: var(--text-disabled); }
 .text-input:focus {
     border-color: var(--machine-blue);
@@ -1802,26 +1809,42 @@ main {
     position: relative;
     z-index: 2;
 }
+/* CLAUDE-GATEWAY-UI-GRAMMAR-01: raw px values below converted to the
+   app's own rem scale (same visual sizes - 16px=1rem/32px=2rem/12px=
+   0.75rem/etc. at the 16px root font-size every other rule in this file
+   assumes) - a Product Owner consistency report named exactly this kind
+   of stray px value (lifted wholesale from a different reference design
+   per this block's own header comment above) as part of the drift.
+   Values themselves are UNCHANGED, only the unit. */
 .gateway-card-compact .gateway-brand {
-    gap: 9.6px;
-    padding: 16px 32px 12px;
+    gap: 0.6rem;
+    padding: 1rem 2rem 0.75rem;
     align-items: flex-end;
 }
 .gateway-card-compact .gateway-brand h1 { line-height: 1; }
-.gateway-card-compact .gateway-section { padding: 12.8px 32px 16px; }
-.gateway-card-compact .gateway-section-label { margin-bottom: 19.2px; }
-.gateway-card-compact .gateway-field { gap: 3px; margin-bottom: 14px; }
+.gateway-card-compact .gateway-section { padding: 0.8rem 2rem 1rem; }
+.gateway-card-compact .gateway-section-label { margin-bottom: 1.2rem; }
+.gateway-card-compact .gateway-field { gap: 0.1875rem; margin-bottom: 0.875rem; }
 .gateway-card-compact .text-input { max-width: none; }
 .gateway-card-compact form .form-error { margin: 0; }
+/* CLAUDE-GATEWAY-UI-GRAMMAR-01: was its own padding/border-radius/font-
+   weight (10px/16px, 0 radius, 700 weight) - a literal square-cornered,
+   differently-padded, bolder button matching neither .btn-primary's
+   shared 0.85rem/1.5rem padding and 3px radius nor any other primary
+   button anywhere else in the app (this block's own header comment
+   already named the whole compact-card geometry as lifted from a
+   different reference design; this was the one piece of that geometry
+   that visibly read as a different button system, not just a smaller
+   card). Only the block/full-width/margin behavior - genuinely specific
+   to this compact card, not expressible via .btn alone - is kept;
+   padding/border-radius/font-weight now inherit .btn/.btn-primary's
+   shared values unchanged. */
 .gateway-card-compact .gateway-signin-button {
     display: block;
     width: 100%;
     box-sizing: border-box;
-    padding: 10px 16px;
-    border-radius: 0;
     text-align: center;
-    font-weight: 700;
-    margin-top: 14px;
+    margin-top: 0.875rem;
 }
 
 .gateway-footer {
@@ -4968,8 +4991,25 @@ main:hover,
    must never look like the primary action. voice-input-listening is
    the ONLY visual state change while capturing - no separate "recording
    timer" or waveform UI, matching this stage's own "no audio permanence,
-   no new conversation system" minimalism. */
+   no new conversation system" minimalism.
+   CLAUDE-GATEWAY-UI-GRAMMAR-01: font-family/font-size/border/border-
+   radius/font-weight/cursor added directly here (previously only ever
+   supplied by the parent `.conversation-input-form button` rule above,
+   since this control only ever appeared inside that composer) - the
+   two newer instances (Sign-In, Project Gateway) render this same class
+   without that parent, and were silently falling back to unstyled
+   native button chrome (no border/radius/font at all) instead of
+   matching the original. Same values as `.conversation-input-form
+   button`, so the in-project instance's appearance is unchanged (this
+   rule is strictly more specific for the properties it repeats, all
+   pixel-identical to that rule's own values). */
 .voice-input-button {
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    border-radius: 4px;
+    border: 1px solid var(--text-primary);
+    font-weight: 600;
+    cursor: pointer;
     background: transparent !important;
     color: var(--text-primary) !important;
     padding: 0.7rem 0.9rem !important;
