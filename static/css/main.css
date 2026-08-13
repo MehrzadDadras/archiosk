@@ -1636,20 +1636,24 @@ main {
 .gateway-back-action { padding: 1.4rem 2rem 0; }
 .gateway-back-action .btn { padding: 0.4rem 0.9rem; font-size: 0.85rem; }
 .gateway-brand { display: flex; align-items: center; gap: 1.2rem; padding: 2rem 2rem 1.5rem; }
-/* The application's identity mark, flat bee-yellow. */
+/* CLAUDE-BOTTLENECK-ADOPTION-01: was a flat bee-yellow filled badge with
+   a literal "A" glyph (font-family/font-size/font-weight below existed
+   only to render that letter) - now holds the real archiosk_mark SVG
+   (CLAUDE-P40-BRAND1's shared macro), so the badge fill/glyph-typography
+   properties are gone; footprint (56x56, same flex/width/height) and
+   position are untouched, preserving the established sign-in/gateway
+   composition. Color via --brand-gold, the same token the authenticated
+   header's own mark already uses - .gateway-card-compact and
+   .gateway-shell each redefine it locally (see their own rules) so this
+   repaints correctly against both the sign-in card and the Gateway
+   card's dark backdrop without a separate override here. */
 .gateway-logo {
     display: grid;
     place-items: center;
     flex: 0 0 56px;
     width: 56px;
     height: 56px;
-    border-radius: 8px;
-    background: var(--bee-yellow);
-    box-shadow: inset 0 0 0 1px rgba(42, 36, 30, 0.08);
-    color: var(--text-primary);
-    font-family: var(--font-display);
-    font-size: 1.6rem;
-    font-weight: 700;
+    color: var(--brand-gold);
 }
 .gateway-brand h1 { font-family: var(--font-display); font-size: 1.8rem; font-weight: 300; margin: 0; color: var(--text-primary); }
 .gateway-subtitle { margin: 0.3rem 0 0; color: var(--text-secondary); font-size: var(--text-sm); }
@@ -1752,6 +1756,14 @@ main {
     --border-strong: rgba(176, 255, 244, .5);
     --machine-blue: rgba(200, 255, 248, .8);
     --failure-red: rgba(255, 170, 150, .95);
+    /* CLAUDE-BOTTLENECK-ADOPTION-01: was never redefined here before
+       (nothing in this card used --brand-gold pre-adoption) - without
+       this, .gateway-logo's mark would inherit the unscoped Light-theme
+       value (tokens.css's own dark-bronze --brand-gold), nearly
+       invisible against this card's own dark translucent background.
+       Same alias .gateway-shell already uses for the identical reason
+       (see its own rule below). */
+    --brand-gold: var(--bee-yellow);
     background-color: rgba(8, 28, 36, .72);
     -webkit-backdrop-filter: blur(14px);
     backdrop-filter: blur(14px);

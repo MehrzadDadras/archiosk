@@ -63,11 +63,13 @@ class RepositoryGroundingTests(unittest.TestCase):
 
     def test_svg_path_data_appears_exactly_once_in_macros(self):
         source = _MACROS_HTML_PATH.read_text(encoding="utf-8")
-        needle = "M17 9 L29 27 L12 57"
+        # CLAUDE-BOTTLENECK-ADOPTION-01: gap widened (see the macro's own
+        # comment) - path data changed, needle updated to match.
+        needle = "M12 8 L21 30 L7 58"
         self.assertEqual(source.count(needle), 1)
 
     def test_no_second_copy_of_the_mark_path_anywhere_else_in_templates(self):
-        needle = "M17 9 L29 27 L12 57"
+        needle = "M12 8 L21 30 L7 58"
         for path in (_REPO_ROOT / "templates").rglob("*.html"):
             if path == _MACROS_HTML_PATH:
                 continue

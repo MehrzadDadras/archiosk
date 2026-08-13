@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+    <!-- CLAUDE-BOTTLENECK-ADOPTION-01: same path data as templates/_macros.html's
+         archiosk_mark (the ONE shared source for the geometry) - a standalone
+         favicon can't inherit page CSS currentColor, so colors are baked in
+         here via prefers-color-scheme instead, the closest equivalent for an
+         asset that must read against whatever the browser's own light/dark
+         tab chrome happens to be, not any one app surface. -->
+    <style>
+        .stroke { fill: none; stroke: #191B1C; stroke-width: 5; stroke-linecap: round; stroke-linejoin: round; }
+        .dot { fill: #191B1C; }
+        @media (prefers-color-scheme: dark) {
+            .stroke { stroke: #E8E4DC; }
+            .dot { fill: #E8E4DC; }
+        }
+    </style>
+    <path class="stroke" d="M17 9 L29 27 L12 57"></path>
+    <path class="stroke" d="M47 9 L35 27 L52 57"></path>
+    <circle class="dot" cx="32" cy="35.5" r="2.5"></circle>
+</svg>

@@ -1,3 +1,4 @@
+{% import "_macros.html" as macros %}
 {# CLAUDE-P40-D1: standalone authentication shell for /login,
    /forgot-password, /reset-password. Deliberately does NOT extend
    base.html/gateway_base.html at all - those pull in the app shell
@@ -24,6 +25,7 @@
        rather than base.html's JS auto-injection script, which this
        standalone shell deliberately does not include at all. #}
     <meta name="csrf-token" content="{{ csrf_token() }}">
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}?v={{ static_version }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/tokens.css') }}?v={{ static_version }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v={{ static_version }}">
     {# CLAUDE-CA1D-SIGNIN-VISUAL-CONTINUITY-01: reuses the exact same
@@ -67,7 +69,16 @@
         <canvas class="landing-field-canvas" id="landing-field-canvas" aria-hidden="true"></canvas>
         <div class="gateway-card{% block gateway_card_modifier %}{% endblock %}">
             <div class="gateway-brand">
-                <div class="gateway-logo">A</div>
+                {# CLAUDE-BOTTLENECK-ADOPTION-01: was a flat bee-yellow
+                   square with a literal "A" glyph - replaced with the
+                   same approved archiosk_mark used in the authenticated
+                   header (CLAUDE-P40-BRAND1), the ONE shared source, not
+                   a second hand-drawn copy. .gateway-logo keeps its
+                   existing 56x56 footprint/position (established
+                   composition unchanged) but no longer paints a filled
+                   badge behind it - see main.css's own comment on this
+                   rule for why. #}
+                <div class="gateway-logo">{{ macros.archiosk_mark(size=36) }}</div>
                 <div>
                     <h1>Archiosk</h1>
                     {% block gateway_subtitle %}{% endblock %}

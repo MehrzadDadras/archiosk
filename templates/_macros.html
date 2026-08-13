@@ -9,22 +9,35 @@
    ============================================================ #}
 
 {# -- archiosk_mark ---------------------------------------------------------
-   CLAUDE-P40-BRAND1 (correction): the ONE shared source for the
-   ARCHIOSK mark - a deterministic geometric glyph built from exactly
-   five visible elements, not a hand-drawn icon and not curves of any
-   kind (the earlier two-parabola-legs version this replaced is gone
-   entirely - see the checkpoint's own correction entry for why).
+   CLAUDE-P40-BRAND1 (correction), CLAUDE-BOTTLENECK-ADOPTION-01 (gap
+   widened): the ONE shared source for the ARCHIOSK mark - a
+   deterministic geometric glyph built from exactly five visible
+   elements, not a hand-drawn icon and not curves of any kind (the
+   earlier two-parabola-legs version this replaced is gone entirely -
+   see the checkpoint's own correction entry for why).
    Two STRAIGHT-LINE open angles, each an asymmetrical "standing,
    leaning" shape: a short arm rising up-and-outward, and a longer leg
-   descending down-and-outward from the same vertex (M17 9 L29 27 L12
-   57 - left; its exact horizontal mirror at M47 9 L35 27 L52 57 -
-   right). The two inner vertices (x=29 and x=35) deliberately do NOT
-   touch - that gap is the bottleneck. One small filled circle
-   (currentColor, not stroked) sits on the centreline immediately below
-   the gap - conceptually the one grain that has passed through.
-   Together this reads as a minimal pair of opposing angles / abstract
-   "A" without ever drawing a crossbar. No prior mark/medallion/icon of
-   any kind existed anywhere in this repository before this stage (no
+   descending down-and-outward from the same vertex (points 12,8 / 21,30
+   / 7,58 - left; its exact horizontal mirror at 52,8 / 43,30 / 57,58 -
+   right; see the actual `<path>` elements below for the real `d` data).
+   The two inner vertices (x=21 and x=43) deliberately do NOT touch -
+   that gap is the bottleneck. CLAUDE-BOTTLENECK-ADOPTION-01: the
+   vertex gap was widened from 6 units (out of the 64-unit viewBox,
+   under 10%) to 22 units (34%) - live rendering at every size from
+   16px to 128px, on both dark and light backgrounds, showed the
+   narrower gap visually merging into a single crossing point at
+   typical render sizes, reading as a plain letter X rather than two
+   separate angles with a visible passage between them (the Product
+   Owner's own explicit "must not collapse into an ambiguous X"
+   acceptance bar). The wider gap keeps every other approved
+   characteristic unchanged (straight lines only, mirrored, shorter arm
+   than leg, dot below the gap) while actually reading as two
+   constricting forms with a visible bottleneck, not a crossing point.
+   One small filled circle (currentColor, not stroked, r=3 - was 2.5,
+   bumped slightly to stay legible in the now-larger gap) sits on the
+   centreline immediately below the gap - conceptually the one grain
+   that has passed through. No prior mark/medallion/icon of any kind
+   existed anywhere in this repository before CLAUDE-P40-BRAND1 (no
    `.svg` file, no inline `<svg>` beyond the annotation-toolbar glyphs,
    no favicon) - grounded by direct search, not assumed. The two
    angle-paths are colored via `stroke="currentColor"`, the dot via
@@ -32,15 +45,14 @@
    through ordinary CSS `color`, so this ONE definition already
    repaints correctly across every Appearance mode with zero color
    logic living in the SVG itself. Always `aria-hidden="true"` -
-   decorative in every context this stage uses it (the header brand
-   link already has its own real accessible name; see that caller's
-   own comment for why the icon must never become a second, competing
-   name/tab-stop). #}
+   decorative in every context this stage uses it (each caller supplies
+   its own real accessible name; see their own comments for why the
+   icon must never become a second, competing name/tab-stop). #}
 {% macro archiosk_mark(size=24, css_class='') %}
 <svg class="archiosk-mark{% if css_class %} {{ css_class }}{% endif %}" width="{{ size }}" height="{{ size }}" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
-    <path d="M17 9 L29 27 L12 57"></path>
-    <path d="M47 9 L35 27 L52 57"></path>
-    <circle cx="32" cy="35.5" r="2.5" fill="currentColor" stroke="none"></circle>
+    <path d="M12 8 L21 30 L7 58"></path>
+    <path d="M52 8 L43 30 L57 58"></path>
+    <circle cx="32" cy="38" r="3" fill="currentColor" stroke="none"></circle>
 </svg>
 {% endmacro %}
 

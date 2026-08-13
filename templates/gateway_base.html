@@ -15,6 +15,7 @@
    reset-password's own .gateway-card-compact modifier still relies on.
    ============================================================ #}
 {% extends "gateway_shell.html" %}
+{% import "_macros.html" as macros %}
 
 {% block title %}{% block gateway_title %}Archiosk{% endblock %}{% endblock %}
 
@@ -28,7 +29,9 @@
            populates it. See that template for the actual link/script. #}
         {% block gateway_back_action %}{% endblock %}
         <div class="gateway-brand">
-            <div class="gateway-logo">A</div>
+            {# CLAUDE-BOTTLENECK-ADOPTION-01: same swap as auth_shell.html
+               - see that template's own comment. #}
+            <div class="gateway-logo">{{ macros.archiosk_mark(size=36) }}</div>
             <div>
                 <h1>Archiosk</h1>
                 {% block gateway_subtitle %}{% endblock %}
