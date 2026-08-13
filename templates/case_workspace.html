@@ -172,6 +172,43 @@
         <p class="workspace-pane-label">Project Operating Environment</p>
         {% if operating_environment %}
         <p class="mono" style="margin:-0.4rem 0 0.8rem;font-size:0.85rem;">{{ operating_environment_label }}</p>
+        {% if is_admin %}
+        {# CLAUDE-VOICE27-MISCLASS-01: a deliberate, separate exception to
+           the "no update path" comment above this block - that comment is
+           still accurate for the ORDINARY case (an already-correct value
+           never needs an edit control); this is the rarer "the one
+           existing value itself was wrong from the start" correction,
+           collapsed by default (<details>) so it doesn't read as an
+           ordinary editable field. No data-ui-ref, matching this whole
+           Access & Operating Environment branch's own existing
+           convention (the classify form above and the owner/grant/revoke
+           forms below have never carried one either - not an oversight
+           introduced here). See routes/workspace.py's
+           correct_operating_environment and CaseWorkspaceStore's own
+           method of the same name for the full reasoning. #}
+        <details class="workspace-environment-correction">
+            <summary class="link-button">Correct this classification</summary>
+            <form method="post" action="{{ url_for('workspace.correct_operating_environment', project_id=project_id) }}">
+                <p style="color:var(--text-secondary);font-size:0.8rem;margin:0.4rem 0;">
+                    Use only to fix a genuine misclassification (e.g. picked at
+                    creation based on which side issued the source document,
+                    not which side this team is actually working from) &mdash;
+                    never to convert an already-correctly-classified project
+                    between sides.
+                </p>
+                <select name="operating_environment" required style="width:100%;margin-bottom:0.4rem;">
+                    <option value="" disabled selected>Correct to&hellip;</option>
+                    {% for value, label in operating_environments.items() %}
+                    {% if value != operating_environment %}
+                    <option value="{{ value }}">{{ label }}</option>
+                    {% endif %}
+                    {% endfor %}
+                </select>
+                <input type="text" name="reason" class="text-input" style="width:100%;margin-bottom:0.4rem;" placeholder="Reason for this correction (required)" required>
+                <button type="submit" class="link-button" onclick="return confirm('This changes the project\'s available tools/behaviour and is logged. Continue?');">Apply correction</button>
+            </form>
+        </details>
+        {% endif %}
         {% else %}
         <p style="color:var(--text-secondary);font-size:0.8rem;margin:-0.4rem 0 0.6rem;">
             Not established (legacy project). This is a one-time classification, not a

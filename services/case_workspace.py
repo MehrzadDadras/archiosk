@@ -5371,6 +5371,71 @@ class CaseWorkspaceStore:
             )
         return workspace
 
+    def correct_operating_environment(
+        self,
+        workspace: ProjectWorkspace,
+        operating_environment: str,
+        actor: str,
+        reason: str,
+        governance_log: Optional[GovernanceLog] = None,
+    ) -> ProjectWorkspace:
+        """
+        CLAUDE-VOICE27-MISCLASS-01: a deliberate, separate, admin-only
+        governed exception to set_operating_environment's own one-time
+        lock -- for the genuine case that field's own docstring didn't
+        anticipate: the value was already established, but wrong from
+        the start (e.g. picked based on which side ISSUED the source
+        document rather than which side this team is actually working
+        from -- an RFP is routinely received and worked from the
+        Design-Builder/Proponent side, not evidence of Client/Owner
+        role). set_project_owner (above) already has the identical
+        precedent for a different project-level field: "a wrong
+        backfill inference... must be recoverable," admin-only,
+        reassignable, fully logged. Deliberately NOT a relaxation of
+        set_operating_environment's own lock (that method's callers -
+        new-project creation and one-time legacy classification - are
+        completely unaffected and still enforce their single-call
+        guarantee); this is a second, explicit, harder-to-reach path
+        for the rarer "the one existing value itself is wrong" case,
+        requiring a real `reason` (unlike set_operating_environment,
+        which needs none - establishing a value for the first time
+        isn't correcting anything) so the audit trail always records
+        WHY a locked value moved, not just that it did. Authority
+        (admin-only) is enforced by the CALLER, matching every other
+        method in this class - see set_project_owner's own comment for
+        why this module never checks a role itself.
+        """
+        from services.environment_capabilities import is_valid_operating_environment
+
+        if not is_valid_operating_environment(operating_environment):
+            raise ValueError(
+                f"{operating_environment!r} is not a recognized operating environment.",
+            )
+        if not reason or not reason.strip():
+            raise CaseWorkspaceError("A reason is required to correct the project operating environment.")
+        if workspace.operating_environment == operating_environment:
+            raise CaseWorkspaceError(
+                f"Project {workspace.project_id!r} is already classified as {operating_environment!r}.",
+            )
+
+        previous_environment = workspace.operating_environment
+        workspace.operating_environment = operating_environment
+        workspace.operating_environment_set_by = actor
+        workspace.operating_environment_set_at = _now()
+        self.save(workspace)
+
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id, event_type="operating_environment_corrected",
+                actor=actor, role="system",
+                payload={
+                    "previous_environment": previous_environment,
+                    "operating_environment": operating_environment,
+                    "reason": reason.strip(),
+                },
+            )
+        return workspace
+
     def record_go_no_go_decision(
         self,
         workspace: ProjectWorkspace,

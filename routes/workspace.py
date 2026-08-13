@@ -2122,6 +2122,48 @@ def classify_operating_environment(project_id):
     return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
 
 
+@workspace_bp.route("/projects/<project_id>/workspace/correct-environment", methods=["POST"])
+@admin_required
+def correct_operating_environment(project_id):
+    """
+    CLAUDE-VOICE27-MISCLASS-01: a real Product Owner report - a project
+    created and worked on from the Design-Builder/Proponent side had
+    been classified Client/Owner at creation (an RFP is routinely
+    received and worked FROM the Proponent side; being an RFP is not
+    evidence the current team issued it). classify_operating_environment
+    above is the one-time FIRST establishment for a legacy project with
+    no value yet - it structurally cannot fix an already-set-but-wrong
+    value (CaseWorkspaceStore.set_operating_environment's own lock).
+    This is the separate, harder-to-reach correction path for that case
+    - see CaseWorkspaceStore.correct_operating_environment's own
+    docstring for the full reasoning. Admin-only, matching every other
+    project-level correction route in this file; requires a real reason
+    so the audit trail always records WHY, not just that a locked value
+    moved.
+    """
+    _, store, workspace = _load_workspace_or_404(project_id)
+
+    operating_environment = (request.form.get("operating_environment") or "").strip()
+    reason = (request.form.get("reason") or "").strip()
+    if not is_valid_operating_environment(operating_environment):
+        flash("Select a valid project operating environment.", "error")
+        return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
+
+    try:
+        store.correct_operating_environment(
+            workspace, operating_environment, actor=_reviewer(), reason=reason, governance_log=_log(),
+        )
+    except CaseWorkspaceError as exc:
+        flash(str(exc), "error")
+        return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
+
+    flash(
+        f"Project operating environment corrected to: "
+        f"{OPERATING_ENVIRONMENT_LABELS[operating_environment]}.", "success",
+    )
+    return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
+
+
 @workspace_bp.route("/projects/<project_id>/workspace/access/owner", methods=["POST"])
 @admin_required
 def set_project_owner_route(project_id):
