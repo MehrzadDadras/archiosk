@@ -195,6 +195,24 @@ unnecessary systemd configuration risk merely to display a hash. Whatever the
 mechanism, the durable requirement is: **it must always be possible to determine
 exactly which git commit is live**, checkable without guessing.
 
+## 11. Clean up this deploy's own scratch (do this every time, not just when it piles up)
+
+`CLAUDE-DEV-CLEANUP-01` found eight superseded deploy tarballs (~21.5MB) sitting in
+`/tmp` from prior sessions, none ever cleaned up after its own deploy succeeded —
+routine hygiene that was never made an explicit step, so it silently never happened.
+Once step 9's online verification passes:
+
+```bash
+ssh ubuntu@<server> "rm -rf /tmp/archiosk-<short-hash>.tar /tmp/archiosk-deploy-staging"
+```
+
+The step-4 backup (`/var/www/archiosk-backup-<hash>`) is the real rollback point,
+not this scratch — it's safe to remove immediately, not "eventually." Keep at most
+the current deploy's own backup and the previous one if you want one extra rollback
+generation; remove older `archiosk-backup-<hash>` directories once you're confident
+the current deploy is stable (a separate, deliberate decision each time, not part of
+routine per-deploy cleanup — don't automate away your only rollback point).
+
 ## Rollback
 
 If the service doesn't restart cleanly, `/health` fails, authentication fails, the
