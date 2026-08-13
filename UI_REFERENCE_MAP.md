@@ -472,6 +472,9 @@ assertion before ever shipping, not discovered live.
 | `toolbox.investigation-findings` | `<section>` | Rendered when an Investigation is the active selection (`active_case`) — Findings list, artifacts, RFI actions | Findings filtered to `findings_view` (already access/visibility-scoped) | active |
 | `toolbox.document` | `<section>` | Rendered when a Document is the active selection (`selected_source`) — Document-level tools | Same as workspace access | active |
 | `toolbox.empty` | `<section>` | Rendered when neither an Investigation nor a Document is selected — concise neutral empty state, points to Documents/Investigations/Project Tools in Lists | — | active |
+| `toolbox.composer-findings` | `<section>` (CLAUDE-GO-RIGHT-PANEL-01) | Rendered when neither an Investigation nor a Document is selected AND this project has at least one Composer-emitted `ComposerFinding` (`composer_findings_view`) — a compact "F-001 — tag" list, one row per finding, sits between `toolbox.document` and `toolbox.empty` in the same priority chain | `composer_findings_view` is project-scoped (`workspace.composer_findings`), already isolated by `CaseWorkspaceStore`'s own per-project registry path | active |
+| `toolbox.composer-findings.leaf` | `<details>`/`<summary>` (`macros.subdisclosure`) | One finding's own summary ("F-00N — tag"); expands in place to Source/Concern/Unresolved question/Urgency/Project stage — light on first touch, deep on demand, never auto-expanded | Same as workspace access | active |
+| `toolbox.composer-findings.leaf.open-source` | `<a>` | "Open supporting source document" — only rendered when the project has an active Source; real navigation to `?source=<id>` (the project's active founding Source), never an auto-snap — only fires on an explicit click inside an already-expanded `toolbox.composer-findings.leaf` | Same as workspace access | active |
 
 ## Right column: Toolbox above Eye (`templates/base.html`, CLAUDE-P40-EYE1)
 

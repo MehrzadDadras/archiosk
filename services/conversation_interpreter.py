@@ -129,6 +129,13 @@ class InterpretationResult:
     # provably ambiguous (e.g. "analysis:{id}" is produced by both a
     # deterministic and an LLM-backed handler).
     content_class: str = CONTENT_CLASS_DETERMINISTIC_CALCULATION
+    # CLAUDE-GO-RIGHT-PANEL-01: the real, persisted
+    # services.case_workspace.ComposerFinding ids created THIS turn (see
+    # _handle_project_question's own promotion logic) - never the raw
+    # model JSON, which is discarded once promotion succeeds. Empty for
+    # every handler except _handle_project_question, and empty there too
+    # for an ordinary factual question (result.findings itself empty).
+    composer_finding_ids: list[str] = field(default_factory=list)
 
 
 _FINDING_NUMBER_PATTERN = re.compile(r"finding\s*#?\s*(\d+)", re.IGNORECASE)
@@ -1829,6 +1836,31 @@ def _handle_project_question(
             },
         ]
 
+    # CLAUDE-GO-RIGHT-PANEL-01: the "structured findings" half of the
+    # result contract - promotes result.findings (services/project_qa.py's
+    # own model-gated signal, empty for an ordinary factual question)
+    # into real, durable, project-scoped ComposerFinding records via the
+    # ONE write path for this (store.add_composer_finding). This is what
+    # lets Composer intelligence leave the chat stream and become
+    # persistent, tagged right-panel project material - the seam Section
+    # 8 of this stage's own governing prompt requires the result contract
+    # to support, rather than locking the interpretation path into
+    # "model response -> string -> chat bubble only."
+    composer_finding_ids: list[str] = []
+    for item in result.findings:
+        record = store.add_composer_finding(
+            workspace,
+            tag=item["tag"],
+            source_reference=item["source_reference"],
+            concern=item["concern"],
+            unresolved_question=item["unresolved_question"],
+            urgency=item.get("urgency"),
+            project_stage=item.get("project_stage"),
+            created_by=reviewer,
+            source_message_id=triggering_message_id,
+        )
+        composer_finding_ids.append(record["id"])
+
     return InterpretationResult(
         action_taken="project_qa_answered",
         reply_text=" ".join(reply_parts),
@@ -1836,6 +1868,7 @@ def _handle_project_question(
         operational_actions=operational_actions,
         river_actions=result.river_actions,
         content_class=CONTENT_CLASS_AI_PROPOSED,
+        composer_finding_ids=composer_finding_ids,
     )
 
 

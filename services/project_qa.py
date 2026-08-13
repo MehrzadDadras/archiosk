@@ -19,11 +19,22 @@ requirement_investigation.py's own docstring on the same limitation).
 A question this evidence can't answer gets an honest "not covered",
 never a guess - this module never marks its own output as anything
 more than a reply; unlike requirement_investigation.py, it creates no
-Finding, no Artifact, no governed record of any kind. The human
-question and this reply are both already persisted as ordinary
-ConversationMessages by the caller (services/case_workspace.py's
-add_message, via routes/workspace.py's _run_conversation_turn) -
-nothing here duplicates that.
+Case, no Analysis, no Artifact. The human question and this reply are
+both already persisted as ordinary ConversationMessages by the caller
+(services/case_workspace.py's add_message, via routes/workspace.py's
+_run_conversation_turn) - nothing here duplicates that.
+
+CLAUDE-GO-RIGHT-PANEL-01: this module's own JSON schema now ALSO
+optionally carries a small `findings` array (parsed by
+_parse_composer_findings below), promoted by the caller
+(conversation_interpreter._handle_project_question) into real,
+durable services.case_workspace.ComposerFinding records via
+store.add_composer_finding - the seam that lets Composer intelligence
+become persistent, tagged right-panel project material instead of only
+existing as chat prose (see that class's own docstring for why this is
+a distinct object from the Case/Analysis-bound Finding). Gated the
+SAME defensive way river_actions already is: an ordinary factual
+question returns an empty findings array and promotes nothing.
 """
 from __future__ import annotations
 
@@ -32,9 +43,16 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 from services.conversational_turn import build_bounded_history
-from services.llm_gateway import call_llm_json
+from services.llm_gateway import call_llm_json, resolve_timeout_from_env, scale_timeout_for_prompt_size
 
 logger = logging.getLogger(__name__)
+
+# CLAUDE-CA1D-COMPOSER-TIMEOUT-FIX-01: this module's own scaling base -
+# matches services.llm_gateway.DEFAULT_TIMEOUT_SECONDS exactly, so a
+# typical short question's timeout is completely unchanged from before
+# this fix (prompt stays under scale_timeout_for_prompt_size's own
+# 4000-char floor, base_timeout passes through untouched).
+DEFAULT_TIMEOUT_SECONDS = 30.0
 
 # CLAUDE-P38: a real, bump-on-meaningful-change marker, same discipline
 # as services/requirement_investigation.py's INVESTIGATION_PROMPT_VERSION.
@@ -50,7 +68,9 @@ logger = logging.getLogger(__name__)
 # CLAUDE-CA1D-RIVER-PO-02 (Section A, "compress missing-evidence
 # notices"): bumped again (ca1d -> ca1d-po02) for the optional
 # missing_evidence_summary field below.
-PROJECT_QA_PROMPT_VERSION = "ca1d-po02"
+# CLAUDE-GO-RIGHT-PANEL-01: bumped again (ca1d-po02 -> go-rp01) for the
+# optional findings structured field and its own gating rule.
+PROJECT_QA_PROMPT_VERSION = "go-rp01"
 
 # CLAUDE-CA1D-RIVER-PO-01: a defensive ceiling on the model's own
 # river_actions array, independent of the prompt's own "normally 1-5"
@@ -58,6 +78,12 @@ PROJECT_QA_PROMPT_VERSION = "ca1d-po02"
 # list, not merely asking nicely. Malformed items (no non-empty "action")
 # are dropped outright rather than rendered as a blank heading.
 _MAX_RIVER_ACTIONS = 8
+
+# CLAUDE-GO-RIGHT-PANEL-01: same defensive-ceiling discipline as
+# _MAX_RIVER_ACTIONS above, applied to the new findings array - the
+# actual backstop against an unbounded right-panel list, independent of
+# the prompt's own guidance text.
+_MAX_COMPOSER_FINDINGS = 10
 
 _MAX_CANDIDATE_ITEMS_IN_PROMPT = 40
 _MAX_GOVERNED_REQUIREMENTS_IN_PROMPT = 40
@@ -163,6 +189,27 @@ BEHAVIORAL_CONTRACT = (
     "order, recency, or verbosity. Leave river_actions empty for every "
     "other kind of question - do not force this structure onto ordinary "
     "answers.\n"
+    # CLAUDE-GO-RIGHT-PANEL-01: a second, SEPARATE structured-output
+    # gate from river_actions above - river_actions answers "what should
+    # I do next," findings answers "what discrete issue did you notice
+    # and why does it matter." The two are never the same list: a
+    # "what's next" question can populate river_actions with nothing
+    # characterization-shaped in it, and a "what's wrong" question can
+    # populate findings with nothing action-ranked in it. Both stay
+    # empty for an ordinary factual question.
+    "- If, and only if, the reviewer is genuinely asking you to identify, "
+    "characterize, or list discrete issues, discrepancies, gaps, or "
+    "unresolved conditions across the project (not an ordinary factual "
+    "lookup, and not a \"what should I do next\" question), identify a "
+    "SMALL set of the most meaningful ones (normally 1-8 - never pad to a "
+    "fixed count, and never invent one merely to fill the list) and return "
+    "them as findings in the schema below. For each: a short (a few words) "
+    "\"tag\" title; \"source_reference\" citing where in the evidence this "
+    "comes from; \"concern\" stating why it matters; \"unresolved_question\" "
+    "stating what would need to be resolved. Only include \"urgency\" or "
+    "\"project_stage\" when the evidence genuinely supports a specific "
+    "value - leave either as an empty string rather than guessing one. "
+    "Leave findings empty for every other kind of question.\n"
     "- Respond only in the exact JSON schema requested, with no prose "
     "outside it."
 )
@@ -208,6 +255,24 @@ class ProjectQAResult:
     # rendered as a blank heading; capped at _MAX_RIVER_ACTIONS regardless
     # of what the model returns).
     river_actions: list[dict] = field(default_factory=list)
+    # CLAUDE-GO-RIGHT-PANEL-01: the model's OWN signal, same "read back
+    # verbatim, only when genuinely warranted" discipline river_actions
+    # already uses - empty for every ordinary factual question, non-empty
+    # only when the reviewer is genuinely asking to characterize/identify
+    # issues, discrepancies, or unresolved conditions across the project
+    # (see BEHAVIORAL_CONTRACT's own gating rule and _build_prompt's own
+    # schema instructions). Each item: {"tag": str, "source_reference":
+    # str, "concern": str, "unresolved_question": str, "urgency":
+    # Optional[str], "project_stage": Optional[str]} - defensively parsed
+    # in answer_project_question (malformed items dropped, never rendered
+    # as a blank row; capped at _MAX_COMPOSER_FINDINGS regardless of what
+    # the model returns). The caller (conversation_interpreter.py's
+    # _handle_project_question) is responsible for promoting these into
+    # real services.case_workspace.ComposerFinding records - this
+    # dataclass itself creates no durable record of any kind, matching
+    # this module's own existing "creates no Case, no Analysis, no
+    # Artifact" discipline.
+    findings: list[dict] = field(default_factory=list)
 
 
 def answer_project_question(
@@ -228,13 +293,51 @@ def answer_project_question(
         question, document_filename, candidate_requirements, governed_requirements, milestones,
         display_title, recent_history, ui_context, additional_document_evidence,
     )
+    # CLAUDE-CA1D-COMPOSER-TIMEOUT-FIX-01: live Product Owner report - a
+    # broad, multi-item "characterize every discrepancy in this project,
+    # with 5 fields each" question failed with "Request timed out after
+    # 30s." Root-caused to TWO compounding gaps, both now fixed:
+    #   1. max_tokens=1500 was genuinely too small for this class of
+    #      question - reproduced locally, the model was cut off mid-JSON
+    #      (stop_reason=max_tokens) before it could finish. Raised to
+    #      3000, empirically confirmed sufficient (a real run against the
+    #      reported project completed cleanly, stop_reason=end_turn, in
+    #      ~28s). Not raised further "to be safe" - 3000 is the smallest
+    #      value that was actually observed to complete this class of
+    #      query without truncation.
+    #   2. This module had NO prompt-size timeout scaling at all (unlike
+    #      services/project_briefing.py, which already fixed the exact
+    #      same failure mode under CLAUDE-P40-B 3.2) - every question got
+    #      the same flat ANTHROPIC_TIMEOUT_SECONDS regardless of prompt
+    #      size, leaving no margin for a large evidence blob plus a
+    #      genuinely long generation. Reuses
+    #      services.llm_gateway.scale_timeout_for_prompt_size (promoted
+    #      from project_briefing.py's own private copy for this) with the
+    #      SAME already-accepted rate/ceiling (3s per extra 1000 prompt
+    #      chars, 90s max). This module's own fixed schema-instruction
+    #      boilerplate (BEHAVIORAL_CONTRACT + _build_prompt's own
+    #      "respond ONLY with a JSON object..." schema text) is itself
+    #      already ~4.4k chars with zero evidence, just over the 4000-char
+    #      scaling floor - so even a trivial question's timeout drifts a
+    #      little past the base (~31s, not exactly 30s) - harmless, and a
+    #      genuinely large evidence blob (like this project's 1310
+    #      extracted candidate items) scales up far more, never past this
+    #      deployment's own Gunicorn worker timeout (150s) or nginx
+    #      proxy_read_timeout (150s on location /, deploy/gunicorn.conf.py
+    #      / deploy/nginx.conf) - confirmed via direct inspection before
+    #      choosing 90s as the ceiling here.
+    base_timeout = resolve_timeout_from_env(timeout, DEFAULT_TIMEOUT_SECONDS)
+    timeout = scale_timeout_for_prompt_size(
+        base_timeout, prompt,
+        base_chars_before_scaling=4000, seconds_per_extra_1000_chars=3.0, max_timeout=90.0,
+    )
     # CLAUDE-CA1D-COMPOSER-SPINE-01 (Stage 0): the client-setup/error-
     # handling/JSON-parsing boundary this module used to own directly is
     # now services/llm_gateway.py's call_llm_json - same behavior, one
     # shared implementation instead of a third independent copy of it.
     outcome = call_llm_json(
         user_prompt=prompt, system_prompt=BEHAVIORAL_CONTRACT,
-        api_key=api_key, model=model, timeout=timeout, max_tokens=1500,
+        api_key=api_key, model=model, timeout=timeout, max_tokens=3000,
         log_label="Project Q&A",
     )
     if not outcome.ran:
@@ -253,6 +356,7 @@ def answer_project_question(
         ),
         needs_clarification=bool(parsed.get("needs_clarification", False)),
         river_actions=_parse_river_actions(parsed.get("river_actions")),
+        findings=_parse_composer_findings(parsed.get("findings")),
         provider=outcome.provider, model=outcome.model, requested_at=outcome.requested_at,
     )
 
@@ -290,6 +394,41 @@ def _parse_river_actions(raw) -> list[dict]:
             break
     parsed_actions.sort(key=lambda a: a["rank"])
     return parsed_actions
+
+
+def _parse_composer_findings(raw) -> list[dict]:
+    """Same defensive-parsing discipline as _parse_river_actions above -
+    the model's own JSON is read back, never trusted on faith. A
+    malformed item (no non-empty "tag" title) is dropped outright rather
+    than rendered as a blank right-panel row; the list is hard-capped at
+    _MAX_COMPOSER_FINDINGS regardless of what the model returned.
+    `urgency`/`project_stage` are left None (never an empty string
+    rendered as if it were a real answer) when the model didn't supply
+    them - Section 2's own "do not invent unsupported metadata merely
+    to fill fields" applies to a blank-but-present value just as much as
+    a fabricated one."""
+    if not isinstance(raw, list):
+        return []
+    parsed_findings: list[dict] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        tag = str(item.get("tag", "")).strip()
+        if not tag:
+            continue
+        urgency = str(item.get("urgency", "")).strip()
+        project_stage = str(item.get("project_stage", "")).strip()
+        parsed_findings.append({
+            "tag": tag,
+            "source_reference": str(item.get("source_reference", "")).strip(),
+            "concern": str(item.get("concern", "")).strip(),
+            "unresolved_question": str(item.get("unresolved_question", "")).strip(),
+            "urgency": urgency or None,
+            "project_stage": project_stage or None,
+        })
+        if len(parsed_findings) >= _MAX_COMPOSER_FINDINGS:
+            break
+    return parsed_findings
 
 
 def _build_prompt(
@@ -460,6 +599,18 @@ def _build_prompt(
         'deadline and full RFP Data Sheet") - never a full sentence, never a '
         "restatement of not_covered's own wording, suitable for a single "
         'scan-path line. Leave "missing_evidence_summary" as an empty string '
-        "when nothing is missing, or when river_actions is empty."
+        'when nothing is missing, or when river_actions is empty. "findings": '
+        '[{"tag": "<a few words - a short descriptive title>", '
+        '"source_reference": "<where in the evidence above this comes from>", '
+        '"concern": "<why this matters>", "unresolved_question": "<what would '
+        'need to be resolved>", "urgency": "<only if the evidence genuinely '
+        'supports one - empty string otherwise>", "project_stage": "<only if '
+        'the evidence genuinely supports one - empty string otherwise>"}, '
+        '...]}. findings MUST be an empty array [] unless the reviewer is '
+        "genuinely asking you to identify/characterize/list discrete issues, "
+        "discrepancies, gaps, or unresolved conditions across the project (see "
+        "the rule above) - never populate it for an ordinary factual/"
+        "explanatory question, and never populate it merely because "
+        'river_actions was also populated (they answer different questions).'
     )
     return "\n".join(lines)

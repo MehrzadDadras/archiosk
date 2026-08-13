@@ -35,7 +35,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Optional
 
-from services.llm_gateway import call_llm_json, resolve_timeout_from_env
+from services.llm_gateway import call_llm_json, resolve_timeout_from_env, scale_timeout_for_prompt_size
 
 logger = logging.getLogger(__name__)
 
@@ -48,22 +48,6 @@ DEFAULT_TIMEOUT_SECONDS = 45.0
 PROJECT_BRIEFING_PROMPT_VERSION = "p38b"
 
 _MAX_ITEMS_PER_CATEGORY_IN_PROMPT = 30
-
-# CLAUDE-P40-B (3.2): see generate_project_briefing's own comment at the
-# call site for the full investigation. A compact document's prompt
-# comfortably fits under _BASE_CHARS_BEFORE_SCALING - the timeout only
-# ever grows past base_timeout once the prompt is genuinely larger than
-# that, and never past _MAX_TIMEOUT_SECONDS regardless of size.
-_BASE_CHARS_BEFORE_SCALING = 4000
-_TIMEOUT_SECONDS_PER_EXTRA_1000_CHARS = 3.0
-_MAX_TIMEOUT_SECONDS = 90.0
-
-
-def _scale_timeout_for_prompt_size(base_timeout: float, prompt: str) -> float:
-    extra_chars = max(0, len(prompt) - _BASE_CHARS_BEFORE_SCALING)
-    scaled = base_timeout + (extra_chars / 1000.0) * _TIMEOUT_SECONDS_PER_EXTRA_1000_CHARS
-    return min(scaled, _MAX_TIMEOUT_SECONDS)
-
 
 @dataclass
 class ProjectBriefingResult:
@@ -122,8 +106,15 @@ def generate_project_briefing(
     # it must scale FROM a base value before call_llm_json ever sees the
     # final timeout, so call_llm_json must not silently re-derive its own
     # default and discard this scaling.
+    # CLAUDE-CA1D-COMPOSER-TIMEOUT-FIX-01: the scaling formula itself now
+    # lives in services/llm_gateway.py's scale_timeout_for_prompt_size,
+    # shared with services/project_qa.py - identical constants passed
+    # explicitly here, so this call's own behavior is unchanged.
     base_timeout = resolve_timeout_from_env(timeout, DEFAULT_TIMEOUT_SECONDS)
-    timeout = _scale_timeout_for_prompt_size(base_timeout, prompt)
+    timeout = scale_timeout_for_prompt_size(
+        base_timeout, prompt,
+        base_chars_before_scaling=4000, seconds_per_extra_1000_chars=3.0, max_timeout=90.0,
+    )
 
     outcome = call_llm_json(
         user_prompt=prompt, api_key=api_key, model=model, timeout=timeout,

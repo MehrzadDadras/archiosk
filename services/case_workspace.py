@@ -1658,6 +1658,67 @@ class Finding:
     artifact_id: Optional[str] = None
 
 
+# CLAUDE-GO-RIGHT-PANEL-01: a Composer-emitted, PROJECT-scoped
+# characterization - deliberately NOT the same object as Finding above.
+# Finding requires a case_id/analysis_id (a real, opened Investigation
+# with a formal Analysis run behind it) - the Composer's own project-
+# level Q&A path (services/project_qa.py) has neither of those and must
+# not fabricate a fake Case/Analysis merely to satisfy Finding's shape
+# (that would be "conflating the two" the governing product principle
+# explicitly warns against). This is the smaller, lighter object: what
+# the Composer noticed while answering an ordinary project question,
+# promoted from transient reply prose into durable, project-scoped
+# record - the same "governed-but-provisional, no Approval Gate"
+# posture record_analysis's own Findings already have (see
+# add_composer_finding below), reusing that established classification
+# rather than inventing a new authority tier.
+COMPOSER_FINDING_STATE_MACHINE_UNREVIEWED = "machine_finding_unreviewed"
+# CLAUDE-GO-RIGHT-PANEL-01: deliberately a ONE-member closed set for
+# this first slice (Section 6's own "Machine Finding / Unreviewed"
+# instruction) - stored and validated as a real closed vocabulary
+# (mirroring KNOWN_CONTENT_CLASSES/REVIEWER_VALIDATION_STATES' own
+# pattern immediately above), not a hardcoded string check, so a future
+# PM-reviewed/accepted/modified/dismissed state is a vocabulary
+# addition here, never a storage-shape migration.
+KNOWN_COMPOSER_FINDING_STATES = (COMPOSER_FINDING_STATE_MACHINE_UNREVIEWED,)
+
+
+@dataclass
+class ComposerFinding:
+    """One Composer-emitted project characterization, promoted from a
+    ProjectQAResult.findings entry (services/project_qa.py) into a
+    durable, project-scoped record - see the module comment above this
+    class for why it is not a Finding. `tag` is a short descriptive
+    title (e.g. "Submission deadline"), deliberately a plain string, NOT
+    a reference into the Tag/BUILT_IN_TAGS system above - that system is
+    a small, reusable, colour-coded label taxonomy meant to be applied
+    to many different passages; a per-finding one-off title is a
+    genuinely different concept, and forcing it through create_custom_tag
+    would flood that taxonomy with names never reused anywhere else (the
+    repository already distinguishes the two, so this keeps them
+    distinct rather than conflating them). `source_message_id` is the
+    ConversationMessage this was promoted from (project_conversation,
+    never a Case's own conversation - this object only exists on the
+    project-level Q&A path) - the provenance link back to the turn that
+    produced it. `urgency`/`project_stage` are optional and left None
+    whenever the model did not honestly ground them (Section 2's own
+    "do not invent unsupported metadata merely to fill fields")."""
+
+    id: str
+    project_id: str
+    tag: str
+    source_reference: str
+    concern: str
+    unresolved_question: str
+    created_at: str
+    created_by: Optional[str] = None
+    urgency: Optional[str] = None
+    project_stage: Optional[str] = None
+    review_state: str = COMPOSER_FINDING_STATE_MACHINE_UNREVIEWED
+    content_class: str = CONTENT_CLASS_AI_PROPOSED
+    source_message_id: Optional[str] = None
+
+
 @dataclass
 class ReviewerValidation:
     """The human's epistemic classification of a Finding's accuracy."""
@@ -3736,6 +3797,10 @@ class ProjectWorkspace:
     tags: list[dict] = field(default_factory=list)  # see Tag
     tag_occurrences: list[dict] = field(default_factory=list)  # see TagOccurrence
     tasks: list[dict] = field(default_factory=list)  # see Task
+    # CLAUDE-GO-RIGHT-PANEL-01: see ComposerFinding's own docstring -
+    # Composer-emitted, project-scoped characterizations, separate from
+    # workspace.findings (Case/Analysis-bound Findings above).
+    composer_findings: list[dict] = field(default_factory=list)  # see ComposerFinding
     # CLAUDE-P40-VW9: Design-Builder Workspace working folders (see Folder
     # above) - purely additive, same backward-compatible pattern as tags/
     # tag_occurrences/tasks above (a legacy record predating this stage
@@ -7025,6 +7090,53 @@ class CaseWorkspaceStore:
         workspace.tags.append(asdict(tag))
         self.save(workspace)
         return asdict(tag)
+
+    def add_composer_finding(
+        self,
+        workspace: ProjectWorkspace,
+        tag: str,
+        source_reference: str,
+        concern: str,
+        unresolved_question: str,
+        created_by: Optional[str] = None,
+        urgency: Optional[str] = None,
+        project_stage: Optional[str] = None,
+        source_message_id: Optional[str] = None,
+    ) -> dict:
+        """CLAUDE-GO-RIGHT-PANEL-01: the one write path that promotes a
+        Composer-emitted characterization (services.project_qa's
+        ProjectQAResult.findings, via
+        conversation_interpreter._handle_project_question) from
+        transient reply prose into a durable, project-scoped record -
+        the "structured finding" half of the "conversational response +
+        structured findings" result contract Section 8 of this stage's
+        own governing prompt requires. Deliberately no case_id/
+        analysis_id (see ComposerFinding's own docstring) and
+        deliberately no Approval Gate (`_require_approval`) - this is
+        the same "governed-but-provisional, no gate" posture
+        record_analysis's own Findings already have; nothing here
+        changes durable Requirement/RFI/Work Product state, so gating
+        it would be inventing a new authority tier this stage's own
+        prompt does not ask for."""
+        stripped_tag = (tag or "").strip()
+        if not stripped_tag:
+            raise CaseWorkspaceError("A Composer Finding must have a non-empty tag/title.")
+        finding = ComposerFinding(
+            id=_new_id(),
+            project_id=workspace.project_id,
+            tag=stripped_tag,
+            source_reference=(source_reference or "").strip(),
+            concern=(concern or "").strip(),
+            unresolved_question=(unresolved_question or "").strip(),
+            created_at=_now(),
+            created_by=created_by,
+            urgency=(urgency or "").strip() or None,
+            project_stage=(project_stage or "").strip() or None,
+            source_message_id=source_message_id,
+        )
+        workspace.composer_findings.append(asdict(finding))
+        self.save(workspace)
+        return asdict(finding)
 
     def _validate_source_anchor(self, workspace: ProjectWorkspace, source_anchor: dict) -> dict:
         """Real validation, not just shape-checking - confirms the

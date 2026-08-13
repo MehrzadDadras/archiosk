@@ -1005,6 +1005,22 @@ def show_workspace(project_id):
     applied_count = 0
     awaiting_apply_count = 0
 
+    # CLAUDE-GO-RIGHT-PANEL-01: the project-scoped, Composer-emitted
+    # counterpart to the Case-scoped findings_view above - see
+    # services.case_workspace.ComposerFinding's own docstring for why
+    # these are a distinct object. Newest-first, matching how every
+    # other reverse-chronological list in this Toolbox already orders
+    # (Investigations, RFIs) - a PM cares about the most recently
+    # surfaced characterization first. Sequential display numbers
+    # (F-001, F-002, ...) are computed here from stable creation order
+    # (oldest first) rather than stored on the record itself - display
+    # numbering is a presentation concern, not part of the record's own
+    # identity (the real id is still the UUID).
+    composer_findings_view = [
+        {**cf, "display_id": f"F-{idx:03d}"}
+        for idx, cf in enumerate(workspace.composer_findings, start=1)
+    ][::-1]
+
     if active_case is not None:
         for finding_id in active_case["finding_ids"]:
             finding = next(f for f in workspace.findings if f["id"] == finding_id)
@@ -1580,6 +1596,7 @@ def show_workspace(project_id):
         project_context_history=project_context_history,
         needs_attention_view=needs_attention_view,
         findings_view=findings_view,
+        composer_findings_view=composer_findings_view,
         focused_finding_id=focused_finding_id,
         applied_count=applied_count,
         awaiting_apply_count=awaiting_apply_count,

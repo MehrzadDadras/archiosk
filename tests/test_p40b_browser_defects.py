@@ -69,26 +69,35 @@ class BriefingTimeoutScalingTests(unittest.TestCase):
     """3.2 - the exact 30s boundary was confirmed to be an application
     timeout (services/project_briefing.py, sourced from .env's
     ANTHROPIC_TIMEOUT_SECONDS), not HTTP/provider/job-state. A larger
-    document's prompt needs proportionally more generation time."""
+    document's prompt needs proportionally more generation time.
+
+    CLAUDE-CA1D-COMPOSER-TIMEOUT-FIX-01: the scaling formula this class
+    exercises was promoted from project_briefing.py's own former private
+    `_scale_timeout_for_prompt_size` into
+    services.llm_gateway.scale_timeout_for_prompt_size, shared with
+    services/project_qa.py (see tests/test_ca1d_composer_timeout_fix_01.py
+    for that call site's own coverage) - these tests now call the shared
+    function with project_briefing.py's own exact constants explicitly,
+    so this file keeps proving THIS module's own behavior is unchanged."""
 
     def test_short_prompt_stays_at_the_base_timeout(self):
-        from services.project_briefing import _scale_timeout_for_prompt_size
+        from services.llm_gateway import scale_timeout_for_prompt_size
 
         short_prompt = "x" * 500
-        self.assertEqual(_scale_timeout_for_prompt_size(30.0, short_prompt), 30.0)
+        self.assertEqual(scale_timeout_for_prompt_size(30.0, short_prompt), 30.0)
 
     def test_long_prompt_scales_up_but_stays_capped(self):
-        from services.project_briefing import _MAX_TIMEOUT_SECONDS, _scale_timeout_for_prompt_size
+        from services.llm_gateway import scale_timeout_for_prompt_size
 
         long_prompt = "x" * 50000
-        scaled = _scale_timeout_for_prompt_size(30.0, long_prompt)
+        scaled = scale_timeout_for_prompt_size(30.0, long_prompt)
         self.assertGreater(scaled, 30.0)
-        self.assertLessEqual(scaled, _MAX_TIMEOUT_SECONDS)
+        self.assertLessEqual(scaled, 90.0)  # project_briefing.py's own max_timeout
 
     def test_scaled_timeout_never_drops_below_the_operator_configured_floor(self):
-        from services.project_briefing import _scale_timeout_for_prompt_size
+        from services.llm_gateway import scale_timeout_for_prompt_size
 
-        self.assertGreaterEqual(_scale_timeout_for_prompt_size(30.0, ""), 30.0)
+        self.assertGreaterEqual(scale_timeout_for_prompt_size(30.0, ""), 30.0)
 
     def test_real_call_uses_a_timeout_scaled_from_the_actual_prompt(self):
         with patch("anthropic.Anthropic") as MockClient, \

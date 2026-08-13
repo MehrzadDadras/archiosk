@@ -69,6 +69,38 @@ def resolve_timeout_from_env(explicit: Optional[float], default_seconds: float) 
     return float(os.getenv("ANTHROPIC_TIMEOUT_SECONDS", default_seconds))
 
 
+def scale_timeout_for_prompt_size(
+    base_timeout: float,
+    prompt: str,
+    base_chars_before_scaling: float = 4000,
+    seconds_per_extra_1000_chars: float = 3.0,
+    max_timeout: float = 90.0,
+) -> float:
+    """CLAUDE-CA1D-COMPOSER-TIMEOUT-FIX-01: promoted here (from services/
+    project_briefing.py's own private `_scale_timeout_for_prompt_size`,
+    the only precedent for this) so a second call site
+    (services/project_qa.py) doesn't grow a second, drifting copy of the
+    same logic - same "one shared implementation" discipline
+    call_llm_json/resolve_timeout_from_env above already established for
+    Stage 0. Behavior-preserving for project_briefing.py's own call
+    (identical formula, identical default constants); project_qa.py is
+    the first caller to actually need this (see its own module comment -
+    a real live Product Owner report: a genuinely large, multi-item
+    "characterize every discrepancy in this project" question was hitting
+    both max_tokens truncation AND this same flat, unscaled timeout).
+
+    A compact prompt (<= base_chars_before_scaling) is untouched - the
+    timeout only ever grows past base_timeout once the prompt is
+    genuinely larger than that, and never past max_timeout regardless of
+    size. Reused, not reinvented, rate/base-timeout tuning: any caller
+    without a specific reason to differ should pass 3.0s/1000 extra chars
+    and a 90s ceiling, project_briefing.py's own already-accepted values.
+    """
+    extra_chars = max(0, len(prompt) - base_chars_before_scaling)
+    scaled = base_timeout + (extra_chars / 1000.0) * seconds_per_extra_1000_chars
+    return min(scaled, max_timeout)
+
+
 def call_llm_json(
     user_prompt: str,
     system_prompt: Optional[str] = None,

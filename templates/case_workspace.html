@@ -2837,6 +2837,66 @@
         </form>
         {% endif %}
     </section>
+    {% elif composer_findings_view %}
+    {# ---------------- Composer Findings (CLAUDE-GO-RIGHT-PANEL-01) --------------
+       The project owns the intelligence; Chat discovers and discusses
+       it; this panel holds and organizes it. Renders ONLY when no
+       Investigation/Document is selected (same priority chain as the
+       branches above) and this project actually has at least one
+       Composer-emitted, project-scoped characterization
+       (services.case_workspace.ComposerFinding - see its own docstring
+       for why this is a distinct object from the Case-scoped Finding
+       list above). Deliberately visually light on first touch (a
+       one-line summary row per finding, reusing the native <details>
+       disclosure via macros.subdisclosure) - the PM should not need to
+       re-read the full Composer answer here; "deep on demand" opens
+       the row for the rest. #}
+    <section class="workspace-pane" data-ui-ref="toolbox.composer-findings">
+        <h3>Findings</h3>
+        <p class="pane-note">
+            Noticed by ARCHIOSK Go while answering a project question &mdash; machine-identified,
+            not yet reviewed.
+        </p>
+        <div class="composer-finding-list">
+            {% for cf in composer_findings_view %}
+            {% call macros.subdisclosure(cf.display_id ~ " — " ~ cf.tag, ui_ref="toolbox.composer-findings.leaf") %}
+                <p class="finding-confidence">
+                    <span class="review-state-badge review-state-unreviewed">Machine Finding &middot; Unreviewed</span>
+                </p>
+                {% if cf.source_reference %}
+                <p class="history-entry"><strong>Source:</strong> {{ cf.source_reference }}</p>
+                {% endif %}
+                <p class="history-entry"><strong>Concern:</strong> {{ cf.concern }}</p>
+                <p class="history-entry"><strong>Unresolved question:</strong> {{ cf.unresolved_question }}</p>
+                {% if cf.urgency %}
+                <p class="history-entry"><strong>Urgency:</strong> {{ cf.urgency }}</p>
+                {% endif %}
+                {% if cf.project_stage %}
+                <p class="history-entry"><strong>Project stage:</strong> {{ cf.project_stage }}</p>
+                {% endif %}
+                {# CLAUDE-GO-RIGHT-PANEL-01 (Section 5): "identify the
+                   supporting source; open/navigate to the relevant
+                   document evidence on demand; preserve the user's
+                   workspace until the PM deliberately clicks." An
+                   ordinary link, not an auto-navigating script - nothing
+                   here fires until this row is already expanded AND this
+                   link is itself clicked. Opens the project's own active
+                   founding Source document (the real, existing Document
+                   navigation this app already has) - honestly labeled as
+                   opening the source DOCUMENT, since arbitrary free-text
+                   Q&A evidence has no finer-grained passage/offset
+                   primitive to deep-link into today (unlike a real
+                   Finding's own Focus Snip Artifact above, which does). #}
+                {% if active_sources %}
+                <p class="history-entry">
+                    <a href="{{ url_for('workspace.show_workspace', project_id=project_id, source=active_sources[0].id) }}"
+                       data-ui-ref="toolbox.composer-findings.leaf.open-source">Open supporting source document</a>
+                </p>
+                {% endif %}
+            {% endcall %}
+            {% endfor %}
+        </div>
+    </section>
     {% else %}
     {# CLAUDE-P40-VW2: concise neutral empty state only - the project-
        level controls formerly here now live in Lists' own "Project
