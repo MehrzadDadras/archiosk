@@ -1,3 +1,4 @@
+{% import "_macros.html" as macros %}
 {% extends "gateway_base.html" %}
 
 {% block gateway_title %}Project Gateway &mdash; Archiosk{% endblock %}
@@ -14,13 +15,34 @@
    either context can have both new and existing Projects. Restructured
    into two context groups, each offering New Project (unchanged
    /upload?environment= deep link, still admin-gated exactly as before)
-   and Open Existing Project (routes/portal.py's own choose_project,
-   now filtered by the same ?environment= param -- still @login_required
-   only, unchanged, matching the original ungated "Open an existing
-   project" visibility outside the old is_admin block). No new project-state
-   concept, no new route, no duplicated records -- both entrances still
-   resolve to the exact same underlying /upload and /projects/choose
-   flows every other entrance already uses. #}
+   and Open Existing Project.
+
+   CLAUDE-CA1D-GATEWAY-INLINE-REOPEN-01: PO correction -- reopening an
+   existing Project must take the fewest possible transitions (Gateway
+   -> reveal projects -> select -> workspace), not Gateway -> a second
+   chooser page -> select -> workspace. Each group's "Open Existing
+   Project" is now a `<details>` reveal (macros.subdisclosure) showing
+   that context's own Projects inline, search-filterable client-side
+   (`.gateway-inline-project-search`/`.gateway-inline-open-form` below),
+   select-then-confirm exactly like `gateway.chooser` already does (same
+   select-radio-then-submit pattern, same reasoning: an explicit action
+   + Enter-key completion, not a bare link-per-row -- see
+   project_chooser.html's own CLAUDE-CA1D-RECEPTION-FIX-01 comment).
+   routes/portal.py's `gateway()` passes each group's own
+   `_environment_projects(...)` list -- the same access-scoped data
+   `choose_project` itself builds, no new authorization surface.
+   `choose_project`/`project_chooser.html` are UNCHANGED and still serve
+   the header's "Switch Project" Vestibule and direct-URL/unfiltered
+   access; Removed Projects/Security ("advanced management") were
+   already reachable from the account menu (gateway_shell.html), not
+   through this chooser.
+
+   The two groups below are intentionally NOT templatized into a shared
+   Jinja macro parameterized by environment -- tests/test_p40vw7a_ui_
+   reference_map.py's registry-vs-template check is a static regex scan
+   over template SOURCE text (see that file's own "Appearance matrix"
+   comment on why), so every `data-ui-ref` value must appear as a
+   literal string in source, not built via Jinja string concatenation. #}
 <div class="gateway-context-groups">
     <section class="gateway-context-group">
         <h3>Client / Owner Projects</h3>
@@ -32,11 +54,39 @@
                 <span><strong>New Project</strong></span>
             </a>
             {% endif %}
-            <a class="gateway-action" data-ui-ref="gateway.open-existing-client-owner" href="{{ url_for('portal.choose_project', environment='client_owner') }}">
-                <span class="gateway-action-icon">&#8963;</span>
-                <span><strong>Open Existing Project</strong></span>
-            </a>
         </div>
+        {% call macros.subdisclosure("Open Existing Project", html_id="gateway-open-existing-client-owner", ui_ref="gateway.open-existing-client-owner") %}
+            {% if client_owner_projects %}
+            <form class="projects-controls" data-ui-ref="gateway.open-existing-client-owner.search">
+                <input
+                    type="search" class="text-input projects-search gateway-inline-project-search"
+                    data-filter-target="gateway-open-existing-client-owner-list"
+                    placeholder="Search your projects" aria-label="Search your Client / Owner projects">
+            </form>
+            <form method="get" class="gateway-inline-open-form" id="gateway-open-existing-client-owner-form" data-ui-ref="gateway.open-existing-client-owner.open-form">
+                <ul class="project-card-list" id="gateway-open-existing-client-owner-list">
+                    {% for p in client_owner_projects %}
+                    <li class="project-card" data-project-name="{{ p.display_name | lower }}">
+                        <label class="project-card-link project-card-selectable" data-ui-ref="gateway.open-existing-client-owner.leaf">
+                            <input
+                                type="radio" name="project_id" value="{{ p.project_id }}" required
+                                data-open-url="{{ url_for('workspace.show_workspace', project_id=p.project_id) }}">
+                            <div class="project-card-main">
+                                <span class="project-card-name">{{ p.display_name }}</span>
+                            </div>
+                            <div class="project-card-meta">
+                                <span>Updated {{ p.last_activity | humanize }}</span>
+                            </div>
+                        </label>
+                    </li>
+                    {% endfor %}
+                </ul>
+                <button type="submit" class="btn btn-primary gateway-inline-open-button" disabled data-ui-ref="gateway.open-existing-client-owner.open-button">Open Project</button>
+            </form>
+            {% else %}
+            <p class="projects-empty" data-ui-ref="gateway.open-existing-client-owner.empty">No Client / Owner projects yet.</p>
+            {% endif %}
+        {% endcall %}
     </section>
     <section class="gateway-context-group">
         <h3>Design-Builder / Proponent Projects</h3>
@@ -48,13 +98,70 @@
                 <span><strong>New Project</strong></span>
             </a>
             {% endif %}
-            <a class="gateway-action" data-ui-ref="gateway.open-existing-design-builder" href="{{ url_for('portal.choose_project', environment='design_builder_proponent') }}">
-                <span class="gateway-action-icon">&#8963;</span>
-                <span><strong>Open Existing Project</strong></span>
-            </a>
         </div>
+        {% call macros.subdisclosure("Open Existing Project", html_id="gateway-open-existing-design-builder", ui_ref="gateway.open-existing-design-builder") %}
+            {% if design_builder_projects %}
+            <form class="projects-controls" data-ui-ref="gateway.open-existing-design-builder.search">
+                <input
+                    type="search" class="text-input projects-search gateway-inline-project-search"
+                    data-filter-target="gateway-open-existing-design-builder-list"
+                    placeholder="Search your projects" aria-label="Search your Design-Builder / Proponent projects">
+            </form>
+            <form method="get" class="gateway-inline-open-form" id="gateway-open-existing-design-builder-form" data-ui-ref="gateway.open-existing-design-builder.open-form">
+                <ul class="project-card-list" id="gateway-open-existing-design-builder-list">
+                    {% for p in design_builder_projects %}
+                    <li class="project-card" data-project-name="{{ p.display_name | lower }}">
+                        <label class="project-card-link project-card-selectable" data-ui-ref="gateway.open-existing-design-builder.leaf">
+                            <input
+                                type="radio" name="project_id" value="{{ p.project_id }}" required
+                                data-open-url="{{ url_for('workspace.show_workspace', project_id=p.project_id) }}">
+                            <div class="project-card-main">
+                                <span class="project-card-name">{{ p.display_name }}</span>
+                            </div>
+                            <div class="project-card-meta">
+                                <span>Updated {{ p.last_activity | humanize }}</span>
+                            </div>
+                        </label>
+                    </li>
+                    {% endfor %}
+                </ul>
+                <button type="submit" class="btn btn-primary gateway-inline-open-button" disabled data-ui-ref="gateway.open-existing-design-builder.open-button">Open Project</button>
+            </form>
+            {% else %}
+            <p class="projects-empty" data-ui-ref="gateway.open-existing-design-builder.empty">No Design-Builder / Proponent projects yet.</p>
+            {% endif %}
+        {% endcall %}
     </section>
 </div>
+<script nonce="{{ csp_nonce }}">
+(function () {
+    document.querySelectorAll('.gateway-inline-open-form').forEach(function (form) {
+        var button = form.querySelector('.gateway-inline-open-button');
+        if (!button) return;
+        form.addEventListener('change', function (e) {
+            if (e.target && e.target.name === 'project_id') button.disabled = false;
+        });
+        form.addEventListener('submit', function (e) {
+            e.preventDefault();
+            var checked = form.querySelector('input[name="project_id"]:checked');
+            if (!checked) return;
+            window.location.href = checked.getAttribute('data-open-url');
+        });
+    });
+    document.querySelectorAll('.gateway-inline-project-search').forEach(function (input) {
+        var targetId = input.getAttribute('data-filter-target');
+        var list = targetId ? document.getElementById(targetId) : null;
+        if (!list) return;
+        input.addEventListener('input', function () {
+            var needle = input.value.trim().toLowerCase();
+            list.querySelectorAll('.project-card').forEach(function (card) {
+                var name = card.getAttribute('data-project-name') || '';
+                card.hidden = needle.length > 0 && name.indexOf(needle) === -1;
+            });
+        });
+    });
+})();
+</script>
 {% endblock %}
 {% block gateway_footer %}
 <footer class="gateway-footer">

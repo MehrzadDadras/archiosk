@@ -238,21 +238,21 @@ class GatewayLinkTests(unittest.TestCase):
     context-scoped ones -- see UI_REFERENCE_MAP.md's own retired-
     references table."""
 
-    def test_gateway_open_existing_points_at_the_chooser_not_management(self):
+    def test_gateway_open_existing_is_present_as_an_inline_reveal(self):
+        """CLAUDE-CA1D-GATEWAY-INLINE-REOPEN-01: a PO correction replaced
+        the navigating `<a>` (to `portal.choose_project`) with an inline
+        `<details>` reveal on the Gateway itself - fewest transitions to
+        reopen a Project. `portal.choose_project`/project_chooser.html
+        are unchanged and still serve the header's "Switch Project"
+        Vestibule (menu.context.switch-project) - just no longer the
+        Gateway's own default reopening path."""
         source = _GATEWAY_HTML_PATH.read_text(encoding="utf-8")
+        # Passed as a macros.subdisclosure(..., ui_ref=...) call argument,
+        # not a literal data-ui-ref="..." HTML attribute in this file's
+        # own source (the attribute itself lives in _macros.html).
         for ref in ("gateway.open-existing-client-owner", "gateway.open-existing-design-builder"):
-            match = re.search(r'data-ui-ref="' + re.escape(ref) + r'"[^>]*href="([^"]+)"', source)
-            if match is None:
-                match = re.search(r'href="\{\{ url_for\(\'([^\']+)\'[^}]*\}\}"[^>]*data-ui-ref="' + re.escape(ref) + r'"', source)
-            self.assertIsNotNone(match, f"{ref} link not found")
-
-    def test_gateway_open_existing_uses_choose_project_endpoint(self):
-        source = _GATEWAY_HTML_PATH.read_text(encoding="utf-8")
-        for ref in ("gateway.open-existing-client-owner", "gateway.open-existing-design-builder"):
-            anchor_start = source.index(f'data-ui-ref="{ref}"')
-            window = source[max(0, anchor_start - 200):anchor_start + 150]
-            self.assertIn("portal.choose_project", window)
-            self.assertNotIn("portal.projects_list", window)
+            self.assertIn(f'ui_ref="{ref}"', source)
+        self.assertNotIn("portal.choose_project", source)
 
 
 if __name__ == "__main__":

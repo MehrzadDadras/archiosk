@@ -114,11 +114,35 @@ class GatewayContextGroupTests(_BaseGatewayLabelsTestCase):
         self.assertIn('href="/upload?environment=client_owner"', body)
         self.assertIn('href="/upload?environment=design_builder_proponent"', body)
 
-    def test_open_existing_links_deep_link_the_correct_environment_filter(self):
+    def test_open_existing_reveals_inline_not_a_link_to_the_chooser(self):
+        """CLAUDE-CA1D-GATEWAY-INLINE-REOPEN-01: a PO correction removed
+        the extra transition through `portal.choose_project` - "Open
+        Existing Project" now reveals that context's own Projects
+        inline (a `<details>` disclosure), never a navigating `<a>`."""
         client = self._client_as("gl_admin", 1)
         body = client.get("/gateway").get_data(as_text=True)
-        self.assertIn('href="/projects/choose?environment=client_owner"', body)
-        self.assertIn('href="/projects/choose?environment=design_builder_proponent"', body)
+        self.assertNotIn('href="/projects/choose?environment=client_owner"', body)
+        self.assertNotIn('href="/projects/choose?environment=design_builder_proponent"', body)
+        self.assertIn('data-ui-ref="gateway.open-existing-client-owner"', body)
+        self.assertIn('data-ui-ref="gateway.open-existing-design-builder"', body)
+
+    def test_open_existing_shows_each_groups_own_projects_inline(self):
+        self._ingest(owner="gl_admin", project_name="Riverside Client Project", environment=CLIENT_OWNER)
+        self._ingest(owner="gl_admin", project_name="Riverside Bidder Project", environment=DESIGN_BUILDER_PROPONENT)
+        client = self._client_as("gl_admin", 1)
+        body = client.get("/gateway").get_data(as_text=True)
+        self.assertIn("Riverside Client Project", body)
+        self.assertIn("Riverside Bidder Project", body)
+        # A real selection, not a bare link - the same select-then-confirm
+        # pattern gateway.chooser itself already uses.
+        self.assertIn('data-ui-ref="gateway.open-existing-client-owner.leaf"', body)
+        self.assertIn('data-ui-ref="gateway.open-existing-design-builder.leaf"', body)
+
+    def test_open_existing_empty_state_per_context_group(self):
+        client = self._client_as("gl_admin", 1)
+        body = client.get("/gateway").get_data(as_text=True)
+        self.assertIn("No Client / Owner projects yet.", body)
+        self.assertIn("No Design-Builder / Proponent projects yet.", body)
 
 
 class ChooseProjectEnvironmentFilterTests(_BaseGatewayLabelsTestCase):

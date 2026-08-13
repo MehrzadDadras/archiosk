@@ -363,13 +363,64 @@ def reset_password():
     return redirect(url_for('portal.login'))
 
 
+def _environment_projects(registry, store: CaseWorkspaceStore, environment_filter: str) -> list[dict]:
+    """The same access-scoped, environment-filtered project summary
+    shape `choose_project` builds (Section 12/CLAUDE-CA1D-PROJECT-
+    GATEWAY-LABELS-01) for its own `?environment=` filter, reused here
+    so `gateway()` can render its two always-scoped lists inline
+    (CLAUDE-CA1D-GATEWAY-INLINE-REOPEN-01) via the same
+    `_accessible_documents`/`_safe_workspace` primitives - no new
+    authorization surface. `choose_project` keeps its own inline loop
+    unchanged (it must also support the unfiltered/`environment_filter
+    == ''` case this helper does not), so this is not a full merge of
+    the two - just the one shape both now need."""
+    documents = _accessible_documents(registry, store)
+    projects = []
+    for document in documents:
+        workspace = _safe_workspace(store, document.project_id)
+        if not workspace or workspace.operating_environment != environment_filter:
+            continue
+        projects.append({
+            "project_id": document.project_id,
+            "display_name": (workspace.display_title if workspace else None) or document.filename,
+            "last_activity": document.ingested_at,
+        })
+    projects.sort(key=lambda p: p["display_name"].lower())
+    return projects
+
+
 @portal_bp.route('/gateway')
 @login_required
 def gateway():
     """Post-login landing: pick "ingest a new document" vs "view dashboard"
     instead of jumping straight into one, mirroring a project-selection
-    style entry point rather than a single default destination."""
-    return render_template('gateway.html')
+    style entry point rather than a single default destination.
+
+    CLAUDE-CA1D-GATEWAY-INLINE-REOPEN-01: "Open Existing Project" used to
+    be a plain `<a>` navigating to `portal.choose_project` - a second,
+    separate page just to reopen a Project. A PO correction named this as
+    more transitions than reopening needs: Gateway -> reveal projects ->
+    select -> workspace, not Gateway -> chooser page -> select -> workspace.
+    Each context group's projects are now rendered inline (client-side
+    reveal via a native `<details>`, no navigation), reusing the exact
+    same `_environment_projects` data `choose_project` itself builds - no
+    new authorization surface. `choose_project`/`project_chooser.html`
+    are UNCHANGED and remain reachable: the header's "Switch Project"
+    Vestibule link still uses them (a different, legitimate use - reopening
+    while ALREADY inside a Project), and the plain unfiltered route is
+    still directly reachable by URL for anyone who wants the fuller
+    picker. Removed Projects/Security ("advanced management") were
+    already reachable from the Gateway's own account menu
+    (gateway_shell.html), not through this chooser - nothing to preserve
+    there that wasn't already independently preserved.
+    """
+    registry = get_registry(current_app)
+    store = CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"])
+    return render_template(
+        'gateway.html',
+        client_owner_projects=_environment_projects(registry, store, 'client_owner'),
+        design_builder_projects=_environment_projects(registry, store, 'design_builder_proponent'),
+    )
 
 
 @portal_bp.route('/explore')

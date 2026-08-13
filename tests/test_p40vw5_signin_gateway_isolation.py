@@ -331,21 +331,22 @@ class GatewayFunctionalChoicesTests(_BaseTestCase):
         self.assertNotIn("/upload?environment=", body)
 
     def test_open_existing_project_action_present_and_functional(self):
-        # CLAUDE-P40-VW8-QA, Section 12: "Open an existing project" now
-        # leads to the focused chooser (/projects/choose), not the full
-        # management directory (/projects) - the latter is unchanged and
-        # still independently reachable/functional (asserted below).
         # CLAUDE-CA1D-PROJECT-GATEWAY-LABELS-01: Gateway's own entrance
-        # is now two context-scoped links (?environment=client_owner /
-        # ?environment=design_builder_proponent), not one environment-
-        # agnostic link.
+        # is two context-scoped controls (client-owner / design-builder),
+        # not one environment-agnostic link.
+        # CLAUDE-CA1D-GATEWAY-INLINE-REOPEN-01: "Open Existing Project"
+        # is now an inline reveal on the Gateway itself (fewest possible
+        # transitions to reopen a Project) rather than a navigating link
+        # to /projects/choose - the fixture's own Client/Owner project
+        # must appear directly in the Gateway's own inline list.
         client = self._client_as("vw5_admin", 1)
         body = client.get("/gateway").get_data(as_text=True)
         self.assertIn('data-ui-ref="gateway.open-existing-client-owner"', body)
         self.assertIn('data-ui-ref="gateway.open-existing-design-builder"', body)
-        self.assertIn('href="/projects/choose?environment=client_owner"', body)
-        # The fixture project is a Client/Owner project (see _ingest
-        # above) - the matching filtered chooser must still find it.
+        self.assertIn(_DISTINCTIVE_PROJECT_NAME, body)
+        self.assertNotIn('href="/projects/choose?environment=client_owner"', body)
+        # /projects/choose itself is unchanged and still independently
+        # reachable (the header's "Switch Project" Vestibule uses it).
         resp = client.get("/projects/choose?environment=client_owner")
         self.assertEqual(resp.status_code, 200)
         self.assertIn(_DISTINCTIVE_PROJECT_NAME, resp.get_data(as_text=True))
@@ -418,22 +419,30 @@ class ShellTransitionTests(_BaseTestCase):
         self.assertIn(_DISTINCTIVE_PROJECT_NAME, body)
 
     def test_returning_to_gateway_shows_no_stale_project_content(self):
+        # CLAUDE-CA1D-GATEWAY-INLINE-REOPEN-01: the fixture's own Project
+        # NAME legitimately appears now, inside Gateway's own inline
+        # "Open Existing Project" picker - that is the intended feature,
+        # not a leak. What must never appear is actual WORKSPACE shell
+        # content (Toolbox/Display/Chat/Lists) rendering around it - the
+        # original VW5 defect this test guards against.
         client = self._client_as("vw5_admin", 1)
         client.get(f"/projects/{self.project_id}/workspace")  # open the Project first
         body = client.get("/gateway").get_data(as_text=True)
         for marker in (
-            _DISTINCTIVE_PROJECT_NAME, self.project_id,
             "workspace-pane-toolbox", "display-divisions", "chat-region",
             "launcher-panel", "app-shell",
         ):
             self.assertNotIn(marker, body, marker)
 
     def test_gateway_then_project_then_gateway_round_trip_leaks_nothing(self):
+        # See test_returning_to_gateway_shows_no_stale_project_content
+        # above: the Project's own name is now expected inline (the
+        # Gateway's own "Open Existing Project" picker); the workspace
+        # SHELL (Lists/launcher-panel) must still never leak.
         client = self._client_as("vw5_admin", 1)
         client.get("/gateway")
         client.get(f"/projects/{self.project_id}/workspace")
         second_gateway = client.get("/gateway").get_data(as_text=True)
-        self.assertNotIn(_DISTINCTIVE_PROJECT_NAME, second_gateway)
         self.assertNotIn("launcher-panel", second_gateway)
 
 
