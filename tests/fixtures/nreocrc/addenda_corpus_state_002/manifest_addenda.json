@@ -1,0 +1,70 @@
+{
+  "project_id": "nreocrc",
+  "extends_corpus_state_id": "CORPUS-STATE-001",
+  "corpus_state_id": "CORPUS-STATE-002",
+  "corpus_state_description": "Governed revision layer added under CLAUDE-GO-COMPETE-01 for the Requirement->Evidence->Adjudication->Governed-Action proving loop. Additive only - does not modify tests/fixtures/nreocrc/immutable_original, manifest.json, baseline_snapshot_001, snapshot_002, or either devils_advocate_review file, matching the Supersession discipline documented in services/case_workspace.py (a predecessor object is never edited in place). Adds three numbered Addenda amending NREOCRC-OPR-001 and one Design-Builder work-product artifact (design evidence) that is deliberately NOT yet reconciled with the latest Addendum.",
+  "manifest_generated_at": "2026-08-12T00:00:00+00:00",
+  "manifest_note": "This manifest is itself derived/generated, following manifest.json's own convention. It does not alter the originals it describes.",
+  "files": [
+    {
+      "file_name": "NREOCRC-ADD-01.md",
+      "document_id": "NREOCRC-ADD-01",
+      "document_title": "Addendum No. 1 to Request for Proposals NREOCRC-RFP-001",
+      "amends": ["NREOCRC-OPR-001 Section 6.1", "NREOCRC-OPR-001 Section 19.3"],
+      "issue_date": "2027-01-12",
+      "issuer": "North River Infrastructure Corporation",
+      "status_as_stated_in_document": "ISSUED - CONTRACTUAL DOCUMENT",
+      "role_in_proving_loop": "Housekeeping addendum - resolves two minor TBD citations named in OPR-001 Section 20.2. Not the substantive change.",
+      "file_type": "text/markdown",
+      "sha256": "7a18b86f05864ae09d4a9de607643366bef1bc801e49d68a834ca916c1e785b8",
+      "byte_size": 2201,
+      "immutable_source_path": "tests/fixtures/nreocrc/addenda_corpus_state_002/NREOCRC-ADD-01.md"
+    },
+    {
+      "file_name": "NREOCRC-ADD-02.md",
+      "document_id": "NREOCRC-ADD-02",
+      "document_title": "Addendum No. 2 to Request for Proposals NREOCRC-RFP-001",
+      "amends": ["NREOCRC-OPR-001 Section 12.1 (as amended by NREOCRC-ADD-01)"],
+      "issue_date": "2027-02-03",
+      "issuer": "North River Infrastructure Corporation",
+      "status_as_stated_in_document": "ISSUED - CONTRACTUAL DOCUMENT",
+      "role_in_proving_loop": "The substantive design-affecting change: standby power duration 96h -> 120h. Deliberately does NOT amend Section 12.2's fuel storage sizing reference table, creating a real internal-consistency question a competent reviewer should catch (design implication + missing/conflicting evidence).",
+      "file_type": "text/markdown",
+      "sha256": "6cf243ae74110eb36589452c68d438754728ca82754922e9a83f429f62ed0c47",
+      "byte_size": 2143,
+      "immutable_source_path": "tests/fixtures/nreocrc/addenda_corpus_state_002/NREOCRC-ADD-02.md"
+    },
+    {
+      "file_name": "NREOCRC-ADD-03.md",
+      "document_id": "NREOCRC-ADD-03",
+      "document_title": "Addendum No. 3 to Request for Proposals NREOCRC-RFP-001 - Response to Proponent Questions",
+      "amends": ["See Item 1 response - does not amend a numbered OPR-001 Section; a Question/Response addendum"],
+      "issue_date": "2027-02-21",
+      "issuer": "North River Infrastructure Corporation",
+      "status_as_stated_in_document": "ISSUED - CONTRACTUAL DOCUMENT",
+      "role_in_proving_loop": "Owner's response to a Proponent question about whether Section 12.2 is amended alongside Section 12.1. Deliberately non-committal ('not, at this time, issuing a revised numeric value') - the ambiguity this specimen's proving loop is meant to surface, and a real strategic-RFI-worthy condition (Sections 5/17 of CLAUDE-GO-COMPETE-01).",
+      "file_type": "text/markdown",
+      "sha256": "133992f71ec0be98a89b65b628a4615316d3c98c44bf469eb879242e11785f77",
+      "byte_size": 3044,
+      "immutable_source_path": "tests/fixtures/nreocrc/addenda_corpus_state_002/NREOCRC-ADD-03.md"
+    },
+    {
+      "file_name": "NREOCRC-DBR-001-standby-power-basis-of-design.md",
+      "document_id": "NREOCRC-DBR-001",
+      "document_title": "Design-Builder Preliminary Basis of Design - Standby Power & Fuel Storage",
+      "amends": null,
+      "issue_date": "2027-01-28",
+      "issuer": "Pursuit Team (synthetic Design-Builder side, not the Owner)",
+      "status_as_stated_in_document": "DRAFT - for internal coordination only; not yet submitted to Owner",
+      "role_in_proving_loop": "Design evidence (Section 13). Sized to the PRE-Addendum-02 72-hour basis and dated before NREOCRC-ADD-02 was issued - a realistic, self-aware stale draft (its own Section 5 already flags 'reconcile against any RFP Addenda issued after the date of this draft'), not a planted trap. Should adjudicate as NOT SATISFIED or PARTIALLY SATISFIED against Section 12.1 as amended.",
+      "file_type": "text/markdown",
+      "sha256": "7e3f0d3ae6ec7472ff1866b59601c5b7db847c939fa79d8c401f5c84d7b185bc",
+      "byte_size": 2539,
+      "immutable_source_path": "tests/fixtures/nreocrc/addenda_corpus_state_002/NREOCRC-DBR-001-standby-power-basis-of-design.md"
+    }
+  ],
+  "known_pre_existing_defects_in_corpus_state_001": {
+    "note": "Not modified by this extension - carried forward for the tester's own reference. See tests/fixtures/nreocrc/known_defects_answer_key_002.md (kept separate from ingestible content, per CLAUDE-GO-COMPETE-01 Section 6's 'preserve hidden known defects separately').",
+    "already_documented_in": "devils_advocate_review_001.md, ingest_nreocrc_lab_002.py's own docstring"
+  }
+}
