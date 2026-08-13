@@ -232,6 +232,62 @@ real places:
 
 ---
 
+## 4b. "Under the hood by default, daylight on demand" (`CLAUDE-GO-DNA-07` addendum)
+
+Recorded following a Product Owner interaction-principle clarification: GO's investigative machinery
+should operate beneath the surface by default (concise finding → evidence citation → characterization
+→ suggested next step), while remaining able to expose a **professional evidence trace** — never raw
+model chain-of-thought — on demand for a consequential finding. **No code changes accompany this
+addendum.**
+
+**A major finding, discovered while grounding this addendum, not assumed:** most of what this
+principle asks for already exists and is live, for the Case/Investigation path — this record had
+not previously credited it. `explain_investigation_answer`/`explain_evidence_trust`
+(`services/case_workspace.py`, `CLAUDE-MM7` "Trustworthy Answer Contract" / "Why should I trust
+this?"), wired to real GET routes (`routes/api.py`, not admin-gated, matching this corpus's own
+read/write authority split) and consumed live by `static/js/drawing_image_viewer.js`'s own
+investigation-answer view. Verified directly: `explain_investigation_answer` is a **pure, read-time
+aggregation over an `InvestigationStep`'s own `Claim`s — no new storage** — assembling exactly the
+trace shape this addendum's own governing prompt asks for: evidence used (`Claim.evidence_links`),
+evidence considered but excluded (`Claim.evidence_excluded` — the concrete answer to "what else did
+you check"), contradiction presence (`contradiction_relationship_ids`/`CLAIM_CLASS_CONFLICTING` —
+"what contradicted this"), staleness, missing-evidence/abstention claims, recommended next checks
+(`Claim.recommended_next_check` — a literal "what would test this further" field), and an
+`authority_boundary` value (`informational` vs `requires_human_authority`) that is itself the
+coordinator-boundary signal §4a above describes. The function's own docstring already states the
+"light on first touch, deep on demand" principle this Product Owner direction asks for, independently
+and earlier: *"progressive disclosure... reveals more of this SAME payload in stages, rather than
+three separate endpoints that could drift apart."*
+
+**The one precise gap, confirmed by direct comparison:** `ComposerFinding` (§1/§4 above, the newer,
+project-level, Composer-Q&A-driven path this record itself introduced) has **no equivalent**. It
+carries `source_reference`/`concern`/`unresolved_question`/`source_message_id` — a single flat
+characterization pointing at the one conversation turn that produced it — but no `evidence_links`
+list, no contradiction tracking, no "what else was checked" record, and therefore no aggregation
+function `explain_investigation_answer` could generalize to. A PM asking "why did you flag this?" of
+a `ComposerFinding` today has only its own four text fields to read — there is no deeper trace to
+reveal even if a UI control existed to request one. This is a materially different situation from
+"the trace exists but isn't exposed" (true of the MM7 path) — for `ComposerFinding`, the trace itself
+was never captured at write time. **Not built by this addendum** — named as the seam a future
+`ComposerFinding` generalization would need to close, and the natural place to reuse
+`explain_investigation_answer`'s own assembly shape rather than inventing a second one.
+
+**What already correctly hides machinery, named per the governing prompt's own question 8:** the
+Composer's own conversational turn (`services/project_qa.py`) never surfaces its prompt construction,
+retrieval steps, or raw model output to the PM — only the parsed `reply_text`/`findings`/`river_actions`
+result. Nothing in the current implementation over-exposes internal machinery by default; the gap is
+one-sided (under-exposure for `ComposerFinding`, not over-exposure anywhere).
+
+**Seam classification:** CURRENT (already enforced) — the MM7 Trustworthy Answer Contract itself,
+its authority-boundary signal, its progressive-disclosure documentation. NEAR-TERM ACCELERATOR (not
+built) — generalizing `ComposerFinding` to carry a `Claim`-shaped evidence trail (reusing
+`Claim.evidence_links`'s validated-reference discipline, per `CLAUDE-GO-DNA-05`) so
+`explain_investigation_answer`'s own aggregation shape could extend to it, plus a right-panel "why"
+affordance surfacing that payload. SPECIFIED-UNBUILT — any full historical Spin trace UI, any
+generalized "explain any finding" endpoint spanning both `Claim` and `ComposerFinding` today.
+
+---
+
 ## 5. What remains specified-unbuilt (do not treat this record as authorizing it)
 
 This record documents what is now DNA — it does **not** authorize building any of the following.
