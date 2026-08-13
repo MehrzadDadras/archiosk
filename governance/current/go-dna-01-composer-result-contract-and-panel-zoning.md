@@ -91,11 +91,24 @@ surface.
 **Conditional projection, not wholesale relocation** (per the governing prompt's own Section 5
 "Directional Correction vs Overbuilding" and its "Conditional Right-Panel Principle" — do not move
 the current left navigation wholesale from left to right; project existing capabilities
-contextually, under the conditions where they matter). Implemented today: the Toolbox already
-branches `active_case` (Investigation selected) → `selected_source` (Document selected) →
-`composer_findings_view` (this project has Composer-emitted findings and nothing more specific is
-selected) → a neutral empty state — each condition showing only what's relevant to what's actually
-selected, never a permanent menu of every capability at once.
+contextually, under the conditions where they matter). Implemented today: the Toolbox branches
+`active_case` (Investigation selected) → `selected_source` (Document selected) →
+`toolbox.project-intelligence` (nothing more specific selected) — each condition showing only
+what's relevant to what's actually selected, never a permanent menu of every capability at once.
+
+**Update — the zoning correction is now structurally complete, not only the narrower
+`composer_findings_view` branch this section originally described (`CLAUDE-GO-DNA-01` Part F.13,
+landed after this record's own initial capture).** `templates/base.html`'s Lists panel for an open
+project now renders ONLY file/evidence territory: the project self-link, the Documents tree, Files,
+and file-related Project Tools (Add Documents/Add Text Record/Revise Document/Add External
+Source/Removed Items). Requirements, Investigations, RFI Correspondence, Work Products,
+Conversation, Tasks, Tags, and Remove Project were physically relocated out of Lists into the
+Toolbox's own always-present `toolbox.project-intelligence` section (`templates/case_workspace.html`)
+— reusing the exact same routes/forms/DOM ids each control already had (the Tasks/Tags live-update
+JS is DOM-id-based, not position-based, so relocating the surrounding markup required zero JS
+changes). Security/Operations/Project Data Management remain correctly separated, unchanged (§3's
+own finding stands). `UI_REFERENCE_MAP.md` records the full retired-`lists.project.*` →
+new-`toolbox.*` mapping.
 
 ---
 
@@ -189,6 +202,36 @@ unsupported metadata merely to fill fields") and Section 9 ("do not overbuild"):
 
 ---
 
+## 4a. Coordinator boundary and RFI authority (`CLAUDE-GO-DNA-02` addendum)
+
+Recorded alongside `specified-unbuilt/spin-project-intelligence-preview.md`'s own probe/echo/
+Task-as-probe-vehicle addendum, which preserves the Product Owner's real Roof Scupper investigation
+as a canonical example and the fuller technical/commercial concurrence model — **not built, see
+that document**. This section records only what is **already true of the current, implemented
+code**, so the boundary is not treated as aspirational when it is in fact already enforced in two
+real places:
+
+- **GO never creates a governed record itself — already enforced, not aspirational.**
+  `services/project_qa.py`'s own `BEHAVIORAL_CONTRACT`, unchanged by this record: *"You may
+  suggest that something become a governed Requirement, Finding, Task, or Decision, but you never
+  create one yourself — only the human project manager does that."* This is the coordinator-not-
+  designer boundary in its general form; the Roof Scupper example is the concrete, human-proven
+  illustration of the same rule ("could the designer review relocating this" as a question GO may
+  raise, never "move the scupper" as an instruction GO may issue).
+- **An RFI is never a dry unilateral machine decision — already enforced structurally, not by
+  convention.** `create_rfi_draft` (`services/case_workspace.py`) hard-requires a
+  `ReviewerValidation` to already exist on the underlying Finding before a draft can be created at
+  all; the draft then requires its own further human review/edit before `issue_rfi_draft` moves it
+  to `RFI_STATUS_ISSUED`. A human decision point exists before both drafting and issuing.
+- **What is NOT enforced today, named honestly:** the single `ReviewerValidation` gate does not
+  distinguish *technical* concurrence (is this a legitimate concern) from *commercial/risk*
+  concurrence (should we raise it, through what channel) — the two-party consultation
+  (design-authority + Construction-Management-equivalent) the Roof Scupper example demonstrates has
+  no structural representation. A future concurrence-type field is named, not built — see
+  `specified-unbuilt/spin-project-intelligence-preview.md`'s own addendum for the full record.
+
+---
+
 ## 5. What remains specified-unbuilt (do not treat this record as authorizing it)
 
 This record documents what is now DNA — it does **not** authorize building any of the following.
@@ -202,8 +245,11 @@ Each remains its own separate, not-yet-authorized step:
   2 commits (`15b037f`/`cbb27d6`/`861d2b3`) for their own detail; this record does not restate it.
 - **The full future Spin programme** — comprehensive Machine Spin, historical Spin-set
   preservation, Pass/Build adjudication, Tool Making, custom-focus management — see
-  `specified-unbuilt/spin-project-intelligence-preview.md` (new, this record) for the
-  concept-preservation entry.
+  `specified-unbuilt/spin-project-intelligence-preview.md` for the concept-preservation entry.
+- **The investigative rhythm (Load → Aim → Probe → Echo → Interpret → Re-aim), Task as a directed
+  probe vehicle, compound evidence, and the "wondering note" concept** — see that same document's
+  `CLAUDE-GO-DNA-02` addendum, including the preserved Roof Scupper canonical example and the
+  technical/commercial concurrence distinction.
 - **`ComposerFinding` → real Investigation escalation.** Not built, but a real seam is identified:
   `ComposerFinding.source_message_id` already matches what the existing `needs_case:` escalation
   route (`start_investigation_from_aperture`, `routes/workspace.py`) expects as input — a future
@@ -247,10 +293,13 @@ Each remains its own separate, not-yet-authorized step:
 - `services/case_workspace.py`'s `add_composer_finding` — the closed-vocabulary validation on
   `content_class`/`review_state` is itself the structural guard against an invalid/unreviewable
   state being persisted; no separate schema-validation layer exists or is needed.
-- **Not yet tested/enforced** (named honestly): the panel-zoning invariant (§2) itself has no
-  structural test today beyond the Toolbox's own existing branch-priority tests — a future
-  regression that puts evidence-territory content into the Toolbox, or intelligence content into
-  Lists, would not be caught automatically. Recorded as a residual, not fixed by this record.
+- **The panel-zoning invariant (§2) now has its own structural guard** (`CLAUDE-GO-DNA-01` Part
+  F.14, closing the residual this section originally recorded): `tests/test_p40vw7a_ui_reference_map.py::
+  PanelZoningInvariantTests` asserts, via a ref-prefix pattern rather than fragile markup, that no
+  `lists.project.(requirements|investigations|rfis|work-products|chats|tasks|tags|
+  tools.remove-project)` reference can render in Lists for an open project, and separately confirms
+  each relocated category is still reachable from the Toolbox. A future regression that
+  reintroduces intelligence content into Lists fails this test, not merely a visual review.
 
 ---
 

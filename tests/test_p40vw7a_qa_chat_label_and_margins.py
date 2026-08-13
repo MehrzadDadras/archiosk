@@ -26,6 +26,7 @@ from pathlib import Path
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _MACROS_HTML_PATH = _REPO_ROOT / "templates" / "_macros.html"
 _BASE_HTML_PATH = _REPO_ROOT / "templates" / "base.html"
+_CASE_WORKSPACE_HTML_PATH = _REPO_ROOT / "templates" / "case_workspace.html"
 _MAIN_CSS_PATH = _REPO_ROOT / "static" / "css" / "main.css"
 _WORKSPACE_ROUTES_PATH = _REPO_ROOT / "routes" / "workspace.py"
 
@@ -63,18 +64,24 @@ class NoDuplicateChatLabelTests(unittest.TestCase):
 
 
 class ChatsListsRowCarriesTheCountTests(unittest.TestCase):
+    """CLAUDE-GO-DNA-01 (Panel Zoning) relocated this row from Lists
+    (`lists.project.chats`, base.html) into the Toolbox's own Project
+    Intelligence view (`toolbox.conversation`, case_workspace.html) - the
+    underlying contract this class protects (one row, carrying the real
+    count, no duplicate label) is unchanged, just relocated."""
+
     def setUp(self):
-        self.base_html = _BASE_HTML_PATH.read_text(encoding="utf-8")
+        self.case_workspace_html = _CASE_WORKSPACE_HTML_PATH.read_text(encoding="utf-8")
         self.routes_source = _WORKSPACE_ROUTES_PATH.read_text(encoding="utf-8")
 
     def test_chats_row_renders_a_launcher_count_span(self):
-        idx = self.base_html.index('data-ui-ref="lists.project.chats"')
-        row = self.base_html[idx: idx + 300]
+        idx = self.case_workspace_html.index('data-ui-ref="toolbox.conversation"')
+        row = self.case_workspace_html[idx: idx + 300]
         self.assertIn("Conversation <span class=\"launcher-count\">", row)
         self.assertIn("{{ project_conversation_count }}", row)
 
     def test_chats_row_identifier_retained(self):
-        self.assertIn('data-ui-ref="lists.project.chats"', self.base_html)
+        self.assertIn('data-ui-ref="toolbox.conversation"', self.case_workspace_html)
 
     def test_route_computes_the_count_from_the_real_conversation_list(self):
         self.assertIn("project_conversation_count=len(workspace.project_conversation)", self.routes_source)

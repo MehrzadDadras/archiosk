@@ -114,9 +114,16 @@ class RFIsBranchAlwaysRendersTests(_BaseTestCase):
         # Investigations/RFIs/Chats) gated on non-empty content - a
         # Project with no RFI drafts yet lost the whole row instead of
         # showing "RFIs (0)" like its siblings always do at any count.
+        # CLAUDE-GO-DNA-01 (Panel Zoning) relocated this branch from Lists
+        # into the Toolbox's Project Intelligence view (toolbox.rfi) and
+        # its label format changed from a trailing <span class=
+        # "launcher-count"> to macros.subdisclosure's own "RFI
+        # Correspondence (N)" - the underlying contract this test protects
+        # (the branch renders at zero count, not just when non-empty) is
+        # unchanged.
         client = self._client_as("e3aqa_owner", 1)
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
-        self.assertIn(">RFI Correspondence <span class=\"launcher-count\">0</span>", body)
+        self.assertIn("RFI Correspondence (0)", body)
 
     def test_rfis_branch_count_reflects_real_drafts_and_filters_unauthorized(self):
         # Same hermetic setup pattern as tests/test_capability_architecture.py's
@@ -145,7 +152,7 @@ class RFIsBranchAlwaysRendersTests(_BaseTestCase):
 
         client = self._client_as("e3aqa_owner", 1)
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
-        self.assertIn(">RFI Correspondence <span class=\"launcher-count\">1</span>", body)
+        self.assertIn("RFI Correspondence (1)", body)
 
 
 # ---------------------------------------------------------------------------
@@ -225,12 +232,16 @@ class ToolboxContextualScopingTests(_BaseTestCase):
         return body[start:body.index("</aside>", start)]
 
     def test_project_level_sections_absent_from_toolbox_when_nothing_selected(self):
+        # CLAUDE-GO-DNA-01 (Panel Zoning): "Remove Project" is now
+        # legitimately IN the Toolbox (its own Project Administration
+        # disclosure, relocated back from Lists) - it's no longer one of
+        # the file-territory controls this test protects. Add a Document/
+        # Removed Items remain Lists-only, unchanged.
         client = self._client_as("e3aqa_owner", 1)
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
         toolbox = self._toolbox_html(body)
         self.assertNotIn("Add a Document", toolbox)
         self.assertNotIn("Removed Items", toolbox)
-        self.assertNotIn("Remove Project", toolbox)
 
     def test_project_level_sections_absent_from_toolbox_when_a_document_is_selected(self):
         client = self._client_as("e3aqa_owner", 1)

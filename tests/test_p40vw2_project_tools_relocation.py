@@ -132,26 +132,43 @@ class _BaseTestCase(unittest.TestCase):
 
 class RelocationOwnershipTests(_BaseTestCase):
     def test_project_tools_branch_present_in_lists_for_the_active_project(self):
+        # CLAUDE-GO-DNA-01 (Panel Zoning): Remove Project moved OUT of this
+        # branch into the Toolbox's own Project Administration disclosure
+        # (a partial reversal of P40-VW2, for this one control only) - the
+        # file-action controls this test otherwise covers (Add Documents,
+        # Removed Items) are unchanged, still here.
         client = self._client_as("vw2_owner", 1)
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
         lists = self._lists_html(body)
         self.assertIn("Project Tools", lists)
         self.assertIn('id="project-sources-add-document"', lists)
         self.assertIn('id="project-removed-items"', lists)
-        self.assertIn(f'action="{"/projects/" + self.project_id + "/workspace/remove"}"', lists)
+        self.assertNotIn(f'action="{"/projects/" + self.project_id + "/workspace/remove"}"', lists)
 
     def test_project_level_controls_absent_from_toolbox_entirely(self):
+        # CLAUDE-GO-DNA-01 (Panel Zoning): "Remove Project" is the one
+        # control that DID move (back) into the Toolbox - see
+        # ProjectAdministrationRelocatedTests below for its own coverage.
+        # Add a Document/Removed Items/Project Data Management remain
+        # Lists-only, unchanged.
         client = self._client_as("vw2_owner", 1)
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
         toolbox = self._toolbox_html(body)
-        for forbidden in ("Add a Document", "Removed Items", "Remove Project", "Project Data Management"):
+        for forbidden in ("Add a Document", "Removed Items", "Project Data Management"):
             self.assertNotIn(forbidden, toolbox, forbidden)
 
-    def test_toolbox_shows_a_concise_neutral_empty_state_when_nothing_selected(self):
+    def test_toolbox_shows_project_intelligence_when_nothing_selected(self):
+        # CLAUDE-GO-DNA-01 (Panel Zoning) superseded this: the old bare
+        # neutral empty state ("No Investigation or Document is currently
+        # selected") was replaced by the always-present Project
+        # Intelligence view (Requirements/Investigations/RFI/Work
+        # Products/Conversation/Tasks/Tags/Project Administration) - see
+        # governance/current/go-dna-01-composer-result-contract-and-panel-
+        # zoning.md for the full record.
         client = self._client_as("vw2_owner", 1)
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
         toolbox = self._toolbox_html(body)
-        self.assertIn("No Investigation or Document is currently selected", toolbox)
+        self.assertIn('data-ui-ref="toolbox.project-intelligence"', toolbox)
 
     def test_relocated_forms_point_at_the_same_unchanged_routes(self):
         client = self._client_as("vw2_owner", 1)
@@ -159,7 +176,29 @@ class RelocationOwnershipTests(_BaseTestCase):
         lists = self._lists_html(body)
         self.assertIn(f'/projects/{self.project_id}/workspace/sources/document', lists)
         self.assertIn(f'/projects/{self.project_id}/workspace/sources/text-record', lists)
-        self.assertIn(f'/projects/{self.project_id}/workspace/remove', lists)
+        # Remove Project posts to the same unchanged route, now from the
+        # Toolbox's own Project Administration disclosure (CLAUDE-GO-DNA-01).
+        toolbox = self._toolbox_html(body)
+        self.assertIn(f'/projects/{self.project_id}/workspace/remove', toolbox)
+
+
+class ProjectAdministrationRelocatedTests(_BaseTestCase):
+    """CLAUDE-GO-DNA-01 (Panel Zoning): Remove Project's own new home -
+    the Toolbox's Project Administration disclosure, owner/admin-gated
+    exactly as before relocation."""
+
+    def test_remove_project_present_in_toolbox_for_owner(self):
+        client = self._client_as("vw2_owner", 1)
+        body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
+        toolbox = self._toolbox_html(body)
+        self.assertIn('data-ui-ref="toolbox.project-admin"', toolbox)
+        self.assertIn('data-ui-ref="toolbox.project-admin.remove-project"', toolbox)
+
+    def test_remove_project_absent_from_toolbox_for_non_owner_non_admin(self):
+        client = self._client_as("vw2_granted_reviewer", 3, role="read_only")
+        body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
+        toolbox = self._toolbox_html(body)
+        self.assertNotIn('data-ui-ref="toolbox.project-admin"', toolbox)
 
 
 # ---------------------------------------------------------------------------

@@ -167,6 +167,12 @@ class _BaseTestCase(unittest.TestCase):
         end = body.index('id="workspace-toolbox-panel"') if 'id="workspace-toolbox-panel"' in body else body.index("</body>")
         return body[start:end]
 
+    def _toolbox_html(self, body: str) -> str:
+        # CLAUDE-GO-DNA-01 (Panel Zoning): Tasks/Tags relocated from Lists
+        # into the Toolbox's own Project Intelligence view.
+        start = body.index('id="workspace-toolbox-panel"')
+        return body[start:body.index("</aside>", start)]
+
 
 # ---------------------------------------------------------------------------
 # Store layer: tag normalization/dedup, anchor validation, task lifecycle.
@@ -603,15 +609,18 @@ class TemplateRenderingTests(_BaseTestCase):
         self.assertIn(f'action="/projects/{self.project_id}/workspace/tasks"', body)
 
     def test_lists_tasks_and_tags_branches_absent_when_empty_but_present(self):
+        # CLAUDE-GO-DNA-01 (Panel Zoning): Tasks/Tags relocated from Lists
+        # into the Toolbox; the total-count element ids (lists-tasks-count/
+        # lists-tags-count) were retired in favor of the subdisclosure's
+        # own "Tasks (N)"/"Tags (N)" label - the per-group open/completed
+        # count ids are unchanged (see other tests in this class).
         client = self._client_as("vw7_owner", 1)
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
-        lists = self._lists_html(body)
-        self.assertIn("Tasks", lists)
-        self.assertIn("Tags", lists)
-        self.assertIn('id="lists-tasks-count">0<', lists)
-        self.assertIn('id="lists-tags-count">0<', lists)
-        self.assertIn("No open Tasks.", lists)
-        self.assertIn("No Tags yet.", lists)
+        toolbox = self._toolbox_html(body)
+        self.assertIn("Tasks (0)", toolbox)
+        self.assertIn("Tags (0)", toolbox)
+        self.assertIn("No open Tasks.", toolbox)
+        self.assertIn("No Tags yet.", toolbox)
 
     def test_lists_shows_task_with_open_count_and_source_link(self):
         client = self._client_as("vw7_owner", 1)
@@ -620,12 +629,12 @@ class TemplateRenderingTests(_BaseTestCase):
             data={"title": "Check load capacity", **self._project_anchor_fields()},
         )
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
-        lists = self._lists_html(body)
-        self.assertIn('id="lists-tasks-count">1<', lists)
-        self.assertIn('id="lists-tasks-open-count">1<', lists)
-        self.assertIn('id="lists-tasks-completed-count">0<', lists)
-        self.assertIn("Check load capacity", lists)
-        self.assertIn(f"/projects/{self.project_id}/workspace#conv-source-{self.project_message['id']}", lists)
+        toolbox = self._toolbox_html(body)
+        self.assertIn("Tasks (1)", toolbox)
+        self.assertIn('id="lists-tasks-open-count">1<', toolbox)
+        self.assertIn('id="lists-tasks-completed-count">0<', toolbox)
+        self.assertIn("Check load capacity", toolbox)
+        self.assertIn(f"/projects/{self.project_id}/workspace#conv-source-{self.project_message['id']}", toolbox)
 
     def test_lists_shows_completed_task_in_completed_group(self):
         client = self._client_as("vw7_owner", 1)
@@ -635,23 +644,31 @@ class TemplateRenderingTests(_BaseTestCase):
         ).get_json()
         client.post(f"/projects/{self.project_id}/workspace/tasks/{created['task']['id']}/complete")
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
-        lists = self._lists_html(body)
-        self.assertIn('id="lists-tasks-open-count">0<', lists)
-        self.assertIn('id="lists-tasks-completed-count">1<', lists)
-        self.assertIn(f'action="/projects/{self.project_id}/workspace/tasks/{created["task"]["id"]}/reopen"', lists)
+        toolbox = self._toolbox_html(body)
+        self.assertIn('id="lists-tasks-open-count">0<', toolbox)
+        self.assertIn('id="lists-tasks-completed-count">1<', toolbox)
+        self.assertIn(f'action="/projects/{self.project_id}/workspace/tasks/{created["task"]["id"]}/reopen"', toolbox)
 
     def test_lists_shows_tag_group_with_swatch_and_source_link(self):
+        # CLAUDE-GO-DNA-01 (Panel Zoning): the Tags list relocated into
+        # the Toolbox's Project Intelligence view, which only renders when
+        # NOTHING is selected (same contextual convention Investigation
+        # Findings already used - active_case/selected_source still win).
+        # A Case-anchored Tag is still ONE aggregate list covering every
+        # anchor scope, so it's fetched from the plain (nothing-selected)
+        # workspace URL now, not `?case=...` (which shows that
+        # Investigation's own Findings instead).
         client = self._client_as("vw7_owner", 1)
         client.post(
             f"/projects/{self.project_id}/workspace/tags",
             data={"tag_id": BUILT_IN_TAG_IMPORTANT, **self._case_anchor_fields()},
         )
-        body = client.get(f"/projects/{self.project_id}/workspace?case={self.case['id']}").get_data(as_text=True)
-        lists = self._lists_html(body)
-        self.assertIn('id="lists-tags-count">1<', lists)
-        self.assertIn('data-tag-group="built-in:important"', lists)
-        self.assertIn("conv-tag-color-red", lists)  # Important's built-in color
-        self.assertIn(f"/projects/{self.project_id}/workspace?case={self.case['id']}#conv-source-{self.case_message['id']}", lists)
+        body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
+        toolbox = self._toolbox_html(body)
+        self.assertIn("Tags (1)", toolbox)
+        self.assertIn('data-tag-group="built-in:important"', toolbox)
+        self.assertIn("conv-tag-color-red", toolbox)  # Important's built-in color
+        self.assertIn(f"/projects/{self.project_id}/workspace?case={self.case['id']}#conv-source-{self.case_message['id']}", toolbox)
 
     def test_guidance_tag_source_url_uses_the_guidance_fragment(self):
         client = self._client_as("vw7_owner", 1)
@@ -660,8 +677,8 @@ class TemplateRenderingTests(_BaseTestCase):
             data={"tag_id": BUILT_IN_TAG_HIGHLIGHT, **self._guidance_anchor_fields()},
         )
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
-        lists = self._lists_html(body)
-        self.assertIn(f"/projects/{self.project_id}/workspace#conv-source-guidance", lists)
+        toolbox = self._toolbox_html(body)
+        self.assertIn(f"/projects/{self.project_id}/workspace#conv-source-guidance", toolbox)
 
     def test_source_unavailable_fallback_when_anchor_cannot_resolve(self):
         # Simulate data drift (the write path itself can never create an
@@ -684,9 +701,9 @@ class TemplateRenderingTests(_BaseTestCase):
 
         client = self._client_as("vw7_owner", 1)
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
-        lists = self._lists_html(body)
-        self.assertIn("Orphaned task", lists)
-        self.assertIn("Source unavailable", lists)
+        toolbox = self._toolbox_html(body)
+        self.assertIn("Orphaned task", toolbox)
+        self.assertIn("Source unavailable", toolbox)
 
 
 # ---------------------------------------------------------------------------

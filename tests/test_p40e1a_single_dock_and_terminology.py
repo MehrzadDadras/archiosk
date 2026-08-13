@@ -222,21 +222,27 @@ class InvestigationListingTests(_BaseDockTestCase):
     def test_every_authorized_investigation_title_is_listed_under_work(self):
         # SUPERSEDED (CLAUDE-P40-E3A, Section 2/4): the retired
         # ?view=investigations Display directory this test originally
-        # checked is gone - every authorized Investigation title is now
+        # checked is gone - every authorized Investigation title was then
         # listed as a real child leaf of the Lists panel's own
-        # "Investigations" tree-toggle (its count shown as
-        # .launcher-count, not the old .display-branch-count), reachable
-        # directly, on every page, not a second navigation column.
+        # "Investigations" tree-toggle.
+        #
+        # SUPERSEDED AGAIN (CLAUDE-GO-DNA-01, Panel Zoning): Investigations
+        # left the Lists tree grammar entirely (no more data-tree-owns=
+        # "case" tree-toggle/tree-leaf) and now renders inside the
+        # Toolbox's own Project Intelligence view as a plain subdisclosure
+        # list (macros.subdisclosure("Investigations (N)", ...)), reachable
+        # whenever nothing else is selected - still on every page an open
+        # Project renders, still not a second Display navigation column.
         client = self._client_as("p40e1a_owner", 1)
         self._create_investigation(client, title="Draft 1")
         client2 = self._client_as("p40e1a_owner", 1)
         client2.post(f"/projects/{self.project_id}/workspace/cases", data={"title": "Schedule Conflict Review", "objective": ""})
 
         home_body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
-        self.assertIn('Investigations <span class="launcher-count">2</span>', home_body)
+        self.assertIn("Investigations (2)", home_body)
         self.assertIn("Draft 1", home_body)
         self.assertIn("Schedule Conflict Review", home_body)
-        self.assertIn('data-tree-owns="case"', home_body)
+        self.assertIn('data-ui-ref="toolbox.investigations.leaf"', home_body)
 
     def test_newly_created_investigation_appears_immediately_and_becomes_active(self):
         client = self._client_as("p40e1a_owner", 1)
@@ -253,22 +259,28 @@ class InvestigationListingTests(_BaseDockTestCase):
         self.assertIn('class="workspace-pane workspace-pane-conversation"', body)
         self.assertIn("<h2>Draft 1</h2>", body)
         # SUPERSEDED (CLAUDE-P40-E3A): "highlight the originating
-        # launcher" now means the Lists panel's own "Investigations"
-        # tree-toggle stays pinned open (aria-expanded="true"/
-        # data-tree-open) while any Investigation is open, and the new
-        # Investigation itself renders as the active Lists leaf inside
-        # it - back in the ONE left panel (Section 2's reversal), not a
-        # retired Display branch-nav entry.
-        # CLAUDE-P40-VW7A added data-ui-ref="lists.project.investigations"/
-        # "...leaf" attributes to these same two elements
-        # (UI_REFERENCE_MAP.md) - both selectors below tolerate
-        # attributes appearing between the existing ones rather than
-        # asserting an exact, now-stale attribute ordering.
-        import re
-        match = re.search(r'<button type="button" class="tree-toggle launcher-link" data-tree-parent data-tree-owns="case"[^>]*aria-expanded="(true|false)">', body)
-        self.assertIsNotNone(match)
-        self.assertEqual(match.group(1), "true")
-        self.assertRegex(body, r'<a class="tree-leaf launcher-link active"[^>]*href="')
+        # launcher" used to mean the Lists panel's own "Investigations"
+        # tree-toggle stayed pinned open while any Investigation was open,
+        # with the new Investigation itself rendering as the active Lists
+        # leaf inside it.
+        #
+        # SUPERSEDED AGAIN (CLAUDE-GO-DNA-01, Panel Zoning): Investigations
+        # left the Lists tree-toggle/tree-leaf grammar entirely, AND the
+        # Toolbox's own Investigations list (toolbox.investigations) only
+        # renders when NOTHING is selected - the moment an Investigation
+        # IS active/selected (as it is on this very response, right after
+        # creation - see the h2/workspace-pane-conversation assertions
+        # above), the Toolbox shows that Investigation's own contextual
+        # view instead, not the list it came from. There is no more
+        # "active leaf in a list" to assert on THIS response; the real
+        # remaining claim - the new Investigation is genuinely discoverable
+        # back in its own list once nothing is selected again - is proven
+        # by a follow-up request to the plain (nothing-selected) workspace
+        # URL.
+        unselected_body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
+        self.assertIn("Investigations (1)", unselected_body)
+        self.assertIn('data-ui-ref="toolbox.investigations.leaf"', unselected_body)
+        self.assertIn("Draft 1", unselected_body)
 
 
 class UnauthorizedInvestigationsHiddenTests(_BaseDockTestCase):

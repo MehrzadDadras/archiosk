@@ -147,13 +147,20 @@ class OpenedProjectPortfolioRemovalTests(_BaseTestCase):
         self.assertNotIn(other.project_id, body)
 
     def test_opened_project_lists_still_shows_its_own_family(self):
+        # CLAUDE-GO-DNA-01 (Panel Zoning): Overview/Investigations/RFIs/
+        # Chats/Tasks/Tags relocated out of Lists into the Toolbox's own
+        # Project Intelligence view (Overview retired outright as
+        # redundant with lists.project.self) - the underlying "the opened
+        # Project's own family is fully reachable" contract this test
+        # protects is preserved, just split across the two panels.
         doc = self._ingest("VW7B Project C")
         client = self._client()
         body = client.get(f"/projects/{doc.project_id}/workspace").get_data(as_text=True)
+        for ref in ("lists.project.self", "lists.project.documents", "lists.project.tools"):
+            self.assertIn(f'data-ui-ref="{ref}"', body, ref)
         for ref in (
-            "lists.project.self", "lists.project.overview", "lists.project.documents",
-            "lists.project.investigations", "lists.project.rfis", "lists.project.chats",
-            "lists.project.tasks", "lists.project.tags", "lists.project.tools",
+            "toolbox.investigations", "toolbox.rfi", "toolbox.conversation",
+            "toolbox.tasks", "toolbox.tags",
         ):
             self.assertIn(f'data-ui-ref="{ref}"', body, ref)
 

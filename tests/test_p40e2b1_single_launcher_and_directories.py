@@ -277,11 +277,14 @@ class DirectoryLauncherTests(_BaseTestCase):
         self.assertNotIn(f'href="/projects/{self.project_id}/workspace?view=investigations"', body)
 
     def test_investigations_directory_lists_every_authorized_investigation(self):
+        # CLAUDE-GO-DNA-01 (Panel Zoning) moved Investigations out of the
+        # Lists tree-toggle/tree-leaf grammar (no more data-tree-owns=
+        # "case") into the Toolbox's own Project Intelligence subdisclosure.
         client = self._client_as("p40e2b1_owner", 1)
         client.post(f"/projects/{self.project_id}/workspace/cases", data={"title": "Schedule Conflict Review", "objective": ""})
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
         self.assertIn("Schedule Conflict Review", body)
-        self.assertIn('data-tree-owns="case"', body)
+        self.assertIn('data-ui-ref="toolbox.investigations.leaf"', body)
 
     def test_retired_directory_views_degrade_to_a_blank_display_not_a_directory_listing(self):
         client = self._client_as("p40e2b1_owner", 1)
@@ -307,17 +310,21 @@ class NewInvestigationAppearsImmediatelyTests(_BaseTestCase):
         self.assertIn("Newly Created Investigation", after)
 
     def test_launcher_investigation_count_updates_immediately(self):
-        # CLAUDE-P40-E3A: the Investigation count now lives on the Lists
-        # tree-toggle itself (.launcher-count), not a retired
-        # .display-branch-count badge in a Display directory body.
+        # CLAUDE-P40-E3A: the Investigation count used to live on the
+        # Lists tree-toggle itself (.launcher-count).
+        #
+        # SUPERSEDED (CLAUDE-GO-DNA-01, Panel Zoning): Investigations
+        # relocated to the Toolbox's own Project Intelligence subdisclosure
+        # (macros.subdisclosure("Investigations (N)", ...)) - a different
+        # count label format, same immediate-update contract.
         client = self._client_as("p40e2b1_owner", 1)
         before = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
-        self.assertIn('Investigations <span class="launcher-count">0</span>', before)
+        self.assertIn("Investigations (0)", before)
 
         client.post(f"/projects/{self.project_id}/workspace/cases", data={"title": "Count Check", "objective": ""})
 
         after = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
-        self.assertIn('Investigations <span class="launcher-count">1</span>', after)
+        self.assertIn("Investigations (1)", after)
 
 
 # ---------------------------------------------------------------------------

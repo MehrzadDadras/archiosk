@@ -164,10 +164,14 @@ class HomeNavigationShellTests(unittest.TestCase):
         # a Project is open - the Foreground Project's own branch
         # (current-project marker + aria-current="true") is what now
         # communicates current-Project context.
+        # CLAUDE-GO-DNA-01 (Panel Zoning): the retired "Overview" leaf's
+        # own data-root-branch/data-root-label now carry over onto this
+        # self-link - see test_global_search_and_header.py's identical
+        # note.
         self.assertIn("rfp.md", body)
         self.assertIn(project_id, body)
         self.assertNotIn("launcher-heading", body)
-        self.assertIn('tree-leaf launcher-link current-project" data-ui-ref="lists.project.self" aria-current="true"', body)
+        self.assertIn('tree-leaf launcher-link current-project" data-ui-ref="lists.project.self" data-root-branch="1.1" data-root-label="Identity &amp; Overview" aria-current="true"', body)
 
     def test_non_admin_does_not_see_new_project_link(self):
         # BUCKET-B FIX (CLAUDE-P40-E3A): base.html's own recursive-tree

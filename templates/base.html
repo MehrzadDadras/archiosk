@@ -568,11 +568,31 @@
                            selected" (aria-current="page", used on the actual selected
                            child leaf below - Overview/a Document/an Investigation/Chats/
                            etc. - never both claiming "page" at once). #}
-                        <a class="tree-leaf launcher-link current-project" data-ui-ref="lists.project.self" aria-current="true" href="{{ url_for('workspace.show_workspace', project_id=project_id) }}">{{ workspace.display_title or document.filename }}</a>
+                        {# CLAUDE-GO-DNA-01 (Panel Zoning): "Overview" as a separate leaf was
+                           removed here - this project-self link and the Overview page it
+                           opens (`show_workspace(project_id)` with no params) were already
+                           the same destination, a redundant second link to the exact same
+                           place. This link alone is now the one "return to project home"
+                           anchor; Requirements/Investigations/RFI Correspondence/Work
+                           Products/Conversation/Tasks/Tags/Project Administration - all
+                           project-intelligence/governed-action content, not evidence
+                           territory - moved to the Toolbox's own "nothing selected" view
+                           (templates/case_workspace.html's {% block toolbox %}), per the
+                           Product Owner's own zoning correction: LEFT = evidence territory
+                           (project name, folders, files, document hierarchy) only; RIGHT =
+                           contextual intelligence and governed action. See
+                           governance/current/go-dna-01-composer-result-contract-and-panel-
+                           zoning.md for the full record. Every capability moved is preserved
+                           unchanged - same routes, same forms, same data-ui-ref values, same
+                           element ids the live-update JS (static/js/case_workspace.js) keys
+                           off of - only WHERE in this page they render changed. #}
+                        {# CLAUDE-GO-DNA-01 (Panel Zoning): data-root-branch="1.1"/
+                           data-root-label="Identity & Overview" (CLAUDE-POSTCAMEL-
+                           ROOT-I1's own numbering scaffold) carries over from the
+                           retired "Overview" leaf onto this link - the same
+                           destination that leaf's own removal folded into. #}
+                        <a class="tree-leaf launcher-link current-project" data-ui-ref="lists.project.self" data-root-branch="1.1" data-root-label="Identity &amp; Overview" aria-current="true" href="{{ url_for('workspace.show_workspace', project_id=project_id) }}">{{ workspace.display_title or document.filename }}</a>
                         <ul class="tree-children" data-tree-open>
-                                    <li class="tree-node" data-tree-node data-root-branch="1.1" data-root-label="Identity &amp; Overview">
-                                        <a class="tree-leaf launcher-link{% if directory_view == 'overview' %} active{% endif %}" data-ui-ref="lists.project.overview" data-view="overview"{% if directory_view == 'overview' %} aria-current="page"{% endif %} href="{{ url_for('workspace.show_workspace', project_id=project_id, view='overview') }}">Overview</a>
-                                    </li>
                                     <li class="tree-node" data-tree-node data-root-branch="2.1" data-root-label="Documents">
                                         <button type="button" class="tree-toggle launcher-link" data-tree-parent data-tree-owns="source" data-ui-ref="lists.project.documents" aria-expanded="{{ 'true' if selected_source else 'false' }}">
                                             <span class="tree-label">Documents <span class="launcher-count">{{ active_sources|length }}</span></span>
@@ -609,301 +629,35 @@
                                     <li class="tree-node" data-tree-node data-root-branch="2.2" data-root-label="Files">
                                         <a class="tree-leaf launcher-link{% if directory_view == 'files' %} active{% endif %}" data-ui-ref="lists.project.files" data-view="files"{% if directory_view == 'files' %} aria-current="page"{% endif %} href="{{ url_for('workspace.show_workspace', project_id=project_id, view='files') }}">Files</a>
                                     </li>
-                                    {# CLAUDE-POSTCAMEL-ROOT-I1 (branch 3 of the ROOT-A1 canonical
-                                       root): Requirements was a real, fully governed, already-
-                                       IMPLEMENTED Project object (register/promote/adjudicate/
-                                       revise, all pre-existing and unchanged by this stage) with NO
-                                       navigable home of its own before this change - reachable only
-                                       by scrolling Overview's own accordion stack. Same single-
-                                       stable-leaf shape as Files above - no tab-strip pill, no
-                                       per-instance-id concept, real count from the same
-                                       requirements_view already computed unconditionally by the
-                                       route. #}
-                                    <li class="tree-node" data-tree-node data-root-branch="3" data-root-label="Requirements">
-                                        <a class="tree-leaf launcher-link{% if directory_view == 'requirements' %} active{% endif %}" data-ui-ref="lists.project.requirements" data-view="requirements"{% if directory_view == 'requirements' %} aria-current="page"{% endif %} href="{{ url_for('workspace.show_workspace', project_id=project_id, view='requirements') }}">Requirements <span class="launcher-count">{{ requirements_view|length }}</span></a>
-                                    </li>
-                                    <li class="tree-node" data-tree-node data-root-branch="4" data-root-label="Investigations">
-                                        <button type="button" class="tree-toggle launcher-link" data-tree-parent data-tree-owns="case" data-ui-ref="lists.project.investigations" aria-expanded="{{ 'true' if (active_case or show_new_case_form or show_continue_from_archive) else 'false' }}">
-                                            <span class="tree-label">Investigations <span class="launcher-count">{{ open_visible_cases|length }}</span></span>
-                                        </button>
-                                        <ul class="tree-children"{% if active_case or show_new_case_form or show_continue_from_archive %} data-tree-open{% endif %}>
-                                            {# CLAUDE-P40-VW8-QA (New Investigation Action in Lists): an
-                                               accessible action row, not a radio button (radios mean
-                                               mutually-exclusive choices, which this isn't - it's a
-                                               command). Always first, always present even at zero
-                                               Investigations - never gated on visible_cases being
-                                               non-empty. A real <a href> (works with JS disabled, real
-                                               navigation to the standalone ?view=new-case form) that
-                                               the same click-interceptor below also intercepts to
-                                               project into the active Display instead, exactly like
-                                               every other data-*-id leaf already does.
-
-                                               CLAUDE-POSTCAMEL-INVESTIGATION-AR1: relabeled "+ New
-                                               Investigation" -> "Start New Investigation" (mechanism,
-                                               href, and data-new-case interception all UNCHANGED - see
-                                               static/js/case_workspace.js's own 'new-case' projection
-                                               entry, which matches on the attribute/query value, never
-                                               the visible text) and paired with a second, always-visible
-                                               sibling action, "Continue from Archive" - two real
-                                               top-level rows, not one hidden behind a hover/toggle,
-                                               per this stage's own "avoid a hover-only invisible
-                                               affordance" instruction. The second link is a plain
-                                               navigation (no data-new-case/data-view) - it deliberately
-                                               does not join the multi-Display projection system, which
-                                               this stage does not touch. #}
-                                            <li class="tree-node" data-tree-node>
-                                                <a class="tree-leaf launcher-link tree-leaf-action{% if show_new_case_form %} active{% endif %}" data-ui-ref="lists.project.investigations.new" data-new-case{% if show_new_case_form %} aria-current="page"{% endif %} href="{{ url_for('workspace.show_workspace', project_id=project_id, view='new-case') }}">Start New Investigation</a>
-                                            </li>
-                                            <li class="tree-node" data-tree-node>
-                                                <a class="tree-leaf launcher-link tree-leaf-action{% if show_continue_from_archive %} active{% endif %}" data-ui-ref="lists.project.investigations.continue-from-archive"{% if show_continue_from_archive %} aria-current="page"{% endif %} href="{{ url_for('workspace.show_workspace', project_id=project_id, view='continue-from-archive') }}">Continue from Archive</a>
-                                            </li>
-                                            {% for c in open_visible_cases %}
-                                            <li class="tree-node" data-tree-node>
-                                                {# CLAUDE-POSTCAMEL-INVESTIGATION-AR1: the same in-flow
-                                                   details/summary "..." disclosure already established
-                                                   for Files' own folder-row actions (see
-                                                   .files-folder-actions in main.css and this same idiom
-                                                   in case_workspace.html's Design-Builder folder list) -
-                                                   a real, always-focusable, click-to-open trigger, never
-                                                   a hover-only affordance. #}
-                                                <div class="launcher-task-row">
-                                                    <a class="tree-leaf launcher-link{% if active_case and active_case.id == c.id %} active{% endif %}" data-ui-ref="lists.project.investigations.leaf" data-case-id="{{ c.id }}" data-case-title="{{ c.title }}"{% if active_case and active_case.id == c.id %} aria-current="page"{% endif %} href="{{ url_for('workspace.show_workspace', project_id=project_id, case=c.id) }}">{{ c.title }}</a>
-                                                    <a class="link-button" aria-label="Archive {{ c.title }}" data-ui-ref="lists.project.investigations.leaf.archive" href="{{ url_for('workspace.confirm_archive_case', project_id=project_id, case_id=c.id) }}">Archive</a>
-                                                </div>
-                                            </li>
-                                            {% else %}
-                                            <li class="tree-node-empty"><span class="pane-note" data-ui-ref="lists.project.investigations.empty">No Investigations yet.</span></li>
-                                            {% endfor %}
-                                        </ul>
-                                    </li>
-                                    {# CLAUDE-P40-E3A-QA fix: this branch used to be wrapped in
-                                       {% if rfi_drafts_view %}, unlike its Documents/Investigations
-                                       siblings above (which always render their heading, count
-                                       included, even at 0) - a Project with no RFI drafts yet
-                                       silently lost the whole RFIs row instead of showing "RFIs
-                                       (0)" like every other branch. Matches the sibling pattern
-                                       now: always present, count reflects reality. #}
-                                    {# CLAUDE-POSTCAMEL-ROOT-I3: relabeled from "RFIs" - ROOT-A2 found
-                                       that grouping this correspondence-status cross-cut at 6.3, right
-                                       beside "Work Products" (6), read as if an RFI were a kind of
-                                       Work Product rather than outgoing/incoming correspondence with
-                                       the Owner. Canonical ownership (RFIDraft on its Investigation)
-                                       and the 6.3 position are both unchanged - only the visible text
-                                       now names the category first. #}
-                                    <li class="tree-node" data-tree-node data-root-branch="6.3" data-root-label="RFI Correspondence">
-                                        <button type="button" class="tree-toggle launcher-link" data-tree-parent data-ui-ref="lists.project.rfis" aria-expanded="false">
-                                            <span class="tree-label">RFI Correspondence <span class="launcher-count">{{ rfi_drafts_view|length }}</span></span>
-                                        </button>
-                                        <ul class="tree-children">
-                                            {# An RFI draft has no standalone content page of its own - it
-                                               lives inside the Investigation that owns it, visible in
-                                               Toolbox once that Investigation is open (existing,
-                                               unchanged behaviour). Selecting one here opens that
-                                               Investigation, honestly, rather than inventing a page that
-                                               doesn't exist. #}
-                                            {% for row in rfi_drafts_view %}
-                                            <li class="tree-node" data-tree-node>
-                                                <a class="tree-leaf launcher-link{% if active_case and active_case.id == row.draft.case_id %} active{% endif %}" data-ui-ref="lists.project.rfis.leaf" data-case-id="{{ row.draft.case_id }}" data-case-title="{{ row.case_title }}"{% if active_case and active_case.id == row.draft.case_id %} aria-current="page"{% endif %} href="{{ url_for('workspace.show_workspace', project_id=project_id, case=row.draft.case_id) }}">{{ row.draft.question_text[:60] }}{% if row.draft.question_text|length > 60 %}&hellip;{% endif %}</a>
-                                            </li>
-                                            {% else %}
-                                            <li class="tree-node-empty"><span class="pane-note" data-ui-ref="lists.project.rfis.empty">No RFIs yet.</span></li>
-                                            {% endfor %}
-                                        </ul>
-                                    </li>
-                                    {# CLAUDE-MM8: Work Products - unlike an RFI draft, a WorkProduct
-                                       DOES have a standalone content page of its own (?work_product=<id>,
-                                       same convention ?source=<id> already established for Documents) -
-                                       it is an editable artifact in its own right, not a marker pointing
-                                       back at an Investigation. #}
-                                    <li class="tree-node" data-tree-node data-root-branch="6" data-root-label="Work Products">
-                                        <button type="button" class="tree-toggle launcher-link" data-tree-parent data-ui-ref="lists.project.work-products" aria-expanded="false">
-                                            <span class="tree-label">Work Products <span class="launcher-count">{{ work_products_view|length }}</span></span>
-                                        </button>
-                                        <ul class="tree-children">
-                                            <li class="tree-node" data-tree-node>
-                                                <form method="post" action="{{ url_for('workspace.create_work_product', project_id=project_id) }}" style="padding:0.3rem 0.6rem;">
-                                                    <input type="text" name="title" placeholder="New work product title" required style="width:100%;margin-bottom:0.2rem;font-size:0.78rem;">
-                                                    <select name="artifact_type" style="width:100%;margin-bottom:0.2rem;font-size:0.78rem;">
-                                                        <option value="report">Report</option>
-                                                        <option value="risk_register">Risk register</option>
-                                                        <option value="team_list">Team list</option>
-                                                    </select>
-                                                    {% if active_case %}<input type="hidden" name="case_id" value="{{ active_case.id }}">{% endif %}
-                                                    <button type="submit" class="tree-leaf-action" data-ui-ref="lists.project.work-products.new" style="width:100%;">+ New Work Product</button>
-                                                </form>
-                                            </li>
-                                            {% for w in work_products_view %}
-                                            <li class="tree-node" data-tree-node>
-                                                <a class="tree-leaf launcher-link{% if selected_work_product and selected_work_product.id == w.id %} active{% endif %}" data-ui-ref="lists.project.work-products.leaf"{% if selected_work_product and selected_work_product.id == w.id %} aria-current="page"{% endif %} href="{{ url_for('workspace.show_workspace', project_id=project_id, work_product=w.id) }}">{{ w.title }} <span class="pane-note">({{ w.state }})</span></a>
-                                            </li>
-                                            {% else %}
-                                            <li class="tree-node-empty"><span class="pane-note" data-ui-ref="lists.project.work-products.empty">No Work Products yet.</span></li>
-                                            {% endfor %}
-                                        </ul>
-                                    </li>
-                                    {# Communications: omitted outright - no honest existing listing
-                                       exists anywhere in this codebase to show (CLAUDE-P40-E3A,
-                                       Section 4's own "only if an honest existing listing exists"
-                                       instruction; confirmed absent during CLAUDE-P40-E3-PLAN). #}
-                                    {# CLAUDE-P40-VW7A-QA: the message count that used to sit in a
-                                       "Chat (N)" label beside the composer moved here instead - this
-                                       row already identifies "Chats," so showing the count next to it
-                                       (matching Documents/Investigations/Tasks/Tags's own
-                                       <span class="launcher-count"> convention) is the ONE place it
-                                       appears now, not duplicated near the composer too. #}
-                                    {# CLAUDE-POSTCAMEL-ROOT-I3: relabeled from "Chats" to match ROOT-A1's
-                                       canonical root branch 7 - the Filing-Ontology addendum (ROOT-A2)
-                                       already established that what's governed here is the project's own
-                                       persisted, append-only ConversationMessage record (workspace.
-                                       project_conversation), authored through a chat-shaped composer -
-                                       not several separate, disposable "chats." "Conversation" (singular)
-                                       names the one continuous log honestly without implying the
-                                       decision-authority of a governed Finding/Decision, and without
-                                       silently promising the more structured ReviewThread mechanism
-                                       lives here too (it doesn't - this leaf reaches the plain project
-                                       conversation dock only, unchanged). #}
-                                    <li class="tree-node" data-tree-node data-root-branch="7" data-root-label="Conversation">
-                                        <a class="tree-leaf launcher-link{% if directory_view is none and not active_case and not selected_source %} active{% endif %}" data-ui-ref="lists.project.chats"{% if directory_view is none and not active_case and not selected_source %} aria-current="page"{% endif %} href="{{ url_for('workspace.show_workspace', project_id=project_id) }}">Conversation <span class="launcher-count">{{ project_conversation_count }}</span></a>
-                                    </li>
-                                    {# ---------------- Tasks (CLAUDE-P40-VW7) --------------------------
-                                       Real, persisted project Tasks created via "Make Task" on a
-                                       selected Project Conversation passage (Section 6) - not a
-                                       decorative checkbox. Closed by default (same reasoning as
-                                       Project Tools below - nothing here has a "currently
-                                       selected" state to auto-open). Open/Completed are plain
-                                       sub-labels, not their own toggles - Tasks itself is the one
-                                       collapsible unit, matching every other branch's "collapsible
-                                       project-level branch" shape rather than inventing a second
-                                       nesting mechanism. id="lists-tasks-*" anchors are read by
-                                       static/js/case_workspace.js's own live-update code after a
-                                       Task is created via the selection toolbar - see that file's
-                                       own comment for why creation specifically must not require a
-                                       reload (Section 12's own browser-verification requirement),
-                                       while Complete/Reopen (plain forms below) stay classic
-                                       redirects. #}
-                                    <li class="tree-node" data-tree-node id="lists-tasks-branch" data-root-branch="8" data-root-label="Action">
-                                        <button type="button" class="tree-toggle launcher-link" data-tree-parent data-ui-ref="lists.project.tasks" aria-expanded="false">
-                                            <span class="tree-label">Tasks <span class="launcher-count" id="lists-tasks-count">{{ tasks_view|length }}</span></span>
-                                        </button>
-                                        <ul class="tree-children">
-                                            <li class="tree-node-group">
-                                                <p class="launcher-subheading" data-ui-ref="lists.project.tasks.open">Open <span class="launcher-count" id="lists-tasks-open-count">{{ tasks_open_view|length }}</span></p>
-                                                <ul class="tree-children" data-tree-open id="lists-tasks-open-list">
-                                                    {% for task in tasks_open_view %}
-                                                    <li class="tree-node" data-tree-node data-task-id="{{ task.id }}">
-                                                        <div class="launcher-task-row">
-                                                            <form method="post" action="{{ url_for('workspace.complete_task_route', project_id=project_id, task_id=task.id) }}" class="task-checkbox-form">
-                                                                <label class="task-checkbox-wrap" data-ui-ref="lists.project.tasks.complete">
-                                                                    <input type="checkbox" class="task-checkbox" onchange="this.form.requestSubmit()">
-                                                                    <span class="visually-hidden">Mark "{{ task.title }}" complete</span>
-                                                                </label>
-                                                            </form>
-                                                            {% if task.source_available %}
-                                                            <a class="tree-leaf launcher-link" data-ui-ref="lists.project.tasks.leaf" href="{{ task.source_url }}">{{ task.title }}</a>
-                                                            {% else %}
-                                                            <span class="tree-leaf launcher-link launcher-link-unavailable" data-ui-ref="lists.project.tasks.leaf">{{ task.title }} <small>(Source unavailable)</small></span>
-                                                            {% endif %}
-                                                        </div>
-                                                    </li>
-                                                    {% else %}
-                                                    <li class="tree-node-empty"><span class="pane-note" data-ui-ref="lists.project.tasks.open.empty">No open Tasks.</span></li>
-                                                    {% endfor %}
-                                                </ul>
-                                            </li>
-                                            <li class="tree-node-group">
-                                                <p class="launcher-subheading" data-ui-ref="lists.project.tasks.completed">Completed <span class="launcher-count" id="lists-tasks-completed-count">{{ tasks_completed_view|length }}</span></p>
-                                                <ul class="tree-children" id="lists-tasks-completed-list">
-                                                    {% for task in tasks_completed_view %}
-                                                    <li class="tree-node" data-tree-node data-task-id="{{ task.id }}">
-                                                        <div class="launcher-task-row">
-                                                            <form method="post" action="{{ url_for('workspace.reopen_task_route', project_id=project_id, task_id=task.id) }}" class="task-checkbox-form">
-                                                                <label class="task-checkbox-wrap" data-ui-ref="lists.project.tasks.reopen">
-                                                                    <input type="checkbox" class="task-checkbox" checked onchange="this.form.requestSubmit()">
-                                                                    <span class="visually-hidden">Reopen "{{ task.title }}"</span>
-                                                                </label>
-                                                            </form>
-                                                            {% if task.source_available %}
-                                                            <a class="tree-leaf launcher-link launcher-task-completed" data-ui-ref="lists.project.tasks.leaf" href="{{ task.source_url }}">{{ task.title }}</a>
-                                                            {% else %}
-                                                            <span class="tree-leaf launcher-link launcher-link-unavailable" data-ui-ref="lists.project.tasks.leaf">{{ task.title }} <small>(Source unavailable)</small></span>
-                                                            {% endif %}
-                                                        </div>
-                                                    </li>
-                                                    {% else %}
-                                                    <li class="tree-node-empty"><span class="pane-note" data-ui-ref="lists.project.tasks.completed.empty">No completed Tasks.</span></li>
-                                                    {% endfor %}
-                                                </ul>
-                                            </li>
-                                        </ul>
-                                    </li>
-                                    {# ---------------- Tags (CLAUDE-P40-VW7) ---------------------------
-                                       Tagged/highlighted Project Conversation passages, grouped by
-                                       tag identity - Highlight/Important/Question are built-in tags
-                                       under the hood (services.case_workspace.BUILT_IN_TAGS), so
-                                       they appear here exactly like a custom tag, not through a
-                                       second display mechanism. Removing an occurrence (the small
-                                       "Remove" form per row) updates this branch's counts
-                                       immediately via fetch() - Section 7's own explicit
-                                       requirement - never a full reload. #}
-                                    <li class="tree-node" data-tree-node id="lists-tags-branch">
-                                        <button type="button" class="tree-toggle launcher-link" data-tree-parent data-ui-ref="lists.project.tags" aria-expanded="false">
-                                            <span class="tree-label">Tags <span class="launcher-count" id="lists-tags-count">{{ tag_occurrences_total }}</span></span>
-                                        </button>
-                                        <ul class="tree-children" id="lists-tags-groups">
-                                            {% for group in tag_groups_view %}
-                                            <li class="tree-node-group" data-tag-group="{{ group.tag.id }}">
-                                                <p class="launcher-subheading" data-ui-ref="lists.project.tags.group">
-                                                    <span class="launcher-tag-swatch conv-tag-color-{{ group.tag.color }}" aria-hidden="true"></span>
-                                                    {{ group.tag.name }} <span class="launcher-count" data-tag-group-count>{{ group.occurrences|length }}</span>
-                                                </p>
-                                                <ul class="tree-children" data-tree-open>
-                                                    {% for occ in group.occurrences %}
-                                                    <li class="tree-node" data-tree-node data-tag-occurrence-id="{{ occ.id }}">
-                                                        <div class="launcher-task-row">
-                                                            {% if occ.source_available %}
-                                                            <a class="tree-leaf launcher-link" data-ui-ref="lists.project.tags.leaf" href="{{ occ.source_url }}">&ldquo;{{ occ.quote[:60] }}{% if occ.quote|length > 60 %}&hellip;{% endif %}&rdquo;</a>
-                                                            {% else %}
-                                                            <span class="tree-leaf launcher-link launcher-link-unavailable" data-ui-ref="lists.project.tags.leaf">&ldquo;{{ occ.quote[:60] }}{% if occ.quote|length > 60 %}&hellip;{% endif %}&rdquo; <small>(Source unavailable)</small></span>
-                                                            {% endif %}
-                                                            <form method="post" action="{{ url_for('workspace.remove_tag_occurrence_route', project_id=project_id, occurrence_id=occ.id) }}" data-tag-remove-form data-occurrence-id="{{ occ.id }}">
-                                                                <button type="submit" class="link-button" data-ui-ref="lists.project.tags.remove">Remove</button>
-                                                            </form>
-                                                        </div>
-                                                    </li>
-                                                    {% endfor %}
-                                                </ul>
-                                            </li>
-                                            {% else %}
-                                            <li class="tree-node-empty"><span class="pane-note" data-ui-ref="lists.project.tags.empty">No Tags yet.</span></li>
-                                            {% endfor %}
-                                        </ul>
-                                    </li>
-                                    {# ---------------- Project Tools (CLAUDE-P40-VW2) -----------------
-                                       Product-owner walkthrough correction: these project-level
-                                       controls (Remove Project, the three Add-a-Source forms,
-                                       Removed Items, admin-only Project Data Management) used to
-                                       render in the right Toolbox's no-selection state - moved
-                                       here wholesale (same forms/routes/CSRF/confirmation/
-                                       authorization/macros.subdisclosure idiom, nothing rebuilt),
-                                       so Toolbox stays reserved for Document/Investigation
-                                       context and these controls live where the rest of the
-                                       Project's own hierarchy already lives. Closed by default
-                                       (unlike Documents/Investigations, nothing here has a
-                                       "currently selected" state to auto-open) - the same
-                                       tree-toggle hover/pin/collapse mechanism as every sibling
-                                       branch above, not a second navigation tree. #}
+                                    {# ---------------- Project Tools (CLAUDE-P40-VW2, narrowed by
+                                       CLAUDE-GO-DNA-01) -------------------------------------------
+                                       CLAUDE-P40-VW2 originally moved these controls here wholesale
+                                       from the Toolbox's own no-selection state. CLAUDE-GO-DNA-01's
+                                       panel-zoning correction partially reverses that: "Remove
+                                       Project" (project-lifecycle, not file-territory) moved BACK to
+                                       the Toolbox's own "nothing selected" Project Administration
+                                       disclosure. What remains here - Add Documents/Add Text Record/
+                                       Register a Document Revision/Add External Source/Removed
+                                       Items - are genuinely file-territory actions (they add, revise,
+                                       or recover a Document Source), so they stay in Lists,
+                                       consistent with "LEFT = evidence territory... folders, files"
+                                       rather than being swept out merely because the group used to be
+                                       labeled one thing. Closed by default (unlike Documents, nothing
+                                       here has a "currently selected" state to auto-open) - the same
+                                       tree-toggle hover/pin/collapse mechanism as every sibling branch
+                                       above, not a second navigation tree. #}
                                     <li class="tree-node" data-tree-node>
                                         <button type="button" class="tree-toggle launcher-link" data-tree-parent data-ui-ref="lists.project.tools" aria-expanded="false">
                                             <span class="tree-label">Project Tools</span>
                                         </button>
                                         <ul class="tree-children">
                                             <li class="tree-node launcher-project-tools">
-                                                {% if is_project_owner or is_admin %}
-                                                <form method="post" action="{{ url_for('workspace.remove_project_route', project_id=project_id) }}">
-                                                    <button type="submit" class="btn btn-ghost" data-ui-ref="lists.project.tools.remove-project">Remove Project</button>
-                                                </form>
-                                                {% endif %}
-
+                                                {# CLAUDE-GO-DNA-01 (Panel Zoning): "Remove Project" moved to
+                                                   the Toolbox's own "nothing selected" Project Administration
+                                                   disclosure (templates/case_workspace.html) - a project-
+                                                   lifecycle/governed action, not a file-territory action, per
+                                                   the same zoning correction as the branches removed above.
+                                                   Same route, same is_project_owner/is_admin gate, unchanged. #}
                                                 {% call macros.subdisclosure('+ Add Documents', html_id='project-sources-add-document') %}
                                                     <form class="workspace-form" method="post" enctype="multipart/form-data" action="{{ url_for('workspace.add_document_source', project_id=project_id) }}" data-ui-ref="lists.project.tools.add-document">
                                                         {# CLAUDE-MM3: .xlsx added to match routes/workspace.py's own

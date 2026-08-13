@@ -99,10 +99,12 @@ class RootI1NavigationTests(unittest.TestCase):
     # -- 3: Requirements visibility -------------------------------------------
 
     def test_requirements_sidebar_link_targets_the_new_view(self):
+        # CLAUDE-GO-DNA-01 (Panel Zoning) relocated Requirements from
+        # Lists into the Toolbox's own Project Intelligence view.
         response = self.client.get(f"/projects/{self.project_id}/workspace?view=overview")
         body = response.get_data(as_text=True)
         self.assertIn(f'href="/projects/{self.project_id}/workspace?view=requirements"', body)
-        self.assertIn('data-ui-ref="lists.project.requirements"', body)
+        self.assertIn('data-ui-ref="toolbox.requirements"', body)
 
     def test_requirements_page_renders_governed_requirement(self):
         self._register_requirement("Contractor shall provide as-built drawings.")
@@ -146,9 +148,14 @@ class RootI1NavigationTests(unittest.TestCase):
     # -- 8/9: empty-state behaviour and project isolation ----------------------
 
     def test_requirements_branch_shows_zero_count_quietly_when_empty(self):
+        # CLAUDE-GO-DNA-01 (Panel Zoning) relocated Requirements from
+        # Lists into the Toolbox's own Project Intelligence view - the
+        # old paired data-view="requirements" attribute was specific to
+        # the Lists tree-toggle active-state grammar, which no longer
+        # applies here (a plain link, not a tree-toggle).
         response = self.client.get(f"/projects/{self.project_id}/workspace?view=overview")
         body = response.get_data(as_text=True)
-        self.assertIn('data-ui-ref="lists.project.requirements" data-view="requirements"', body)
+        self.assertIn('data-ui-ref="toolbox.requirements"', body)
         # A quiet count, not a stack of "No X / No Y / No Z" phrases in the sidebar itself.
         sidebar_start = body.index('data-root-branch="3"')
         sidebar_row = body[sidebar_start:sidebar_start + 400]

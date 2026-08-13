@@ -383,18 +383,24 @@ class ToolboxContractTests(_BaseTestCase):
         self.assertNotIn("Removed Projects", toolbox)
         self.assertNotIn(">Security<", toolbox)
 
-    def test_toolbox_empty_when_nothing_selected(self):
+    def test_toolbox_shows_project_intelligence_when_nothing_selected(self):
         # CLAUDE-P40-EYE1: Chat now renders BEFORE the Toolbox/Eye right
         # column in DOM order (Chat is nested inside .workspace-main-
         # column, itself before .workspace-right-column as a sibling of
         # Lists) - slicing to the next "</aside>" (the Toolbox <aside>'s
         # own closing tag) is DOM-structure-accurate regardless of
         # ordering elsewhere, unlike the old id="chat-region" boundary.
+        #
+        # CLAUDE-GO-DNA-01 (Panel Zoning) superseded the old bare neutral
+        # empty state ("No Investigation or Document is currently
+        # selected") with the always-present Project Intelligence view -
+        # see governance/current/go-dna-01-composer-result-contract-and-
+        # panel-zoning.md for the full record.
         client = self._client_as("e3a_owner", 1)
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
         start = body.index('id="workspace-toolbox-panel"')
         toolbox = body[start:body.index("</aside>", start)]
-        self.assertIn("No Investigation or Document is currently selected", toolbox)
+        self.assertIn('data-ui-ref="toolbox.project-intelligence"', toolbox)
 
 
 # ---------------------------------------------------------------------------

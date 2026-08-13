@@ -270,9 +270,13 @@ class ProjectsTreeTests(unittest.TestCase):
         # class + aria-current="true" (see .current-project's own CSS
         # comment for the restrained edge-marker treatment it gets
         # instead of a background fill).
+        # CLAUDE-GO-DNA-01 (Panel Zoning): the retired "Overview" leaf's
+        # own data-root-branch/data-root-label now carry over onto this
+        # self-link (the same destination its removal folded into), so
+        # they appear between data-ui-ref and aria-current now.
         body = self.client.get("/projects/alpha/workspace").get_data(as_text=True)
         self.assertNotIn("launcher-heading", body)
-        self.assertIn('tree-leaf launcher-link current-project" data-ui-ref="lists.project.self" aria-current="true"', body)
+        self.assertIn('tree-leaf launcher-link current-project" data-ui-ref="lists.project.self" data-root-branch="1.1" data-root-label="Identity &amp; Overview" aria-current="true"', body)
         self.assertNotIn("launcher-project-item", body)
         # The old standalone "Current Project" orientation block is gone.
         self.assertNotIn('side-rail-context-label">Current Project<', body)

@@ -109,27 +109,31 @@ class EmptyFolderCoverageTests(_BaseTestCase):
             workspace = store.get(self.project_id)
             for source in list(workspace.sources):
                 store.remove_source(workspace, source["id"], actor="tag_admin")
+        # CLAUDE-GO-DNA-01 (Panel Zoning) relocated RFIs/Tags from Lists
+        # into the Toolbox's own Project Intelligence view - Documents
+        # (file territory) stays the only one of these still in Lists.
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
-        for ref in (
-            "lists.project.documents.empty",
-            "lists.project.rfis.empty",
-            "lists.project.tags.empty",
-        ):
-            self.assertIn(f'data-ui-ref="{ref}"', body, ref)
+        self.assertIn('data-ui-ref="lists.project.documents.empty"', body)
+        self.assertIn('data-ui-ref="toolbox.rfi.empty"', body)
+        self.assertIn('data-ui-ref="toolbox.tags.empty"', body)
 
     def test_investigations_empty_state_and_new_action_both_present_together(self):
         # Section: "the action row is never gated on this state" - both
         # must render side by side, never one instead of the other.
+        # CLAUDE-GO-DNA-01 (Panel Zoning) relocated Investigations from
+        # Lists into the Toolbox.
         client = self._client_as("tag_admin", 1)
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
-        self.assertIn('data-ui-ref="lists.project.investigations.new"', body)
-        self.assertIn('data-ui-ref="lists.project.investigations.empty"', body)
+        self.assertIn('data-ui-ref="toolbox.investigations.new"', body)
+        self.assertIn('data-ui-ref="toolbox.investigations.empty"', body)
 
     def test_tasks_open_and_completed_empty_states_are_independently_tagged(self):
+        # CLAUDE-GO-DNA-01 (Panel Zoning) relocated Tasks from Lists into
+        # the Toolbox.
         client = self._client_as("tag_admin", 1)
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
-        self.assertIn('data-ui-ref="lists.project.tasks.open.empty"', body)
-        self.assertIn('data-ui-ref="lists.project.tasks.completed.empty"', body)
+        self.assertIn('data-ui-ref="toolbox.tasks.open.empty"', body)
+        self.assertIn('data-ui-ref="toolbox.tasks.completed.empty"', body)
 
 
 # ---------------------------------------------------------------------------
@@ -138,11 +142,14 @@ class EmptyFolderCoverageTests(_BaseTestCase):
 
 class NestedFolderCoverageTests(_BaseTestCase):
     def test_investigation_new_action_nests_correctly_under_its_parent_family(self):
+        # CLAUDE-GO-DNA-01 (Panel Zoning) relocated Investigations/RFIs
+        # from Lists into the Toolbox - same nesting/source-order
+        # invariant, same relative order (Investigations before RFIs).
         client = self._client_as("tag_admin", 1)
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
-        parent_pos = body.index('data-ui-ref="lists.project.investigations"')
-        child_pos = body.index('data-ui-ref="lists.project.investigations.new"')
-        rfis_pos = body.index('data-ui-ref="lists.project.rfis"')
+        parent_pos = body.index('data-ui-ref="toolbox.investigations"')
+        child_pos = body.index('data-ui-ref="toolbox.investigations.new"')
+        rfis_pos = body.index('data-ui-ref="toolbox.rfi"')
         self.assertLess(parent_pos, child_pos)
         self.assertLess(child_pos, rfis_pos)
 
@@ -334,12 +341,15 @@ class DynamicRecordConventionTests(_BaseTestCase):
             store = CaseWorkspaceStore(self.tmp_dir)
             workspace = store.get(self.project_id)
             case = store.create_case(workspace, title="A Tagged Investigation", objective="", created_by="tag_admin")
+        # CLAUDE-GO-DNA-01 (Panel Zoning) relocated Investigations from
+        # Lists into the Toolbox.
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
         # The SAME data-ui-ref value for every Investigation row -
-        # identity comes from data-case-id, never a per-instance ref.
-        self.assertEqual(body.count('data-ui-ref="lists.project.investigations.leaf"'), 1)
-        self.assertIn(case["id"], body)  # present as data-case-id, not as part of the ref
-        self.assertNotIn(f'data-ui-ref="lists.project.investigations.leaf.{case["id"]}"', body)
+        # identity comes from the row's own ?case= URL, never a
+        # per-instance ref.
+        self.assertEqual(body.count('data-ui-ref="toolbox.investigations.leaf"'), 1)
+        self.assertIn(case["id"], body)  # present in the row's own URL, not as part of the ref
+        self.assertNotIn(f'data-ui-ref="toolbox.investigations.leaf.{case["id"]}"', body)
 
 
 if __name__ == "__main__":

@@ -315,12 +315,23 @@ class RootFamilyReferencePresenceTests(_BaseTestCase):
         # left asserted-present incorrectly. See
         # OpenedProjectPortfolioRemovalTests below for the explicit
         # regression coverage of their absence.
+        #
+        # CLAUDE-GO-DNA-01 (Panel Zoning): the full project family is
+        # still reachable, now split across two zones instead of all
+        # living in Lists - "lists.project.overview" is retired outright
+        # (lists.project.self already opens the same page); Investigations/
+        # RFI/Conversation/Tasks/Tags moved to their toolbox.* equivalents,
+        # rendered in the Toolbox's own "nothing selected" Project
+        # Intelligence view (no Investigation/Document selected here, so
+        # it renders). lists.project.documents/tools stay in Lists -
+        # genuinely file-territory.
         client = self._client_as("vw7a_owner", 1)
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
+        for ref in ("lists.project.self", "lists.project.documents", "lists.project.tools"):
+            self.assertIn(f'data-ui-ref="{ref}"', body, ref)
         for ref in (
-            "lists.project.self", "lists.project.overview",
-            "lists.project.documents", "lists.project.investigations", "lists.project.rfis",
-            "lists.project.chats", "lists.project.tasks", "lists.project.tags", "lists.project.tools",
+            "toolbox.investigations", "toolbox.rfi",
+            "toolbox.conversation", "toolbox.tasks", "toolbox.tags",
         ):
             self.assertIn(f'data-ui-ref="{ref}"', body, ref)
 
@@ -335,20 +346,26 @@ class RootFamilyReferencePresenceTests(_BaseTestCase):
         client.post(f"/projects/{self.project_id}/workspace/cases", data={"title": "Foundation Review", "objective": ""})
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
         self.assertIn('data-ui-ref="lists.project.documents.leaf"', body)
-        self.assertIn('data-ui-ref="lists.project.investigations.leaf"', body)
+        # CLAUDE-GO-DNA-01 (Panel Zoning): Investigations now renders in the
+        # Toolbox's Project Intelligence view, not Lists.
+        self.assertIn('data-ui-ref="toolbox.investigations.leaf"', body)
 
     def test_toolbox_and_display_refs_present_and_context_switches(self):
         client = self._client_as("vw7a_owner", 1)
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
         self.assertIn('data-ui-ref="toolbox.panel"', body)
-        self.assertIn('data-ui-ref="toolbox.empty"', body)
+        # CLAUDE-GO-DNA-01 (Panel Zoning): the old bare "toolbox.empty" state
+        # was replaced by the always-present "toolbox.project-intelligence"
+        # section (Requirements/Investigations/RFI/Work Products/
+        # Conversation/Tasks/Tags), shown whenever nothing is selected.
+        self.assertIn('data-ui-ref="toolbox.project-intelligence"', body)
         self.assertIn('data-ui-ref="display.divisions"', body)
         self.assertIn('data-ui-ref="display.division"', body)
 
         source_id = self._store().get(self.project_id).sources[0]["id"]
         body = client.get(f"/projects/{self.project_id}/workspace?source={source_id}").get_data(as_text=True)
         self.assertIn('data-ui-ref="toolbox.document"', body)
-        self.assertNotIn('data-ui-ref="toolbox.empty"', body)
+        self.assertNotIn('data-ui-ref="toolbox.project-intelligence"', body)
 
     def test_overview_leaf_projects_display_overview_ref(self):
         client = self._client_as("vw7a_owner", 1)
@@ -391,13 +408,15 @@ class AuthorizationAwareReferenceTests(_BaseTestCase):
         self.assertIn('data-ui-ref="lists.system-data-management"', body)
 
     def test_remove_project_ref_owner_or_admin_only(self):
+        # CLAUDE-GO-DNA-01 (Panel Zoning): Remove Project moved from Lists'
+        # Project Tools into the Toolbox's Project Administration disclosure.
         client = self._client_as("vw7a_granted_reviewer", 3, role="read_only")
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
-        self.assertNotIn('data-ui-ref="lists.project.tools.remove-project"', body)
+        self.assertNotIn('data-ui-ref="toolbox.project-admin.remove-project"', body)
 
         owner_client = self._client_as("vw7a_owner", 1)
         owner_body = owner_client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
-        self.assertIn('data-ui-ref="lists.project.tools.remove-project"', owner_body)
+        self.assertIn('data-ui-ref="toolbox.project-admin.remove-project"', owner_body)
 
     def test_outsider_gets_404_not_a_filtered_reference_map(self):
         from models import User, db
@@ -480,6 +499,46 @@ class NoBehaviorChangeSpotCheckTests(_BaseTestCase):
             content_type="multipart/form-data", follow_redirects=True,
         )
         self.assertIn("Document added as a Project Source.", resp.get_data(as_text=True))
+
+
+class PanelZoningInvariantTests(_BaseTestCase):
+    """CLAUDE-GO-DNA-01 (Panel Zoning), structural guard (Part F.14).
+
+    LEFT (Lists) is file/evidence territory only: project name, folders,
+    Documents, Files, and file-related Project Tools actions. Requirements,
+    Investigations, RFI Correspondence, Work Products, Conversation, Tasks,
+    Tags, and Remove Project must never render as `lists.project.*`
+    references again - those categories now live in the Toolbox's Project
+    Intelligence view. This asserts the zoning boundary itself (a ref-prefix
+    pattern), not any specific markup shape, so it survives future
+    reshuffling inside either panel as long as the boundary holds.
+    """
+
+    _FORBIDDEN_LISTS_REF_PATTERN = re.compile(
+        r'data-ui-ref="lists\.project\.'
+        r'(requirements|investigations|rfis|work-products|chats|tasks|tags|tools\.remove-project)'
+    )
+
+    def test_lists_panel_never_regresses_into_a_mixed_functional_menu(self):
+        client = self._client_as("vw7a_owner", 1)
+        client.post(f"/projects/{self.project_id}/workspace/cases", data={"title": "Foundation Review", "objective": ""})
+        body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
+        match = self._FORBIDDEN_LISTS_REF_PATTERN.search(body)
+        self.assertIsNone(
+            match,
+            f"Lists panel regressed to a mixed functional menu: found {match.group(0) if match else None}",
+        )
+
+    def test_the_relocated_categories_still_exist_in_the_toolbox(self):
+        # The invariant is a relocation, not a removal - confirm the
+        # displaced categories are still reachable, just from the Toolbox.
+        client = self._client_as("vw7a_owner", 1)
+        body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
+        for ref in (
+            "toolbox.requirements", "toolbox.investigations", "toolbox.rfi",
+            "toolbox.work-products", "toolbox.conversation", "toolbox.tasks", "toolbox.tags",
+        ):
+            self.assertIn(f'data-ui-ref="{ref}"', body, ref)
 
 
 if __name__ == "__main__":

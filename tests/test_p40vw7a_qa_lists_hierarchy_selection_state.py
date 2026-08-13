@@ -48,6 +48,7 @@ from werkzeug.datastructures import FileStorage
 from werkzeug.security import generate_password_hash
 
 from services.bhive_parser import BHiveParser, ParsedDocument
+from services.case_workspace import CaseWorkspaceStore
 from services.environment_capabilities import CLIENT_OWNER
 from services.ingestion import ingest_upload
 
@@ -102,6 +103,9 @@ class _BaseTestCase(unittest.TestCase):
         end = body.index("</nav>", start)
         return body[start:end]
 
+    def _store(self) -> CaseWorkspaceStore:
+        return CaseWorkspaceStore(self.tmp_dir)
+
 
 class SelectionTierSeparationTests(_BaseTestCase):
     """The three states (root/current-Project/selected-child) must
@@ -117,17 +121,33 @@ class SelectionTierSeparationTests(_BaseTestCase):
         self.assertNotIn("active", tag)
         self.assertIn("current-project", tag)
 
-    def test_only_one_row_carries_the_active_selection_class(self):
+    def test_no_row_is_active_when_nothing_lists_relevant_is_selected(self):
+        # CLAUDE-GO-DNA-01 (Panel Zoning): "Chats" (the old default-active
+        # leaf on the bare workspace URL) relocated out of Lists entirely
+        # - Lists' own remaining selectable leaves (Documents/Files) are
+        # BOTH inactive until their own specific selection - so unlike
+        # before, a fully bare URL now legitimately activates none of them.
         doc = self._ingest("Nipigon Ramp", "rfp.txt")
         client = self._client()
         body = client.get(f"/projects/{doc.project_id}/workspace").get_data(as_text=True)
         lists_html = self._lists_html(body)
-        # Every .tree-leaf.launcher-link(.active) opening tag - count
-        # how many actually carry the literal "active" token.
+        leaf_tags = re.findall(r'<a class="tree-leaf launcher-link[^"]*"[^>]*>', lists_html)
+        active_leaves = [t for t in leaf_tags if re.search(r'\bactive\b', t)]
+        self.assertEqual(len(active_leaves), 0, active_leaves)
+
+    def test_only_one_row_carries_the_active_selection_class(self):
+        # CLAUDE-GO-DNA-01 (Panel Zoning): "Chats" is gone from Lists -
+        # exercised here against a Document selection instead, Lists' own
+        # remaining genuinely-selectable leaf kind.
+        doc = self._ingest("Nipigon Ramp", "rfp.txt")
+        client = self._client()
+        source_id = self._store().get(doc.project_id).sources[0]["id"]
+        body = client.get(f"/projects/{doc.project_id}/workspace?source={source_id}").get_data(as_text=True)
+        lists_html = self._lists_html(body)
         leaf_tags = re.findall(r'<a class="tree-leaf launcher-link[^"]*"[^>]*>', lists_html)
         active_leaves = [t for t in leaf_tags if re.search(r'\bactive\b', t)]
         self.assertEqual(len(active_leaves), 1, active_leaves)
-        self.assertIn('data-ui-ref="lists.project.chats"', active_leaves[0])
+        self.assertIn('data-ui-ref="lists.project.documents.leaf"', active_leaves[0])
 
     def test_projects_root_no_longer_renders_at_all_while_a_project_is_open(self):
         # CLAUDE-P40-VW7B, Section 3: the portfolio-level PROJECTS root
@@ -143,14 +163,19 @@ class SelectionTierSeparationTests(_BaseTestCase):
         self.assertNotIn('data-ui-ref="lists.projects"', lists_html)
 
     def test_selecting_a_different_child_moves_the_active_class_there(self):
+        # CLAUDE-GO-DNA-01 (Panel Zoning): "Overview" was itself retired
+        # as a Lists leaf (redundant with lists.project.self, which
+        # already opens the same page) - exercised here against
+        # ?view=files (lists.project.files), Lists' other still-real
+        # selectable leaf kind besides a Document.
         doc = self._ingest("Nipigon Ramp", "rfp.txt")
         client = self._client()
-        body = client.get(f"/projects/{doc.project_id}/workspace?view=overview").get_data(as_text=True)
+        body = client.get(f"/projects/{doc.project_id}/workspace?view=files").get_data(as_text=True)
         lists_html = self._lists_html(body)
         leaf_tags = re.findall(r'<a class="tree-leaf launcher-link[^"]*"[^>]*>', lists_html)
         active_leaves = [t for t in leaf_tags if re.search(r'\bactive\b', t)]
         self.assertEqual(len(active_leaves), 1)
-        self.assertIn('data-ui-ref="lists.project.overview"', active_leaves[0])
+        self.assertIn('data-ui-ref="lists.project.files"', active_leaves[0])
         # current-project row still present, still un-selected.
         self_idx = lists_html.index('data-ui-ref="lists.project.self"')
         self_tag = lists_html[lists_html.rindex("<a", 0, self_idx):lists_html.index(">", self_idx)]
@@ -168,18 +193,23 @@ class AccessibilityStateTests(_BaseTestCase):
         self.assertIn('aria-current="true"', tag)
 
     def test_selected_child_gets_aria_current_page_not_true(self):
+        # CLAUDE-GO-DNA-01 (Panel Zoning): "Chats" is gone from Lists -
+        # exercised here against ?view=files instead.
         doc = self._ingest("Nipigon Ramp", "rfp.txt")
         client = self._client()
-        body = client.get(f"/projects/{doc.project_id}/workspace").get_data(as_text=True)
+        body = client.get(f"/projects/{doc.project_id}/workspace?view=files").get_data(as_text=True)
         lists_html = self._lists_html(body)
-        idx = lists_html.index('data-ui-ref="lists.project.chats"')
+        idx = lists_html.index('data-ui-ref="lists.project.files"')
         tag = lists_html[lists_html.rindex("<a", 0, idx):lists_html.index(">", idx)]
         self.assertIn('aria-current="page"', tag)
 
     def test_only_one_element_carries_aria_current_page(self):
+        # CLAUDE-GO-DNA-01 (Panel Zoning): ?view=overview no longer
+        # activates a Lists leaf (Overview was retired from Lists) -
+        # exercised here against ?view=files instead.
         doc = self._ingest("Nipigon Ramp", "rfp.txt")
         client = self._client()
-        body = client.get(f"/projects/{doc.project_id}/workspace?view=overview").get_data(as_text=True)
+        body = client.get(f"/projects/{doc.project_id}/workspace?view=files").get_data(as_text=True)
         lists_html = self._lists_html(body)
         self.assertEqual(lists_html.count('aria-current="page"'), 1)
         self.assertEqual(lists_html.count('aria-current="true"'), 1)
@@ -318,13 +348,26 @@ class UiReferenceRetentionTests(unittest.TestCase):
         self.map_text = (_REPO_ROOT / "UI_REFERENCE_MAP.md").read_text(encoding="utf-8")
 
     def test_all_existing_lists_project_refs_retained(self):
+        # CLAUDE-GO-DNA-01 (Panel Zoning) relocated Investigations/RFIs/
+        # Chats (and Overview, retired outright as redundant with
+        # lists.project.self) out of Lists into the Toolbox - genuinely
+        # no longer present here by design, not a regression. This test
+        # now only asserts the refs that are still genuinely Lists' own
+        # (file-territory); the structural guard for the full zoning
+        # invariant (nothing outside file-territory ever reappears in
+        # Lists) lives in
+        # tests/test_p40vw7a_ui_reference_map.py::PanelZoningInvariantTests.
         for ref in (
             "lists.projects", "lists.projects.leaf", "lists.project.self",
-            "lists.project.overview", "lists.project.documents", "lists.project.documents.leaf",
-            "lists.project.investigations", "lists.project.investigations.leaf",
-            "lists.project.rfis", "lists.project.rfis.leaf", "lists.project.chats",
+            "lists.project.documents", "lists.project.documents.leaf",
         ):
             self.assertIn(f'data-ui-ref="{ref}"', self.html, ref)
+        for retired_ref in (
+            "lists.project.overview", "lists.project.investigations",
+            "lists.project.investigations.leaf", "lists.project.rfis",
+            "lists.project.rfis.leaf", "lists.project.chats",
+        ):
+            self.assertNotIn(f'data-ui-ref="{retired_ref}"', self.html, retired_ref)
 
     def test_no_refs_renumbered_for_styling_reasons(self):
         # The styling/indentation/class changes this stage made must not

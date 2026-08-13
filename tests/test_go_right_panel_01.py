@@ -294,11 +294,16 @@ class ToolboxRenderTests(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
 
-    def test_no_findings_shows_the_existing_empty_state_not_a_broken_section(self):
+    def test_no_findings_shows_project_intelligence_without_a_composer_findings_section(self):
+        """CLAUDE-GO-DNA-01 (Panel Zoning): the old bare toolbox.empty state
+        was replaced by the always-present toolbox.project-intelligence
+        section (Requirements/Investigations/RFI/Work Products/Conversation/
+        Tasks/Tags, relocated from Lists) - composer-findings itself stays
+        conditional within that section, never shown when there are none."""
         resp = self.client.get(f"/projects/{self.project_id}/workspace")
         body = resp.get_data(as_text=True)
         self.assertNotIn('data-ui-ref="toolbox.composer-findings"', body)
-        self.assertIn('data-ui-ref="toolbox.empty"', body)
+        self.assertIn('data-ui-ref="toolbox.project-intelligence"', body)
 
     def test_findings_render_with_display_id_and_tag(self):
         workspace = self.store.get(self.project_id)

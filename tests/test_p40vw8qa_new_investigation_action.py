@@ -94,13 +94,13 @@ class ActionRowAvailabilityTests(_BaseTestCase):
     def test_new_investigation_action_present_at_zero_count(self):
         client = self._client_as("newinv_owner", 1)
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
-        self.assertIn('data-ui-ref="lists.project.investigations.new"', body)
+        self.assertIn('data-ui-ref="toolbox.investigations.new"', body)
         self.assertIn("No Investigations yet.", body)
 
     def test_new_investigation_action_is_not_a_radio_input(self):
         client = self._client_as("newinv_owner", 1)
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
-        match = re.search(r'<a[^>]*data-ui-ref="lists\.project\.investigations\.new"[^>]*>', body)
+        match = re.search(r'<a[^>]*data-ui-ref="toolbox\.investigations\.new"[^>]*>', body)
         self.assertIsNotNone(match)
         self.assertEqual(match.group(0).count("<input"), 0)
 
@@ -112,8 +112,8 @@ class ActionRowAvailabilityTests(_BaseTestCase):
             workspace = store.get(self.project_id)
             store.create_case(workspace, title="Existing Investigation", objective="", created_by="newinv_owner")
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
-        new_action_pos = body.index('data-ui-ref="lists.project.investigations.new"')
-        existing_leaf_pos = body.index('data-ui-ref="lists.project.investigations.leaf"')
+        new_action_pos = body.index('data-ui-ref="toolbox.investigations.new"')
+        existing_leaf_pos = body.index('data-ui-ref="toolbox.investigations.leaf"')
         self.assertLess(new_action_pos, existing_leaf_pos)
 
     def test_action_row_still_present_with_existing_investigations(self):
@@ -124,7 +124,7 @@ class ActionRowAvailabilityTests(_BaseTestCase):
             workspace = store.get(self.project_id)
             store.create_case(workspace, title="Existing Investigation", objective="", created_by="newinv_owner")
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
-        self.assertIn('data-ui-ref="lists.project.investigations.new"', body)
+        self.assertIn('data-ui-ref="toolbox.investigations.new"', body)
         self.assertIn("Existing Investigation", body)
 
 
@@ -190,7 +190,10 @@ class CreationTests(_BaseTestCase):
             data={"title": "Foundation Review", "source": "new-case-form"},
         )
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
-        self.assertIn('Investigations <span class="launcher-count">1</span>', body)
+        # CLAUDE-GO-DNA-01 (Panel Zoning) relocated Investigations from
+        # Lists into the Toolbox, with a different count-label format
+        # (macros.subdisclosure's "Investigations (N)").
+        self.assertIn("Investigations (1)", body)
         self.assertIn("Foundation Review", body)
 
     def test_new_investigation_added_under_the_same_family(self):
@@ -200,9 +203,9 @@ class CreationTests(_BaseTestCase):
             data={"title": "Foundation Review", "source": "new-case-form"},
         )
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
-        investigations_start = body.index('data-ui-ref="lists.project.investigations"')
-        investigations_leaf = body.index('data-ui-ref="lists.project.investigations.leaf"')
-        rfis_start = body.index('data-ui-ref="lists.project.rfis"')
+        investigations_start = body.index('data-ui-ref="toolbox.investigations"')
+        investigations_leaf = body.index('data-ui-ref="toolbox.investigations.leaf"')
+        rfis_start = body.index('data-ui-ref="toolbox.rfi"')
         self.assertLess(investigations_start, investigations_leaf)
         self.assertLess(investigations_leaf, rfis_start)
 

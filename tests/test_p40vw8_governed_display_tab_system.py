@@ -211,9 +211,16 @@ class AuditConfirmationTests(_BaseTestCase):
         # `case=row.draft.case_id` via url_for('workspace.show_workspace',
         # ...case=...) - the exact same route/parameter Investigations
         # themselves use, never a distinct rfi= or kind=rfi value.
-        html = _BASE_HTML_PATH.read_text(encoding="utf-8")
-        idx = html.index('data-ui-ref="lists.project.rfis.leaf"')
-        tag = html[html.rindex("<a", 0, idx):html.index(">", idx) + 1]
+        # CLAUDE-GO-DNA-01 (Panel Zoning) relocated this leaf from Lists
+        # (base.html) into the Toolbox's own Project Intelligence view
+        # (case_workspace.html) - the underlying routing fact this test
+        # protects is unchanged.
+        html = _CASE_WORKSPACE_HTML_PATH.read_text(encoding="utf-8")
+        idx = html.index('data-ui-ref="toolbox.rfi.leaf"')
+        # Unlike the old Lists markup, the ref lives on the wrapping <p>,
+        # not the <a> itself - the href-bearing tag is the next <a> after it.
+        anchor_start = html.index("<a", idx)
+        tag = html[anchor_start:html.index(">", anchor_start) + 1]
         self.assertIn("case=row.draft.case_id", tag)
         self.assertNotIn("rfi=", tag)
         self.assertNotIn("kind=", tag)
@@ -247,10 +254,12 @@ class AuditConfirmationTests(_BaseTestCase):
         self.assertNotIn("data-case-id", branch)
 
     def test_empty_display_state_message_present_when_nothing_selected(self):
+        # CLAUDE-GO-DNA-01 (Panel Zoning) superseded the old bare neutral
+        # empty state with the always-present Project Intelligence view.
         doc = self._ingest("VW8 Empty State Project")
         client = self._client()
         body = client.get(f"/projects/{doc.project_id}/workspace").get_data(as_text=True)
-        self.assertIn("No Investigation or Document is currently selected", body)
+        self.assertIn('data-ui-ref="toolbox.project-intelligence"', body)
 
     def test_both_dynamic_record_strips_render_regardless_of_current_selection(self):
         # Section 4's own "present regardless of the current selection" -

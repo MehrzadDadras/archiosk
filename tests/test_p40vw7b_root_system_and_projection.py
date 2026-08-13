@@ -104,6 +104,13 @@ class _BaseTestCase(unittest.TestCase):
         end = body.index('id="workspace-toolbox-panel"') if 'id="workspace-toolbox-panel"' in body else body.index("</body>")
         return body[start:end]
 
+    def _toolbox_html(self, body: str) -> str:
+        # CLAUDE-GO-DNA-01 (Panel Zoning): Investigations/RFIs/Tasks/Tags
+        # relocated from Lists into the Toolbox's own Project Intelligence
+        # view.
+        start = body.index('id="workspace-toolbox-panel"')
+        return body[start:body.index("</aside>", start)]
+
 
 # ---------------------------------------------------------------------------
 # Hierarchy: empty states, admin-function relocation, active-state on RFIs.
@@ -123,8 +130,11 @@ class HierarchyTests(_BaseTestCase):
         body = client.get(f"/projects/{doc.project_id}/workspace").get_data(as_text=True)
         lists = self._lists_html(body)
         self.assertIn("No Documents yet.", lists)
-        self.assertIn("No Investigations yet.", lists)
-        self.assertIn("No RFIs yet.", lists)
+        # CLAUDE-GO-DNA-01 (Panel Zoning): Investigations/RFIs relocated
+        # from Lists into the Toolbox's own Project Intelligence view.
+        toolbox = self._toolbox_html(body)
+        self.assertIn("No Investigations yet.", toolbox)
+        self.assertIn("RFI Correspondence (0)", toolbox)
 
     def test_reset_project_data_moved_out_of_project_tools_to_top_level(self):
         client = self._client_as("vw7b_admin", 4, role="admin")
@@ -160,10 +170,22 @@ class HierarchyTests(_BaseTestCase):
         })
         store.save(workspace)
 
+        # SUPERSEDED (CLAUDE-GO-DNA-01, Panel Zoning): RFI Correspondence
+        # relocated into the Toolbox's Project Intelligence view, which
+        # only renders when NOTHING is selected - the moment its owning
+        # Investigation IS open (as here), the Toolbox shows that
+        # Investigation's own Findings instead, not the RFI list. There is
+        # no more "active RFI leaf styled against its open Investigation"
+        # state to assert - RFI Correspondence and an open Investigation's
+        # Findings are now mutually exclusive views, never shown together.
+        # The real remaining invariant - the RFI leaf correctly links back
+        # to its owning Investigation's URL - is proven from the
+        # nothing-selected state instead.
         client = self._client_as("vw7b_owner", 1)
-        body = client.get(f"/projects/{self.project_id}/workspace?case={self.case['id']}").get_data(as_text=True)
-        lists = self._lists_html(body)
-        self.assertRegex(lists, r'<a class="tree-leaf launcher-link active"[^>]*data-ui-ref="lists\.project\.rfis\.leaf"')
+        body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
+        toolbox = self._toolbox_html(body)
+        self.assertIn('data-ui-ref="toolbox.rfi.leaf"', toolbox)
+        self.assertIn(f'href="/projects/{self.project_id}/workspace?case={self.case["id"]}"', toolbox)
 
 
 # ---------------------------------------------------------------------------
@@ -332,10 +354,13 @@ class PreservationSpotCheckTests(_BaseTestCase):
         self.assertNotIn(f'data-ui-ref="lists.project.self" href="/projects/{self.project_id}/workspace" active', resp2.get_data(as_text=True))
 
     def test_tags_and_tasks_lists_branches_still_present_and_functional(self):
+        # CLAUDE-GO-DNA-01 (Panel Zoning): Tasks/Tags relocated from Lists
+        # into the Toolbox's own Project Intelligence view - still
+        # present and functional, just relocated.
         client = self._client_as("vw7b_owner", 1)
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
-        self.assertIn('data-ui-ref="lists.project.tasks"', body)
-        self.assertIn('data-ui-ref="lists.project.tags"', body)
+        self.assertIn('data-ui-ref="toolbox.tasks"', body)
+        self.assertIn('data-ui-ref="toolbox.tags"', body)
 
     def test_ui_reference_mode_toggle_still_present(self):
         client = self._client_as("vw7b_owner", 1)

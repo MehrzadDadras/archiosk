@@ -176,15 +176,19 @@ class NoDuplicatedChildHierarchyTests(_BaseTestCase):
         self.assertNotIn("A Second Distinct Project", display_html)
 
     def test_documents_investigations_chats_are_listed_in_the_panel_for_the_active_project(self):
+        # CLAUDE-GO-DNA-01 (Panel Zoning): Investigations/Conversation
+        # relocated out of the Lists <nav class="launcher-panel"> into
+        # the Toolbox's own Project Intelligence view - Documents (file
+        # territory) is the only one of these three that stays in Lists.
         client = self._client_as("p40e2b1a_owner", 1)
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
         launcher_start = body.index('<nav class="launcher-panel"')
         launcher_end = body.index("</nav>", launcher_start)
         panel_html = body[launcher_start:launcher_end]
         self.assertIn("Documents", panel_html)
-        self.assertIn("Investigations", panel_html)
-        self.assertIn("Conversation", panel_html)
         self.assertIn("rfp.txt", panel_html)
+        self.assertIn('data-ui-ref="toolbox.investigations"', body)
+        self.assertIn('data-ui-ref="toolbox.conversation"', body)
 
     def test_panel_content_differs_between_home_and_an_open_workspace(self):
         # REVERSED from the old invariant: the active Project's own
@@ -224,15 +228,16 @@ class RecursiveProjectionTests(_BaseTestCase):
         self.assertIn("Riverside P40E2B1A Workspace", level1)
 
         # Level 2: opening a Project -> its own branch, expanded in Lists
-        # (not Display) - Documents/Investigations/RFIs/Chats children.
+        # (not Display) - Documents stays a Lists tree-toggle child;
+        # Investigations/RFIs/Chats relocated to the Toolbox (CLAUDE-GO-
+        # DNA-01, Panel Zoning) and no longer use the tree-toggle grammar
+        # at all (no more data-tree-owns="case").
         level2 = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
-        self.assertIn('data-tree-owns="case"', level2)
         self.assertIn('data-tree-owns="source"', level2)
         self.assertNotIn("display-branch-nav", level2)
 
-        # Level 3: the "Investigations" tree-toggle's own children list
-        # real Investigation names with real ?case= hrefs, still inside
-        # Lists.
+        # Level 3: the Toolbox's own "Investigations" subdisclosure lists
+        # real Investigation names with real ?case= hrefs.
         client.post(f"/projects/{self.project_id}/workspace/cases", data={"title": "Deep Link Investigation", "objective": ""})
         level3 = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
         self.assertIn("Deep Link Investigation", level3)
@@ -427,11 +432,14 @@ class ToolboxAndChatContextualTests(_BaseTestCase):
         case_id = self._store().get(self.project_id).cases[0]["id"]
 
         # SUPERSEDED (CLAUDE-P40-E3A, Section 8): the generic "<h3>Project</h3>"
-        # Toolbox section label was removed outright ("remove generic
-        # section labels...when they add no information") - the
-        # nothing-selected state now reads as a plain note instead.
+        # Toolbox section label was removed outright, and the nothing-
+        # selected state read as a plain note instead.
+        #
+        # SUPERSEDED AGAIN (CLAUDE-GO-DNA-01, Panel Zoning): that plain
+        # note was itself replaced by the always-present Project
+        # Intelligence view.
         project_home = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
-        self.assertIn("No Investigation or Document is currently selected", project_home)
+        self.assertIn('data-ui-ref="toolbox.project-intelligence"', project_home)
 
         opened = client.get(f"/projects/{self.project_id}/workspace?case={case_id}").get_data(as_text=True)
         self.assertIn("Investigation &middot; Findings", opened)
