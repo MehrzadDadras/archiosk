@@ -902,8 +902,39 @@ document.addEventListener('DOMContentLoaded', () => {
             // endpoint, no async infrastructure added.
             const executionStatus = document.getElementById('dock-composer-execution-status');
             if (executionStatus) executionStatus.textContent = 'Working on your request…';
-            const sendBtn = e.target.querySelector('button[type="submit"]');
+            // CLAUDE-CA1D-COMPOSER-ENTER-FIX-01: was `e.target.querySelector
+            // ('button[type="submit"]')`, which returns the FIRST submit
+            // button in DOM order - since CLAUDE-CA1D-COMPOSER-CONTEXT-
+            // LABEL-01 this form can also contain the "Clear work context"
+            // button (composer-context-clear, also type="submit", rendered
+            // BEFORE this one whenever current_context is set), so this was
+            // disabling the wrong button. The real Send button has its own
+            // stable data-ui-ref - use that instead of positional order.
+            const sendBtn = e.target.querySelector('[data-ui-ref="chat.composer.send"]');
             if (sendBtn) sendBtn.disabled = true;
+        });
+
+        // CLAUDE-CA1D-COMPOSER-ENTER-FIX-01: live Product Owner report -
+        // "Enter does not trigger Send." Root cause: per the HTML
+        // Standard's implicit-submission rule, pressing Enter in a text
+        // field submits the form via its "default button" - the FIRST
+        // submit button in DOM order - and the composer-context-clear
+        // button (above) is exactly that whenever current_context is set,
+        // silently clearing the work context instead of sending the
+        // message. Explicitly forcing Enter to submit via the real Send
+        // button removes the ambiguity outright, rather than depending on
+        // markup order or browser-specific default-button behavior.
+        // Shift+Enter is left alone (browser default) even though this is
+        // a single-line <input> and cannot show a newline, so a reviewer
+        // holding Shift for some other reason isn't surprised by a send.
+        draftInput.addEventListener('keydown', (e) => {
+            if (e.key !== 'Enter' || e.shiftKey) return;
+            const form = draftInput.closest('form');
+            const sendBtn = form.querySelector('[data-ui-ref="chat.composer.send"]');
+            if (!form || !sendBtn || sendBtn.disabled) return;
+            e.preventDefault();
+            if (typeof form.requestSubmit === 'function') form.requestSubmit(sendBtn);
+            else sendBtn.click();
         });
     }
 
