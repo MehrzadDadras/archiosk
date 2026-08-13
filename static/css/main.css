@@ -1225,17 +1225,44 @@ main {
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 0.3rem;
+    /* CLAUDE-SIGNIN-EYE-VISIBILITY-01: 0.45rem (up from 0.3rem) so the
+       clickable box is ~32x32px, closer to a practical tap target,
+       without exceeding .text-input's own 2.4rem reserved padding-right
+       above (right:0.4rem + this box must stay under ~2rem). */
+    padding: 0.45rem;
     background: none;
     border: none;
     border-radius: 3px;
-    color: var(--text-metadata);
+    /* CLAUDE-SIGNIN-EYE-VISIBILITY-01: was --text-metadata (this card's
+       own token override makes it rgba(200,255,248,.72), already
+       adequate contrast on its own) - bumped to --text-primary at rest
+       so the control reads as clearly present/interactive at a glance
+       rather than only becoming legible on hover, matching the Product
+       Owner's "clearly visible against the password-field background"
+       requirement. */
+    color: var(--text-primary);
     cursor: pointer;
 }
-.password-toggle:hover { color: var(--text-primary); }
+.password-toggle:hover { color: var(--machine-blue); }
 .password-toggle:focus-visible {
     outline: 2px solid var(--machine-blue);
     outline-offset: 1px;
+}
+/* CLAUDE-SIGNIN-EYE-VISIBILITY-01: root-cause fix for the two icons
+   rendering superimposed on each other ("beside/on top of each other,
+   confusing" - Product Owner live report). login.js's previous approach
+   toggled the SVGs' `hidden` IDL property/attribute, but `hidden` has no
+   effect on SVG elements in Chromium (SVG's own UA stylesheet does not
+   include a `[hidden]` rule the way html.css does for HTML elements, and
+   author-origin CSS always wins over UA-origin CSS regardless of
+   specificity) - both icons were always visible, permanently overlapping.
+   Driving visibility from aria-pressed here instead means the single
+   source of truth for "which state is this control in" is the same
+   attribute assistive tech already reads, and login.js only has to keep
+   toggling that one attribute (see its own updated comment). */
+.password-toggle[aria-pressed="false"] .password-toggle-icon-hide,
+.password-toggle[aria-pressed="true"] .password-toggle-icon-show {
+    display: none;
 }
 
 .btn {
