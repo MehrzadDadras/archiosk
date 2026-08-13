@@ -288,6 +288,56 @@ generalized "explain any finding" endpoint spanning both `Claim` and `ComposerFi
 
 ---
 
+## 4c. "Pre-populate, never auto-execute" — one strong continuation (`CLAUDE-GO-DNA-08` addendum)
+
+Recorded following a Product Owner interaction-principle clarification: when GO produces a grounded
+finding and one clear next step is strongly implied, Composer should prepare that continuation for
+the PM to adopt, edit, redirect, or ignore — never auto-execute it. **No code changes accompany this
+addendum.**
+
+**What already exists, and why neither matches this pattern, confirmed by direct inspection:**
+
+- `river_action_stack` (`templates/_macros.html`, backed by `ProjectQAResult.river_actions`) renders
+  a **ranked list of several** actions (rank/action/rationale/consequence/uncertainty/evidence), each
+  in its own read-only `<details>` disclosure — explicitly documented in its own comment as "never a
+  Make-Task/Tag button per item." It is informational text, not interactive, and it is a *set* of
+  candidates, not the *one strong continuation* this addendum asks for.
+- `operational_action_offers` (same file, backed by `message.operational_actions`) is the opposite
+  failure mode: a real `<form method=post>`/submit `<button>` per offered action (`create_task_route`/
+  `add_tag_occurrence_route`) that **executes immediately on click** — appropriate for its own
+  low-stakes, governed-but-provisional actions (Task/Tag creation, never overwriting anything), but
+  not the "lands in an editable field, PM submits when ready" shape this addendum describes.
+- **The one real precedent for the actual UI mechanic ("write text into the composer input box, PM
+  edits, PM submits") already exists and works today, for a different origin**: the Voice-Typer
+  (`static/js/case_workspace.js`, `composerInput.value = transcript`) writes recognized speech into
+  `#dock-composer-input` without auto-submitting — proving the exact interaction shape this addendum
+  needs is already implemented, just never triggered from a GO-authored suggestion.
+- `ConversationalTurnResult.proposed_action` (`services/conversational_turn.py`, `CLAUDE-CA1D-
+  COMPOSER-SPINE-01` Stage 2) is the closest existing **proposal-envelope** shape — a `dict`,
+  populated only for consequential `intent_class` values, explicitly documented as "only envelope
+  construction, never execution." This is the right shape to reuse for a future "prepared
+  continuation" object. It is real code, but — confirmed again here — Stage 2 remains unreached from
+  any live request; Stage 3 (wiring into `interpret_message`) is still not authorized, unchanged from
+  every earlier record in this corpus that has named it.
+
+**The smallest missing seam, precisely:** there is no path today from "GO produced a grounded finding
+with one clearly implied next move" to "that move's text sits in `#dock-composer-input`, editable."
+Building it needs either (a) Stage 3 wiring so `proposed_action` can ever be produced from a live
+turn, or (b) a `suggested_action`-shaped field on `ComposerFinding` (named as absent, not built, in
+§4 above) paired with new JS reusing the Voice-Typer's own `composerInput.value = ...` pattern. Both
+paths are already-named, not-yet-authorized seams — this addendum adds no third one.
+
+**Seam classification:** CURRENT (already enforced) — the coordinator boundary that makes this safe
+regardless of how it's eventually built (`BEHAVIORAL_CONTRACT`'s "never create one yourself";
+`proposed_action`'s own "never execution" discipline). NEAR-TERM ACCELERATOR (not built) — reusing
+the Voice-Typer's `composerInput.value` mechanic to populate one GO-suggested continuation, once
+either Stage 3 or a `ComposerFinding.suggested_action` field exists to supply the text from.
+SPECIFIED-UNBUILT — everything upstream of that (Stage 3 itself; `ComposerFinding.suggested_action`;
+any ranking logic for choosing "the one strong continuation" over `river_actions`' existing
+multi-item shape).
+
+---
+
 ## 5. What remains specified-unbuilt (do not treat this record as authorizing it)
 
 This record documents what is now DNA — it does **not** authorize building any of the following.
