@@ -262,20 +262,24 @@ class ProjectsTreeTests(unittest.TestCase):
         # longer exists) - checked against the active Project's own
         # expanded Lists branch instead.
         # SUPERSEDED AGAIN (CLAUDE-P40-VW7B, Section 3): the "Projects"
-        # root launcher (.launcher-heading) no longer renders at all
-        # while a Project is open (removed from the opened-Project
-        # Lists entirely) - there is nothing left to "stay highlighted."
-        # The Foreground Project's own branch is what now communicates
-        # "which Project is current" - its own current-project marker
-        # class + aria-current="true" (see .current-project's own CSS
-        # comment for the restrained edge-marker treatment it gets
-        # instead of a background fill).
+        # root launcher (.launcher-heading) no longer rendered at all
+        # while a Project was open (removed from the opened-Project
+        # Lists entirely) - nothing left to "stay highlighted."
+        # SUPERSEDED AGAIN (CLAUDE-LEFT-RAIL-01): back to this test's own
+        # ORIGINAL premise, for a different reason - .launcher-heading
+        # (the PROJECTS toggle) is unconditional again, always active/
+        # expanded, since PROJECTS is now the one, always-present live
+        # active-project switcher (Product Owner rule: "PROJECTS = the
+        # projects I can work on and switch between"). The Foreground
+        # Project's own branch STILL separately communicates "which
+        # Project is current" via its own current-project marker class +
+        # aria-current="true" - both signals now coexist, not either/or.
         # CLAUDE-GO-DNA-01 (Panel Zoning): the retired "Overview" leaf's
         # own data-root-branch/data-root-label now carry over onto this
         # self-link (the same destination its removal folded into), so
         # they appear between data-ui-ref and aria-current now.
         body = self.client.get("/projects/alpha/workspace").get_data(as_text=True)
-        self.assertNotIn("launcher-heading", body)
+        self.assertIn("launcher-heading", body)
         self.assertIn('tree-leaf launcher-link current-project" data-ui-ref="lists.project.self" data-root-branch="1.1" data-root-label="Identity &amp; Overview" aria-current="true"', body)
         self.assertNotIn("launcher-project-item", body)
         # The old standalone "Current Project" orientation block is gone.

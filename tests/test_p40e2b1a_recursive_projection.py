@@ -148,15 +148,20 @@ class NoDuplicatedChildHierarchyTests(_BaseTestCase):
         # Lists leaf on the portfolio dashboard (Section 2's own
         # reversal) - CLAUDE-P40-VW7B then removed the portfolio (every
         # OTHER Project's name included) from the opened-Project Lists
-        # panel entirely (Section 3) - it must appear ZERO times on a
-        # DIFFERENT, already-open Project's own workspace page now,
-        # never even once as a plain leaf there.
+        # panel entirely (Section 3) - it appeared ZERO times on a
+        # DIFFERENT, already-open Project's own workspace page then.
+        # CLAUDE-LEFT-RAIL-01 reverses this again, permanently, as an
+        # explicit Product Owner architecture decision: PROJECTS is now
+        # the one, always-present live active-project switcher, so
+        # "A Second Distinct Project" legitimately appears exactly ONCE
+        # on a different, already-open Project's own page too - as a
+        # plain lists.projects.leaf switch target, never duplicated.
         other = self._ingest(owner="p40e2b1a_owner", project_name="A Second Distinct Project")
         client = self._client_as("p40e2b1a_owner", 1)
         dashboard_body = client.get("/").get_data(as_text=True)
         self.assertEqual(dashboard_body.count("A Second Distinct Project"), 1)
         other_project_open_body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
-        self.assertEqual(other_project_open_body.count("A Second Distinct Project"), 0)
+        self.assertEqual(other_project_open_body.count("A Second Distinct Project"), 1)
 
         own_page = client.get(f"/projects/{other.project_id}/workspace").get_data(as_text=True)
         # On its own page it legitimately appears three times now

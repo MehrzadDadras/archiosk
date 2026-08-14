@@ -137,11 +137,17 @@ class HierarchyTests(_BaseTestCase):
         self.assertIn("RFI Correspondence (0)", toolbox)
 
     def test_reset_project_data_moved_out_of_project_tools_to_top_level(self):
+        # CLAUDE-LEFT-RAIL-01: relocated a second time, out of Lists
+        # entirely (was lists.system-data-management, a Lists admin
+        # branch item) into the top-right Account/Admin menu - so this
+        # is checked over the whole body now, not scoped to the Lists
+        # panel, and under its current ref name.
         client = self._client_as("vw7b_admin", 4, role="admin")
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
         lists = self._lists_html(body)
-        self.assertIn('data-ui-ref="lists.system-data-management"', lists)
+        self.assertIn('data-ui-ref="menu.account.admin.project-data-management"', body)
         self.assertNotIn('data-ui-ref="lists.project.tools.data-management"', lists)
+        self.assertNotIn('data-ui-ref="lists.system-data-management"', body)
         # Still exactly one html_id="project-data-management" anchor -
         # relocated, not duplicated.
         self.assertEqual(body.count('id="project-data-management"'), 1)

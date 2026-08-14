@@ -196,23 +196,26 @@ class TopBarSpansShellTests(_BaseTestCase):
 # ---------------------------------------------------------------------------
 
 class ProjectNamesOnlyUnderProjectsTests(_BaseTestCase):
-    def test_other_project_names_do_not_leak_into_an_open_workspace(self):
-        # SUPERSEDED twice now:
+    def test_other_project_names_appear_as_switch_targets_in_an_open_workspace(self):
+        # SUPERSEDED three times now:
         # - CLAUDE-P40-E3A, Section 2 first re-authorized a recursive
         #   Lists hierarchy listing every authorized Project as a
         #   sibling leaf under "Projects," on every page including an
         #   open Workspace.
         # - CLAUDE-P40-VW7B, Section 3 then removed that portfolio
-        #   branch from the OPENED-Project Lists panel entirely (this
-        #   test's own original title, "do not leak into an open
-        #   workspace," is now true in the strongest possible sense -
-        #   zero occurrences, not "exactly once, safely inside Lists").
-        #   The bare /projects directory (no Project open) is
-        #   unaffected and still lists every accessible Project, below.
+        #   branch from the OPENED-Project Lists panel entirely (zero
+        #   occurrences while a Project was open).
+        # - CLAUDE-LEFT-RAIL-01 reverses this again, permanently this
+        #   time as an explicit Product Owner architecture decision (not
+        #   a course-correction like the prior two): PROJECTS is the
+        #   one, always-present live active-project switcher, so every
+        #   OTHER accessible Project name is expected, intentional
+        #   content inside an open Workspace now - that's the entire
+        #   point (switch without leaving the Project you're in).
         other = self._ingest(owner="p40e2b1_owner", project_name="A Distinct Other Project Name")
         client = self._client_as("p40e2b1_owner", 1)
         workspace_body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
-        self.assertEqual(workspace_body.count("A Distinct Other Project Name"), 0)
+        self.assertIn("A Distinct Other Project Name", workspace_body)
 
         directory_body = client.get("/projects").get_data(as_text=True)
         self.assertIn("A Distinct Other Project Name", directory_body)

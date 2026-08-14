@@ -401,18 +401,27 @@ class AuthorizationAwareReferenceTests(_BaseTestCase):
         self.assertNotIn('data-ui-ref="lists.system-data-management"', body)
 
     def test_admin_only_refs_present_for_admin(self):
-        # CLAUDE-P40-VW7B, Section 3: "lists.new-project" ("+ New
-        # Project") is one of the explicitly forbidden portfolio
-        # controls inside an opened Project workspace - removed here
-        # even for an admin, since Section 3 draws no admin exception.
-        # lists.security/lists.system-data-management are admin TOOLS,
-        # not portfolio Project-selection surfaces, and deliberately
-        # stay reachable regardless of whether a Project is open.
+        # CLAUDE-LEFT-RAIL-01: supersedes CLAUDE-P40-VW7B's own Section 3
+        # distinction (new-project forbidden inside an opened Project,
+        # security/system-data-management reachable regardless) - that
+        # distinction existed only because these lived in two different
+        # places (a portfolio-only Lists branch vs. an always-rendered
+        # admin Lists branch). All four (New Project, Security,
+        # Operations, Project Data Management) now live in exactly ONE
+        # place - the top-right Account/Admin menu - with exactly the
+        # SAME "reachable from any page, admin only" treatment, so the
+        # old asymmetry no longer applies: every one of them is present,
+        # under the new menu.account.admin.* ref namespace, not the old
+        # lists.* one (which no longer describes where they render).
         client = self._client_as("vw7a_admin", 4, role="admin")
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
         self.assertNotIn('data-ui-ref="lists.new-project"', body)
-        self.assertIn('data-ui-ref="lists.security"', body)
-        self.assertIn('data-ui-ref="lists.system-data-management"', body)
+        self.assertNotIn('data-ui-ref="lists.security"', body)
+        self.assertNotIn('data-ui-ref="lists.system-data-management"', body)
+        self.assertIn('data-ui-ref="menu.account.admin.new-project"', body)
+        self.assertIn('data-ui-ref="menu.account.admin.security"', body)
+        self.assertIn('data-ui-ref="menu.account.admin.operations"', body)
+        self.assertIn('data-ui-ref="menu.account.admin.project-data-management"', body)
 
     def test_remove_project_ref_owner_or_admin_only(self):
         # CLAUDE-GO-DNA-01 (Panel Zoning): Remove Project moved from Lists'

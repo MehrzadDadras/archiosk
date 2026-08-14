@@ -2386,7 +2386,10 @@ main {
     flex-direction: column;
     gap: 0.15rem;
     z-index: 60;
-    min-width: 170px;
+    /* CLAUDE-LEFT-RAIL-01: widened from 170px so "Project Data
+       Management" (the longest item now relocated here) fits on one
+       line without wrapping. */
+    min-width: 220px;
 }
 /* CLAUDE-POSTCAMEL-PROJECT-CONTEXT-01: the Project Context control joins
    the SAME popover idiom as the three menus above, but is kept as its
@@ -2557,6 +2560,21 @@ main {
 }
 .workspace-overflow-item:hover {
     background: var(--surface-hover);
+}
+/* CLAUDE-LEFT-RAIL-01: a quiet, non-interactive section label - the
+   same restrained "structural landmark, not a second control" idiom
+   .current-project's own border-only treatment already established
+   (no fill, no new accent color), distinguishing the relocated
+   Admin-only items from the account-level items below them without
+   adding a divider rule or any decorative chrome. */
+.workspace-overflow-label {
+    font-family: var(--font-body);
+    font-size: var(--text-xs);
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    padding: 0.35rem 0.5rem 0.15rem;
 }
 /* CLAUDE-P40-VW7A: the UI Reference Mode toggle is a <label> wrapping a
    checkbox, not a plain <a>/<button> like its .workspace-overflow-item

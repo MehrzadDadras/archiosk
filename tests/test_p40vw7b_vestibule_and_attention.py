@@ -134,17 +134,28 @@ class _BaseTestCase(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 class OpenedProjectPortfolioRemovalTests(_BaseTestCase):
-    def test_no_portfolio_root_other_project_names_or_new_project_inside_open_project(self):
+    def test_projects_switcher_shows_other_projects_but_admin_functions_moved_to_account_menu(self):
+        # CLAUDE-LEFT-RAIL-01: supersedes this test's own prior form
+        # (test_no_portfolio_root_other_project_names_or_new_project_
+        # inside_open_project) - the Product Owner has reversed the old
+        # invariant. PROJECTS is now a live active-project switcher that
+        # DOES show other accessible Projects even while one is open
+        # (the whole point: switch without leaving); New Project/Removed
+        # Projects/Security/Operations/Project Data Management moved out
+        # of the rail into the top-right Account/Admin menu instead of
+        # merely disappearing.
         doc = self._ingest("VW7B Project A")
         other = self._ingest("VW7B Project B (Other)")
         client = self._client()
         body = client.get(f"/projects/{doc.project_id}/workspace").get_data(as_text=True)
-        self.assertNotIn('data-ui-ref="lists.projects"', body)
-        self.assertNotIn('data-ui-ref="lists.projects.leaf"', body)
+        self.assertIn('data-ui-ref="lists.projects"', body)
+        self.assertIn('data-ui-ref="lists.projects.leaf"', body)
+        self.assertIn("VW7B Project B (Other)", body)
+        self.assertIn(other.project_id, body)
         self.assertNotIn('data-ui-ref="lists.new-project"', body)
         self.assertNotIn('data-ui-ref="lists.removed-projects"', body)
-        self.assertNotIn("VW7B Project B (Other)", body)
-        self.assertNotIn(other.project_id, body)
+        self.assertIn('data-ui-ref="menu.account.admin.new-project"', body)
+        self.assertIn('data-ui-ref="menu.account.removed-projects"', body)
 
     def test_opened_project_lists_still_shows_its_own_family(self):
         # CLAUDE-GO-DNA-01 (Panel Zoning): Overview/Investigations/RFIs/
@@ -165,15 +176,16 @@ class OpenedProjectPortfolioRemovalTests(_BaseTestCase):
             self.assertIn(f'data-ui-ref="{ref}"', body, ref)
 
     def test_admin_only_security_and_data_management_still_reachable_when_open(self):
-        # Section 3's forbidden list is specific (PROJECTS root, other
-        # Project names, +New Project, Removed Projects) - Security and
-        # Project Data Management are admin TOOLS, not portfolio
-        # Project-selection surfaces, and deliberately stay reachable.
+        # CLAUDE-LEFT-RAIL-01: Security and Project Data Management stay
+        # reachable whether or not a Project is open - unchanged - but
+        # now via the top-right Account/Admin menu (menu.account.admin.*)
+        # rather than a Lists admin branch, since Lists no longer carries
+        # any admin-function items at all.
         doc = self._ingest("VW7B Project D")
         client = self._client()
         body = client.get(f"/projects/{doc.project_id}/workspace").get_data(as_text=True)
-        self.assertIn('data-ui-ref="lists.security"', body)
-        self.assertIn('data-ui-ref="lists.system-data-management"', body)
+        self.assertIn('data-ui-ref="menu.account.admin.security"', body)
+        self.assertIn('data-ui-ref="menu.account.admin.project-data-management"', body)
 
     def test_removed_project_tombstone_does_not_crash_and_falls_back_to_portfolio(self):
         doc = self._ingest("VW7B Project E")

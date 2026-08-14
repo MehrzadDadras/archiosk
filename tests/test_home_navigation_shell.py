@@ -160,17 +160,22 @@ class HomeNavigationShellTests(unittest.TestCase):
         # anywhere, but the project's own identity is genuinely present
         # throughout.
         # SUPERSEDED AGAIN (CLAUDE-P40-VW7B, Section 3): "launcher-
-        # heading" (the "Projects" root) no longer renders at all while
-        # a Project is open - the Foreground Project's own branch
-        # (current-project marker + aria-current="true") is what now
-        # communicates current-Project context.
+        # heading" (the "Projects" root) no longer rendered at all while
+        # a Project was open - the Foreground Project's own branch
+        # (current-project marker + aria-current="true") communicated
+        # current-Project context instead.
+        # SUPERSEDED AGAIN (CLAUDE-LEFT-RAIL-01): "launcher-heading" is
+        # unconditional again - PROJECTS is now the one, always-present
+        # live active-project switcher. Both signals coexist now: the
+        # PROJECTS toggle itself, and the Foreground Project's own
+        # current-project marker + aria-current="true".
         # CLAUDE-GO-DNA-01 (Panel Zoning): the retired "Overview" leaf's
         # own data-root-branch/data-root-label now carry over onto this
         # self-link - see test_global_search_and_header.py's identical
         # note.
         self.assertIn("rfp.md", body)
         self.assertIn(project_id, body)
-        self.assertNotIn("launcher-heading", body)
+        self.assertIn("launcher-heading", body)
         self.assertIn('tree-leaf launcher-link current-project" data-ui-ref="lists.project.self" data-root-branch="1.1" data-root-label="Identity &amp; Overview" aria-current="true"', body)
 
     def test_non_admin_does_not_see_new_project_link(self):

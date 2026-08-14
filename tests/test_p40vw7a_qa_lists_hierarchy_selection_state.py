@@ -149,18 +149,23 @@ class SelectionTierSeparationTests(_BaseTestCase):
         self.assertEqual(len(active_leaves), 1, active_leaves)
         self.assertIn('data-ui-ref="lists.project.documents.leaf"', active_leaves[0])
 
-    def test_projects_root_no_longer_renders_at_all_while_a_project_is_open(self):
-        # CLAUDE-P40-VW7B, Section 3: the portfolio-level PROJECTS root
-        # (and every other Project's own name) is removed from the
-        # opened-Project Lists panel entirely, not merely re-styled as
-        # unselected - this supersedes the original VW7A-QA assertion
-        # that it still rendered (expanded, de-emphasized) alongside the
-        # current Project's own branch.
+    def test_projects_root_always_renders_as_a_live_project_switcher(self):
+        # CLAUDE-LEFT-RAIL-01: supersedes CLAUDE-P40-VW7B's own Section 3
+        # assertion (immediately above, in this test's own prior form)
+        # that the PROJECTS root was removed entirely while a Project was
+        # open - the Product Owner has since clarified the opposite: the
+        # left rail's ONE job is "show me the projects I can work on, and
+        # let me switch which one GO and the workspace are currently
+        # working with," which is meaningless unless it stays visible
+        # while a Project is already open (otherwise a PM managing
+        # several Projects would have to leave the one they're in just to
+        # see the others). PROJECTS is now unconditional - see
+        # templates/base.html's own CLAUDE-LEFT-RAIL-01 comment.
         doc = self._ingest("Nipigon Ramp", "rfp.txt")
         client = self._client()
         body = client.get(f"/projects/{doc.project_id}/workspace").get_data(as_text=True)
         lists_html = self._lists_html(body)
-        self.assertNotIn('data-ui-ref="lists.projects"', lists_html)
+        self.assertIn('data-ui-ref="lists.projects"', lists_html)
 
     def test_selecting_a_different_child_moves_the_active_class_there(self):
         # CLAUDE-GO-DNA-01 (Panel Zoning): "Overview" was itself retired
@@ -214,18 +219,25 @@ class AccessibilityStateTests(_BaseTestCase):
         self.assertEqual(lists_html.count('aria-current="page"'), 1)
         self.assertEqual(lists_html.count('aria-current="true"'), 1)
 
-    def test_projects_root_absent_so_no_aria_current_confusion_possible(self):
-        # CLAUDE-P40-VW7B, Section 3: supersedes the original VW7A-QA
-        # assertion (the PROJECTS root used aria-expanded, never
-        # aria-current, while ALSO rendering next to the current
-        # Project's own branch) - now the root doesn't render in this
-        # state at all, so there is no longer a second element in this
-        # region that could even be mistaken for carrying aria-current.
+    def test_projects_root_renders_with_exactly_one_unambiguous_current_project(self):
+        # CLAUDE-LEFT-RAIL-01: supersedes CLAUDE-P40-VW7B's own Section 3
+        # assertion (immediately above, in this test's own prior form)
+        # that the PROJECTS root was absent while a Project was open -
+        # see test_projects_root_always_renders_as_a_live_project_switcher
+        # above for why it is now unconditional. What that older test's
+        # own concern actually protected - no ambiguity about WHICH
+        # Project is current - still holds under the new structure: the
+        # root itself uses aria-expanded, never aria-current; every OTHER
+        # accessible Project renders as a plain lists.projects.leaf link
+        # with no aria-current at all; only the current Project's own
+        # self-link (lists.project.self) carries aria-current="true" -
+        # exactly one, never zero, never two.
         doc = self._ingest("Nipigon Ramp", "rfp.txt")
         client = self._client()
         body = client.get(f"/projects/{doc.project_id}/workspace").get_data(as_text=True)
         lists_html = self._lists_html(body)
-        self.assertNotIn('data-ui-ref="lists.projects"', lists_html)
+        self.assertIn('data-ui-ref="lists.projects"', lists_html)
+        self.assertEqual(lists_html.count('aria-current="true"'), 1)
 
 
 # CLAUDE-P40-VW7B: SiblingSeparationTests (two tests) retired outright,

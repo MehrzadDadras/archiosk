@@ -419,14 +419,59 @@
 
                 {# ---------------- User three-dot menu (CLAUDE-P40-E3A, Section 3) -------
                    Username + Sign out (its child) live here now, not the
-                   Lists panel's own identity block - Security stays in
-                   Lists per the explicit instruction not to move it. #}
+                   Lists panel's own identity block. CLAUDE-LEFT-RAIL-01
+                   supersedes this comment's own "Security stays in Lists per
+                   the explicit instruction not to move it" - the Product
+                   Owner has since clarified the opposite: PROJECTS is a pure
+                   active-project switcher, and creation/governance/recovery/
+                   system administration belong here instead, reusing this
+                   SAME existing surface rather than a new mechanism. #}
                 <details class="workspace-user-menu" id="workspace-user-menu" data-ui-ref="menu.account">
                     <summary class="workspace-topbar-btn workspace-user-summary" aria-label="Account menu">
                         {% if current_username %}<span class="workspace-user-name">{{ current_username }}</span>{% endif %}
                         <span aria-hidden="true">&hellip;</span>
                     </summary>
                     <div class="workspace-user-options" role="group" aria-label="Account">
+                        {% if is_admin %}
+                        {# CLAUDE-LEFT-RAIL-01: administrative functions relocated
+                           here from the left PROJECTS rail (Product Owner
+                           decision: "PROJECTS = the projects I can work on and
+                           switch between... ADMIN = actions that create, govern,
+                           recover, or administer projects and the system").
+                           Same routes, same admin_required gates as before -
+                           only WHERE these render changed. Given a new NAMESPACE
+                           (menu.account.admin.*, not lists.*), not the old
+                           lists.new-project/lists.security/lists.operations/
+                           lists.system-data-management ref values - this is no
+                           longer part of Lists at all, and the old refs' own
+                           established meaning ("New Project is forbidden inside
+                           an opened Project, Security/Operations/PDM are
+                           reachable regardless") has collapsed into one single
+                           rule now that all four live in the same place with
+                           the same always-reachable-if-admin treatment; keeping
+                           the old names would misleadingly imply they're still
+                           Lists controls. Section 8's own "privilege-aware
+                           Admin, reuse existing authorization behavior" is
+                           satisfied by reusing is_admin exactly as the rail
+                           did - no new authorization surface invented. #}
+                        <span class="workspace-overflow-label" data-ui-ref="menu.account.admin">Admin</span>
+                        <a class="workspace-overflow-item" data-ui-ref="menu.account.admin.new-project" href="{{ url_for('portal.upload') }}">+ New Project</a>
+                        <a class="workspace-overflow-item" data-ui-ref="menu.account.admin.security" href="{{ url_for('security.department_home') }}">Security</a>
+                        <a class="workspace-overflow-item" data-ui-ref="menu.account.admin.operations" href="{{ url_for('operations.department_home') }}">Operations</a>
+                        <a class="workspace-overflow-item" id="project-data-management" data-ui-ref="menu.account.admin.project-data-management" href="{{ url_for('portal.reset_project_data') }}">Project Data Management</a>
+                        {% endif %}
+                        {# CLAUDE-LEFT-RAIL-01: NOT admin-gated, deliberately -
+                           routes/portal.py's own removed_projects/
+                           restore_project_route are @login_required only
+                           (P32-access-filtered, not admin-only) - reusing
+                           existing authorization behavior means this stays
+                           reachable by any authenticated user with access to
+                           the removed Project, not narrowed to admins merely
+                           because it now lives next to Admin-only items -
+                           hence its own separate ref namespace (menu.account.*,
+                           not menu.account.admin.*), reflecting that real
+                           authorization difference honestly. #}
+                        <a class="workspace-overflow-item" data-ui-ref="menu.account.removed-projects" href="{{ url_for('portal.removed_projects') }}">Removed Projects</a>
                         {# CLAUDE-P40-VW7A: a developer/QA-facing toggle, not a
                            product-owner-facing feature - same localStorage +
                            html-level-class pattern as the risk-layer/history-
@@ -504,16 +549,30 @@
                Investigation or conversation"). #}
             <div class="lists-pane" id="lists-pane">
             <div class="launcher-panel-body">
-                {# CLAUDE-CA1D-RECEPTION-FIX-01: request.path also checked against
-                   removed_projects's own URL, not just projects_list's -- a live
-                   walkthrough found the "Projects" chevron collapsed by default on
-                   /removed-projects while it was already expanded on a single
-                   removed Project's own tombstone page (project_id is defined
-                   there). No repository-documented reason found for that
-                   asymmetry; both are "currently browsing within Projects" in the
-                   same sense projects_list already is. #}
-                {% set projects_open = project_id is defined or request.path == url_for('portal.projects_list') or request.path == url_for('portal.removed_projects') %}
                 <ul class="tree" data-tree-root>
+                    {# CLAUDE-LEFT-RAIL-01: PROJECTS is now the one, always-
+                       present rail purpose - a live active-project switcher,
+                       not a portfolio-browsing surface that only existed when
+                       no Project was open. Unconditional now (previously only
+                       rendered via the portfolio {% else %} branch below,
+                       displaced by CLAUDE-P40-VW7B's per-project family tree
+                       whenever a Project WAS open) - closes the exact gap the
+                       Product Owner named: a PM managing several Projects had
+                       no way to switch between them without first leaving
+                       whichever one was currently open. Always expanded
+                       (data-tree-no-clear, same attribute/reasoning as
+                       before, see this file's own tree-toggle script comment
+                       on why PROJECTS is exempted from "collapsing clears the
+                       active descendant") - the one section whose entire
+                       purpose is instant switching should never default to
+                       collapsed, so the old conditional projects_open
+                       variable (request.path-based) is retired as dead code
+                       rather than carried forward unused. #}
+                    <li class="tree-node" data-tree-node data-tree-no-clear>
+                        <button type="button" class="tree-toggle launcher-heading active" data-tree-parent data-tree-no-clear data-ui-ref="lists.projects" aria-expanded="true">
+                            <span class="tree-label">Projects</span>
+                        </button>
+                        <ul class="tree-children" data-tree-open>
                     {% if project_id is defined and workspace is defined %}
                     {# ---------------- The Foreground Project's own family branch (CLAUDE-P40-VW7B) ---
                        `workspace is defined` (not just `project_id is
@@ -723,86 +782,32 @@
                                             </li>
                                         </ul>
                                     </li>
-                    {% else %}
-                    {# ---------------- Portfolio browsing (no Foreground Project open) ---
-                       Unchanged from before CLAUDE-P40-VW7B - the "Projects" root
-                       (every accessible Project as a plain nav link), "+ New
-                       Project", and "Removed Projects" all still belong here
-                       exactly as before. This branch now fires ONLY when there
-                       is no open Foreground Project to compose Lists from
-                       instead (Section 3's own scope is correcting the OPENED
-                       workspace, not portfolio browsing on the dashboard/
-                       /projects/etc.). The old per-row "sibling Project after
-                       the current one" visual-continuation guard is gone - it
-                       existed only because the current Project's own branch
-                       used to render INSIDE this same loop; now that branch
-                       never appears here at all (see the Foreground Project
-                       branch above), so every row is an ordinary plain leaf and
-                       the guard's own trigger condition can never fire again. #}
+                    {% endif %}
+                    {# CLAUDE-LEFT-RAIL-01: every OTHER accessible Project as a
+                       plain direct switch target - reuses nav_recent_projects
+                       exactly as the old portfolio-only branch did (already
+                       P32-access-filtered and excludes removed Projects, see
+                       app.py's own _nav_recent_projects), just no longer
+                       gated behind "no Project is currently open." The
+                       currently open Project (if any) is excluded from this
+                       loop - its own row is the rich family branch just
+                       above, never a second, redundant plain link to itself.
+                       New Project/Removed Projects/Security/Operations/
+                       Project Data Management all moved out of this rail
+                       entirely (Product Owner decision, CLAUDE-LEFT-RAIL-01:
+                       "PROJECTS = the projects I can work on and switch
+                       between" - creation, governance, recovery, and system
+                       administration are a different concern) - see the
+                       Account menu above for their new home. #}
+                    {% for p in nav_recent_projects %}
+                    {% if not (project_id is defined and p.project_id == project_id) %}
                     <li class="tree-node" data-tree-node>
-                        <button type="button" class="tree-toggle launcher-heading{% if projects_open %} active{% endif %}" data-tree-parent data-tree-no-clear data-ui-ref="lists.projects" aria-expanded="{{ 'true' if projects_open else 'false' }}">
-                            <span class="tree-label">Projects</span>
-                        </button>
-                        <ul class="tree-children"{% if projects_open %} data-tree-open{% endif %}>
-                            {% for p in nav_recent_projects %}
-                            <li class="tree-node" data-tree-node>
-                                <a class="tree-leaf launcher-link" data-ui-ref="lists.projects.leaf" href="{{ url_for('workspace.show_workspace', project_id=p.project_id) }}">{{ p.display_name }}</a>
-                            </li>
-                            {% endfor %}
+                        <a class="tree-leaf launcher-link" data-ui-ref="lists.projects.leaf" href="{{ url_for('workspace.show_workspace', project_id=p.project_id) }}">{{ p.display_name }}</a>
+                    </li>
+                    {% endif %}
+                    {% endfor %}
                         </ul>
                     </li>
-                    {% if is_admin %}
-                    {# portal.upload is @admin_required (routes/portal.py) - this leaf must
-                       never render for a non-admin reviewer (Section 4: "unauthorized...
-                       branches must never render"). #}
-                    <li class="tree-node" data-tree-node>
-                        <a class="tree-leaf launcher-link launcher-new-project" data-ui-ref="lists.new-project" href="{{ url_for('portal.upload') }}">+ New Project</a>
-                    </li>
-                    {% endif %}
-                    {# Global "Chats" root (cross-Project) omitted outright - no
-                       cross-Project conversation index exists anywhere in this
-                       codebase; only per-Project conversation does (see the
-                       Project branch above). Nothing honest to list here. #}
-                    <li class="tree-node" data-tree-node>
-                        <a class="tree-leaf launcher-link" data-ui-ref="lists.removed-projects" href="{{ url_for('portal.removed_projects') }}">Removed Projects</a>
-                    </li>
-                    {% endif %}
-                    {% if is_admin %}
-                    <li class="tree-node" data-tree-node>
-                        <a class="tree-leaf launcher-link" data-ui-ref="lists.security" href="{{ url_for('security.department_home') }}">Security</a>
-                    </li>
-                    {# CLAUDE-CA1D-INSTRUMENT-RAIL-01: Operations is the admin-page
-                       half of the four-part Instrument Rail split (Plan-Mode report,
-                       Section D.1) -- persistent, deployment-wide machinery, reached
-                       exactly the same way Security already is (same is_admin gate,
-                       same "reachable whether or not a Project is open" placement),
-                       not a new rail column. Deliberately minimal this tranche -- see
-                       routes/operations.py's own docstring for exact scope. #}
-                    <li class="tree-node" data-tree-node>
-                        <a class="tree-leaf launcher-link" data-ui-ref="lists.operations" href="{{ url_for('operations.department_home') }}">Operations</a>
-                    </li>
-                    {# CLAUDE-P40-VW7B: Security/Project Data Management are admin
-                       TOOLS, not portfolio Project-selection surfaces or "Project
-                       records" (Section 3's own specific forbidden list names the
-                       PROJECTS root, other Project names, +New Project, and
-                       Removed Projects - not these) - they stay reachable
-                       whether or not a Project is open, unlike everything in
-                       the {% else %} branch above. Relocated here from the
-                       active Project's own "Project Tools" branch back in
-                       CLAUDE-P40-VW7B's own predecessor stage - routes/
-                       portal.py's reset_project_data operates on the WHOLE
-                       REGISTRY_STORE_PATH ("returns the app to a clean,
-                       no-project state", per that route's own template), not
-                       one Project's data; same route, same form-less link,
-                       same admin-only gate, same html_id="project-data-
-                       management" test/DOM anchor. #}
-                    <li class="tree-node" data-tree-node>
-                        {% call macros.subdisclosure('Project Data Management', html_id='project-data-management') %}
-                            <p class="pane-note">Administrator only &mdash; resets every Project in this deployment, not just one.</p>
-                            <a class="btn btn-ghost workspace-link" data-ui-ref="lists.system-data-management" href="{{ url_for('portal.reset_project_data') }}">Reset Project Data&hellip;</a>
-                        {% endcall %}
-                    </li>
-                    {% endif %}
                 </ul>
             </div>
             </div>

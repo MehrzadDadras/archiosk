@@ -141,17 +141,20 @@ class LeafAttributeTests(_BaseTestCase):
         self.assertNotIn("data-project-id", self_leaf_match.group(0))
         self.assertNotIn("data-project-name", self_leaf_match.group(0))
 
-    def test_other_projects_leaf_never_appears_inside_an_open_project(self):
-        # CLAUDE-P40-VW7B, Section 3: supersedes the original VW8
-        # "carries correct switch attributes" assertion - the whole
-        # data-project-id attribute (and the lists.projects.leaf row
-        # that used to carry it) is gone from this state entirely, not
-        # just missing its old attribute. "Beta Substation" (Project 2,
-        # not the one open here) must not appear at all.
+    def test_other_projects_leaf_appears_as_a_switch_target_inside_an_open_project(self):
+        # CLAUDE-LEFT-RAIL-01: supersedes CLAUDE-P40-VW7B's own Section 3
+        # assertion (immediately above, in this test's own prior form)
+        # that other Projects were absent entirely while one was open -
+        # the Product Owner has since reversed this: PROJECTS is now a
+        # live active-project switcher, always showing every OTHER
+        # accessible Project ("Beta Substation", Project 2, not the one
+        # open here) as a direct switch target via lists.projects.leaf,
+        # exactly so a PM can move between Projects without leaving the
+        # one currently open.
         client = self._client_as("vw8_owner", 1)
         body = client.get(f"/projects/{self.doc1.project_id}/workspace").get_data(as_text=True)
-        self.assertNotIn("Beta Substation", body)
-        self.assertIsNone(re.search(r'data-ui-ref="lists\.projects\.leaf"', body))
+        self.assertIn("Beta Substation", body)
+        self.assertIsNotNone(re.search(r'data-ui-ref="lists\.projects\.leaf"', body))
 
     def test_no_project_leaf_carries_switch_attributes_on_bare_listing(self):
         client = self._client_as("vw8_owner", 1)

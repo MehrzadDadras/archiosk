@@ -116,16 +116,19 @@ class OperationsPageAccessTests(_BaseInstrumentRailTestCase):
         # primitive is actually wired, not just referenced.
         self.assertIn("operations.department_home", body)
 
-    def test_operations_leaf_reachable_from_lists_admin_branch_for_admin_only(self):
-        # The Lists admin branch renders on any authenticated page; the
-        # projects listing is the simplest one that exercises base.html's
-        # portfolio-browsing branch (no project open).
+    def test_operations_leaf_reachable_from_account_admin_menu_for_admin_only(self):
+        # CLAUDE-LEFT-RAIL-01: relocated from the Lists admin branch (a
+        # left-rail concept retired for admin functions entirely) into
+        # the top-right Account/Admin menu - reachable from any
+        # authenticated page, exactly as before, just a different ref
+        # namespace (menu.account.admin.operations, not lists.operations)
+        # reflecting where it actually lives now.
         admin_body = self._admin_client().get("/projects").get_data(as_text=True)
-        self.assertIn('data-ui-ref="lists.operations"', admin_body)
+        self.assertIn('data-ui-ref="menu.account.admin.operations"', admin_body)
         self.assertIn('href="/operations/"', admin_body)
 
         reader_body = self._reader_client().get("/projects").get_data(as_text=True)
-        self.assertNotIn('data-ui-ref="lists.operations"', reader_body)
+        self.assertNotIn('data-ui-ref="menu.account.admin.operations"', reader_body)
 
 
 class TopBarStatusLineTests(_BaseInstrumentRailTestCase):
