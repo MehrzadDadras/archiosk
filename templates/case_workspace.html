@@ -3105,20 +3105,23 @@
             </div>
         {% endcall %}
 
-        {# ---------------- Spin launcher (CLAUDE-SPIN-00A) ---------------------------
-           A prototype-stage entry point only - see `templates/_spin_prototype.html`'s
+        {# ---------------- Spin launcher (CLAUDE-SPIN-00A, grammar finalized CLAUDE-SPIN-01) ---
+           A prototype-stage entry point - see `templates/_spin_prototype.html`'s
            own header comment for the full scope boundary (no real evidence
-           filtering, no persistence, comparison-only). Opens via the same
-           `?spin=1` query-param idiom every other Toolbox selection already
-           uses (?source=/?requirement=/?finding=), resolved entirely
+           filtering, no persistence). The Product Owner selected the
+           container grammar (Alternative A + one pairing from B) following
+           SPIN-00A/00B's comparison exercise; the dev-only A/B/C switcher
+           is retired, but the underlying capability - real evidence
+           isolation - is still not built. Opens via the same `?spin=1`
+           query-param idiom every other Toolbox selection already uses
+           (?source=/?requirement=/?finding=), resolved entirely
            client-side once rendered - no new authorization surface, since
            reaching this page at all already required project authorization. #}
         {% call macros.subdisclosure("Spin — Evidence Isolation (prototype)", ui_ref="toolbox.spin-launcher") %}
             <p class="pane-note">
                 Turn the project down to the smallest meaningful relationship, then
-                progressively reintroduce disciplines. Three container alternatives
-                for Product Owner comparison - prototype only, no evidence is
-                actually filtered yet.
+                progressively reintroduce disciplines - prototype only, no evidence
+                is actually filtered yet.
             </p>
             <a class="btn btn-ghost" data-ui-ref="toolbox.spin-launcher.open" href="{{ url_for('workspace.show_workspace', project_id=project_id, spin=1) }}">Open Spin</a>
         {% endcall %}

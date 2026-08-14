@@ -6152,58 +6152,18 @@ main:hover,
 .review-state-badge.review-state-baseline { color: var(--text-metadata); border-color: var(--border); }
 .review-state-badge.review-state-spin-active { color: var(--accepted-green); border-color: var(--accepted-green); }
 
-/* -- Spin prototype scaffolding (templates/_spin_prototype.html) ------- */
-.spin-variant-switcher {
-    display: flex;
-    gap: var(--space-3);
-    padding: var(--space-4);
-    margin-bottom: var(--space-5);
-    border: 1px dashed var(--machine-blue);
-    border-radius: 3px;
-    align-items: center;
-}
-.spin-variant-switcher-label {
-    font-family: var(--font-body);
-    font-size: var(--text-2xs);
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: var(--machine-blue);
-    margin-right: var(--space-2);
-}
-.spin-variant-switcher-btn {
-    font-family: var(--font-body);
-    font-size: var(--text-xs);
-    padding: 0.3rem 0.7rem;
-    border-radius: 3px;
-    border: 1px solid var(--border-strong);
-    background: transparent;
-    color: var(--text-secondary);
-    cursor: pointer;
-}
-.spin-variant-switcher-btn[aria-pressed="true"] {
-    background: var(--machine-blue);
-    border-color: var(--machine-blue);
-    color: var(--surface-primary);
-    font-weight: 600;
-}
-.spin-global-controls {
-    display: flex;
-    gap: var(--space-3);
-    margin-bottom: var(--space-4);
-    flex-wrap: wrap;
-}
-.spin-global-controls .btn { padding: 0.45rem 0.8rem; font-size: var(--text-xs); }
-.spin-discipline-list { display: flex; flex-direction: column; }
-
-/* Alternative A - Compact Control Stack: the plainest possible density,
-   no extra grouping chrome around the shared .tool-control-row list. */
-.spin-variant-a .spin-discipline-list { max-height: 15rem; overflow-y: auto; }
-
-/* Alternative B - Instrument Panel: a clearer Baseline/Active split and
-   a more prominent Pulse reservation - still built from the same
-   .tool-control-row/.gauge-slot primitives, just grouped and ordered
-   differently. */
-.spin-variant-b .spin-status-strip {
+/* -- Spin canonical grammar (templates/_spin_prototype.html) -----------
+   CLAUDE-SPIN-01: the Product Owner selected Alternative A (Compact
+   Control Stack) as the base, plus one incorporated pairing from
+   Alternative B - the status badge and active-set summary grouped into
+   one header block (.spin-status-strip) so engagement state reads at a
+   glance without scrolling. B's physical Engaged/Not-Engaged row
+   regrouping and C's always-visible sequence display were both
+   explicitly NOT adopted (see the template's own header comment) - their
+   CSS (.spin-variant-switcher*, .spin-sequence-row/.spin-sequence-index,
+   per-variant .spin-discipline-list/.gauge-slot overrides) is retired
+   along with the markup that used it, not left as dead weight. #}
+.spin-status-strip {
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -6212,26 +6172,11 @@ main:hover,
     background: var(--surface-secondary);
     border-radius: 3px;
 }
-.spin-variant-b .gauge-slot { margin-top: var(--space-5); padding: var(--space-7) var(--space-5); }
-.spin-variant-b .spin-discipline-list { max-height: 13rem; overflow-y: auto; }
-
-/* Alternative C - Progressive Engagement: an ordered sequence list - a
-   small numeric index box ahead of the same shared row, present only
-   for disciplines currently engaged (their engagement order), so the
-   sequence itself stays legible without inventing a second control. */
-.spin-sequence-row { display: flex; align-items: center; gap: var(--space-4); }
-.spin-sequence-index {
-    font-family: var(--font-body);
-    font-size: var(--text-2xs);
-    color: var(--surface-primary);
-    background: var(--text-metadata);
-    border-radius: 999px;
-    width: 1.3rem;
-    height: 1.3rem;
+.spin-global-controls {
     display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
+    gap: var(--space-3);
+    margin-bottom: var(--space-4);
+    flex-wrap: wrap;
 }
-.tool-control-row[data-engaged="true"] .spin-sequence-index { background: var(--accepted-green); }
-.spin-variant-c .spin-discipline-list { max-height: 15rem; overflow-y: auto; }
+.spin-global-controls .btn { padding: 0.45rem 0.8rem; font-size: var(--text-xs); }
+.spin-discipline-list { display: flex; flex-direction: column; max-height: 15rem; overflow-y: auto; }

@@ -1,20 +1,36 @@
 """
-CLAUDE-SPIN-00A - Spin container comparison prototype.
+CLAUDE-SPIN-00A - Spin container comparison prototype (retired, see below).
+CLAUDE-SPIN-01 - Spin's selected canonical container grammar.
 
-Covers `templates/_spin_prototype.html` (three container alternatives,
-built from shared right-panel grammar - `macros.tool_pane`,
-`.tool-control-row`, `.tool-toggle`, `.review-state-badge`,
-`.active-set-summary`, `.gauge-slot`; see static/css/main.css's own
-"CLAUDE-SPIN-00A" section), `routes/workspace.py`'s `?spin=1` flag, and
-the Toolbox launcher (`toolbox.spin-launcher`) that opens it.
+CLAUDE-SPIN-00A built three container alternatives (Compact Control Stack /
+Instrument Panel / Progressive Engagement) behind a dev-only comparison
+switcher and gave the Product Owner a live route to compare them. Following
+SPIN-00A/00B's comparison, the Product Owner selected Alternative A as the
+base, plus one incorporated characteristic from Alternative B - the status
+badge and active-set summary paired together in one header block
+(`.spin-status-strip`) so engagement state reads at a glance without
+scrolling. Explicitly NOT adopted: B's physical Engaged/Not-Engaged row
+regrouping, and C's always-visible engagement-sequence display. The dev-only
+switcher and the two unselected variants' markup were removed accordingly -
+`SpinRetirementTests` below is the explicit regression guard against
+reintroducing that dead comparison code, the same convention this
+repository's own `DialogRetirementTests` (test_p40vw8_project_switch_and_
+chooser.py) already established for a prior retired-mechanism regression.
 
-This is a container/interaction-selection prototype only - no real
-evidence filtering, no persistence, no route mutates anything. The tests
-below are structural (server-rendered markup) plus one explicit
-nonmutation proof; the actual toggle/switch INTERACTION logic lives in
-static/js/spin_prototype.js and is not exercised here (no browser
-automation tool is connected in this environment, consistent with every
-other VW/E-stage test file in this repository).
+Covers `templates/_spin_prototype.html` (the one canonical grammar, built
+from shared right-panel primitives - `macros.tool_pane`, `.tool-control-row`,
+`.tool-toggle`, `.review-state-badge`, `.active-set-summary`, `.gauge-slot`;
+see static/css/main.css's own "Spin canonical grammar" section),
+`routes/workspace.py`'s `?spin=1` flag, and the Toolbox launcher
+(`toolbox.spin-launcher`) that opens it.
+
+Still a container/interaction-selection prototype - no real evidence
+filtering, no persistence, no route mutates anything. The tests below are
+structural (server-rendered markup) plus one explicit nonmutation proof; the
+actual toggle INTERACTION logic lives in static/js/spin_prototype.js and is
+not exercised here (no browser automation tool is connected in this
+environment, consistent with every other VW/E-stage test file in this
+repository).
 
 Every ingestion call spies on BHiveParser.parse rather than letting it
 run for real (existing repo-wide hermetic-test convention).
@@ -117,104 +133,124 @@ class SpinLauncherTests(_BaseSpinTestCase):
         client = self._client_as("spin_owner", 1)
         body = client.get(self._workspace_url()).get_data(as_text=True)
         self.assertIn('data-ui-ref="toolbox.project-intelligence"', body)
-        self.assertNotIn('data-ui-ref="spin.dev-switcher"', body)
+        self.assertNotIn('data-ui-ref="spin.pane"', body)
+
+
+class SpinRetirementTests(_BaseSpinTestCase):
+    """CLAUDE-SPIN-01: explicit regression guard against reintroducing the
+    retired dev-only comparison switcher or the two unselected variants -
+    all dead code once the Product Owner made a selection, removed outright
+    rather than left unreachable (same reasoning as this repo's own prior
+    DialogRetirementTests)."""
+
+    def test_dev_switcher_markup_is_gone(self):
+        client = self._client_as("spin_owner", 1)
+        body = client.get(self._workspace_url(spin=True)).get_data(as_text=True)
+        self.assertNotIn("spin.dev-switcher", body)
+        self.assertNotIn("DEV COMPARISON", body)
+
+    def test_unselected_variants_are_gone(self):
+        client = self._client_as("spin_owner", 1)
+        body = client.get(self._workspace_url(spin=True)).get_data(as_text=True)
+        for retired_ref in ("spin.variant-a", "spin.variant-b", "spin.variant-c"):
+            self.assertNotIn(retired_ref, body)
+        self.assertNotIn("Instrument Panel", body)
+        self.assertNotIn("Progressive Engagement", body)
+
+    def test_b_engaged_disengaged_regrouping_is_gone(self):
+        client = self._client_as("spin_owner", 1)
+        body = client.get(self._workspace_url(spin=True)).get_data(as_text=True)
+        self.assertNotIn(">Engaged<", body)
+        self.assertNotIn("Not Engaged", body)
+        self.assertNotIn("spin.variant-b.engaged-list", body)
+        self.assertNotIn("spin.variant-b.disengaged-list", body)
+
+    def test_c_visible_sequence_display_is_gone(self):
+        # The underlying engagement-ORDER tracking is deliberately kept in
+        # static/js/spin_prototype.js (harmless, unsurfaced) - only the
+        # VISIBLE per-row index/summary markup is retired.
+        client = self._client_as("spin_owner", 1)
+        body = client.get(self._workspace_url(spin=True)).get_data(as_text=True)
+        self.assertNotIn("spin.variant-c.sequence", body)
+        self.assertNotIn("data-spin-index", body)
+        self.assertNotIn("spin-sequence-index", body)
 
 
 class SpinContainerRenderTests(_BaseSpinTestCase):
-    def test_spin_mode_renders_the_dev_switcher_and_all_three_variants(self):
+    def test_spin_mode_renders_the_one_canonical_pane(self):
         client = self._client_as("spin_owner", 1)
         body = client.get(self._workspace_url(spin=True)).get_data(as_text=True)
-        self.assertIn('data-ui-ref="spin.dev-switcher"', body)
-        for ref in ("spin.dev-switcher.a", "spin.dev-switcher.b", "spin.dev-switcher.c"):
-            self.assertIn(f'data-ui-ref="{ref}"', body)
-        for ref in ("spin.variant-a", "spin.variant-b", "spin.variant-c"):
-            self.assertIn(f'data-ui-ref="{ref}"', body)
+        self.assertIn('data-ui-ref="spin.pane"', body)
+        self.assertIn("Spin — Evidence Isolation", body)
 
     def test_spin_mode_suppresses_the_default_project_intelligence_view(self):
         client = self._client_as("spin_owner", 1)
         body = client.get(self._workspace_url(spin=True)).get_data(as_text=True)
         self.assertNotIn('data-ui-ref="toolbox.project-intelligence"', body)
 
-    def test_only_variant_a_visible_by_default(self):
+    def test_status_strip_pairs_badge_and_summary_in_one_header_block(self):
+        # The one characteristic incorporated from Alternative B, per the
+        # Product Owner's own selection: status + active-set summary
+        # grouped together, readable without scrolling.
         client = self._client_as("spin_owner", 1)
         body = client.get(self._workspace_url(spin=True)).get_data(as_text=True)
-        variant_a = body[body.index('data-spin-variant="a"'):body.index('data-spin-variant="b"')]
-        variant_b = body[body.index('data-spin-variant="b"'):body.index('data-spin-variant="c"')]
-        variant_c = body[body.index('data-spin-variant="c"'):]
-        self.assertNotIn("hidden", variant_a.split(">", 1)[0])
-        self.assertIn("hidden", variant_b.split(">", 1)[0])
-        self.assertIn("hidden", variant_c.split(">", 1)[0])
+        self.assertIn('data-ui-ref="spin.status-strip"', body)
+        strip = body[body.index('data-ui-ref="spin.status-strip"'):]
+        strip = strip[:strip.index("</div>", strip.index("</div>") + 1) + len("</div>")]
+        self.assertIn('data-ui-ref="spin.status"', strip)
+        self.assertIn('data-ui-ref="spin.summary"', strip)
 
-    def test_each_variant_built_from_the_same_shared_primitives(self):
-        # Not three separate CSS worlds - the governing prompt's own
-        # explicit requirement.
+    def test_built_from_shared_primitives_not_a_new_css_world(self):
         client = self._client_as("spin_owner", 1)
         body = client.get(self._workspace_url(spin=True)).get_data(as_text=True)
         for shared_class in ("workspace-pane", "tool-control-row", "tool-toggle", "review-state-badge", "active-set-summary", "gauge-slot"):
-            self.assertGreaterEqual(body.count(shared_class), 3, shared_class)
+            self.assertIn(shared_class, body, shared_class)
 
-    def test_all_variants_show_the_full_representative_discipline_set(self):
-        # Many-item stress test - the same 13-entry prototype list appears
-        # once per variant (not written into the Project itself - see
-        # SpinNonmutationTests below). Each discipline name appears twice
-        # per variant (the visible row label plus its data-spin-name
-        # attribute), so 3 variants -> 6 occurrences.
+    def test_shows_the_full_representative_discipline_set(self):
+        # Many-item stress test - the 13-entry prototype list (not written
+        # into the Project itself - see SpinNonmutationTests below).
         client = self._client_as("spin_owner", 1)
         body = client.get(self._workspace_url(spin=True)).get_data(as_text=True)
-        self.assertEqual(body.count("Architecture"), 6)
-        self.assertEqual(body.count("Commissioning"), 6)
-        self.assertEqual(body.count('data-ui-ref="spin.variant-a.toggle"'), 13)
-        self.assertEqual(body.count('data-ui-ref="spin.variant-b.toggle"'), 13)
-        self.assertEqual(body.count('data-ui-ref="spin.variant-c.toggle"'), 13)
+        self.assertIn("Architecture", body)
+        self.assertIn("Commissioning", body)
+        self.assertEqual(body.count('data-ui-ref="spin.toggle"'), 13)
 
-    def test_baseline_status_and_no_evidence_isolated_yet_by_default(self):
+    def test_rows_carry_no_relocation_affordance(self):
+        # Spatial stability was the Product Owner's own explicit reason for
+        # selecting A over B - there is exactly one discipline list, not a
+        # pair of containers rows could move between.
         client = self._client_as("spin_owner", 1)
         body = client.get(self._workspace_url(spin=True)).get_data(as_text=True)
-        self.assertEqual(body.count(">Baseline<"), 3)
-        self.assertIn('data-spin-switch="a" aria-pressed="true"', body)
-        self.assertIn('data-spin-switch="b" aria-pressed="false"', body)
-        self.assertIn('data-spin-switch="c" aria-pressed="false"', body)
+        self.assertEqual(body.count('data-spin-list'), 1)
 
-    def test_global_controls_present_per_variant(self):
+    def test_baseline_status_by_default(self):
+        client = self._client_as("spin_owner", 1)
+        body = client.get(self._workspace_url(spin=True)).get_data(as_text=True)
+        self.assertIn(">Baseline<", body)
+        self.assertIn("None engaged", body)
+
+    def test_global_controls_present(self):
         client = self._client_as("spin_owner", 1)
         body = client.get(self._workspace_url(spin=True)).get_data(as_text=True)
         for suffix in ("all-on", "all-off", "reset"):
-            self.assertEqual(body.count(f'data-spin-action="{suffix}"'), 3, suffix)
+            self.assertIn(f'data-spin-action="{suffix}"', body)
 
     def test_pulse_placeholder_present_and_neutral_no_fabricated_score(self):
         client = self._client_as("spin_owner", 1)
         body = client.get(self._workspace_url(spin=True)).get_data(as_text=True)
-        self.assertEqual(body.count("Project Pulse"), 3)
-        self.assertEqual(body.count("Future analytical layer"), 3)
+        self.assertIn("Project Pulse", body)
+        self.assertIn("Future analytical layer", body)
         # No numeric health/risk score anywhere inside a gauge-slot.
         self.assertNotIn("Project Pulse: ", body)
 
-    def test_variant_c_carries_a_distinct_ordered_sequence_summary(self):
+    def test_toggles_carry_switch_semantics(self):
         client = self._client_as("spin_owner", 1)
         body = client.get(self._workspace_url(spin=True)).get_data(as_text=True)
-        self.assertIn('data-ui-ref="spin.variant-c.sequence"', body)
-        self.assertIn('data-spin-index', body)
-
-    def test_variant_b_groups_rows_into_engaged_and_disengaged_containers(self):
-        client = self._client_as("spin_owner", 1)
-        body = client.get(self._workspace_url(spin=True)).get_data(as_text=True)
-        self.assertIn('data-ui-ref="spin.variant-b.engaged-list"', body)
-        self.assertIn('data-ui-ref="spin.variant-b.disengaged-list"', body)
-
-    def test_switcher_and_toggles_carry_switch_semantics(self):
-        client = self._client_as("spin_owner", 1)
-        body = client.get(self._workspace_url(spin=True)).get_data(as_text=True)
-        self.assertIn('role="group"', body)
-        self.assertIn('aria-label="Spin container alternative', body)
-        # Scoped to the Spin fragment itself (base.html's own maximize
-        # buttons elsewhere on the page also carry aria-pressed="false",
-        # so an unscoped whole-body count would be fragile/unrelated).
         # id="toolbox-eye-divider" is base.html's own next sibling
         # immediately after the Toolbox <aside> closes, so it reliably
-        # follows the Spin fragment in document order (unlike
-        # id="chat-region", which base.html renders BEFORE the Toolbox).
-        spin_fragment = body[body.index('data-ui-ref="spin.dev-switcher"'):body.index('id="toolbox-eye-divider"')]
-        self.assertEqual(spin_fragment.count('aria-pressed="false"'), 13 * 3 + 2)  # 39 discipline toggles (off) + 2 unselected dev-switcher buttons
+        # follows the Spin fragment in document order.
+        spin_fragment = body[body.index('data-ui-ref="spin.pane"'):body.index('id="toolbox-eye-divider"')]
+        self.assertEqual(spin_fragment.count('aria-pressed="false"'), 13)  # 13 discipline toggles, all off by default
 
 
 class SpinNonmutationTests(_BaseSpinTestCase):
@@ -272,7 +308,7 @@ class SpinRightPanelRegressionTests(_BaseSpinTestCase):
         client = self._client_as("spin_owner", 1)
         body = client.get(f"/projects/{self.doc.project_id}/workspace?source={source_id}").get_data(as_text=True)
         self.assertIn('data-ui-ref="toolbox.document"', body)
-        self.assertNotIn('data-ui-ref="spin.dev-switcher"', body)
+        self.assertNotIn('data-ui-ref="spin.pane"', body)
 
 
 if __name__ == "__main__":
