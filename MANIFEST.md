@@ -17,7 +17,13 @@ self-catalog `CLAUDE.md`/`CONTINUATION_CHECKPOINT.md`/its own file —
 add `UI_REFERENCE_MAP.md` (CLAUDE-P40-VW7A) to that same group: a
 top-level durable record with its own index (every `data-ui-ref` id used
 across `templates/base.html`/`case_workspace.html`/`_macros.html`),
-not a file-layout entry this document's own rows describe.
+not a file-layout entry this document's own rows describe. Same group
+again for `TEST_LANES.md` (CLAUDE-TEST-ACCEL-01, new) — a hand-
+maintained mapping from "what changed" to "which smaller, file-list-
+based test set gives fast feedback before the full 3,594-test suite,"
+with measured proof for two worked examples (SPIN-00A, Requirements);
+it does not introduce pytest markers or reorganize `tests/` itself, and
+the full suite remains the only real pre-commit/pre-deploy gate.
 
 **Known gap, not yet fixed:** this manifest predates the multi-user
 `User`/`PasswordResetToken` auth system (`models.py`,
