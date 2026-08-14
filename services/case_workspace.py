@@ -1249,6 +1249,19 @@ class Source:
     size_bytes: Optional[int] = None
     security_classification: Optional[str] = None  # open-world
     extractor_version: Optional[str] = None
+    # CLAUDE-RFP27-TERRITORY-01: which Folder (see below) this Source
+    # belongs to - None means "unfiled," the honest state of every
+    # pre-existing Source and of any Source whose real Data Room location
+    # isn't known. Deliberately optional and additive (every existing
+    # Source simply lacks this key and loads with the honest None
+    # default, same backward-compatible shape as every prior addition to
+    # this dataclass) - Lists' own flat Documents list is UNCHANGED for
+    # any Source with folder_id=None; only Files' own per-folder view
+    # (below) reads this field. Never inferred from filename/path
+    # guessing - only ever set by real folder-reconciliation (see
+    # CaseWorkspaceStore.ensure_folder_path/services/ingestion.py's own
+    # reconcile_data_room_upload) or a future explicit move action.
+    folder_id: Optional[str] = None
 
 
 @dataclass
@@ -5651,6 +5664,7 @@ class CaseWorkspaceStore:
         file_hash: Optional[str] = None,
         origin_type: Optional[str] = None,
         origin_reference: Optional[str] = None,
+        folder_id: Optional[str] = None,
         governance_log: Optional[GovernanceLog] = None,
         actor: str = "system",
     ) -> dict:
@@ -5662,6 +5676,14 @@ class CaseWorkspaceStore:
         a schedule, any non-image Source) should call directly, instead
         of constructing a Source dataclass by hand the way the NREOCRC
         ingestion lab script previously had to (a gap this batch closes).
+
+        CLAUDE-RFP27-TERRITORY-01: `folder_id`, when given, is NOT
+        validated against workspace.folders here - callers that resolve
+        a real Folder (CaseWorkspaceStore.ensure_folder_path) already
+        guarantee it exists; this stays a plain optional passthrough, the
+        same trust level file_path/origin_reference already have, so
+        add_source's existing callers (none of which pass folder_id
+        today) are completely unaffected.
         """
         source = Source(
             id=_new_id(),
@@ -5687,6 +5709,7 @@ class CaseWorkspaceStore:
                 if origin_type is not None else None
             ),
             origin_reference=origin_reference,
+            folder_id=folder_id,
         )
         workspace.sources.append(asdict(source))
         self.save(workspace)
@@ -6182,6 +6205,92 @@ class CaseWorkspaceStore:
                 correlation_id=folder.id,
             )
         return asdict(folder)
+
+    def ensure_folder_path(
+        self, workspace: ProjectWorkspace, root: str, relative_path: str,
+        actor: Optional[str] = None, governance_log: Optional[GovernanceLog] = None,
+    ) -> Optional[str]:
+        """
+        CLAUDE-RFP27-TERRITORY-01: the ONE place in this codebase allowed
+        to construct a `root=FOLDER_ROOT_DATA_ROOM` Folder -
+        `create_folder` above is deliberately hard-coded to
+        FOLDER_ROOT_DESIGN_BUILDER only (its own docstring: "structurally
+        no way to reach FOLDER_ROOT_DATA_ROOM through this method at all,
+        not merely a convention some caller could bypass") - that guard
+        stays completely untouched; this is a second, explicitly separate
+        entry point for the "governed, deliberate act" that docstring
+        itself named as the future exception. Called only from
+        services/ingestion.py's own reconcile_data_room_upload (real,
+        eligible files - directories are implied by a file's own path)
+        and routes/workspace.py's own explicit "register empty folder
+        paths" route (real directories with zero files - the one case a
+        file-upload can never report, since browsers never emit a File
+        for an empty directory).
+
+        `relative_path` is a "/"-separated path (e.g. "01 RFP Documents/
+        01.2 Addenda") - idempotent: walks each segment, reusing an
+        existing same-named sibling under the same root/parent rather
+        than creating a duplicate every time this is called again for
+        the same real directory (a reconciliation run over an unchanged
+        Data Room must be a safe no-op). Returns the deepest segment's
+        folder_id, or None for an empty/root-only path.
+        """
+        segments = [s.strip() for s in relative_path.replace("\\", "/").split("/") if s.strip()]
+        parent_folder_id: Optional[str] = None
+        folder_id: Optional[str] = None
+        for segment in segments:
+            existing = next(
+                (
+                    f for f in self._active_folder_siblings(workspace, workspace.project_id, root, parent_folder_id)
+                    if f["name"] == segment
+                ),
+                None,
+            )
+            if existing is not None:
+                folder_id = existing["id"]
+            else:
+                folder = Folder(
+                    id=_new_id(), project_id=workspace.project_id, root=root,
+                    name=segment, created_at=_now(), created_by=actor, parent_folder_id=parent_folder_id,
+                )
+                workspace.folders.append(asdict(folder))
+                folder_id = folder.id
+                if governance_log is not None:
+                    governance_log.append(
+                        project_id=workspace.project_id, event_type="folder_created",
+                        actor=actor or "system", role="system",
+                        payload={"folder_id": folder.id, "name": segment, "root": root, "parent_folder_id": parent_folder_id},
+                        correlation_id=folder.id,
+                    )
+            parent_folder_id = folder_id
+        self.save(workspace)
+        return folder_id
+
+    def set_source_folder(
+        self, workspace: ProjectWorkspace, source_id: str, folder_id: Optional[str],
+        actor: Optional[str] = None, governance_log: Optional[GovernanceLog] = None,
+    ) -> dict:
+        """CLAUDE-RFP27-TERRITORY-01: relinks an EXISTING Source into a
+        Folder without touching anything else about it (id, file_hash,
+        content, evidence already extracted) - the real mechanism behind
+        "preserve existing Source identity... do not create duplicate
+        Sources merely because earlier files were uploaded from a flat
+        ad-hoc location," used by reconcile_data_room_upload when a
+        newly-scanned file's content hash matches an already-registered
+        Source exactly."""
+        source = self._find(workspace.sources, source_id)
+        if source is None:
+            raise CaseWorkspaceError(f"Source {source_id} was not found.")
+        source["folder_id"] = folder_id
+        self.save(workspace)
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id, event_type="source_relinked_to_folder",
+                actor=actor or "system", role="system",
+                payload={"source_id": source_id, "folder_id": folder_id},
+                correlation_id=source_id,
+            )
+        return source
 
     def rename_folder(
         self, workspace: ProjectWorkspace, folder_id: str, new_name: str,

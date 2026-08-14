@@ -37,6 +37,7 @@ from services.case_workspace import (
     CONTENT_CLASS_AI_PROPOSED,
     CONTENT_CLASS_DETERMINISTIC_CALCULATION,
     CONTENT_CLASS_DIRECT_EVIDENCE_REFERENCE,
+    FOLDER_ROOT_DATA_ROOM,
     INVESTIGATION_STEP_KIND_REQUIREMENT_INVESTIGATION,
     OBJECT_KIND_REQUIREMENT,
     PERSPECTIVE_ORIGIN_MACHINE,
@@ -456,6 +457,18 @@ def interpret_message(
     # Project-level) and no external-AI policy gate (no model call).
     if _looks_like_orientation_request(lowered):
         return _handle_project_orientation(workspace)
+
+    # CLAUDE-RFP27-TERRITORY-01 (Part 3): checked before the generic
+    # project-question branch below, same reasoning as orientation above
+    # - a real Folder name mentioned in the message gets a deterministic,
+    # no-model-call answer (existence + Source count is either true or
+    # false, never something worth spending a real external-AI call on),
+    # and - the whole point of this stage - can say "exists and is
+    # currently empty" instead of either fabricating content or wrongly
+    # implying the folder doesn't exist.
+    folder_reference = _resolve_mentioned_folder(workspace, text)
+    if folder_reference is not None:
+        return _handle_folder_reference(workspace, folder_reference)
 
     if _looks_like_project_question(lowered):
         return _handle_project_question(
@@ -895,6 +908,55 @@ def _handle_project_orientation(workspace: ProjectWorkspace) -> InterpretationRe
 
     return InterpretationResult(
         action_taken="project_orientation", reply_text=reply, next_steps=next_steps,
+    )
+
+
+# CLAUDE-RFP27-TERRITORY-01 (Part 3): "GO must understand both Files and
+# Folders" - matches a REAL Folder's own `name`, case-insensitive, as a
+# whole-word-ish substring of the message (never a fuzzy/partial guess
+# that could match an unrelated Folder that merely shares a common word).
+# Deliberately requires at least 4 characters so a stray short folder
+# name never accidentally matches ordinary conversation text.
+def _resolve_mentioned_folder(workspace: ProjectWorkspace, text: str) -> Optional[dict]:
+    lowered = text.lower()
+    active_folders = [f for f in workspace.folders if not f.get("removed_at")]
+    # Longest name first - "Financial Submission" should win over a
+    # shorter sibling/ancestor whose name happens to also appear.
+    for folder in sorted(active_folders, key=lambda f: len(f["name"]), reverse=True):
+        name = folder["name"].strip()
+        if len(name) >= 4 and name.lower() in lowered:
+            return folder
+    return None
+
+
+def _handle_folder_reference(workspace: ProjectWorkspace, folder: dict) -> InterpretationResult:
+    """CLAUDE-RFP27-TERRITORY-01 (Part 3): the real "exists and is
+    currently empty" vs "does not exist" distinction the governing
+    prompt names as the whole point of first-class folder identity - no
+    model call, no fabricated content, just a real count against
+    workspace.sources' own `folder_id` field (Source.folder_id's own
+    field comment) and workspace.folders for real child folders."""
+    source_count = sum(
+        1 for s in workspace.sources if s.get("folder_id") == folder["id"] and not s.get("removed_at")
+    )
+    child_folder_count = sum(
+        1 for f in workspace.folders if f.get("parent_folder_id") == folder["id"] and not f.get("removed_at")
+    )
+    root_label = "Data Room" if folder["root"] == FOLDER_ROOT_DATA_ROOM else "Design-Builder Workspace"
+
+    if source_count == 0 and child_folder_count == 0:
+        reply = f'"{folder["name"]}" exists in {root_label} and is currently empty - no Documents or subfolders registered in it yet.'
+    else:
+        parts = []
+        if source_count:
+            parts.append(f"{source_count} Document(s)")
+        if child_folder_count:
+            parts.append(f"{child_folder_count} subfolder(s)")
+        reply = f'"{folder["name"]}" exists in {root_label} with {" and ".join(parts)}.'
+
+    return InterpretationResult(
+        action_taken="folder_reference", reply_text=reply,
+        next_steps=[{"label": "Open Files", "view": "files"}],
     )
 
 

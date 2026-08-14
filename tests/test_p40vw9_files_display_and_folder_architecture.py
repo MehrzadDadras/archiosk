@@ -406,8 +406,19 @@ class FolderIdentityTests(_BaseTestCase):
         folder = self.store.create_folder(ws, "New On Legacy", actor="vw9_owner")
         self.assertTrue(folder["id"])
 
-    def test_no_folder_id_field_exists_on_source_this_stage(self):
-        self.assertNotIn("folder_id", cw.Source.__dataclass_fields__)
+    def test_folder_id_field_defaults_to_none_and_is_backward_compatible(self):
+        # CLAUDE-RFP27-TERRITORY-01: VW9 originally asserted `folder_id`
+        # did NOT exist on Source at all ("a Document is never assigned
+        # into a Folder in this slice"); that slice's own scope boundary
+        # was deliberately widened this stage (governance/STATUS.md's own
+        # CLAUDE-RFP27-TERRITORY-01 row) - a Source CAN now belong to a
+        # Folder. What VW9's own test actually protected - a legacy
+        # Source record predating this field loads safely - still holds:
+        # every pre-existing Source simply lacks the key and gets the
+        # honest None default, the same backward-compatible shape every
+        # other additive Source field already uses.
+        self.assertIn("folder_id", cw.Source.__dataclass_fields__)
+        self.assertIsNone(cw.Source.__dataclass_fields__["folder_id"].default)
 
     def test_existing_document_identity_and_relationships_unaffected_by_folders(self):
         doc = self._ingest("VW9 Document Compatibility Project")
@@ -602,6 +613,243 @@ class DisplayBehaviorTests(_BaseTestCase):
         panel = body[row_idx:row_idx + 2000]
         self.assertIn(other["name"], panel)
         self.assertNotIn(f'value="{root["id"]}"', panel)  # not offered as its own move target
+
+
+# ---------------------------------------------------------------------------
+# CLAUDE-RFP27-TERRITORY-01 Parts 3-4: Data Room folder construction,
+# Source relinking/reconciliation, and GO folder-reference resolution.
+# ---------------------------------------------------------------------------
+
+class DataRoomFolderConstructionTests(_BaseTestCase):
+    def test_ensure_folder_path_creates_nested_data_room_folders(self):
+        doc = self._ingest("RFP27 Nested Path Project")
+        ws = self.store.get(doc.project_id)
+        folder_id = self.store.ensure_folder_path(
+            ws, root=cw.FOLDER_ROOT_DATA_ROOM, relative_path="01 RFP Documents/01.2 Addenda", actor="vw9_owner",
+        )
+        ws2 = self.store.get(doc.project_id)
+        leaf = next(f for f in ws2.folders if f["id"] == folder_id)
+        self.assertEqual(leaf["name"], "01.2 Addenda")
+        self.assertEqual(leaf["root"], cw.FOLDER_ROOT_DATA_ROOM)
+        parent = next(f for f in ws2.folders if f["id"] == leaf["parent_folder_id"])
+        self.assertEqual(parent["name"], "01 RFP Documents")
+        self.assertIsNone(parent["parent_folder_id"])
+
+    def test_ensure_folder_path_is_idempotent(self):
+        doc = self._ingest("RFP27 Idempotent Path Project")
+        ws = self.store.get(doc.project_id)
+        first = self.store.ensure_folder_path(ws, root=cw.FOLDER_ROOT_DATA_ROOM, relative_path="Addenda", actor="vw9_owner")
+        ws2 = self.store.get(doc.project_id)
+        second = self.store.ensure_folder_path(ws2, root=cw.FOLDER_ROOT_DATA_ROOM, relative_path="Addenda", actor="vw9_owner")
+        self.assertEqual(first, second)
+        ws3 = self.store.get(doc.project_id)
+        matches = [f for f in ws3.folders if f["name"] == "Addenda" and f["root"] == cw.FOLDER_ROOT_DATA_ROOM]
+        self.assertEqual(len(matches), 1)
+
+    def test_ensure_folder_path_blank_segment_yields_no_folder(self):
+        doc = self._ingest("RFP27 Blank Path Project")
+        ws = self.store.get(doc.project_id)
+        folder_id = self.store.ensure_folder_path(ws, root=cw.FOLDER_ROOT_DATA_ROOM, relative_path="", actor="vw9_owner")
+        self.assertIsNone(folder_id)
+
+
+class SetSourceFolderTests(_BaseTestCase):
+    def test_relinking_a_source_does_not_change_its_identity(self):
+        doc = self._ingest("RFP27 Relink Identity Project")
+        ws = self.store.get(doc.project_id)
+        source_id = ws.sources[0]["id"]
+        folder = self.store.create_folder(ws, "Somewhere", actor="vw9_owner")
+        updated = self.store.set_source_folder(ws, source_id, folder["id"], actor="vw9_owner")
+        self.assertEqual(updated["id"], source_id)
+        self.assertEqual(updated["folder_id"], folder["id"])
+        ws2 = self.store.get(doc.project_id)
+        self.assertEqual(ws2.sources[0]["id"], source_id)
+
+    def test_relinking_to_none_clears_folder_membership(self):
+        doc = self._ingest("RFP27 Unlink Project")
+        ws = self.store.get(doc.project_id)
+        source_id = ws.sources[0]["id"]
+        folder = self.store.create_folder(ws, "Somewhere", actor="vw9_owner")
+        self.store.set_source_folder(ws, source_id, folder["id"], actor="vw9_owner")
+        ws2 = self.store.get(doc.project_id)
+        cleared = self.store.set_source_folder(ws2, source_id, None, actor="vw9_owner")
+        self.assertIsNone(cleared["folder_id"])
+
+
+class ReconcileDataRoomUploadTests(_BaseTestCase):
+    def test_new_file_is_added_and_folder_created_from_relative_path(self):
+        from services.ingestion import reconcile_data_room_upload
+
+        def fake_parse(self_parser, raw_bytes, filename_):
+            return "extracted text"
+
+        doc = self._ingest("RFP27 Reconcile New File Project")
+        with patch.object(BHiveParser, "_extract", fake_parse):
+            with self.flask_app.app_context():
+                results = reconcile_data_room_upload(
+                    [_fake_file(b"brand new content", "Addendum-01.pdf")],
+                    ["01 RFP Documents/01.2 Addenda/Addendum-01.pdf"],
+                    doc.project_id, self.flask_app, actor="vw9_owner",
+                )
+        self.assertEqual(results[0]["status"], "added")
+        ws = self.store.get(doc.project_id)
+        added_source = next(s for s in ws.sources if s["id"] == results[0]["source_id"])
+        folder = next(f for f in ws.folders if f["id"] == added_source["folder_id"])
+        self.assertEqual(folder["name"], "01.2 Addenda")
+        self.assertEqual(folder["root"], cw.FOLDER_ROOT_DATA_ROOM)
+
+    def test_byte_identical_file_is_relinked_not_duplicated(self):
+        from services.ingestion import reconcile_data_room_upload
+
+        content = b"same bytes both times"
+        doc = self._ingest("RFP27 Reconcile Dedup Project", content=content)
+        ws = self.store.get(doc.project_id)
+        original_source_id = ws.sources[0]["id"]
+        before_count = len(ws.sources)
+
+        with self.flask_app.app_context():
+            results = reconcile_data_room_upload(
+                [_fake_file(content, "spec.pdf")], ["Data Room/spec.pdf"],
+                doc.project_id, self.flask_app, actor="vw9_owner",
+            )
+        self.assertEqual(results[0]["status"], "relinked")
+        self.assertEqual(results[0]["source_id"], original_source_id)
+        ws2 = self.store.get(doc.project_id)
+        self.assertEqual(len(ws2.sources), before_count)  # no duplicate created
+        relinked = next(s for s in ws2.sources if s["id"] == original_source_id)
+        folder = next(f for f in ws2.folders if f["id"] == relinked["folder_id"])
+        self.assertEqual(folder["name"], "Data Room")
+
+    def test_unsupported_extension_is_skipped_not_silently_dropped(self):
+        from services.ingestion import reconcile_data_room_upload
+
+        doc = self._ingest("RFP27 Reconcile Skip Project")
+        with self.flask_app.app_context():
+            results = reconcile_data_room_upload(
+                [_fake_file(b"<svg></svg>", "Reference-Design.svg")], ["Reference Design/Reference-Design.svg"],
+                doc.project_id, self.flask_app, actor="vw9_owner",
+            )
+        self.assertEqual(results[0]["status"], "skipped")
+        self.assertIn("Unsupported file type", results[0]["reason"])
+        ws = self.store.get(doc.project_id)
+        self.assertFalse(any(f["name"] == "Reference Design" for f in ws.folders))
+
+
+class TerritoryRouteTests(_BaseTestCase):
+    def test_register_folder_paths_route_creates_empty_folders_visible_without_documents(self):
+        doc = self._ingest("RFP27 Register Paths Route Project")
+        client = self._client()
+        resp = client.post(
+            f"/projects/{doc.project_id}/workspace/folders/register-paths",
+            data={"root": cw.FOLDER_ROOT_DESIGN_BUILDER, "paths": "01_TECHNICAL_SUBMISSION\n02_FINANCIAL_SUBMISSION_(PART_B)\n03_LEGAL_&_CONSORTIUM_AGREEMENTS"},
+            follow_redirects=True,
+        )
+        self.assertEqual(resp.status_code, 200)
+        body = resp.get_data(as_text=True)
+        self.assertIn("01_TECHNICAL_SUBMISSION", body)
+        ws = self.store.get(doc.project_id)
+        names = {f["name"] for f in ws.folders}
+        self.assertIn("01_TECHNICAL_SUBMISSION", names)
+        self.assertIn("02_FINANCIAL_SUBMISSION_(PART_B)", names)
+        self.assertIn("03_LEGAL_&_CONSORTIUM_AGREEMENTS", names)
+
+    def test_register_folder_paths_route_rejects_invalid_root(self):
+        doc = self._ingest("RFP27 Register Invalid Root Project")
+        client = self._client()
+        resp = client.post(
+            f"/projects/{doc.project_id}/workspace/folders/register-paths",
+            data={"root": "not-a-real-root", "paths": "Something"},
+            follow_redirects=True,
+        )
+        self.assertEqual(resp.status_code, 200)
+        ws = self.store.get(doc.project_id)
+        self.assertEqual(ws.folders, [])
+
+    def test_reconcile_data_room_route_end_to_end(self):
+        # .txt content is genuinely, directly extractable text - avoids
+        # exercising the real pypdf parser against fabricated PDF bytes
+        # (that's what the mocked-parser unit tests above already cover).
+        doc = self._ingest("RFP27 Reconcile Route Project")
+        client = self._client()
+        resp = client.post(
+            f"/projects/{doc.project_id}/workspace/data-room/reconcile",
+            data={"folder_files": [_fake_file(b"genuinely new evidence", "Schedule-4.txt")]},
+            content_type="multipart/form-data",
+            follow_redirects=True,
+        )
+        self.assertEqual(resp.status_code, 200)
+        ws = self.store.get(doc.project_id)
+        self.assertTrue(any(s["name"] == "Schedule-4.txt" for s in ws.sources))
+
+    def test_reconcile_data_room_route_requires_admin(self):
+        doc = self._ingest("RFP27 Reconcile Route Auth Project")
+        from models import User, db
+        with self.flask_app.app_context():
+            db.session.add(User(username="vw9_reader", password_hash=generate_password_hash("x"), role="read_only"))
+            db.session.commit()
+        reader = self._client(username="vw9_reader", user_id=3, role="read_only")
+        resp = reader.post(
+            f"/projects/{doc.project_id}/workspace/data-room/reconcile",
+            data={"folder_files": [_fake_file(b"x", "y.pdf")]},
+            content_type="multipart/form-data",
+        )
+        # admin_required's own split (services/auth.py): authenticated but
+        # non-admin is 403, distinct from unauthenticated (302) and from
+        # login_required-only routes' 404-on-non-owner pattern used
+        # elsewhere in this file.
+        self.assertEqual(resp.status_code, 403)
+
+
+class GoFolderReferenceTests(_BaseTestCase):
+    """CLAUDE-RFP27-TERRITORY-01 (Part 3): GO must distinguish 'exists
+    and is currently empty' from 'does not exist', deterministically,
+    with no model call - direct interpret_message unit tests, same
+    pattern as InterpretMessageWithoutACaseTests in
+    test_conversation_apertures.py."""
+
+    def _interpret(self, workspace, text):
+        from services.conversation_interpreter import interpret_message
+        return interpret_message(
+            text=text, workspace=workspace, case=None, store=self.store,
+            artifacts_dir=self.tmp_dir, reviewer="vw9_owner", focused_finding_id=None,
+        )
+
+    def test_go_reports_an_empty_folder_honestly_as_empty_not_missing(self):
+        doc = self._ingest("RFP27 GO Empty Folder Project")
+        ws = self.store.get(doc.project_id)
+        self.store.create_folder(ws, "01_TECHNICAL_SUBMISSION", actor="vw9_owner")
+        ws2 = self.store.get(doc.project_id)
+        result = self._interpret(ws2, "Is anything in 01_TECHNICAL_SUBMISSION yet?")
+        self.assertEqual(result.action_taken, "folder_reference")
+        self.assertIn("currently empty", result.reply_text)
+        self.assertNotIn("does not exist", result.reply_text)
+
+    def test_go_reports_a_populated_folder_with_a_real_count(self):
+        doc = self._ingest("RFP27 GO Populated Folder Project")
+        ws = self.store.get(doc.project_id)
+        folder = self.store.create_folder(ws, "Addenda", actor="vw9_owner")
+        self.store.set_source_folder(ws, ws.sources[0]["id"], folder["id"], actor="vw9_owner")
+        ws2 = self.store.get(doc.project_id)
+        result = self._interpret(ws2, "What's in the Addenda folder?")
+        self.assertEqual(result.action_taken, "folder_reference")
+        self.assertIn("1 Document(s)", result.reply_text)
+
+    def test_go_never_falsely_matches_unrelated_conversation(self):
+        doc = self._ingest("RFP27 GO No False Match Project")
+        ws = self.store.get(doc.project_id)
+        self.store.create_folder(ws, "Addenda", actor="vw9_owner")
+        ws2 = self.store.get(doc.project_id)
+        result = self._interpret(ws2, "just leaving a note here, nothing to action")
+        self.assertNotEqual(result.action_taken, "folder_reference")
+
+    def test_go_ignores_a_removed_folder_reference(self):
+        doc = self._ingest("RFP27 GO Removed Folder Project")
+        ws = self.store.get(doc.project_id)
+        folder = self.store.create_folder(ws, "Addenda", actor="vw9_owner")
+        self.store.delete_folder(ws, folder["id"], actor="vw9_owner")
+        ws2 = self.store.get(doc.project_id)
+        result = self._interpret(ws2, "What's in the Addenda folder?")
+        self.assertNotEqual(result.action_taken, "folder_reference")
 
 
 if __name__ == "__main__":

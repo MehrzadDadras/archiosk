@@ -62,6 +62,7 @@ from services.case_workspace import (
     CONVERSATION_GUIDANCE_PROJECT_INTRO,
     FOLDER_ROOT_DATA_ROOM,
     FOLDER_ROOT_DESIGN_BUILDER,
+    KNOWN_FOLDER_ROOTS,
     GO_NO_GO_DECISIONS,
     KNOWN_ADJUDICATION_ATTRIBUTIONS,
     KNOWN_CONTENT_CLASSES,
@@ -113,7 +114,7 @@ from services.conversation_interpreter import (
     interpret_message,
 )
 from services.governance import GovernanceLog
-from services.ingestion import UploadError, document_source_payload, get_registry, reject_if_display_name_taken
+from services.ingestion import UploadError, document_source_payload, get_registry, reconcile_data_room_upload, reject_if_display_name_taken
 from services.investigation_snapshot import build_archive_snapshot
 from services.project_clock import open_project
 from services.rfi_export import RFIExportError, build_rfi_docx, build_rfi_draft_docx
@@ -757,6 +758,11 @@ def show_workspace(project_id):
     design_builder_children: list = []
     design_builder_move_targets: dict = {}
     data_room_sources: list = []
+    open_data_room_folder = None
+    data_room_folder_ancestors: list = []
+    data_room_children: list = []
+    data_room_folder_sources: list = []
+    data_room_unfiled_sources: list = []
     if directory_view == "files":
         requested_folder_id = request.args.get("folder")
         if requested_folder_id:
@@ -785,6 +791,46 @@ def show_workspace(project_id):
         # duplicated. Honest about what this is: the pre-Files system's
         # own existing Documents, not the future issued hierarchy.
         data_room_sources = [s for s in workspace.sources if not s.get("removed_at")]
+
+        # CLAUDE-RFP27-TERRITORY-01 (Part 3/5): the real, governed Data
+        # Room hierarchy, once CaseWorkspaceStore.ensure_folder_path/
+        # reconcile_data_room_upload have actually populated it - read-
+        # only navigation (no rename/move/delete controls, unlike Design-
+        # Builder above: this root is externally issued, never reorganized
+        # from inside ARCHIOSK - create_folder's own docstring). Same
+        # `?data_room_folder=<id>` query-param idiom as Design-Builder's
+        # own `?folder=<id>`, deliberately a SEPARATE param so the two
+        # roots' own navigation states never collide when both are
+        # rendered on the same page.
+        requested_data_room_folder_id = request.args.get("data_room_folder")
+        if requested_data_room_folder_id:
+            dr_candidate = next(
+                (
+                    f for f in workspace.folders
+                    if f["id"] == requested_data_room_folder_id and f["root"] == FOLDER_ROOT_DATA_ROOM
+                    and not f.get("removed_at")
+                ),
+                None,
+            )
+            open_data_room_folder = dr_candidate
+        data_room_folder_ancestors = store._folder_path(workspace, open_data_room_folder["id"] if open_data_room_folder else None)
+        open_data_room_folder_id = open_data_room_folder["id"] if open_data_room_folder else None
+        data_room_children = sorted(
+            (
+                f for f in workspace.folders
+                if f["root"] == FOLDER_ROOT_DATA_ROOM and f.get("parent_folder_id") == open_data_room_folder_id
+                and not f.get("removed_at")
+            ),
+            key=lambda f: f["name"].lower(),
+        )
+        data_room_folder_sources = [
+            s for s in data_room_sources if s.get("folder_id") == open_data_room_folder_id
+        ] if open_data_room_folder_id else []
+        # Root-level only: Sources with no folder_id at all - the exact
+        # "existing pre-Files identity, not yet organized" compatibility
+        # set Section 7 originally introduced, now honestly scoped to
+        # ONLY the still-unfiled subset rather than every Source.
+        data_room_unfiled_sources = [s for s in data_room_sources if not s.get("folder_id")]
 
         # Move-target candidates per visible folder row: every OTHER
         # active Design-Builder folder in the project, excluding the
@@ -1611,6 +1657,11 @@ def show_workspace(project_id):
         design_builder_children=design_builder_children,
         design_builder_move_targets=design_builder_move_targets,
         data_room_sources=data_room_sources,
+        open_data_room_folder=open_data_room_folder,
+        data_room_folder_ancestors=data_room_folder_ancestors,
+        data_room_children=data_room_children,
+        data_room_folder_sources=data_room_folder_sources,
+        data_room_unfiled_sources=data_room_unfiled_sources,
         show_new_case_form=show_new_case_form,
         show_continue_from_archive=show_continue_from_archive,
         current_project_context=current_project_context,
@@ -2395,6 +2446,87 @@ def create_folder_route(project_id):
     except CaseWorkspaceError as exc:
         flash(str(exc), "error")
         return _files_redirect(project_id, parent_folder_id)
+
+
+@workspace_bp.route("/projects/<project_id>/workspace/folders/register-paths", methods=["POST"])
+@admin_required
+def register_folder_paths_route(project_id):
+    """CLAUDE-RFP27-TERRITORY-01 (Part 3/4): registers real, meaningful
+    project-territory folders that have ZERO files today - the one case
+    a file upload structurally can never report (browsers never emit a
+    File for an empty directory, so reconcile_data_room_upload_route
+    below can never learn an empty folder exists). Admin-gated - unlike
+    the collaborative "+ New Folder" (create_folder_route above), this
+    is an explicit, deliberate declaration of real external project
+    structure, not ordinary working-folder organization. `root` is an
+    explicit, required human choice (never inferred) - CaseWorkspaceStore.
+    ensure_folder_path is the one place allowed to construct a Data Room
+    Folder; this route is simply its second real caller, alongside
+    reconcile_data_room_upload_route's own per-file directory segments."""
+    _, store, workspace = _load_workspace_or_404(project_id)
+    root = request.form.get("root") or ""
+    if root not in KNOWN_FOLDER_ROOTS:
+        flash("Choose a valid folder root.", "error")
+        return _files_redirect(project_id)
+
+    raw_paths = (request.form.get("paths") or "").splitlines()
+    created = []
+    for line in raw_paths:
+        line = line.strip()
+        if not line:
+            continue
+        store.ensure_folder_path(workspace, root=root, relative_path=line, actor=_reviewer(), governance_log=_log())
+        created.append(line)
+        workspace = store.get(project_id)
+
+    if created:
+        flash(f"Registered {len(created)} folder path(s).", "success")
+    else:
+        flash("No folder paths were given.", "error")
+    return _files_redirect(project_id)
+
+
+@workspace_bp.route("/projects/<project_id>/workspace/data-room/reconcile", methods=["POST"])
+@admin_required
+def reconcile_data_room_route(project_id):
+    """CLAUDE-RFP27-TERRITORY-01 (Part 4): the Data Room discovery/
+    reconciliation action - "local/external project territory changes
+    -> ARCHIOSK discovers the change." Deterministic, explicit-Refresh
+    (never automatic background polling/filesystem-watching - the
+    governing prompt's own "prefer deterministic, read-only discovery
+    before aggressive automation"), reusing the exact same browser
+    folder-select convention `portal.upload`'s own folder mode already
+    established (files renamed to their own webkitRelativePath client-
+    side before submission - see templates/upload.html's own script -
+    so relative_paths is derived the same way portal.py's own folder-
+    upload handler already derives it: [f.filename for f in files]).
+    Admin-gated: registers real project evidence and can relink existing
+    Source identity, a consequential, project-wide action, not ordinary
+    per-Document housekeeping."""
+    _, store, workspace = _load_workspace_or_404(project_id)
+    files = [f for f in request.files.getlist("folder_files") if f and f.filename]
+    if not files:
+        flash("No folder was selected.", "error")
+        return _files_redirect(project_id)
+    relative_paths = [f.filename for f in files]
+
+    try:
+        results = reconcile_data_room_upload(
+            files, relative_paths, project_id, current_app,
+            actor=_reviewer(), role=session.get("role"),
+        )
+    except UploadError as exc:
+        flash(str(exc), "error")
+        return _files_redirect(project_id)
+
+    added = [r for r in results if r["status"] == "added"]
+    relinked = [r for r in results if r["status"] == "relinked"]
+    skipped = [r for r in results if r["status"] == "skipped"]
+    summary = f"Data Room reconciled: {len(added)} added, {len(relinked)} relinked (not duplicated), {len(skipped)} skipped."
+    flash(summary, "success" if (added or relinked) else "error")
+    if skipped:
+        flash("Skipped: " + "; ".join(f'{r["filename"]} ({r["reason"]})' for r in skipped[:5]), "error")
+    return _files_redirect(project_id)
 
 
 @workspace_bp.route("/projects/<project_id>/workspace/organize/create-structure", methods=["POST"])

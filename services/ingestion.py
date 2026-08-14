@@ -18,6 +18,7 @@ from werkzeug.utils import secure_filename
 
 from services.bhive_parser import BHiveParser, ParsedDocument, ParserError
 from services.case_workspace import (
+    FOLDER_ROOT_DATA_ROOM,
     SOURCE_KIND_PROJECT_DOCUMENT,
     SOURCE_ORIGIN_TYPE_UPLOAD,
     CaseWorkspaceStore,
@@ -480,3 +481,151 @@ def ingest_folder_upload(
         results.append({"filename": filename, "relative_path": relative_path, "status": "added", "reason": None})
 
     return founding_document, results
+
+
+def reconcile_data_room_upload(
+    files: list[FileStorage],
+    relative_paths: list[str],
+    project_id: str,
+    app: Flask,
+    actor: str | None = None,
+    role: str | None = None,
+) -> list[dict]:
+    """
+    CLAUDE-RFP27-TERRITORY-01: the Data Room discovery/reconciliation
+    mechanism (Part 4 of the governing prompt) - reconciles a real,
+    browser-selected folder (the SAME `webkitdirectory` shape
+    ingest_folder_upload above already parses: files[i]/relative_paths[i]
+    are parallel, relative_paths[i] a path local to the uploader's own
+    machine, e.g. "01 RFP Documents/01.2 Addenda/Addendum-01.pdf") against
+    an EXISTING project's already-registered Sources, rather than
+    creating a new project the way ingest_folder_upload does.
+
+    Deliberately read-only/additive, never destructive (Part 4's own
+    "do not auto-delete canonical records when a filesystem path
+    disappears" - a file present in a PRIOR scan but absent from this one
+    is simply not mentioned in the results; nothing about it is touched):
+
+    - Every directory segment in relative_paths becomes a real, governed
+      Folder (root=FOLDER_ROOT_DATA_ROOM, via CaseWorkspaceStore.
+      ensure_folder_path - the one place allowed to construct that root),
+      created idempotently - re-running this against an unchanged folder
+      is a safe no-op, never a duplicate.
+    - A file whose content hash EXACTLY matches an already-registered
+      Source (anywhere in the project, not only ones already in a
+      Folder) is treated as the SAME Source, just now known to live at
+      this real path - relinked (CaseWorkspaceStore.set_source_folder),
+      never duplicated. This is "preserve existing Source identity
+      wherever safely possible... do not create duplicate canonical
+      Sources merely because earlier files were uploaded from a flat
+      ad-hoc location," the governing prompt's own explicit Part 2
+      requirement.
+    - A genuinely new eligible file is registered exactly like
+      ingest_folder_upload's own non-founding files (add_source, real
+      BHiveParser._extract, register_plain_text_structure) - so it is
+      real, searchable project evidence, not a filename-only stub -
+      with folder_id set to its resolved Folder.
+    - An ineligible extension, oversize file, or unreadable content is
+      reported skipped with a reason, exactly like ingest_folder_upload,
+      never silently dropped.
+
+    Returns one dict per file: {"filename", "relative_path", "status":
+    "added" | "relinked" | "skipped", "reason", "source_id"}.
+    """
+    store = CaseWorkspaceStore(app.config["REGISTRY_STORE_PATH"])
+    workspace = store.get(project_id)
+    if workspace is None:
+        raise UploadError(f"Project {project_id} was not found.")
+
+    governance_log = get_governance_log(app)
+    allowed = app.config["ALLOWED_UPLOAD_EXTENSIONS"]
+    max_bytes = app.config.get("MAX_CONTENT_LENGTH")
+    sources_dir = Path(app.config["REGISTRY_STORE_PATH"]) / "workspace_sources" / project_id
+    sources_dir.mkdir(parents=True, exist_ok=True)
+
+    parser = BHiveParser(
+        anthropic_api_key=app.config.get("ANTHROPIC_API_KEY"),
+        model=app.config.get("ANTHROPIC_MODEL"),
+    )
+
+    # Re-fetched fresh after every mutating store call below (ensure_folder_
+    # path/set_source_folder/add_source all call self.save internally) so
+    # each iteration's hash-dedup check sees every Source registered by an
+    # EARLIER iteration in this same reconciliation run too, not just the
+    # ones that existed before it started.
+    results: list[dict] = []
+    for file_storage, relative_path in zip(files, relative_paths):
+        if not relative_path:
+            results.append({"filename": "(unnamed file)", "relative_path": relative_path, "status": "skipped", "reason": "No filename.", "source_id": None})
+            continue
+
+        rel = Path(relative_path.replace("\\", "/"))
+        filename = rel.name
+        directory = "/".join(rel.parts[:-1])
+
+        ext = rel.suffix.lower()
+        if ext not in allowed:
+            results.append({
+                "filename": filename, "relative_path": relative_path, "status": "skipped",
+                "reason": f"Unsupported file type '{ext}'.", "source_id": None,
+            })
+            continue
+
+        raw_bytes = file_storage.read()
+        if max_bytes and len(raw_bytes) > max_bytes:
+            results.append({
+                "filename": filename, "relative_path": relative_path, "status": "skipped",
+                "reason": f"File exceeds the {max_bytes // (1024 * 1024)}MB size limit.", "source_id": None,
+            })
+            continue
+
+        file_hash = hashlib.sha256(raw_bytes).hexdigest()
+        workspace = store.get(project_id)
+        folder_id = store.ensure_folder_path(
+            workspace, root=FOLDER_ROOT_DATA_ROOM, relative_path=directory,
+            actor=actor or _DEFAULT_ACTOR, governance_log=governance_log,
+        ) if directory else None
+
+        workspace = store.get(project_id)
+        existing = next((s for s in workspace.sources if s.get("file_hash") == file_hash), None)
+        if existing is not None:
+            store.set_source_folder(
+                workspace, source_id=existing["id"], folder_id=folder_id,
+                actor=actor or _DEFAULT_ACTOR, governance_log=governance_log,
+            )
+            results.append({
+                "filename": filename, "relative_path": relative_path, "status": "relinked",
+                "reason": f"Byte-identical to already-registered Source \"{existing['name']}\" - relinked, not duplicated.",
+                "source_id": existing["id"],
+            })
+            continue
+
+        safe_name = secure_filename(filename)
+        stored_path = sources_dir / f"{uuid.uuid4().hex}_{safe_name}"
+        stored_path.write_bytes(raw_bytes)
+
+        source = store.add_source(
+            workspace, name=safe_name, file_path=str(stored_path),
+            kind=SOURCE_KIND_PROJECT_DOCUMENT, file_hash=file_hash,
+            origin_type=SOURCE_ORIGIN_TYPE_UPLOAD, origin_reference=relative_path,
+            folder_id=folder_id, governance_log=governance_log, actor=actor or _DEFAULT_ACTOR,
+        )
+
+        try:
+            text = parser._extract(raw_bytes, filename)  # noqa: SLF001 - same shared stage ingest_upload/ingest_folder_upload's own parse() uses internally
+        except ParserError as exc:
+            results.append({
+                "filename": filename, "relative_path": relative_path, "status": "skipped",
+                "reason": f"Registered as a Source, but its content could not be extracted: {exc}",
+                "source_id": source["id"],
+            })
+            continue
+
+        store.register_plain_text_structure(
+            workspace, source_id=source["id"], text=text,
+            extractor_version=parser.__class__.__name__, actor=actor or _DEFAULT_ACTOR,
+            governance_log=governance_log,
+        )
+        results.append({"filename": filename, "relative_path": relative_path, "status": "added", "reason": None, "source_id": source["id"]})
+
+    return results

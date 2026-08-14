@@ -2314,29 +2314,103 @@
                     Controlled source material issued or received from an external
                     authority, client, owner, procurement body, or consultant.
                     Design-Builder Workspace's own folder controls cannot reach or
-                    reorganize this root - its real issued hierarchy is imported
-                    through a separate, deliberate, governed action, not yet part of
-                    this stage.
+                    reorganize this root - real hierarchy here comes only from
+                    Data Room reconciliation (CLAUDE-RFP27-TERRITORY-01), a
+                    deliberate, admin-gated, governed action, never ordinary
+                    folder editing. Read-only navigation - no rename/move/delete.
                 </p>
-                {% if data_room_sources %}
+
+                {# In-content breadcrumb - same DERIVED-never-stored idiom as
+                   Design-Builder's own, below, just against the Data Room
+                   root and its own separate ?data_room_folder= param. #}
+                <p class="files-breadcrumb" data-ui-ref="display.files.data-room.breadcrumb">
+                    <a href="{{ url_for('workspace.show_workspace', project_id=project_id, view='files') }}">Data Room</a>
+                    {% for ancestor in data_room_folder_ancestors %}
+                    &rsaquo; <a href="{{ url_for('workspace.show_workspace', project_id=project_id, view='files', data_room_folder=ancestor.id) }}">{{ ancestor.name }}</a>
+                    {% endfor %}
+                </p>
+
+                {% if data_room_children or (open_data_room_folder and data_room_folder_sources) %}
+                <ul class="files-folder-list" data-ui-ref="display.files.data-room.folder-list">
+                    {% for folder in data_room_children %}
+                    <li class="files-folder-row" data-ui-ref="display.files.data-room.folder-row">
+                        <a href="{{ url_for('workspace.show_workspace', project_id=project_id, view='files', data_room_folder=folder.id) }}">&#128193; {{ folder.name }}</a>
+                    </li>
+                    {% endfor %}
+                    {% if open_data_room_folder %}
+                    {% for s in data_room_folder_sources %}
+                    <li class="source-item">
+                        <a href="{{ url_for('workspace.show_workspace', project_id=project_id, source=s.id) }}">{{ s.name }}</a>
+                    </li>
+                    {% endfor %}
+                    {% endif %}
+                </ul>
+                {% elif open_data_room_folder %}
+                <p class="pane-note" data-ui-ref="display.files.data-room.folder-empty" style="margin-top:0.6rem;">
+                    This folder is empty.
+                </p>
+                {% endif %}
+
+                {% if not open_data_room_folder %}
+                {% if data_room_unfiled_sources %}
                 <p class="pane-note" style="margin-top:0.6rem;">
-                    Existing Documents, shown here under their existing (pre-Files)
-                    identity - not yet organized into the issued hierarchy. Open one
-                    below, or from Documents in Lists.
+                    Existing Documents not yet placed in the Data Room hierarchy above -
+                    open one below, or from Documents in Lists.
                 </p>
                 <ul class="source-list" data-ui-ref="display.files.data-room.compatibility-list">
-                    {% for s in data_room_sources %}
+                    {% for s in data_room_unfiled_sources %}
                     <li class="source-item">
                         <a href="{{ url_for('workspace.show_workspace', project_id=project_id, source=s.id) }}">{{ s.name }}</a>
                     </li>
                     {% endfor %}
                 </ul>
-                {% else %}
+                {% elif not data_room_children %}
                 <p class="pane-note" data-ui-ref="display.files.data-room.empty" style="margin-top:0.6rem;">
                     No Documents yet. Documents added to this Project will appear
                     here, honestly labeled, until the Data Room's own issued
-                    hierarchy is imported in a future stage.
+                    hierarchy is reconciled.
                 </p>
+                {% endif %}
+
+                {% if is_admin %}
+                {# CLAUDE-RFP27-TERRITORY-01: both admin actions share ONE
+                   collapsed disclosure rather than two - real-browser
+                   click-reachability testing (this repo's own established
+                   META-T01 precedent) found that stacking two separate
+                   always-visible <summary> lines here pushed Design-
+                   Builder's own folder-menu triggers below a fixed
+                   viewport further down the page; one combined disclosure
+                   keeps the added height to a single line when collapsed. #}
+                {% call macros.subdisclosure('Data Room admin actions', ui_ref='display.files.data-room.admin-actions') %}
+                    <p class="pane-note">
+                        Select the authoritative Data Room folder on your own machine.
+                        Every eligible file inside it (subfolders included) is compared
+                        against what's already registered - a byte-identical match is
+                        relinked to its existing Source, never duplicated; a genuinely
+                        new file is registered and its content ingested as real
+                        project evidence. Nothing already registered is ever removed.
+                    </p>
+                    <form method="post" enctype="multipart/form-data" action="{{ url_for('workspace.reconcile_data_room_route', project_id=project_id) }}" data-ui-ref="display.files.data-room.reconcile.form">
+                        <input type="file" name="folder_files" webkitdirectory directory multiple required data-ui-ref="display.files.data-room.reconcile.picker">
+                        <button type="submit" data-ui-ref="display.files.data-room.reconcile.submit">Reconcile</button>
+                    </form>
+                    <p class="pane-note" style="margin-top:0.8rem;">
+                        For real project territory that has no files yet (a file upload
+                        can never report an empty folder) - one relative path per line,
+                        e.g. "01_TECHNICAL_SUBMISSION/01_Design_Submission_(Part_B)/Architectural".
+                    </p>
+                    <form method="post" action="{{ url_for('workspace.register_folder_paths_route', project_id=project_id) }}" data-ui-ref="display.files.data-room.register-paths.form">
+                        <label class="operating-environment-option">
+                            <input type="radio" name="root" value="data_room" checked> Data Room
+                        </label>
+                        <label class="operating-environment-option">
+                            <input type="radio" name="root" value="design_builder"> Design-Builder Workspace
+                        </label>
+                        <textarea name="paths" placeholder="One relative folder path per line" required data-ui-ref="display.files.data-room.register-paths.paths"></textarea>
+                        <button type="submit" data-ui-ref="display.files.data-room.register-paths.submit">Register</button>
+                    </form>
+                {% endcall %}
+                {% endif %}
                 {% endif %}
             </section>
 
