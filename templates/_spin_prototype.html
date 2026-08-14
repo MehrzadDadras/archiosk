@@ -1,0 +1,150 @@
+{% import "_macros.html" as macros %}
+{# ============================================================================
+   CLAUDE-SPIN-00A - Spin container comparison prototype.
+
+   SCOPE BOUNDARY (see the governing prompt's own "Important scope boundary"
+   section - repeated here so this stays legible on its own, without needing
+   the prompt to hand): this is a container and interaction-selection
+   exercise ONLY. Every toggle below is local client-side prototype state
+   (static/js/spin_prototype.js) - it never calls a route, never filters
+   real evidence, never persists, never changes `operating_environment` or
+   any other real project fact. `spin_disciplines` (routes/workspace.py's
+   own SPIN_PROTOTYPE_DISCIPLINES) is deliberately noncanonical placeholder
+   data, never written into this or any Project.
+
+   Three alternatives (A/B/C) render together, INCLUDING all three variants
+   in the DOM at once, `hidden` except the one currently selected by the
+   dev-only switcher immediately below - this is the "temporary
+   development-only online selector" the governing prompt asks for. Remove
+   this whole file (and its Toolbox launcher/route flag) once the Product
+   Owner has chosen one alternative and SPIN-01 begins.
+
+   All three variants are built from the SAME shared primitives
+   (macros.tool_pane, .tool-control-row, .tool-toggle, .review-state-badge,
+   .active-set-summary, .gauge-slot - see static/css/main.css's own
+   "CLAUDE-SPIN-00A" section) - they differ in composition/grouping, not in
+   a separate CSS world each. #}
+<div class="spin-variant-switcher" data-ui-ref="spin.dev-switcher" role="group" aria-label="Spin container alternative (development comparison only)">
+    <span class="spin-variant-switcher-label">DEV COMPARISON</span>
+    <button type="button" class="spin-variant-switcher-btn" data-spin-switch="a" aria-pressed="true" data-ui-ref="spin.dev-switcher.a">Spin A</button>
+    <button type="button" class="spin-variant-switcher-btn" data-spin-switch="b" aria-pressed="false" data-ui-ref="spin.dev-switcher.b">Spin B</button>
+    <button type="button" class="spin-variant-switcher-btn" data-spin-switch="c" aria-pressed="false" data-ui-ref="spin.dev-switcher.c">Spin C</button>
+</div>
+
+{# ---------------- Alternative A - Compact Control Stack -------------------
+   The most space-efficient arrangement: one flat, scrollable list of
+   .tool-control-row, a single status badge, a single active-set summary,
+   a small reserved Pulse slot. Tests Spin as a frequent working tool
+   beside drawings/documents - minimal vertical footprint. #}
+<div class="spin-variant spin-variant-a" data-spin-variant="a" data-ui-ref="spin.variant-a">
+    {% call macros.tool_pane("Spin — Compact Control Stack", ui_ref="spin.variant-a.pane") %}
+        <p class="pane-note">
+            Discipline rows (prototype labels, not this Project's own data). Toggle any
+            discipline directly - granularity below Discipline (Division/Source/Revision)
+            is a future refinement, not shown here.
+        </p>
+        <span class="review-state-badge review-state-baseline" data-spin-status data-ui-ref="spin.variant-a.status">Baseline</span>
+        <div class="spin-global-controls">
+            <button type="button" class="btn btn-ghost" data-spin-action="all-on" data-ui-ref="spin.variant-a.all-on">All ON</button>
+            <button type="button" class="btn btn-ghost" data-spin-action="all-off" data-ui-ref="spin.variant-a.all-off">All OFF</button>
+            <button type="button" class="btn btn-ghost" data-spin-action="reset" data-ui-ref="spin.variant-a.reset">Return to Baseline</button>
+        </div>
+        <div class="active-set-summary">
+            <p class="active-set-summary-label">Active Set</p>
+            <p class="active-set-summary-value" data-spin-summary data-ui-ref="spin.variant-a.summary">None engaged</p>
+        </div>
+        <div class="spin-discipline-list" data-spin-list>
+            {% for d in spin_disciplines %}
+            <div class="tool-control-row" data-spin-id="{{ loop.index0 }}" data-spin-name="{{ d }}">
+                <span class="tool-control-row-label">{{ d }}</span>
+                <button type="button" class="tool-toggle" aria-pressed="false" data-spin-toggle data-ui-ref="spin.variant-a.toggle">OFF</button>
+            </div>
+            {% endfor %}
+        </div>
+        <div class="gauge-slot" data-ui-ref="spin.variant-a.pulse-slot">
+            <span class="gauge-slot-title">Project Pulse</span>
+            Future analytical layer
+        </div>
+    {% endcall %}
+</div>
+
+{# ---------------- Alternative B - Instrument Panel -------------------------
+   A clearer Baseline/Active split: a prominent status strip up top, rows
+   grouped into "Engaged"/"Not Engaged" (moved between the two groups as
+   they're toggled, not just recolored in place), a larger Pulse
+   reservation - still compact, not a decorative cockpit. #}
+<div class="spin-variant spin-variant-b" data-spin-variant="b" data-ui-ref="spin.variant-b" hidden>
+    {% call macros.tool_pane("Spin — Instrument Panel", ui_ref="spin.variant-b.pane") %}
+        <div class="spin-status-strip">
+            <span class="review-state-badge review-state-baseline" data-spin-status data-ui-ref="spin.variant-b.status">Baseline</span>
+            <div class="active-set-summary" style="margin:0;">
+                <p class="active-set-summary-label">Active Set</p>
+                <p class="active-set-summary-value" data-spin-summary data-ui-ref="spin.variant-b.summary">None engaged</p>
+            </div>
+        </div>
+        <div class="spin-global-controls">
+            <button type="button" class="btn btn-ghost" data-spin-action="all-on" data-ui-ref="spin.variant-b.all-on">All ON</button>
+            <button type="button" class="btn btn-ghost" data-spin-action="all-off" data-ui-ref="spin.variant-b.all-off">All OFF</button>
+            <button type="button" class="btn btn-ghost" data-spin-action="reset" data-ui-ref="spin.variant-b.reset">Return to Baseline</button>
+        </div>
+        <p class="workspace-pane-label">Engaged</p>
+        <div class="spin-discipline-list" data-spin-list="engaged" data-ui-ref="spin.variant-b.engaged-list">
+            <p class="pane-note" data-spin-empty-note>None yet.</p>
+        </div>
+        <p class="workspace-pane-label" style="margin-top:var(--space-5);">Not Engaged</p>
+        <div class="spin-discipline-list" data-spin-list="disengaged" data-ui-ref="spin.variant-b.disengaged-list">
+            {% for d in spin_disciplines %}
+            <div class="tool-control-row" data-spin-id="{{ loop.index0 }}" data-spin-name="{{ d }}">
+                <span class="tool-control-row-label">{{ d }}</span>
+                <button type="button" class="tool-toggle" aria-pressed="false" data-spin-toggle data-ui-ref="spin.variant-b.toggle">OFF</button>
+            </div>
+            {% endfor %}
+        </div>
+        <div class="gauge-slot" data-ui-ref="spin.variant-b.pulse-slot">
+            <span class="gauge-slot-title">Project Pulse / PM Situational Gauge</span>
+            Future analytical layer
+        </div>
+    {% endcall %}
+</div>
+
+{# ---------------- Alternative C - Progressive Engagement -------------------
+   Makes the SEQUENCE of engagement legible: each row carries a small
+   index box showing its engagement order (blank until engaged), and a
+   dedicated "Sequence" summary line reads as an ordered chain
+   (Architecture -> Structural -> ...), distinct from A/B's unordered "+"
+   summary. Any discipline can still be toggled directly, in any order -
+   nothing here enforces a required sequence. #}
+<div class="spin-variant spin-variant-c" data-spin-variant="c" data-ui-ref="spin.variant-c" hidden>
+    {% call macros.tool_pane("Spin — Progressive Engagement", ui_ref="spin.variant-c.pane") %}
+        <p class="pane-note">
+            Reintroduce disciplines one at a time to see where a mismatch first
+            appears (later work - not implemented yet). Direct ON/OFF stays available
+            for any discipline, in any order.
+        </p>
+        <span class="review-state-badge review-state-baseline" data-spin-status data-ui-ref="spin.variant-c.status">Baseline</span>
+        <div class="spin-global-controls">
+            <button type="button" class="btn btn-ghost" data-spin-action="all-on" data-ui-ref="spin.variant-c.all-on">All ON</button>
+            <button type="button" class="btn btn-ghost" data-spin-action="all-off" data-ui-ref="spin.variant-c.all-off">All OFF</button>
+            <button type="button" class="btn btn-ghost" data-spin-action="reset" data-ui-ref="spin.variant-c.reset">Return to Baseline</button>
+        </div>
+        <div class="active-set-summary">
+            <p class="active-set-summary-label">Sequence</p>
+            <p class="active-set-summary-value" data-spin-sequence data-ui-ref="spin.variant-c.sequence">None engaged</p>
+        </div>
+        <div class="spin-discipline-list" data-spin-list>
+            {% for d in spin_disciplines %}
+            <div class="tool-control-row" data-spin-id="{{ loop.index0 }}" data-spin-name="{{ d }}" data-engaged="false">
+                <span class="spin-sequence-row">
+                    <span class="spin-sequence-index" data-spin-index aria-hidden="true">&ndash;</span>
+                    <span class="tool-control-row-label">{{ d }}</span>
+                </span>
+                <button type="button" class="tool-toggle" aria-pressed="false" data-spin-toggle data-ui-ref="spin.variant-c.toggle">OFF</button>
+            </div>
+            {% endfor %}
+        </div>
+        <div class="gauge-slot" data-ui-ref="spin.variant-c.pulse-slot">
+            <span class="gauge-slot-title">Project Pulse</span>
+            Future analytical layer &mdash; may later show at which engagement step a mismatch appeared
+        </div>
+    {% endcall %}
+</div>

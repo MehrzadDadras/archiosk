@@ -122,6 +122,19 @@ from models import User
 
 workspace_bp = Blueprint("workspace", __name__)
 
+# CLAUDE-SPIN-00A: representative, deliberately noncanonical prototype
+# discipline labels for the Spin container comparison exercise only -
+# never written into any real project's own data, never treated as a
+# governed concept (contrast with the real, stored `operating_environment`
+# or `participant` roles elsewhere in this module). Kept here, at the
+# route layer, rather than in services/case_workspace.py, specifically so
+# it never reads as part of the domain model.
+SPIN_PROTOTYPE_DISCIPLINES = (
+    "Architecture", "Structural", "Mechanical", "Electrical", "Plumbing",
+    "Civil", "Landscape", "Interior Design", "Fire Protection", "Security",
+    "AV / IT", "Specifications", "Commissioning",
+)
+
 ALLOWED_DRAWING_EXTENSIONS = {".png", ".jpg", ".jpeg"}
 # CLAUDE-MM3: .xlsx added here (Add Documents, an existing-project Source),
 # deliberately NOT to ingestion.py's own ALLOWED_UPLOAD_EXTENSIONS (project
@@ -541,6 +554,14 @@ def show_workspace(project_id):
     selected_source = next(
         (s for s in workspace.sources if s["id"] == selected_source_id), None,
     ) if selected_source_id else None
+
+    # CLAUDE-SPIN-00A: an explicit, session-less, unpersisted request flag -
+    # deliberately NOT routed through _set_persisted_selection below (this
+    # is a container/interaction-selection prototype, not a real project
+    # selection; nothing here should survive as "professional context").
+    # Reuses the exact same already-authorized `document`/`workspace`
+    # this route already loaded - no new authorization surface.
+    spin_mode = request.args.get("spin") == "1"
 
     # CLAUDE-POSTCAMEL-CA1B (Section 2/3): same "?<id> selection, resolved
     # only against THIS already-authorized project's own workspace list,
@@ -1758,6 +1779,8 @@ def show_workspace(project_id):
             for c in visible_cases
         ]),
         panel_only=panel_only,
+        spin_mode=spin_mode,
+        spin_disciplines=SPIN_PROTOTYPE_DISCIPLINES,
     )
 
 

@@ -504,8 +504,41 @@ assertion before ever shipping, not discovered live.
 | `toolbox.tags.leaf` | `<a>`/`<span>` (pattern, relocated from `lists.project.tags.leaf`) | quoted passage (truncated) | Real navigation to the same source URL — unchanged | Same as workspace access | active |
 | `toolbox.tags.remove` | `<button>` in a `<form>` (relocated from `lists.project.tags.remove`) | "Remove" | `fetch()` POST to `remove_tag_occurrence_route`, live-patches counts/DOM without reload — unchanged | Same as workspace access | active |
 | `toolbox.tags.empty` | `<p>` (relocated from `lists.project.tags.empty`) | "No Tags yet." | Empty-state message | Same as workspace access | active |
+| `toolbox.spin-launcher` (new, CLAUDE-SPIN-00A) | `<summary>` (`macros.subdisclosure`) | "Spin — Evidence Isolation (prototype)" | Collapsed by default; contains `.open` only — a prototype-stage entry point, see the Spin (prototype) section below | Same as workspace access | active |
+| `toolbox.spin-launcher.open` (new, CLAUDE-SPIN-00A) | `<a>` | "Open Spin" | Navigates to `?spin=1` on this same authorized workspace URL — no new authorization surface | Same as workspace access | active |
 | `toolbox.project-admin` | `<summary>` (`macros.subdisclosure`, new, CLAUDE-GO-DNA-01) | "Project Administration" | Collapsed by default; contains `.remove-project` only - a project-lifecycle/governed action, not file-territory, so it moved here rather than staying among Lists' own file-adding controls | **Owner or admin** — `is_project_owner or is_admin` (the `{% if %}` gate itself, not merely the route) | active |
 | `toolbox.project-admin.remove-project` | `<button>` in a `<form>` (relocated from `lists.project.tools.remove-project`) | "Remove Project" | Same `remove_project_route` POST (Approval-Gate `confirm=yes\|no` vocabulary), unchanged | **Owner or admin** — `is_project_owner or is_admin` | active |
+
+## Spin (prototype) (`templates/_spin_prototype.html` — CLAUDE-SPIN-00A, new surface)
+
+Container/interaction-selection prototype only — no real evidence filtering, no persistence, never touches `operating_environment` or any other real project fact. `spin.dev-switcher` and everything under it is explicitly temporary: removable wholesale (this file, its Toolbox launcher above, and the `?spin=1` route flag) once the Product Owner has chosen one alternative and SPIN-01 begins. All three variants below share the same primitives (`macros.tool_pane`, `.tool-control-row`, `.tool-toggle`, `.review-state-badge`, `.active-set-summary`, `.gauge-slot`); the `.toggle`/`.status`/`.summary`/`.pulse-slot`/etc. sub-refs repeat once per variant (pattern), not because they're distinct controls.
+
+| Reference | Element | Current behavior | Auth notes | Status |
+|---|---|---|---|---|
+| `spin.dev-switcher` | `<div role="group">` | "DEV COMPARISON" + three buttons | Client-side only — shows/hides the three `.spin-variant` containers below; not part of permanent navigation | Same as workspace access | active |
+| `spin.dev-switcher.a`, `spin.dev-switcher.b`, `spin.dev-switcher.c` | `<button aria-pressed>` | "Spin A" / "Spin B" / "Spin C" | Selects which variant is visible; `aria-pressed` follows the current selection | Same as workspace access | active |
+| `spin.variant-a` | `<div>` | (wrapper, no visible label) | Outer container for Alternative A; `hidden` unless the dev switcher above has it selected | Same as workspace access | active |
+| `spin.variant-a.pane` | `<section>` (`macros.tool_pane`) | "Spin — Compact Control Stack" | Alternative A: one flat scrollable discipline list, minimal chrome | Same as workspace access | active |
+| `spin.variant-a.status` | `.review-state-badge` (pattern) | "Baseline" / "Spin Active" | Client-side only — reflects whether any discipline is currently toggled ON | Same as workspace access | active |
+| `spin.variant-a.all-on`, `spin.variant-a.all-off`, `spin.variant-a.reset` | `<button>` | "All ON" / "All OFF" / "Return to Baseline" | Client-side prototype state only | Same as workspace access | active |
+| `spin.variant-a.summary` | `<p>` | active-set text (e.g. "Architecture + Structural") | Client-side, updates immediately on toggle | Same as workspace access | active |
+| `spin.variant-a.toggle` | `<button aria-pressed>` (pattern, one per discipline) | "ON" / "OFF" | Client-side per-discipline engagement toggle | Same as workspace access | active |
+| `spin.variant-a.pulse-slot` | `.gauge-slot` | "Project Pulse — Future analytical layer" | Neutral placeholder only — no fabricated score | Same as workspace access | active |
+| `spin.variant-b` | `<div>` | (wrapper, no visible label) | Outer container for Alternative B; `hidden` unless the dev switcher above has it selected | Same as workspace access | active |
+| `spin.variant-b.pane` | `<section>` (`macros.tool_pane`) | "Spin — Instrument Panel" | Alternative B: prominent status strip, disciplines physically grouped into Engaged/Not Engaged, larger Pulse reservation | Same as workspace access | active |
+| `spin.variant-b.status` | `.review-state-badge` (pattern) | "Baseline" / "Spin Active" | Same as `spin.variant-a.status` | Same as workspace access | active |
+| `spin.variant-b.summary` | `<p>` | active-set text | Same as `spin.variant-a.summary` | Same as workspace access | active |
+| `spin.variant-b.all-on`, `spin.variant-b.all-off`, `spin.variant-b.reset` | `<button>` | Same as Alternative A's own | Client-side prototype state only | Same as workspace access | active |
+| `spin.variant-b.engaged-list`, `spin.variant-b.disengaged-list` | `<div>` | Two sub-lists | Rows (`spin.variant-b.toggle`, pattern) move between these two containers on toggle, not just recolored in place | Same as workspace access | active |
+| `spin.variant-b.toggle` | `<button aria-pressed>` (pattern) | "ON" / "OFF" | Same as `spin.variant-a.toggle` | Same as workspace access | active |
+| `spin.variant-b.pulse-slot` | `.gauge-slot` | "Project Pulse / PM Situational Gauge" | Same neutral-placeholder rule as Alternative A | Same as workspace access | active |
+| `spin.variant-c` | `<div>` | (wrapper, no visible label) | Outer container for Alternative C; `hidden` unless the dev switcher above has it selected | Same as workspace access | active |
+| `spin.variant-c.pane` | `<section>` (`macros.tool_pane`) | "Spin — Progressive Engagement" | Alternative C: each row carries a sequence-order index; a dedicated ordered "Sequence" summary | Same as workspace access | active |
+| `spin.variant-c.status` | `.review-state-badge` (pattern) | "Baseline" / "Spin Active" | Same as `spin.variant-a.status` | Same as workspace access | active |
+| `spin.variant-c.all-on`, `spin.variant-c.all-off`, `spin.variant-c.reset` | `<button>` | Same as Alternative A's own | Client-side prototype state only | Same as workspace access | active |
+| `spin.variant-c.sequence` | `<p>` | ordered chain text (e.g. "Architecture → Structural") | Reflects engagement ORDER, distinct from A/B's unordered "+" summary | Same as workspace access | active |
+| `spin.variant-c.toggle` | `<button aria-pressed>` (pattern) | "ON" / "OFF" | Same as `spin.variant-a.toggle`; still direct per-discipline control, in any order | Same as workspace access | active |
+| `spin.variant-c.pulse-slot` | `.gauge-slot` | "Project Pulse — … may later show at which engagement step a mismatch appeared" | Same neutral-placeholder rule as Alternative A | Same as workspace access | active |
 
 ## Right column: Toolbox above Eye (`templates/base.html`, CLAUDE-P40-EYE1)
 

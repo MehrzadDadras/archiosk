@@ -1651,6 +1651,12 @@
        here as well never double-mounts anything. #}
     <script src="{{ url_for('static', filename='js/drawing_image_viewer.js') }}?v={{ static_version }}"></script>
     <script src="{{ url_for('static', filename='js/eye_pane.js') }}?v={{ static_version }}"></script>
+    {# CLAUDE-SPIN-00A: same "available wherever the shell is, mount is a
+       no-op when its own markup isn't present" idiom as the two scripts
+       above - spin_prototype.js itself no-ops immediately unless
+       `.spin-variant-switcher` actually exists in the DOM (only true
+       when ?spin=1 rendered `_spin_prototype.html`). #}
+    <script src="{{ url_for('static', filename='js/spin_prototype.js') }}?v={{ static_version }}"></script>
     {% endif %}
     <script nonce="{{ csp_nonce }}">
         // CLAUDE-P40-E3A / CLAUDE-LEFTPANEL-CALM-01: the recursive Lists

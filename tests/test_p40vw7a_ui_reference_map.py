@@ -71,6 +71,12 @@ _CONFIRM_DELETE_FOLDER_HTML_PATH = _REPO_ROOT / "templates" / "confirm_delete_fo
 # documents - added to the scanned list from the start, not left as a
 # second silent blind spot.
 _OPERATIONS_HTML_PATH = _REPO_ROOT / "templates" / "operations.html"
+# CLAUDE-SPIN-00A: _spin_prototype.html is included (not extended) by
+# case_workspace.html's own {% block toolbox %} - its own refs are real
+# rendered markup (when ?spin=1), same as any other template here, just
+# never inlined into case_workspace.html's own source text for the
+# _DATA_REF_RE scan above to find without this separate path.
+_SPIN_PROTOTYPE_HTML_PATH = _REPO_ROOT / "templates" / "_spin_prototype.html"
 _MAIN_CSS_PATH = _REPO_ROOT / "static" / "css" / "main.css"
 _REFERENCE_MAP_PATH = _REPO_ROOT / "UI_REFERENCE_MAP.md"
 
@@ -167,6 +173,7 @@ def _all_template_refs() -> set[str]:
         _SECURITY_DEPARTMENT_HTML_PATH, _PROJECTS_HTML_PATH, _REMOVED_PROJECTS_HTML_PATH, _APP_PY_PATH,
         _CONFIRM_DELETE_FOLDER_HTML_PATH, _OPERATIONS_HTML_PATH,
         _LANDING_HTML_PATH, _EXPLORE_HTML_PATH, _START_TRIAL_HTML_PATH,
+        _SPIN_PROTOTYPE_HTML_PATH,
     ):
         text = path.read_text(encoding="utf-8")
         refs |= set(_DATA_REF_RE.findall(text))
@@ -241,7 +248,7 @@ class RegistryConsistencyTests(unittest.TestCase):
                 ref,
                 r"^(menu|lists|display|toolbox|chat|eye|shell|gateway|auth|upload|errors|"
                 r"security|operations|projects-directory|removed-projects|"
-                r"landing|explore|start-trial)\.[a-z0-9._\-]+$",
+                r"landing|explore|start-trial|spin)\.[a-z0-9._\-]+$",
                 ref,
             )
 

@@ -127,6 +127,24 @@
 </details>
 {% endmacro %}
 
+{# -- tool_pane ---------------------------------------------------------
+   CLAUDE-SPIN-00A: the minimum reusable equivalent of a Toolbox
+   "section" - every existing Toolbox pane (Investigation & Findings,
+   Document, Project Intelligence) hand-writes its own
+   a `<section class="workspace-pane">` plus its own `<h3>` heading and
+   an optional data-ui-ref attribute, hand-written every time; this
+   macro is that pattern extracted, introduced here
+   for Spin's own use rather than retrofitting the existing panes
+   (which stay exactly as they are - no forced migration). Any future
+   right-panel tool can compose from this instead of hand-copying the
+   boilerplate again. #}
+{% macro tool_pane(title, ui_ref=None, html_id=None) %}
+<section class="workspace-pane"{% if html_id %} id="{{ html_id }}"{% endif %}{% if ui_ref %} data-ui-ref="{{ ui_ref }}"{% endif %}>
+    <h3>{{ title }}</h3>
+    {{ caller() }}
+</section>
+{% endmacro %}
+
 {# -- conversation_dock ------------------------------------------------
    CLAUDE-P40-E1A, Section A: the ONE physical conversation dock. Called
    once with Project-level data (nothing selected) or once with an

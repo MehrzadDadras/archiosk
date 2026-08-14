@@ -2655,7 +2655,9 @@
    branch for the other half of this relocation. #}
     <h2 data-ui-ref="toolbox.heading">Toolbox</h2>
 
-    {% if active_case %}
+    {% if spin_mode %}
+    {% include "_spin_prototype.html" %}
+    {% elif active_case %}
     {# CLAUDE-P40-E3A bucket-b fix: same cross-block {% set %} scoping
        issue as {% block chat %}'s own note below - drawing_sources must
        be recomputed here too, not inherited from {% block content %}. #}
@@ -3101,6 +3103,24 @@
                 <p class="pane-note" data-ui-ref="toolbox.tags.empty">No Tags yet.</p>
                 {% endfor %}
             </div>
+        {% endcall %}
+
+        {# ---------------- Spin launcher (CLAUDE-SPIN-00A) ---------------------------
+           A prototype-stage entry point only - see `templates/_spin_prototype.html`'s
+           own header comment for the full scope boundary (no real evidence
+           filtering, no persistence, comparison-only). Opens via the same
+           `?spin=1` query-param idiom every other Toolbox selection already
+           uses (?source=/?requirement=/?finding=), resolved entirely
+           client-side once rendered - no new authorization surface, since
+           reaching this page at all already required project authorization. #}
+        {% call macros.subdisclosure("Spin — Evidence Isolation (prototype)", ui_ref="toolbox.spin-launcher") %}
+            <p class="pane-note">
+                Turn the project down to the smallest meaningful relationship, then
+                progressively reintroduce disciplines. Three container alternatives
+                for Product Owner comparison - prototype only, no evidence is
+                actually filtered yet.
+            </p>
+            <a class="btn btn-ghost" data-ui-ref="toolbox.spin-launcher.open" href="{{ url_for('workspace.show_workspace', project_id=project_id, spin=1) }}">Open Spin</a>
         {% endcall %}
 
         {% if is_project_owner or is_admin %}

@@ -6045,3 +6045,193 @@ main:hover,
     white-space: pre;
     pointer-events: none;
 }
+
+/* =========================================================================
+   CLAUDE-SPIN-00A - reusable right-panel tool-control grammar
+   ---------------------------------------------------------------------
+   Introduced for the Spin container comparison exercise, but written as
+   genuinely reusable primitives (no Spin-only assumptions baked in) so a
+   future right-panel tool can compose from these instead of writing new
+   page-specific markup/CSS - the Product Owner's own "choose approved
+   container -> compose approved components -> configure content" goal.
+   Every value below is a token reference, no new hex colors introduced.
+   ========================================================================= */
+
+/* -- tool-control-row: label + a small trailing control area. Compact,
+   professional, repeated-use density - NOT a consumer settings-list row
+   (no icon, no chevron, no full-row hover-highlight ceremony). */
+.tool-control-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-5);
+    padding: var(--space-3) 0;
+    border-bottom: 1px solid var(--border);
+}
+.tool-control-row:last-child { border-bottom: none; }
+.tool-control-row-label {
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* -- tool-toggle: a compact ON/OFF control for professional, repeated
+   use - deliberately a small rectangular button (role="switch" via
+   aria-pressed), not an iOS-style pill/thumb switch (PO: "avoid large
+   consumer-style switches"). Same tonal-contrast-on-press idiom as
+   .btn-primary, just much smaller. */
+.tool-toggle {
+    font-family: var(--font-body);
+    font-size: var(--text-2xs);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    line-height: 1;
+    padding: 0.3rem 0.55rem;
+    border-radius: 3px;
+    border: 1px solid var(--border-strong);
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    flex-shrink: 0;
+    min-width: 3.2rem;
+    text-align: center;
+}
+.tool-toggle:hover { border-color: var(--text-primary); color: var(--text-primary); }
+.tool-toggle[aria-pressed="true"] {
+    background: var(--text-primary);
+    border-color: var(--text-primary);
+    color: var(--surface-primary);
+    font-weight: 700;
+}
+
+/* -- active-set-summary: reuses .workspace-pane-label's own small-caps
+   metadata typography for the label half, plain body text for the
+   value - no new type scale introduced. */
+.active-set-summary { margin: var(--space-4) 0; }
+.active-set-summary-label {
+    font-family: var(--font-body);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    font-size: var(--text-xs);
+    color: var(--text-metadata);
+    margin: 0 0 var(--space-2);
+}
+.active-set-summary-value {
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+/* -- gauge-slot: a neutral, restrained reservation for the future
+   Project Pulse / PM Situational Gauge - explicitly NOT a real gauge
+   (no fabricated score, no needle, no color-coded health value). A
+   dashed border reads as "reserved," not "broken/empty by mistake". */
+.gauge-slot {
+    border: 1px dashed var(--border-strong);
+    border-radius: 3px;
+    padding: var(--space-6) var(--space-5);
+    text-align: center;
+    color: var(--text-metadata);
+    font-size: var(--text-xs);
+}
+.gauge-slot-title {
+    display: block;
+    font-family: var(--font-display);
+    font-size: var(--text-sm);
+    color: var(--text-secondary);
+    margin-bottom: var(--space-1);
+}
+
+/* -- Baseline / Spin Active status: two more states in the same
+   .review-state-badge vocabulary already reused for risk/opportunity
+   above - not a new badge component. */
+.review-state-badge.review-state-baseline { color: var(--text-metadata); border-color: var(--border); }
+.review-state-badge.review-state-spin-active { color: var(--accepted-green); border-color: var(--accepted-green); }
+
+/* -- Spin prototype scaffolding (templates/_spin_prototype.html) ------- */
+.spin-variant-switcher {
+    display: flex;
+    gap: var(--space-3);
+    padding: var(--space-4);
+    margin-bottom: var(--space-5);
+    border: 1px dashed var(--machine-blue);
+    border-radius: 3px;
+    align-items: center;
+}
+.spin-variant-switcher-label {
+    font-family: var(--font-body);
+    font-size: var(--text-2xs);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--machine-blue);
+    margin-right: var(--space-2);
+}
+.spin-variant-switcher-btn {
+    font-family: var(--font-body);
+    font-size: var(--text-xs);
+    padding: 0.3rem 0.7rem;
+    border-radius: 3px;
+    border: 1px solid var(--border-strong);
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+}
+.spin-variant-switcher-btn[aria-pressed="true"] {
+    background: var(--machine-blue);
+    border-color: var(--machine-blue);
+    color: var(--surface-primary);
+    font-weight: 600;
+}
+.spin-global-controls {
+    display: flex;
+    gap: var(--space-3);
+    margin-bottom: var(--space-4);
+    flex-wrap: wrap;
+}
+.spin-global-controls .btn { padding: 0.45rem 0.8rem; font-size: var(--text-xs); }
+.spin-discipline-list { display: flex; flex-direction: column; }
+
+/* Alternative A - Compact Control Stack: the plainest possible density,
+   no extra grouping chrome around the shared .tool-control-row list. */
+.spin-variant-a .spin-discipline-list { max-height: 15rem; overflow-y: auto; }
+
+/* Alternative B - Instrument Panel: a clearer Baseline/Active split and
+   a more prominent Pulse reservation - still built from the same
+   .tool-control-row/.gauge-slot primitives, just grouped and ordered
+   differently. */
+.spin-variant-b .spin-status-strip {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--space-4);
+    margin-bottom: var(--space-4);
+    background: var(--surface-secondary);
+    border-radius: 3px;
+}
+.spin-variant-b .gauge-slot { margin-top: var(--space-5); padding: var(--space-7) var(--space-5); }
+.spin-variant-b .spin-discipline-list { max-height: 13rem; overflow-y: auto; }
+
+/* Alternative C - Progressive Engagement: an ordered sequence list - a
+   small numeric index box ahead of the same shared row, present only
+   for disciplines currently engaged (their engagement order), so the
+   sequence itself stays legible without inventing a second control. */
+.spin-sequence-row { display: flex; align-items: center; gap: var(--space-4); }
+.spin-sequence-index {
+    font-family: var(--font-body);
+    font-size: var(--text-2xs);
+    color: var(--surface-primary);
+    background: var(--text-metadata);
+    border-radius: 999px;
+    width: 1.3rem;
+    height: 1.3rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+.tool-control-row[data-engaged="true"] .spin-sequence-index { background: var(--accepted-green); }
+.spin-variant-c .spin-discipline-list { max-height: 15rem; overflow-y: auto; }
