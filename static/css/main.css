@@ -6162,7 +6162,7 @@ main:hover,
    explicitly NOT adopted (see the template's own header comment) - their
    CSS (.spin-variant-switcher*, .spin-sequence-row/.spin-sequence-index,
    per-variant .spin-discipline-list/.gauge-slot overrides) is retired
-   along with the markup that used it, not left as dead weight. #}
+   along with the markup that used it, not left as dead weight. */
 .spin-status-strip {
     display: flex;
     justify-content: space-between;
