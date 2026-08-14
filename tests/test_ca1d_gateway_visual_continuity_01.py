@@ -78,17 +78,17 @@ class GatewayShellVisualContinuityTests(_BaseGatewayVisualTestCase):
         self.assertIn("js/ocean_field.js", body)
         self.assertNotIn("blueprint-grid", body)
 
-    def test_gateway_context_groups_and_actions_still_present(self):
+    def test_gateway_neutral_entry_actions_still_present(self):
         """A pure visual-continuity correction must not touch the
-        CLAUDE-CA1D-PROJECT-GATEWAY-LABELS-01 restructure."""
+        CLAUDE-GO-NEUTRAL-ENTRY-01 restructure (the two-door
+        Client/Owner vs Design-Builder/Proponent split it replaced is
+        gone; the single neutral New Project / Open Existing Project
+        pair must still render inside the re-themed shell)."""
         client = self._client_as("gv_admin", 1)
         body = client.get("/gateway").get_data(as_text=True)
-        self.assertIn("Client / Owner Projects", body)
-        self.assertIn("Design-Builder / Proponent Projects", body)
-        for ref in (
-            "gateway.create-client-owner", "gateway.open-existing-client-owner",
-            "gateway.create-design-builder", "gateway.open-existing-design-builder",
-        ):
+        self.assertNotIn("Client / Owner Projects", body)
+        self.assertNotIn("Design-Builder / Proponent Projects", body)
+        for ref in ("gateway.new-project", "gateway.open-existing-projects"):
             self.assertIn(f'data-ui-ref="{ref}"', body)
 
     def test_account_menu_still_present_and_functional_markup(self):

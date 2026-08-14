@@ -1,14 +1,23 @@
 """
 CLAUDE-CA1D-PROJECT-GATEWAY-LABELS-01 - Separate Role from New/Existing
-State.
+State (Gateway's own two-context-group structure, superseded).
 
-Covers the Project Gateway restructure from three flat cards (Create
-Client/Owner, Create Design-Builder/Proponent, Open an existing
-project) into two context groups -- Client/Owner Projects and Design-
-Builder/Proponent Projects -- each offering New Project and Open
-Existing Project, plus the new optional `?environment=` filter on
-routes/portal.py's choose_project that makes "Open Existing Project"
-actually scoped to the right context.
+Originally covered the Project Gateway restructure from three flat
+cards (Create Client/Owner, Create Design-Builder/Proponent, Open an
+existing project) into two context groups - Client/Owner Projects and
+Design-Builder/Proponent Projects - each offering New Project and Open
+Existing Project. CLAUDE-GO-NEUTRAL-ENTRY-01 later replaced that
+two-door structure itself (a real Product Owner report: the user
+enters ARCHIOSK, not a stakeholder category) with one neutral entry -
+see `GatewayNeutralEntryTests` below, which replaces the old
+`GatewayContextGroupTests`.
+
+`choose_project`'s own optional `?environment=` filter
+(`ChooseProjectEnvironmentFilterTests` below) is UNCHANGED by that
+correction - project_chooser.html is a different page (reached from
+inside an already-open project, e.g. "Switch Project"), not the
+Gateway's own first-entry door, and was already an unfiltered-by-
+default single list, not a two-door split.
 
 Every ingestion call spies on BHiveParser.parse rather than letting it
 run for real (existing repo-wide convention).
@@ -82,51 +91,56 @@ class _BaseGatewayLabelsTestCase(unittest.TestCase):
         return client
 
 
-class GatewayContextGroupTests(_BaseGatewayLabelsTestCase):
-    def test_two_context_groups_present_not_three_flat_cards(self):
-        client = self._client_as("gl_admin", 1)
-        body = client.get("/gateway").get_data(as_text=True)
-        self.assertIn("Client / Owner Projects", body)
-        self.assertIn("Design-Builder / Proponent Projects", body)
-        # The old flat, environment-agnostic entrance is gone.
-        self.assertNotIn('data-ui-ref="gateway.open-existing"', body)
-        self.assertNotIn(">Open an existing project<", body)
+class GatewayNeutralEntryTests(_BaseGatewayLabelsTestCase):
+    """CLAUDE-GO-NEUTRAL-ENTRY-01: replaces the retired
+    GatewayContextGroupTests - the Gateway no longer presents Client/
+    Owner vs Design-Builder/Proponent as a front-door choice. Every
+    authorized project appears in ONE list regardless of its
+    operating_environment; operating_environment itself is unchanged
+    as a real, governed, project-level fact (still required and locked
+    at creation via /upload's own form)."""
 
-    def test_each_context_group_offers_new_and_open_existing_for_admin(self):
+    def test_no_stakeholder_category_headings_at_the_front_door(self):
         client = self._client_as("gl_admin", 1)
         body = client.get("/gateway").get_data(as_text=True)
-        self.assertIn('data-ui-ref="gateway.create-client-owner"', body)
-        self.assertIn('data-ui-ref="gateway.open-existing-client-owner"', body)
-        self.assertIn('data-ui-ref="gateway.create-design-builder"', body)
-        self.assertIn('data-ui-ref="gateway.open-existing-design-builder"', body)
+        self.assertNotIn("Client / Owner Projects", body)
+        self.assertNotIn("Design-Builder / Proponent Projects", body)
+
+    def test_gateway_offers_one_new_and_one_open_existing_action_for_admin(self):
+        client = self._client_as("gl_admin", 1)
+        body = client.get("/gateway").get_data(as_text=True)
+        self.assertIn('data-ui-ref="gateway.new-project"', body)
+        self.assertIn('data-ui-ref="gateway.open-existing-projects"', body)
+        # Exactly one of each - not one per stakeholder category.
+        self.assertEqual(body.count('data-ui-ref="gateway.new-project"'), 1)
+        self.assertEqual(body.count('data-ui-ref="gateway.open-existing-projects"'), 1)
 
     def test_new_project_hidden_from_non_admin_but_open_existing_still_shown(self):
         client = self._client_as("gl_reviewer", 2, role="read_only")
         body = client.get("/gateway").get_data(as_text=True)
-        self.assertNotIn('data-ui-ref="gateway.create-client-owner"', body)
-        self.assertNotIn('data-ui-ref="gateway.create-design-builder"', body)
-        self.assertIn('data-ui-ref="gateway.open-existing-client-owner"', body)
-        self.assertIn('data-ui-ref="gateway.open-existing-design-builder"', body)
+        self.assertNotIn('data-ui-ref="gateway.new-project"', body)
+        self.assertIn('data-ui-ref="gateway.open-existing-projects"', body)
 
-    def test_new_project_links_still_deep_link_the_correct_environment(self):
+    def test_new_project_link_carries_no_environment_preset(self):
+        """The old two doors each deep-linked /upload?environment=... -
+        the neutral action does not pre-decide which side a project
+        will be; that choice now lives entirely in /upload's own form."""
         client = self._client_as("gl_admin", 1)
         body = client.get("/gateway").get_data(as_text=True)
-        self.assertIn('href="/upload?environment=client_owner"', body)
-        self.assertIn('href="/upload?environment=design_builder_proponent"', body)
+        self.assertIn('href="/upload"', body)
+        self.assertNotIn('href="/upload?environment=', body)
 
     def test_open_existing_reveals_inline_not_a_link_to_the_chooser(self):
         """CLAUDE-CA1D-GATEWAY-INLINE-REOPEN-01: a PO correction removed
         the extra transition through `portal.choose_project` - "Open
-        Existing Project" now reveals that context's own Projects
-        inline (a `<details>` disclosure), never a navigating `<a>`."""
+        Existing Project" reveals every authorized Project inline (a
+        `<details>` disclosure), never a navigating `<a>`."""
         client = self._client_as("gl_admin", 1)
         body = client.get("/gateway").get_data(as_text=True)
-        self.assertNotIn('href="/projects/choose?environment=client_owner"', body)
-        self.assertNotIn('href="/projects/choose?environment=design_builder_proponent"', body)
-        self.assertIn('data-ui-ref="gateway.open-existing-client-owner"', body)
-        self.assertIn('data-ui-ref="gateway.open-existing-design-builder"', body)
+        self.assertNotIn('href="/projects/choose?environment=', body)
+        self.assertIn('data-ui-ref="gateway.open-existing-projects"', body)
 
-    def test_open_existing_shows_each_groups_own_projects_inline(self):
+    def test_open_existing_shows_projects_from_both_operating_environments_in_one_list(self):
         self._ingest(owner="gl_admin", project_name="Riverside Client Project", environment=CLIENT_OWNER)
         self._ingest(owner="gl_admin", project_name="Riverside Bidder Project", environment=DESIGN_BUILDER_PROPONENT)
         client = self._client_as("gl_admin", 1)
@@ -134,15 +148,16 @@ class GatewayContextGroupTests(_BaseGatewayLabelsTestCase):
         self.assertIn("Riverside Client Project", body)
         self.assertIn("Riverside Bidder Project", body)
         # A real selection, not a bare link - the same select-then-confirm
-        # pattern gateway.chooser itself already uses.
-        self.assertIn('data-ui-ref="gateway.open-existing-client-owner.leaf"', body)
-        self.assertIn('data-ui-ref="gateway.open-existing-design-builder.leaf"', body)
+        # pattern gateway.chooser itself already uses. Exactly one shared
+        # leaf ref, not one per stakeholder category.
+        self.assertEqual(body.count('data-ui-ref="gateway.open-existing-projects.leaf"'), 2)
 
-    def test_open_existing_empty_state_per_context_group(self):
+    def test_open_existing_empty_state_is_one_neutral_message(self):
         client = self._client_as("gl_admin", 1)
         body = client.get("/gateway").get_data(as_text=True)
-        self.assertIn("No Client / Owner projects yet.", body)
-        self.assertIn("No Design-Builder / Proponent projects yet.", body)
+        self.assertIn("No projects yet.", body)
+        self.assertNotIn("No Client / Owner projects yet.", body)
+        self.assertNotIn("No Design-Builder / Proponent projects yet.", body)
 
 
 class ChooseProjectEnvironmentFilterTests(_BaseGatewayLabelsTestCase):

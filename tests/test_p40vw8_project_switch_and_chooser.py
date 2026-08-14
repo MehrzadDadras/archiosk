@@ -233,10 +233,12 @@ class ChooserEmptyStateTests(unittest.TestCase):
 
 
 class GatewayLinkTests(unittest.TestCase):
-    """CLAUDE-CA1D-PROJECT-GATEWAY-LABELS-01: the single environment-
-    agnostic gateway.open-existing ref was retired in favor of two
-    context-scoped ones -- see UI_REFERENCE_MAP.md's own retired-
-    references table."""
+    """CLAUDE-CA1D-PROJECT-GATEWAY-LABELS-01 originally retired the single
+    environment-agnostic gateway.open-existing ref in favor of two
+    context-scoped ones; CLAUDE-GO-NEUTRAL-ENTRY-01 later retired THOSE
+    too, converging back to one neutral, unfiltered reveal -
+    gateway.open-existing-projects - see UI_REFERENCE_MAP.md's own
+    retired-references table for the full lineage."""
 
     def test_gateway_open_existing_is_present_as_an_inline_reveal(self):
         """CLAUDE-CA1D-GATEWAY-INLINE-REOPEN-01: a PO correction replaced
@@ -250,8 +252,7 @@ class GatewayLinkTests(unittest.TestCase):
         # Passed as a macros.subdisclosure(..., ui_ref=...) call argument,
         # not a literal data-ui-ref="..." HTML attribute in this file's
         # own source (the attribute itself lives in _macros.html).
-        for ref in ("gateway.open-existing-client-owner", "gateway.open-existing-design-builder"):
-            self.assertIn(f'ui_ref="{ref}"', source)
+        self.assertIn('ui_ref="gateway.open-existing-projects"', source)
         self.assertNotIn("portal.choose_project", source)
 
 

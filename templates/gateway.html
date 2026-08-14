@@ -26,69 +26,52 @@
 <p class="gateway-orientation-reply" id="gateway-orientation-reply" data-ui-ref="gateway.orientation.reply" aria-live="polite" hidden></p>
 {% endblock %}
 {% block gateway_body %}
-{# CLAUDE-CA1D-PROJECT-GATEWAY-LABELS-01: Client/Owner vs Design-
-   Builder/Proponent is a project CONTEXT (which side of the table this
-   Project represents); New vs Open Existing is a project STATE/ACTION.
-   These are two independent dimensions -- a live report found the
-   previous three-flat-card layout (Create Client/Owner, Create Design-
-   Builder/Proponent, Open an existing project) reading as if "Existing
-   Project" were a third context alongside the other two, when in fact
-   either context can have both new and existing Projects. Restructured
-   into two context groups, each offering New Project (unchanged
-   /upload?environment= deep link, still admin-gated exactly as before)
-   and Open Existing Project.
-
-   CLAUDE-CA1D-GATEWAY-INLINE-REOPEN-01: PO correction -- reopening an
-   existing Project must take the fewest possible transitions (Gateway
-   -> reveal projects -> select -> workspace), not Gateway -> a second
-   chooser page -> select -> workspace. Each group's "Open Existing
-   Project" is now a `<details>` reveal (macros.subdisclosure) showing
-   that context's own Projects inline, search-filterable client-side
-   (`.gateway-inline-project-search`/`.gateway-inline-open-form` below),
-   select-then-confirm exactly like `gateway.chooser` already does (same
-   select-radio-then-submit pattern, same reasoning: an explicit action
-   + Enter-key completion, not a bare link-per-row -- see
-   project_chooser.html's own CLAUDE-CA1D-RECEPTION-FIX-01 comment).
-   routes/portal.py's `gateway()` passes each group's own
-   `_environment_projects(...)` list -- the same access-scoped data
-   `choose_project` itself builds, no new authorization surface.
-   `choose_project`/`project_chooser.html` are UNCHANGED and still serve
-   the header's "Switch Project" Vestibule and direct-URL/unfiltered
-   access; Removed Projects/Security ("advanced management") were
-   already reachable from the account menu (gateway_shell.html), not
-   through this chooser.
-
-   The two groups below are intentionally NOT templatized into a shared
-   Jinja macro parameterized by environment -- tests/test_p40vw7a_ui_
-   reference_map.py's registry-vs-template check is a static regex scan
-   over template SOURCE text (see that file's own "Appearance matrix"
-   comment on why), so every `data-ui-ref` value must appear as a
-   literal string in source, not built via Jinja string concatenation. #}
+{# CLAUDE-GO-NEUTRAL-ENTRY-01: used to be two context groups here, one
+   per operating_environment ("Client / Owner Projects" / "Design-
+   Builder / Proponent Projects" front-door columns - see git history,
+   CLAUDE-CA1D-PROJECT-GATEWAY-LABELS-01/CLAUDE-CA1D-GATEWAY-INLINE-
+   REOPEN-01, for that design's own reasoning). A real Product Owner
+   direction replaced that: the user enters ARCHIOSK, not a stakeholder
+   category - a Design-Builder user should not see the Owner's own
+   column sitting beside their own merely to reach their own projects,
+   and vice versa. operating_environment is UNCHANGED as a real,
+   governed, project-level fact - still required and locked at
+   creation (upload.html's own "Project Operating Environment"
+   fieldset, unchanged), still gates RFI/decision-stage capability
+   elsewhere - it simply no longer partitions this list or gates which
+   "New Project" card a user sees. New Project now links to plain
+   `/upload` (no `?environment=` preset); that form's own required
+   radio + confirmation checkbox IS the project's real commissioning
+   step, already exactly where the Product Owner's own "move the
+   distinction deeper into project setup" direction asks for it -
+   nothing new needed there. Reopening an existing Project stays the
+   same inline `<details>` reveal (CLAUDE-CA1D-GATEWAY-INLINE-REOPEN-01)
+   over the SAME already-access-scoped `_environment_projects` data,
+   just called once, unfiltered, instead of twice. #}
 <div class="gateway-context-groups">
     <section class="gateway-context-group">
-        <h3>Client / Owner Projects</h3>
-        <p class="gateway-context-description">Create a new project or open an existing project from the Client / Owner side.</p>
+        <p class="gateway-context-description">Create a new project or open an existing project.</p>
         <div class="gateway-actions">
             {% if is_admin %}
-            <a class="gateway-action gateway-action-primary" data-ui-ref="gateway.create-client-owner" href="{{ url_for('portal.upload', environment='client_owner') }}">
+            <a class="gateway-action gateway-action-primary" data-ui-ref="gateway.new-project" href="{{ url_for('portal.upload') }}">
                 <span class="gateway-action-icon">+</span>
                 <span><strong>New Project</strong></span>
             </a>
             {% endif %}
         </div>
-        {% call macros.subdisclosure("Open Existing Project", html_id="gateway-open-existing-client-owner", ui_ref="gateway.open-existing-client-owner") %}
-            {% if client_owner_projects %}
-            <form class="projects-controls" data-ui-ref="gateway.open-existing-client-owner.search">
+        {% call macros.subdisclosure("Open Existing Project", html_id="gateway-open-existing", ui_ref="gateway.open-existing-projects") %}
+            {% if projects %}
+            <form class="projects-controls" data-ui-ref="gateway.open-existing-projects.search">
                 <input
                     type="search" class="text-input projects-search gateway-inline-project-search"
-                    data-filter-target="gateway-open-existing-client-owner-list"
-                    placeholder="Search your projects" aria-label="Search your Client / Owner projects">
+                    data-filter-target="gateway-open-existing-list"
+                    placeholder="Search your projects" aria-label="Search your projects">
             </form>
-            <form method="get" class="gateway-inline-open-form" id="gateway-open-existing-client-owner-form" data-ui-ref="gateway.open-existing-client-owner.open-form">
-                <ul class="project-card-list" id="gateway-open-existing-client-owner-list">
-                    {% for p in client_owner_projects %}
+            <form method="get" class="gateway-inline-open-form" id="gateway-open-existing-form" data-ui-ref="gateway.open-existing-projects.open-form">
+                <ul class="project-card-list" id="gateway-open-existing-list">
+                    {% for p in projects %}
                     <li class="project-card" data-project-name="{{ p.display_name | lower }}">
-                        <label class="project-card-link project-card-selectable" data-ui-ref="gateway.open-existing-client-owner.leaf">
+                        <label class="project-card-link project-card-selectable" data-ui-ref="gateway.open-existing-projects.leaf">
                             <input
                                 type="radio" name="project_id" value="{{ p.project_id }}" required
                                 data-open-url="{{ url_for('workspace.show_workspace', project_id=p.project_id) }}">
@@ -102,54 +85,10 @@
                     </li>
                     {% endfor %}
                 </ul>
-                <button type="submit" class="btn btn-primary gateway-inline-open-button" disabled data-ui-ref="gateway.open-existing-client-owner.open-button">Open Project</button>
+                <button type="submit" class="btn btn-primary gateway-inline-open-button" disabled data-ui-ref="gateway.open-existing-projects.open-button">Open Project</button>
             </form>
             {% else %}
-            <p class="projects-empty" data-ui-ref="gateway.open-existing-client-owner.empty">No Client / Owner projects yet.</p>
-            {% endif %}
-        {% endcall %}
-    </section>
-    <section class="gateway-context-group">
-        <h3>Design-Builder / Proponent Projects</h3>
-        <p class="gateway-context-description">Create a new project or open an existing project from the Design-Builder / Proponent side.</p>
-        <div class="gateway-actions">
-            {% if is_admin %}
-            <a class="gateway-action gateway-action-primary" data-ui-ref="gateway.create-design-builder" href="{{ url_for('portal.upload', environment='design_builder_proponent') }}">
-                <span class="gateway-action-icon">+</span>
-                <span><strong>New Project</strong></span>
-            </a>
-            {% endif %}
-        </div>
-        {% call macros.subdisclosure("Open Existing Project", html_id="gateway-open-existing-design-builder", ui_ref="gateway.open-existing-design-builder") %}
-            {% if design_builder_projects %}
-            <form class="projects-controls" data-ui-ref="gateway.open-existing-design-builder.search">
-                <input
-                    type="search" class="text-input projects-search gateway-inline-project-search"
-                    data-filter-target="gateway-open-existing-design-builder-list"
-                    placeholder="Search your projects" aria-label="Search your Design-Builder / Proponent projects">
-            </form>
-            <form method="get" class="gateway-inline-open-form" id="gateway-open-existing-design-builder-form" data-ui-ref="gateway.open-existing-design-builder.open-form">
-                <ul class="project-card-list" id="gateway-open-existing-design-builder-list">
-                    {% for p in design_builder_projects %}
-                    <li class="project-card" data-project-name="{{ p.display_name | lower }}">
-                        <label class="project-card-link project-card-selectable" data-ui-ref="gateway.open-existing-design-builder.leaf">
-                            <input
-                                type="radio" name="project_id" value="{{ p.project_id }}" required
-                                data-open-url="{{ url_for('workspace.show_workspace', project_id=p.project_id) }}">
-                            <div class="project-card-main">
-                                <span class="project-card-name">{{ p.display_name }}</span>
-                            </div>
-                            <div class="project-card-meta">
-                                <span>Updated {{ p.last_activity | humanize }}</span>
-                            </div>
-                        </label>
-                    </li>
-                    {% endfor %}
-                </ul>
-                <button type="submit" class="btn btn-primary gateway-inline-open-button" disabled data-ui-ref="gateway.open-existing-design-builder.open-button">Open Project</button>
-            </form>
-            {% else %}
-            <p class="projects-empty" data-ui-ref="gateway.open-existing-design-builder.empty">No Design-Builder / Proponent projects yet.</p>
+            <p class="projects-empty" data-ui-ref="gateway.open-existing-projects.empty">No projects yet.</p>
             {% endif %}
         {% endcall %}
     </section>

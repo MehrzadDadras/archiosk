@@ -198,42 +198,33 @@ class CorrectOperatingEnvironmentRouteTests(_BaseCorrectionTestCase):
         store = self._store()
         self.assertEqual(store.get(doc.project_id).operating_environment, DESIGN_BUILDER_PROPONENT)
 
-    def test_project_moves_between_gateway_lists_after_correction(self):
-        # The actual Product Owner regression check: appears only in the
-        # correct side's "Open Existing Project" list afterward, on the
-        # real rendered Gateway page (gateway.html), not just the
-        # underlying data helper.
+    def test_project_stays_visible_on_the_gateway_across_a_correction(self):
+        # CLAUDE-GO-NEUTRAL-ENTRY-01: the Gateway no longer splits
+        # projects into a Client/Owner list and a Design-Builder/
+        # Proponent list, so a correction no longer "moves" a project
+        # between two lists - it only changes the project's own
+        # internal operating_environment. The real Product Owner
+        # regression check now is that the project remains visible in
+        # the single, unified "Open Existing Project" list, unaffected
+        # by which side its operating_environment names, both before
+        # and after the correction.
         doc = self._ingest(environment=CLIENT_OWNER)
         client = self._client_as("misclass_admin", 1)
 
-        def _lists():
-            # The <ul> only renders when that side's list is non-empty
-            # (the empty state is a plain <p> instead), so section
-            # boundaries (the <h3> headings) are used rather than
-            # assuming the <ul> is always present.
-            body = client.get("/gateway").get_data(as_text=True)
-            owner_start = body.index("Client / Owner Projects</h3>")
-            proponent_start = body.index("Design-Builder / Proponent Projects</h3>")
-            # gateway.html's own trailing <script nonce=...> reliably
-            # follows both context groups - a nearby "</div>" would
-            # instead match .gateway-actions's own closing tag, cutting
-            # the slice off before the "Open Existing Project" disclosure
-            # (which comes after it in the markup) even renders.
-            groups_end = body.index('<script nonce=', proponent_start)
-            return body[owner_start:proponent_start], body[proponent_start:groups_end]
-
-        before_owner_list, before_proponent_list = _lists()
-        self.assertIn(doc.project_id, before_owner_list)
-        self.assertNotIn(doc.project_id, before_proponent_list)
+        before_body = client.get("/gateway").get_data(as_text=True)
+        self.assertIn(doc.project_id, before_body)
 
         client.post(
             f"/projects/{doc.project_id}/workspace/correct-environment",
             data={"operating_environment": DESIGN_BUILDER_PROPONENT, "reason": "Wrong side at creation."},
         )
 
-        after_owner_list, after_proponent_list = _lists()
-        self.assertNotIn(doc.project_id, after_owner_list)
-        self.assertIn(doc.project_id, after_proponent_list)
+        after_body = client.get("/gateway").get_data(as_text=True)
+        self.assertIn(doc.project_id, after_body)
+        self.assertEqual(
+            self._store().get(doc.project_id).operating_environment,
+            DESIGN_BUILDER_PROPONENT,
+        )
 
     def test_route_rejects_a_missing_reason(self):
         doc = self._ingest(environment=CLIENT_OWNER)

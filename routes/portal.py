@@ -364,22 +364,32 @@ def reset_password():
     return redirect(url_for('portal.login'))
 
 
-def _environment_projects(registry, store: CaseWorkspaceStore, environment_filter: str) -> list[dict]:
-    """The same access-scoped, environment-filtered project summary
-    shape `choose_project` builds (Section 12/CLAUDE-CA1D-PROJECT-
-    GATEWAY-LABELS-01) for its own `?environment=` filter, reused here
-    so `gateway()` can render its two always-scoped lists inline
-    (CLAUDE-CA1D-GATEWAY-INLINE-REOPEN-01) via the same
-    `_accessible_documents`/`_safe_workspace` primitives - no new
-    authorization surface. `choose_project` keeps its own inline loop
-    unchanged (it must also support the unfiltered/`environment_filter
-    == ''` case this helper does not), so this is not a full merge of
-    the two - just the one shape both now need."""
+def _environment_projects(registry, store: CaseWorkspaceStore, environment_filter: str = '') -> list[dict]:
+    """The same access-scoped project summary shape `choose_project`
+    builds (Section 12/CLAUDE-CA1D-PROJECT-GATEWAY-LABELS-01), reused
+    here via the same `_accessible_documents`/`_safe_workspace`
+    primitives - no new authorization surface.
+
+    CLAUDE-GO-NEUTRAL-ENTRY-01: `environment_filter` defaults to ''
+    (unfiltered - every accessible project, regardless of operating
+    environment) - the same convention `choose_project`'s own optional
+    `?environment=` deep link already established, adopted here as the
+    default rather than a special case. `gateway()` used to call this
+    twice (once per environment) to build two separate front-door
+    lists; the Product Owner's own "the user enters ARCHIOSK, not a
+    stakeholder category" direction replaced that with ONE unfiltered
+    call - operating_environment is still a real, still-required,
+    still-locked-at-creation project fact (unchanged - see
+    CaseWorkspaceStore.set_operating_environment/
+    correct_operating_environment), it now simply never partitions the
+    Gateway's own project list. The optional filter argument is kept
+    (not removed) since `choose_project`'s own `?environment=` deep
+    link still legitimately uses the equivalent narrowing inline."""
     documents = _accessible_documents(registry, store)
     projects = []
     for document in documents:
         workspace = _safe_workspace(store, document.project_id)
-        if not workspace or workspace.operating_environment != environment_filter:
+        if environment_filter and (not workspace or workspace.operating_environment != environment_filter):
             continue
         projects.append({
             "project_id": document.project_id,
@@ -397,14 +407,29 @@ def gateway():
     instead of jumping straight into one, mirroring a project-selection
     style entry point rather than a single default destination.
 
+    CLAUDE-GO-NEUTRAL-ENTRY-01: used to render TWO project lists here,
+    one per operating_environment ("Client / Owner Projects" /
+    "Design-Builder / Proponent Projects" front-door columns) - a real
+    Product Owner report named this as the wrong entry model: a user
+    enters ARCHIOSK, not a stakeholder category, and a Design-Builder
+    user should not see the Owner's own column sitting beside their
+    own merely to reach their own projects. operating_environment is
+    UNCHANGED as a real, governed, project-level fact (still required
+    and locked at creation - see CaseWorkspaceStore.
+    set_operating_environment/correct_operating_environment, still
+    gates RFI/decision-stage capability elsewhere) - it simply no
+    longer partitions this list. One unfiltered, already-access-scoped
+    call now serves every authorized project regardless of side - see
+    `_environment_projects`'s own updated comment.
+
     CLAUDE-CA1D-GATEWAY-INLINE-REOPEN-01: "Open Existing Project" used to
     be a plain `<a>` navigating to `portal.choose_project` - a second,
     separate page just to reopen a Project. A PO correction named this as
     more transitions than reopening needs: Gateway -> reveal projects ->
     select -> workspace, not Gateway -> chooser page -> select -> workspace.
-    Each context group's projects are now rendered inline (client-side
-    reveal via a native `<details>`, no navigation), reusing the exact
-    same `_environment_projects` data `choose_project` itself builds - no
+    Projects are rendered inline (client-side reveal via a native
+    `<details>`, no navigation), reusing the exact same
+    `_environment_projects` data `choose_project` itself builds - no
     new authorization surface. `choose_project`/`project_chooser.html`
     are UNCHANGED and remain reachable: the header's "Switch Project"
     Vestibule link still uses them (a different, legitimate use - reopening
@@ -417,11 +442,7 @@ def gateway():
     """
     registry = get_registry(current_app)
     store = CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"])
-    return render_template(
-        'gateway.html',
-        client_owner_projects=_environment_projects(registry, store, 'client_owner'),
-        design_builder_projects=_environment_projects(registry, store, 'design_builder_proponent'),
-    )
+    return render_template('gateway.html', projects=_environment_projects(registry, store))
 
 
 _GATEWAY_NEW_PROJECT_PATTERN = re.compile(r"new project|create a project|start a project", re.IGNORECASE)
@@ -481,10 +502,7 @@ def gateway_orientation():
     message = (request.form.get('message') or '')[:500]
     registry = get_registry(current_app)
     store = CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"])
-    projects = (
-        _environment_projects(registry, store, 'client_owner')
-        + _environment_projects(registry, store, 'design_builder_proponent')
-    )
+    projects = _environment_projects(registry, store)
     reply = _classify_gateway_orientation(message, projects, can_create_project=is_admin())
     return jsonify(reply)
 

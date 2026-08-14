@@ -309,45 +309,44 @@ class GatewayShellIsolationTests(_BaseTestCase):
 # ---------------------------------------------------------------------------
 
 class GatewayFunctionalChoicesTests(_BaseTestCase):
-    def test_admin_sees_both_create_project_actions(self):
-        """CLAUDE-CA1D-PROJECT-GATEWAY-LABELS-01: Gateway is now two
-        context groups (Client/Owner, Design-Builder/Proponent), each
-        with its own "New Project" action -- the group heading names
-        the context, the action itself no longer repeats it."""
+    def test_admin_sees_one_neutral_create_project_action(self):
+        """CLAUDE-GO-NEUTRAL-ENTRY-01: Gateway used to be two context
+        groups (Client/Owner, Design-Builder/Proponent), each with its
+        own "New Project" action - a real Product Owner report named
+        that two-door split itself as the defect (the user enters
+        ARCHIOSK, not a stakeholder category). Now one neutral action,
+        no `?environment=` preset - the real commissioning step is
+        `/upload`'s own required radio + confirmation checkbox,
+        unchanged."""
         client = self._client_as("vw5_admin", 1)
         body = client.get("/gateway").get_data(as_text=True)
-        self.assertIn("Client / Owner Projects", body)
-        self.assertIn("Design-Builder / Proponent Projects", body)
-        self.assertIn('data-ui-ref="gateway.create-client-owner"', body)
-        self.assertIn('data-ui-ref="gateway.create-design-builder"', body)
-        self.assertIn('href="/upload?environment=client_owner"', body)
-        self.assertIn('href="/upload?environment=design_builder_proponent"', body)
+        self.assertNotIn("Client / Owner Projects", body)
+        self.assertNotIn("Design-Builder / Proponent Projects", body)
+        self.assertIn('data-ui-ref="gateway.new-project"', body)
+        self.assertIn('href="/upload"', body)
+        self.assertNotIn('href="/upload?environment=', body)
 
-    def test_non_admin_does_not_see_create_project_actions(self):
+    def test_non_admin_does_not_see_create_project_action(self):
         client = self._client_as("vw5_reviewer", 2, role="read_only")
         body = client.get("/gateway").get_data(as_text=True)
-        self.assertNotIn('data-ui-ref="gateway.create-client-owner"', body)
-        self.assertNotIn('data-ui-ref="gateway.create-design-builder"', body)
-        self.assertNotIn("/upload?environment=", body)
+        self.assertNotIn('data-ui-ref="gateway.new-project"', body)
 
     def test_open_existing_project_action_present_and_functional(self):
-        # CLAUDE-CA1D-PROJECT-GATEWAY-LABELS-01: Gateway's own entrance
-        # is two context-scoped controls (client-owner / design-builder),
-        # not one environment-agnostic link.
+        # CLAUDE-GO-NEUTRAL-ENTRY-01: one unfiltered inline reveal over
+        # every authorized project, regardless of operating environment
+        # - not partitioned into two context-scoped controls.
         # CLAUDE-CA1D-GATEWAY-INLINE-REOPEN-01: "Open Existing Project"
-        # is now an inline reveal on the Gateway itself (fewest possible
+        # is an inline reveal on the Gateway itself (fewest possible
         # transitions to reopen a Project) rather than a navigating link
-        # to /projects/choose - the fixture's own Client/Owner project
-        # must appear directly in the Gateway's own inline list.
+        # to /projects/choose - the fixture's own project must appear
+        # directly in the Gateway's own inline list.
         client = self._client_as("vw5_admin", 1)
         body = client.get("/gateway").get_data(as_text=True)
-        self.assertIn('data-ui-ref="gateway.open-existing-client-owner"', body)
-        self.assertIn('data-ui-ref="gateway.open-existing-design-builder"', body)
+        self.assertIn('data-ui-ref="gateway.open-existing-projects"', body)
         self.assertIn(_DISTINCTIVE_PROJECT_NAME, body)
-        self.assertNotIn('href="/projects/choose?environment=client_owner"', body)
         # /projects/choose itself is unchanged and still independently
         # reachable (the header's "Switch Project" Vestibule uses it).
-        resp = client.get("/projects/choose?environment=client_owner")
+        resp = client.get("/projects/choose")
         self.assertEqual(resp.status_code, 200)
         self.assertIn(_DISTINCTIVE_PROJECT_NAME, resp.get_data(as_text=True))
         # The management directory itself is unchanged and still works.
@@ -357,7 +356,7 @@ class GatewayFunctionalChoicesTests(_BaseTestCase):
 
     def test_create_project_action_actually_reaches_the_admin_only_route(self):
         client = self._client_as("vw5_admin", 1)
-        resp = client.get("/upload?environment=client_owner")
+        resp = client.get("/upload")
         self.assertEqual(resp.status_code, 200)
 
 
