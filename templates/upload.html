@@ -22,18 +22,21 @@
        "+ New Project," and still carrying the Territory framing (a
        project is established IN Archiosk, not moved into it). #}
     <h1>Establish a Project</h1>
-    {# CLAUDE-CA1D-RECEPTION-FIX-01 (folder establishment): a folder is
-       now the primary path - a public stranger should be able to start
-       with the actual RFP package, not learn GO's internal "founding
-       document" concept first. Every eligible file in the chosen folder
-       becomes real, usable project evidence (see upload_folder's own
-       docstring); a single file remains available as a secondary path. #}
+    {# CLAUDE-HYBRID-ENTRY-01: CLAUDE-CA1D-RECEPTION-FIX-01's own "your
+       files stay wherever they already are" claim is no longer true of
+       either path below - both currently upload and permanently store a
+       server-side copy (see services/ingestion.py's own
+       ingest_upload/ingest_folder_upload). The accepted hybrid-storage
+       direction (Archiosk stores understanding by default, not permanent
+       custody of the complete file corpus) is a planned future
+       correction to the MECHANISM, not yet built - this copy states the
+       current, honest behavior instead of the aspirational one. #}
     <p class="hero-copy" data-ui-ref="upload.limits">
-        Archiosk works alongside your project's existing material &mdash; it
-        does not take the place of it, and your files stay wherever they
-        already are. Choose the folder holding your RFP/pursuit material and
-        Archiosk brings in every eligible document inside it; a single file
-        works too if that's all you have.
+        Archiosk is designed to work alongside your project's existing
+        material, without becoming a duplicate permanent copy of it &mdash;
+        a linked local/company-storage option for that is being prepared.
+        Until it ships, both options below upload and permanently store a
+        copy of your files on Archiosk's own server.
     </p>
     <p class="hero-copy" data-ui-ref="upload.limits.formats">
         Accepted formats: PDF, DOCX, TXT, CSV, MD &mdash; up to {{ max_upload_mb }}MB
@@ -90,15 +93,28 @@
         <span class="mono">(required)</span>
     </label>
 
+    {# CLAUDE-HYBRID-ENTRY-01: relabeled as an explicit legacy/full-upload
+       path, not disabled outright - CLAUDE-CA1D-FOLDER-ESTABLISH-CLARITY-01
+       built real, tested UX specifically around this mechanism's own
+       founding-document selection (see
+       tests/test_ca1d_folder_establish_clarity_01.py), a genuine capability
+       worth keeping for establishing a project from a full document set
+       while a real linked-storage option is designed - see the accepted
+       Product Owner correction (CLAUDE-HYBRID-ENTRY-01) for why the OLD
+       "Choose Project Folder" / "Establish Project from Folder" wording is
+       no longer acceptable: it read as folder-linking to at least one real
+       reviewer, when the actual operation is a permanent server upload. #}
     <fieldset class="folder-establish-fieldset">
-        <legend>Choose Project Folder</legend>
+        <legend>Upload Folder Contents <span class="mono">(Legacy &mdash; full server upload)</span></legend>
         <p class="pane-note">
-            Select the folder containing your RFP/pursuit material. Archiosk brings in every
-            eligible document inside it (subfolders included) and preserves where each one
-            sits relative to the folder you chose.
+            <strong>This is not a folder link.</strong> Selecting a folder here uploads every
+            eligible document inside it (subfolders included) and stores a permanent copy of
+            each one on Archiosk's own server &mdash; your local files are not watched,
+            referenced, or left in place. Kept available for establishing a project from a full
+            document set while a genuine linked-storage option is prepared.
         </p>
         <button type="button" class="btn btn-ghost" id="folder-picker-button" data-ui-ref="upload.folder.picker-button">
-            Choose Project Folder&hellip;
+            Choose Folder to Upload&hellip;
         </button>
         <input type="file" id="folder-picker-input" webkitdirectory directory multiple hidden data-ui-ref="upload.folder.picker-input">
         <input type="file" name="folder_files" id="folder-files-hidden" multiple hidden>
@@ -113,15 +129,23 @@
 
         <p class="mono form-error" id="folder-selection-error" data-ui-ref="upload.folder.error" hidden></p>
 
+        {# CLAUDE-HYBRID-ENTRY-01: demoted from btn-primary to btn-ghost -
+           this path is explicitly legacy now, not the recommended
+           project-establishment method; #folder-submit-button:disabled's
+           own dedicated CSS state (CLAUDE-CA1D-FOLDER-ESTABLISH-CLARITY-01)
+           is keyed off the id, unaffected by this class change. #}
         <button
-            type="submit" class="btn btn-primary" id="folder-submit-button" disabled
+            type="submit" class="btn btn-ghost" id="folder-submit-button" disabled
             formaction="{{ url_for('portal.upload_folder') }}" data-ui-ref="upload.folder.submit">
-            Establish Project from Folder
+            Upload Folder Contents (Legacy)
         </button>
     </fieldset>
 
     <fieldset class="single-file-establish-fieldset">
-        <legend>Or establish from a single file</legend>
+        <legend>Or upload a single file</legend>
+        <p class="pane-note">
+            Uploads and permanently stores a copy of this file on Archiosk's own server.
+        </p>
         <input
             type="file" name="file" accept=".pdf,.docx,.txt,.csv,.md"
             id="upload-file-input" data-ui-ref="upload.file"

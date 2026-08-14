@@ -186,11 +186,20 @@ class UploadEntryPointCopyTests(unittest.TestCase):
         # ("+ New Project" always creates a fresh record, never reopens
         # an existing one).
         self.assertIn("Establish a Project", body)
-        # Reformatted onto several source lines in the template - checked
-        # as fragments guaranteed to be on one source line each (see the
-        # same note on the Overview/Files assertions above).
-        self.assertIn("does not take the place of it, and your files stay wherever they", body)
-        self.assertIn("already are.", body)
+        # CLAUDE-HYBRID-ENTRY-01: META-T01's own original claim here -
+        # "your files stay wherever they already are" - was found to be
+        # false of BOTH establishment mechanisms on this page (both
+        # permanently upload a copy to Archiosk's own server; see
+        # services/ingestion.py's ingest_upload/ingest_folder_upload).
+        # This test originally asserted that now-false claim; rewritten
+        # to assert the corrected, honest copy instead of silently
+        # dropping coverage of this paragraph. Reformatted onto several
+        # source lines in the template - checked as fragments guaranteed
+        # to be on one source line each (see the same note on the
+        # Overview/Files assertions above).
+        self.assertIn("without becoming a duplicate permanent copy of it", body)
+        self.assertIn("both options below upload and permanently store a", body)
+        self.assertNotIn("your files stay wherever they already are", body)
 
     def test_upload_page_still_carries_every_required_ui_reference(self):
         """Regression guard: the copy reframe must not drop any existing
