@@ -147,3 +147,58 @@ retired *behavior*.
   itself a non-fixed height (currently `70vh`, independent of `main`'s own
   height), which could reopen the same double-scroll question from a
   different root cause.
+
+## Real image/shape/visual document search — Future Reserve
+
+- **Status:** Future (not yet built at all, not a parked/removed component
+  — recorded here per Product Owner instruction,
+  `CLAUDE-DOCUMENT-RAIL-SEARCH-01` Part 10).
+- **Intended PM workflow:** in the left rail's Image search mode (`static/
+  js/document_marks.js`'s own image tray — paste/drop/preview/collapse
+  states are real and already built), the PM supplies a shape, symbol,
+  graphic detail fragment, or visual pattern (pasted, dropped, or —
+  eventually — captured directly from an open Document/drawing via an
+  existing ARCHIOSK capture path such as Eye's own paste/drop or a
+  Snapshot) and ARCHIOSK returns other Documents/drawings in the SAME
+  project containing a visually similar condition — the same purpose
+  Bluebeam VisualSearch serves, not its literal appearance.
+- **Why it is deferred — a real, checked absence, not an assumption:**
+  `services/image_intelligence.py`'s own header comment states the
+  existing capability boundary explicitly: "no facial recognition, no
+  object/defect detection, no OCR over arbitrary image content, no
+  panorama stitching, no filters/artistic effects — this module reads
+  EXIF metadata and pixel dimensions only, never interprets what an
+  image DEPICTS." No visual-feature extraction, embedding, or similarity-
+  matching capability exists anywhere in this codebase today (checked
+  services/image_intelligence.py, services/drawing_intelligence.py,
+  services/case_workspace.py) — there is nothing to safely expose now.
+  Faking this with OCR-text matching (Part 10's own explicit prohibition)
+  or filename/dimension heuristics would misrepresent a real evidence-
+  discovery claim as genuine visual matching, which this project's own
+  "never fabricate/hide evidence silently" principle forbids.
+- **Required capability, if built:** a real visual-feature index — at
+  minimum, per-page/per-sheet image embeddings (or an equivalent
+  hand-built shape/symbol-matching pipeline) computed at ingestion time
+  and persisted (mirroring the "genuinely new extraction+storage work,
+  not a per-search re-parse" conclusion this same stage's own text-
+  search audit reached for document content) — plus a similarity query
+  path from a pasted/dropped query image against that index, scoped to
+  the active project only.
+- **Evidence types involved:** drawing/image Sources primarily (`kind=
+  "drawing"`), and potentially PDF page rasters for drawing sets embedded
+  in PDF form — the same universe `services/drawing_intelligence.py` and
+  `services/image_intelligence.py` already govern.
+- **Future mixed text+image direction (Part 11):** once both a real text
+  index (see the companion note this same audit would add if content
+  search is ever built) and a real visual index exist, a combined query
+  such as "image sample + text condition" (e.g. a pasted door-hardware
+  symbol + `secure courtroom`) becomes a straightforward intersection of
+  the two result sets — the Image tray's own architecture (a persisted
+  query image, independent of the Text field) already leaves room for
+  this without a redesign; nothing about today's UI needs to change to
+  add it later, only a real backend to call.
+- **Promotion trigger:** a future Product Owner decision to invest in a
+  real visual-indexing pipeline (a genuinely new capability, not a small
+  extension) — until then, Image mode's own "Search" action stays an
+  honest deferred state (`#documents-image-search-status`), never a
+  fabricated result list.

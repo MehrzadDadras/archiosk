@@ -109,9 +109,15 @@ class PmMarkStructureTests(unittest.TestCase):
         self.assertIn("setMarked(cb.getAttribute('data-source-id'), cb.checked);", self.js)
 
     def test_marked_filter_is_pure_row_hide_no_navigation(self):
+        # CLAUDE-DOCUMENT-RAIL-SEARCH-01 folded search into this same
+        # function (Marked + search must compose, not compete - see
+        # test_document_rail_search_01.py's own coverage of that) - this
+        # guard now checks the combined predicate, same "pure row-hide,
+        # no navigation" property.
         body = self.js[self.js.index("function applyFilter()"):]
-        body = body[:body.index("\n    }\n")]
-        self.assertIn("row.hidden = filterActive && !isMarked", body)
+        body = body[:body.index("\n    }\n\n    if (searchInput)")]
+        self.assertIn("var matchesMarked = !filterActive || isMarked(cb.getAttribute('data-source-id'));", body)
+        self.assertIn("row.hidden = !visible;", body)
         self.assertNotIn("location.href", body)
 
     def test_exposes_read_only_lookup_for_future_search_integration(self):

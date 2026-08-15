@@ -645,10 +645,51 @@
                                         <button type="button" class="tree-toggle launcher-link" data-tree-parent data-tree-owns="source" data-ui-ref="lists.project.documents" aria-expanded="{{ 'true' if selected_source else 'false' }}">
                                             <span class="tree-label">Documents <span class="launcher-count">{{ active_sources|length }}</span></span>
                                         </button>
-                                        {# CLAUDE-DOCUMENT-RAIL-PROBE-EYE-TOOL-01, Part 4: "near the search
-                                           field" - RAIL-SEARCH-01 (next stage) adds the actual search field
-                                           beside this same control; this toggle itself is fully functional
-                                           now (static/js/document_marks.js), not scaffolding for later. #}
+                                        {# CLAUDE-DOCUMENT-RAIL-SEARCH-01: "Text | Image" mode toggle - shares
+                                           the same result list/row grammar (Part 12), different input surface
+                                           per mode (Part 2/17). Client-side only (static/js/document_marks.js);
+                                           never navigates a document merely from typing/pasting/switching modes
+                                           (Part 15). #}
+                                        <div class="documents-search-mode-toggle" role="radiogroup" aria-label="Search mode">
+                                            <button type="button" class="documents-search-mode-btn" id="documents-search-mode-text" data-ui-ref="lists.project.documents.search-mode-text" data-mode="text" aria-pressed="true">Text</button>
+                                            <button type="button" class="documents-search-mode-btn" id="documents-search-mode-image" data-ui-ref="lists.project.documents.search-mode-image" data-mode="image" aria-pressed="false">Image</button>
+                                        </div>
+                                        {# Part 3-7: filename matching, multi-term AND semantics, quoted-
+                                           phrase support, and a cheap exact-phrase-first ranking - all over
+                                           filenames only. A real, repo-wide audit before writing this (services/
+                                           bhive_parser.py, services/case_workspace.py) found no stored
+                                           extracted document text anywhere and no existing content-search
+                                           route (BHiveParser.parse() extracts text once, in memory, to classify
+                                           requirements, then discards it) - #documents-search-status states
+                                           this limitation honestly on a zero-match search rather than implying
+                                           full document text was checked. #}
+                                        <input type="search" class="documents-search-input" id="documents-search-input" data-ui-ref="lists.project.documents.search" placeholder="Search Documents" aria-label="Search Documents by name">
+                                        {# Part 8/9: Image mode's own larger, TEMPORARY tray - collapses to a
+                                           compact query thumbnail once a search is run (Part 9's own "the PM
+                                           must not have to recreate the image merely because the tray
+                                           collapsed"), never permanently enlarges the rail. #}
+                                        <div class="documents-image-search-tray" id="documents-image-search-tray" data-ui-ref="lists.project.documents.image-tray" tabindex="0" role="group" aria-label="Image search - paste, drop, or capture an image" hidden>
+                                            <p class="documents-image-search-empty" id="documents-image-search-empty">Paste, drop, or capture an image to search</p>
+                                            <div class="documents-image-search-preview" id="documents-image-search-preview" hidden>
+                                                <img class="documents-image-search-preview-img" id="documents-image-search-preview-img" alt="Image search query">
+                                                <div class="documents-image-search-preview-actions">
+                                                    <button type="button" class="btn btn-ghost" id="documents-image-search-run" data-ui-ref="lists.project.documents.image-search-run">Search</button>
+                                                    <button type="button" class="btn btn-ghost" id="documents-image-search-replace" data-ui-ref="lists.project.documents.image-search-replace">Replace</button>
+                                                    <button type="button" class="btn btn-ghost" id="documents-image-search-clear" data-ui-ref="lists.project.documents.image-search-clear">Clear</button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="documents-image-search-collapsed" id="documents-image-search-collapsed" data-ui-ref="lists.project.documents.image-search-collapsed" hidden>
+                                            <img class="documents-image-search-collapsed-thumb" id="documents-image-search-collapsed-thumb" alt="Current image query">
+                                            <button type="button" class="documents-image-search-collapsed-btn" id="documents-image-search-expand" data-ui-ref="lists.project.documents.image-search-expand" title="Expand">Expand</button>
+                                            <button type="button" class="documents-image-search-collapsed-btn" id="documents-image-search-collapsed-replace" data-ui-ref="lists.project.documents.image-search-collapsed-replace" title="Replace">Replace</button>
+                                            <button type="button" class="documents-image-search-collapsed-btn" id="documents-image-search-collapsed-clear" data-ui-ref="lists.project.documents.image-search-collapsed-clear" title="Clear">Clear</button>
+                                        </div>
+                                        {# Part 10: honest deferred state - no fabricated results, no OCR-as-
+                                           image-search. See governance/spare-parts-yard.md's own new record for
+                                           the real capability this preserves a UI path toward. #}
+                                        <p class="documents-image-search-status" id="documents-image-search-status" data-ui-ref="lists.project.documents.image-search-status" aria-live="polite" hidden>Image/shape search is not yet available in ARCHIOSK - your query image is saved above, not discarded. See the Parts Yard record for what real visual search would require.</p>
+                                        <p class="documents-search-status" id="documents-search-status" data-ui-ref="lists.project.documents.search-status" aria-live="polite" hidden></p>
                                         <button type="button" class="documents-marked-filter-btn" id="documents-marked-filter-btn" data-ui-ref="lists.project.documents.marked-filter" aria-pressed="false" aria-label="Show only marked Documents" title="Marked">Marked</button>
                                         <ul class="tree-children"{% if selected_source %} data-tree-open{% endif %}>
                                             {% for s in active_sources %}
