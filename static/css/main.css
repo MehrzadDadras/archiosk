@@ -5089,6 +5089,45 @@ main:hover,
 .app-shell.appearance-deep-ocean .display-divisions {
     background: var(--ocean-canvas);
 }
+/* CLAUDE-DEEP-OCEAN-MIDDLE-SURFACE-CORRECTION-01 (Product Owner: "the
+   main middle panel has an additional lighter background shade that
+   stops short of the left and right structural edges... creates a
+   floating-panel effect and makes the middle workspace visually
+   narrower than the chat/composer area below").
+   Root cause, confirmed live via computed styles: .workspace-pane-
+   display (nested inside .app-main's own <main>) paints its OWN
+   background: var(--surface-primary) - for Deep Ocean, the SAME
+   translucent rgba(10, 35, 42, .55) .app-main (its ancestor) already
+   painted. Stacking that translucent fill a SECOND time compounds the
+   alpha compositing into a more opaque, visibly lighter box than the
+   single-layer surrounding area - exactly the "additional lighter
+   shade." Every other Appearance's fill is opaque, so painting it
+   twice is visually identical to painting it once (no seam) - this
+   is genuinely Deep-Ocean-only, not a shared defect. Fix: let Deep
+   Ocean's own Display content show the SAME single layer of
+   translucency .app-main already provides - transparent here, not a
+   second color (Part: "do not introduce a replacement panel color").
+   The unrelated bare `main` rule (this file, ~line 1105) and its
+   3rem/1180px padding/max-width are UNTOUCHED - those apply globally,
+   to every Appearance and every non-Workspace page (gateway, docs,
+   etc.), and are explicitly out of scope ("DO NOT CHANGE... general
+   workspace dimensions"). The override below narrows scope to
+   Workspace's own <main>, Deep Ocean only, reducing (not zeroing) the
+   inset so Display's own left/right content edges land close to
+   Chat/Composer's own (measured live: Composer's own effective inset
+   from the shared column edge is roughly 1.5rem, not 3rem) - "preserve
+   reasonable small internal padding so text does not literally touch
+   a divider," not full edge-to-edge text. max-width: none removes the
+   1180px reading-width cap for this one case, since Chat/Composer has
+   no equivalent cap either - the two must expand and contract
+   together, not diverge on a wide viewport. */
+.app-main.appearance-deep-ocean .workspace-pane-display {
+    background: transparent;
+}
+.app-main.appearance-deep-ocean main {
+    padding: 0 1.5rem;
+    max-width: none;
+}
 /* CLAUDE-EYE-TOOLBOX-LAYOUT-01: the "splitter/lock controls reveal on
    hover/focus" treatment that used to live here, scoped to
    .appearance-deep-ocean only, is now the SHARED base behavior for
