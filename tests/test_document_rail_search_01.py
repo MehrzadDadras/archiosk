@@ -194,6 +194,28 @@ class ImageTraySearchCssTests(unittest.TestCase):
         body = _rule_body(self.css, '.documents-search-mode-btn[aria-pressed="true"]')
         self.assertIn("machine-blue", body)
 
+    def test_elements_toggled_via_hidden_respect_the_hidden_attribute(self):
+        # Regression guard for the bug live verification on archiosk.com
+        # caught immediately: an author `display` declaration on a
+        # selector beats the UA stylesheet's own `[hidden] {display:
+        # none}` (equal specificity, author rule comes later in cascade
+        # order) unless an explicit `[hidden]` override is added - same
+        # root cause, same fix, as CLAUDE-DUAL-DOCUMENT-FOCUS-01's own
+        # .toolbox-eye-thumbnails-panel[hidden] fix earlier this session.
+        # Every one of these selectors both declares its own `display`
+        # AND is toggled via `.hidden = ...` in static/js/document_marks.js.
+        for selector in (
+            ".documents-image-search-tray",
+            ".documents-image-search-preview",
+            ".documents-image-search-collapsed",
+            ".documents-search-input",
+        ):
+            with self.subTest(selector=selector):
+                base_body = _rule_body(self.css, selector)
+                self.assertIn("display", base_body, f"{selector} has no display rule to guard")
+                override_body = _rule_body(self.css, selector + "[hidden]")
+                self.assertIn("display: none", override_body)
+
 
 class PartsYardRecordTests(unittest.TestCase):
     def test_visual_shape_search_future_reserve_record_exists(self):
