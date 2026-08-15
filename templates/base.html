@@ -954,6 +954,7 @@
             <div class="toolbox-eye-divider" id="toolbox-eye-divider" data-ui-ref="shell.toolbox-eye-divider"
                  role="separator" aria-orientation="horizontal" aria-label="Resize Eye/Toolbox split"
                  tabindex="0" aria-valuemin="8" aria-valuemax="92">
+                <button type="button" class="divider-link-btn" id="toolbox-eye-link-btn" data-ui-ref="shell.toolbox-eye-link" aria-pressed="false" aria-label="Link the two splitters">&#128279;</button>
                 <button type="button" class="divider-lock-btn" id="toolbox-eye-lock-btn" data-ui-ref="shell.toolbox-eye-lock" aria-pressed="false" aria-label="Lock the Eye/Toolbox split">&#128275;</button>
             </div>
             {# ---------------- The one Toolbox (CLAUDE-P40-E3A, Section 8; CLAUDE-
@@ -1330,10 +1331,67 @@
         // unlocked, all of them resume. Persisted independently of the
         // split position itself and independently of the separate
         // main-panel (Display/Chat) lock in case_workspace.js.
+        //
+        // CLAUDE-EYE-TOOLBOX-LAYOUT-01-CORRECTION-01 (Product Owner: "the
+        // current implementation misunderstood the requested lock
+        // behavior... add the ability to LINK the two horizontal
+        // splitters"): a new compact chain/link toggle
+        // (#toolbox-eye-link-btn) shares a single `window.__splitterLink`
+        // boolean with case_workspace.js's own chat-divider script. While
+        // linked, every value-changing action here (drag/keyboard/
+        // dblclick/maximize - all of which already funnel through the
+        // single applyPct() write point below) also drives the Chat
+        // divider to the SAME fraction of the shared column height, via
+        // window.__chatSplitter.setValue(...) - "one aligned horizontal
+        // division across the main workspace and right-side panel."
+        // Locking, while linked, is likewise mirrored onto the Chat
+        // divider's own EXISTING lock (case_workspace.js's own
+        // beehive:chat:height-locked key) rather than inventing a third
+        // lock key - "Linked + Locked" is just both of the pre-existing
+        // per-divider locks being driven to the same value together.
+        // window.__toolboxEyeSplitter is this side's own half of that
+        // contract, called BY case_workspace.js when the Chat divider
+        // moves and linking needs to mirror back this way.
+        window.__splitterLink = window.__splitterLink || (function () {
+            var linkedKey = 'beehive:panel:splitters-linked:{{ project_id }}';
+            var linked = false;
+            try { linked = window.localStorage.getItem(linkedKey) === 'true'; } catch (e) { /* ignore */ }
+            function updateButtons() {
+                document.querySelectorAll('.divider-link-btn').forEach(function (btn) {
+                    btn.setAttribute('aria-pressed', String(linked));
+                    btn.setAttribute('aria-label', linked ? 'Unlink the two splitters' : 'Link the two splitters');
+                });
+            }
+            function setLinked(next, persist) {
+                linked = next;
+                if (persist !== false) {
+                    try { window.localStorage.setItem(linkedKey, next ? 'true' : 'false'); } catch (e) { /* ignore */ }
+                }
+                updateButtons();
+                // Turning linking ON immediately aligns the two dividers
+                // (using the Eye/Toolbox split as the source of truth)
+                // rather than waiting for the next drag - otherwise
+                // "reads as one aligned division" would be false until
+                // the reviewer happens to move one.
+                if (next && window.__toolboxEyeSplitter && window.__chatSplitter) {
+                    var columnEl = document.querySelector('.workspace-right-column');
+                    if (columnEl) {
+                        window.__chatSplitter.setValue(columnEl.clientHeight * (window.__toolboxEyeSplitter.getValue() / 100), true, true);
+                    }
+                }
+            }
+            updateButtons();
+            return {
+                get linked() { return linked; },
+                setLinked: setLinked,
+                updateButtons: updateButtons,
+            };
+        })();
         (function () {
             var column = document.querySelector('.workspace-right-column');
             var divider = document.getElementById('toolbox-eye-divider');
             var lockBtn = document.getElementById('toolbox-eye-lock-btn');
+            var linkBtn = document.getElementById('toolbox-eye-link-btn');
             var maximizeBtn = document.getElementById('toolbox-maximize-btn');
             var eyeMaximizeBtn = document.getElementById('eye-maximize-btn');
             if (!column || !divider) return;
@@ -1348,17 +1406,20 @@
 
             function clamp(pct) { return Math.max(MIN_PCT, Math.min(MAX_PCT, pct)); }
 
-            function applyPct(pct, persist) {
+            function applyPct(pct, persist, fromLink) {
                 var clamped = clamp(pct);
                 column.style.setProperty('--toolbox-height', clamped + '%');
                 divider.setAttribute('aria-valuenow', String(Math.round(clamped)));
                 if (persist !== false) {
                     try { window.localStorage.setItem(heightKey, String(clamped)); } catch (e) { /* ignore */ }
                 }
+                if (!fromLink && window.__splitterLink.linked && window.__chatSplitter) {
+                    window.__chatSplitter.setValue(column.clientHeight * (clamped / 100), persist, true);
+                }
                 return clamped;
             }
 
-            function setLocked(next, persist) {
+            function setLocked(next, persist, fromLink) {
                 locked = next;
                 divider.classList.toggle('locked', locked);
                 if (lockBtn) {
@@ -1369,15 +1430,30 @@
                 if (persist !== false) {
                     try { window.localStorage.setItem(lockedKey, locked ? 'true' : 'false'); } catch (e) { /* ignore */ }
                 }
+                if (!fromLink && window.__splitterLink.linked && window.__chatSplitter) {
+                    window.__chatSplitter.setLocked(next, persist, true);
+                }
             }
 
             var stored = null;
             try { stored = window.localStorage.getItem(heightKey); } catch (e) { /* ignore */ }
-            applyPct(stored ? parseFloat(stored) : DEFAULT_PCT, false);
+            applyPct(stored ? parseFloat(stored) : DEFAULT_PCT, false, true);
 
             var storedLocked = null;
             try { storedLocked = window.localStorage.getItem(lockedKey); } catch (e) { /* ignore */ }
-            setLocked(storedLocked === 'true', false);
+            setLocked(storedLocked === 'true', false, true);
+
+            // This divider's own half of the window.__splitterLink
+            // contract (see that object's own comment above) - lets
+            // case_workspace.js's Chat divider drive THIS pane's value/
+            // lock when the two are linked and the reviewer moved the
+            // Chat divider instead.
+            window.__toolboxEyeSplitter = {
+                setValue: function (pct, persist, fromLink) { return applyPct(pct, persist, fromLink); },
+                getValue: function () { return parseFloat(divider.getAttribute('aria-valuenow')) || DEFAULT_PCT; },
+                setLocked: function (next, persist, fromLink) { setLocked(next, persist, fromLink); },
+                isLocked: function () { return locked; },
+            };
 
             if (lockBtn) {
                 // stopPropagation on BOTH events - the lock button is a
@@ -1391,6 +1467,14 @@
                 lockBtn.addEventListener('click', function (e) {
                     e.stopPropagation();
                     setLocked(!locked);
+                });
+            }
+            if (linkBtn) {
+                // Same stopPropagation reasoning as the lock button above.
+                linkBtn.addEventListener('pointerdown', function (e) { e.stopPropagation(); });
+                linkBtn.addEventListener('click', function (e) {
+                    e.stopPropagation();
+                    window.__splitterLink.setLinked(!window.__splitterLink.linked);
                 });
             }
 
@@ -1416,7 +1500,7 @@
                 document.removeEventListener('pointerup', onPointerUp);
             }
             divider.addEventListener('pointerdown', function (e) {
-                if (locked || (lockBtn && e.target === lockBtn)) return;
+                if (locked || (lockBtn && e.target === lockBtn) || (linkBtn && e.target === linkBtn)) return;
                 dragStartY = e.clientY;
                 dragTotalHeight = column.clientHeight || 1;
                 dragStartPct = parseFloat(getComputedStyle(column).getPropertyValue('--toolbox-height')) || DEFAULT_PCT;

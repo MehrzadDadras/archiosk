@@ -144,6 +144,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const lockedKey = `beehive:chat:height-locked:${projectId}`;
         const sizeToggle = document.getElementById('conversation-size-toggle');
         const lockBtn = document.getElementById('conversation-dock-lock-btn');
+        const linkBtn = document.getElementById('conversation-dock-link-btn');
         let locked = false;
 
         function clamp(px) {
@@ -154,7 +155,13 @@ document.addEventListener('DOMContentLoaded', () => {
         // behavior as the Eye/Toolbox splitter (templates/base.html's own
         // #toolbox-eye-lock-btn) - independently persisted, independently
         // toggled ("the two locks... must be independently lockable").
-        function setLocked(next, persist) {
+        //
+        // CLAUDE-EYE-TOOLBOX-LAYOUT-01-CORRECTION-01: `fromLink` mirrors
+        // the same parameter on base.html's own setLocked() - true only
+        // when THIS call is itself the result of the OTHER divider being
+        // locked/unlocked while linked, so the mirror-back below doesn't
+        // recurse into a ping-pong.
+        function setLocked(next, persist, fromLink) {
             locked = next;
             handle.classList.toggle('locked', locked);
             if (lockBtn) {
@@ -164,6 +171,9 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             if (persist !== false) {
                 try { window.localStorage.setItem(lockedKey, locked ? 'true' : 'false'); } catch (e) { /* ignore */ }
+            }
+            if (!fromLink && window.__splitterLink && window.__splitterLink.linked && window.__toolboxEyeSplitter) {
+                window.__toolboxEyeSplitter.setLocked(next, persist, true);
             }
         }
 
@@ -175,13 +185,28 @@ document.addEventListener('DOMContentLoaded', () => {
             sizeToggle.setAttribute('aria-label', isExpanded ? 'Compact the conversation panel' : 'Expand the conversation panel');
         }
 
-        function applyHeight(px, persist) {
+        // CLAUDE-EYE-TOOLBOX-LAYOUT-01-CORRECTION-01: while linked, every
+        // height change here also drives the Eye/Toolbox split to the
+        // SAME fraction of the shared column height (`.workspace-right-
+        // column`, which is always exactly as tall as this Display/Chat
+        // column - both are full-height siblings inside `.app-shell-
+        // body`) - "one aligned horizontal division across the main
+        // workspace and right-side panel." `fromLink` (see setLocked's
+        // own comment above) prevents mirroring a value that was ITSELF
+        // just mirrored in from the other side.
+        function applyHeight(px, persist, fromLink) {
             const clamped = clamp(px);
             grid.style.setProperty('--chat-height', `${clamped}px`);
             handle.setAttribute('aria-valuenow', String(clamped));
             syncSizeToggle(clamped);
             if (persist !== false) {
                 try { window.localStorage.setItem(heightKey, String(clamped)); } catch (e) { /* ignore */ }
+            }
+            if (!fromLink && window.__splitterLink && window.__splitterLink.linked && window.__toolboxEyeSplitter) {
+                const column = document.querySelector('.workspace-right-column');
+                if (column && column.clientHeight) {
+                    window.__toolboxEyeSplitter.setValue((clamped / column.clientHeight) * 100, persist, true);
+                }
             }
             return clamped;
         }
@@ -191,13 +216,28 @@ document.addEventListener('DOMContentLoaded', () => {
         // ProjectWorkspace structural persistence" applies equally to
         // Chat's height) before anything else, so there is no flash of
         // the default size on a page that already has a saved one.
+        // fromLink=true - an initial restore-from-storage is never a
+        // reason to push a mirrored value onto the OTHER divider (that
+        // one restores its own independently, from its own key).
         let stored = null;
         try { stored = window.localStorage.getItem(heightKey); } catch (e) { /* ignore */ }
-        applyHeight(stored ? parseInt(stored, 10) : COMPACT_HEIGHT, false);
+        applyHeight(stored ? parseInt(stored, 10) : COMPACT_HEIGHT, false, true);
 
         let storedLocked = null;
         try { storedLocked = window.localStorage.getItem(lockedKey); } catch (e) { /* ignore */ }
-        setLocked(storedLocked === 'true', false);
+        setLocked(storedLocked === 'true', false, true);
+
+        // This divider's own half of the window.__splitterLink contract
+        // (see base.html's own comment on that object) - lets base.html's
+        // Eye/Toolbox divider drive THIS pane's value/lock when the two
+        // are linked and the reviewer moved the Eye/Toolbox divider
+        // instead.
+        window.__chatSplitter = {
+            setValue: (px, persist, fromLink) => applyHeight(px, persist, fromLink),
+            getValue: () => parseInt(handle.getAttribute('aria-valuenow'), 10) || COMPACT_HEIGHT,
+            setLocked: (next, persist, fromLink) => setLocked(next, persist, fromLink),
+            isLocked: () => locked,
+        };
 
         if (lockBtn) {
             // Same reasoning as the Eye/Toolbox lock button: stop the
@@ -208,6 +248,18 @@ document.addEventListener('DOMContentLoaded', () => {
             lockBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 setLocked(!locked);
+            });
+        }
+        if (linkBtn) {
+            // Same stopPropagation reasoning as the lock button above.
+            // window.__splitterLink is defined by base.html's own inline
+            // script, which runs before this external file's
+            // DOMContentLoaded handler - see case_workspace.html's own
+            // comment on script-load ordering.
+            linkBtn.addEventListener('pointerdown', (e) => { e.stopPropagation(); });
+            linkBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (window.__splitterLink) window.__splitterLink.setLinked(!window.__splitterLink.linked);
             });
         }
 
@@ -234,7 +286,7 @@ document.addEventListener('DOMContentLoaded', () => {
             document.removeEventListener('pointerup', onPointerUp);
         }
         handle.addEventListener('pointerdown', (e) => {
-            if (locked || (lockBtn && e.target === lockBtn)) return;
+            if (locked || (lockBtn && e.target === lockBtn) || (linkBtn && e.target === linkBtn)) return;
             dragStartY = e.clientY;
             dragStartHeight = parseInt(getComputedStyle(grid).getPropertyValue('--chat-height'), 10) || COMPACT_HEIGHT;
             handle.classList.add('dragging');

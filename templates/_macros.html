@@ -195,12 +195,19 @@
 <div class="accordion-section conversation-dock-panel" id="conversation-dock" role="region" aria-label="{{ heading }} conversation">
     {# CLAUDE-EYE-TOOLBOX-LAYOUT-01, Part 4: the same lockable-boundary
        treatment as the Eye/Toolbox splitter (base.html's own
-       #toolbox-eye-lock-btn) - independent of it (its own persistence
-       key, its own lock state - "the two locks... must be independently
-       lockable"). #}
+       #toolbox-eye-lock-btn) - independently lockable by default.
+       CLAUDE-EYE-TOOLBOX-LAYOUT-01-CORRECTION-01 (Product Owner: "add the
+       ability to link the two horizontal splitters"): a compact chain
+       toggle (#conversation-dock-link-btn) shares the SAME
+       window.__splitterLink boolean base.html's Eye/Toolbox divider
+       defines - while linked, moving either divider (or locking either)
+       drives both together; static/js/case_workspace.js's own
+       setUpChatResize() wires this button's click handler and the
+       mirroring logic (window.__chatSplitter). #}
     <div class="conversation-dock-resize-handle" id="conversation-dock-resize-handle"
          role="separator" aria-orientation="horizontal" aria-label="Resize conversation panel"
          tabindex="0" aria-valuemin="120" aria-valuemax="640">
+        <button type="button" class="divider-link-btn" id="conversation-dock-link-btn" data-ui-ref="shell.chat-divider-link" aria-pressed="false" aria-label="Link the two splitters">&#128279;</button>
         <button type="button" class="divider-lock-btn" id="conversation-dock-lock-btn" data-ui-ref="shell.chat-divider-lock" aria-pressed="false" aria-label="Lock the Display/Chat split">&#128275;</button>
     </div>
     {# CLAUDE-P40-VW8-QA: the old "{{ heading }} ({{ message_count }})"

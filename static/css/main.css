@@ -3577,12 +3577,16 @@ html.toolbox-hidden .workspace-right-column {
    rest, revealed the same way the divider's own accent line is
    (hover/focus-within), except when locked - then it stays visible as
    the persistent "tiny lock-state cue" the divider's own line
-   deliberately does not become. */
-.divider-lock-btn {
+   deliberately does not become.
+   CLAUDE-EYE-TOOLBOX-LAYOUT-01-CORRECTION-01: .divider-link-btn (new)
+   shares this exact same compact/hidden-at-rest/persistent-when-active
+   treatment - "keep controls extremely compact... do not add large
+   toolbar buttons" (Product Owner) - sitting immediately beside the lock
+   button in the same strip, not a second control elsewhere. */
+.divider-lock-btn,
+.divider-link-btn {
     position: absolute;
     top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
     z-index: 2;
     width: 18px;
     height: 18px;
@@ -3598,20 +3602,35 @@ html.toolbox-hidden .workspace-right-column {
     opacity: 0;
     transition: opacity 0.15s ease;
 }
+.divider-lock-btn {
+    left: calc(50% + 12px);
+    transform: translate(-50%, -50%);
+}
+.divider-link-btn {
+    left: calc(50% - 12px);
+    transform: translate(-50%, -50%);
+}
 .toolbox-eye-divider:hover .divider-lock-btn,
 .toolbox-eye-divider:focus-within .divider-lock-btn,
+.toolbox-eye-divider:hover .divider-link-btn,
+.toolbox-eye-divider:focus-within .divider-link-btn,
 .divider-lock-btn:focus-visible,
-.divider-lock-btn[aria-pressed="true"] {
+.divider-link-btn:focus-visible,
+.divider-lock-btn[aria-pressed="true"],
+.divider-link-btn[aria-pressed="true"] {
     opacity: 1;
 }
-.divider-lock-btn:hover {
+.divider-lock-btn:hover,
+.divider-link-btn:hover {
     background: var(--surface-hover);
     color: var(--text-primary);
 }
-.divider-lock-btn[aria-pressed="true"] {
+.divider-lock-btn[aria-pressed="true"],
+.divider-link-btn[aria-pressed="true"] {
     color: var(--machine-blue);
 }
-.divider-lock-btn:focus-visible {
+.divider-lock-btn:focus-visible,
+.divider-link-btn:focus-visible {
     outline: 2px solid var(--machine-blue);
     outline-offset: 1px;
 }
