@@ -1885,6 +1885,117 @@
             };
         })();
     </script>
+    <script nonce="{{ csp_nonce }}">
+        // Bounded UI pass (listing-panel resize): #lists-divider (already
+        // click-to-toggle, Section 7 above) is now ALSO a real, mouse-
+        // draggable WIDTH resize handle for .launcher-panel - the exact
+        // same pointerdown/pointermove/pointerup + CSS-custom-property +
+        // capture-phase click-suppression + keyboard pattern the
+        // #toolbox-divider script above already established, mirrored
+        // left-to-right: Lists' LEFT edge is pinned (viewport edge), so
+        // its RIGHT edge is what the divider moves - dragging the
+        // divider right widens it (deltaPx is NOT inverted here, unlike
+        // the right-side Toolbox column's own math one block up, because
+        // Lists sits on the opposite side of the shell).
+        // Not project-scoped (persistence key, like the collapse toggle's
+        // own 'beehive:panel:launcher' above) - Lists renders on every
+        // authenticated page, not only inside a Project workspace.
+        (function () {
+            var launcherPanel = document.querySelector('.launcher-panel');
+            var rightColumn = document.querySelector('.workspace-right-column');
+            var divider = document.getElementById('lists-divider');
+            if (!launcherPanel || !divider) return;
+
+            var LISTS_MIN = 200;
+            var LISTS_MAX = 480;
+            var CENTRE_MIN = 320;
+            var DEFAULT_WIDTH = 240;
+            var DRAG_THRESHOLD = 3;
+            var widthKey = 'beehive:panel:launcher-width';
+
+            function rightColumnWidth() {
+                if (!rightColumn || document.documentElement.classList.contains('toolbox-hidden')) return 0;
+                return rightColumn.getBoundingClientRect().width;
+            }
+
+            function maxAllowed() {
+                var available = window.innerWidth - rightColumnWidth() - CENTRE_MIN;
+                return Math.max(LISTS_MIN, Math.min(LISTS_MAX, available));
+            }
+
+            function clamp(px) {
+                return Math.max(LISTS_MIN, Math.min(maxAllowed(), px));
+            }
+
+            function currentWidth() {
+                return parseFloat(getComputedStyle(launcherPanel).getPropertyValue('--launcher-width')) || DEFAULT_WIDTH;
+            }
+
+            function applyWidth(px, persist) {
+                var clamped = clamp(px);
+                launcherPanel.style.setProperty('--launcher-width', clamped + 'px');
+                divider.setAttribute('aria-valuenow', String(Math.round(clamped)));
+                divider.setAttribute('aria-valuemax', String(Math.round(maxAllowed())));
+                if (persist !== false) {
+                    try { window.localStorage.setItem(widthKey, String(clamped)); } catch (e) { /* ignore */ }
+                }
+                return clamped;
+            }
+
+            var stored = null;
+            try { stored = window.localStorage.getItem(widthKey); } catch (e) { /* ignore */ }
+            divider.setAttribute('aria-valuemin', String(LISTS_MIN));
+            applyWidth(stored ? parseFloat(stored) : DEFAULT_WIDTH, false);
+
+            var dragStartX = null;
+            var dragStartWidth = null;
+            var dragMoved = false;
+            var justDragged = false;
+            function onPointerMove(e) {
+                if (dragStartX === null) return;
+                var deltaPx = e.clientX - dragStartX;
+                if (Math.abs(deltaPx) > DRAG_THRESHOLD) dragMoved = true;
+                applyWidth(dragStartWidth + deltaPx);
+            }
+            function onPointerUp() {
+                dragStartX = null;
+                dragStartWidth = null;
+                if (dragMoved) justDragged = true;
+                divider.classList.remove('dragging');
+                document.removeEventListener('pointermove', onPointerMove);
+                document.removeEventListener('pointerup', onPointerUp);
+            }
+            divider.addEventListener('pointerdown', function (e) {
+                dragStartX = e.clientX;
+                dragStartWidth = currentWidth();
+                dragMoved = false;
+                divider.classList.add('dragging');
+                document.addEventListener('pointermove', onPointerMove);
+                document.addEventListener('pointerup', onPointerUp);
+                e.preventDefault();
+            });
+            // Capture phase - runs before Section 7's own bubble-phase
+            // click-toggle listener regardless of registration order,
+            // same reasoning as the Toolbox divider's own capture-phase
+            // listener above.
+            divider.addEventListener('click', function (e) {
+                if (justDragged) {
+                    e.stopImmediatePropagation();
+                    e.preventDefault();
+                    justDragged = false;
+                }
+            }, true);
+
+            var KEY_STEP = 20;
+            divider.addEventListener('keydown', function (e) {
+                var current = currentWidth();
+                if (e.key === 'ArrowRight') { applyWidth(current + KEY_STEP); e.preventDefault(); }
+                else if (e.key === 'ArrowLeft') { applyWidth(current - KEY_STEP); e.preventDefault(); }
+                else if (e.key === 'Home') { applyWidth(LISTS_MIN); e.preventDefault(); }
+                else if (e.key === 'End') { applyWidth(maxAllowed()); e.preventDefault(); }
+            });
+        })();
+    </script>
     {# CLAUDE-MM5: available wherever Eye is (project_id/workspace defined
        on ANY page, not only case_workspace.html) so "Save to project"
        can hand off to the same real drawing/image viewer MM4 built,

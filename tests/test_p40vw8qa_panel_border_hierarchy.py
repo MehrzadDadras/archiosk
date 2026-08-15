@@ -156,8 +156,17 @@ class PanelBorderHierarchyTests(unittest.TestCase):
         # Scope guard: this correction only ever removes/retints a
         # border - width/height/flex-basis of the panels themselves
         # must be exactly what they were before.
+        #
+        # Bounded UI pass (listing-panel resize): .launcher-panel's width
+        # is now a CSS custom property (base.html's own #lists-divider
+        # drag handler writes --launcher-width), a deliberate, explicitly
+        # authorized change in that later pass, not a regression of this
+        # correction's own border-only scope - the 240px default this
+        # guard originally protected is still exactly what unhydrated/
+        # no-JS page loads get, just expressed as the property's fallback
+        # instead of a bare literal.
         launcher_body = self._rule_body(".launcher-panel {")
-        self.assertIn("width: 240px", launcher_body)
+        self.assertIn("width: var(--launcher-width, 240px)", launcher_body)
         topbar_body = self._rule_body(".workspace-topbar {")
         self.assertIn("padding: 0.6rem 0", topbar_body)
         self.assertIn("margin-bottom: 1rem", topbar_body)

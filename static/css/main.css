@@ -250,7 +250,13 @@ a:focus-visible, button:focus-visible, input:focus-visible {
    beside it (the divider is what collapses the panel in the first
    place), so there is no second line to double up with there. */
 .launcher-panel {
-    width: 240px;
+    /* Bounded UI pass (listing-panel resize): --launcher-width is set by
+       base.html's own drag handler on #lists-divider, same CSS-custom-
+       property write point every other resizable divider in this file
+       already uses (--right-column-width, --toolbox-height, --chat-
+       height) - the 240px fallback is what unhydrated/no-JS page loads
+       still get, unchanged from before. */
+    width: var(--launcher-width, 240px);
     flex-shrink: 0;
     display: flex;
     flex-direction: column;
@@ -544,6 +550,16 @@ a:focus-visible, button:focus-visible, input:focus-visible {
    pointer strays off this thin line - see .lists-thumbnails-divider's
    own comment on why :hover alone isn't enough). */
 .panel-divider-toolbox {
+    cursor: ew-resize;
+}
+/* Bounded UI pass (listing-panel resize): the comment above ("Lists
+   stays click-only") was true when written but is now superseded -
+   Lists gets the SAME real drag-to-resize treatment, mirrored left-
+   side (drag right widens, drag left narrows - see base.html's own
+   drag handler on #lists-divider for the direction math). Same
+   ew-resize/.dragging idiom as .panel-divider-toolbox above, so the
+   two panels read identically as resizable. */
+.panel-divider-lists {
     cursor: ew-resize;
 }
 /* .panel-divider-toolbox.dragging::before's own reveal is now handled by
@@ -976,14 +992,42 @@ html.launcher-hidden .launcher-panel { display: none; }
    shortlist checkbox, same compact footprint as the icon buttons beside
    it - "following the restrained document-review grammar familiar from
    professional review applications" (Product Owner), not a decorative
-   custom control. */
+   custom control.
+
+   Bounded UI pass (row-control proportions + transparency): two
+   corrections layered on top of the original 14px control, both purely
+   visual - click/mark behavior (native checkbox semantics, JS reads of
+   .checked) is untouched:
+   1) shrunk slightly (14px -> 12px) so it reads as visually quieter
+      next to the triangle Keep control beside it, which goes the other
+      direction (see .keep-open-btn below);
+   2) appearance:none + a transparent background + a thin border,
+      replacing the browser's native solid white checkbox fill - accent-
+      color only paints a native control's own rendering, so it's
+      dropped now that appearance:none opts out of that rendering;
+      the checked state below supplies the mark indicator instead. */
 .pm-mark-checkbox {
     flex-shrink: 0;
-    width: 14px;
-    height: 14px;
+    width: 12px;
+    height: 12px;
     margin: 0;
     cursor: pointer;
-    accent-color: var(--machine-blue);
+    appearance: none;
+    -webkit-appearance: none;
+    background: transparent;
+    border: 1px solid var(--text-metadata);
+    border-radius: 2px;
+}
+.pm-mark-checkbox:checked {
+    background: var(--machine-blue);
+    border-color: var(--machine-blue);
+}
+.pm-mark-checkbox:hover {
+    border-color: var(--machine-blue);
+}
+.pm-mark-checkbox:focus-visible {
+    outline: 2px solid var(--machine-blue);
+    outline-offset: 1px;
 }
 /* Part 6: "do not give the Eye document another filled selection color
    competing with Main - normal row background + thin restrained dashed
@@ -1004,7 +1048,14 @@ html.launcher-hidden .launcher-panel { display: none; }
    square." Same compact footprint as the icon buttons around it;
    aria-pressed reflects the SAME real pinned-tab state document_tabs.js
    itself already tracks (findPinned), not a separate boolean of its
-   own. */
+   own.
+
+   Bounded UI pass (row-control proportions): the glyph itself
+   (0.75rem, well below the 22px hit-target box it sits in) is bumped
+   slightly so the triangle is easier to read/recognize, going the
+   opposite direction from .pm-mark-checkbox's own shrink above - the
+   22px box, line-height, and every click/hover/focus rule below are
+   unchanged, so the glyph stays centered in the same footprint. */
 .keep-open-btn {
     flex-shrink: 0;
     width: 22px;
@@ -1014,7 +1065,7 @@ html.launcher-hidden .launcher-panel { display: none; }
     border-radius: 4px;
     background: none;
     color: var(--text-metadata);
-    font-size: 0.75rem;
+    font-size: 0.9rem;
     line-height: 22px;
     text-align: center;
     cursor: pointer;
@@ -6866,7 +6917,18 @@ main:hover,
    defines - see .conv-dialog's own 80) so the badge is never hidden
    behind a popup/dialog while inspecting one. pointer-events:none so
    the badge itself is never a click target, and pre-wrap/monospace so
-   a longer dot-path id never gets silently clipped. */
+   a longer dot-path id never gets silently clipped.
+
+   Bounded UI pass (ID badge correction): the badge is a shrink-to-fit
+   absolutely-positioned box (no explicit width), so its old symmetric
+   0.05rem/0.3rem padding was pure box inflation - it never centered
+   anything (there was no extra space to center within) and only ate
+   into how much of the available rail width a long dot-path id got
+   before crowding its neighbor. Padding removed outright and
+   text-align:center added (harmless no-op at today's shrink-to-fit
+   width, but correct if this ever gets an explicit width) so the
+   badge now reads as a compact identifier chip that hugs its own
+   text, not a padded input. */
 .ui-reference-mode-active [data-ui-ref] {
     position: relative;
     outline: 1px dashed var(--machine-blue);
@@ -6882,9 +6944,10 @@ main:hover,
     font-family: var(--font-mono);
     font-size: var(--text-2xs);
     line-height: 1.3;
+    text-align: center;
     color: var(--surface-primary);
     background: var(--machine-blue);
-    padding: 0.05rem 0.3rem;
+    padding: 0;
     border-radius: 2px;
     white-space: pre;
     pointer-events: none;
