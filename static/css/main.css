@@ -2506,51 +2506,28 @@ main {
 .document-context-panel { margin: 0.6rem 0; }
 .document-context-panel summary { cursor: pointer; font-size: var(--text-sm); color: var(--machine-blue); }
 .document-context-text { font-size: var(--text-sm); color: var(--text-primary); white-space: pre-wrap; margin: 0.3rem 0; }
-.appearance-matrix {
-    border-collapse: collapse;
+/* CLAUDE-APPEARANCE-SIMPLIFY-01: retires the old .appearance-matrix
+   table (per-surface Menu/Lists/Display/Toolbox/Chat rows, a "mixed"
+   state note) entirely - Appearance is now ONE global choice, so there
+   is nothing left to disagree and nothing to display as "mixed."
+   .appearance-global-options reuses the same plain-list, no-card
+   density every other compact popover control in this file already
+   uses (see .operating-environment-option). */
+.appearance-global-options {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+.appearance-global-option {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
     font-size: var(--text-sm);
-    width: 100%;
-}
-.appearance-matrix th,
-.appearance-matrix td {
-    padding: 0.2rem 0.3rem;
-    text-align: center;
-}
-.appearance-matrix thead th {
-    color: var(--text-metadata);
-    font-weight: 400;
-    font-size: var(--text-xs);
-    word-break: normal;
-    overflow-wrap: break-word;
-}
-.appearance-matrix tbody th {
-    text-align: left;
-    font-weight: 500;
-    color: var(--text-primary);
-    padding-right: 0.6rem;
-    white-space: nowrap;
-}
-.appearance-matrix input[type="radio"] {
-    margin: 0;
     cursor: pointer;
 }
-/* CLAUDE-P40-VW8-QA, Section 5: the All row sits above the five
-   per-surface rows, set apart by a divider (not a fill/box - this
-   file's own "no cards/shadows" discipline) so it visibly reads as a
-   universal control, not a sixth surface. */
-.appearance-matrix-all-row th,
-.appearance-matrix-all-row td {
-    border-bottom: 1px solid var(--border);
-    padding-bottom: 0.4rem;
-}
-.appearance-matrix tbody tr:nth-child(2) th,
-.appearance-matrix tbody tr:nth-child(2) td {
-    padding-top: 0.4rem;
-}
-.appearance-mixed-note {
-    font-size: var(--text-xs);
-    color: var(--text-metadata);
-    margin: 0.3rem 0 0;
+.appearance-global-option input[type="radio"] {
+    margin: 0;
+    cursor: pointer;
 }
 /* Standard visually-hidden pattern: present to assistive tech and
    keyboard navigation, removed from normal visual flow only - never
@@ -4673,15 +4650,59 @@ main:hover,
     background: var(--surface-primary);
     color: var(--text-primary);
 }
+/* "Deep Ocean" (CLAUDE-APPEARANCE-SIMPLIFY-01) - fifth global appearance
+   choice, same redefinition pattern as .appearance-dark/.appearance-
+   tinted/.appearance-deep-forest above, reading from the new --ocean-*
+   token family (tokens.css's own comment there has the full derivation
+   and source-tracing story - traced from the landing/sign-in shell's
+   own deep-ocean background, not invented). */
+.app-shell.appearance-deep-ocean,
+.workspace-topbar.appearance-deep-ocean,
+.launcher-panel.appearance-deep-ocean,
+.app-main.appearance-deep-ocean,
+.workspace-right-column.appearance-deep-ocean,
+.chat-region.appearance-deep-ocean {
+    --canvas: var(--ocean-canvas);
+    --surface-primary: var(--ocean-surface-primary);
+    --surface-secondary: var(--ocean-surface-secondary);
+    --surface-hover: var(--ocean-surface-hover);
+    --surface-selected: var(--ocean-surface-selected);
+    --border: var(--ocean-border);
+    --border-strong: var(--ocean-border-strong);
+    --text-primary: var(--ocean-text-primary);
+    --text-secondary: var(--ocean-text-secondary);
+    --text-metadata: var(--ocean-text-metadata);
+    --text-disabled: var(--ocean-text-disabled);
+    --seal-red: var(--ocean-seal-red);
+    --seal-red-tint: var(--ocean-seal-red-tint);
+    --machine-blue: var(--ocean-machine-blue);
+    --machine-blue-tint: var(--ocean-machine-blue-tint);
+    --highlight-orange: var(--ocean-highlight-orange);
+    --highlight-orange-tint: var(--ocean-highlight-orange-tint);
+    --accepted-green: var(--ocean-accepted-green);
+    --accepted-green-tint: var(--ocean-accepted-green-tint);
+    --attention-amber: var(--ocean-attention-amber);
+    --attention-amber-tint: var(--ocean-attention-amber-tint);
+    --failure-red: var(--ocean-failure-red);
+    --failure-red-tint: var(--ocean-failure-red-tint);
+    --risk-red: var(--ocean-risk-red);
+    --risk-red-tint: var(--ocean-risk-red-tint);
+    --brand-gold: var(--ocean-brand-gold);
+    background: var(--surface-primary);
+    color: var(--text-primary);
+}
 .chat-region.appearance-tinted,
 .chat-region.appearance-tinted .conversation-dock-panel,
 .chat-region.appearance-dark,
 .chat-region.appearance-dark .conversation-dock-panel,
 .chat-region.appearance-deep-forest,
-.chat-region.appearance-deep-forest .conversation-dock-panel {
+.chat-region.appearance-deep-forest .conversation-dock-panel,
+.chat-region.appearance-deep-ocean,
+.chat-region.appearance-deep-ocean .conversation-dock-panel {
     background: var(--surface-primary);
     color: var(--text-primary);
 }
+
 /* CLAUDE-P40-E2B: the drag/keyboard-operable divider between Display
    and Chat - a real ARIA separator (draggable via
    static/js/case_workspace.js's pointer handlers, and keyboard-
@@ -4732,6 +4753,105 @@ main:hover,
     outline: 2px solid var(--machine-blue);
     outline-offset: 2px;
 }
+
+/* ===========================================================================
+   Deep Ocean "Visual Source of Truth" (CLAUDE-APPEARANCE-SIMPLIFY-01
+   addendum) - Product Owner correction, twice, after live review: a
+   first attempt here (a flat, opaque, luminance-matched hex the same
+   way Midnight Blue/Deep Forest were derived) read "close to midnight
+   blue instead of being like gateway page," followed by the explicit
+   instruction "adapt Gateway page for deepocean appearance." Every
+   --ocean-* token (tokens.css) is now a literal copy of THIS FILE's own
+   .gateway-shell rule (above - templates/gateway_shell.html's already-
+   shipped, already-visually-approved deep-ocean treatment), so the
+   standard shared token-redefinition mechanism every other theme
+   already uses (background: var(--surface-primary) etc., in the
+   combined selector above) already produces the correct translucent
+   glass fill/text/border for every one of the 5 former surfaces
+   (including Display now - a plain opaque patch there would read as a
+   surface this theme forgot, not a deliberate exception) with zero
+   extra rules. This block is only what genuinely can't flow through
+   that token mechanism: the literal background gradient (.app-shell
+   has no --canvas equivalent to redefine into, since Gateway's own
+   background is a real multi-stop gradient, not a flat color) and
+   backdrop-filter (not expressible as a custom property). Placed AFTER
+   every base rule it touches (.panel-divider, .toolbox-eye-divider,
+   .conversation-dock-resize-handle above) so a plain textual/regex
+   search for one of those base selectors still finds the base rule
+   first, not this override. ============================================ */
+
+/* The literal .landing-page gradient (static/css/landing.css), reused
+   verbatim in place of a flat canvas color - .app-shell has no
+   translucency of its own to blur (it IS the base layer everything
+   else floats above), so it gets the real multi-stop background
+   directly rather than going through --canvas. */
+.app-shell.appearance-deep-ocean {
+    background:
+        radial-gradient(circle at 50% 10%, rgba(33, 112, 132, .14), transparent 30%),
+        radial-gradient(circle at 50% 45%, rgba(8, 55, 68, .12), transparent 42%),
+        linear-gradient(180deg, rgb(2, 8, 18) 0%, rgb(3, 23, 37) 46%, rgb(1, 5, 10) 100%);
+}
+/* backdrop-filter itself has no custom-property equivalent, so this is
+   the one thing every former surface still needs a dedicated rule for -
+   the actual glass FILL/text/border colors already flow through the
+   standard --surface-primary/--text-primary/--border mechanism (the
+   combined selector above), now that those tokens are themselves
+   translucent rgba() values reused from .gateway-shell. */
+.workspace-topbar.appearance-deep-ocean,
+.launcher-panel.appearance-deep-ocean,
+.app-main.appearance-deep-ocean,
+.workspace-right-column.appearance-deep-ocean,
+.chat-region.appearance-deep-ocean {
+    -webkit-backdrop-filter: blur(14px);
+    backdrop-filter: blur(14px);
+}
+/* Menu's own bottom border (border-bottom: 1px solid var(--divider-
+   strong) in its base rule) is functionally meaningful - separates
+   persistent chrome from scrolling content below it ("borders only
+   where functionally necessary"). --divider-strong is deliberately
+   mode-invariant (see tokens.css's own comment - it must stay legible
+   regardless of which theme is active), so it is never itself
+   redefined here; this scoped override recolors just this ONE border
+   to var(--border) (now the same translucent glass tone every other
+   ocean border already reads) instead, a deliberate Deep-Ocean-only
+   exception for internal consistency, not a change to the shared
+   token. */
+.workspace-topbar.appearance-deep-ocean {
+    border-bottom-color: var(--border);
+}
+/* "Splitter/lock controls reveal on hover/focus where appropriate" -
+   minimal at rest (letting the ocean canvas show through the gap
+   behind them - see .app-shell's own gradient above), full strength on
+   hover/focus/drag via the SAME existing accent (--machine-blue) every
+   other theme's dividers already use there - a visibility change only,
+   never a new color or interaction mechanism. The Lists/Toolbox
+   collapse toggles (.panel-divider, aria-expanded) are the one
+   exception while COLLAPSED ([aria-expanded="false"]) - that state is
+   the only way back to re-expand the panel, so it stays visible at
+   rest rather than hidden until a hover that can't happen because the
+   control can't be found. */
+.app-shell.appearance-deep-ocean .panel-divider,
+.app-shell.appearance-deep-ocean .toolbox-eye-divider {
+    background: transparent;
+}
+.app-shell.appearance-deep-ocean .panel-divider[aria-expanded="true"]::before,
+.app-shell.appearance-deep-ocean .toolbox-eye-divider::before,
+.app-shell.appearance-deep-ocean .conversation-dock-resize-handle::before {
+    opacity: 0;
+    transition: opacity 0.15s ease;
+}
+.app-shell.appearance-deep-ocean .panel-divider[aria-expanded="true"]:hover::before,
+.app-shell.appearance-deep-ocean .panel-divider[aria-expanded="true"]:focus-visible::before,
+.app-shell.appearance-deep-ocean .panel-divider-toolbox[aria-expanded="true"].dragging::before,
+.app-shell.appearance-deep-ocean .toolbox-eye-divider:hover::before,
+.app-shell.appearance-deep-ocean .toolbox-eye-divider:focus-visible::before,
+.app-shell.appearance-deep-ocean .toolbox-eye-divider.dragging::before,
+.app-shell.appearance-deep-ocean .conversation-dock-resize-handle:hover::before,
+.app-shell.appearance-deep-ocean .conversation-dock-resize-handle:focus-visible::before,
+.app-shell.appearance-deep-ocean .conversation-dock-resize-handle.dragging::before {
+    opacity: 1;
+}
+
 /* CLAUDE-P40-VW8-QA: was justify-content:space-between, spreading the
    old heading text (removed - see _macros.html's own comment) and this
    toggle to opposite ends. With only the toggle left, flex-end keeps it
@@ -6209,8 +6329,8 @@ main:hover,
    (the "All ON"/"All OFF"/"Return to Baseline" button trio) is retired
    below in favor of .spin-trigger (one SPIN action) and the compact
    per-row .spin-selector/.spin-findings-box/.spin-row-disclosure grammar
-   - same real-estate-conscious density precedent as .appearance-matrix
-   above (small, plain, no icon/chevron ceremony), following a live
+   - same real-estate-conscious density precedent as the Appearance
+   selector above (small, plain, no icon/chevron ceremony), following a live
    Product Owner review that rejected the repeated large ON/OFF buttons. */
 .spin-status-strip {
     display: flex;

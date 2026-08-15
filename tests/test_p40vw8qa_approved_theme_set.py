@@ -193,8 +193,13 @@ class DefaultAndMigrationTests(unittest.TestCase):
         self.source = _BASE_HTML_PATH.read_text(encoding="utf-8")
 
     def test_resolver_defined_before_the_later_wiring_block_reuses_it(self):
+        # CLAUDE-APPEARANCE-SIMPLIFY-01: the later wiring block no longer
+        # aliases resolveStoredMode into a local var (Appearance is one
+        # global choice now, resolved once via
+        # window.__resolveGlobalAppearanceMode()) - applyMode is the
+        # landmark that still exists in both places.
         early_idx = self.source.index("window.__resolveStoredAppearanceMode = function")
-        later_idx = self.source.index("var resolveStoredMode = window.__resolveStoredAppearanceMode;")
+        later_idx = self.source.index("var applyMode = window.__applyStoredAppearanceMode;")
         self.assertLess(early_idx, later_idx)
 
     def test_migration_dark_and_graphite_map_to_black(self):
@@ -230,22 +235,31 @@ class DefaultAndMigrationTests(unittest.TestCase):
     def test_early_pre_paint_script_runs_immediately_after_chat_region(self):
         chat_region_idx = self.source.index('<div class="chat-region"')
         resolver_idx = self.source.index("window.__resolveStoredAppearanceMode = function")
-        later_wiring_idx = self.source.index("var resolveStoredMode = window.__resolveStoredAppearanceMode;")
+        later_wiring_idx = self.source.index("var applyMode = window.__applyStoredAppearanceMode;")
         self.assertLess(chat_region_idx, resolver_idx)
         self.assertLess(resolver_idx, later_wiring_idx)
 
 
 class AppearanceMatrixLabelTests(unittest.TestCase):
+    """CLAUDE-APPEARANCE-SIMPLIFY-01 supersedes this whole class's own
+    original premise: the five-surface x four-mode <table> matrix these
+    tests checked is retired outright - Appearance is now ONE global
+    radio choice among five options (Product Owner: "do not allow
+    panel-by-panel theme mixing"). Rewritten to assert the new, single
+    mode tuple/radio-group structure instead of a table's column
+    headers/per-surface row template."""
+
     def setUp(self):
         self.source = _BASE_HTML_PATH.read_text(encoding="utf-8")
 
-    def test_four_column_header_present(self):
-        # CLAUDE-POSTCAMEL-P02-ST1: Light relabeled Titanium.
-        idx = self.source.index('<th scope="col">Titanium</th>')
-        body = self.source[idx: idx + 300]
-        self.assertIn("Black", body)
-        self.assertIn("Midnight Blue", body)
-        self.assertIn("Deep Forest", body)
+    def test_five_labels_present(self):
+        # CLAUDE-POSTCAMEL-P02-ST1: Light relabeled Titanium. Labels
+        # render via {{ mode_label }} (never a literal ">Titanium<" in
+        # the template source) - checked as quoted entries in the mode
+        # tuple itself instead, same tuple test_one_global_radio_group_
+        # with_five_choices below verifies in full.
+        for label in ("'Titanium'", "'Black'", "'Midnight Blue'", "'Deep Forest'", "'Deep Ocean'"):
+            self.assertIn(label, self.source)
 
     def test_mode_value_tuples_use_black_not_graphite(self):
         self.assertNotIn("'graphite', 'Graphite'", self.source)
@@ -257,19 +271,19 @@ class AppearanceMatrixLabelTests(unittest.TestCase):
         # must never change.
         self.assertIn("('black', 'Black', 'dark')", self.source)
 
-    def test_five_surfaces_each_have_four_radio_choices(self):
-        # data-appearance-target="{{ surface_key }}" is Jinja source, not
-        # a literal value - assert the surface tuple list itself covers
-        # all five, and that the template renders ONE row template (one
-        # literal data-appearance-target attribute) reused per surface
-        # via the {% for %} loop, times a 4-choice inner loop.
-        surfaces_tuple = "[('menu', 'Menu'), ('lists', 'Lists'), ('display', 'Display'), ('toolbox', 'Toolbox'), ('chat', 'Chat')]"
-        self.assertIn(surfaces_tuple, self.source)
-        self.assertEqual(self.source.count('data-appearance-target="{{ surface_key }}"'), 1)
-        self.assertEqual(self.source.count('data-appearance-mode="{{ mode_value }}"'), 1)
+    def test_one_global_radio_group_with_five_choices(self):
+        # data-appearance-all-mode="{{ mode_value }}" is Jinja source,
+        # not a literal value - assert the ONE mode tuple the template's
+        # single {% for %} loop iterates over covers all five choices,
+        # and that the loop body itself (one literal
+        # data-appearance-all-mode attribute) is rendered exactly once -
+        # there is no longer a second, per-surface loop to keep in sync.
+        mode_tuple = "[('light', 'Titanium', 'light'), ('black', 'Black', 'dark'), ('midnight-blue', 'Midnight Blue', 'tinted'), ('deep-forest', 'Deep Forest', 'deep-forest'), ('deep-ocean', 'Deep Ocean', 'deep-ocean')]"
+        self.assertIn(mode_tuple, self.source)
+        self.assertEqual(self.source.count(mode_tuple), 1)
         self.assertEqual(self.source.count('data-appearance-all-mode="{{ mode_value }}"'), 1)
-        mode_tuple = "[('light', 'Titanium', 'light'), ('black', 'Black', 'dark'), ('midnight-blue', 'Midnight Blue', 'tinted'), ('deep-forest', 'Deep Forest', 'deep-forest')]"
-        self.assertEqual(self.source.count(mode_tuple), 2)  # All row + per-surface row loops share the identical 4-choice list
+        self.assertNotIn('data-appearance-target="{{ surface_key }}"', self.source)
+        self.assertNotIn('data-appearance-mode="{{ mode_value }}"', self.source)
 
 
 class MatrixNarrowViewportTests(unittest.TestCase):
@@ -280,10 +294,16 @@ class MatrixNarrowViewportTests(unittest.TestCase):
         idx = self.css.index(".workspace-appearance-options {\n    max-width:")
         self.assertGreaterEqual(idx, 0)
 
-    def test_matrix_header_cells_are_allowed_to_wrap(self):
-        idx = self.css.index(".appearance-matrix thead th {")
-        body = self.css[idx: idx + 300]
-        self.assertNotIn("white-space: nowrap", body)
+    def test_matrix_table_css_is_gone(self):
+        # CLAUDE-APPEARANCE-SIMPLIFY-01: supersedes this class's own
+        # "header cells are allowed to wrap" check - there is no table,
+        # no header row, nothing to wrap. Regression guard against the
+        # retired table CSS RULE reappearing (a retirement comment is
+        # allowed to name the class it retired, so this checks for the
+        # actual selector declaration, not a bare substring match).
+        self.assertNotIn(".appearance-matrix {", self.css)
+        self.assertNotIn(".appearance-matrix th", self.css)
+        self.assertIn(".appearance-global-options", self.css)
 
 
 if __name__ == "__main__":

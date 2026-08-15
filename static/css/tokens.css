@@ -524,6 +524,75 @@
     --forest-brand-gold: #E3BA52;
 }
 
+/* "Deep Ocean" (CLAUDE-APPEARANCE-SIMPLIFY-01) - fifth global appearance
+   choice, new this stage. Product Owner correction, twice, after a live
+   review of a first attempt here that luminance-matched a flat opaque
+   hex the same way Midnight Blue/Deep Forest were derived: "close to
+   midnight blue instead of being like gateway page," followed by the
+   explicit instruction "adapt Gateway page for deepocean appearance."
+   Every value below is therefore a LITERAL copy of static/css/main.css's
+   own .gateway-shell rule (templates/gateway_shell.html's already-
+   shipped, already-visually-approved deep-ocean treatment for the
+   authenticated Gateway page) - translucent rgba glass, not a new
+   opaque flat-hex ramp derived by tools/derive_theme_palettes.py (that
+   tool's own luminance-matching method doesn't apply to a translucent
+   palette in the first place - relative_luminance() assumes an opaque
+   RGB triple, not what an rgba() value renders as once composited over
+   a blurred background - see that tool's own comment on why "ocean" was
+   removed from its THEMES dict). --ocean-canvas has no Gateway-shell
+   equivalent (that rule never sets --canvas, since Gateway has no
+   watermark grid) - kept equal to --ocean-surface-primary, the same
+   convention Black/Midnight Blue/Deep Forest already use. Accent colors
+   Gateway's own rule does NOT redefine (seal-red/highlight-orange/
+   accepted-green/attention-amber/risk-red) fall back to Black's own
+   values, unchanged - there is no traced Gateway equivalent to reuse for
+   those, and Black's own values are already contrast-verified. */
+:root {
+    --ocean-canvas: rgba(10, 35, 42, .55);
+    --ocean-surface-primary: rgba(10, 35, 42, .55);
+    --ocean-surface-secondary: rgba(14, 45, 54, .5);
+    --ocean-surface-hover: rgba(176, 255, 244, .12);
+    --ocean-surface-selected: rgba(176, 255, 244, .18);
+    --ocean-border: rgba(176, 255, 244, .28);
+    --ocean-border-strong: rgba(176, 255, 244, .5);
+    --ocean-text-primary: rgb(230, 255, 251);
+    --ocean-text-secondary: rgba(228, 255, 251, .82);
+    --ocean-text-metadata: rgba(200, 255, 248, .72);
+    --ocean-text-disabled: rgba(200, 255, 248, .4);
+
+    --ocean-seal-red: #E5756C;
+    --ocean-seal-red-tint: #3A1A18;
+    --ocean-machine-blue: rgba(200, 255, 248, .8);
+    --ocean-machine-blue-tint: #1E2D34;
+    --ocean-highlight-orange: #E59C6C;
+    --ocean-highlight-orange-tint: #392519;
+    --ocean-accepted-green: #8AC696;
+    --ocean-accepted-green-tint: #213124;
+    --ocean-attention-amber: #E5B26C;
+    --ocean-attention-amber-tint: #3B2C16;
+    --ocean-failure-red: rgba(255, 170, 150, .95);
+    --ocean-failure-red-tint: #361E1B;
+    --ocean-risk-red: #E4826D;
+    --ocean-risk-red-tint: #381F19;
+
+    /* CLAUDE-P40-DTAB1: same rationale as the light-mode block above -
+       identical values across every dark theme, the same convention
+       every other accent color in this file already follows. Gateway's
+       own rule does not redefine these either. */
+    --ocean-tabcolor-gold: #D4AF37;
+    --ocean-tabcolor-turquoise: #4ECDC4;
+    --ocean-tabcolor-lapis: #6C9BF5;
+    --ocean-tabcolor-terracotta: #E08350;
+    --ocean-tabcolor-green: #7FBF6A;
+    --ocean-tabcolor-purple: #C08FE0;
+    /* CLAUDE-BOTTLENECK-ADOPTION-01 precedent (.gateway-card-compact/
+       .gateway-shell, main.css above): --bee-yellow, not Black's own
+       dark-bronze --dark-brand-gold, which would be nearly invisible
+       against this translucent dark background - same reuse, same
+       reason. */
+    --ocean-brand-gold: var(--bee-yellow);
+}
+
 /* CLAUDE-P40-VW6: ONE fixed, mode-invariant divider color - deliberately
    NEVER redefined inside .appearance-dark/.appearance-tinted (unlike
    every other token above, which each scope DOES redefine). The

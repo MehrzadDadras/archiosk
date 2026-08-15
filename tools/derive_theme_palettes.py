@@ -76,6 +76,20 @@ THEMES = {
     "black": {"base": "#000000", "reproject": False},
     "midnight": {"base": "#001426", "reproject": True},
     "forest": {"base": "#001A12", "reproject": True},
+    # CLAUDE-APPEARANCE-SIMPLIFY-01: "Deep Ocean" is deliberately NOT
+    # listed here. Product Owner correction, twice: the first
+    # luminance-matched-from-a-flat-color attempt read "too close to
+    # Midnight Blue," and the explicit follow-up instruction was
+    # "adapt Gateway page for deepocean appearance" - so Deep Ocean's
+    # own tokens (tokens.css) are a literal, direct copy of
+    # templates/gateway_shell.html's own already-shipped, already-
+    # visually-approved .gateway-shell token block (static/css/
+    # main.css), not a NEW palette this tool derives. This tool's own
+    # method (luminance-match a flat hex to Black's ramp) doesn't apply
+    # to a translucent-glass palette in the first place - it estimates
+    # relative_luminance() from three OPAQUE RGB channels, which is not
+    # equivalent to what an rgba() value actually renders as once
+    # composited over a blurred background.
 }
 
 # Shared dark-mode accent colors - reused unmodified by every dark

@@ -264,80 +264,40 @@
                    parchment family) were replaced with a desaturated,
                    restrained warm-neutral "Titanium" character in the
                    same commit) --------
-                   Five independently configurable surfaces (Menu - this bar
-                   itself, plus Lists/Display/Toolbox/Chat), four mutually
-                   exclusive choices each - real radio semantics (one <input
-                   type=radio> group per row), never a checkbox pretending to
-                   be tri-state (now quad-state). Reviewer/device
-                   presentation state only (localStorage, keyed per surface -
-                   see this stage's own JS below), never a Project-record
-                   write. Rows ordered by the page's own visual hierarchy:
-                   Menu (top), then Lists/Display/Toolbox left-to-right
-                   (middle), then Chat (bottom).
+                   CLAUDE-APPEARANCE-SIMPLIFY-01 (Product Owner live-browser
+                   correction): retires the five-independently-configurable-
+                   surface matrix above outright - "the selected appearance
+                   must apply coherently across the entire application... do
+                   not allow panel-by-panel theme mixing." ONE global choice
+                   now, five mutually exclusive options (Titanium/Black/
+                   Midnight Blue/Deep Forest/Deep Ocean - Deep Ocean new this
+                   stage, see tokens.css's own comment on where its palette
+                   was traced from). Still reviewer/device presentation state
+                   only (localStorage - see this stage's own JS below), never
+                   a Project-record write.
 
                    The (mode_value, mode_label, ref_suffix) triples below
                    deliberately decouple the STORED/applied value (new
-                   vocabulary: light/black/midnight-blue/deep-forest)
-                   from the UI-reference suffix (light/dark/tinted/
-                   deep-forest) - light/dark/tinted are the pre-existing,
-                   RETAINED identifiers (a label or palette revision does
-                   not require renumbering a control that still means the
-                   same choice - see tokens.css's own comment on the same
-                   point; the neutral-dark control's ref_suffix stayed
-                   'dark' through BOTH the Dark->Graphite and the
-                   Graphite->Black relabeling, since its underlying
-                   purpose - "select the neutral dark theme" - never
-                   changed), deep-forest is the one genuinely NEW
-                   identifier this stage adds. #}
+                   vocabulary: light/black/midnight-blue/deep-forest/
+                   deep-ocean) from the UI-reference suffix (light/dark/
+                   tinted/deep-forest/deep-ocean) - light/dark/tinted are the
+                   pre-existing, RETAINED identifiers (a label or palette
+                   revision does not require renumbering a control that
+                   still means the same choice - see tokens.css's own
+                   comment on the same point). #}
                 <details class="workspace-appearance-menu" id="workspace-appearance-menu" data-ui-ref="menu.appearance">
                     <summary class="workspace-topbar-btn">Appearance</summary>
                     <div class="workspace-appearance-options" role="group" aria-label="Appearance">
-                        <table class="appearance-matrix">
-                            <caption class="visually-hidden">Per-surface appearance - choose Titanium, Black, Midnight Blue, or Deep Forest for each surface, or All to set every surface at once</caption>
-                            <thead>
-                                <tr>
-                                    <th scope="col"><span class="visually-hidden">Surface</span></th>
-                                    <th scope="col">Titanium</th>
-                                    <th scope="col">Black</th>
-                                    <th scope="col">Midnight Blue</th>
-                                    <th scope="col">Deep Forest</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {# CLAUDE-P40-VW8-QA, Section 5: All is a CONTROL that applies an
-                                   existing mode to every surface at once, never a fifth theme
-                                   of its own - unchecked (never fabricated as "selected") the
-                                   moment the five surfaces disagree, per the JS wiring below,
-                                   which is also what decides whether it should show checked in
-                                   the first place; nothing here hardcodes an initial checked
-                                   state. */ #}
-                                <tr class="appearance-matrix-all-row" data-ui-ref="menu.appearance.all">
-                                    <th scope="row">All</th>
-                                    {% for mode_value, mode_label, ref_suffix in [('light', 'Titanium', 'light'), ('black', 'Black', 'dark'), ('midnight-blue', 'Midnight Blue', 'tinted'), ('deep-forest', 'Deep Forest', 'deep-forest')] %}
-                                    <td>
-                                        <input type="radio" name="appearance-all" id="appearance-all-{{ ref_suffix }}"
-                                               data-appearance-all-mode="{{ mode_value }}"
-                                               data-ui-ref="menu.appearance.all.{{ ref_suffix }}"
-                                               aria-label="All surfaces appearance: {{ mode_label }}">
-                                    </td>
-                                    {% endfor %}
-                                </tr>
-                                {% for surface_key, surface_label in [('menu', 'Menu'), ('lists', 'Lists'), ('display', 'Display'), ('toolbox', 'Toolbox'), ('chat', 'Chat')] %}
-                                <tr data-ui-ref="menu.appearance.{{ surface_key }}">
-                                    <th scope="row">{{ surface_label }}</th>
-                                    {% for mode_value, mode_label, ref_suffix in [('light', 'Titanium', 'light'), ('black', 'Black', 'dark'), ('midnight-blue', 'Midnight Blue', 'tinted'), ('deep-forest', 'Deep Forest', 'deep-forest')] %}
-                                    <td>
-                                        <input type="radio" name="appearance-{{ surface_key }}" id="appearance-{{ surface_key }}-{{ ref_suffix }}"
-                                               data-appearance-target="{{ surface_key }}" data-appearance-mode="{{ mode_value }}"
-                                               data-ui-ref="menu.appearance.{{ surface_key }}.{{ ref_suffix }}"
-                                               aria-label="{{ surface_label }} appearance: {{ mode_label }}">
-                                    </td>
-                                    {% endfor %}
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                        <p class="appearance-mixed-note" id="appearance-mixed-note" role="status" aria-live="polite" hidden>Mixed &mdash; not every surface currently shares one mode.</p>
+                        <div class="appearance-global-options" role="radiogroup" aria-label="Appearance">
+                            {% for mode_value, mode_label, ref_suffix in [('light', 'Titanium', 'light'), ('black', 'Black', 'dark'), ('midnight-blue', 'Midnight Blue', 'tinted'), ('deep-forest', 'Deep Forest', 'deep-forest'), ('deep-ocean', 'Deep Ocean', 'deep-ocean')] %}
+                            <label class="appearance-global-option">
+                                <input type="radio" name="appearance-all" id="appearance-all-{{ ref_suffix }}"
+                                       data-appearance-all-mode="{{ mode_value }}"
+                                       data-ui-ref="menu.appearance.{{ ref_suffix }}">
+                                {{ mode_label }}
+                            </label>
+                            {% endfor %}
+                        </div>
                     </div>
                 </details>
 
@@ -432,6 +392,18 @@
                         <span aria-hidden="true">&hellip;</span>
                     </summary>
                     <div class="workspace-user-options" role="group" aria-label="Account">
+                        {# CLAUDE-APPEARANCE-SIMPLIFY-01: Sign out is an account/
+                           session action, not an Admin one - Product Owner
+                           live-browser correction. Moved here, first in this
+                           menu (directly under the username, before the
+                           "Admin" label below) so it reads unambiguously as
+                           an account action rather than the last item after
+                           a list of governance links; "Admin should remain
+                           focused on governance/administrative functions."
+                           Same route/security behavior as before
+                           (portal.logout, unchanged) - a placement change
+                           only, never duplicated. #}
+                        <a class="workspace-overflow-item" data-ui-ref="menu.account.sign-out" href="{{ url_for('portal.logout') }}">Sign out</a>
                         {% if is_admin %}
                         {# CLAUDE-LEFT-RAIL-01: administrative functions relocated
                            here from the left PROJECTS rail (Product Owner
@@ -498,7 +470,6 @@
                             <input type="checkbox" id="ui-reference-mode-toggle">
                             UI Reference Mode
                         </label>
-                        <a class="workspace-overflow-item" href="{{ url_for('portal.logout') }}">Sign out</a>
                     </div>
                 </details>
             </div>
@@ -1043,7 +1014,7 @@
             // losslessly onto the current one, exactly once.
             if (stored === 'dark' || stored === 'graphite') return 'black';
             if (stored === 'tinted') return 'midnight-blue';
-            if (stored === 'light' || stored === 'black' || stored === 'midnight-blue' || stored === 'deep-forest') {
+            if (stored === 'light' || stored === 'black' || stored === 'midnight-blue' || stored === 'deep-forest' || stored === 'deep-ocean') {
                 return stored;
             }
             // No stored value (new browser/user) OR anything else
@@ -1055,48 +1026,69 @@
             el.classList.toggle('appearance-dark', mode === 'black');
             el.classList.toggle('appearance-tinted', mode === 'midnight-blue');
             el.classList.toggle('appearance-deep-forest', mode === 'deep-forest');
+            el.classList.toggle('appearance-deep-ocean', mode === 'deep-ocean');
+        };
+        // CLAUDE-APPEARANCE-SIMPLIFY-01: Appearance is now ONE global
+        // choice, not five independent per-surface ones - "do not allow
+        // panel-by-panel theme mixing." __resolveGlobalAppearanceMode
+        // reads the new single 'beehive:appearance' key; if it has never
+        // been set (a browser that only ever stored the old per-surface
+        // keys, or a genuinely new one), it migrates exactly once: if
+        // every old per-surface value already agreed, that shared value
+        // becomes the new global one (Part 6's own "use the current All
+        // value as the canonical global state where practical"); if they
+        // disagreed (a real "mixed" browser) or none existed, it falls
+        // back to the same Black default as before. The five old keys
+        // are removed as part of migrating, so a stale one can never
+        // resurface and produce a mixed theme again after this point.
+        window.__resolveGlobalAppearanceMode = function () {
+            var OLD_SURFACE_KEYS = ['menu', 'lists', 'display', 'toolbox', 'chat'];
+            var stored = null;
+            try { stored = window.localStorage.getItem('beehive:appearance'); } catch (e) { /* ignore */ }
+            if (stored !== null) return window.__resolveStoredAppearanceMode(stored);
+
+            var oldResolved = [];
+            OLD_SURFACE_KEYS.forEach(function (key) {
+                var raw = null;
+                try { raw = window.localStorage.getItem('beehive:appearance:' + key); } catch (e) { /* ignore */ }
+                if (raw !== null) oldResolved.push(window.__resolveStoredAppearanceMode(raw));
+            });
+            var uniform = oldResolved.length > 0 && oldResolved.every(function (m) { return m === oldResolved[0]; });
+            var migrated = uniform ? oldResolved[0] : window.__resolveStoredAppearanceMode(null);
+
+            try {
+                window.localStorage.setItem('beehive:appearance', migrated);
+                OLD_SURFACE_KEYS.forEach(function (key) { window.localStorage.removeItem('beehive:appearance:' + key); });
+            } catch (e) { /* ignore */ }
+            return migrated;
         };
         (function () {
-            var earlyTargets = {
-                menu: document.querySelector('.workspace-topbar'),
-                lists: document.querySelector('.launcher-panel'),
-                display: document.querySelector('.app-main'),
-                // CLAUDE-P40-EYE1: .workspace-right-column (not
-                // .workspace-pane-toolbox alone) is the theme root now -
-                // Eye is its own sibling pane inside the same column,
-                // and needs the identical --surface-primary/--text-*
-                // redefinition Toolbox already gets, via ordinary CSS
-                // custom-property inheritance from one shared ancestor.
-                toolbox: document.querySelector('.workspace-right-column'),
-                chat: document.querySelector('.chat-region'),
-            };
-            Object.keys(earlyTargets).forEach(function (key) {
-                var el = earlyTargets[key];
-                if (!el) return;
-                var stored = null;
-                try { stored = window.localStorage.getItem('beehive:appearance:' + key); } catch (e) { /* ignore */ }
-                var mode = window.__resolveStoredAppearanceMode(stored);
-                window.__applyStoredAppearanceMode(el, mode);
-                // CLAUDE-P40-VW7A-QA2 (product-owner browser correction):
-                // shell CHROME that sits between surfaces (panel dividers/
-                // splitters, none of which are a descendant of any of the
-                // 5 surfaces above) never inherited any of their
-                // --surface-primary redefinitions, so it stayed on the
-                // unthemed :root light default even in a dark mode - "the
-                // white splitter tracks... incorrect in the dark theme."
-                // Piggybacked on Menu specifically (not a new, separate
-                // preference) - the one surface that is always visible and
-                // always has a defined mode, applied to .app-shell itself
-                // (an ancestor of every surface AND every divider) before
-                // first paint, same "avoid a flash of the wrong layout"
-                // discipline as the 5 real surfaces above. A themed
-                // surface nested inside .app-shell still wins locally via
-                // ordinary CSS custom-property cascade (closer ancestor),
-                // so per-surface Appearance independence is unaffected.
-                if (key === 'menu') {
-                    var shellEl = document.querySelector('.app-shell');
-                    if (shellEl) window.__applyStoredAppearanceMode(shellEl, mode);
-                }
+            // CLAUDE-P40-EYE1: .workspace-right-column (not
+            // .workspace-pane-toolbox alone) is the theme root for
+            // Toolbox/Eye - Eye is its own sibling pane inside the same
+            // column, and needs the identical --surface-primary/--text-*
+            // redefinition Toolbox already gets, via ordinary CSS
+            // custom-property inheritance from one shared ancestor.
+            //
+            // CLAUDE-P40-VW7A-QA2 (product-owner browser correction):
+            // shell CHROME that sits between surfaces (panel dividers/
+            // splitters, none of which are a descendant of any single
+            // surface below) never inherited any of their
+            // --surface-primary redefinitions on its own, so .app-shell
+            // itself (an ancestor of every surface AND every divider)
+            // gets the SAME global mode applied directly too - "the
+            // white splitter tracks... incorrect in the dark theme."
+            var earlyTargets = [
+                document.querySelector('.app-shell'),
+                document.querySelector('.workspace-topbar'),
+                document.querySelector('.launcher-panel'),
+                document.querySelector('.app-main'),
+                document.querySelector('.workspace-right-column'),
+                document.querySelector('.chat-region'),
+            ];
+            var mode = window.__resolveGlobalAppearanceMode();
+            earlyTargets.forEach(function (el) {
+                if (el) window.__applyStoredAppearanceMode(el, mode);
             });
         })();
     </script>
@@ -1807,117 +1799,58 @@
         // Lists nav's closing tag, where that dialog used to render,
         // for why.
 
-        // CLAUDE-P40-E3A, Section 10; CLAUDE-P40-VW3: Appearance menu -
-        // applies one of four choices (Light/Graphite/Midnight Blue/Deep
-        // Forest) independently per surface, including the top Menu bar.
-        // Reviewer/device presentation state only (localStorage, one key
-        // per surface, same key names as before), never a Project-record
-        // write - same persistence boundary VW3's own prompt requires
-        // preserving.
-        //
-        // CLAUDE-P40-VW8-QA (Approved Theme Set): resolveStoredMode/
-        // applyMode below now delegate to window.__resolveStoredAppearanceMode/
-        // __applyStoredAppearanceMode (defined in the earlier script
-        // block, right after .chat-region, so first paint doesn't wait
-        // for this whole block - see that block's own comment for why)
-        // rather than duplicating the migration rule a second time.
-        // VW3's own original "honest mapping" reasoning for 'plain'/
-        // missing -> 'light' no longer applies now that Graphite is the
-        // default - see the shared resolver's own comment for the
-        // current dark/tinted -> graphite/midnight-blue mapping.
+        // CLAUDE-APPEARANCE-SIMPLIFY-01 (supersedes CLAUDE-P40-E3A Section
+        // 10/CLAUDE-P40-VW3's own per-surface independence): Appearance is
+        // now ONE global choice, applied identically to every surface -
+        // "do not allow panel-by-panel theme mixing." Wires the radios
+        // rendered in the template above; the actual resolve/apply/
+        // migrate logic lives in window.__resolveGlobalAppearanceMode/
+        // __applyStoredAppearanceMode (earlier script block, right after
+        // .chat-region, so first paint doesn't wait for this whole block)
+        // rather than a second, potentially-drifting copy of it.
         (function () {
-            var targets = {
-                menu: document.querySelector('.workspace-topbar'),
-                lists: document.querySelector('.launcher-panel'),
-                display: document.querySelector('.app-main'),
+            var targets = [
+                document.querySelector('.app-shell'),
+                document.querySelector('.workspace-topbar'),
+                document.querySelector('.launcher-panel'),
+                document.querySelector('.app-main'),
                 // CLAUDE-P40-EYE1: .workspace-right-column (not
-                // .workspace-pane-toolbox alone) is the theme root now -
-                // Eye is its own sibling pane inside the same column,
-                // and needs the identical --surface-primary/--text-*
-                // redefinition Toolbox already gets, via ordinary CSS
-                // custom-property inheritance from one shared ancestor.
-                toolbox: document.querySelector('.workspace-right-column'),
-                chat: document.querySelector('.chat-region'),
-            };
-            var surfaceKeys = Object.keys(targets);
-            var currentMode = {}; // key -> 'light'|'graphite'|'midnight-blue'|'deep-forest', kept in sync below
-
-            var resolveStoredMode = window.__resolveStoredAppearanceMode;
+                // .workspace-pane-toolbox alone) is the theme root for
+                // Toolbox/Eye - Eye is its own sibling pane inside the
+                // same column, and needs the identical --surface-primary/
+                // --text-* redefinition Toolbox already gets, via
+                // ordinary CSS custom-property inheritance from one
+                // shared ancestor.
+                document.querySelector('.workspace-right-column'),
+                document.querySelector('.chat-region'),
+            ];
             var applyMode = window.__applyStoredAppearanceMode;
+            var allRadios = document.querySelectorAll('[data-appearance-all-mode]');
 
-            // CLAUDE-P40-VW8-QA, Section 5: applies ONE surface's mode -
-            // updates its DOM class, its own radio row, its localStorage
-            // key, and currentMode's own record of it (the single source
-            // syncAllRow reads to decide the All row's own state below).
-            // Shared by both an individual radio's own change handler AND
-            // the All row, so there is exactly one place a surface's mode
-            // is ever actually applied - never two divergent code paths.
-            function setSurfaceMode(key, mode, persist) {
-                var el = targets[key];
-                currentMode[key] = mode;
-                if (el) applyMode(el, mode);
-                // CLAUDE-P40-VW7A-QA2: keep .app-shell's own piggybacked
-                // class (base.html's early pre-paint script, above) in
-                // sync on every LIVE Menu change too, not just first
-                // paint - so shell chrome (panel dividers/splitters)
-                // updates immediately when Menu's own mode changes,
-                // whether from its own radio or from the "All" row.
-                if (key === 'menu') {
-                    var shellEl = document.querySelector('.app-shell');
-                    if (shellEl) applyMode(shellEl, mode);
-                }
-                var radios = document.querySelectorAll('[data-appearance-target="' + key + '"]');
-                radios.forEach(function (radio) {
-                    radio.checked = (radio.getAttribute('data-appearance-mode') === mode);
+            // Applies the SAME mode to every surface at once - updates
+            // every target's DOM class, the radio group's own checked
+            // state, and (unless explicitly suppressed for the initial,
+            // already-resolved first-paint sync) localStorage. Exactly
+            // one place a mode is ever actually applied - never a
+            // per-surface code path to keep in sync with this one.
+            function applyGlobalMode(mode, persist) {
+                targets.forEach(function (el) { if (el) applyMode(el, mode); });
+                allRadios.forEach(function (radio) {
+                    radio.checked = (radio.getAttribute('data-appearance-all-mode') === mode);
                 });
                 if (persist !== false) {
-                    try { window.localStorage.setItem('beehive:appearance:' + key, mode); } catch (e) { /* ignore */ }
+                    try { window.localStorage.setItem('beehive:appearance', mode); } catch (e) { /* ignore */ }
                 }
             }
 
-            // CLAUDE-P40-VW8-QA, Section 5: "If all five panels share one
-            // mode, the matching All choice reflects that state... no
-            // universal mode may falsely appear selected [when mixed];
-            // expose an accessible mixed-state description." Re-evaluated
-            // after EVERY individual or All-row change - never assumed,
-            // always freshly derived from currentMode.
-            var allRadios = document.querySelectorAll('[data-appearance-all-mode]');
-            var mixedNote = document.getElementById('appearance-mixed-note');
-            function syncAllRow() {
-                var first = currentMode[surfaceKeys[0]];
-                var uniform = surfaceKeys.every(function (key) { return currentMode[key] === first; });
-                allRadios.forEach(function (radio) {
-                    radio.checked = uniform && radio.getAttribute('data-appearance-all-mode') === first;
-                });
-                if (mixedNote) mixedNote.hidden = uniform;
-            }
-
-            surfaceKeys.forEach(function (key) {
-                var storageKey = 'beehive:appearance:' + key;
-                var stored = null;
-                try { stored = window.localStorage.getItem(storageKey); } catch (e) { /* ignore */ }
-                setSurfaceMode(key, resolveStoredMode(stored), false);
-
-                var radios = document.querySelectorAll('[data-appearance-target="' + key + '"]');
-                radios.forEach(function (radio) {
-                    radio.addEventListener('change', function () {
-                        if (!radio.checked) return;
-                        setSurfaceMode(key, radio.getAttribute('data-appearance-mode'));
-                        syncAllRow();
-                    });
-                });
-            });
+            applyGlobalMode(window.__resolveGlobalAppearanceMode(), false);
 
             allRadios.forEach(function (radio) {
                 radio.addEventListener('change', function () {
                     if (!radio.checked) return;
-                    var mode = radio.getAttribute('data-appearance-all-mode');
-                    surfaceKeys.forEach(function (key) { setSurfaceMode(key, mode); });
-                    syncAllRow();
+                    applyGlobalMode(radio.getAttribute('data-appearance-all-mode'));
                 });
             });
-
-            syncAllRow();
         })();
     </script>
     <script nonce="{{ csp_nonce }}">

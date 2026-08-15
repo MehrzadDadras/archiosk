@@ -41,6 +41,18 @@ assertions verify the structural facts a browser's cascade algorithm
 and radio-group semantics would act on; HTML assertions verify
 server-rendered markup. Stated honestly rather than skipped, matching
 this repo's established convention.
+
+CLAUDE-APPEARANCE-SIMPLIFY-01 supersedes this whole file's own original
+"five independently configurable surfaces" premise: Product Owner
+live-browser correction, "do not allow panel-by-panel theme mixing."
+Appearance is now ONE global radio choice (five modes - Titanium/Black/
+Midnight Blue/Deep Forest/Deep Ocean) applied identically to every
+former surface at once. `MatrixStructureTests`/`AppearanceJsWiringTests`
+below are rewritten (`GlobalAppearanceStructureTests`/
+`GlobalAppearanceJsWiringTests`) to assert the new single-choice
+structure instead of the retired per-surface matrix; `PreservationTests`/
+`DarkTokenCssTests` are untouched - the underlying dark-theme token
+families and their contrast guarantees are unaffected by this stage.
 """
 from __future__ import annotations
 
@@ -62,16 +74,6 @@ from services.ingestion import ingest_upload
 _BASE_HTML_PATH = Path(__file__).resolve().parent.parent / "templates" / "base.html"
 _TOKENS_CSS_PATH = Path(__file__).resolve().parent.parent / "static" / "css" / "tokens.css"
 _MAIN_CSS_PATH = Path(__file__).resolve().parent.parent / "static" / "css" / "main.css"
-
-_SURFACES = ["menu", "lists", "display", "toolbox", "chat"]
-# CLAUDE-P40-VW8-QA (Approved Theme Set): these are the UI-reference
-# SUFFIXES rendered into each radio's id="appearance-{surface}-{suffix}"
-# (light/dark/tinted retained unchanged through two label revisions -
-# Dark->Black, Tinted->Midnight Blue - deep-forest is the one genuinely
-# new suffix), not the stored mode VALUES (light/black/midnight-blue/
-# deep-forest) - see templates/base.html's own (mode_value, mode_label,
-# ref_suffix) comment for why these are deliberately different.
-_MODES = ["light", "dark", "tinted", "deep-forest"]
 
 
 def _fake_file(content: bytes, filename: str) -> FileStorage:
@@ -130,31 +132,31 @@ class _BaseTestCase(unittest.TestCase):
 # Matrix structure: five surfaces, three modes each, real radio semantics.
 # ---------------------------------------------------------------------------
 
-class MatrixStructureTests(_BaseTestCase):
-    def test_five_surfaces_x_three_modes_all_present(self):
-        client = self._client_as("vw3_owner", 1)
-        body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
-        menu = self._appearance_html(body)
-        for surface in _SURFACES:
-            for mode in _MODES:
-                self.assertIn(f'id="appearance-{surface}-{mode}"', menu, f"{surface}/{mode}")
+class GlobalAppearanceStructureTests(_BaseTestCase):
+    _GLOBAL_MODES = ["light", "dark", "tinted", "deep-forest", "deep-ocean"]
 
-    def test_exactly_twentyfour_radio_inputs(self):
-        # CLAUDE-P40-VW8-QA added a 6th row ("All") applying one mode to
-        # all five surfaces at once (Section 5), and the Approved Theme
-        # Set added a 4th mode (Deep Forest) - 5 surfaces x 4 modes (20)
-        # + 1 All row x 4 modes (4) = 24.
+    def test_five_modes_all_present_as_one_global_choice(self):
         client = self._client_as("vw3_owner", 1)
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
         menu = self._appearance_html(body)
-        self.assertEqual(menu.count('type="radio"'), 24)
+        for mode in self._GLOBAL_MODES:
+            self.assertIn(f'id="appearance-all-{mode}"', menu, mode)
 
-    def test_each_surface_is_its_own_radio_group(self):
+    def test_exactly_five_radio_inputs(self):
+        # CLAUDE-APPEARANCE-SIMPLIFY-01: retired the five-surface x
+        # four-mode matrix (20) + All row (4) = 24 total - ONE radio
+        # group, 5 modes (Titanium/Black/Midnight Blue/Deep Forest/Deep
+        # Ocean), nothing else.
         client = self._client_as("vw3_owner", 1)
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
         menu = self._appearance_html(body)
-        for surface in _SURFACES:
-            self.assertEqual(menu.count(f'name="appearance-{surface}"'), 4, surface)
+        self.assertEqual(menu.count('type="radio"'), 5)
+
+    def test_one_radio_group_covers_all_five_modes(self):
+        client = self._client_as("vw3_owner", 1)
+        body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
+        menu = self._appearance_html(body)
+        self.assertEqual(menu.count('name="appearance-all"'), 5)
 
     def test_no_checkboxes_remain(self):
         client = self._client_as("vw3_owner", 1)
@@ -162,34 +164,36 @@ class MatrixStructureTests(_BaseTestCase):
         menu = self._appearance_html(body)
         self.assertNotIn('type="checkbox"', menu)
 
-    def test_menu_row_present_and_ordered_first(self):
-        # CLAUDE-P40-VW8-QA's new "All" row sits above the five real
-        # surfaces (Section 5 - a universal control, not a sixth
-        # surface) - "Menu" is still the first SURFACE row, just no
-        # longer the first scope="row" cell in the whole table.
+    def test_no_per_surface_rows_or_table_remain(self):
+        # CLAUDE-APPEARANCE-SIMPLIFY-01: regression guard against the
+        # retired per-surface matrix (table/rows/scope="row"/surface-
+        # scoped data attributes) reappearing.
         client = self._client_as("vw3_owner", 1)
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
         menu = self._appearance_html(body)
-        row_scopes = [m.start() for m in re.finditer(r'scope="row"', menu)]
-        self.assertGreaterEqual(len(row_scopes), 2)
-        self.assertIn(">All<", menu[row_scopes[0]:row_scopes[0] + 30])
-        self.assertIn(">Menu<", menu[row_scopes[1]:row_scopes[1] + 30])
+        self.assertNotIn("<table", menu)
+        self.assertNotIn('scope="row"', menu)
+        self.assertNotIn("data-appearance-target", menu)
+        self.assertNotIn("data-appearance-mode", menu)
 
-    def test_rows_ordered_menu_lists_display_toolbox_chat(self):
+    def test_modes_rendered_in_declared_order(self):
         client = self._client_as("vw3_owner", 1)
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
         menu = self._appearance_html(body)
-        positions = [menu.index(f'id="appearance-{s}-light"') for s in _SURFACES]
+        positions = [menu.index(f'id="appearance-all-{mode}"') for mode in self._GLOBAL_MODES]
         self.assertEqual(positions, sorted(positions))
 
-    def test_all_twentyfour_options_have_accessible_labels(self):
-        # CLAUDE-P40-VW8-QA: 24 now - see
-        # test_exactly_twentyfour_radio_inputs's own comment.
+    def test_all_five_options_are_labeled(self):
+        # CLAUDE-APPEARANCE-SIMPLIFY-01: each radio is now wrapped in a
+        # <label> (the mode name itself is the accessible label text),
+        # not a standalone aria-label attribute - the per-surface
+        # "<Surface> appearance: <Mode>" aria-label this test originally
+        # counted no longer applies to a single global control where
+        # there is no surface left to name.
         client = self._client_as("vw3_owner", 1)
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
         menu = self._appearance_html(body)
-        radio_aria_labels = re.findall(r'<input type="radio"[^>]*aria-label="[^"]+"', menu)
-        self.assertEqual(len(radio_aria_labels), 24)
+        self.assertEqual(menu.count('<label class="appearance-global-option">'), 5)
 
     def test_column_headers_light_black_midnight_blue_deep_forest(self):
         # CLAUDE-P40-VW8-QA (Approved Theme Set): Dark relabeled Black
@@ -197,13 +201,17 @@ class MatrixStructureTests(_BaseTestCase):
         # Black), Tinted relabeled Midnight Blue, Deep Forest added.
         # CLAUDE-POSTCAMEL-P02-ST1: Light relabeled Titanium (mode_value/
         # ref_suffix stay 'light' - see base.html's own comment).
+        # CLAUDE-APPEARANCE-SIMPLIFY-01: these are no longer column
+        # headers (no table) - just each radio's own visible label text -
+        # and Deep Ocean is a genuinely new fifth choice.
         client = self._client_as("vw3_owner", 1)
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
         menu = self._appearance_html(body)
-        self.assertIn(">Titanium<", menu)
-        self.assertIn(">Black<", menu)
-        self.assertIn(">Midnight Blue<", menu)
-        self.assertIn(">Deep Forest<", menu)
+        self.assertIn("Titanium", menu)
+        self.assertIn("Black", menu)
+        self.assertIn("Midnight Blue", menu)
+        self.assertIn("Deep Forest", menu)
+        self.assertIn("Deep Ocean", menu)
         self.assertNotIn(">Dark<", menu)
         self.assertNotIn(">Tinted<", menu)
         self.assertNotIn(">Graphite<", menu)
@@ -353,23 +361,25 @@ class DarkTokenCssTests(unittest.TestCase):
 # mapping, and persistence across the existing localStorage boundary.
 # ---------------------------------------------------------------------------
 
-class AppearanceJsWiringTests(unittest.TestCase):
+class GlobalAppearanceJsWiringTests(unittest.TestCase):
+    """CLAUDE-APPEARANCE-SIMPLIFY-01 supersedes this whole class's own
+    "each surface wired independently" premise - ONE global mode is
+    applied to every former surface identically now (Product Owner: "do
+    not allow panel-by-panel theme mixing"). Rewritten to assert that
+    single-target-list wiring instead."""
+
     def setUp(self):
         self.html = _BASE_HTML_PATH.read_text(encoding="utf-8")
 
     def _appearance_script(self) -> str:
-        start = self.html.index("CLAUDE-P40-E3A, Section 10; CLAUDE-P40-VW3: Appearance menu")
+        start = self.html.index("CLAUDE-APPEARANCE-SIMPLIFY-01 (supersedes CLAUDE-P40-E3A Section")
         end = self.html.index("</script>", start)
         return self.html[start:end]
 
-    def test_all_five_surfaces_targeted(self):
+    def test_all_five_former_surfaces_still_present_as_apply_targets(self):
         js = self._appearance_script()
-        for surface in _SURFACES:
-            self.assertIn(f"{surface}: document.querySelector(", js, surface)
-
-    def test_menu_target_is_the_topbar(self):
-        js = self._appearance_script()
-        self.assertIn("menu: document.querySelector('.workspace-topbar')", js)
+        for selector in ('.app-shell', '.workspace-topbar', '.launcher-panel', '.app-main', '.workspace-right-column', '.chat-region'):
+            self.assertIn(f"document.querySelector('{selector}')", js, selector)
 
     def test_compat_mapping_legacy_and_current_values_resolve_correctly(self):
         # CLAUDE-P40-VW8-QA (Approved Theme Set): the resolver moved to
@@ -384,36 +394,39 @@ class AppearanceJsWiringTests(unittest.TestCase):
         self.assertIn("if (stored === 'tinted') return 'midnight-blue';", self.html)
         self.assertIn("return 'black';", self.html)
         js = self._appearance_script()
-        self.assertIn("var resolveStoredMode = window.__resolveStoredAppearanceMode;", js)
+        self.assertIn("window.__resolveGlobalAppearanceMode()", js)
 
-    def test_apply_mode_toggles_exactly_the_three_mutually_exclusive_classes(self):
-        # A 4th theme (Deep Forest) added a 3rd toggled class - "exactly
-        # two" became "exactly three," still mutually exclusive (each
-        # condition checks a different mode value, so at most one is
-        # ever true).
+    def test_apply_mode_toggles_exactly_the_four_mutually_exclusive_classes(self):
+        # CLAUDE-APPEARANCE-SIMPLIFY-01 added Deep Ocean, a 4th toggled
+        # class - "exactly three" became "exactly four," still mutually
+        # exclusive (each condition checks a different mode value, so at
+        # most one is ever true).
         self.assertIn("window.__applyStoredAppearanceMode = function (el, mode)", self.html)
         self.assertIn("el.classList.toggle('appearance-dark', mode === 'black');", self.html)
         self.assertIn("el.classList.toggle('appearance-tinted', mode === 'midnight-blue');", self.html)
         self.assertIn("el.classList.toggle('appearance-deep-forest', mode === 'deep-forest');", self.html)
+        self.assertIn("el.classList.toggle('appearance-deep-ocean', mode === 'deep-ocean');", self.html)
         js = self._appearance_script()
         self.assertIn("var applyMode = window.__applyStoredAppearanceMode;", js)
 
-    def test_each_surface_wired_independently_by_its_own_data_attribute(self):
+    def test_no_per_surface_data_attribute_wiring_remains(self):
         js = self._appearance_script()
-        self.assertIn('document.querySelectorAll(\'[data-appearance-target="\' + key + \'"]\')', js)
+        self.assertNotIn("data-appearance-target", js)
 
-    def test_change_handler_persists_to_the_same_per_surface_storage_key(self):
-        # CLAUDE-P40-VW8-QA refactored the per-surface apply/persist
-        # logic into one shared setSurfaceMode() function (so the new
-        # All row and each individual radio call the same code path) -
-        # the storage key FORMAT this test protects is unchanged.
+    def test_change_handler_persists_to_one_global_storage_key(self):
+        # CLAUDE-APPEARANCE-SIMPLIFY-01 refactored the per-surface
+        # apply/persist logic into one shared applyGlobalMode() function
+        # (the direct successor to setSurfaceMode() - same "exactly one
+        # place a mode is ever applied" discipline, now global) - the
+        # storage key itself is a single 'beehive:appearance', no more
+        # per-surface suffix.
         js = self._appearance_script()
-        self.assertIn("try { window.localStorage.setItem('beehive:appearance:' + key, mode); } catch (e) { /* ignore */ }", js)
-        self.assertIn("function setSurfaceMode(key, mode, persist)", js)
+        self.assertIn("try { window.localStorage.setItem('beehive:appearance', mode); } catch (e) { /* ignore */ }", js)
+        self.assertIn("function applyGlobalMode(mode, persist)", js)
 
     def test_radio_checked_state_set_from_resolved_mode_not_hardcoded(self):
         js = self._appearance_script()
-        self.assertIn("radio.checked = (radio.getAttribute('data-appearance-mode') === mode);", js)
+        self.assertIn('radio.checked = (radio.getAttribute(\'data-appearance-all-mode\') === mode);', js)
 
 
 if __name__ == "__main__":

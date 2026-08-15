@@ -193,12 +193,20 @@ class _BaseTestCase(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 class FiveSurfaceRadioGroupsTests(_BaseTestCase):
-    def test_all_five_surfaces_still_have_three_modes(self):
+    def test_global_appearance_choice_has_at_least_three_modes(self):
+        # CLAUDE-APPEARANCE-SIMPLIFY-01 supersedes this class's own
+        # "five independent surface radio groups" premise outright -
+        # Appearance is now ONE global choice (Product Owner: "do not
+        # allow panel-by-panel theme mixing"), so there is no longer a
+        # per-surface id to check for each of the five former surfaces.
+        # This asserts the ONE radio group still offers at least the
+        # three modes this stage's own subject (Black/Midnight Blue)
+        # covers - see test_p40vw8qa_approved_theme_set.py for the full,
+        # exact five-choice (incl. Deep Forest/Deep Ocean) assertion.
         client = self._client_as("vw6_owner", 1)
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
-        for surface in _SURFACE_SELECTORS:
-            for mode in ("light", "dark", "tinted"):
-                self.assertIn(f'id="appearance-{surface}-{mode}"', body, f"{surface}/{mode}")
+        for mode in ("light", "dark", "tinted"):
+            self.assertIn(f'id="appearance-all-{mode}"', body, mode)
 
 
 # ---------------------------------------------------------------------------
@@ -587,12 +595,19 @@ class IndependentModeTests(unittest.TestCase):
     def setUp(self):
         self.html = _BASE_HTML_PATH.read_text(encoding="utf-8")
 
-    def test_each_surface_still_wired_independently(self):
-        start = self.html.index("CLAUDE-P40-E3A, Section 10; CLAUDE-P40-VW3: Appearance menu")
+    def test_all_five_former_surfaces_now_share_one_target_list(self):
+        # CLAUDE-APPEARANCE-SIMPLIFY-01 supersedes this test's own
+        # "independently wired" premise outright - Product Owner: "do
+        # not allow panel-by-panel theme mixing." The five former
+        # surface selectors still all exist as apply TARGETS (every one
+        # of them still receives the appearance class), but there is no
+        # longer a per-surface key/data-attribute distinguishing them -
+        # one array, one mode, applied to all of them identically.
+        start = self.html.index("CLAUDE-APPEARANCE-SIMPLIFY-01 (supersedes CLAUDE-P40-E3A Section")
         js = self.html[start:self.html.index("</script>", start)]
-        for surface in _SURFACE_SELECTORS:
-            self.assertIn(f"{surface}: document.querySelector(", js, surface)
-        self.assertIn('document.querySelectorAll(\'[data-appearance-target="\' + key + \'"]\')', js)
+        for selector in _SURFACE_SELECTORS.values():
+            self.assertIn(f"document.querySelector('{selector}')", js, selector)
+        self.assertNotIn("data-appearance-target", js)
 
     def test_apply_mode_still_toggles_the_mutually_exclusive_classes(self):
         # CLAUDE-P40-VW8-QA (Approved Theme Set): applyMode moved to
@@ -614,7 +629,7 @@ class IndependentModeTests(unittest.TestCase):
 class PersistenceAndLegacyCompatibilityTests(unittest.TestCase):
     def setUp(self):
         self.html = _BASE_HTML_PATH.read_text(encoding="utf-8")
-        start = self.html.index("CLAUDE-P40-E3A, Section 10; CLAUDE-P40-VW3: Appearance menu")
+        start = self.html.index("CLAUDE-APPEARANCE-SIMPLIFY-01 (supersedes CLAUDE-P40-E3A Section")
         self.js = self.html[start:self.html.index("</script>", start)]
 
     def test_compat_mapping_extended_not_broken(self):
@@ -630,16 +645,19 @@ class PersistenceAndLegacyCompatibilityTests(unittest.TestCase):
         self.assertIn("if (stored === 'tinted') return 'midnight-blue';", self.html)
         self.assertIn("return 'black';", self.html)
 
-    def test_persists_to_the_same_per_surface_storage_key(self):
-        # CLAUDE-P40-VW8-QA: the per-surface apply/persist logic was
-        # refactored into one shared setSurfaceMode() function (so the
-        # new All row and each individual radio both call the exact
-        # same code path, never two divergent ones - see that
-        # function's own comment) - the storage key FORMAT this test
-        # actually protects is unchanged, just no longer inlined at the
-        # radio's own change-listener call site.
-        self.assertIn("try { window.localStorage.setItem('beehive:appearance:' + key, mode); } catch (e) { /* ignore */ }", self.js)
-        self.assertIn("function setSurfaceMode(key, mode, persist)", self.js)
+    def test_persists_to_one_global_storage_key(self):
+        # CLAUDE-APPEARANCE-SIMPLIFY-01 supersedes this test's own
+        # "per-surface storage key" premise - Appearance persists under
+        # ONE key now (beehive:appearance, no per-surface suffix), via
+        # applyGlobalMode() (the direct successor to setSurfaceMode() -
+        # same "exactly one place a mode is ever applied" discipline,
+        # now global instead of per-surface). The FIVE now-retired
+        # per-surface keys are still referenced, but only inside
+        # __resolveGlobalAppearanceMode's own one-time migration logic
+        # (an earlier script block), never written to again after that.
+        self.assertIn("try { window.localStorage.setItem('beehive:appearance', mode); } catch (e) { /* ignore */ }", self.js)
+        self.assertIn("function applyGlobalMode(mode, persist)", self.js)
+        self.assertIn("window.__resolveGlobalAppearanceMode = function ()", self.html)
 
 
 # ---------------------------------------------------------------------------

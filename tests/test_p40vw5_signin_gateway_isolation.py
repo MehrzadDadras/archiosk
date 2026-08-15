@@ -474,11 +474,15 @@ class PriorStagePreservationTests(_BaseTestCase):
         toolbox = body[toolbox_start:body.index("</aside>", toolbox_start)]
         self.assertNotIn("Add a Document", toolbox)
 
-    def test_vw3_appearance_matrix_still_present_in_workspace(self):
+    def test_vw3_appearance_selector_still_present_in_workspace(self):
+        # CLAUDE-APPEARANCE-SIMPLIFY-01 supersedes this test's own
+        # per-surface id ("appearance-menu-light" was the Menu row's own
+        # Light radio) - Appearance is one global choice now, the
+        # equivalent id is "appearance-all-light".
         client = self._client_as("vw5_admin", 1)
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
         self.assertIn('id="workspace-appearance-menu"', body)
-        self.assertEqual(body.count('id="appearance-menu-light"'), 1)
+        self.assertEqual(body.count('id="appearance-all-light"'), 1)
 
     def test_vw4_independent_vertical_horizontal_steppers_still_present(self):
         client = self._client_as("vw5_admin", 1)

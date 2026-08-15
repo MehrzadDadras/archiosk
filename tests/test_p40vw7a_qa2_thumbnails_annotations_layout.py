@@ -631,19 +631,30 @@ class AppearanceControlledSplitterTests(unittest.TestCase):
             self.assertNotIn("opacity", body, selector)
 
     def test_app_shell_gets_a_piggybacked_appearance_class_early(self):
-        # The pre-paint script (avoids a flash of the wrong shell color).
+        # CLAUDE-APPEARANCE-SIMPLIFY-01 supersedes this test's own
+        # original "piggyback conditionally when key === 'menu'" premise
+        # - Appearance is one global choice now, so .app-shell is simply
+        # one of the (now six, uniform) early targets that all receive
+        # the SAME resolved mode directly - no more per-surface-key
+        # special-casing needed since there is only one mode to apply.
         early_script = self.html[self.html.index("window.__resolveStoredAppearanceMode"):self.html.index("</script>", self.html.index("window.__resolveStoredAppearanceMode"))]
         self.assertIn("document.querySelector('.app-shell')", early_script)
-        self.assertIn("if (key === 'menu')", early_script)
+        self.assertIn("var mode = window.__resolveGlobalAppearanceMode();", early_script)
 
     def test_app_shell_class_stays_in_sync_on_live_menu_changes(self):
-        # The main Appearance-menu wiring script, not just first paint -
-        # switching Menu's own mode (individually or via "All") later.
-        self.assertIn("function setSurfaceMode(key, mode, persist)", self.html)
-        set_surface_mode_fn = self.html[self.html.index("function setSurfaceMode(key, mode, persist)"):]
-        set_surface_mode_fn = set_surface_mode_fn[:set_surface_mode_fn.index("var radios = document.querySelectorAll")]
-        self.assertIn("if (key === 'menu')", set_surface_mode_fn)
-        self.assertIn("document.querySelector('.app-shell')", set_surface_mode_fn)
+        # CLAUDE-APPEARANCE-SIMPLIFY-01 supersedes this test's own
+        # "setSurfaceMode" premise - applyGlobalMode() is the direct
+        # successor (same "exactly one place a mode is ever applied"
+        # discipline, now global instead of per-surface) and already
+        # includes .app-shell among its own targets array (checked by
+        # test_app_shell_is_actually_in_the_combined_appearance_selector_
+        # lists above, and by templates/base.html's own earlyTargets),
+        # so there is no separate "keep app-shell in sync" branch left to
+        # test - one function, one target list, applied uniformly.
+        self.assertIn("function applyGlobalMode(mode, persist)", self.html)
+        apply_global_mode_fn = self.html[self.html.index("function applyGlobalMode(mode, persist)"):]
+        apply_global_mode_fn = apply_global_mode_fn[:apply_global_mode_fn.index("allRadios.forEach")]
+        self.assertIn("targets.forEach(function (el) { if (el) applyMode(el, mode); });", apply_global_mode_fn)
 
     def test_dividers_still_have_a_distinct_accent_only_on_hover_focus_or_drag(self):
         # The base background fix must not have swallowed the existing

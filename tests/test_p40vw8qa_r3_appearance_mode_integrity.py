@@ -329,10 +329,18 @@ class JavaScriptToggleLogicTests(unittest.TestCase):
         # divergent code path.
         self.assertEqual(self.source.count("if (el) applyMode(el, mode)"), 1)
 
-    def test_all_handler_applies_to_every_one_of_the_five_surfaces(self):
-        script_start = self.source.index("allRadios.forEach(function (radio) {\n                radio.addEventListener")
-        script = self.source[script_start:script_start + 400]
-        self.assertIn("surfaceKeys.forEach(function (key) { setSurfaceMode(key, mode); })", script)
+    def test_all_handler_applies_to_every_one_of_the_five_former_surfaces(self):
+        # CLAUDE-APPEARANCE-SIMPLIFY-01 supersedes this test's own
+        # "surfaceKeys.forEach... setSurfaceMode" premise - there is no
+        # longer an "All" handler distinct from "the" handler (every
+        # radio IS an All-equivalent choice now, Product Owner: "do not
+        # allow panel-by-panel theme mixing"). applyGlobalMode() already
+        # applies to a `targets` array covering all 5 former surfaces
+        # (plus .app-shell) uniformly - checked directly here via its
+        # own event-listener registration.
+        script_start = self.source.index("radio.addEventListener('change', function () {\n                    if (!radio.checked) return;\n                    applyGlobalMode(")
+        script = self.source[script_start:script_start + 200]
+        self.assertIn("applyGlobalMode(radio.getAttribute('data-appearance-all-mode'));", script)
 
     def test_viewer_iframe_content_is_never_recolored_by_appearance_css(self):
         # Section: "Do not invert, recolor or otherwise alter the

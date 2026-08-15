@@ -107,27 +107,26 @@ _MACRO_UI_REF_RE = re.compile(r"ui_ref=['\"]([a-z0-9._\-]+)['\"]")
 _REGISTRY_ROW_RE = re.compile(r"^\| (.+?) \|.*\| (active|retired) \|$", re.MULTILINE)
 _REF_TOKEN_RE = re.compile(r"`([a-z0-9._\-]+)`")
 
-# CLAUDE-P40-VW8-QA: the Appearance matrix constructs its own data-ui-ref
-# VALUES from a Jinja loop variable (data-ui-ref="menu.appearance.
-# {{ surface_key }}.{{ mode_key }}") - unlike every other pattern ref
-# (a literal, static string reused across repeated instances), a plain
+# CLAUDE-P40-VW8-QA: the Appearance selector constructs its own
+# data-ui-ref VALUES from a Jinja loop variable (data-ui-ref="menu.
+# appearance.{{ ref_suffix }}") - unlike every other pattern ref (a
+# literal, static string reused across repeated instances), a plain
 # regex over the template SOURCE can never recover the resolved values,
 # since the source never contains them literally. Enumerated here from
-# the exact same fixed (key, label) tuples base.html's own {% for %}
-# loops iterate over, so registry-vs-template drift (e.g. a surface
-# added to one but not the other) is still genuinely caught, not
-# silently exempted.
-_APPEARANCE_SURFACES = ("menu", "lists", "display", "toolbox", "chat")
-# CLAUDE-P40-VW8-QA (Approved Theme Set) added Deep Forest as a 4th
-# choice - "tinted" and "dark" stayed as the RETAINED ref suffixes for
-# Midnight Blue/Black (label/palette revisions, not renumbering - see
-# tokens.css's own comment); "deep-forest" is the one genuinely new one.
-_APPEARANCE_MODES = ("light", "dark", "tinted", "deep-forest")
-_APPEARANCE_DYNAMIC_REFS = {
-    f"menu.appearance.{surface}.{mode}" for surface in _APPEARANCE_SURFACES for mode in _APPEARANCE_MODES
-} | {f"menu.appearance.all.{mode}" for mode in _APPEARANCE_MODES} | {
-    f"menu.appearance.{surface}" for surface in _APPEARANCE_SURFACES
-}
+# the exact same fixed tuple base.html's own {% for %} loop iterates
+# over, so registry-vs-template drift (e.g. a mode added to one but not
+# the other) is still genuinely caught, not silently exempted.
+#
+# CLAUDE-APPEARANCE-SIMPLIFY-01: retired the five-per-surface dimension
+# entirely (Product Owner: "do not allow panel-by-panel theme mixing") -
+# ONE global choice now, so this is a flat set of modes, no more
+# surface x mode cross product and no more separate "all" namespace.
+# "tinted" and "dark" stayed as the RETAINED ref suffixes for Midnight
+# Blue/Black (label/palette revisions, not renumbering - see tokens.css's
+# own comment); "deep-ocean" is the one genuinely new suffix this stage
+# adds.
+_APPEARANCE_MODES = ("light", "dark", "tinted", "deep-forest", "deep-ocean")
+_APPEARANCE_DYNAMIC_REFS = {f"menu.appearance.{mode}" for mode in _APPEARANCE_MODES}
 
 # CLAUDE-P40-VW8-QA (Project-Creation Upload-Capacity Correction):
 # errors/error.html's action link renders `data-ui-ref="{{ ui_ref }}"`
