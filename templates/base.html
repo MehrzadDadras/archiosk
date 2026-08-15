@@ -654,7 +654,14 @@
                                                    so Document A can stay open in Display while Document B loads
                                                    into Eye. Pure GET of the existing source_file route - no
                                                    mutation, no new backend endpoint. #}
-                                                <button type="button" class="eye-send-btn" data-ui-ref="lists.project.documents.send-to-eye" data-source-id="{{ s.id }}" data-source-name="{{ s.name }}" data-source-kind="{{ s.kind }}" data-project-id="{{ project_id }}" aria-label="Open {{ s.name }} in Eye" title="Open in Eye">&#128065;</button>
+                                                <button type="button" class="eye-send-btn" data-ui-ref="lists.project.documents.send-to-eye" data-source-id="{{ s.id }}" data-source-name="{{ s.name }}" data-source-kind="{{ s.kind }}" data-project-id="{{ project_id }}" aria-pressed="false" aria-label="Open {{ s.name }} in Eye" title="Open in Eye">&#128065;</button>
+                                                {# CLAUDE-LEFTRAIL-ROUTING-01, Part 3: a mode switch, not a document
+                                                   destination - identical action on every row (deliberately not
+                                                   data-source-id-scoped) so it's always in reach without scrolling
+                                                   to one global control. Clears Eye/Compare and lets the existing
+                                                   eyeHasContent()-driven .eye-inactive collapse (static/js/eye_pane.js's
+                                                   own refreshEyeLayout) do the rest - no new layout state invented. #}
+                                                <button type="button" class="toolbox-send-btn" data-ui-ref="lists.project.documents.send-to-toolbox" aria-pressed="false" aria-label="Switch right side to Toolbox tools" title="Toolbox tools">&#9881;</button>
                                             </li>
                                             {% else %}
                                             {# CLAUDE-P40-VW7B: a coherent empty state, matching the

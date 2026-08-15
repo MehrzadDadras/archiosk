@@ -175,7 +175,8 @@ class EyePaneIntegrationTests(unittest.TestCase):
         body = self.js[self.js.index("function refreshEyeLayout()"):]
         body = body[:body.index("\n    }\n")]
         self.assertIn("workspace-right-column", body)
-        self.assertIn("classList.toggle('eye-inactive', !eyeDetached && !eyeHasContent())", body)
+        self.assertIn("var inToolboxMode = !eyeDetached && !eyeHasContent();", body)
+        self.assertIn("classList.toggle('eye-inactive', inToolboxMode)", body)
 
     def test_eye_layout_refresh_exposed_globally_for_pdf_viewer_to_call(self):
         self.assertIn("window.ArchioskEyeLayout = { refresh: refreshEyeLayout };", self.js)

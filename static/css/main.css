@@ -803,6 +803,46 @@ html.launcher-hidden .launcher-panel { display: none; }
     outline: 2px solid var(--machine-blue);
     outline-offset: 1px;
 }
+/* CLAUDE-LEFTRAIL-ROUTING-01, Part 2/7: "the user must still be able to
+   tell at a glance... avoid heavy borders or bright controls" - a plain
+   color/weight shift on the SAME glyph, matching the restrained
+   .toolbox-compare-btn[aria-pressed="true"] precedent already
+   established, not a filled/bordered "active" box. */
+.eye-send-btn[aria-pressed="true"] {
+    color: var(--machine-blue);
+    font-weight: 700;
+}
+/* Part 3: the Tool/Toolbox icon - same compact per-row footprint as
+   .eye-send-btn immediately beside it, a real glyph (gear, U+2699) per
+   this Product Owner's own "not a literal text T" instruction, not a
+   new icon asset/library (tools/dependency_fit.py's no-new-dependency
+   discipline). */
+.toolbox-send-btn {
+    flex-shrink: 0;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border: none;
+    border-radius: 4px;
+    background: none;
+    color: var(--text-metadata);
+    font-size: 0.75rem;
+    line-height: 22px;
+    text-align: center;
+    cursor: pointer;
+}
+.toolbox-send-btn:hover, .toolbox-send-btn:focus-visible {
+    background: var(--surface-hover);
+    color: var(--machine-blue);
+}
+.toolbox-send-btn:focus-visible {
+    outline: 2px solid var(--machine-blue);
+    outline-offset: 1px;
+}
+.toolbox-send-btn[aria-pressed="true"] {
+    color: var(--machine-blue);
+    font-weight: 700;
+}
 
 /* CLAUDE-P40-VW7: Tasks/Tags branches - reuse the tree idiom above as-
    is (.tree-node/.tree-toggle/.tree-children/.launcher-count already do

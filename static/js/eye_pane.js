@@ -87,6 +87,23 @@
     // .eye-inactive rules).
     var eyeDetached = false; // set by the Pop Out / Bring Eye Back lifecycle below
 
+    // -------- CLAUDE-LEFTRAIL-ROUTING-01: Eye icon active-state + toggle -
+    // which Project Document (if any) currently occupies Eye, so every
+    // .eye-send-btn on the rail can show whether ITS OWN document is the
+    // one currently in Eye (Part 2/7), and a second click on the ACTIVE
+    // icon clears Eye instead of reloading the same document. Pasted/
+    // dropped images and saved captures have no source id of their own -
+    // this only ever matches a real Project Document sent via this same
+    // mechanism, never a false-positive on an unrelated image state.
+    var currentEyeSourceId = null;
+
+    function updateEyeSendButtonStates() {
+        Array.prototype.forEach.call(document.querySelectorAll('.eye-send-btn'), function (btn) {
+            var isActive = !!currentEyeSourceId && btn.getAttribute('data-source-id') === currentEyeSourceId;
+            btn.setAttribute('aria-pressed', String(isActive));
+        });
+    }
+
     function eyeHasContent() {
         var hasImage = canvas && !canvas.hidden;
         var hasSaved = savedViewEl && !savedViewEl.hidden;
@@ -97,7 +114,13 @@
     function refreshEyeLayout() {
         var rightColumn = document.getElementById('workspace-right-column');
         if (!rightColumn) return;
-        rightColumn.classList.toggle('eye-inactive', !eyeDetached && !eyeHasContent());
+        var inToolboxMode = !eyeDetached && !eyeHasContent();
+        rightColumn.classList.toggle('eye-inactive', inToolboxMode);
+        // Part 4/7: a restrained indication of which mode the right side
+        // is currently in, mirrored on every row's identical Tool icon.
+        Array.prototype.forEach.call(document.querySelectorAll('.toolbox-send-btn'), function (btn) {
+            btn.setAttribute('aria-pressed', String(inToolboxMode));
+        });
     }
     window.ArchioskEyeLayout = { refresh: refreshEyeLayout };
 
@@ -427,6 +450,8 @@
         if (emptyState) emptyState.hidden = false;
         if (noteEl) noteEl.hidden = false;
         updateEmptyStateText();
+        currentEyeSourceId = null;
+        updateEyeSendButtonStates();
         refreshEyeLayout();
     }
 
@@ -444,6 +469,8 @@
         documentBodyEl.textContent = '';
         if (documentNameEl) documentNameEl.textContent = name || '';
         documentView.hidden = false;
+        currentEyeSourceId = sourceId;
+        updateEyeSendButtonStates();
         // Eye's whole-column visibility reacts immediately - the reviewer
         // sees Eye expand the instant they click the eye icon, not only
         // once an async PDF fetch/mount later resolves.
@@ -475,16 +502,41 @@
     // reliably... a compact Open in Eye action" - one small button per
     // rail leaf, wired here (not a new drag-and-drop payload format) so
     // it works identically with mouse and keyboard.
+    // CLAUDE-LEFTRAIL-ROUTING-01, Part 2: a second click on the ALREADY-
+    // active icon (this row's own document is the one currently in Eye)
+    // clears Eye instead of reloading the same document - "clicking the
+    // active Eye icon again clears/removes that document from Eye."
     Array.prototype.forEach.call(document.querySelectorAll('.eye-send-btn'), function (btn) {
         btn.addEventListener('click', function (e) {
             e.preventDefault();
             e.stopPropagation();
+            var sourceId = btn.getAttribute('data-source-id');
+            if (currentEyeSourceId && currentEyeSourceId === sourceId) {
+                clearDocumentView();
+                return;
+            }
             loadDocument(
-                btn.getAttribute('data-source-id'),
+                sourceId,
                 btn.getAttribute('data-source-name'),
                 btn.getAttribute('data-source-kind'),
                 btn.getAttribute('data-project-id')
             );
+        });
+    });
+
+    // CLAUDE-LEFTRAIL-ROUTING-01, Part 3/4: a mode switch, not a document
+    // destination - forces the right side back to Toolbox mode for
+    // whatever is currently in Main, by clearing Eye's own content and
+    // turning Compare off (the same two things that, per addendum A's
+    // eyeHasContent(), are the only reasons the right side would show Eye
+    // instead of a full-height Toolbox - no separate mode flag needed).
+    Array.prototype.forEach.call(document.querySelectorAll('.toolbox-send-btn'), function (btn) {
+        btn.addEventListener('click', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            clearPreview();
+            clearDocumentView();
+            setCompareActive(false);
         });
     });
 
