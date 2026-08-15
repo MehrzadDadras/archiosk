@@ -3780,6 +3780,15 @@ html.toolbox-hidden .workspace-right-column {
     min-height: 0;
     flex: 1 1 auto;
 }
+/* An author `display` declaration on this selector otherwise beats the
+   UA stylesheet's own `[hidden] { display: none }` (equal specificity,
+   author rule comes later in cascade order) - explicit here so the
+   `hidden` attribute base.html renders by default, and
+   pdf_viewer.js's own thumbnailsPanelVisibility() toggles, actually
+   takes effect instead of the panel always rendering. */
+.toolbox-eye-thumbnails-panel[hidden] {
+    display: none;
+}
 .toolbox-eye-thumbnails-panel > h2 {
     font-family: var(--font-display);
     font-size: 0.95rem;
