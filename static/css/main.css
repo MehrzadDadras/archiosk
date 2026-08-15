@@ -1159,6 +1159,28 @@ main {
     main { padding: 0 1.2rem; }
 }
 
+/* CLAUDE-MAIN-DISPLAY-SCROLL-SIMPLIFICATION-01: main's own general-
+   purpose overflow-y:auto (CLAUDE-P40-VW8-QA, above - "the ONE scroll
+   region for every page's actual content") becomes a REDUNDANT second
+   scrolling surface specifically when a PDF Document is the active
+   Display content - .document-viewer-canvas-container (mounted by
+   static/js/pdf_viewer.js's own mount(), see that rule's own
+   `overflow: auto` further below) already provides a real, correctly-
+   bounded internal scroll region for the rendered page/canvas. "The
+   document moves. The workspace does not" - the Product Owner's own
+   red-scrollbar-keep/green-scrollbar-remove screenshot. Scoped
+   narrowly, via :has() (already an established technique in this file
+   - see .conversation-thread:has(...) and .files-folder-row:has(...)
+   elsewhere), to THIS one content shape specifically, so every other
+   page (Investigation/Overview/forms/Project Data Management/etc) keeps
+   main's own whole-content scroll exactly as CLAUDE-P40-VW8-QA
+   intended - only the PDF-viewing case loses it. A real mechanism
+   removal (overflow-y:hidden), not a cosmetic scrollbar hide - main
+   genuinely cannot become a second scrolling context in this state. */
+main:has(.document-viewer-canvas-container) {
+    overflow-y: hidden;
+}
+
 /* -- true zero-state entry shell (pre-authentication) ---------------------
    Deliberately minimal - no launcher panel, no top bar, no workspace
    controls exist pre-auth (see templates/base.html) - this is the entire

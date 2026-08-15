@@ -107,3 +107,43 @@ built in `CLAUDE-RFP27-TERRITORY-01`) stays fully **Active**, reachable via
 Overview's own independent, pre-existing `display.overview.files-link`
 ("Open Files →"). Removing the rail's own copy is de-duplication, not a
 lifecycle change.
+
+## "Whole-Main scroll while a PDF is active" — narrowed, not retired
+
+**Status:** the general mechanism stays fully **Active**; only its
+application to one specific content shape was scoped out. Not a
+component with its own route/store method, so it doesn't fit this file's
+usual entry shape exactly, but recorded here per Product Owner instruction
+(`CLAUDE-MAIN-DISPLAY-SCROLL-SIMPLIFICATION-01`) since it is genuine
+retired *behavior*.
+
+- **Was:** `main`'s own `overflow-y: auto` (`CLAUDE-P40-VW8-QA` — "the ONE
+  scroll region for every page's actual content") made the ENTIRE Display
+  area, including an already-independently-scrollable PDF canvas
+  (`.document-viewer-canvas-container`, fixed `height: 70vh`, its own
+  `overflow: auto`), a second nested vertical scroll surface. Reported live
+  as two visible scrollbars stacked side by side while viewing a multipage
+  PDF — the outer one redundant and, per the Product Owner, unwanted
+  ("the document moves, the workspace does not").
+- **Retired:** `main`'s whole-content scroll, but **only** in the specific
+  state where `.document-viewer-canvas-container` is present as a
+  descendant (`main:has(.document-viewer-canvas-container) { overflow-y:
+  hidden; }`, `static/css/main.css`). A real mechanism removal (the scroll
+  container itself stops existing in that state), not a cosmetic
+  scrollbar hide.
+- **Preserved / reusable concept:** `main`'s own base rule (`CLAUDE-P40-
+  VW8-QA`'s "Menu must stay visible while content scrolls, one shared
+  central rule rather than scattered per-page overrides") is untouched and
+  still governs every other page — Investigation, Overview, forms, Project
+  Data Management, Chat, etc. all still rely on it exactly as before. The
+  reusable DNA here is the `:has()`-scoped-override pattern itself (already
+  used elsewhere in this file — `.conversation-thread:has(...)`,
+  `.files-folder-row:has(...)`) as the general technique for "one shared
+  ancestor rule, narrowed for one specific descendant content shape"
+  without forking the ancestor rule into two competing near-duplicates.
+- **Promotion/reassignment trigger:** none anticipated — this is the
+  intended permanent state for the PDF-viewing case. Would only need
+  revisiting if a future stage gives `.document-viewer-canvas-container`
+  itself a non-fixed height (currently `70vh`, independent of `main`'s own
+  height), which could reopen the same double-scroll question from a
+  different root cause.
