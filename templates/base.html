@@ -645,15 +645,37 @@
                                         <button type="button" class="tree-toggle launcher-link" data-tree-parent data-tree-owns="source" data-ui-ref="lists.project.documents" aria-expanded="{{ 'true' if selected_source else 'false' }}">
                                             <span class="tree-label">Documents <span class="launcher-count">{{ active_sources|length }}</span></span>
                                         </button>
+                                        {# CLAUDE-DOCUMENT-RAIL-PROBE-EYE-TOOL-01, Part 4: "near the search
+                                           field" - RAIL-SEARCH-01 (next stage) adds the actual search field
+                                           beside this same control; this toggle itself is fully functional
+                                           now (static/js/document_marks.js), not scaffolding for later. #}
+                                        <button type="button" class="documents-marked-filter-btn" id="documents-marked-filter-btn" data-ui-ref="lists.project.documents.marked-filter" aria-pressed="false" aria-label="Show only marked Documents" title="Marked">Marked</button>
                                         <ul class="tree-children"{% if selected_source %} data-tree-open{% endif %}>
                                             {% for s in active_sources %}
-                                            <li class="tree-node tree-node-document" data-tree-node>
-                                                {# CLAUDE-P40-E3A: the retired ?view=documents directory body used to
-                                                   show each Source's added-date inline; Section 4 forbids restoring
-                                                   that as a second visible directory in Display, but the provenance
-                                                   detail itself (Section 12: "current source-document provenance")
-                                                   is preserved here as a title tooltip rather than dropped outright. #}
+                                            <li class="tree-node tree-node-document" data-tree-node data-source-id="{{ s.id }}">
+                                                {# ADDENDUM - FINAL DOCUMENT-ROW CONTROL ORDER: "Name = Probe, □ =
+                                                   Mark, ▷ = Keep, Eye = Compare/secondary projection, Tool = Act" -
+                                                   the filename comes first (CLAUDE-P40-E3A: added-date provenance
+                                                   preserved as a title tooltip, not restored as a second visible
+                                                   directory), followed by the four controls in this exact order. #}
                                                 <a class="tree-leaf launcher-link{% if selected_source and selected_source.id == s.id %} active{% endif %}" data-ui-ref="lists.project.documents.leaf"{% if selected_source and selected_source.id == s.id %} aria-current="page"{% endif %} href="{{ url_for('workspace.show_workspace', project_id=project_id, source=s.id) }}" data-source-id="{{ s.id }}" title="Added {{ s.added_at }}">{{ s.name }}</a>
+                                                {# CLAUDE-DOCUMENT-RAIL-PROBE-EYE-TOOL-01, Part 3: "this document
+                                                   interests me, keep it on my review shortlist" - lightweight PM
+                                                   working state (localStorage, static/js/document_marks.js),
+                                                   never a governed project finding/mutation. Distinct from Main/
+                                                   Eye/Toolbox routing - deliberately does nothing else. #}
+                                                <input type="checkbox" class="pm-mark-checkbox" data-ui-ref="lists.project.documents.mark" data-source-id="{{ s.id }}" aria-label="Mark {{ s.name }} for review">
+                                                {# ADDENDUM - DOCUMENT-ROW CONTROL ORDER / MARK VS KEEP: "Keep this
+                                                   document open for continued work... promotes/projects the
+                                                   document into the persistent Main working-tab set... avoids
+                                                   duplicate retained tabs" - this is exactly static/js/document_
+                                                   tabs.js's own pre-existing pinTab()/findPinned() pinned-tab
+                                                   mechanism (previously reachable only via double-click on an
+                                                   already-open preview tab, or its "Keep Open" tab-menu item) -
+                                                   newly exposed here as a direct per-row rail control, not a new
+                                                   tab system. Visually/functionally distinct from PM Mark
+                                                   immediately before it - a triangle, never a second square. #}
+                                                <button type="button" class="keep-open-btn" data-ui-ref="lists.project.documents.keep-open" data-source-id="{{ s.id }}" aria-pressed="false" aria-label="Keep {{ s.name }} open as a retained tab" title="Keep open">&#9656;</button>
                                                 {# CLAUDE-EYE-COMPARE-01: a compact, always-present per-row action -
                                                    "the simplest existing application grammar that works reliably"
                                                    (Product Owner) - client-side only (window.ArchioskEyePane.

@@ -3549,6 +3549,7 @@
 {% block extra_scripts %}
 {% if not panel_only %}
 <script src="{{ url_for('static', filename='js/document_tabs.js') }}?v={{ static_version }}"></script>
+<script src="{{ url_for('static', filename='js/document_marks.js') }}?v={{ static_version }}"></script>
 <script src="{{ url_for('static', filename='js/investigation_attention.js') }}?v={{ static_version }}"></script>
 {% else %}
 {# CLAUDE-DUAL-DOCUMENT-FOCUS-01: pdf_viewer.js moved to base.html itself

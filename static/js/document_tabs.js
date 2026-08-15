@@ -221,7 +221,29 @@
 
         renderOverflowPanel();
         strip.hidden = !anyTabs;
+        syncKeepOpenButtons();
     }
+
+    // -------- ADDENDUM (DOCUMENT-ROW CONTROL ORDER / MARK VS KEEP): the
+    // rail's own "Keep this document open" triangle - a direct per-row
+    // path to the SAME pinTab()/findPinned() mechanism above (previously
+    // reachable only from inside the tab strip itself, via double-click
+    // or the "Keep Open" tab-menu item), not a second tab system. Synced
+    // from render() itself so it can never drift from the real pinned
+    // set regardless of which action last mutated it.
+    var keepOpenButtons = document.querySelectorAll('.keep-open-btn');
+    function syncKeepOpenButtons() {
+        Array.prototype.forEach.call(keepOpenButtons, function (btn) {
+            btn.setAttribute('aria-pressed', String(!!findPinned(btn.getAttribute('data-source-id'))));
+        });
+    }
+    Array.prototype.forEach.call(keepOpenButtons, function (btn) {
+        btn.addEventListener('click', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            pinTab(btn.getAttribute('data-source-id'));
+        });
+    });
 
     function renderOverflowPanel() {
         overflowPanel.textContent = '';

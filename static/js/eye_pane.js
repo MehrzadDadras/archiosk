@@ -103,6 +103,16 @@
         Array.prototype.forEach.call(document.querySelectorAll('.eye-send-btn'), function (btn) {
             var isActive = !!currentEyeSourceId && btn.getAttribute('data-source-id') === currentEyeSourceId;
             btn.setAttribute('aria-pressed', String(isActive));
+            // CLAUDE-DOCUMENT-RAIL-PROBE-EYE-TOOL-01, Part 6: "do not give
+            // the Eye document another filled selection color competing
+            // with Main - normal row background + thin restrained dashed
+            // outline/frame." The row's own .active/aria-current highlight
+            // (Main) is server-rendered on .tree-leaf directly and never
+            // touched here - this only ever adds/removes a class for the
+            // dashed frame, on whichever row's own filename link matches.
+            var row = btn.closest('.tree-node-document');
+            var leaf = row ? row.querySelector('.tree-leaf') : null;
+            if (leaf) leaf.classList.toggle('eye-projected', isActive);
         });
     }
 

@@ -765,6 +765,30 @@ html.launcher-hidden .launcher-panel { display: none; }
     text-transform: none;
     letter-spacing: normal;
 }
+/* CLAUDE-DOCUMENT-RAIL-PROBE-EYE-TOOL-01, Part 4: "compact Marked
+   filter/toggle... do not create a separate large panel" - same small-
+   pill-toggle idiom as .toolbox-compare-btn, sized for the rail's own
+   narrower column rather than Toolbox's. RAIL-SEARCH-01 (next stage)
+   places the actual search field beside this same control. */
+.documents-marked-filter-btn {
+    margin: 0.2rem 0 0.3rem;
+    padding: 0.15rem 0.5rem;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: none;
+    color: var(--text-metadata);
+    font-family: var(--font-body);
+    font-size: 0.7rem;
+    cursor: pointer;
+}
+.documents-marked-filter-btn:hover, .documents-marked-filter-btn:focus-visible {
+    background: var(--surface-hover);
+    color: var(--text-primary);
+}
+.documents-marked-filter-btn[aria-pressed="true"] {
+    color: var(--machine-blue);
+    border-color: var(--machine-blue);
+}
 .tree-leaf.launcher-new-project { color: var(--machine-blue); }
 /* CLAUDE-P40-VW8-QA (New Investigation Action in Lists): same accent
    "+ New X" already uses (.launcher-new-project, above) - a generic
@@ -781,6 +805,65 @@ html.launcher-hidden .launcher-panel { display: none; }
    the leaf keeps its own ellipsis truncation via min-width:0. */
 .tree-node-document { display: flex; align-items: center; gap: 0.15rem; }
 .tree-node-document .tree-leaf { flex: 1 1 auto; min-width: 0; }
+/* CLAUDE-DOCUMENT-RAIL-PROBE-EYE-TOOL-01, Part 3: a restrained review-
+   shortlist checkbox, same compact footprint as the icon buttons beside
+   it - "following the restrained document-review grammar familiar from
+   professional review applications" (Product Owner), not a decorative
+   custom control. */
+.pm-mark-checkbox {
+    flex-shrink: 0;
+    width: 14px;
+    height: 14px;
+    margin: 0;
+    cursor: pointer;
+    accent-color: var(--machine-blue);
+}
+/* Part 6: "do not give the Eye document another filled selection color
+   competing with Main - normal row background + thin restrained dashed
+   outline/frame." Main's own selection (.tree-leaf.active, server-
+   rendered) stays a filled background elsewhere in this file - this is
+   deliberately the opposite treatment (border only, transparent fill)
+   so the two states are never visually confusable, and both can be true
+   on the same row at once (a Document can be both Main and, briefly
+   before this stage's own Part 7 auto-clear takes effect, Eye) without
+   one drowning out the other. */
+.tree-leaf.eye-projected {
+    outline: 1px dashed var(--machine-blue);
+    outline-offset: -1px;
+    border-radius: 3px;
+}
+/* ADDENDUM (DOCUMENT-ROW CONTROL ORDER / MARK VS KEEP): "visually and
+   functionally distinct from PM Mark - a triangle, never a second
+   square." Same compact footprint as the icon buttons around it;
+   aria-pressed reflects the SAME real pinned-tab state document_tabs.js
+   itself already tracks (findPinned), not a separate boolean of its
+   own. */
+.keep-open-btn {
+    flex-shrink: 0;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border: none;
+    border-radius: 4px;
+    background: none;
+    color: var(--text-metadata);
+    font-size: 0.75rem;
+    line-height: 22px;
+    text-align: center;
+    cursor: pointer;
+}
+.keep-open-btn:hover, .keep-open-btn:focus-visible {
+    background: var(--surface-hover);
+    color: var(--machine-blue);
+}
+.keep-open-btn:focus-visible {
+    outline: 2px solid var(--machine-blue);
+    outline-offset: 1px;
+}
+.keep-open-btn[aria-pressed="true"] {
+    color: var(--machine-blue);
+    font-weight: 700;
+}
 .eye-send-btn {
     flex-shrink: 0;
     width: 22px;
