@@ -413,6 +413,20 @@ def _register_security_headers(app: Flask) -> None:
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; base-uri 'self'; form-action 'self'; "
             "frame-ancestors 'none'; object-src 'none'; "
+            # CLAUDE-EYE-COMPARE-01: img-src has no directive of its own,
+            # so it silently fell back to default-src 'self' - which does
+            # NOT cover the data: scheme (a different scheme, not "same
+            # origin" under CSP's own matching rules). This is the real
+            # root cause of "pasted images do not display" (Eye's own
+            # preview, static/js/eye_pane.js's showCanvas(), has always
+            # rendered via `image.src = <a data: URL from FileReader>`,
+            # confirmed live: a real, well-formed data: image URL fails
+            # to load with img-src absent, and succeeds once data: is
+            # explicitly allowed here) - not a bug in that code itself.
+            # data: is safe to allow broadly for img-src specifically
+            # (unlike script-src) - a data: URI can only ever decode to
+            # pixels, never execute as script.
+            "img-src 'self' data:; "
             f"script-src 'self' 'nonce-{nonce}'"
         )
         return response
