@@ -41,6 +41,7 @@ _ADMIN_ONLY_ENDPOINTS = {
     "api.register_spreadsheet_structure_route", "api.edit_spreadsheet_cell",
     "api.register_drawing_structure", "api.create_drawing_region",
     "api.save_eye_capture", "api.create_image_marker", "api.export_derivative_crop",
+    "api.create_document_snapshot",
     "api.create_relationship", "api.confirm_relationship_route", "api.dispute_relationship_route",
     "api.reject_relationship_route", "api.supersede_relationship_route",
     "api.create_investigation", "api.accept_claim_as_observation", "api.accept_claim_as_finding",
@@ -433,6 +434,53 @@ def save_eye_capture(project_id):
     if result["classification"] != "supported":
         return jsonify(error="invalid_image", message=f"This image was refused: {result['classification']}.",
                        classification=result["classification"]), 400
+    return jsonify(result), 201
+
+
+@api_bp.route('/documents/<project_id>/sources/<source_id>/snapshot', methods=['POST'])
+def create_document_snapshot(project_id, source_id):
+    """
+    CLAUDE-SNAPSHOT-DUAL-SURFACE-01: `<source_id>` is the PARENT Document
+    being captured - the caller (static/js/pdf_viewer.js's own
+    takeSnapshot(), called via whichever surface, Main or Eye, currently
+    owns the shared toolbar) already resolved which document/page that
+    is BEFORE this request is made; this route never infers it from rail
+    selection or "last opened."
+
+    JSON body: `{"image": "data:image/png;base64,...", "page": <int|null>}`
+    - a rendered-canvas capture, not a raw file upload, so no `request.
+    files` multipart handling (contrast with save_eye_capture above).
+    """
+    import base64
+
+    from services.image_intelligence import ImageIntelligenceError, register_document_snapshot
+
+    _document, workspace = _load_authorized_project_or_404(project_id)
+    store = CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"])
+    body = request.get_json(silent=True) or {}
+    data_url = body.get('image')
+    if not data_url or not isinstance(data_url, str) or ';base64,' not in data_url:
+        return jsonify(error="invalid_image", message="An 'image' data URL is required."), 400
+    page = body.get('page')
+    if page is not None:
+        try:
+            page = int(page)
+        except (TypeError, ValueError):
+            return jsonify(error="invalid_page", message="'page' must be an integer when given."), 400
+    try:
+        raw_bytes = base64.b64decode(data_url.split(';base64,', 1)[1], validate=True)
+    except (ValueError, TypeError):
+        return jsonify(error="invalid_image", message="'image' was not valid base64."), 400
+
+    sources_dir = Path(current_app.config["REGISTRY_STORE_PATH"]) / "workspace_sources" / project_id
+    try:
+        result = register_document_snapshot(
+            store, workspace, parent_source_id=source_id, page_number=page, raw_bytes=raw_bytes,
+            sources_dir=sources_dir, actor=session.get('username', 'system'),
+            governance_log=get_governance_log(current_app),
+        )
+    except ImageIntelligenceError as exc:
+        return jsonify(error="invalid_snapshot", message=str(exc)), 400
     return jsonify(result), 201
 
 

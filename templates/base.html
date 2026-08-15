@@ -169,6 +169,14 @@
                     <span class="doc-controls-divider" aria-hidden="true"></span>
                     <a class="doc-control-btn" id="doc-download" data-ui-ref="menu.document-controls.download" aria-label="Download" title="Download" download>&#8595;</a>
                     <button type="button" class="doc-control-btn" id="doc-print" data-ui-ref="menu.document-controls.print" aria-label="Print" title="Print">&#128438;</button>
+                    {# CLAUDE-SNAPSHOT-DUAL-SURFACE-01: follows the same
+                       focus-routed dispatch every other control here
+                       already uses (static/js/pdf_viewer.js's own
+                       getFocused()) - captures whichever surface (Main
+                       or Eye) currently owns this shared toolbar, never
+                       inferred from rail selection or "last opened." #}
+                    <button type="button" class="doc-control-btn" id="doc-snapshot" data-ui-ref="menu.document-controls.snapshot" aria-label="Take Snapshot" title="Take Snapshot">&#128247;</button>
+                    <span class="doc-snapshot-status" id="doc-snapshot-status" data-ui-ref="menu.document-controls.snapshot-status" aria-live="polite"></span>
                     {# CLAUDE-P40-VW7A-QA2, Section 4: real, functional annotation
                        tools - text/highlight/freehand ink, select+delete, undo/
                        redo, one-active-tool-at-a-time (aria-pressed, radio-group

@@ -82,6 +82,8 @@
     var searchCount = document.getElementById('doc-search-count');
     var downloadLink = document.getElementById('doc-download');
     var printBtn = document.getElementById('doc-print');
+    var snapshotBtn = document.getElementById('doc-snapshot');
+    var snapshotStatusEl = document.getElementById('doc-snapshot-status');
     var overflowDetails = document.getElementById('doc-controls-overflow');
     var overflowPanel = document.getElementById('doc-controls-overflow-panel');
     var secondaryGroup = document.getElementById('doc-controls-secondary');
@@ -1111,10 +1113,35 @@
             if (name === 'main') updateAnnotationUi();
         }
 
+        // CLAUDE-SNAPSHOT-DUAL-SURFACE-01: captures whatever THIS surface's
+        // own <canvas> currently shows (its real rendered page, at
+        // whatever zoom/rotation is active) and registers it as a new
+        // derived Source, parented to THIS surface's own currentSourceId -
+        // "active Main -> snapshot Main; active Eye -> snapshot Eye," never
+        // inferred from rail selection. The shared toolbar's own snapshot
+        // button (below) calls getFocused().takeSnapshot(), so it is
+        // already scoped to whichever surface owns focus by construction.
+        function takeSnapshot() {
+            if (!pdfDoc || !canvas || !currentSourceId) return Promise.resolve(null);
+            var dataUrl = canvas.toDataURL('image/png');
+            var pageNum = currentPage;
+            var stripEl = document.getElementById('document-tab-strip');
+            var projectId = stripEl ? stripEl.getAttribute('data-project-id') : '';
+            if (!projectId) return Promise.resolve(null);
+            return fetch('/api/v1/documents/' + encodeURIComponent(projectId) + '/sources/' + encodeURIComponent(currentSourceId) + '/snapshot', {
+                method: 'POST', credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ image: dataUrl, page: pageNum }),
+            }).then(function (resp) {
+                return resp.json().then(function (body) { return { ok: resp.ok, status: resp.status, body: body }; });
+            });
+        }
+
         var api = {
             name: name,
             mount: mount,
             unmount: unmount,
+            takeSnapshot: takeSnapshot,
             hasDoc: function () { return !!pdfDoc; },
             getSourceId: function () { return currentSourceId; },
             getPage: function () { return currentPage; },
@@ -1210,6 +1237,53 @@
         var s = getFocused();
         if (s) s.print();
     });
+
+    // CLAUDE-SNAPSHOT-DUAL-SURFACE-01: captures whichever surface owns
+    // this toolbar, registers a real new -01/-02 Source, then opens it
+    // as a new, active Main tab via the SAME real navigation every other
+    // "open a document" action in this app already uses (document_tabs.js
+    // itself decides tab placement/pinning from that navigation - nothing
+    // Main-tab-specific is special-cased here). Eye's own document state
+    // is client-side-only and does not survive a page reload - if EYE
+    // (not Main) triggered this, its current document identity is
+    // stashed in a one-shot sessionStorage marker BEFORE navigating, so
+    // eye_pane.js can restore it once on the next load ("Eye remains on
+    // PDF B after the snapshot") without inventing a general Eye-
+    // persists-across-reload feature.
+    if (snapshotBtn) {
+        snapshotBtn.addEventListener('click', function () {
+            var s = getFocused();
+            if (!s || !s.hasDoc()) return;
+            var wasEye = window.__activeDocumentSurface === 'eye';
+            snapshotBtn.disabled = true;
+            if (snapshotStatusEl) snapshotStatusEl.textContent = 'Capturing…';
+            s.takeSnapshot().then(function (result) {
+                snapshotBtn.disabled = false;
+                if (!result || !result.ok) {
+                    var message = (result && result.body && result.body.message) || 'unknown error';
+                    if (snapshotStatusEl) snapshotStatusEl.textContent = 'Could not create Snapshot: ' + message;
+                    return;
+                }
+                if (snapshotStatusEl) snapshotStatusEl.textContent = '';
+                var stripEl = document.getElementById('document-tab-strip');
+                var baseUrl = stripEl ? stripEl.getAttribute('data-base-url') : null;
+                if (!baseUrl) return;
+                if (wasEye && window.ArchioskEyePane && window.ArchioskEyePane.getRestoreState) {
+                    var restoreState = window.ArchioskEyePane.getRestoreState();
+                    if (restoreState) {
+                        var projectId = stripEl.getAttribute('data-project-id');
+                        try {
+                            window.sessionStorage.setItem(
+                                'beehive:eye:pending-restore:' + projectId,
+                                JSON.stringify(restoreState)
+                            );
+                        } catch (e) { /* ignore */ }
+                    }
+                }
+                window.location.href = baseUrl + '?source=' + encodeURIComponent(result.body.source_id);
+            });
+        });
+    }
 
     // Annotation/region toolbar - always dispatches to Main (see header
     // comment); the buttons themselves are disabled while Eye is focused

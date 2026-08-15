@@ -879,6 +879,16 @@ SOURCE_ORIGIN_TYPE_IMPORT = "import"
 # which is exactly what origin_reference (below) is for.
 SOURCE_ORIGIN_TYPE_EYE_CAPTURE = "eye_capture"
 SOURCE_ORIGIN_TYPE_DERIVATIVE_CROP = "derivative_crop"
+# CLAUDE-SNAPSHOT-DUAL-SURFACE-01: a rendered-page capture of a document
+# already open in Main or Eye (whichever surface currently has focus) -
+# distinct from eye_capture (a pasted/dropped/camera image with no
+# document of its own behind it) and derivative_crop (a bounded region
+# crop of a Source's own stored file, not a rendered VIEW of it - a
+# Snapshot can capture a page/zoom/rotation state a crop has no concept
+# of). origin_reference carries "<parent_source_id>" or "<parent_source_
+# id>#page=<n>" when a page number is known - meaning-depends-on-origin-
+# type, same convention every other origin_type here already uses.
+SOURCE_ORIGIN_TYPE_DOCUMENT_SNAPSHOT = "document_snapshot"
 
 KNOWN_SOURCE_ORIGIN_TYPES = (
     SOURCE_ORIGIN_TYPE_UPLOAD,
@@ -887,6 +897,7 @@ KNOWN_SOURCE_ORIGIN_TYPES = (
     SOURCE_ORIGIN_TYPE_IMPORT,
     SOURCE_ORIGIN_TYPE_EYE_CAPTURE,
     SOURCE_ORIGIN_TYPE_DERIVATIVE_CROP,
+    SOURCE_ORIGIN_TYPE_DOCUMENT_SNAPSHOT,
 )
 
 # -- Requirement vocabulary (Prompt 15) --------------------------------------

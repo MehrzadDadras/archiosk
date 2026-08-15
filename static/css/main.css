@@ -4524,7 +4524,8 @@ main:hover,
     background: var(--surface-secondary);
 }
 .doc-orientation-status,
-.doc-region-status {
+.doc-region-status,
+.doc-snapshot-status {
     font-size: 0.72rem;
     color: var(--text-metadata);
     display: inline-flex;

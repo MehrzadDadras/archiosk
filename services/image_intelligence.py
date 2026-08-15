@@ -67,6 +67,7 @@ from services.case_workspace import (
     ProjectWorkspace,
     SOURCE_KIND_DRAWING,
     SOURCE_ORIGIN_TYPE_DERIVATIVE_CROP,
+    SOURCE_ORIGIN_TYPE_DOCUMENT_SNAPSHOT,
     SOURCE_ORIGIN_TYPE_EYE_CAPTURE,
 )
 from services.governance import GovernanceLog
@@ -299,6 +300,94 @@ def register_eye_capture(
         "classification": IMAGE_CLASSIFICATION_SUPPORTED,
         "source_id": source["id"],
         "structural_unit_id": registration["structural_unit_ids"][0],
+    }
+
+
+def register_document_snapshot(
+    store: CaseWorkspaceStore,
+    workspace: ProjectWorkspace,
+    parent_source_id: str,
+    page_number: Optional[int],
+    raw_bytes: bytes,
+    sources_dir: Path,
+    actor: str = "system",
+    governance_log: Optional[GovernanceLog] = None,
+) -> dict:
+    """
+    CLAUDE-SNAPSHOT-DUAL-SURFACE-01: captures the currently-rendered page
+    of a Document already open in Main or Eye - built fresh this stage
+    (there was no pre-existing "-01/-02" screenshot mechanism to
+    preserve, confirmed by a real code search before writing this).
+
+    The CALLER (routes/workspace.py) is the one that knows which surface
+    (Main or Eye, embedded or detached) currently has focus and therefore
+    which document/page raw_bytes actually depicts - this function only
+    ever registers what it is given, against the parent Source it is
+    told, exactly like register_eye_capture/extract_bounded_crop above
+    never independently decide what they're capturing either.
+
+    Naming is deterministic and sequential off the PARENT Source's own
+    stem (`<parent-stem>-01.png`, `-02.png`, ...), scanning every
+    existing Source name in this Project - never reused/gapped/renamed
+    on a later deletion, and never colliding with an unrelated Source
+    that happens to already end in the same digits.
+
+    Provenance is carried on the new Source's own existing origin_type/
+    origin_reference fields (SOURCE_ORIGIN_TYPE_DOCUMENT_SNAPSHOT,
+    "<parent_source_id>#page=<n>" when a page number is known) - the
+    same "carried on the Source's own existing fields, not a new record
+    type" precedent extract_bounded_crop already established for
+    derivative_crop. The parent Source itself is never mutated - this
+    only ever ADDS a new sibling Source.
+    """
+    parent = store._find(workspace.sources, parent_source_id)
+    if parent is None or parent["project_id"] != workspace.project_id:
+        raise ImageIntelligenceError(f"Source {parent_source_id} was not found.")
+
+    inspection = _classify_and_inspect(raw_bytes)
+    if inspection["classification"] != IMAGE_CLASSIFICATION_SUPPORTED:
+        raise ImageIntelligenceError("Snapshot capture was not a valid image.")
+
+    stem = Path(parent["name"]).stem
+    existing_names = {s["name"] for s in workspace.sources}
+    n = 1
+    while True:
+        candidate_name = f"{stem}-{n:02d}.png"
+        if candidate_name not in existing_names:
+            break
+        n += 1
+
+    sources_dir.mkdir(parents=True, exist_ok=True)
+    stored_path = sources_dir / f"{uuid.uuid4().hex}_{secure_filename(candidate_name)}"
+    stored_path.write_bytes(raw_bytes)
+    file_hash = hashlib.sha256(raw_bytes).hexdigest()
+
+    origin_reference = (
+        f"{parent_source_id}#page={page_number}" if page_number is not None else parent_source_id
+    )
+
+    snapshot_source = store.add_source(
+        workspace, name=candidate_name, file_path=str(stored_path), kind=SOURCE_KIND_DRAWING,
+        width=inspection["width"], height=inspection["height"], file_hash=file_hash,
+        origin_type=SOURCE_ORIGIN_TYPE_DOCUMENT_SNAPSHOT, origin_reference=origin_reference,
+        actor=actor, governance_log=governance_log,
+    )
+
+    registration = store.register_drawing_sheet_structure(
+        workspace, snapshot_source["id"],
+        [{"index": 0, "label": candidate_name, "width": inspection["width"], "height": inspection["height"],
+          "source_rotation": 0, "metadata": {}}],
+        extractor_version=IMAGE_EXTRACTOR_VERSION, actor=actor, governance_log=governance_log,
+        unit_type="image",
+    )
+
+    return {
+        "source_id": snapshot_source["id"],
+        "name": candidate_name,
+        "kind": snapshot_source["kind"],
+        "structural_unit_id": registration["structural_unit_ids"][0],
+        "parent_source_id": parent_source_id,
+        "page_number": page_number,
     }
 
 

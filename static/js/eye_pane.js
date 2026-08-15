@@ -96,6 +96,8 @@
     // this only ever matches a real Project Document sent via this same
     // mechanism, never a false-positive on an unrelated image state.
     var currentEyeSourceId = null;
+    var currentEyeSourceName = null;
+    var currentEyeSourceKind = null;
 
     function updateEyeSendButtonStates() {
         Array.prototype.forEach.call(document.querySelectorAll('.eye-send-btn'), function (btn) {
@@ -451,6 +453,8 @@
         if (noteEl) noteEl.hidden = false;
         updateEmptyStateText();
         currentEyeSourceId = null;
+        currentEyeSourceName = null;
+        currentEyeSourceKind = null;
         updateEyeSendButtonStates();
         refreshEyeLayout();
     }
@@ -470,6 +474,8 @@
         if (documentNameEl) documentNameEl.textContent = name || '';
         documentView.hidden = false;
         currentEyeSourceId = sourceId;
+        currentEyeSourceName = name || null;
+        currentEyeSourceKind = kind || null;
         updateEyeSendButtonStates();
         // Eye's whole-column visibility reacts immediately - the reviewer
         // sees Eye expand the instant they click the eye icon, not only
@@ -597,5 +603,37 @@
         }, { passive: false });
     }
 
-    window.ArchioskEyePane = { clear: clearPreview, setFit: setFit };
+    // CLAUDE-SNAPSHOT-DUAL-SURFACE-01: Eye's own document state is
+    // client-side-only and does not survive a page reload (this pane's
+    // own "Not saved - cleared on reload" note is still true for the
+    // ORDINARY case) - Snapshot-from-Eye is the one specific action that
+    // needs Eye to survive the real navigation it triggers (opening the
+    // new artifact as a Main tab). getRestoreState() lets pdf_viewer.js's
+    // own snapshot handler capture exactly what to restore, without this
+    // file needing to know anything about Snapshot/tabs/navigation
+    // itself - a one-shot detail of that ONE flow, not a general "Eye
+    // persists across reload" feature.
+    function getRestoreState() {
+        if (!currentEyeSourceId) return null;
+        var projectId = dropTarget.getAttribute('data-project-id');
+        if (!projectId) return null;
+        return { sourceId: currentEyeSourceId, name: currentEyeSourceName, kind: currentEyeSourceKind, projectId: projectId };
+    }
+
+    (function restorePendingEyeStateIfAny() {
+        var projectId = dropTarget.getAttribute('data-project-id');
+        if (!projectId) return;
+        var key = 'beehive:eye:pending-restore:' + projectId;
+        var raw = null;
+        try { raw = window.sessionStorage.getItem(key); } catch (e) { raw = null; }
+        if (!raw) return;
+        try { window.sessionStorage.removeItem(key); } catch (e) { /* ignore */ }
+        var state = null;
+        try { state = JSON.parse(raw); } catch (e) { state = null; }
+        if (state && state.sourceId && state.projectId) {
+            loadDocument(state.sourceId, state.name, state.kind, state.projectId);
+        }
+    })();
+
+    window.ArchioskEyePane = { clear: clearPreview, setFit: setFit, getRestoreState: getRestoreState };
 })();
