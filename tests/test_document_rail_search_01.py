@@ -209,6 +209,13 @@ class ImageTraySearchCssTests(unittest.TestCase):
             ".documents-image-search-preview",
             ".documents-image-search-collapsed",
             ".documents-search-input",
+            # Found by the SAME live-verification pass: the Marked filter
+            # (a CLAUDE-DOCUMENT-RAIL-PROBE-EYE-TOOL-01 feature, one
+            # stage earlier) had been silently broken since it first
+            # shipped - .tree-node-document's own row.hidden was always
+            # set correctly in JS, but never actually hid anything
+            # on screen until this fix.
+            ".tree-node-document",
         ):
             with self.subTest(selector=selector):
                 base_body = _rule_body(self.css, selector)

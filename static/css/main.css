@@ -956,6 +956,21 @@ html.launcher-hidden .launcher-panel { display: none; }
    sits beside (not inside) the existing full-width .tree-leaf link;
    the leaf keeps its own ellipsis truncation via min-width:0. */
 .tree-node-document { display: flex; align-items: center; gap: 0.15rem; }
+/* An author `display` declaration here otherwise beats the UA
+   stylesheet's own `[hidden] { display: none }` (equal specificity,
+   author rule comes later in cascade order) - this was a REAL, latent
+   bug from the moment the Marked filter first shipped
+   (CLAUDE-DOCUMENT-RAIL-PROBE-EYE-TOOL-01): static/js/document_marks.js
+   correctly set row.hidden on every filtered-out row, and JS reads of
+   `!row.hidden` correctly reflected that, but the rows stayed VISUALLY
+   present regardless - caught only now, by actually looking at a
+   screenshot instead of trusting a JS-computed "visible count" alone,
+   while live-verifying CLAUDE-DOCUMENT-RAIL-SEARCH-01. Same root cause,
+   same fix, as every other `[hidden]` override already added this
+   session (.toolbox-eye-thumbnails-panel, the Image tray/search input). */
+.tree-node-document[hidden] {
+    display: none;
+}
 .tree-node-document .tree-leaf { flex: 1 1 auto; min-width: 0; }
 /* CLAUDE-DOCUMENT-RAIL-PROBE-EYE-TOOL-01, Part 3: a restrained review-
    shortlist checkbox, same compact footprint as the icon buttons beside
