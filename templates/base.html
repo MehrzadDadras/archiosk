@@ -639,13 +639,22 @@
                                         </button>
                                         <ul class="tree-children"{% if selected_source %} data-tree-open{% endif %}>
                                             {% for s in active_sources %}
-                                            <li class="tree-node" data-tree-node>
+                                            <li class="tree-node tree-node-document" data-tree-node>
                                                 {# CLAUDE-P40-E3A: the retired ?view=documents directory body used to
                                                    show each Source's added-date inline; Section 4 forbids restoring
                                                    that as a second visible directory in Display, but the provenance
                                                    detail itself (Section 12: "current source-document provenance")
                                                    is preserved here as a title tooltip rather than dropped outright. #}
                                                 <a class="tree-leaf launcher-link{% if selected_source and selected_source.id == s.id %} active{% endif %}" data-ui-ref="lists.project.documents.leaf"{% if selected_source and selected_source.id == s.id %} aria-current="page"{% endif %} href="{{ url_for('workspace.show_workspace', project_id=project_id, source=s.id) }}" data-source-id="{{ s.id }}" title="Added {{ s.added_at }}">{{ s.name }}</a>
+                                                {# CLAUDE-EYE-COMPARE-01: a compact, always-present per-row action -
+                                                   "the simplest existing application grammar that works reliably"
+                                                   (Product Owner) - client-side only (window.ArchioskEyePane.
+                                                   loadDocument, defined in eye_pane.js), never navigates/replaces
+                                                   Display's own selected_source the way this row's own <a> does,
+                                                   so Document A can stay open in Display while Document B loads
+                                                   into Eye. Pure GET of the existing source_file route - no
+                                                   mutation, no new backend endpoint. #}
+                                                <button type="button" class="eye-send-btn" data-ui-ref="lists.project.documents.send-to-eye" data-source-id="{{ s.id }}" data-source-name="{{ s.name }}" data-source-kind="{{ s.kind }}" data-project-id="{{ project_id }}" aria-label="Open {{ s.name }} in Eye" title="Open in Eye">&#128065;</button>
                                             </li>
                                             {% else %}
                                             {# CLAUDE-P40-VW7B: a coherent empty state, matching the
@@ -935,6 +944,26 @@
                            reimplemented, mounted on a real Source instead of an
                            in-memory data: URL. #}
                         <div class="eye-saved-view" id="eye-saved-view" hidden></div>
+                        {# CLAUDE-EYE-COMPARE-01: Eye's second real content state - a
+                           genuine, already-registered Project Document (not an
+                           unsaved paste/drop), loaded here as a pure working-view
+                           action (window.ArchioskEyePane.loadDocument in eye_pane.js
+                           - a GET of the same workspace.source_file route Display
+                           itself uses, never a mutation). Hidden by default;
+                           static/js/eye_pane.js fills #eye-document-body with
+                           whichever of the three honest branches applies (PDF
+                           canvas via the same vendored PDF.js engine Display uses;
+                           a plain <img> for an image-kind Source; or the identical
+                           "not previewable inside ARCHIOSK yet" fallback card
+                           Display's own case_workspace.html renders for DOCX/etc). #}
+                        <div class="eye-document-view" id="eye-document-view" hidden>
+                            <div class="eye-document-header">
+                                <span class="eye-document-label" id="eye-document-label" data-ui-ref="eye.document.label">PROJECT DOCUMENT</span>
+                                <span class="eye-document-name" id="eye-document-name"></span>
+                                <button type="button" class="eye-canvas-btn" id="eye-document-clear" data-ui-ref="eye.document.clear" aria-label="Clear this document from Eye" title="Clear">Clear</button>
+                            </div>
+                            <div class="eye-document-body" id="eye-document-body"></div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -976,6 +1005,18 @@
                    first child - this deliberately does not duplicate or
                    wrap that heading. #}
                 <button type="button" class="toolbox-maximize-btn" id="toolbox-maximize-btn" data-ui-ref="toolbox.maximize" aria-pressed="false" aria-label="Maximize Toolbox">&#10530;</button>
+                {# CLAUDE-EYE-COMPARE-01: lives in the shared Toolbox chrome
+                   (not case_workspace.html's own conditional {% block
+                   toolbox %} branches) so it is available regardless of
+                   what's currently selected - Document A can stay open in
+                   Display, Compare can be turned on, and a Document B can
+                   still be sent to Eye without navigating away from A.
+                   "Compare remains active... until changed/cancelled" -
+                   persisted per-Project the same way the splitter/lock
+                   state above is, not a one-time disposable click. #}
+                {% if project_id is defined and workspace is defined %}
+                <button type="button" class="toolbox-compare-btn" id="toolbox-compare-btn" data-ui-ref="toolbox.compare" data-project-id="{{ project_id }}" aria-pressed="false" aria-label="Compare two documents">Compare</button>
+                {% endif %}
                 {% block toolbox %}{% endblock %}
             </aside>
         </div>

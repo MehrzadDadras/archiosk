@@ -773,6 +773,37 @@ html.launcher-hidden .launcher-panel { display: none; }
    expandable families already have an equivalent). */
 .tree-leaf.tree-leaf-action { color: var(--machine-blue); }
 
+/* CLAUDE-EYE-COMPARE-01: a compact, always-visible per-row action
+   letting the reviewer send a document to Eye without navigating away
+   from whatever is currently open in Display - "do not create a large
+   new control system." Row becomes a flex container so the icon button
+   sits beside (not inside) the existing full-width .tree-leaf link;
+   the leaf keeps its own ellipsis truncation via min-width:0. */
+.tree-node-document { display: flex; align-items: center; gap: 0.15rem; }
+.tree-node-document .tree-leaf { flex: 1 1 auto; min-width: 0; }
+.eye-send-btn {
+    flex-shrink: 0;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border: none;
+    border-radius: 4px;
+    background: none;
+    color: var(--text-metadata);
+    font-size: 0.75rem;
+    line-height: 22px;
+    text-align: center;
+    cursor: pointer;
+}
+.eye-send-btn:hover, .eye-send-btn:focus-visible {
+    background: var(--surface-hover);
+    color: var(--machine-blue);
+}
+.eye-send-btn:focus-visible {
+    outline: 2px solid var(--machine-blue);
+    outline-offset: 1px;
+}
+
 /* CLAUDE-P40-VW7: Tasks/Tags branches - reuse the tree idiom above as-
    is (.tree-node/.tree-toggle/.tree-children/.launcher-count already do
    the collapsing, indentation, and count-badge work); this block only
@@ -3464,6 +3495,32 @@ html.toolbox-hidden .workspace-right-column {
     color: var(--text-primary);
 }
 .toolbox-maximize-btn[aria-pressed="true"] { color: var(--machine-blue); }
+/* CLAUDE-EYE-COMPARE-01: same floating-over-the-pane-corner treatment
+   as .toolbox-maximize-btn (immediately above) - offset further left so
+   the two compact controls sit side by side without overlapping, both
+   inside the padding-top:2.2rem the pane already reserves. */
+.toolbox-compare-btn {
+    position: absolute;
+    top: 0.4rem;
+    right: 2.6rem;
+    background: none;
+    border: 1px solid var(--border);
+    cursor: pointer;
+    color: var(--text-secondary);
+    font-family: var(--font-body);
+    font-size: 0.72rem;
+    padding: 0.2rem 0.5rem;
+    border-radius: 4px;
+    z-index: 2;
+}
+.toolbox-compare-btn:hover, .toolbox-compare-btn:focus-visible {
+    background: var(--surface-hover);
+    color: var(--text-primary);
+}
+.toolbox-compare-btn[aria-pressed="true"] {
+    color: var(--machine-blue);
+    border-color: var(--machine-blue);
+}
 /* CLAUDE-P40-VW6: the old .workspace-pane-toolbox.appearance-tinted
    single-property rule that used to live here is gone - Toolbox's own
    root used to BE its painted surface (unlike Display/Chat, which paint
@@ -3877,6 +3934,81 @@ html.toolbox-hidden .workspace-right-column {
     width: 100%;
 }
 .eye-saved-view[hidden] { display: none; }
+
+/* CLAUDE-EYE-COMPARE-01: Eye's second real content state - a genuine
+   Project Document (PDF/image/honest-fallback), reusing the exact same
+   visual language as the image-canvas state above (.eye-canvas-btn,
+   --text-secondary/--text-metadata, .eye-canvas-viewport's own
+   centered/scrollable treatment) rather than inventing a second look. */
+.eye-document-view {
+    align-self: stretch;
+    flex: 1 1 auto;
+    min-height: 0;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+.eye-document-view[hidden] { display: none; }
+.eye-document-header {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex-shrink: 0;
+    flex-wrap: wrap;
+}
+.eye-document-label {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-metadata);
+    flex-shrink: 0;
+}
+.eye-document-name {
+    font-size: 0.82rem;
+    color: var(--text-primary);
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.eye-document-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: var(--surface-primary);
+    border-radius: 4px;
+    scrollbar-color: transparent transparent;
+}
+.eye-document-image {
+    display: block;
+    max-width: 100%;
+    max-height: 100%;
+}
+.eye-document-pdf {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.4rem;
+    width: 100%;
+    height: 100%;
+}
+.eye-document-pdf-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.3rem;
+    flex-shrink: 0;
+}
+.eye-document-pdf-canvas {
+    max-width: 100%;
+    display: block;
+}
 
 /* CLAUDE-P40-EYE1 (product-owner browser correction): "one nested
    scrollbar in the upper-right Toolbox/Findings region remains

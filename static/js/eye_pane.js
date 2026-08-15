@@ -49,6 +49,56 @@
     var descriptionInput = document.getElementById('eye-save-description');
     var savedViewEl = document.getElementById('eye-saved-view');
 
+    // -------- CLAUDE-EYE-COMPARE-01: a second real document/image ------
+    var documentView = document.getElementById('eye-document-view');
+    var documentLabelEl = document.getElementById('eye-document-label');
+    var documentNameEl = document.getElementById('eye-document-name');
+    var documentClearBtn = document.getElementById('eye-document-clear');
+    var documentBodyEl = document.getElementById('eye-document-body');
+    var compareBtn = document.getElementById('toolbox-compare-btn');
+    var IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg'];
+    var compareActive = false;
+    var pdfPageTask = null; // the currently-mounted Eye-side PDF document, if any
+
+    // -------- CLAUDE-EYE-COMPARE-01: Compare toggle (Part 1/6) -----------
+    // A compact, per-Project-persisted toggle - "Compare remains active...
+    // until changed/cancelled," not a one-time disposable click. Lives in
+    // base.html's own shared Toolbox chrome (always rendered, regardless
+    // of what's selected) but its STATE and Eye's own reaction to it are
+    // owned here, alongside the rest of Eye's behavior.
+    function compareKey() {
+        var projectId = compareBtn && compareBtn.getAttribute('data-project-id');
+        return projectId ? 'beehive:panel:compare-active:' + projectId : null;
+    }
+
+    function updateEmptyStateText() {
+        if (!emptyState) return;
+        var eyeIsEmpty = canvas.hidden && savedViewEl.hidden && documentView.hidden;
+        if (!eyeIsEmpty) return;
+        emptyState.textContent = compareActive
+            ? 'Choose a document to compare.'
+            : 'Paste or drop an image here to preview it.';
+    }
+
+    function setCompareActive(next, persist) {
+        compareActive = next;
+        if (compareBtn) compareBtn.setAttribute('aria-pressed', String(next));
+        if (persist !== false) {
+            var key = compareKey();
+            if (key) { try { window.localStorage.setItem(key, next ? 'true' : 'false'); } catch (e) { /* ignore */ } }
+        }
+        updateEmptyStateText();
+    }
+
+    if (compareBtn) {
+        var storedCompare = null;
+        try { storedCompare = window.localStorage.getItem(compareKey()); } catch (e) { /* ignore */ }
+        setCompareActive(storedCompare === 'true', false);
+        compareBtn.addEventListener('click', function () {
+            setCompareActive(!compareActive);
+        });
+    }
+
     var currentError = null;
     var naturalWidth = 0;
     var naturalHeight = 0;
@@ -219,6 +269,11 @@
 
     function showCanvas(dataUrl) {
         clearError();
+        // Part 5: Eye holds exactly one of {nothing, image, document} at a
+        // time - loading a new pasted/dropped image replaces a Project
+        // Document that was showing, the same way it already replaced an
+        // earlier pasted image.
+        clearDocumentView();
         if (emptyState) emptyState.hidden = true;
         if (noteEl) noteEl.hidden = true;
         savedViewEl.hidden = true;
@@ -231,6 +286,12 @@
             naturalHeight = image.naturalHeight;
             setFit();
             watchResize();
+        };
+        image.onerror = function () {
+            canvas.hidden = true;
+            showError('This image could not be displayed.');
+            if (emptyState) emptyState.hidden = false;
+            if (noteEl) noteEl.hidden = false;
         };
         image.src = dataUrl;
     }
@@ -249,6 +310,7 @@
         if (emptyState) emptyState.hidden = false;
         if (noteEl) noteEl.hidden = false;
         clearError();
+        updateEmptyStateText();
     }
 
     function handleFile(file) {
@@ -262,6 +324,194 @@
         reader.onerror = function () { showError('This image could not be read.'); };
         reader.readAsDataURL(file);
     }
+
+    // -------- CLAUDE-EYE-COMPARE-01: a second real document/image --------
+    // (Part 1/2/3): a genuine, already-registered Project Document loaded
+    // as a pure working-view action - never a mutation of the governed
+    // Source (Part 6/2), never a second viewer architecture invented from
+    // scratch (Part 3) - PDF reuses the same vendored PDF.js engine
+    // static/js/pdf_viewer.js already loads (a second, independent
+    // instance of the real library, not a fake one - pdf_viewer.js's own
+    // module is a Display-only singleton with one shared toolbar, so it
+    // cannot itself run a second, simultaneous instance inside Eye without
+    // a much larger refactor of that shared module); an unsupported format
+    // gets the IDENTICAL honest fallback card case_workspace.html's own
+    // Display branch already renders for the same case, not a
+    // reinterpretation of it.
+    var eyePdfjsLibPromise = null;
+    function loadEyePdfjsLib() {
+        if (!eyePdfjsLibPromise) {
+            // The SAME specifier pdf_viewer.js itself imports - the
+            // browser's module map caches a dynamic import() by URL, so
+            // this is a second reference to the one real, already-fetched
+            // module instance, not a duplicate network fetch or a forked
+            // copy of the library.
+            eyePdfjsLibPromise = import('/static/js/vendor/pdfjs/pdf.min.mjs').then(function (mod) {
+                mod.GlobalWorkerOptions.workerSrc = '/static/js/vendor/pdfjs/pdf.worker.min.mjs';
+                return mod;
+            });
+        }
+        return eyePdfjsLibPromise;
+    }
+
+    function eyeDocumentFallbackCard(fileUrl, downloadUrl) {
+        var wrap = document.createElement('div');
+        wrap.className = 'document-unavailable-preview';
+        var p = document.createElement('p');
+        p.className = 'pane-note';
+        p.textContent = "This file type isn't previewable inside ARCHIOSK yet - the document itself is safely registered and untouched.";
+        wrap.appendChild(p);
+        var actions = document.createElement('div');
+        actions.className = 'document-unavailable-preview-actions';
+        var openLink = document.createElement('a');
+        openLink.className = 'btn btn-ghost';
+        openLink.href = fileUrl;
+        openLink.target = '_blank';
+        openLink.rel = 'noopener';
+        openLink.textContent = 'Open externally';
+        actions.appendChild(openLink);
+        var downloadLink = document.createElement('a');
+        downloadLink.className = 'btn btn-ghost';
+        downloadLink.href = downloadUrl;
+        downloadLink.textContent = 'Download';
+        actions.appendChild(downloadLink);
+        wrap.appendChild(actions);
+        return wrap;
+    }
+
+    function renderEyePdf(fileUrl) {
+        var container = document.createElement('div');
+        container.className = 'eye-document-pdf';
+        var toolbar = document.createElement('div');
+        toolbar.className = 'eye-document-pdf-toolbar';
+        var prevBtn = document.createElement('button');
+        prevBtn.type = 'button';
+        prevBtn.className = 'eye-canvas-btn';
+        prevBtn.textContent = 'Prev';
+        var pageLabel = document.createElement('span');
+        pageLabel.className = 'eye-canvas-zoom-level';
+        var nextBtn = document.createElement('button');
+        nextBtn.type = 'button';
+        nextBtn.className = 'eye-canvas-btn';
+        nextBtn.textContent = 'Next';
+        toolbar.appendChild(prevBtn);
+        toolbar.appendChild(pageLabel);
+        toolbar.appendChild(nextBtn);
+        var canvasEl = document.createElement('canvas');
+        canvasEl.className = 'eye-document-pdf-canvas';
+        container.appendChild(toolbar);
+        container.appendChild(canvasEl);
+        documentBodyEl.appendChild(container);
+
+        var pdfDoc = null;
+        var pageNum = 1;
+        // A single mutable token, checked (never reassigned/compared-by-
+        // identity) at every async continuation below - clearDocumentView
+        // flips .cancelled on THIS SAME object when the reviewer clears or
+        // replaces Eye's content, so an in-flight page fetch/render from a
+        // document that's no longer showing can never paint a stale canvas.
+        var token = { cancelled: false };
+
+        function renderPage() {
+            pdfDoc.getPage(pageNum).then(function (page) {
+                if (token.cancelled) return;
+                var containerWidth = container.clientWidth || 400;
+                var baseViewport = page.getViewport({ scale: 1 });
+                var scale = Math.max(0.1, containerWidth / baseViewport.width);
+                var viewport = page.getViewport({ scale: scale });
+                canvasEl.width = viewport.width;
+                canvasEl.height = viewport.height;
+                var ctx = canvasEl.getContext('2d');
+                page.render({ canvasContext: ctx, viewport: viewport });
+                pageLabel.textContent = pageNum + ' / ' + pdfDoc.numPages;
+                prevBtn.disabled = pageNum <= 1;
+                nextBtn.disabled = pageNum >= pdfDoc.numPages;
+            });
+        }
+
+        prevBtn.addEventListener('click', function () { if (pageNum > 1) { pageNum -= 1; renderPage(); } });
+        nextBtn.addEventListener('click', function () { if (pdfDoc && pageNum < pdfDoc.numPages) { pageNum += 1; renderPage(); } });
+
+        loadEyePdfjsLib().then(function (pdfjsLib) {
+            if (token.cancelled) return null;
+            return pdfjsLib.getDocument({ url: fileUrl }).promise;
+        }).then(function (doc) {
+            if (!doc || token.cancelled) return;
+            pdfDoc = doc;
+            renderPage();
+        }).catch(function (err) {
+            if (token.cancelled) return;
+            documentBodyEl.textContent = '';
+            var msg = document.createElement('p');
+            msg.className = 'document-viewer-load-error';
+            msg.textContent = 'This PDF could not be opened in Eye' + (err && err.message ? ': ' + err.message : '.');
+            documentBodyEl.appendChild(msg);
+        });
+
+        return token;
+    }
+
+    function clearDocumentView() {
+        if (pdfPageTask) { pdfPageTask.cancelled = true; }
+        pdfPageTask = null;
+        documentView.hidden = true;
+        documentBodyEl.textContent = '';
+        if (documentNameEl) documentNameEl.textContent = '';
+        updateEmptyStateText();
+    }
+
+    // sourceId/name/kind/projectId all come from data-* attributes already
+    // server-rendered on the rail leaf (or the Document toolbox pane) -
+    // this function never calls anything but the existing, already-
+    // authorized GET route that serves that Source's own file, and never
+    // POSTs/mutates anything.
+    function loadDocument(sourceId, name, kind, projectId) {
+        if (!sourceId || !projectId) return;
+        clearError();
+        clearPreview(); // Part 5: mutually exclusive with the image state
+        if (emptyState) emptyState.hidden = true;
+        if (noteEl) noteEl.hidden = true;
+        documentBodyEl.textContent = '';
+        if (documentNameEl) documentNameEl.textContent = name || '';
+        documentView.hidden = false;
+
+        var fileUrl = '/projects/' + encodeURIComponent(projectId) + '/workspace/sources/' + encodeURIComponent(sourceId) + '/file';
+        var downloadUrl = fileUrl + '?download=1';
+        var ext = (name || '').split('.').pop().toLowerCase();
+
+        if (kind === 'drawing' || IMAGE_EXTENSIONS.indexOf(ext) !== -1) {
+            var img = document.createElement('img');
+            img.className = 'eye-document-image';
+            img.alt = name || 'Project document';
+            img.src = fileUrl;
+            documentBodyEl.appendChild(img);
+        } else if (ext === 'pdf') {
+            pdfPageTask = renderEyePdf(fileUrl);
+        } else {
+            documentBodyEl.appendChild(eyeDocumentFallbackCard(fileUrl, downloadUrl));
+        }
+    }
+
+    if (documentClearBtn) {
+        documentClearBtn.addEventListener('click', clearDocumentView);
+    }
+
+    // Part 1: "the simplest existing application grammar that works
+    // reliably... a compact Open in Eye action" - one small button per
+    // rail leaf, wired here (not a new drag-and-drop payload format) so
+    // it works identically with mouse and keyboard.
+    Array.prototype.forEach.call(document.querySelectorAll('.eye-send-btn'), function (btn) {
+        btn.addEventListener('click', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            loadDocument(
+                btn.getAttribute('data-source-id'),
+                btn.getAttribute('data-source-name'),
+                btn.getAttribute('data-source-kind'),
+                btn.getAttribute('data-project-id')
+            );
+        });
+    });
 
     dropTarget.addEventListener('dragover', function (e) {
         e.preventDefault();
