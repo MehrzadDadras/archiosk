@@ -3550,8 +3550,18 @@
 {% if not panel_only %}
 <script src="{{ url_for('static', filename='js/document_tabs.js') }}?v={{ static_version }}"></script>
 <script src="{{ url_for('static', filename='js/investigation_attention.js') }}?v={{ static_version }}"></script>
-{% endif %}
+{% else %}
+{# CLAUDE-DUAL-DOCUMENT-FOCUS-01: pdf_viewer.js moved to base.html itself
+   (loaded before eye_pane.js there, so window.ArchioskPdfViewer.
+   createSurface exists in time for Eye's own second instance) - it no
+   longer needs its own tag here on the non-panel_only path. On a
+   panel_only page (this branch), base.html is never the extending
+   template (panel_shell.html is), and #workspace-document-controls does
+   not exist there either way, so this file was always inert here (see
+   its own top-of-file guard) - loaded here explicitly instead, same
+   inert no-op as before this stage, not a behavior change. #}
 <script src="{{ url_for('static', filename='js/pdf_viewer.js') }}?v={{ static_version }}"></script>
+{% endif %}
 <script src="{{ url_for('static', filename='js/drawing_image_viewer.js') }}?v={{ static_version }}"></script>
 <script src="{{ url_for('static', filename='js/document_structure_registration.js') }}?v={{ static_version }}"></script>
 <script src="{{ url_for('static', filename='js/investigation_snapshot.js') }}?v={{ static_version }}"></script>

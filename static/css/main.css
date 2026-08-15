@@ -3737,6 +3737,78 @@ html.toolbox-hidden .workspace-right-column {
     margin: 0;
     color: var(--text-primary);
 }
+/* CLAUDE-DUAL-DOCUMENT-FOCUS-01, Part 4: "a restrained visual
+   indication of which viewing surface currently owns the toolbar...
+   not a heavy border or bright selection box" - a subtle weight/color
+   shift on the surface's own existing title, nothing added. Applied to
+   whichever of .workspace-display-panel's title
+   (.display-division-header-name) or Eye's own (.eye-pane-header h2)
+   belongs to the currently-focused surface (static/js/pdf_viewer.js's
+   own applyFocusIndication toggles the .surface-focused class). */
+.eye-pane.surface-focused .eye-pane-header h2 {
+    color: var(--machine-blue);
+    font-weight: 700;
+}
+.workspace-pane-display.surface-focused .display-division-header-name {
+    color: var(--machine-blue);
+    font-weight: 700;
+}
+/* CLAUDE-DUAL-DOCUMENT-FOCUS-01 addendum A: "Eye is not a permanent
+   right-hand panel... no comparison = Toolbox owns the right column."
+   static/js/eye_pane.js's own refreshEyeLayout() toggles .eye-inactive
+   on .workspace-right-column whenever Eye holds no image/document and
+   Compare is off (and Eye is not detached to a second window) - Eye
+   and its divider disappear entirely rather than sitting empty, and
+   Toolbox (which already has an explicit flex-basis, .workspace-pane-
+   toolbox above) takes the whole column instead. */
+.workspace-right-column.eye-inactive .eye-pane,
+.workspace-right-column.eye-inactive .toolbox-eye-divider {
+    display: none;
+}
+.workspace-right-column.eye-inactive .workspace-pane-toolbox {
+    flex: 1 1 auto;
+}
+/* CLAUDE-DUAL-DOCUMENT-FOCUS-01, Part 2/5/7: Toolbox's own ordinary
+   content and Eye's page-thumbnails share one slot, one visible at a
+   time (base.html's own #toolbox-normal-content/#toolbox-eye-
+   thumbnails-panel) - the thumbnails panel reuses .thumbnails-list/
+   .thumbnails-empty-state's own established styling verbatim (same
+   class names, a different pane), not a second set of rules. */
+.toolbox-eye-thumbnails-panel {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    flex: 1 1 auto;
+}
+.toolbox-eye-thumbnails-panel > h2 {
+    font-family: var(--font-display);
+    font-size: 0.95rem;
+    margin: 0 0 0.4rem;
+    color: var(--text-primary);
+}
+/* Addendum: a compact, floating status/return control for a DETACHED
+   Eye window - same floating-corner idiom as .toolbox-compare-btn
+   immediately above it in the markup, offset further left so all
+   three compact controls (Maximize/Compare/Eye-detached-status) sit in
+   a row without overlapping. */
+.eye-detached-status-btn {
+    position: absolute;
+    top: 0.4rem;
+    right: 6.4rem;
+    background: none;
+    border: 1px solid var(--border);
+    cursor: pointer;
+    color: var(--text-secondary);
+    font-family: var(--font-body);
+    font-size: 0.72rem;
+    padding: 0.2rem 0.5rem;
+    border-radius: 4px;
+    z-index: 2;
+}
+.eye-detached-status-return {
+    color: var(--machine-blue);
+    text-decoration: underline;
+}
 .eye-pane-body {
     flex: 1 1 auto;
     min-height: 0;

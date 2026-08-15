@@ -58,7 +58,48 @@
     var compareBtn = document.getElementById('toolbox-compare-btn');
     var IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg'];
     var compareActive = false;
-    var pdfPageTask = null; // the currently-mounted Eye-side PDF document, if any
+
+    // -------- CLAUDE-DUAL-DOCUMENT-FOCUS-01, Part 2: a REAL, independent
+    // second PDF instance (not a fake mini-renderer) - the same reusable
+    // engine static/js/pdf_viewer.js now exposes for Main, with its own
+    // page/zoom/rotation/thumbnails, and it drives the ONE shared top
+    // toolbar whenever Eye has focus (see that file's own focus-routing).
+    // Eye's own thumbnails render into base.html's own #toolbox-eye-
+    // thumbnails-list, inside Toolbox - never the Lists rail's #thumbnails-
+    // list, which stays exclusively Main's.
+    var eyeSurface = window.ArchioskPdfViewer && window.ArchioskPdfViewer.createSurface
+        ? window.ArchioskPdfViewer.createSurface(
+            'eye',
+            document.getElementById('toolbox-eye-thumbnails-list'),
+            document.getElementById('toolbox-eye-thumbnails-empty-state')
+        )
+        : null;
+
+    // -------- CLAUDE-DUAL-DOCUMENT-FOCUS-01 addendum A: "Eye is not a
+    // permanent right-hand panel." Eye (and its divider) only occupies
+    // the right column while it actually has something to show - a
+    // pasted/dropped image, a saved capture, a loaded Project Document,
+    // or Compare turned on (even before a document is chosen, so the
+    // "Choose a document to compare." prompt has somewhere to live). The
+    // whole-column class lives on #workspace-right-column, a sibling of
+    // both #eye-pane and Toolbox, so this one toggle governs Toolbox's
+    // own full-height fallback too (see static/css/main.css's own
+    // .eye-inactive rules).
+    var eyeDetached = false; // set by the Pop Out / Bring Eye Back lifecycle below
+
+    function eyeHasContent() {
+        var hasImage = canvas && !canvas.hidden;
+        var hasSaved = savedViewEl && !savedViewEl.hidden;
+        var hasDocument = documentView && !documentView.hidden;
+        return compareActive || hasImage || hasSaved || hasDocument;
+    }
+
+    function refreshEyeLayout() {
+        var rightColumn = document.getElementById('workspace-right-column');
+        if (!rightColumn) return;
+        rightColumn.classList.toggle('eye-inactive', !eyeDetached && !eyeHasContent());
+    }
+    window.ArchioskEyeLayout = { refresh: refreshEyeLayout };
 
     // -------- CLAUDE-EYE-COMPARE-01: Compare toggle (Part 1/6) -----------
     // A compact, per-Project-persisted toggle - "Compare remains active...
@@ -92,6 +133,7 @@
             if (key) { try { window.localStorage.setItem(key, next ? 'true' : 'false'); } catch (e) { /* ignore */ } }
         }
         updateEmptyStateText();
+        refreshEyeLayout();
     }
 
     if (compareBtn) {
@@ -176,6 +218,7 @@
         img.src = '/projects/' + encodeURIComponent(projectId) + '/workspace/sources/' + encodeURIComponent(sourceId) + '/file';
         savedViewEl.appendChild(img);
         if (window.ArchioskDrawingImageViewer) window.ArchioskDrawingImageViewer.mount(img);
+        refreshEyeLayout();
     }
 
     function saveToProject() {
@@ -284,6 +327,7 @@
         canvas.hidden = false;
         resetOrientation();
         setSaveStatus('Temporary preview — not saved to the project.');
+        refreshEyeLayout();
 
         image.onload = function () {
             naturalWidth = image.naturalWidth;
@@ -296,6 +340,7 @@
             showError('This image could not be displayed.');
             if (emptyState) emptyState.hidden = false;
             if (noteEl) noteEl.hidden = false;
+            refreshEyeLayout();
         };
         image.src = dataUrl;
     }
@@ -315,6 +360,7 @@
         if (noteEl) noteEl.hidden = false;
         clearError();
         updateEmptyStateText();
+        refreshEyeLayout();
     }
 
     function handleFile(file) {
@@ -342,22 +388,6 @@
     // gets the IDENTICAL honest fallback card case_workspace.html's own
     // Display branch already renders for the same case, not a
     // reinterpretation of it.
-    var eyePdfjsLibPromise = null;
-    function loadEyePdfjsLib() {
-        if (!eyePdfjsLibPromise) {
-            // The SAME specifier pdf_viewer.js itself imports - the
-            // browser's module map caches a dynamic import() by URL, so
-            // this is a second reference to the one real, already-fetched
-            // module instance, not a duplicate network fetch or a forked
-            // copy of the library.
-            eyePdfjsLibPromise = import('/static/js/vendor/pdfjs/pdf.min.mjs').then(function (mod) {
-                mod.GlobalWorkerOptions.workerSrc = '/static/js/vendor/pdfjs/pdf.worker.min.mjs';
-                return mod;
-            });
-        }
-        return eyePdfjsLibPromise;
-    }
-
     function eyeDocumentFallbackCard(fileUrl, downloadUrl) {
         var wrap = document.createElement('div');
         wrap.className = 'document-unavailable-preview';
@@ -383,85 +413,13 @@
         return wrap;
     }
 
-    function renderEyePdf(fileUrl) {
-        var container = document.createElement('div');
-        container.className = 'eye-document-pdf';
-        var toolbar = document.createElement('div');
-        toolbar.className = 'eye-document-pdf-toolbar';
-        var prevBtn = document.createElement('button');
-        prevBtn.type = 'button';
-        prevBtn.className = 'eye-canvas-btn';
-        prevBtn.textContent = 'Prev';
-        var pageLabel = document.createElement('span');
-        pageLabel.className = 'eye-canvas-zoom-level';
-        var nextBtn = document.createElement('button');
-        nextBtn.type = 'button';
-        nextBtn.className = 'eye-canvas-btn';
-        nextBtn.textContent = 'Next';
-        toolbar.appendChild(prevBtn);
-        toolbar.appendChild(pageLabel);
-        toolbar.appendChild(nextBtn);
-        var canvasEl = document.createElement('canvas');
-        canvasEl.className = 'eye-document-pdf-canvas';
-        container.appendChild(toolbar);
-        container.appendChild(canvasEl);
-        documentBodyEl.appendChild(container);
-
-        var pdfDoc = null;
-        var pageNum = 1;
-        // A single mutable token, checked (never reassigned/compared-by-
-        // identity) at every async continuation below - clearDocumentView
-        // flips .cancelled on THIS SAME object when the reviewer clears or
-        // replaces Eye's content, so an in-flight page fetch/render from a
-        // document that's no longer showing can never paint a stale canvas.
-        var token = { cancelled: false };
-
-        function renderPage() {
-            pdfDoc.getPage(pageNum).then(function (page) {
-                if (token.cancelled) return;
-                var containerWidth = container.clientWidth || 400;
-                var baseViewport = page.getViewport({ scale: 1 });
-                var scale = Math.max(0.1, containerWidth / baseViewport.width);
-                var viewport = page.getViewport({ scale: scale });
-                canvasEl.width = viewport.width;
-                canvasEl.height = viewport.height;
-                var ctx = canvasEl.getContext('2d');
-                page.render({ canvasContext: ctx, viewport: viewport });
-                pageLabel.textContent = pageNum + ' / ' + pdfDoc.numPages;
-                prevBtn.disabled = pageNum <= 1;
-                nextBtn.disabled = pageNum >= pdfDoc.numPages;
-            });
-        }
-
-        prevBtn.addEventListener('click', function () { if (pageNum > 1) { pageNum -= 1; renderPage(); } });
-        nextBtn.addEventListener('click', function () { if (pdfDoc && pageNum < pdfDoc.numPages) { pageNum += 1; renderPage(); } });
-
-        loadEyePdfjsLib().then(function (pdfjsLib) {
-            if (token.cancelled) return null;
-            return pdfjsLib.getDocument({ url: fileUrl }).promise;
-        }).then(function (doc) {
-            if (!doc || token.cancelled) return;
-            pdfDoc = doc;
-            renderPage();
-        }).catch(function (err) {
-            if (token.cancelled) return;
-            documentBodyEl.textContent = '';
-            var msg = document.createElement('p');
-            msg.className = 'document-viewer-load-error';
-            msg.textContent = 'This PDF could not be opened in Eye' + (err && err.message ? ': ' + err.message : '.');
-            documentBodyEl.appendChild(msg);
-        });
-
-        return token;
-    }
-
     function clearDocumentView() {
-        if (pdfPageTask) { pdfPageTask.cancelled = true; }
-        pdfPageTask = null;
+        if (eyeSurface && eyeSurface.hasDoc()) eyeSurface.unmount();
         documentView.hidden = true;
         documentBodyEl.textContent = '';
         if (documentNameEl) documentNameEl.textContent = '';
         updateEmptyStateText();
+        refreshEyeLayout();
     }
 
     // sourceId/name/kind/projectId all come from data-* attributes already
@@ -478,6 +436,10 @@
         documentBodyEl.textContent = '';
         if (documentNameEl) documentNameEl.textContent = name || '';
         documentView.hidden = false;
+        // Eye's whole-column visibility reacts immediately - the reviewer
+        // sees Eye expand the instant they click the eye icon, not only
+        // once an async PDF fetch/mount later resolves.
+        refreshEyeLayout();
 
         var fileUrl = '/projects/' + encodeURIComponent(projectId) + '/workspace/sources/' + encodeURIComponent(sourceId) + '/file';
         var downloadUrl = fileUrl + '?download=1';
@@ -489,10 +451,11 @@
             img.alt = name || 'Project document';
             img.src = fileUrl;
             documentBodyEl.appendChild(img);
-        } else if (ext === 'pdf') {
-            pdfPageTask = renderEyePdf(fileUrl);
+        } else if (ext === 'pdf' && eyeSurface) {
+            eyeSurface.mount(fileUrl, documentBodyEl, name, sourceId);
         } else {
             documentBodyEl.appendChild(eyeDocumentFallbackCard(fileUrl, downloadUrl));
+            refreshEyeLayout();
         }
     }
 

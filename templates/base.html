@@ -1030,8 +1030,30 @@
                    state above is, not a one-time disposable click. #}
                 {% if project_id is defined and workspace is defined %}
                 <button type="button" class="toolbox-compare-btn" id="toolbox-compare-btn" data-ui-ref="toolbox.compare" data-project-id="{{ project_id }}" aria-pressed="false" aria-label="Compare two documents">Compare</button>
+                {# CLAUDE-DUAL-DOCUMENT-FOCUS-01 addendum A: a compact,
+                   always-in-DOM status/return affordance for a DETACHED
+                   Eye window - hidden unless Eye is actually popped out
+                   (static/js/eye_pane.js's own toggle), so it never
+                   consumes space in the ordinary embedded case. #}
+                <button type="button" class="eye-detached-status-btn" id="eye-detached-status-btn" data-ui-ref="toolbox.eye-detached-status" hidden>Eye is open in another window &middot; <span class="eye-detached-status-return">Bring Eye Back</span></button>
                 {% endif %}
+                {# CLAUDE-DUAL-DOCUMENT-FOCUS-01, Part 2/5/7 + addendum A:
+                   Toolbox's own ordinary content (Spin/Arrow/Investigation/
+                   Document tools - whatever {% block toolbox %} renders)
+                   lives in this one wrapper so it can be swapped, as a
+                   single unit, for Eye's own page-thumbnail/navigation
+                   surface whenever Eye holds a paginated (PDF) document -
+                   static/js/pdf_viewer.js's own thumbnailsPanelVisibility()
+                   toggles which of these two siblings is [hidden], never
+                   both changed independently by separate code paths. #}
+                <div class="toolbox-normal-content" id="toolbox-normal-content">
                 {% block toolbox %}{% endblock %}
+                </div>
+                <div class="toolbox-eye-thumbnails-panel" id="toolbox-eye-thumbnails-panel" hidden>
+                    <h2 data-ui-ref="toolbox.eye-thumbnails.heading">Eye &middot; Pages</h2>
+                    <p class="thumbnails-empty-state" id="toolbox-eye-thumbnails-empty-state" data-ui-ref="toolbox.eye-thumbnails.empty">Eye has no paginated document open.</p>
+                    <div class="thumbnails-list" id="toolbox-eye-thumbnails-list" role="list" aria-label="Eye document page thumbnails" data-ui-ref="toolbox.eye-thumbnails.list"></div>
+                </div>
             </aside>
         </div>
         {% endif %}
@@ -1793,6 +1815,17 @@
        primary document pane and Display divisions - mount() is
        idempotent (dataset.drawingViewerMounted guard), so loading it
        here as well never double-mounts anything. #}
+    {# CLAUDE-DUAL-DOCUMENT-FOCUS-01: moved here from case_workspace.html's
+       own extra_scripts block (which loads AFTER this point in the
+       rendered document - base.html's own {% block extra_scripts %} sits
+       much further down) specifically so it executes, and defines
+       window.ArchioskPdfViewer, BEFORE eye_pane.js runs immediately below
+       - eye_pane.js's own IIFE now calls window.ArchioskPdfViewer.
+       createSurface('eye', ...) once, synchronously, at load time, so
+       load ORDER here is a real correctness requirement, not just a
+       convenience. Same idempotent, no-op-if-absent guard as the two
+       scripts around it (its own top-of-file `if (!container) return`). #}
+    <script src="{{ url_for('static', filename='js/pdf_viewer.js') }}?v={{ static_version }}"></script>
     <script src="{{ url_for('static', filename='js/drawing_image_viewer.js') }}?v={{ static_version }}"></script>
     <script src="{{ url_for('static', filename='js/eye_pane.js') }}?v={{ static_version }}"></script>
     {# CLAUDE-SPIN-00A: same "available wherever the shell is, mount is a
