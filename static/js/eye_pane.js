@@ -418,6 +418,14 @@
         documentView.hidden = true;
         documentBodyEl.textContent = '';
         if (documentNameEl) documentNameEl.textContent = '';
+        // Pre-existing gap found during CLAUDE-DUAL-DOCUMENT-FOCUS-01 live
+        // verification: this path never restored the empty state's own
+        // [hidden] (only clearPreview's Discard-preview path did), so
+        // clearing a Document left Eye showing nothing at all - no "Eye -
+        // secondary context surface" / "Choose a document to compare."
+        // text - instead of its real empty state.
+        if (emptyState) emptyState.hidden = false;
+        if (noteEl) noteEl.hidden = false;
         updateEmptyStateText();
         refreshEyeLayout();
     }
