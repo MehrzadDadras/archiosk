@@ -162,13 +162,17 @@ class NestedFolderCoverageTests(_BaseTestCase):
         self.assertLess(parent_pos, child_pos)
         self.assertLess(child_pos, next_parent_pos)
 
-    def test_project_tools_subfamily_still_nests_correctly_unaffected_by_this_stage(self):
-        # Pre-existing nesting (untouched by this stage) - a regression
-        # guard that the new empty-state insertions didn't disturb it.
+    def test_project_data_management_archive_subfamily_nests_correctly(self):
+        # CLAUDE-PROJECT-SURFACE-CONSOLIDATION-01 supersedes this test's
+        # own original form: lists.project.tools/lists.project.tools.
+        # add-document are both retired (Part B2/E) - "+ Add Documents"'
+        # real successor nesting (parent list -> child Archive button) now
+        # lives on Project Data Management instead, same nesting-order
+        # regression-guard purpose, new real vehicle.
         client = self._client_as("tag_admin", 1)
-        body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
-        parent_pos = body.index('data-ui-ref="lists.project.tools"')
-        child_pos = body.index('data-ui-ref="lists.project.tools.add-document"')
+        body = client.get(f"/admin/reset-project-data?project_id={self.project_id}").get_data(as_text=True)
+        parent_pos = body.index('data-ui-ref="pdm.archive-documents.active-list"')
+        child_pos = body.index('data-ui-ref="pdm.archive-documents.archive"')
         self.assertLess(parent_pos, child_pos)
 
 

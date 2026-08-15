@@ -1171,6 +1171,29 @@ main {
    the plain, unstyled radio candidates below is clicked - a control
    that gave no visual signal it was interactive or required at all. */
 #folder-submit-button:disabled { opacity: 0.5; cursor: not-allowed; }
+/* CLAUDE-PROJECT-SURFACE-CONSOLIDATION-01 addendum (Storage Grammar):
+   two named options (Link/Upload) inside one fieldset, same plain
+   border-only treatment as .operating-environment-fieldset above (this
+   is a structural choice, not a status signal). .storage-option-disabled
+   covers both the permanently-disabled Link option and the entitlement-
+   greyed Upload option - visually identical (--text-disabled + reduced
+   opacity), same token this file uses everywhere else for "not
+   available right now" (see .doc-control-btn:disabled,
+   .conv-selection-btn:disabled). */
+.storage-connection-fieldset {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: var(--space-5) var(--space-6);
+    width: 100%;
+    max-width: 480px;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-5);
+}
+.storage-option-label { margin: 0; font-size: var(--text-sm); }
+.storage-option-disabled { opacity: 0.6; }
+.storage-option-disabled .storage-option-label,
+.storage-option-disabled > .pane-note { color: var(--text-disabled); }
 #folder-selection-summary { margin: 0.8rem 0 0.4rem; color: var(--text-secondary); font-size: var(--text-sm); }
 .folder-founding-candidates {
     list-style: none;
@@ -6180,7 +6203,15 @@ main:hover,
    explicitly NOT adopted (see the template's own header comment) - their
    CSS (.spin-variant-switcher*, .spin-sequence-row/.spin-sequence-index,
    per-variant .spin-discipline-list/.gauge-slot overrides) is retired
-   along with the markup that used it, not left as dead weight. */
+   along with the markup that used it, not left as dead weight.
+
+   CLAUDE-PROJECT-SURFACE-CONSOLIDATION-01 (Part I): .spin-global-controls
+   (the "All ON"/"All OFF"/"Return to Baseline" button trio) is retired
+   below in favor of .spin-trigger (one SPIN action) and the compact
+   per-row .spin-selector/.spin-findings-box/.spin-row-disclosure grammar
+   - same real-estate-conscious density precedent as .appearance-matrix
+   above (small, plain, no icon/chevron ceremony), following a live
+   Product Owner review that rejected the repeated large ON/OFF buttons. */
 .spin-status-strip {
     display: flex;
     justify-content: space-between;
@@ -6190,11 +6221,51 @@ main:hover,
     background: var(--surface-secondary);
     border-radius: 3px;
 }
-.spin-global-controls {
-    display: flex;
-    gap: var(--space-3);
-    margin-bottom: var(--space-4);
-    flex-wrap: wrap;
-}
-.spin-global-controls .btn { padding: 0.45rem 0.8rem; font-size: var(--text-xs); }
+.spin-trigger { margin-bottom: var(--space-4); }
 .spin-discipline-list { display: flex; flex-direction: column; max-height: 15rem; overflow-y: auto; }
+.spin-row {
+    display: grid;
+    grid-template-columns: 1fr 1.5rem 2.5rem 1.25rem;
+    align-items: center;
+    gap: var(--space-3);
+}
+/* -- spin-selector: "included in the next Spin," not a persistent power
+   state - a small circle (○/●), deliberately not styled like
+   .tool-toggle's rectangular ON/OFF button, so it reads as a lighter-
+   weight selection affordance rather than a switch. */
+.spin-selector {
+    width: 0.9rem;
+    height: 0.9rem;
+    border-radius: 50%;
+    border: 1px solid var(--border-strong);
+    background: transparent;
+    cursor: pointer;
+    padding: 0;
+    justify-self: center;
+}
+.spin-selector:hover { border-color: var(--text-primary); }
+.spin-selector[aria-pressed="true"] { background: var(--text-primary); border-color: var(--text-primary); }
+/* -- spin-findings-box: honestly blank ("[ ]") until a real investigation
+   completes - this prototype layer never populates it (see
+   spin_prototype.js's own header comment); never a fabricated count. */
+.spin-findings-box {
+    font-family: var(--font-body);
+    font-size: var(--text-xs);
+    color: var(--text-metadata);
+    text-align: center;
+}
+.spin-row-disclosure {
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    line-height: 1;
+    color: var(--text-metadata);
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    justify-self: center;
+}
+.spin-row-disclosure:hover { color: var(--text-primary); }
+.spin-row-disclosure[aria-expanded="true"] { color: var(--text-primary); }
+.spin-row-detail { padding: 0 0 var(--space-3) var(--space-3); }
+.spin-row-detail .pane-note { margin: 0; }

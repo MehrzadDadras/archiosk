@@ -267,6 +267,15 @@ class ToolboxContextualScopingTests(_BaseTestCase):
         # Project hierarchy - present whether or not a Document/
         # Investigation happens to be selected, exactly like its
         # Documents/Investigations siblings.
+        #
+        # CLAUDE-PROJECT-SURFACE-CONSOLIDATION-01 supersedes this test's
+        # own "regardless of selection" premise: Project Tools (and its
+        # Add Documents/Removed Items children) is retired from the rail
+        # entirely, in every selection state, not merely rescoped -
+        # Add Documents/Removed Items ("Archive documents") were
+        # promoted to a new Active home, Admin -> Project Data
+        # Management (see governance/spare-parts-yard.md). Absence in
+        # both states is now the correct assertion.
         client = self._client_as("e3aqa_owner", 1)
         source_id = self._store().get(self.project_id).sources[0]["id"]
         for url in (
@@ -274,8 +283,8 @@ class ToolboxContextualScopingTests(_BaseTestCase):
             f"/projects/{self.project_id}/workspace?source={source_id}",
         ):
             body = client.get(url).get_data(as_text=True)
-            self.assertIn('id="project-sources-add-document"', body, url)
-            self.assertIn('id="project-removed-items"', body, url)
+            self.assertNotIn('id="project-sources-add-document"', body, url)
+            self.assertNotIn('id="project-removed-items"', body, url)
 
 
 # ---------------------------------------------------------------------------

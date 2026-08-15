@@ -223,10 +223,22 @@ class ProjectHomeTests(unittest.TestCase):
         # entirely into their own launcher-projected Documents directory
         # (?view=documents) - no longer reachable from the bare
         # Project Home URL.
+        #
+        # CLAUDE-PROJECT-SURFACE-CONSOLIDATION-01 (Part B2) supersedes
+        # this test's own original assertion: "+ Add External Source"
+        # was retired from the rail entirely (the left rail is
+        # "principally project switching + project/evidence navigation,
+        # not an action drawer or administration panel") and parked at
+        # Reserve/Spare Parts Yard status - see
+        # governance/spare-parts-yard.md Section 3, which also notes it
+        # was already inert before this stage (no real connector was
+        # ever configured, only this same static placeholder message).
+        # Nothing to assert present on this page anymore; assert its
+        # absence instead, per this repo's own established convention
+        # for a deliberately-changed invariant.
         response = self.client.get(f"/projects/{self.project_id}/workspace?view=documents")
         body = response.get_data(as_text=True)
-        self.assertIn("Add External Source", body)
-        self.assertIn("Not yet available", body)
+        self.assertNotIn("Add External Source", body)
 
     # -- composer / quick-start ---------------------------------------------------
 

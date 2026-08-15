@@ -71,6 +71,11 @@ _CONFIRM_DELETE_FOLDER_HTML_PATH = _REPO_ROOT / "templates" / "confirm_delete_fo
 # documents - added to the scanned list from the start, not left as a
 # second silent blind spot.
 _OPERATIONS_HTML_PATH = _REPO_ROOT / "templates" / "operations.html"
+# CLAUDE-PROJECT-SURFACE-CONSOLIDATION-01: reset_project_data.html gained
+# real data-ui-ref attributes for the first time this stage (its "Project
+# Data Management" identity) - added to the scanned list from the start,
+# same discipline as _OPERATIONS_HTML_PATH's own comment above.
+_RESET_PROJECT_DATA_HTML_PATH = _REPO_ROOT / "templates" / "reset_project_data.html"
 # CLAUDE-SPIN-00A: _spin_prototype.html is included (not extended) by
 # case_workspace.html's own {% block toolbox %} - its own refs are real
 # rendered markup (when ?spin=1), same as any other template here, just
@@ -173,7 +178,7 @@ def _all_template_refs() -> set[str]:
         _SECURITY_DEPARTMENT_HTML_PATH, _PROJECTS_HTML_PATH, _REMOVED_PROJECTS_HTML_PATH, _APP_PY_PATH,
         _CONFIRM_DELETE_FOLDER_HTML_PATH, _OPERATIONS_HTML_PATH,
         _LANDING_HTML_PATH, _EXPLORE_HTML_PATH, _START_TRIAL_HTML_PATH,
-        _SPIN_PROTOTYPE_HTML_PATH,
+        _SPIN_PROTOTYPE_HTML_PATH, _RESET_PROJECT_DATA_HTML_PATH,
     ):
         text = path.read_text(encoding="utf-8")
         refs |= set(_DATA_REF_RE.findall(text))
@@ -243,12 +248,15 @@ class RegistryConsistencyTests(unittest.TestCase):
         # "start-trial" - the new public front door, its own standalone
         # shell outside gateway/auth (see UI_REFERENCE_MAP.md's own
         # "Public Landing" section).
+        # CLAUDE-PROJECT-SURFACE-CONSOLIDATION-01 added "pdm" - Project
+        # Data Management's own new Add/Archive Documents content (see
+        # UI_REFERENCE_MAP.md's own "Project Data Management" section).
         for ref in _all_template_refs():
             self.assertRegex(
                 ref,
                 r"^(menu|lists|display|toolbox|chat|eye|shell|gateway|auth|upload|errors|"
                 r"security|operations|projects-directory|removed-projects|"
-                r"landing|explore|start-trial|spin)\.[a-z0-9._\-]+$",
+                r"landing|explore|start-trial|spin|pdm)\.[a-z0-9._\-]+$",
                 ref,
             )
 
@@ -330,11 +338,14 @@ class RootFamilyReferencePresenceTests(_BaseTestCase):
         # RFI/Conversation/Tasks/Tags moved to their toolbox.* equivalents,
         # rendered in the Toolbox's own "nothing selected" Project
         # Intelligence view (no Investigation/Document selected here, so
-        # it renders). lists.project.documents/tools stay in Lists -
-        # genuinely file-territory.
+        # it renders). lists.project.documents stays in Lists - genuinely
+        # file-territory.
+        # CLAUDE-PROJECT-SURFACE-CONSOLIDATION-01: lists.project.tools
+        # dropped from this list - retired outright (Part B2), not
+        # merely relocated within Lists like the refs above.
         client = self._client_as("vw7a_owner", 1)
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
-        for ref in ("lists.project.self", "lists.project.documents", "lists.project.tools"):
+        for ref in ("lists.project.self", "lists.project.documents"):
             self.assertIn(f'data-ui-ref="{ref}"', body, ref)
         for ref in (
             "toolbox.investigations", "toolbox.rfi",

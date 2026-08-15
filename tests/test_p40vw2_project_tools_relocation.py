@@ -39,6 +39,26 @@ visibility of the CONTROLS, not the underlying operations.
 No browser/rendering tool exists in this environment - structural HTML
 assertions verify what a browser would show; stated honestly rather
 than skipped, matching this repo's established convention.
+
+CLAUDE-PROJECT-SURFACE-CONSOLIDATION-01 supersedes this file's own
+original premise a second time: the "Project Tools" rail branch this
+file's own docstring describes is now retired outright (Product Owner:
+the left rail is "principally project switching + project/evidence
+navigation, not an action drawer or administration panel"). Add
+Documents and Removed Items (renamed "Archive documents") got a real,
+decided new home - Admin -> Project Data Management
+(templates/reset_project_data.html) - reusing the EXACT SAME routes
+(add_document_source, remove_document_route, restore_document_route),
+now genuinely admin-gated (a real, deliberate authorization narrowing
+from "any authorized project participant" to "admin only," following
+directly from the Product Owner's own explicit "belongs under Admin"
+framing - not an oversight). Add Text Record/Register a Document
+Revision/Add External Source have no decided new home and are parked
+at Reserve/Spare Parts Yard status - see governance/spare-parts-yard.md.
+Tests below that asserted the now-retired rail branch's own structure
+are rewritten to assert its absence and the new location's presence,
+per this repository's own established convention for a deliberately-
+changed invariant.
 """
 from __future__ import annotations
 
@@ -131,19 +151,16 @@ class _BaseTestCase(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 class RelocationOwnershipTests(_BaseTestCase):
-    def test_project_tools_branch_present_in_lists_for_the_active_project(self):
-        # CLAUDE-GO-DNA-01 (Panel Zoning): Remove Project moved OUT of this
-        # branch into the Toolbox's own Project Administration disclosure
-        # (a partial reversal of P40-VW2, for this one control only) - the
-        # file-action controls this test otherwise covers (Add Documents,
-        # Removed Items) are unchanged, still here.
+    def test_project_tools_branch_removed_from_lists_entirely(self):
+        # CLAUDE-PROJECT-SURFACE-CONSOLIDATION-01 supersedes this test's
+        # own original form: "Project Tools" no longer exists as a rail
+        # branch at all - retired outright, not merely restyled.
         client = self._client_as("vw2_owner", 1)
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
         lists = self._lists_html(body)
-        self.assertIn("Project Tools", lists)
-        self.assertIn('id="project-sources-add-document"', lists)
-        self.assertIn('id="project-removed-items"', lists)
-        self.assertNotIn(f'action="{"/projects/" + self.project_id + "/workspace/remove"}"', lists)
+        self.assertNotIn("Project Tools", lists)
+        self.assertNotIn('id="project-sources-add-document"', lists)
+        self.assertNotIn('id="project-removed-items"', lists)
 
     def test_project_level_controls_absent_from_toolbox_entirely(self):
         # CLAUDE-GO-DNA-01 (Panel Zoning): "Remove Project" is the one
@@ -170,15 +187,27 @@ class RelocationOwnershipTests(_BaseTestCase):
         toolbox = self._toolbox_html(body)
         self.assertIn('data-ui-ref="toolbox.project-intelligence"', toolbox)
 
-    def test_relocated_forms_point_at_the_same_unchanged_routes(self):
+    def test_add_document_form_moved_to_project_data_management_same_route(self):
+        # CLAUDE-PROJECT-SURFACE-CONSOLIDATION-01: Add Documents is no
+        # longer in Lists at all - it now lives on Admin -> Project Data
+        # Management, reusing the exact same, unchanged
+        # add_document_source route (Part E: "reuse the existing
+        # canonical ingestion capability... do not create parallel
+        # ingestion logic"). Add Text Record has no decided new home
+        # (Spare Parts Yard) and is absent from both surfaces now.
         client = self._client_as("vw2_owner", 1)
-        body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
-        lists = self._lists_html(body)
-        self.assertIn(f'/projects/{self.project_id}/workspace/sources/document', lists)
-        self.assertIn(f'/projects/{self.project_id}/workspace/sources/text-record', lists)
-        # Remove Project posts to the same unchanged route, now from the
-        # Toolbox's own Project Administration disclosure (CLAUDE-GO-DNA-01).
-        toolbox = self._toolbox_html(body)
+        workspace_body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
+        lists = self._lists_html(workspace_body)
+        self.assertNotIn(f'/projects/{self.project_id}/workspace/sources/document', lists)
+        self.assertNotIn(f'/projects/{self.project_id}/workspace/sources/text-record', lists)
+
+        pdm_body = client.get(f"/admin/reset-project-data?project_id={self.project_id}").get_data(as_text=True)
+        self.assertIn(f'/projects/{self.project_id}/workspace/sources/document', pdm_body)
+
+        # Remove Project posts to the same unchanged route, still from the
+        # Toolbox's own Project Administration disclosure (CLAUDE-GO-DNA-01,
+        # untouched by this stage).
+        toolbox = self._toolbox_html(workspace_body)
         self.assertIn(f'/projects/{self.project_id}/workspace/remove', toolbox)
 
 
@@ -207,15 +236,28 @@ class ProjectAdministrationRelocatedTests(_BaseTestCase):
 
 class NoDuplicationTests(_BaseTestCase):
     def test_each_relocated_control_id_appears_exactly_once(self):
+        # CLAUDE-PROJECT-SURFACE-CONSOLIDATION-01: project-sources-add-
+        # document/project-removed-items retired along with the rail's
+        # own Project Tools branch (no longer rendered anywhere, so
+        # "exactly once" becomes "exactly zero"). project-data-management
+        # is a different, still-real anchor - the Account menu's own
+        # link to the page now named Project Data Management (see
+        # templates/base.html) - still exactly one, unaffected.
         client = self._client_as("vw2_owner", 1)
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
-        for html_id in ("project-sources-add-document", "project-removed-items", "project-data-management"):
-            self.assertEqual(body.count(f'id="{html_id}"'), 1, html_id)
+        for html_id in ("project-sources-add-document", "project-removed-items"):
+            self.assertEqual(body.count(f'id="{html_id}"'), 0, html_id)
+        self.assertEqual(body.count('id="project-data-management"'), 1)
 
-    def test_add_document_form_action_appears_exactly_once(self):
+    def test_add_document_form_action_appears_exactly_once_on_project_data_management(self):
+        # CLAUDE-PROJECT-SURFACE-CONSOLIDATION-01: the form itself moved
+        # from the workspace rail to Admin -> Project Data Management -
+        # absent from the former, present exactly once on the latter.
         client = self._client_as("vw2_owner", 1)
-        body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
-        self.assertEqual(body.count(f'action="/projects/{self.project_id}/workspace/sources/document"'), 1)
+        workspace_body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
+        self.assertEqual(workspace_body.count(f'action="/projects/{self.project_id}/workspace/sources/document"'), 0)
+        pdm_body = client.get(f"/admin/reset-project-data?project_id={self.project_id}").get_data(as_text=True)
+        self.assertEqual(pdm_body.count(f'action="/projects/{self.project_id}/workspace/sources/document"'), 1)
 
     def test_remove_project_form_appears_exactly_once(self):
         client = self._client_as("vw2_owner", 1)
@@ -253,15 +295,24 @@ class AuthorizationTests(_BaseTestCase):
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
         self.assertIn("Project Data Management", body)
 
-    def test_granted_reviewer_still_sees_the_project_tools_branch_itself(self):
-        # Add-a-Source/Removed Items were never owner/admin-gated before
-        # relocation (any authorized project participant could use
-        # them) - that stays true, only Remove Project/Project Data
-        # Management are role-gated.
+    def test_granted_reviewer_can_no_longer_reach_add_documents_or_archive(self):
+        # CLAUDE-PROJECT-SURFACE-CONSOLIDATION-01 supersedes this test's
+        # own original form (immediately above): Add-a-Source/Removed
+        # Items were never owner/admin-gated before relocation - a real,
+        # deliberate narrowing now, not an oversight. The Product
+        # Owner's own instruction is explicit: Add Documents "belongs
+        # under Admin -> Project Data Management," and that whole
+        # surface is admin-gated (routes/portal.py's reset_project_data
+        # is @admin_required, unchanged by this stage) - so a granted
+        # non-owner, non-admin reviewer can no longer add or archive
+        # Documents at all, only browse/inspect them. Flagged explicitly
+        # here as a real capability change, not silently absorbed.
         client = self._client_as("vw2_granted_reviewer", 3, role="read_only")
-        body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
-        self.assertIn('id="project-sources-add-document"', body)
-        self.assertIn('id="project-removed-items"', body)
+        workspace_body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
+        self.assertNotIn('id="project-sources-add-document"', workspace_body)
+        self.assertNotIn('id="project-removed-items"', workspace_body)
+        pdm_resp = client.get(f"/admin/reset-project-data?project_id={self.project_id}")
+        self.assertEqual(pdm_resp.status_code, 403)
 
     def test_outsider_with_no_access_still_gets_404_not_a_filtered_project_tools_branch(self):
         from models import User, db
@@ -337,16 +388,24 @@ class FunctionalBehaviourPreservedTests(_BaseTestCase):
         restored = next(s for s in workspace.sources if s["id"] == source_id)
         self.assertIsNone(restored["removed_at"])
 
-    def test_removed_items_list_reflects_a_real_removal(self):
+    def test_archived_document_reflects_a_real_removal_on_project_data_management(self):
+        # CLAUDE-PROJECT-SURFACE-CONSOLIDATION-01: rewritten - the
+        # original form of this test checked the rail's own Removed
+        # Items list, which no longer exists (its own "rfp.txt" match
+        # had actually become a false positive against the current
+        # Project's own display title row, not real removed-item
+        # coverage at all - caught and fixed here, not left passing for
+        # the wrong reason). The real archived-document list now lives
+        # on Project Data Management's own "Archive documents" section.
         client = self._client_as("vw2_owner", 1)
         source_id = self._store().get(self.project_id).sources[0]["id"]
         client.post(
             f"/projects/{self.project_id}/workspace/sources/{source_id}/remove",
             data={"confirm": "yes"},
         )
-        body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
-        lists = self._lists_html(body)
-        self.assertIn("rfp.txt", lists)
+        pdm_body = client.get(f"/admin/reset-project-data?project_id={self.project_id}").get_data(as_text=True)
+        self.assertIn('data-ui-ref="pdm.archive-documents.archived-list"', pdm_body)
+        self.assertIn("rfp.txt", pdm_body)
 
     def test_remove_project_still_works_from_the_relocated_form(self):
         client = self._client_as("vw2_owner", 1)

@@ -68,6 +68,15 @@ class RootI1NavigationTests(unittest.TestCase):
     # -- 1/2: canonical branch ordering and numbering -------------------------
 
     def test_sidebar_carries_the_canonical_root_numbering_scaffold(self):
+        # CLAUDE-PROJECT-SURFACE-CONSOLIDATION-01 (Part B1) supersedes
+        # this test's own original list: the rail's standalone Files
+        # leaf (branch "2.2") is retired entirely - Files was found to be
+        # a genuine duplicate of Overview's own pre-existing
+        # `display.overview.files-link` ("Open Files ->"), safely
+        # removable with zero loss of reachable capability (that link
+        # itself carries no root-branch marker, never having been part
+        # of this rail-only numbering scaffold). Every other branch
+        # number is unaffected - nothing was renumbered to fill the gap.
         response = self.client.get(f"/projects/{self.project_id}/workspace?view=overview")
         self.assertEqual(response.status_code, 200)
         body = response.get_data(as_text=True)
@@ -76,7 +85,6 @@ class RootI1NavigationTests(unittest.TestCase):
             ("1.2", "Project Context"),
             ("1.3", "Access &amp; Operating Environment"),
             ("2.1", "Documents"),
-            ("2.2", "Files"),
             ("3", "Requirements"),
             ("4", "Investigations"),
             ("6", "Work Products"),
@@ -86,14 +94,19 @@ class RootI1NavigationTests(unittest.TestCase):
         ]:
             self.assertIn(f'data-root-branch="{branch}"', body)
             self.assertIn(f'data-root-label="{label}"', body)
+        self.assertNotIn('data-root-branch="2.2"', body)
 
-    def test_requirements_branch_sits_between_files_and_investigations(self):
+    def test_requirements_branch_sits_between_documents_and_investigations(self):
+        # CLAUDE-PROJECT-SURFACE-CONSOLIDATION-01 (Part B1): was "between
+        # Files and Investigations" - Files (branch "2.2") no longer
+        # exists in the rail at all, so Documents (2.1, the nearest
+        # remaining preceding branch) is the correct anchor now.
         response = self.client.get(f"/projects/{self.project_id}/workspace?view=overview")
         body = response.get_data(as_text=True)
-        files_pos = body.index('data-root-branch="2.2"')
+        documents_pos = body.index('data-root-branch="2.1"')
         requirements_pos = body.index('data-root-branch="3"')
         investigations_pos = body.index('data-root-branch="4"')
-        self.assertLess(files_pos, requirements_pos)
+        self.assertLess(documents_pos, requirements_pos)
         self.assertLess(requirements_pos, investigations_pos)
 
     # -- 3: Requirements visibility -------------------------------------------

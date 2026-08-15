@@ -264,10 +264,21 @@ class DirectoryLauncherTests(_BaseTestCase):
         # state only, matching Section 9's own Expected-context table
         # ("Document: existing Document tools as applicable" - Remove
         # Document only, not Add-a-Document too).
+        # CLAUDE-PROJECT-SURFACE-CONSOLIDATION-01 supersedes this test's
+        # own original assertion a third time: "Add a Document" no
+        # longer renders in Lists' rail at all (retired outright, not
+        # merely rescoped) - it was relocated wholesale to Admin ->
+        # Project Data Management, reusing the same, unchanged
+        # add_document_source route (see
+        # tests/test_p40vw2_project_tools_relocation.py's own
+        # test_add_document_form_moved_to_project_data_management_same_route).
+        # The form's absence from BOTH the no-selection AND the
+        # per-Document Toolbox states is now the correct assertion, not
+        # a scoping distinction between the two.
         client = self._client_as("p40e2b1_owner", 1)
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
         self.assertIn("rfp.txt", body)
-        self.assertIn('action="/projects/{}/workspace/sources/document"'.format(self.project_id), body)
+        self.assertNotIn('action="/projects/{}/workspace/sources/document"'.format(self.project_id), body)
         add_body = client.get(f"/projects/{self.project_id}/workspace?source=" + self._store().get(self.project_id).sources[0]["id"]).get_data(as_text=True)
         toolbox_start = add_body.index('id="workspace-toolbox-panel"')
         toolbox = add_body[toolbox_start:add_body.index("</aside>", toolbox_start)]

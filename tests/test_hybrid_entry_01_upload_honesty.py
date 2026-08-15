@@ -66,15 +66,34 @@ class FolderPathNoLongerReadsAsLinkingTests(_BaseTestCase):
         self.assertNotIn("Establish Project from Folder", body)
 
     def test_folder_path_is_explicitly_labeled_legacy_full_upload(self):
+        # CLAUDE-PROJECT-SURFACE-CONSOLIDATION-01 addendum (Storage
+        # Grammar): supersedes the "Legacy" framing this test asserted -
+        # the Product Owner's own Part 1/3 replaced "Upload Folder
+        # Contents (Legacy - full server upload)" with a plain, enduring
+        # Link-vs-Upload choice ("Upload to Storage"), no longer framed
+        # as a demoted/legacy path. The underlying mechanism this test
+        # family exists to protect (folder upload is a real, kept
+        # capability, not silently removed) is now covered by
+        # test_upload_option_present_and_functional below instead.
         body = self._body()
         self.assertIn("Upload Folder Contents", body)
-        self.assertIn("Legacy", body)
-        self.assertIn("full server upload", body)
+        self.assertIn("Upload to Storage", body)
+        self.assertIn("configured managed storage", body)
 
     def test_folder_path_explicitly_states_it_is_not_a_folder_link(self):
+        # CLAUDE-PROJECT-SURFACE-CONSOLIDATION-01 addendum (Storage
+        # Grammar, Part 4): the literal sentence this test asserted was
+        # HYBRID-ENTRY-01's own inline disclaimer, now moved behind the
+        # Upload option's own "Details" subdisclosure (Part 1: "do not
+        # fill the normal surface with lengthy custody explanations").
+        # The invariant itself - never claiming this is a live link -
+        # is preserved by the DISTINCT "Link to Storage" option being
+        # honestly labeled "(not yet configured)" rather than by this
+        # exact sentence appearing inline.
         body = self._body()
-        self.assertIn("This is not a folder link.", body)
-        self.assertIn("permanent copy", body)
+        self.assertIn("not yet configured", body)
+        self.assertIn("Link to Storage", body)
+        self.assertIn("local files are not watched, referenced, or left in place", body)
 
     def test_folder_submit_button_no_longer_styled_as_the_primary_recommended_action(self):
         body = self._body()
@@ -98,10 +117,16 @@ class FolderPathNoLongerReadsAsLinkingTests(_BaseTestCase):
         self.assertNotIn("your files stay wherever they already are", body)
 
     def test_hero_copy_states_current_honest_behavior_and_future_direction(self):
+        # CLAUDE-PROJECT-SURFACE-CONSOLIDATION-01 addendum (Storage
+        # Grammar, Part 1): the long inline disclaimer this test asserted
+        # is deliberately gone - the Product Owner's own instruction was
+        # "do not fill the normal surface with lengthy custody
+        # explanations." The hero is now a short framing sentence; the
+        # "future direction" claim now lives in the Link option's own
+        # Details disclosure (test_link_option_present_but_disabled_and_
+        # honest below), not inline hero copy.
         body = self._body()
-        self.assertIn("without becoming a duplicate permanent copy of it", body)
-        self.assertIn("linked local/company-storage option", body)
-        self.assertIn("both options below upload and permanently store a", body)
+        self.assertIn("Choose how this Project's documents connect to Archiosk.", body)
 
 
 class SingleFilePathWordingTests(_BaseTestCase):

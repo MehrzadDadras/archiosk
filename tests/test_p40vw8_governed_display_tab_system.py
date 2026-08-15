@@ -240,18 +240,17 @@ class AuditConfirmationTests(_BaseTestCase):
         self.assertNotIn('"source"', fn_body)
         self.assertIn("case=source_anchor", fn_body.replace(" ", ""))
 
-    def test_project_tools_branch_contains_no_display_iframe_or_case_source_refs(self):
+    def test_project_tools_branch_retired_not_merely_isolated(self):
+        # CLAUDE-PROJECT-SURFACE-CONSOLIDATION-01 supersedes this test's
+        # own original premise: the "Project Tools" rail branch this test
+        # used to check for iframe/case/source leakage no longer exists
+        # at all (Part B2) - there is nothing left to isolate. Rewritten
+        # to confirm the retirement itself rather than checking a branch
+        # that no longer renders.
         doc = self._ingest("VW8 Project Tools Isolation")
         client = self._client()
         body = client.get(f"/projects/{doc.project_id}/workspace").get_data(as_text=True)
-        start = body.index('data-ui-ref="lists.project.tools"')
-        end = body.index("</ul>", body.index("<ul", start))
-        # index of the branch's OWN closing children </ul> - Project Tools'
-        # own subtree, not the rest of the page.
-        branch = body[start:end]
-        self.assertNotIn("iframe", branch)
-        self.assertNotIn("data-source-id", branch)
-        self.assertNotIn("data-case-id", branch)
+        self.assertNotIn('data-ui-ref="lists.project.tools"', body)
 
     def test_empty_display_state_message_present_when_nothing_selected(self):
         # CLAUDE-GO-DNA-01 (Panel Zoning) superseded the old bare neutral

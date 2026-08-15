@@ -193,12 +193,19 @@ class UploadEntryPointCopyTests(unittest.TestCase):
         # services/ingestion.py's ingest_upload/ingest_folder_upload).
         # This test originally asserted that now-false claim; rewritten
         # to assert the corrected, honest copy instead of silently
-        # dropping coverage of this paragraph. Reformatted onto several
-        # source lines in the template - checked as fragments guaranteed
-        # to be on one source line each (see the same note on the
-        # Overview/Files assertions above).
-        self.assertIn("without becoming a duplicate permanent copy of it", body)
-        self.assertIn("both options below upload and permanently store a", body)
+        # dropping coverage of this paragraph.
+        #
+        # CLAUDE-PROJECT-SURFACE-CONSOLIDATION-01 addendum (Storage
+        # Grammar) supersedes HYBRID-ENTRY-01's own longer copy in turn -
+        # replaced by a short framing sentence plus the Link-vs-Upload
+        # choice itself (Part 1: "do not fill the normal surface with
+        # lengthy custody explanations"). The underlying invariant this
+        # test protects - never claim files stay in place when they
+        # don't, for whichever mechanism is actually offered - is now
+        # carried by the Link option's own honest "not yet configured"
+        # label (see tests/test_storage_grammar_01_link_upload_
+        # entitlement.py) rather than by this exact sentence.
+        self.assertIn("Choose how this Project's documents connect to Archiosk.", body)
         self.assertNotIn("your files stay wherever they already are", body)
 
     def test_upload_page_still_carries_every_required_ui_reference(self):

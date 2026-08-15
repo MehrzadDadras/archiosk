@@ -1,6 +1,10 @@
 {% import "_macros.html" as macros %}
 {# ============================================================================
    CLAUDE-SPIN-01 - Spin's selected canonical container grammar.
+   CLAUDE-PROJECT-SURFACE-CONSOLIDATION-01 (Part I) - compact grammar
+   correction, replacing the ON/OFF-heavy layout below with a single top
+   SPIN action plus compact per-row selection, following a live Product
+   Owner browser review that rejected the repeated large ON/OFF buttons.
 
    Product Owner selection, following the SPIN-00A/00B comparison exercise:
    Alternative A (Compact Control Stack) is the base, with one incorporated
@@ -14,13 +18,32 @@
    analytical payoff yet). The dev-only A/B/C comparison switcher is removed
    now that a selection has been made.
 
-   SCOPE BOUNDARY (unchanged from SPIN-00A): every toggle below is local
-   client-side state (static/js/spin_prototype.js) - it never calls a route,
-   never filters real evidence, never persists, never changes
+   Part I grammar (real-estate-conscious, same density precedent as the
+   existing Appearance selector's own compact matrix - base.html's
+   `.appearance-matrix`, a table of rows with an "All" row at the top
+   applying to every surface at once, never a persistent state of its
+   own): ONE `[ SPIN ]` action triggers everything; below it, an "All"
+   row sits directly above "Architecture" using the SAME row grammar as
+   every discipline row - label | compact selection circle (○/●) |
+   findings box | "+" detail disclosure. A row's circle means "included
+   in the NEXT Spin," not a persistent power state, and clicking it never
+   by itself runs anything - only the single SPIN button does (Product
+   Owner: "selection alone must never trigger the Spin"). The findings
+   box is deliberately, permanently blank in this prototype layer - it
+   would only ever show "[N]"/"[0]" once a real investigation actually
+   completes, which nothing here does yet (real evidence filtering is
+   CLAUDE-SPIN-01's own separate, paused increment); fabricating a count
+   this layer cannot back up would violate the same "never show what
+   isn't real" principle every other honest-empty-state in this app
+   follows.
+
+   SCOPE BOUNDARY (unchanged from SPIN-00A): everything below is local
+   client-side state (static/js/spin_prototype.js) - it never calls a
+   route, never filters real evidence, never persists, never changes
    `operating_environment` or any other real project fact. `spin_disciplines`
    (routes/workspace.py's own SPIN_PROTOTYPE_DISCIPLINES) is deliberately
    noncanonical placeholder data, never written into this or any Project.
-   `spin_prototype.js` still privately tracks each discipline's engagement
+   `spin_prototype.js` still privately tracks each discipline's selection
    ORDER (not just on/off) - harmless, unsurfaced, per the Product Owner's
    own "preserve existing latent engagement-order data... but do not surface
    it in the UI" - a real future capability (GO explaining at which
@@ -34,24 +57,38 @@
             <p class="active-set-summary-value" data-spin-summary data-ui-ref="spin.summary">None engaged</p>
         </div>
     </div>
+
+    <button type="button" class="btn btn-primary spin-trigger" data-spin-action="spin" data-ui-ref="spin.trigger">SPIN</button>
+
     <p class="pane-note">
-        Discipline rows (prototype labels, not this Project's own data). Toggle any
-        discipline directly - granularity below Discipline (Division/Source/Revision)
-        is a future refinement, not shown here.
+        Select disciplines below, then press SPIN. Selecting a discipline does not run
+        anything by itself. Prototype labels only, not this Project's own data -
+        granularity below Discipline (Division/Source/Revision) is a future refinement.
     </p>
-    <div class="spin-global-controls">
-        <button type="button" class="btn btn-ghost" data-spin-action="all-on" data-ui-ref="spin.all-on">All ON</button>
-        <button type="button" class="btn btn-ghost" data-spin-action="all-off" data-ui-ref="spin.all-off">All OFF</button>
-        <button type="button" class="btn btn-ghost" data-spin-action="reset" data-ui-ref="spin.reset">Return to Baseline</button>
-    </div>
+
     <div class="spin-discipline-list" data-spin-list>
+        <div class="tool-control-row spin-row" data-spin-all-row data-ui-ref="spin.all-row">
+            <span class="tool-control-row-label">All</span>
+            <button type="button" class="spin-selector" aria-pressed="false" data-spin-all-toggle data-ui-ref="spin.all-toggle" aria-label="Select every discipline"></button>
+            <span class="spin-findings-box" data-ui-ref="spin.all-findings" aria-hidden="true">[ ]</span>
+            <button type="button" class="spin-row-disclosure" data-spin-disclosure aria-expanded="false" data-ui-ref="spin.all-disclosure" aria-label="What does All do?">+</button>
+        </div>
+        <div class="spin-row-detail" data-spin-detail hidden data-ui-ref="spin.all-detail">
+            <p class="pane-note">Selects or deselects every discipline below for the next Spin.</p>
+        </div>
         {% for d in spin_disciplines %}
-        <div class="tool-control-row" data-spin-id="{{ loop.index0 }}" data-spin-name="{{ d }}" data-engaged="false">
+        <div class="tool-control-row spin-row" data-spin-id="{{ loop.index0 }}" data-spin-name="{{ d }}" data-selected="false">
             <span class="tool-control-row-label">{{ d }}</span>
-            <button type="button" class="tool-toggle" aria-pressed="false" data-spin-toggle data-ui-ref="spin.toggle">OFF</button>
+            <button type="button" class="spin-selector" aria-pressed="false" data-spin-selector data-ui-ref="spin.selector" aria-label="Select {{ d }} for the next Spin"></button>
+            <span class="spin-findings-box" data-spin-findings data-ui-ref="spin.findings" aria-label="{{ d }} findings">[ ]</span>
+            <button type="button" class="spin-row-disclosure" data-spin-disclosure aria-expanded="false" data-ui-ref="spin.row-disclosure" aria-label="Show {{ d }} investigation detail">+</button>
+        </div>
+        <div class="spin-row-detail" data-spin-detail hidden data-ui-ref="spin.row-detail">
+            <p class="pane-note">No investigation has run for this discipline yet.</p>
         </div>
         {% endfor %}
     </div>
+
     <div class="gauge-slot" data-ui-ref="spin.pulse-slot">
         <span class="gauge-slot-title">Project Pulse</span>
         Future analytical layer

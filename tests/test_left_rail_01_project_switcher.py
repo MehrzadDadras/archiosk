@@ -232,7 +232,10 @@ class AdminSurfaceRelocationTests(_BaseTestCase):
         self.assertIn('href="/upload"', body)
         self.assertIn('href="/security/"', body)
         self.assertIn('href="/operations/"', body)
-        self.assertIn('href="/admin/reset-project-data"', body)
+        # CLAUDE-PROJECT-SURFACE-CONSOLIDATION-01: now carries the open
+        # Project forward so Project Data Management can unmistakably
+        # identify which Project's evidence Add/Archive Documents acts on.
+        self.assertIn(f'href="/admin/reset-project-data?project_id={doc.project_id}"', body)
 
     def test_admin_section_absent_from_account_menu_for_a_non_admin(self):
         doc = self._ingest("Project Alpha")

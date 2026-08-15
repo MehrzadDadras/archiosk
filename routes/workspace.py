@@ -45,7 +45,7 @@ from flask import (
 from PIL import Image
 from werkzeug.utils import secure_filename
 
-from services.auth import admin_required, login_required
+from services.auth import admin_required, login_required, user_can_upload_to_storage
 from services.case_workspace import (
     ADJUDICATION_ATTRIBUTION_AGENT_ASSESSMENT,
     ADJUDICATION_ATTRIBUTION_HUMAN_REVIEWED,
@@ -2651,7 +2651,20 @@ def add_document_source(project_id):
     Toolbox still shows the same Add-a-Document tool right where the
     reviewer just used it, not a stale directory listing that no longer
     exists.
+
+    CLAUDE-PROJECT-SURFACE-CONSOLIDATION-01 addendum (Storage Grammar &
+    Public-Trial Entitlement, Part 6/8): this is the second of the two
+    named "Upload to Storage" surfaces (the other is
+    routes/portal.py::upload_folder) - real server-side enforcement, not
+    merely the Project Data Management page's own greying. Deliberately
+    does NOT touch this route's existing @login_required-only
+    authorization level (see governance/deferred-reserved/
+    reservations.md item 13 - a separate, already-recorded residual;
+    Part H of the base CONSOLIDATION-01 prompt says leave it alone).
     """
+    if not user_can_upload_to_storage():
+        abort(403)
+
     _, store, workspace = _load_workspace_or_404(project_id)
 
     file_storage = request.files.get("document")

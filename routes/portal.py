@@ -18,7 +18,10 @@ from typing import Optional
 from flask import Blueprint, abort, current_app, flash, jsonify, redirect, render_template, request, session, url_for
 from werkzeug.datastructures import FileStorage
 
-from services.auth import admin_required, check_credentials, is_admin, is_authenticated, log_in, log_out, login_required
+from services.auth import (
+    admin_required, check_credentials, is_admin, is_authenticated, log_in, log_out, login_required,
+    user_can_upload_to_storage,
+)
 from services.rate_limit import limiter
 from services.case_workspace import CaseWorkspaceStore
 from services.environment_capabilities import OPERATING_ENVIRONMENT_LABELS, is_valid_operating_environment
@@ -1599,12 +1602,45 @@ def reset_project_data():
     _recover_interrupted_transactions(current_app)
 
     if request.method == 'GET':
+        # CLAUDE-PROJECT-SURFACE-CONSOLIDATION-01: "Project Data
+        # Management" (this page's new identity - see
+        # templates/reset_project_data.html's own header comment) is
+        # now project-aware, via an OPTIONAL ?project_id= the Account
+        # menu's own link supplies when reached from an open Project's
+        # page. This is purely additive to the existing, unchanged,
+        # deployment-wide reset below - active_project is None (and the
+        # Add/Archive sections render an honest "no active project"
+        # state) whenever no project_id is given, or the given one is
+        # invalid/inaccessible - reuses the SAME centralized
+        # authorization routine every other blueprint's loader wraps,
+        # not a new access-control surface.
+        active_project = None
+        requested_project_id = request.args.get('project_id')
+        if requested_project_id:
+            from services.project_access import load_authorized_project_or_none
+            registry = get_registry(current_app)
+            store = CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"])
+            governance_log = get_governance_log(current_app)
+            result = load_authorized_project_or_none(
+                store, registry, governance_log, requested_project_id, session.get('username'), is_admin(),
+            )
+            if result is not None:
+                document, workspace = result
+                if not workspace.removed_at:
+                    active_project = {
+                        "project_id": requested_project_id,
+                        "display_name": workspace.display_title or document.filename,
+                        "active_sources": CaseWorkspaceStore.active_sources(workspace),
+                        "removed_sources": CaseWorkspaceStore.removed_sources(workspace),
+                    }
         return render_template(
             'reset_project_data.html',
             inventory=_project_data_inventory(current_app),
             confirmation_phrase=RESET_CONFIRMATION_PHRASE,
             lock_info=_lock_info(lock_path),
             recovery_failed=current_app.config.get("REGISTRY_RECOVERY_FAILED", False),
+            active_project=active_project,
+            upload_entitled=user_can_upload_to_storage(),
         )
 
     if current_app.config.get("REGISTRY_RECOVERY_FAILED"):
@@ -1792,6 +1828,7 @@ def upload():
             'upload.html', max_upload_mb=max_upload_mb,
             selected_environment=request.args.get('environment'),
             operating_environments=OPERATING_ENVIRONMENT_LABELS,
+            upload_entitled=user_can_upload_to_storage(),
         )
 
     file_storage = request.files.get('file')
@@ -1881,7 +1918,16 @@ def upload_folder():
     multi-file establishment is real additional scope this tranche
     does not cover; noted as a residual, not a silent behavior change
     a reviewer would have no way to notice.
+
+    CLAUDE-PROJECT-SURFACE-CONSOLIDATION-01 addendum (Storage Grammar &
+    Public-Trial Entitlement, Part 6): the real server-side gate -
+    upload.html greys the picker/submit when not entitled, but that's
+    cosmetic only; this abort(403) is what actually stops a direct POST
+    here from bypassing it.
     """
+    if not user_can_upload_to_storage():
+        abort(403)
+
     max_upload_mb = current_app.config['MAX_CONTENT_LENGTH'] // (1024 * 1024)
     common_context = dict(
         max_upload_mb=max_upload_mb,

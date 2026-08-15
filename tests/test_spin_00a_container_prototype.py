@@ -201,10 +201,17 @@ class SpinContainerRenderTests(_BaseSpinTestCase):
         self.assertIn('data-ui-ref="spin.summary"', strip)
 
     def test_built_from_shared_primitives_not_a_new_css_world(self):
+        # CLAUDE-PROJECT-SURFACE-CONSOLIDATION-01 (Part I) supersedes this
+        # test's own original list: .tool-toggle (the rectangular ON/OFF
+        # button) is retired from Spin entirely, replaced by the compact
+        # .spin-selector circle - the Product Owner's own explicit
+        # rejection of repeated large ON/OFF buttons, following a live
+        # browser review. Every other shared primitive is unchanged.
         client = self._client_as("spin_owner", 1)
         body = client.get(self._workspace_url(spin=True)).get_data(as_text=True)
-        for shared_class in ("workspace-pane", "tool-control-row", "tool-toggle", "review-state-badge", "active-set-summary", "gauge-slot"):
+        for shared_class in ("workspace-pane", "tool-control-row", "review-state-badge", "active-set-summary", "gauge-slot"):
             self.assertIn(shared_class, body, shared_class)
+        self.assertNotIn("tool-toggle", body)
 
     def test_shows_the_full_representative_discipline_set(self):
         # Many-item stress test - the 13-entry prototype list (not written
@@ -213,7 +220,10 @@ class SpinContainerRenderTests(_BaseSpinTestCase):
         body = client.get(self._workspace_url(spin=True)).get_data(as_text=True)
         self.assertIn("Architecture", body)
         self.assertIn("Commissioning", body)
-        self.assertEqual(body.count('data-ui-ref="spin.toggle"'), 13)
+        # CLAUDE-PROJECT-SURFACE-CONSOLIDATION-01 (Part I): spin.toggle is
+        # retired - one spin.selector per discipline now (spin.all-toggle,
+        # the separate All row's own circle, is intentionally excluded).
+        self.assertEqual(body.count('data-ui-ref="spin.selector"'), 13)
 
     def test_rows_carry_no_relocation_affordance(self):
         # Spatial stability was the Product Owner's own explicit reason for
@@ -229,11 +239,59 @@ class SpinContainerRenderTests(_BaseSpinTestCase):
         self.assertIn(">Baseline<", body)
         self.assertIn("None engaged", body)
 
-    def test_global_controls_present(self):
+    def test_single_spin_trigger_present_no_repeated_on_off_buttons(self):
+        # CLAUDE-PROJECT-SURFACE-CONSOLIDATION-01 (Part I) supersedes this
+        # test's own original form: the All-ON/All-OFF/Return-to-Baseline
+        # trio is gone, replaced by one SPIN action plus the All row's own
+        # compact selection circle (spin.all-toggle, covered separately
+        # below) - selection state alone must never trigger anything;
+        # only this one button does.
         client = self._client_as("spin_owner", 1)
         body = client.get(self._workspace_url(spin=True)).get_data(as_text=True)
-        for suffix in ("all-on", "all-off", "reset"):
-            self.assertIn(f'data-spin-action="{suffix}"', body)
+        self.assertIn('data-spin-action="spin"', body)
+        self.assertIn('data-ui-ref="spin.trigger"', body)
+        self.assertEqual(body.count('data-spin-action="spin"'), 1)
+        for retired in ("all-on", "all-off", "reset"):
+            self.assertNotIn(f'data-spin-action="{retired}"', body)
+
+    def test_all_row_present_above_first_discipline_row_same_grammar(self):
+        client = self._client_as("spin_owner", 1)
+        body = client.get(self._workspace_url(spin=True)).get_data(as_text=True)
+        self.assertIn('data-ui-ref="spin.all-row"', body)
+        all_row_pos = body.index('data-ui-ref="spin.all-row"')
+        architecture_pos = body.index('data-spin-name="Architecture"')
+        self.assertLess(all_row_pos, architecture_pos)
+        # Same row grammar as every discipline row: selector, findings box, disclosure.
+        all_row = body[all_row_pos:body.index('</div>', body.index('spin-row-detail', all_row_pos))]
+        self.assertIn('data-ui-ref="spin.all-toggle"', all_row)
+        self.assertIn('data-ui-ref="spin.all-findings"', all_row)
+        self.assertIn('data-ui-ref="spin.all-disclosure"', all_row)
+
+    def test_findings_boxes_are_honestly_blank_never_a_fabricated_count(self):
+        # Part I's own explicit instruction: "do not fabricate result
+        # counts the current prototype doesn't generate" - this layer
+        # never runs a real investigation, so every findings box (13
+        # discipline rows + the All row) must render the same honest
+        # blank placeholder, never a "[0]" or any digit.
+        client = self._client_as("spin_owner", 1)
+        body = client.get(self._workspace_url(spin=True)).get_data(as_text=True)
+        spin_fragment = body[body.index('data-ui-ref="spin.pane"'):body.index('id="toolbox-eye-divider"')]
+        self.assertEqual(spin_fragment.count('data-ui-ref="spin.findings"'), 13)
+        self.assertIn('data-ui-ref="spin.all-findings"', spin_fragment)
+        # Every findings box (13 discipline + 1 All) renders the same
+        # honest blank placeholder text.
+        self.assertEqual(spin_fragment.count('>[ ]<'), 14)
+        for digit in "0123456789":
+            self.assertNotIn(f'[{digit}]', spin_fragment)
+
+    def test_row_disclosures_present_and_collapsed_by_default(self):
+        client = self._client_as("spin_owner", 1)
+        body = client.get(self._workspace_url(spin=True)).get_data(as_text=True)
+        self.assertEqual(body.count('data-ui-ref="spin.row-disclosure"'), 13)
+        self.assertEqual(body.count('data-ui-ref="spin.row-detail"'), 13)
+        spin_fragment = body[body.index('data-ui-ref="spin.pane"'):body.index('id="toolbox-eye-divider"')]
+        self.assertEqual(spin_fragment.count('aria-expanded="false"'), 14)  # 13 discipline rows + All row
+        self.assertNotIn('aria-expanded="true"', spin_fragment)
 
     def test_pulse_placeholder_present_and_neutral_no_fabricated_score(self):
         client = self._client_as("spin_owner", 1)
@@ -250,7 +308,9 @@ class SpinContainerRenderTests(_BaseSpinTestCase):
         # immediately after the Toolbox <aside> closes, so it reliably
         # follows the Spin fragment in document order.
         spin_fragment = body[body.index('data-ui-ref="spin.pane"'):body.index('id="toolbox-eye-divider"')]
-        self.assertEqual(spin_fragment.count('aria-pressed="false"'), 13)  # 13 discipline toggles, all off by default
+        # CLAUDE-PROJECT-SURFACE-CONSOLIDATION-01 (Part I): 13 discipline
+        # selectors + the All row's own selector, all unselected by default.
+        self.assertEqual(spin_fragment.count('aria-pressed="false"'), 14)
 
 
 class SpinNonmutationTests(_BaseSpinTestCase):

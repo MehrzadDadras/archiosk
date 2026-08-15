@@ -1,13 +1,100 @@
 {% extends "base.html" %}
 {% import "_macros.html" as macros %}
 
-{% block title %}Reset Project Data &mdash; Archiosk{% endblock %}
+{# CLAUDE-PROJECT-SURFACE-CONSOLIDATION-01: this page's own identity
+   changes from "Reset Project Data" (a single destructive, deployment-
+   wide operation as the ONLY content) to "Project Data Management" -
+   the governed surface for changing the ACTIVE project's own evidence
+   set (Add/Archive Documents), with the destructive whole-deployment
+   reset demoted into a collapsed "Recovery / Advanced Administration"
+   disclosure rather than defining the ordinary page. Same route
+   (portal.reset_project_data), same template file, same admin_required
+   gate, same POST handler/lock/snapshot machinery, entirely unchanged -
+   only what an ordinary visit to this page emphasizes changed. #}
+{% block title %}Project Data Management &mdash; Archiosk{% endblock %}
 
 {% block content %}
-{% call macros.page_header('Reset Project Data', subtitle='Administrator only &mdash; returns the app to a clean, no-project state.') %}
-    <a class="btn btn-ghost" href="{{ url_for('portal.list_reset_snapshots') }}">View Reset Snapshots</a>
+{% call macros.page_header('Project Data Management') %}
     <a class="btn btn-ghost" href="{{ url_for('portal.projects_list') }}">&larr; Back to Projects</a>
 {% endcall %}
+
+{% if active_project %}
+<section class="workspace-pane" data-ui-ref="pdm.active-project">
+    <p class="eyebrow mono">Active Project</p>
+    <p><strong>{{ active_project.display_name }}</strong></p>
+</section>
+
+<section class="workspace-pane{% if not upload_entitled %} storage-option-disabled{% endif %}">
+    <h2>Add documents to project</h2>
+    <p class="pane-note">Upload to Storage &mdash; copy documents into the Project's configured managed storage.</p>
+    {% if not upload_entitled %}
+    <p class="mono form-error" data-ui-ref="pdm.add-documents.disabled-reason">Not available in public trial. Available on managed/organization plans.</p>
+    {% endif %}
+    {# CLAUDE-PROJECT-SURFACE-CONSOLIDATION-01 addendum (Storage Grammar &
+       Public-Trial Entitlement, Part 8): same Upload-to-Storage grammar/
+       greying as upload.html's own folder-establishment fieldset - real
+       server-side gate lives in workspace.add_document_source, this
+       `disabled` is a convenience on top of that, never the only gate. #}
+    <form class="workspace-form" method="post" enctype="multipart/form-data"
+          action="{{ url_for('workspace.add_document_source', project_id=active_project.project_id) }}"
+          data-ui-ref="pdm.add-documents.form">
+        {# CLAUDE-MM3: .xlsx matches routes/workspace.py's own
+           ALLOWED_DOCUMENT_EXTENSIONS - same accept hint as the rail's
+           own former "+ Add Documents" form, which this replaces (not
+           duplicates - see templates/base.html's own CLAUDE-
+           PROJECT-SURFACE-CONSOLIDATION-01 comment). #}
+        <input type="file" name="document" accept=".pdf,.docx,.txt,.csv,.md,.xlsx" required data-ui-ref="pdm.add-documents.file" {% if not upload_entitled %}disabled{% endif %}>
+        <button type="submit" data-ui-ref="pdm.add-documents.submit" {% if not upload_entitled %}disabled{% endif %}>Add Documents</button>
+    </form>
+</section>
+
+<section class="workspace-pane">
+    <h2>Archive documents</h2>
+    <p class="pane-note">
+        Move selected evidence out of the active/current set while preserving identity, history and
+        provenance. Archived Documents are excluded from ordinary GO reasoning by default, but remain
+        fully recoverable and stay available for history, provenance and explicit investigation - this is
+        never permanent deletion. Reuses the same remove/restore mechanism as the per-Document
+        Remove/Restore control in the workspace itself.
+    </p>
+    {% if active_project.active_sources %}
+    <ul class="source-list" data-ui-ref="pdm.archive-documents.active-list">
+        {% for s in active_project.active_sources %}
+        <li class="source-item">
+            {{ s.name }}
+            <form method="post" action="{{ url_for('workspace.remove_document_route', project_id=active_project.project_id, source_id=s.id) }}" style="display:inline;">
+                <button type="submit" class="link-button" data-ui-ref="pdm.archive-documents.archive">Archive</button>
+            </form>
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p class="pane-note" data-ui-ref="pdm.archive-documents.empty">No active Documents to archive.</p>
+    {% endif %}
+
+    {% if active_project.removed_sources %}
+    <p class="pane-note" style="margin-top:0.8rem;">Archived ({{ active_project.removed_sources|length }})</p>
+    <ul class="source-list" data-ui-ref="pdm.archive-documents.archived-list">
+        {% for s in active_project.removed_sources %}
+        <li class="source-item">
+            {{ s.name }}
+            <br><small class="text-muted">Archived {{ s.removed_at }}{% if s.removed_by %} by {{ s.removed_by }}{% endif %}</small>
+            <form method="post" action="{{ url_for('workspace.restore_document_route', project_id=active_project.project_id, source_id=s.id) }}">
+                <button type="submit" class="link-button" data-ui-ref="pdm.archive-documents.restore">Restore</button>
+            </form>
+        </li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+</section>
+{% else %}
+<section class="workspace-pane">
+    <p class="pane-note" data-ui-ref="pdm.no-active-project">
+        No project is currently active. Open a project, then reach Project Data Management from its own
+        Admin menu to add or archive that project's evidence.
+    </p>
+</section>
+{% endif %}
 
 {% if recovery_failed %}
 <p class="pane-note" style="color:var(--failure-red);">
@@ -23,40 +110,55 @@
     A Reset or Restore is currently in progress (started {{ lock_info.age_seconds }}s ago). Refresh in a moment.
     {% endif %}
 </p>
-{% else %}
-
-<section class="workspace-pane">
-    <h2>What this removes</h2>
-    <ul class="source-list">
-        <li class="source-item">{{ inventory.projects }} Project(s)</li>
-        <li class="source-item">{{ inventory.documents }} Document(s)</li>
-        <li class="source-item">{{ inventory.investigations }} Investigation(s)</li>
-        <li class="source-item">{{ inventory.findings }} Finding(s)</li>
-        <li class="source-item">{{ inventory.requirements }} Requirement(s)</li>
-    </ul>
-    <p class="pane-note">
-        A complete, checksummed snapshot of everything above is preserved on disk before anything is
-        removed &mdash; this is not permanent deletion, and can be restored from
-        <a href="{{ url_for('portal.list_reset_snapshots') }}">Reset Snapshots</a>. User accounts and sign-in,
-        security policies and authorization config, application config/credentials, and the current
-        software/schema version are all retained untouched.
-    </p>
-    <p class="pane-note" style="color:var(--attention-amber);">
-        Do not run this against real project records until a snapshot restoration has been verified to
-        work - see Reset Snapshots for the current verified/unverified state of any existing snapshot.
-    </p>
-</section>
-
-<section class="workspace-pane">
-    <h2>Confirm</h2>
-    <p class="pane-note">
-        Type <strong>{{ confirmation_phrase }}</strong> exactly to proceed.
-    </p>
-    <form method="post" action="{{ url_for('portal.reset_project_data') }}" class="workspace-form">
-        <input type="text" name="confirmation_phrase" placeholder="{{ confirmation_phrase }}" autocomplete="off" required>
-        <button type="submit" class="review-btn reject">Reset Project Data</button>
-    </form>
-</section>
-
 {% endif %}
+
+{# CLAUDE-PROJECT-SURFACE-CONSOLIDATION-01 (Part G): demoted from the
+   page's own primary content into a collapsed, clearly-labeled
+   secondary area - "the ordinary user should not arrive at Project
+   Data Management and immediately be presented with 'return the app
+   to a clean no-project state.'" Every safeguard below (typed
+   confirmation phrase, atomic lock, pre-reset snapshot, snapshot
+   restoration) is completely unchanged - only where it renders moved. #}
+{% call macros.subdisclosure('Recovery / Advanced Administration', html_id='pdm-recovery-advanced', ui_ref='pdm.recovery-advanced') %}
+    <p class="pane-note" style="color:var(--attention-amber);">
+        Deployment-wide operations - not scoped to the active project above.
+    </p>
+    <a class="btn btn-ghost" href="{{ url_for('portal.list_reset_snapshots') }}">View Reset Snapshots</a>
+
+    {% if not recovery_failed and not lock_info %}
+    <section class="workspace-pane">
+        <h2>What this removes</h2>
+        <ul class="source-list">
+            <li class="source-item">{{ inventory.projects }} Project(s)</li>
+            <li class="source-item">{{ inventory.documents }} Document(s)</li>
+            <li class="source-item">{{ inventory.investigations }} Investigation(s)</li>
+            <li class="source-item">{{ inventory.findings }} Finding(s)</li>
+            <li class="source-item">{{ inventory.requirements }} Requirement(s)</li>
+        </ul>
+        <p class="pane-note">
+            A complete, checksummed snapshot of everything above is preserved on disk before anything is
+            removed &mdash; this is not permanent deletion, and can be restored from
+            <a href="{{ url_for('portal.list_reset_snapshots') }}">Reset Snapshots</a>. User accounts and sign-in,
+            security policies and authorization config, application config/credentials, and the current
+            software/schema version are all retained untouched.
+        </p>
+        <p class="pane-note" style="color:var(--attention-amber);">
+            Do not run this against real project records until a snapshot restoration has been verified to
+            work - see Reset Snapshots for the current verified/unverified state of any existing snapshot.
+        </p>
+    </section>
+
+    <section class="workspace-pane">
+        <h2>Confirm</h2>
+        <p class="pane-note">
+            Type <strong>{{ confirmation_phrase }}</strong> exactly to proceed. This resets EVERY Project in
+            this deployment, not only the active Project above.
+        </p>
+        <form method="post" action="{{ url_for('portal.reset_project_data') }}" class="workspace-form">
+            <input type="text" name="confirmation_phrase" placeholder="{{ confirmation_phrase }}" autocomplete="off" required>
+            <button type="submit" class="review-btn reject">Reset Project Data</button>
+        </form>
+    </section>
+    {% endif %}
+{% endcall %}
 {% endblock %}

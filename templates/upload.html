@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_macros.html" as macros %}
 
 {% block title %}Establish a Project &mdash; Archiosk{% endblock %}
 
@@ -25,21 +26,13 @@
        framing (a project is established IN Archiosk, not moved into
        it). #}
     <h1>Establish a Project</h1>
-    {# CLAUDE-HYBRID-ENTRY-01: CLAUDE-CA1D-RECEPTION-FIX-01's own "your
-       files stay wherever they already are" claim is no longer true of
-       either path below - both currently upload and permanently store a
-       server-side copy (see services/ingestion.py's own
-       ingest_upload/ingest_folder_upload). The accepted hybrid-storage
-       direction (Archiosk stores understanding by default, not permanent
-       custody of the complete file corpus) is a planned future
-       correction to the MECHANISM, not yet built - this copy states the
-       current, honest behavior instead of the aspirational one. #}
+    {# CLAUDE-PROJECT-SURFACE-CONSOLIDATION-01 addendum (Storage Grammar):
+       replaces CLAUDE-HYBRID-ENTRY-01's own longer disclaimer copy - the
+       enduring customer-facing choice is Link vs. Upload (below), stated
+       plainly rather than as a disclaimer; the fuller custody explanation
+       moved behind each option's own "Details" disclosure. #}
     <p class="hero-copy" data-ui-ref="upload.limits">
-        Archiosk is designed to work alongside your project's existing
-        material, without becoming a duplicate permanent copy of it &mdash;
-        a linked local/company-storage option for that is being prepared.
-        Until it ships, both options below upload and permanently store a
-        copy of your files on Archiosk's own server.
+        Choose how this Project's documents connect to Archiosk.
     </p>
     <p class="hero-copy" data-ui-ref="upload.limits.formats">
         Accepted formats: PDF, DOCX, TXT, CSV, MD &mdash; up to {{ max_upload_mb }}MB
@@ -96,52 +89,75 @@
         <span class="mono">(required)</span>
     </label>
 
-    {# CLAUDE-HYBRID-ENTRY-01: relabeled as an explicit legacy/full-upload
-       path, not disabled outright - CLAUDE-CA1D-FOLDER-ESTABLISH-CLARITY-01
-       built real, tested UX specifically around this mechanism's own
-       founding-document selection (see
-       tests/test_ca1d_folder_establish_clarity_01.py), a genuine capability
-       worth keeping for establishing a project from a full document set
-       while a real linked-storage option is designed - see the accepted
-       Product Owner correction (CLAUDE-HYBRID-ENTRY-01) for why the OLD
-       "Choose Project Folder" / "Establish Project from Folder" wording is
-       no longer acceptable: it read as folder-linking to at least one real
-       reviewer, when the actual operation is a permanent server upload. #}
-    <fieldset class="folder-establish-fieldset">
-        <legend>Upload Folder Contents <span class="mono">(Legacy &mdash; full server upload)</span></legend>
-        <p class="pane-note">
-            <strong>This is not a folder link.</strong> Selecting a folder here uploads every
-            eligible document inside it (subfolders included) and stores a permanent copy of
-            each one on Archiosk's own server &mdash; your local files are not watched,
-            referenced, or left in place. Kept available for establishing a project from a full
-            document set while a genuine linked-storage option is prepared.
-        </p>
-        <button type="button" class="btn btn-ghost" id="folder-picker-button" data-ui-ref="upload.folder.picker-button">
-            Choose Folder to Upload&hellip;
-        </button>
-        <input type="file" id="folder-picker-input" webkitdirectory directory multiple hidden data-ui-ref="upload.folder.picker-input">
-        <input type="file" name="folder_files" id="folder-files-hidden" multiple hidden>
-        <input type="hidden" name="founding_relative_path" id="founding-relative-path-field">
+    {# CLAUDE-PROJECT-SURFACE-CONSOLIDATION-01 addendum (Storage Grammar &
+       Public-Trial Entitlement): supersedes CLAUDE-HYBRID-ENTRY-01's own
+       "Legacy" framing. The enduring choice is Link vs. Upload (Part 3):
+       LINK leaves documents in their existing approved storage and
+       connects Archiosk to them; UPLOAD makes a copy in the Project's
+       configured managed storage. Link is shown, not hidden, but honestly
+       disabled - no genuine linked-storage mechanism exists yet, and
+       Part 4 forbids disguising today's copy-upload as a link. Upload is
+       the same CLAUDE-CA1D-FOLDER-ESTABLISH-CLARITY-01 mechanism as
+       before (founding-document selection, tests unchanged), functionally
+       identical, gated by upload_entitled (services.auth.
+       user_can_upload_to_storage - real server-side enforcement lives in
+       routes/portal.py::upload_folder, this greying is a convenience on
+       top of that, never the only gate). #}
+    <fieldset class="storage-connection-fieldset">
+        <legend>Connect Documents</legend>
 
-        <div id="folder-selection-summary" data-ui-ref="upload.folder.summary" hidden></div>
-
-        <div id="folder-founding-picker" data-ui-ref="upload.folder.founding-picker" hidden>
-            <p class="pane-note">Which of these is the principal RFP/document for this project? <span class="mono">(required &mdash; select one to continue)</span></p>
-            <ul class="folder-founding-candidates" id="folder-founding-candidates"></ul>
+        <div class="storage-option storage-option-disabled" data-ui-ref="upload.storage.link">
+            <p class="storage-option-label"><strong>Link to Storage</strong> <span class="mono">(not yet configured)</span></p>
+            <p class="pane-note">Use documents where they already live.</p>
+            {% call macros.subdisclosure('Details', html_id='storage-link-details', ui_ref='upload.storage.link.details') %}
+            <p class="pane-note">
+                Archiosk would connect to documents already in an approved storage location
+                (for example, an organization's SharePoint, another enterprise repository, or
+                Archiosk-hosted storage where offered) and leave them there as the
+                authoritative copy, rather than making a separate copy inside Archiosk. This is
+                the preferred direction but isn't built yet, so it's shown here rather than
+                hidden, and left disabled rather than misrepresented as available.
+            </p>
+            {% endcall %}
         </div>
 
-        <p class="mono form-error" id="folder-selection-error" data-ui-ref="upload.folder.error" hidden></p>
+        <div class="storage-option{% if not upload_entitled %} storage-option-disabled{% endif %}" data-ui-ref="upload.storage.upload">
+            <p class="storage-option-label"><strong>Upload to Storage</strong></p>
+            <p class="pane-note">Copy documents into the Project's configured managed storage.</p>
+            {% if not upload_entitled %}
+            <p class="mono form-error" data-ui-ref="upload.storage.upload.disabled-reason">Not available in public trial. Available on managed/organization plans.</p>
+            {% endif %}
 
-        {# CLAUDE-HYBRID-ENTRY-01: demoted from btn-primary to btn-ghost -
-           this path is explicitly legacy now, not the recommended
-           project-establishment method; #folder-submit-button:disabled's
-           own dedicated CSS state (CLAUDE-CA1D-FOLDER-ESTABLISH-CLARITY-01)
-           is keyed off the id, unaffected by this class change. #}
-        <button
-            type="submit" class="btn btn-ghost" id="folder-submit-button" disabled
-            formaction="{{ url_for('portal.upload_folder') }}" data-ui-ref="upload.folder.submit">
-            Upload Folder Contents (Legacy)
-        </button>
+            <button type="button" class="btn btn-ghost" id="folder-picker-button" data-ui-ref="upload.folder.picker-button" {% if not upload_entitled %}disabled{% endif %}>
+                Choose Folder to Upload&hellip;
+            </button>
+            <input type="file" id="folder-picker-input" webkitdirectory directory multiple hidden data-ui-ref="upload.folder.picker-input">
+            <input type="file" name="folder_files" id="folder-files-hidden" multiple hidden>
+            <input type="hidden" name="founding_relative_path" id="founding-relative-path-field">
+
+            <div id="folder-selection-summary" data-ui-ref="upload.folder.summary" hidden></div>
+
+            <div id="folder-founding-picker" data-ui-ref="upload.folder.founding-picker" hidden>
+                <p class="pane-note">Which of these is the principal RFP/document for this project? <span class="mono">(required &mdash; select one to continue)</span></p>
+                <ul class="folder-founding-candidates" id="folder-founding-candidates"></ul>
+            </div>
+
+            <p class="mono form-error" id="folder-selection-error" data-ui-ref="upload.folder.error" hidden></p>
+
+            <button
+                type="submit" class="btn btn-ghost" id="folder-submit-button" disabled
+                formaction="{{ url_for('portal.upload_folder') }}" data-ui-ref="upload.folder.submit">
+                Upload Folder Contents
+            </button>
+
+            {% call macros.subdisclosure('Details', html_id='storage-upload-details', ui_ref='upload.storage.upload.details') %}
+            <p class="pane-note">
+                Uploads every eligible document in the chosen folder (subfolders included) and
+                stores a permanent copy of each one in the Project's configured managed storage
+                &mdash; your local files are not watched, referenced, or left in place.
+            </p>
+            {% endcall %}
+        </div>
     </fieldset>
 
     <fieldset class="single-file-establish-fieldset">

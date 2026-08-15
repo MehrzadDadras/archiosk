@@ -171,16 +171,19 @@ class RegistryTests(_BaseTestCase):
         self.assertNotIn(': \'a[data-view="overview"]\';', body)
         self.assertNotIn(': \'a[data-view="files"]\';', body)
 
-    def test_files_leaf_has_no_dynamic_record_count_or_tab_strip_pill(self):
-        # Section 3's own "does not create a dynamic-record tab-strip
-        # pill" - same stable-singleton shape as Overview: one leaf, no
-        # launcher-count, no data-source-id/data-case-id pattern.
+    def test_files_leaf_removed_from_the_rail_entirely(self):
+        # CLAUDE-PROJECT-SURFACE-CONSOLIDATION-01 (Part B1) supersedes
+        # this test's own original form: the rail's own "Files" leaf
+        # (lists.project.files) was a stable, no-dynamic-record singleton
+        # (Section 3's own original requirement, still true of the
+        # underlying Files/Data Room/Design-Builder capability itself -
+        # see test_reference_mode_toggle_does_not_expose_a_hidden_files_
+        # control below) - now removed from the rail outright per the
+        # Product Owner's "left rail is principally project switching +
+        # evidence navigation" decision. The route/capability itself is
+        # untouched and unaffected, only this one duplicate entry point.
         base_html = (_REPO_ROOT / "templates" / "base.html").read_text(encoding="utf-8")
-        idx = base_html.index('data-ui-ref="lists.project.files"')
-        tag = base_html[base_html.rindex("<li", 0, idx):base_html.index("</li>", idx) + 5]
-        self.assertNotIn("launcher-count", tag)
-        self.assertNotIn("data-source-id", tag)
-        self.assertNotIn("data-case-id", tag)
+        self.assertNotIn('data-ui-ref="lists.project.files"', base_html)
 
     def test_multi_display_click_interceptor_resolves_files_kind_not_overview(self):
         # CLAUDE-P40-VW9: a real bug found and fixed during this stage's
@@ -494,10 +497,17 @@ class GovernanceTests(_BaseTestCase):
     def test_reference_mode_toggle_does_not_expose_a_hidden_files_control(self):
         # UI Reference Mode only ever labels already-rendered content
         # (existing convention) - not exercised via a new mechanism here.
+        # CLAUDE-PROJECT-SURFACE-CONSOLIDATION-01: lists.project.files
+        # dropped from this assertion - the rail's own Files leaf is
+        # retired (Part B1), but display.files (the actual Files/Data
+        # Room/Design-Builder content) still renders correctly when
+        # ?view=files is requested by any means (Overview's own
+        # "Open Files ->" link, a direct URL) - proving the underlying
+        # capability survived the rail-entry removal untouched.
         doc = self._ingest("VW9 Reference Mode Project")
         client = self._client()
         without = client.get(f"/projects/{doc.project_id}/workspace?view=files").get_data(as_text=True)
-        self.assertIn('data-ui-ref="lists.project.files"', without)
+        self.assertNotIn('data-ui-ref="lists.project.files"', without)
         self.assertIn('data-ui-ref="display.files"', without)
 
 

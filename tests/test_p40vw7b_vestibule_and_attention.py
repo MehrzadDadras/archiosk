@@ -164,10 +164,12 @@ class OpenedProjectPortfolioRemovalTests(_BaseTestCase):
         # redundant with lists.project.self) - the underlying "the opened
         # Project's own family is fully reachable" contract this test
         # protects is preserved, just split across the two panels.
+        # CLAUDE-PROJECT-SURFACE-CONSOLIDATION-01: lists.project.tools
+        # dropped - retired outright (Part B2), unlike the refs below it.
         doc = self._ingest("VW7B Project C")
         client = self._client()
         body = client.get(f"/projects/{doc.project_id}/workspace").get_data(as_text=True)
-        for ref in ("lists.project.self", "lists.project.documents", "lists.project.tools"):
+        for ref in ("lists.project.self", "lists.project.documents"):
             self.assertIn(f'data-ui-ref="{ref}"', body, ref)
         for ref in (
             "toolbox.investigations", "toolbox.rfi", "toolbox.conversation",

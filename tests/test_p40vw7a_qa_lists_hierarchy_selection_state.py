@@ -170,17 +170,23 @@ class SelectionTierSeparationTests(_BaseTestCase):
     def test_selecting_a_different_child_moves_the_active_class_there(self):
         # CLAUDE-GO-DNA-01 (Panel Zoning): "Overview" was itself retired
         # as a Lists leaf (redundant with lists.project.self, which
-        # already opens the same page) - exercised here against
-        # ?view=files (lists.project.files), Lists' other still-real
-        # selectable leaf kind besides a Document.
+        # already opens the same page) - exercised here against ?view=files
+        # (lists.project.files), Lists' other still-real selectable leaf
+        # kind besides a Document.
+        # CLAUDE-PROJECT-SURFACE-CONSOLIDATION-01: lists.project.files is
+        # ALSO now retired (Part B1) - the rail's own real selectable-leaf
+        # vehicles are down to Documents alone, so this test now selects a
+        # real Document (?source=<id>, lists.project.documents.leaf)
+        # instead.
         doc = self._ingest("Nipigon Ramp", "rfp.txt")
+        source_id = self._store().get(doc.project_id).sources[0]["id"]
         client = self._client()
-        body = client.get(f"/projects/{doc.project_id}/workspace?view=files").get_data(as_text=True)
+        body = client.get(f"/projects/{doc.project_id}/workspace?source={source_id}").get_data(as_text=True)
         lists_html = self._lists_html(body)
         leaf_tags = re.findall(r'<a class="tree-leaf launcher-link[^"]*"[^>]*>', lists_html)
         active_leaves = [t for t in leaf_tags if re.search(r'\bactive\b', t)]
         self.assertEqual(len(active_leaves), 1)
-        self.assertIn('data-ui-ref="lists.project.files"', active_leaves[0])
+        self.assertIn('data-ui-ref="lists.project.documents.leaf"', active_leaves[0])
         # current-project row still present, still un-selected.
         self_idx = lists_html.index('data-ui-ref="lists.project.self"')
         self_tag = lists_html[lists_html.rindex("<a", 0, self_idx):lists_html.index(">", self_idx)]
@@ -200,11 +206,15 @@ class AccessibilityStateTests(_BaseTestCase):
     def test_selected_child_gets_aria_current_page_not_true(self):
         # CLAUDE-GO-DNA-01 (Panel Zoning): "Chats" is gone from Lists -
         # exercised here against ?view=files instead.
+        # CLAUDE-PROJECT-SURFACE-CONSOLIDATION-01: lists.project.files is
+        # ALSO now retired (Part B1) - exercised against a real Document
+        # selection instead, same reasoning as the test above.
         doc = self._ingest("Nipigon Ramp", "rfp.txt")
+        source_id = self._store().get(doc.project_id).sources[0]["id"]
         client = self._client()
-        body = client.get(f"/projects/{doc.project_id}/workspace?view=files").get_data(as_text=True)
+        body = client.get(f"/projects/{doc.project_id}/workspace?source={source_id}").get_data(as_text=True)
         lists_html = self._lists_html(body)
-        idx = lists_html.index('data-ui-ref="lists.project.files"')
+        idx = lists_html.index('data-ui-ref="lists.project.documents.leaf"')
         tag = lists_html[lists_html.rindex("<a", 0, idx):lists_html.index(">", idx)]
         self.assertIn('aria-current="page"', tag)
 
@@ -212,9 +222,13 @@ class AccessibilityStateTests(_BaseTestCase):
         # CLAUDE-GO-DNA-01 (Panel Zoning): ?view=overview no longer
         # activates a Lists leaf (Overview was retired from Lists) -
         # exercised here against ?view=files instead.
+        # CLAUDE-PROJECT-SURFACE-CONSOLIDATION-01: lists.project.files is
+        # ALSO now retired (Part B1) - exercised against a real Document
+        # selection instead, same reasoning as the tests above.
         doc = self._ingest("Nipigon Ramp", "rfp.txt")
+        source_id = self._store().get(doc.project_id).sources[0]["id"]
         client = self._client()
-        body = client.get(f"/projects/{doc.project_id}/workspace?view=files").get_data(as_text=True)
+        body = client.get(f"/projects/{doc.project_id}/workspace?source={source_id}").get_data(as_text=True)
         lists_html = self._lists_html(body)
         self.assertEqual(lists_html.count('aria-current="page"'), 1)
         self.assertEqual(lists_html.count('aria-current="true"'), 1)

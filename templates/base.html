@@ -458,7 +458,16 @@
                         <a class="workspace-overflow-item" data-ui-ref="menu.account.admin.new-project" href="{{ url_for('portal.upload') }}">+ New Project</a>
                         <a class="workspace-overflow-item" data-ui-ref="menu.account.admin.security" href="{{ url_for('security.department_home') }}">Security</a>
                         <a class="workspace-overflow-item" data-ui-ref="menu.account.admin.operations" href="{{ url_for('operations.department_home') }}">Operations</a>
-                        <a class="workspace-overflow-item" id="project-data-management" data-ui-ref="menu.account.admin.project-data-management" href="{{ url_for('portal.reset_project_data') }}">Project Data Management</a>
+                        {# CLAUDE-PROJECT-SURFACE-CONSOLIDATION-01: carries the
+                           currently open Project forward via ?project_id= (only
+                           when one is actually open - project_id is a template
+                           global only on Project-scoped pages) so the
+                           destination page can unmistakably identify which
+                           Project's evidence Add/Archive Documents would act
+                           on. Reached from the portfolio/no-project state, it
+                           omits the param and the destination renders its own
+                           honest "no active project" state instead of guessing. #}
+                        <a class="workspace-overflow-item" id="project-data-management" data-ui-ref="menu.account.admin.project-data-management" href="{{ url_for('portal.reset_project_data', project_id=(project_id if project_id is defined else None)) }}">Project Data Management</a>
                         {% endif %}
                         {# CLAUDE-LEFT-RAIL-01: NOT admin-gated, deliberately -
                            routes/portal.py's own removed_projects/
@@ -677,111 +686,41 @@
                                             {% endfor %}
                                         </ul>
                                     </li>
-                                    {# CLAUDE-P40-VW9 (Governed Files Display and Project File
-                                       Architecture): a single stable leaf, same shape as Overview
-                                       above - no tab-strip pill, no dynamic-record count (Files
-                                       itself is not a per-instance record the way a Document or
-                                       Investigation is), no duplicate-open concept. Projects the
-                                       two governed sibling roots (Data Room, Design-Builder
-                                       Workspace) into Display via the same ?view= vocabulary
-                                       Overview already established - see routes/workspace.py's
-                                       own STABLE_DIRECTORY_KINDS. #}
-                                    <li class="tree-node" data-tree-node data-root-branch="2.2" data-root-label="Files">
-                                        <a class="tree-leaf launcher-link{% if directory_view == 'files' %} active{% endif %}" data-ui-ref="lists.project.files" data-view="files"{% if directory_view == 'files' %} aria-current="page"{% endif %} href="{{ url_for('workspace.show_workspace', project_id=project_id, view='files') }}">Files</a>
-                                    </li>
-                                    {# ---------------- Project Tools (CLAUDE-P40-VW2, narrowed by
-                                       CLAUDE-GO-DNA-01) -------------------------------------------
-                                       CLAUDE-P40-VW2 originally moved these controls here wholesale
-                                       from the Toolbox's own no-selection state. CLAUDE-GO-DNA-01's
-                                       panel-zoning correction partially reverses that: "Remove
-                                       Project" (project-lifecycle, not file-territory) moved BACK to
-                                       the Toolbox's own "nothing selected" Project Administration
-                                       disclosure. What remains here - Add Documents/Add Text Record/
-                                       Register a Document Revision/Add External Source/Removed
-                                       Items - are genuinely file-territory actions (they add, revise,
-                                       or recover a Document Source), so they stay in Lists,
-                                       consistent with "LEFT = evidence territory... folders, files"
-                                       rather than being swept out merely because the group used to be
-                                       labeled one thing. Closed by default (unlike Documents, nothing
-                                       here has a "currently selected" state to auto-open) - the same
-                                       tree-toggle hover/pin/collapse mechanism as every sibling branch
-                                       above, not a second navigation tree. #}
-                                    <li class="tree-node" data-tree-node>
-                                        <button type="button" class="tree-toggle launcher-link" data-tree-parent data-ui-ref="lists.project.tools" aria-expanded="false">
-                                            <span class="tree-label">Project Tools</span>
-                                        </button>
-                                        <ul class="tree-children">
-                                            <li class="tree-node launcher-project-tools">
-                                                {# CLAUDE-GO-DNA-01 (Panel Zoning): "Remove Project" moved to
-                                                   the Toolbox's own "nothing selected" Project Administration
-                                                   disclosure (templates/case_workspace.html) - a project-
-                                                   lifecycle/governed action, not a file-territory action, per
-                                                   the same zoning correction as the branches removed above.
-                                                   Same route, same is_project_owner/is_admin gate, unchanged. #}
-                                                {% call macros.subdisclosure('+ Add Documents', html_id='project-sources-add-document') %}
-                                                    <form class="workspace-form" method="post" enctype="multipart/form-data" action="{{ url_for('workspace.add_document_source', project_id=project_id) }}" data-ui-ref="lists.project.tools.add-document">
-                                                        {# CLAUDE-MM3: .xlsx added to match routes/workspace.py's own
-                                                           ALLOWED_DOCUMENT_EXTENSIONS - the server-side check is the
-                                                           real enforcement, but this hint must stay in sync or Chrome
-                                                           silently filters an already-selected .xlsx out of the
-                                                           FileList before the form can even submit it. #}
-                                                        <input type="file" name="document" accept=".pdf,.docx,.txt,.csv,.md,.xlsx" required>
-                                                        <button type="submit">Add Document</button>
-                                                    </form>
-                                                {% endcall %}
-                                                {% call macros.subdisclosure('+ Add Text Record') %}
-                                                    <form class="workspace-form" method="post" action="{{ url_for('workspace.add_text_record_source', project_id=project_id) }}" data-ui-ref="lists.project.tools.add-text-record">
-                                                        <input type="text" name="title" placeholder="Title (e.g. Site visit note &mdash; May 3)" required>
-                                                        <textarea name="content" placeholder="Content" required></textarea>
-                                                        <button type="submit">Add Record</button>
-                                                    </form>
-                                                {% endcall %}
-                                                {% set revisable_document_sources = active_sources|rejectattr("kind", "equalto", "drawing")|rejectattr("superseded_by_source_id")|list %}
-                                                {% call macros.subdisclosure('+ Register a Document Revision', html_id='project-sources-revise-document') %}
-                                                    {% if revisable_document_sources %}
-                                                    {% for source in revisable_document_sources %}
-                                                    <form class="workspace-form" method="post" enctype="multipart/form-data"
-                                                          action="{{ url_for('workspace.revise_document_source', project_id=project_id, source_id=source.id) }}"
-                                                          data-ui-ref="lists.project.tools.revise-document">
-                                                        <label style="font-family:var(--font-mono);font-size:0.85rem;color:var(--text-secondary);">{{ source.name }}</label>
-                                                        <input type="file" name="document" accept=".pdf,.docx,.txt,.csv,.md,.xlsx" required>
-                                                        <button type="submit">Register Revision</button>
-                                                    </form>
-                                                    {% endfor %}
-                                                    {% else %}
-                                                    <p class="pane-note" data-ui-ref="lists.project.tools.revise-document.empty">No revisable documents (add one via "+ Add Documents" or "+ Add Text Record" first).</p>
-                                                    {% endif %}
-                                                {% endcall %}
-                                                {% call macros.subdisclosure('+ Add External Source') %}
-                                                    <p style="font-size:0.85rem;color:var(--text-secondary);" data-ui-ref="lists.project.tools.add-external-source">
-                                                        Not yet available &mdash; no external source connector is configured for this deployment.
-                                                    </p>
-                                                {% endcall %}
+                    {# CLAUDE-PROJECT-SURFACE-CONSOLIDATION-01 (Parts B/C/E):
+                       "Files" and "Project Tools" retired from the rail -
+                       Product Owner: the left rail is "principally: project
+                       switching + project/evidence navigation, not an action
+                       drawer or administration panel."
 
-                                                {# CLAUDE-P40-E3A, Section 8's own note preserved: "Removed
-                                                   Projects" cross-link stays a separate leaf elsewhere in
-                                                   this same panel (see below) - this owns only removed
-                                                   DOCUMENTS within THIS Project. #}
-                                                {% call macros.subdisclosure('Removed Items (' ~ removed_sources|length ~ ')', html_id='project-removed-items') %}
-                                                    {% if removed_sources %}
-                                                    <ul class="source-list" data-ui-ref="lists.project.tools.removed-items">
-                                                        {% for source in removed_sources %}
-                                                        <li class="source-item">
-                                                            {{ source.name }}
-                                                            <br><small class="text-muted">Removed {{ source.removed_at }}{% if source.removed_by %} by {{ source.removed_by }}{% endif %}</small>
-                                                            <form method="post" action="{{ url_for('workspace.restore_document_route', project_id=project_id, source_id=source.id) }}">
-                                                                <button type="submit" class="link-button" data-ui-ref="lists.project.tools.removed-items.restore">Restore Document</button>
-                                                            </form>
-                                                        </li>
-                                                        {% endfor %}
-                                                    </ul>
-                                                    {% else %}
-                                                    <p class="pane-note" data-ui-ref="lists.project.tools.removed-items">No removed Documents in this Project.</p>
-                                                    {% endif %}
-                                                {% endcall %}
-                                            </li>
-                                        </ul>
-                                    </li>
+                       Files: NOT deleted, NOT the future hybrid-storage
+                       capability - traced first (Part B's own requirement):
+                       the route (workspace.show_workspace?view=files, the
+                       real Data Room/Design-Builder governed folder view
+                       built in CLAUDE-RFP27-TERRITORY-01) is completely
+                       untouched and stays fully reachable via Overview's own
+                       pre-existing, independent "Open Files ->" link
+                       (display.overview.files-link, CLAUDE-POSTCAMEL-META-T01
+                       - not new, was already a second entry point before this
+                       stage). Removing this rail leaf is de-duplication, not
+                       retirement - Files stays Active, just not in the rail.
+
+                       Project Tools: Add Documents got a real, decided new
+                       Active home (Admin -> Project Data Management, Part E -
+                       see templates/reset_project_data.html), reusing the
+                       exact same workspace.add_document_source route, so its
+                       own rail copy is a removed duplicate, not a parked one.
+                       Removed Items (view + restore already-archived
+                       Documents) was promoted alongside it into Project Data
+                       Management's own "Archive documents" section (Part F),
+                       reusing workspace.remove_document_route/
+                       restore_document_route unchanged - also Active, not
+                       parked. Add Text Record, Register a Document Revision,
+                       and the already-inert Add External Source stub have no
+                       decided new home yet - parked at Reserve / Spare Parts
+                       Yard status per the Product Owner's own lifecycle
+                       grammar; see governance/spare-parts-yard.md for the
+                       durable record (reason parked, promotion trigger,
+                       untouched original routes/forms). #}
                     {% endif %}
                     {# CLAUDE-LEFT-RAIL-01: every OTHER accessible Project as a
                        plain direct switch target - reuses nav_recent_projects

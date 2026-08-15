@@ -493,3 +493,178 @@ architectural expansion for its own sake." The existing priority order stands: f
 work, then reassess `CLAUDE-CA1D-COMPOSER-SPINE-01` Stage 3 from the accepted baseline, with the
 near-term-accelerator seam named above available to fold into that reassessment if and when Stage 3
 is separately authorized.
+
+---
+
+## Addendum (`CLAUDE-GO-DNA-09`) — Arrow/Target/Echo, PM-scope vs. GO investigative chemistry,
+asterisk provenance, and the information-tail/cross-discipline-chain concept
+
+Recorded per `CLAUDE-PROJECT-SURFACE-CONSOLIDATION-01` Parts J–N: a Product Owner instruction to
+preserve a body of investigative-architecture concept **as documentation only** while that stage's
+own actual, bounded implementation work (left-rail/Project Data Management restructuring, the Spin
+UX grammar correction) proceeded. **No code changes accompany this addendum. NOT AUTHORIZED for
+implementation or further design.**
+
+### Arrow / temporary skewer / Target / Echo / Re-aim
+
+A refinement of the `CLAUDE-GO-DNA-02` addendum's own **Load → Aim → Probe → Echo → Interpret →
+Re-aim** rhythm (above), not a second, competing rhythm — same underlying investigative loop, three
+of its stages given sharper names:
+
+- **Arrow** — the directed investigative action itself (DNA-02's "Probe," renamed for the
+  metaphor's own internal consistency: an Arrow is aimed, not merely asked).
+- **Temporary skewer** — the Arrow's flight passes through, and momentarily connects, several
+  pieces of evidence on its way to a Target, without those evidence items becoming permanently
+  linked to each other by virtue of having been passed through together. This is a real, useful
+  distinction from MM6's `record_evidence_relationship` (a *persistent*, named relationship between
+  two endpoints): a skewer is transient investigative context for one Arrow's own flight, not a new
+  standing Relationship row. **No existing primitive represents a transient, non-persisted grouping
+  of evidence read during one investigative act** — `InvestigationStep` records what was examined
+  for a completed step, but a skewer is the concept of "read together in service of one Arrow," a
+  narrower and more transient idea than a full step record. Not built; not investigated further than
+  this naming.
+- **Target** — the investigative destination the Arrow is aimed at: a question, a discipline
+  interface, a specific document passage, a hypothesis. DNA-02's "Aim" stage already names the same
+  underlying act; Target is what Aim aims *at*.
+- **Echo / Re-aim** — unchanged from `CLAUDE-GO-DNA-02`/`CLAUDE-GO-DNA-04`'s own treatment above
+  (Echo may strengthen, weaken, contradict, dissolve, merge, or redirect; Re-aim's schema-ready,
+  code-absent seam is `InvestigationStep.branched_from_step_id`, confirmed still unpopulated by any
+  caller as of `CLAUDE-GO-DNA-05`'s own correction, above).
+
+### PM-defined scope vs. GO's own "investigative chemistry"
+
+A boundary distinct from, and narrower than, the DNA-02 addendum's own coordinator-authority
+boundary (GO may question, never instruct): this one governs **evidence scope**, not decision
+authority. A PM (or a Spin run, once authorized) defines the investigative scope explicitly — the
+disciplines, documents, or questions in play. Within that scope, GO may associate **minimum
+additional evidence** it judges necessary to answer honestly, but that association must be:
+
+1. **Authorized** — within or a direct, traceable extension of the PM-defined scope, never a
+   silent expansion into unrelated project territory.
+2. **Relevant** — actually bears on the question at hand, not merely topically adjacent.
+3. **Minimum-sufficient** — the smallest evidence set that supports an honest answer, not the
+   largest set GO could find. This is the same restraint `CLAUDE-GO-DNA-02`'s own "relevance
+   discrimination" concept (recorded in the `CLAUDE-GO-DNA-03` addendum above) already names from a
+   different angle — GO must not treat everything a search turns up as equally load-bearing.
+4. **Traceable** — every GO-associated item must be identifiable as such, distinct from what the PM
+   originally selected (see the asterisk-provenance grammar immediately below — this is precisely
+   why that grammar exists).
+
+**Never the full corpus.** This is the concrete, named guardrail against a future Spin/GO
+orchestrator treating "gather evidence" as "read everything the project has" — a real risk once a
+comprehensive Spin (this document's own primary subject) is eventually authorized, since a
+comprehensive review is exactly the case where an unbounded evidence pull would be easiest to justify
+and most damaging to relevance/cost/trust. No existing primitive enforces "minimum-sufficient" as a
+constraint today — `Claim.evidence_links`/`evidence_excluded` (`CLAUDE-MM7`) record what WAS used and
+explicitly excluded, but nothing evaluates whether a GATHERED set was minimal. Named, not built.
+
+### Asterisk provenance grammar — PM-selected vs. GO-associated vs. evidence-gap
+
+A visible-provenance concept for any future UI presenting a mixed PM/GO evidence set: text or
+citations the PM themselves selected render plainly; an asterisk (`*`) marks evidence GO associated
+on its own investigative authority (per the "investigative chemistry" scope above); a second,
+distinct use of the same glyph marks an **evidence gap** — a point where evidence that should exist
+does not, or could not be found. **Both are named `*` in the governing prompt's own language, and
+that collision is recorded here honestly rather than silently resolved**: an "I added this" marker
+and an "I looked and found nothing" marker are semantically opposite (presence vs. absence) and must
+never share one glyph in an actual implementation, or a reviewer cannot tell "GO found something
+extra" from "GO looked and came up empty" at a glance. This is a real, named open design question for
+whenever this grammar is authorized — **not resolved by this addendum**, which only preserves the
+underlying distinction (PM-selected / GO-associated / evidence-gap are three states, not two) and
+flags that the two asterisk uses need visually distinct treatment.
+
+**The one hard invariant, regardless of eventual glyph choice**: a GO-associated marker must never be
+rendered in a way that implies PM endorsement or selection. This is the same "characterizes and
+questions, does not decide" boundary `CLAUDE-GO-DNA-02`/`CLAUDE-GO-DNA-03` already establish for GO's
+own conclusions, applied here to evidence PROVENANCE specifically — the PM must always be able to
+tell, at a glance, which evidence they chose to look at and which evidence GO chose to bring in.
+
+**Relationship to `CLAUDE-GO-DNA-07`'s own "under the hood by default, daylight on demand"
+principle** (this same governing document, §4b above, recorded in
+`current/go-dna-01-composer-result-contract-and-panel-zoning.md`): the asterisk itself is the
+"under the hood" signal (a small, quiet marker, not an interruption); the fuller "why is this here /
+what does the gap mean" explanation belongs behind the SAME progressive-disclosure "Show
+Investigation/Why/Trace" affordance that addendum already names — see "Relationship to the DNA-07
+disclosure" below. This addendum does not invent a second disclosure mechanism.
+
+### Information-tail / cross-discipline-chain concept
+
+A named pattern for how a single design decision propagates consequences across disciplines, given
+as two worked examples in the governing prompt:
+
+> geotechnical → structural → foundation → caisson → quantity → estimate → procurement
+>
+> acoustic → mechanical → sleeve → drawing → costing → installation
+
+The product meaning: a change or finding at one end of such a chain has real, traceable downstream
+consequences at every later link, and GO's own value includes noticing where the chain's evidence
+trail actually breaks — a later link exists in the project record but nothing connects it back to the
+earlier link that should have driven it (e.g., a procurement quantity with no traceable geotechnical
+basis, or an installation drawing with no acoustic sleeve requirement behind it).
+
+**Named cross-discipline interfaces are first-class investigative Targets** in their own right (using
+this same addendum's Arrow/Target vocabulary above) — not merely incidental waypoints noticed while
+investigating something else. A future Spin/GO orchestrator should be able to aim an Arrow directly
+AT an interface (e.g., "the geotechnical→structural handoff for this foundation element") rather than
+only ever landing on one by accident while pursuing an unrelated question.
+
+**Conservative characterization is the hard requirement, not a stylistic preference**: when GO cannot
+trace a link in such a chain, the correct characterization is a **"possible information-tail
+discontinuity"** — never a stronger claim ("this was never coordinated," "this is an error") unless
+the evidence actually supports that stronger conclusion. This is the same evidence-discipline
+`CLAUDE-GO-DNA-02`'s own evidence-vs-wondering distinction and `CLAUDE-MM7`'s `CLAIM_CLASS_UNKNOWN`/
+`insufficient_evidence` vocabulary (recorded in the `CLAUDE-GO-DNA-05` addendum above) already
+enforce elsewhere in this corpus, applied here specifically to chain-discontinuity findings — an
+absence of evidence connecting two links is evidence of an information-tail gap, not evidence of a
+project error, and must never be silently upgraded to the latter.
+
+**Relationship to existing evidence-relating machinery**: the same MM6 relationship layer
+(`record_evidence_relationship`/`resolve_relationship_status`, `_MM6_ENDPOINT_LISTS`) already named
+in the `CLAUDE-GO-DNA-02`/`CLAUDE-GO-DNA-04` addenda above as the closest existing primitive for
+pairwise evidence relationships is, again, the closest existing primitive here — a chain is a
+sequence of such pairwise links, and a "discontinuity" is the absence of an expected link at one
+position in that sequence. Whether a chain needs its own first-class object (an ordered, named
+sequence of Relationship endpoints with a discipline label at each link) or can be represented purely
+as an interpretation over existing Relationships remains **unresolved, not investigated by this
+addendum**.
+
+### Design-to-cost translation direction
+
+A specific, bounded investigative direction for GO, distinct from general cross-discipline-chain
+tracing above: **GO looks for design changes absent from estimate assumptions, unpriced specialist
+requirements, and cost allowances with no design basis.** The governing question is always "does this
+number represent the design actually being offered," not "is this number correct" — **GO is
+explicitly not the estimator** and this addendum does not authorize any cost-calculation or
+cost-verification capability. The role is comparative/consistency-checking (does the design and the
+estimate agree on what is being built), not evaluative (is the estimate's own arithmetic or unit
+pricing correct) — the same distinction `CLAUDE-GO-DNA-05`'s own "GO is not the estimator" framing
+would apply if extended to a Claim-producing capability, which this addendum does not build. No
+existing primitive performs design/estimate cross-referencing today; named, not built.
+
+### Relationship to the DNA-07 "Show Investigation/Why/Trace" disclosure (Part N)
+
+Part N of the governing prompt's own request — an optional disclosure exposing Target, PM-selected
+vs. GO-associated evidence, evidence-gaps, relationships tested, Echoes, and rejected hypotheses,
+without flooding the ordinary GO UI — is **already substantially recorded**, not a new concept this
+addendum needs to introduce: `CLAUDE-GO-DNA-07`'s own addendum (§4b of
+`current/go-dna-01-composer-result-contract-and-panel-zoning.md`, cross-referenced above) already
+documents a real, live, wired progressive-disclosure mechanism for the Case/Investigation path
+(`explain_investigation_answer`/`explain_evidence_trust`) that assembles nearly this exact payload
+shape (evidence used, evidence excluded, contradictions, staleness, missing-evidence/abstention,
+recommended next checks) from real `Claim` data — and separately names the one precise gap
+(`ComposerFinding`, the project-level path, has no equivalent trace to reveal because none is
+captured at write time). This addendum adds only what DNA-07 did not yet have vocabulary for: Target
+(this addendum, above), the asterisk provenance grammar for PM-selected vs. GO-associated evidence
+specifically (this addendum, above), and Echo/rejected-hypotheses as explicit fields a future trace
+payload would need to add to `explain_investigation_answer`'s existing shape (rejected hypotheses in
+particular have no existing field anywhere in this corpus — `Claim` records what was concluded and
+excluded, not what was considered and rejected as a candidate explanation). **Do not build a second
+disclosure mechanism when this addendum's concepts are eventually authorized** — extend DNA-07's
+existing one.
+
+### What this addendum changes about the current implementation sequence
+
+Nothing. Concept-preservation only, per `CLAUDE-PROJECT-SURFACE-CONSOLIDATION-01` Part J's own
+explicit instruction to preserve this material as documentation while the stage's actual bounded
+implementation work (left-rail/Project Data Management, Spin UX grammar) proceeded independently. The
+full Spin programme, including every concept this addendum records, remains specified-unbuilt.

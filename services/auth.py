@@ -75,6 +75,31 @@ def is_admin() -> bool:
     return session.get("role") == ROLE_ADMIN
 
 
+def user_can_upload_to_storage() -> bool:
+    """
+    CLAUDE-PROJECT-SURFACE-CONSOLIDATION-01 addendum (Storage Grammar &
+    Public-Trial Entitlement): the ONE centralized choke point every
+    "Upload to Storage" surface (both the New Project folder-upload
+    fieldset and Admin -> Project Data Management's own "Add documents
+    to project") checks - client-side (grey the control) AND
+    server-side (the actual gate on the route itself), so a public-trial
+    user cannot bypass a cosmetic UI-only restriction by posting
+    directly to the upload route.
+
+    Deliberately, honestly a no-op today: `models.User.ROLES` is
+    `(admin, read_only)` only - this codebase has no real public-trial
+    account/entitlement concept yet (`services/trial_request.py` is a
+    lead-gen "request access" contact-email form, not real account
+    provisioning; there is no self-serve signup flow). Every
+    authenticated user is entitled to Upload today, so this always
+    returns True. When a real trial/managed-plan entitlement distinction
+    is built, THIS function (and only this function) needs to change -
+    every caller already checks through here rather than re-deriving
+    the answer, so nothing else needs to be found and updated.
+    """
+    return True
+
+
 def log_in(user: User) -> None:
     session["user_id"] = user.id
     session["username"] = user.username

@@ -460,10 +460,16 @@ class PriorStagePreservationTests(_BaseTestCase):
         tag = body[start - 40:start + 120]
         self.assertIn("hidden", tag)
 
-    def test_vw2_project_tools_still_relocated_to_lists(self):
+    def test_vw2_project_tools_no_longer_in_lists_or_toolbox(self):
+        # CLAUDE-PROJECT-SURFACE-CONSOLIDATION-01 supersedes this test's
+        # own "still relocated to Lists" premise: Project Tools/Add
+        # Documents is retired from the rail entirely now (promoted to
+        # Admin -> Project Data Management instead, see
+        # governance/spare-parts-yard.md), not merely moved from Toolbox
+        # to Lists. Absent from both surfaces is now the correct check.
         client = self._client_as("vw5_admin", 1)
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
-        self.assertIn('id="project-sources-add-document"', body)
+        self.assertNotIn('id="project-sources-add-document"', body)
         toolbox_start = body.index('id="workspace-toolbox-panel"')
         toolbox = body[toolbox_start:body.index("</aside>", toolbox_start)]
         self.assertNotIn("Add a Document", toolbox)

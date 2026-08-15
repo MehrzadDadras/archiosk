@@ -1,22 +1,28 @@
 /*
  * CLAUDE-SPIN-01 - Spin's selected canonical container grammar.
+ * CLAUDE-PROJECT-SURFACE-CONSOLIDATION-01 (Part I) - compact grammar
+ * correction: no more per-row ON/OFF toggle or All-ON/All-OFF/Return-to-
+ * Baseline button trio. Each row now carries a compact selection circle
+ * (data-spin-selector) meaning "included in the next Spin" - purely local
+ * selection state, changing it never by itself updates the status strip.
+ * Only the single top SPIN button (data-spin-action="spin") commits the
+ * current selection as the active/engaged set. An "All" row
+ * (data-spin-all-toggle) is a convenience that selects/deselects every
+ * discipline row at once - same "control that applies an existing state,
+ * never a state of its own" idiom as base.html's own Appearance-menu "All"
+ * row, kept in sync (checked only when every row already agrees).
+ *
+ * Findings boxes (data-spin-findings) are deliberately never written to
+ * by this file - this prototype layer has no real investigation to
+ * report, so fabricating "[N]"/"[0]" here would violate the "never show
+ * what isn't real" rule. They stay in their honest, permanently-blank
+ * "[ ]" state; a future layer that actually runs an investigation is the
+ * only thing that should ever populate them.
  *
  * Pure client-side prototype state. No fetch/XHR anywhere in this file -
- * every toggle and "All ON"/"All OFF"/"Return to Baseline" only ever
- * mutates the DOM already rendered by templates/_spin_prototype.html.
- * Nothing here persists across a reload, nothing here calls a route,
- * nothing here touches real project data - see that template's own header
+ * nothing here persists across a reload, nothing here calls a route,
+ * nothing here touches real project data - see the template's own header
  * comment for the full scope boundary.
- *
- * CLAUDE-SPIN-00A built three comparison alternatives with a dev-only
- * switcher; the Product Owner selected Alternative A (+ one incorporated
- * pairing from B - see the template's own header comment). This file was
- * simplified accordingly: no more variant switching, no more Engaged/
- * Not-Engaged row regrouping (Alternative B, not adopted), no more visible
- * per-row sequence index or "Sequence" summary (Alternative C, not
- * adopted). `engagedOrder` itself is kept - harmless, never rendered - per
- * the Product Owner's own explicit instruction to preserve the latent
- * engagement-order data without surfacing it in the UI.
  */
 (function () {
     'use strict';
@@ -25,78 +31,97 @@
     if (!statusStrip) return;
 
     var root = statusStrip.closest('.workspace-pane') || document;
-    var rows = Array.prototype.slice.call(root.querySelectorAll('[data-spin-toggle]')).map(function (btn) {
-        return btn.closest('[data-spin-id]');
-    });
+    var rows = Array.prototype.slice.call(root.querySelectorAll('[data-spin-id]'));
+    var allToggle = root.querySelector('[data-spin-all-toggle]');
+    var spinTrigger = root.querySelector('[data-spin-action="spin"]');
     var statusEl = root.querySelector('[data-spin-status]');
     var summaryEl = root.querySelector('[data-spin-summary]');
-    var engagedOrder = []; // ordered list of data-spin-id values, in engagement order - unsurfaced
+    var selectionOrder = []; // ordered list of data-spin-id values, in selection order - unsurfaced
 
-    function isEngaged(row) {
-        return row.getAttribute('data-engaged') === 'true'
-            || row.querySelector('[data-spin-toggle]').getAttribute('aria-pressed') === 'true';
+    function isSelected(row) {
+        return row.getAttribute('data-selected') === 'true';
     }
 
-    function engagedRows() {
-        return rows.filter(isEngaged);
+    function selectedRows() {
+        return rows.filter(isSelected);
     }
 
-    function setRowState(row, engaged) {
-        var toggle = row.querySelector('[data-spin-toggle]');
-        toggle.setAttribute('aria-pressed', engaged ? 'true' : 'false');
-        toggle.textContent = engaged ? 'ON' : 'OFF';
-        row.setAttribute('data-engaged', engaged ? 'true' : 'false');
+    function setRowSelected(row, selected) {
+        var selector = row.querySelector('[data-spin-selector]');
+        selector.setAttribute('aria-pressed', selected ? 'true' : 'false');
+        row.setAttribute('data-selected', selected ? 'true' : 'false');
 
         var id = row.getAttribute('data-spin-id');
-        var pos = engagedOrder.indexOf(id);
-        if (engaged && pos === -1) {
-            engagedOrder.push(id);
-        } else if (!engaged && pos !== -1) {
-            engagedOrder.splice(pos, 1);
+        var pos = selectionOrder.indexOf(id);
+        if (selected && pos === -1) {
+            selectionOrder.push(id);
+        } else if (!selected && pos !== -1) {
+            selectionOrder.splice(pos, 1);
         }
     }
 
-    function render() {
-        var engaged = engagedRows();
-        var active = engaged.length > 0;
+    function syncAllToggle() {
+        if (!allToggle) return;
+        var allSelected = rows.length > 0 && rows.every(isSelected);
+        allToggle.setAttribute('aria-pressed', allSelected ? 'true' : 'false');
+    }
 
-        if (statusEl) {
-            statusEl.textContent = active ? 'Spin Active' : 'Baseline';
-            statusEl.classList.toggle('review-state-baseline', !active);
-            statusEl.classList.toggle('review-state-spin-active', active);
-        }
-
-        if (summaryEl) {
-            summaryEl.textContent = active
-                ? engaged.map(function (r) { return r.getAttribute('data-spin-name'); }).join(' + ')
-                : 'None engaged';
-        }
+    function wireDisclosure(toggleBtn, detail) {
+        if (!toggleBtn || !detail) return;
+        toggleBtn.addEventListener('click', function () {
+            var expanded = toggleBtn.getAttribute('aria-expanded') === 'true';
+            toggleBtn.setAttribute('aria-expanded', expanded ? 'false' : 'true');
+            toggleBtn.textContent = expanded ? '+' : '−';
+            detail.hidden = expanded;
+        });
     }
 
     rows.forEach(function (row) {
-        var toggle = row.querySelector('[data-spin-toggle]');
-        toggle.addEventListener('click', function () {
-            setRowState(row, toggle.getAttribute('aria-pressed') !== 'true');
-            render();
+        var selector = row.querySelector('[data-spin-selector]');
+        selector.addEventListener('click', function () {
+            // Selecting/deselecting a row is local state only - never
+            // updates the status strip and never runs anything; only the
+            // SPIN button below commits a selection.
+            setRowSelected(row, selector.getAttribute('aria-pressed') !== 'true');
+            syncAllToggle();
         });
+        wireDisclosure(row.querySelector('[data-spin-disclosure]'), row.nextElementSibling);
     });
 
-    root.querySelectorAll('[data-spin-action]').forEach(function (btn) {
-        btn.addEventListener('click', function () {
-            var action = btn.getAttribute('data-spin-action');
-            if (action === 'all-on') {
-                rows.forEach(function (row) { setRowState(row, true); });
-            } else {
-                // "all-off" and "reset" (Return to Baseline) both fully
-                // disengage every discipline - kept as two separate,
-                // separately-labeled controls per the original comparison
-                // brief even though they currently do the same thing.
-                rows.forEach(function (row) { setRowState(row, false); });
-                engagedOrder.length = 0;
+    var allRow = root.querySelector('[data-spin-all-row]');
+    if (allRow) {
+        wireDisclosure(allRow.querySelector('[data-spin-disclosure]'), allRow.nextElementSibling);
+    }
+
+    if (allToggle) {
+        allToggle.addEventListener('click', function () {
+            var makeSelected = allToggle.getAttribute('aria-pressed') !== 'true';
+            rows.forEach(function (row) { setRowSelected(row, makeSelected); });
+            syncAllToggle();
+        });
+    }
+
+    if (spinTrigger) {
+        spinTrigger.addEventListener('click', function () {
+            var selected = selectedRows();
+            var active = selected.length > 0;
+
+            if (statusEl) {
+                statusEl.textContent = active ? 'Spin Active' : 'Baseline';
+                statusEl.classList.toggle('review-state-baseline', !active);
+                statusEl.classList.toggle('review-state-spin-active', active);
             }
-            render();
-        });
-    });
 
-    render();
+            if (summaryEl) {
+                summaryEl.textContent = active
+                    ? selected.map(function (r) { return r.getAttribute('data-spin-name'); }).join(' + ')
+                    : 'None engaged';
+            }
+
+            // Findings boxes are deliberately left untouched here - see
+            // this file's own header comment.
+        });
+    }
+
+    syncAllToggle();
 })();
