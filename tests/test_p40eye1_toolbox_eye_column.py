@@ -292,8 +292,18 @@ class EyeScaffoldMarkupTests(_BaseTestCase):
         self.assertIn(">Eye<", body)
         self.assertIn('id="eye-drop-target"', body)
         self.assertIn('id="eye-drop-target-empty"', body)
-        self.assertIn("Paste or drop an image here to preview it.", body)
-        self.assertIn("Not saved anywhere", body)
+        # CLAUDE-EYE-SURFACE-CORRECTION-01 (Product Owner: "Eye is not an
+        # image-drop utility... Eye is the persistent secondary working/
+        # context surface") superseded the old "Paste or drop an image
+        # here to preview it." default text - that copy made paste/drop
+        # read as Eye's whole identity rather than one of its
+        # capabilities. static/js/eye_pane.js's own updateEmptyStateText()
+        # still swaps this for "Choose a document to compare." while
+        # Compare is active - see test_appearance_simplify_01_... or the
+        # Eye/Compare test coverage for that behavior, unchanged by this
+        # correction.
+        self.assertIn("Eye — secondary context surface", body)
+        self.assertIn("Not saved", body)
 
     def test_drop_target_is_a_real_focusable_group_not_a_decorative_div(self):
         html = _BASE_HTML_PATH.read_text(encoding="utf-8")

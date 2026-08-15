@@ -938,28 +938,25 @@
         </div>
         {% endfor %}
 
-        {% call macros.subdisclosure('+ Add drawing Source to this Investigation') %}
-            <form class="workspace-form" method="post" enctype="multipart/form-data"
-                  action="{{ url_for('workspace.add_drawing_source', project_id=project_id, case_id=active_case.id) }}">
-                <input type="file" name="drawing" accept=".png,.jpg,.jpeg" required>
-                <button type="submit">Add Drawing</button>
-            </form>
-        {% endcall %}
-
-        {% set drawing_sources = active_sources|selectattr("kind", "equalto", "drawing")|selectattr("id", "in", active_case.source_ids)|list %}
-        {% if drawing_sources %}
-        {% call macros.subdisclosure('+ Register a new revision of an existing drawing Source') %}
-            {% for source in drawing_sources if not source.superseded_by_source_id %}
-            <form class="workspace-form" method="post" enctype="multipart/form-data"
-                  action="{{ url_for('workspace.revise_source', project_id=project_id, source_id=source.id) }}">
-                <input type="hidden" name="case_id" value="{{ active_case.id }}">
-                <label style="font-family:var(--font-mono);font-size:0.85rem;color:var(--text-secondary);">{{ source.name }}</label>
-                <input type="file" name="drawing" accept=".png,.jpg,.jpeg" required>
-                <button type="submit">Register Revision</button>
-            </form>
-            {% endfor %}
-        {% endcall %}
-        {% endif %}
+        {# CLAUDE-EYE-SURFACE-CORRECTION-01 (Product Owner): "do not
+           surface folder-creation/document-management prompts as
+           investigation content in the Display... Folder/document
+           management now belongs under Admin → Project Data
+           Management... do not duplicate Admin functions in the main
+           workspace." The two file-upload forms that used to render
+           here ("+ Add drawing Source to this Investigation" / "+
+           Register a new revision of an existing drawing Source") are
+           exactly that duplication - document-management actions
+           surfaced as investigation content. Removed from Display, not
+           deleted: workspace.add_drawing_source/workspace.revise_source
+           (routes/workspace.py) are untouched and still fully
+           functional, simply no longer reachable from this specific
+           surface - the same "preserve the underlying governed
+           capability, relocate/retire only the UI entry point" pattern
+           this repo already used for Remove Document (CLAUDE-PROJECT-
+           SURFACE-CONSOLIDATION-01). Legitimate investigation content
+           (Activities, Discussion, Findings via Toolbox, governance
+           history) is unchanged below. #}
 
         {# CLAUDE-P40-E1A, Section A: the Investigation's own conversation
            now renders at the ONE shared physical dock position (after

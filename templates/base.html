@@ -899,9 +899,23 @@
                        the SAME drop/paste zone (#eye-drop-target) in both
                        states, so dropping/pasting a new image while one
                        is already shown just replaces it. #}
-                    <div class="eye-drop-target" id="eye-drop-target" data-ui-ref="eye.drop-target" tabindex="0" role="group" aria-label="Paste or drop an image to preview it here" data-project-id="{{ project_id }}">
-                        <p class="eye-drop-target-empty" id="eye-drop-target-empty">Paste or drop an image here to preview it.</p>
-                        <p class="eye-drop-target-note" id="eye-drop-target-note">Not saved anywhere - cleared when you navigate away or reload.</p>
+                    {# CLAUDE-EYE-SURFACE-CORRECTION-01: "Eye is not an
+                       image-drop utility... Eye is the persistent
+                       secondary working/context surface" (Product Owner).
+                       Server-rendered default text/aria-label reflect that
+                       identity - static/js/eye_pane.js's own
+                       updateEmptyStateText() overrides the visible text
+                       exactly as before (still "Choose a document to
+                       compare." while Compare is active and Eye is
+                       empty), this is only the non-JS/first-paint
+                       fallback and the two states that text actually
+                       toggles between. Paste/drop remain fully wired
+                       (dragover/drop/paste listeners, data-project-id) -
+                       a capability of this surface, not its defining
+                       visual. #}
+                    <div class="eye-drop-target" id="eye-drop-target" data-ui-ref="eye.drop-target" tabindex="0" role="group" aria-label="Eye - secondary context surface. Paste or drop an image, or send a Project Document here." data-project-id="{{ project_id }}">
+                        <p class="eye-drop-target-empty" id="eye-drop-target-empty">Eye — secondary context surface</p>
+                        <p class="eye-drop-target-note" id="eye-drop-target-note">Paste/drop an image, or send a document from Documents. Not saved — cleared on reload.</p>
                         <div class="eye-canvas" id="eye-canvas" data-ui-ref="eye.canvas" hidden>
                             <div class="eye-canvas-toolbar" role="toolbar" aria-label="Image view controls">
                                 <button type="button" class="eye-canvas-btn" id="eye-canvas-zoom-out" data-ui-ref="eye.canvas.zoom-out" aria-label="Zoom out" title="Zoom out">&minus;</button>

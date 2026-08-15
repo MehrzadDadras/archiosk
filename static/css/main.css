@@ -3746,19 +3746,16 @@ html.toolbox-hidden .workspace-right-column {
     padding: 0 0.7rem 0.7rem;
     scrollbar-color: transparent transparent;
 }
-/* CLAUDE-P40-EYE1, Section 4: a real (not decorative) drop target - a
-   dashed border reads as "things go here" without implying a filled/
-   bordered "card" the CLAUDE-P40-E1A-VISUAL de-boxing pass deliberately
-   removed elsewhere (this is a genuinely functional boundary - Section
-   4's own "select this to paste/drop" affordance - not a decorative
-   container, so it is exempt from that pass the same way .finding-card/
-   .delegation-choice already are). --surface-secondary (a step above
-   the pane's own --surface-primary, the same "grouped/interactive
-   sub-region" meaning it already carries elsewhere in this file) marks
-   it as its own distinct drop zone within the pane, not a repaint of
-   the whole pane. static/js/eye_pane.js toggles .eye-drop-target-active
-   during a real dragover/dragenter (Section 4's own "visually reacts to
-   drag-over"). */
+/* CLAUDE-P40-EYE1, Section 4: a real (not decorative) drop target.
+   CLAUDE-EYE-SURFACE-CORRECTION-01 (Product Owner: "Eye is not an
+   image-drop utility... remove the oversized dashed drop-zone treatment
+   from the normal empty state"): the dashed border + --surface-secondary
+   fill used to be PERMANENT, dominating the panel even at rest - moved
+   to the :focus-visible/.eye-drop-target-active states only (a real
+   keyboard focus, or an actual dragover in progress), so the quiet
+   default reads as part of the pane, not as a standing "drop things
+   here" box. Paste/drop/click-to-focus remain fully functional either
+   way - this is a visual change only, not a capability change. */
 .eye-drop-target {
     flex: 1 1 auto;
     min-height: 120px;
@@ -3769,9 +3766,8 @@ html.toolbox-hidden .workspace-right-column {
     gap: 0.5rem;
     text-align: center;
     padding: 1rem;
-    border: 2px dashed var(--border-strong);
+    border: 2px solid transparent;
     border-radius: 6px;
-    background: var(--surface-secondary);
     cursor: pointer;
 }
 .eye-drop-target:focus-visible {
@@ -3779,7 +3775,7 @@ html.toolbox-hidden .workspace-right-column {
     outline-offset: 2px;
 }
 .eye-drop-target.eye-drop-target-active {
-    border-color: var(--machine-blue);
+    border: 2px dashed var(--machine-blue);
     background: var(--surface-hover);
 }
 .eye-drop-target-empty {

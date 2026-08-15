@@ -71,13 +71,17 @@
         return projectId ? 'beehive:panel:compare-active:' + projectId : null;
     }
 
+    // CLAUDE-EYE-SURFACE-CORRECTION-01: "Eye — secondary context surface"
+    // is the quiet neutral default (Part 1) - "Choose a document to
+    // compare." only while Compare is active AND Eye holds nothing, same
+    // as before this correction.
     function updateEmptyStateText() {
         if (!emptyState) return;
         var eyeIsEmpty = canvas.hidden && savedViewEl.hidden && documentView.hidden;
         if (!eyeIsEmpty) return;
         emptyState.textContent = compareActive
             ? 'Choose a document to compare.'
-            : 'Paste or drop an image here to preview it.';
+            : 'Eye — secondary context surface';
     }
 
     function setCompareActive(next, persist) {
