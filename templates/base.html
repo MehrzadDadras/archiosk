@@ -845,53 +845,25 @@
         </div>
 
         {% if project_id is defined and workspace is defined %}
-        {# ---------------- The right column: Toolbox above Eye (CLAUDE-P40-EYE1) ----
+        {# ---------------- The right column: Eye above Toolbox (CLAUDE-EYE-TOOLBOX-
+           LAYOUT-01, supersedes CLAUDE-P40-EYE1's own "Toolbox above Eye" -
+           Product Owner: "Eye above = current guidance, comparison state,
+           findings, next-step instruction; Toolbox below = persistent
+           working tool/mode") ----
            Mirrors the Lists/Thumbnails split (CLAUDE-P40-VW7A-QA2) on the
            opposite side: one full-height column, sibling of Lists AND of
            .workspace-main-column inside .app-shell-body (never stopping
            at the Display/Chat divider - Section 1's own explicit
-           requirement), divided vertically into Toolbox (upper) and Eye
-           (lower) by a draggable divider. The EXISTING toolbox-divider/
-           html.toolbox-hidden show/hide mechanism (CLAUDE-P40-E3A,
-           Section 7) now targets this WHOLE column, not .workspace-pane-
-           toolbox alone (Section 3's own "apply it to the complete right
-           column") - aria-controls updated to match what is actually
-           being toggled. #}
+           requirement), divided vertically into Eye (upper) and Toolbox
+           (lower) by a draggable, lockable divider. The EXISTING
+           toolbox-divider/html.toolbox-hidden show/hide mechanism
+           (CLAUDE-P40-E3A, Section 7) still targets this WHOLE column,
+           not either pane alone - aria-controls unchanged, only the
+           panes' own order inside it flipped. #}
         <button type="button" class="panel-divider panel-divider-toolbox" id="toolbox-divider" data-ui-ref="shell.toolbox-divider" aria-expanded="true" aria-controls="workspace-right-column" aria-label="Collapse Toolbox and Eye"></button>
         <div class="workspace-right-column" id="workspace-right-column">
-            {# ---------------- The one Toolbox (CLAUDE-P40-E3A, Section 8) --------
-               Shell-owned markup (one definition, one place). Content
-               comes from {% block toolbox %}, filled in only by
-               case_workspace.html. CLAUDE-P40-EYE1: no longer owns its
-               own width/background/flex-shrink - .workspace-right-column
-               (above) now owns those, the same "outer column owns
-               sizing, inner pane owns its own scroll" split
-               .launcher-panel/.lists-pane already established. #}
-            <aside class="workspace-pane-toolbox" id="workspace-toolbox-panel" data-ui-ref="toolbox.panel">
-                {# CLAUDE-P40-EYE1, Section 2: "clear collapse and restore
-                   controls" - floats over the top-right corner rather
-                   than a dedicated header row, since case_workspace.html's
-                   own {% block toolbox %} already renders its own real
-                   <h2 data-ui-ref="toolbox.heading">Toolbox</h2> as its
-                   first child - this deliberately does not duplicate or
-                   wrap that heading. #}
-                <button type="button" class="toolbox-maximize-btn" id="toolbox-maximize-btn" data-ui-ref="toolbox.maximize" aria-pressed="false" aria-label="Maximize Toolbox">&#10530;</button>
-                {% block toolbox %}{% endblock %}
-            </aside>
-            {# CLAUDE-P40-EYE1, Section 2: draggable horizontal divider
-               between Toolbox and Eye - same role="separator"/pointer-
-               drag/keyboard-step/percentage-based idiom as the Lists/
-               Thumbnails divider (CLAUDE-P40-VW7A-QA2), reused rather
-               than invented fresh. Unlike Lists/Thumbnails, Eye is never
-               hidden/shown independently (Section 4: a permanent
-               structural surface from this stage on) - only the SPLIT
-               proportion is adjustable, all the way to "practically
-               collapsed" for either pane, so this divider is never
-               itself [hidden]. #}
-            <div class="toolbox-eye-divider" id="toolbox-eye-divider" data-ui-ref="shell.toolbox-eye-divider"
-                 role="separator" aria-orientation="horizontal" aria-label="Resize Toolbox/Eye split"
-                 tabindex="0" aria-valuemin="8" aria-valuemax="92"></div>
-            {# ---------------- The Eye (CLAUDE-P40-EYE1) --------------------------------
+            {# ---------------- The Eye (CLAUDE-P40-EYE1; CLAUDE-EYE-TOOLBOX-LAYOUT-01
+               moved it here, first in the column) --------------------------------
                Structural scaffold ONLY (Section 4's own explicit scope
                boundary) - a clear heading, a neutral empty state, and a
                visually understandable paste/drop TARGET (the target
@@ -966,6 +938,45 @@
                     </div>
                 </div>
             </div>
+            {# CLAUDE-EYE-TOOLBOX-LAYOUT-01: draggable, LOCKABLE horizontal
+               divider between Eye and Toolbox - same role="separator"/
+               pointer-drag/keyboard-step/percentage-based idiom the
+               Lists/Thumbnails divider (CLAUDE-P40-VW7A-QA2) already
+               established, plus a new compact lock/unlock toggle living
+               INSIDE the divider's own thin strip (Part 3/6 - "keep the
+               control compact... do not add a large lock button
+               elsewhere"). Locked, the split position cannot be dragged;
+               unlocked, dragging resumes - independent of the separate
+               main-panel (Display/Chat) lock below. Neither the divider
+               nor Eye is ever [hidden] - only the SPLIT proportion is
+               adjustable, all the way to "practically collapsed" for
+               either pane. #}
+            <div class="toolbox-eye-divider" id="toolbox-eye-divider" data-ui-ref="shell.toolbox-eye-divider"
+                 role="separator" aria-orientation="horizontal" aria-label="Resize Eye/Toolbox split"
+                 tabindex="0" aria-valuemin="8" aria-valuemax="92">
+                <button type="button" class="divider-lock-btn" id="toolbox-eye-lock-btn" data-ui-ref="shell.toolbox-eye-lock" aria-pressed="false" aria-label="Lock the Eye/Toolbox split">&#128275;</button>
+            </div>
+            {# ---------------- The one Toolbox (CLAUDE-P40-E3A, Section 8; CLAUDE-
+               EYE-TOOLBOX-LAYOUT-01 moved it here, second/lower in the
+               column) --------
+               Shell-owned markup (one definition, one place). Content
+               comes from {% block toolbox %}, filled in only by
+               case_workspace.html. CLAUDE-P40-EYE1: no longer owns its
+               own width/background/flex-shrink - .workspace-right-column
+               (above) now owns those, the same "outer column owns
+               sizing, inner pane owns its own scroll" split
+               .launcher-panel/.lists-pane already established. #}
+            <aside class="workspace-pane-toolbox" id="workspace-toolbox-panel" data-ui-ref="toolbox.panel">
+                {# CLAUDE-P40-EYE1, Section 2: "clear collapse and restore
+                   controls" - floats over the top-right corner rather
+                   than a dedicated header row, since case_workspace.html's
+                   own {% block toolbox %} already renders its own real
+                   <h2 data-ui-ref="toolbox.heading">Toolbox</h2> as its
+                   first child - this deliberately does not duplicate or
+                   wrap that heading. #}
+                <button type="button" class="toolbox-maximize-btn" id="toolbox-maximize-btn" data-ui-ref="toolbox.maximize" aria-pressed="false" aria-label="Maximize Toolbox">&#10530;</button>
+                {% block toolbox %}{% endblock %}
+            </aside>
         </div>
         {% endif %}
     </div>
@@ -1291,23 +1302,38 @@
     </script>
     {% if project_id is defined and workspace is defined %}
     <script nonce="{{ csp_nonce }}">
-        // CLAUDE-P40-EYE1, Section 2: draggable divider between Toolbox
-        // and Eye - the SAME percentage-based pointer-drag/keyboard-step/
+        // CLAUDE-P40-EYE1, Section 2: draggable divider between Eye and
+        // Toolbox - the SAME percentage-based pointer-drag/keyboard-step/
         // double-click-restore pattern as the Lists/Thumbnails divider
         // just above (CLAUDE-P40-VW7A-QA2), reused rather than invented
         // fresh. Unlike that one, there is no show()/hide() API here -
         // Eye is never independently hidden (Section 4: a permanent
         // pane from this stage on), only its SIZE is adjustable, so this
-        // script only ever needs to manage --toolbox-height.
+        // script only ever needs to manage --toolbox-height (still the
+        // TOOLBOX's own size, regardless of which end of the column it
+        // now occupies - CLAUDE-EYE-TOOLBOX-LAYOUT-01 only flipped
+        // ORDER, never renamed this token).
         // Persistence: localStorage, per-Project (beehive:panel:
         // toolbox-eye:{{ project_id }}) - matching Toolbox's OWN
         // existing show/hide preference scoping (per-Project, unlike
         // Lists' reviewer-wide one), the "the lightest existing
         // preference mechanism" already established for this exact
         // panel family, not a new scoping convention invented for Eye.
+        //
+        // CLAUDE-EYE-TOOLBOX-LAYOUT-01: Eye moved above Toolbox, so the
+        // pointer-drag/keyboard-arrow directionality below is inverted
+        // from CLAUDE-P40-EYE1's own original math - "drag/arrow the
+        // divider DOWN" must still shrink whichever pane the divider
+        // moved INTO (now Toolbox, below), not grow it. Also adds a
+        // compact lock toggle (#toolbox-eye-lock-btn, living inside the
+        // divider's own strip) - locked, every resize path below no-ops;
+        // unlocked, all of them resume. Persisted independently of the
+        // split position itself and independently of the separate
+        // main-panel (Display/Chat) lock in case_workspace.js.
         (function () {
             var column = document.querySelector('.workspace-right-column');
             var divider = document.getElementById('toolbox-eye-divider');
+            var lockBtn = document.getElementById('toolbox-eye-lock-btn');
             var maximizeBtn = document.getElementById('toolbox-maximize-btn');
             var eyeMaximizeBtn = document.getElementById('eye-maximize-btn');
             if (!column || !divider) return;
@@ -1316,7 +1342,9 @@
             var MAX_PCT = 92;
             var DEFAULT_PCT = 60;
             var heightKey = 'beehive:panel:toolbox-eye:{{ project_id }}';
+            var lockedKey = 'beehive:panel:toolbox-eye-locked:{{ project_id }}';
             var preMaximizePct = null;
+            var locked = false;
 
             function clamp(pct) { return Math.max(MIN_PCT, Math.min(MAX_PCT, pct)); }
 
@@ -1330,9 +1358,41 @@
                 return clamped;
             }
 
+            function setLocked(next, persist) {
+                locked = next;
+                divider.classList.toggle('locked', locked);
+                if (lockBtn) {
+                    lockBtn.setAttribute('aria-pressed', String(locked));
+                    lockBtn.textContent = locked ? '\u{1F512}' : '\u{1F513}';
+                    lockBtn.setAttribute('aria-label', locked ? 'Unlock the Eye/Toolbox split' : 'Lock the Eye/Toolbox split');
+                }
+                if (persist !== false) {
+                    try { window.localStorage.setItem(lockedKey, locked ? 'true' : 'false'); } catch (e) { /* ignore */ }
+                }
+            }
+
             var stored = null;
             try { stored = window.localStorage.getItem(heightKey); } catch (e) { /* ignore */ }
             applyPct(stored ? parseFloat(stored) : DEFAULT_PCT, false);
+
+            var storedLocked = null;
+            try { storedLocked = window.localStorage.getItem(lockedKey); } catch (e) { /* ignore */ }
+            setLocked(storedLocked === 'true', false);
+
+            if (lockBtn) {
+                // stopPropagation on BOTH events - the lock button is a
+                // descendant of the divider, which owns its own
+                // pointerdown/click-adjacent drag-start listener below;
+                // without this, pressing the lock button would also
+                // start a drag (or, once locked, do nothing because the
+                // divider's own handler now no-ops - either way the
+                // click must never reach the divider's own listeners).
+                lockBtn.addEventListener('pointerdown', function (e) { e.stopPropagation(); });
+                lockBtn.addEventListener('click', function (e) {
+                    e.stopPropagation();
+                    setLocked(!locked);
+                });
+            }
 
             var dragStartY = null;
             var dragStartPct = null;
@@ -1341,7 +1401,12 @@
                 if (dragStartY === null || !dragTotalHeight) return;
                 var deltaPx = e.clientY - dragStartY;
                 var deltaPct = (deltaPx / dragTotalHeight) * 100;
-                applyPct(dragStartPct + deltaPct);
+                // Eye is now ABOVE Toolbox - dragging the divider DOWN
+                // must shrink Toolbox (below it), not grow it, so the
+                // delta is subtracted here (CLAUDE-P40-EYE1's own
+                // original math added it, correct only for the old
+                // Toolbox-above-Eye order).
+                applyPct(dragStartPct - deltaPct);
             }
             function onPointerUp() {
                 dragStartY = null;
@@ -1351,6 +1416,7 @@
                 document.removeEventListener('pointerup', onPointerUp);
             }
             divider.addEventListener('pointerdown', function (e) {
+                if (locked || (lockBtn && e.target === lockBtn)) return;
                 dragStartY = e.clientY;
                 dragTotalHeight = column.clientHeight || 1;
                 dragStartPct = parseFloat(getComputedStyle(column).getPropertyValue('--toolbox-height')) || DEFAULT_PCT;
@@ -1359,13 +1425,16 @@
                 document.addEventListener('pointerup', onPointerUp);
                 e.preventDefault();
             });
-            divider.addEventListener('dblclick', function () { applyPct(DEFAULT_PCT); });
+            divider.addEventListener('dblclick', function () { if (!locked) applyPct(DEFAULT_PCT); });
 
             var KEY_STEP = 4;
             divider.addEventListener('keydown', function (e) {
+                if (locked) return;
                 var current = parseFloat(divider.getAttribute('aria-valuenow')) || DEFAULT_PCT;
-                if (e.key === 'ArrowUp') { applyPct(current - KEY_STEP); e.preventDefault(); }
-                else if (e.key === 'ArrowDown') { applyPct(current + KEY_STEP); e.preventDefault(); }
+                // Same inversion as the pointer-drag above - ArrowDown
+                // moves the divider down, shrinking Toolbox (below it).
+                if (e.key === 'ArrowUp') { applyPct(current + KEY_STEP); e.preventDefault(); }
+                else if (e.key === 'ArrowDown') { applyPct(current - KEY_STEP); e.preventDefault(); }
                 else if (e.key === 'Home') { applyPct(MIN_PCT); e.preventDefault(); }
                 else if (e.key === 'End') { applyPct(MAX_PCT); e.preventDefault(); }
             });

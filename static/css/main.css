@@ -493,6 +493,17 @@ a:focus-visible, button:focus-visible, input:focus-visible {
        stacking context - verified structurally, not just by omission. */
     z-index: 1;
 }
+/* CLAUDE-EYE-TOOLBOX-LAYOUT-01: quiet gap at rest, revealed only on
+   hover/focus/drag - this used to be Deep Ocean's own scoped exception
+   ("Deep Ocean currently has no visible line between panels; other
+   themes still show separator lines" - Product Owner). Generalized here
+   into the shared base rule so all 5 Appearances behave identically ("do
+   not make Deep Ocean the exception; do not leave old theme-specific
+   borders active elsewhere" - do not differ by Appearance). The
+   collapsed state ([aria-expanded="false"]) is the one deliberate
+   exception, staying visible at rest - it's the only way back to
+   re-expand a hidden panel, so it can't wait for a hover that can't
+   happen because the control can't be found. */
 .panel-divider::before {
     content: "";
     position: absolute;
@@ -501,12 +512,19 @@ a:focus-visible, button:focus-visible, input:focus-visible {
     left: 4px;
     width: 1px;
     background: var(--border);
+    opacity: 0;
+    transition: opacity 0.15s ease;
+}
+.panel-divider[aria-expanded="false"]::before {
+    opacity: 1;
 }
 .panel-divider:hover::before,
-.panel-divider:focus-visible::before {
+.panel-divider:focus-visible::before,
+.panel-divider-toolbox.dragging::before {
     background: var(--machine-blue);
     width: 2px;
     left: 3.5px;
+    opacity: 1;
 }
 .panel-divider[aria-expanded="false"] {
     width: 14px;
@@ -528,11 +546,9 @@ a:focus-visible, button:focus-visible, input:focus-visible {
 .panel-divider-toolbox {
     cursor: ew-resize;
 }
-.panel-divider-toolbox.dragging::before {
-    background: var(--machine-blue);
-    width: 2px;
-    left: 3.5px;
-}
+/* .panel-divider-toolbox.dragging::before's own reveal is now handled by
+   the shared .panel-divider:hover/:focus-visible/.dragging::before rule
+   above (CLAUDE-EYE-TOOLBOX-LAYOUT-01) - no separate rule needed here. */
 /* CLAUDE-P40-E2B1, Section B: one show/hide control (the top bar's
    "Lists" button), a reviewer-wide localStorage preference (not
    per-Project like the old per-Workspace Lists toggle it replaces -
@@ -3524,6 +3540,10 @@ html.toolbox-hidden .workspace-right-column {
     position: relative;
     z-index: 1;
 }
+/* CLAUDE-EYE-TOOLBOX-LAYOUT-01: quiet at rest, revealed on hover/focus/
+   drag - see .panel-divider's own comment above for why this used to be
+   a Deep-Ocean-only exception and is now the shared behavior for every
+   Appearance. */
 .toolbox-eye-divider::before {
     content: "";
     position: absolute;
@@ -3532,6 +3552,8 @@ html.toolbox-hidden .workspace-right-column {
     top: 4px;
     height: 1px;
     background: var(--border);
+    opacity: 0;
+    transition: opacity 0.15s ease;
 }
 .toolbox-eye-divider:hover::before,
 .toolbox-eye-divider:focus-visible::before,
@@ -3539,8 +3561,57 @@ html.toolbox-hidden .workspace-right-column {
     background: var(--machine-blue);
     height: 2px;
     top: 3.5px;
+    opacity: 1;
 }
+/* Locked state deliberately does NOT reveal this line - "a tiny
+   persistent lock-state cue is acceptable, never a full-width bright
+   line merely to indicate locked state" (Product Owner). The lock glyph
+   itself (.divider-lock-btn[aria-pressed="true"] below) is that cue. */
 .toolbox-eye-divider:focus-visible {
+    outline: 2px solid var(--machine-blue);
+    outline-offset: 1px;
+}
+/* CLAUDE-EYE-TOOLBOX-LAYOUT-01: the compact lock/unlock control living
+   INSIDE the divider's own thin strip ("keep the control compact... do
+   not add a large lock button elsewhere... lives in the gap"). Hidden at
+   rest, revealed the same way the divider's own accent line is
+   (hover/focus-within), except when locked - then it stays visible as
+   the persistent "tiny lock-state cue" the divider's own line
+   deliberately does not become. */
+.divider-lock-btn {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 2;
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    border: none;
+    border-radius: 3px;
+    background: var(--surface-secondary);
+    color: var(--text-secondary);
+    font-size: 0.65rem;
+    line-height: 18px;
+    text-align: center;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+}
+.toolbox-eye-divider:hover .divider-lock-btn,
+.toolbox-eye-divider:focus-within .divider-lock-btn,
+.divider-lock-btn:focus-visible,
+.divider-lock-btn[aria-pressed="true"] {
+    opacity: 1;
+}
+.divider-lock-btn:hover {
+    background: var(--surface-hover);
+    color: var(--text-primary);
+}
+.divider-lock-btn[aria-pressed="true"] {
+    color: var(--machine-blue);
+}
+.divider-lock-btn:focus-visible {
     outline: 2px solid var(--machine-blue);
     outline-offset: 1px;
 }
@@ -3548,14 +3619,19 @@ html.toolbox-hidden .workspace-right-column {
 /* CLAUDE-P40-EYE1, Section 4: the Eye pane itself - a structural
    scaffold, not a completed tool. Takes whatever height Toolbox's own
    flex-basis (--toolbox-height) doesn't use, the same "remaining space"
-   idiom .thumbnails-pane already established relative to .lists-pane. */
+   idiom .thumbnails-pane already established relative to .lists-pane.
+   CLAUDE-EYE-TOOLBOX-LAYOUT-01: the old border-top here duplicated the
+   .toolbox-eye-divider immediately adjacent to it - a full-width
+   separator line with no interaction purpose of its own ("a divider
+   line should appear only if it has an actual interaction purpose" -
+   Product Owner). Removed; the divider itself is the one real boundary
+   now, on every Appearance. */
 .eye-pane {
     display: flex;
     flex-direction: column;
     flex: 1 1 auto;
     min-height: 0;
     overflow: hidden;
-    border-top: 1px solid var(--border);
 }
 .eye-pane-header {
     display: flex;
@@ -4741,17 +4817,37 @@ main:hover,
        not perceptible). --divider-strong is fixed and never redefined
        by .appearance-dark/.appearance-tinted, so it stays visible
        against light, dark, AND tinted alike, on either side, in any
-       combination. */
+       combination.
+       CLAUDE-EYE-TOOLBOX-LAYOUT-01: quiet (opacity 0) at rest, revealed
+       on hover/focus/drag - same generalized-from-Deep-Ocean treatment
+       as .panel-divider/.toolbox-eye-divider above. --divider-strong is
+       still the right color CHOICE for the moment it IS revealed (still
+       needs to read against either side in any combination); opacity is
+       what makes it quiet at rest now, not a weaker color. */
     background: var(--divider-strong);
+    opacity: 0;
+    transition: opacity 0.15s ease;
 }
 .conversation-dock-resize-handle:hover::before,
 .conversation-dock-resize-handle:focus-visible::before,
 .conversation-dock-resize-handle.dragging::before {
     background: var(--machine-blue);
+    opacity: 1;
 }
+/* Locked state deliberately does NOT reveal this line - same rule as
+   .toolbox-eye-divider's own locked state above; the lock glyph itself
+   is the persistent cue, not a full-width line. */
 .conversation-dock-resize-handle:focus-visible {
     outline: 2px solid var(--machine-blue);
     outline-offset: 2px;
+}
+.conversation-dock-resize-handle .divider-lock-btn {
+    top: 4px;
+    transform: translate(-50%, -50%);
+}
+.conversation-dock-resize-handle:hover .divider-lock-btn,
+.conversation-dock-resize-handle:focus-within .divider-lock-btn {
+    opacity: 1;
 }
 
 /* ===========================================================================
@@ -4819,38 +4915,18 @@ main:hover,
 .workspace-topbar.appearance-deep-ocean {
     border-bottom-color: var(--border);
 }
-/* "Splitter/lock controls reveal on hover/focus where appropriate" -
-   minimal at rest (letting the ocean canvas show through the gap
-   behind them - see .app-shell's own gradient above), full strength on
-   hover/focus/drag via the SAME existing accent (--machine-blue) every
-   other theme's dividers already use there - a visibility change only,
-   never a new color or interaction mechanism. The Lists/Toolbox
-   collapse toggles (.panel-divider, aria-expanded) are the one
-   exception while COLLAPSED ([aria-expanded="false"]) - that state is
-   the only way back to re-expand the panel, so it stays visible at
-   rest rather than hidden until a hover that can't happen because the
-   control can't be found. */
-.app-shell.appearance-deep-ocean .panel-divider,
-.app-shell.appearance-deep-ocean .toolbox-eye-divider {
-    background: transparent;
-}
-.app-shell.appearance-deep-ocean .panel-divider[aria-expanded="true"]::before,
-.app-shell.appearance-deep-ocean .toolbox-eye-divider::before,
-.app-shell.appearance-deep-ocean .conversation-dock-resize-handle::before {
-    opacity: 0;
-    transition: opacity 0.15s ease;
-}
-.app-shell.appearance-deep-ocean .panel-divider[aria-expanded="true"]:hover::before,
-.app-shell.appearance-deep-ocean .panel-divider[aria-expanded="true"]:focus-visible::before,
-.app-shell.appearance-deep-ocean .panel-divider-toolbox[aria-expanded="true"].dragging::before,
-.app-shell.appearance-deep-ocean .toolbox-eye-divider:hover::before,
-.app-shell.appearance-deep-ocean .toolbox-eye-divider:focus-visible::before,
-.app-shell.appearance-deep-ocean .toolbox-eye-divider.dragging::before,
-.app-shell.appearance-deep-ocean .conversation-dock-resize-handle:hover::before,
-.app-shell.appearance-deep-ocean .conversation-dock-resize-handle:focus-visible::before,
-.app-shell.appearance-deep-ocean .conversation-dock-resize-handle.dragging::before {
-    opacity: 1;
-}
+/* CLAUDE-EYE-TOOLBOX-LAYOUT-01: the "splitter/lock controls reveal on
+   hover/focus" treatment that used to live here, scoped to
+   .appearance-deep-ocean only, is now the SHARED base behavior for
+   .panel-divider/.toolbox-eye-divider/.conversation-dock-resize-handle
+   (see each one's own base rule above) - "Deep Ocean currently has no
+   visible line between panels; other themes still show separator
+   lines... do not make Deep Ocean the exception; do not leave old
+   theme-specific borders active elsewhere" (Product Owner). Removed
+   from here entirely rather than leaving a now-redundant duplicate:
+   Deep Ocean gets the identical quiet-gap/hover-reveal behavior every
+   other Appearance now gets, from the same rules, not a second copy of
+   it. */
 
 /* CLAUDE-P40-VW8-QA: was justify-content:space-between, spreading the
    old heading text (removed - see _macros.html's own comment) and this

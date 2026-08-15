@@ -179,6 +179,7 @@ still renders, unchanged, for those formats).
 | `shell.lists-divider` | `<button>` | (unlabeled divider) | Collapses/shows the Lists panel; `localStorage`-persisted, reviewer-wide | Every authenticated page | active |
 | `shell.toolbox-divider` | `<button>` | (unlabeled divider) | Collapses/shows the WHOLE right column (Toolbox and Eye together, CLAUDE-P40-EYE1 — was Toolbox alone); `localStorage`-persisted, per-Project. **Product-owner browser correction:** now ALSO a real, mouse-draggable/keyboard-operable (`ArrowLeft` widens/`ArrowRight` narrows) WIDTH resize handle for the right column — a genuine drag (movement past a small threshold) is distinguished from a plain click, so the pre-existing collapse/show behavior is unchanged for an ordinary click. Width persisted separately (`beehive:panel:right-column-width:<project_id>`), clamped against a practical minimum for both the right column and the centre (Display/Chat) column | Only rendered when `project_id`/`workspace` are defined | active |
 | `shell.lists-thumbnails-divider` | `<div role="separator">` (CLAUDE-P40-VW7A-QA2) | (unlabeled divider) | Draggable (pointer + arrow-key) horizontal split between `lists.thumbnails-pane` and Lists above it; percentage-based, `sessionStorage`-persisted (deliberately weaker than the `localStorage` panel-show/hide prefs above — Section 3's own "may persist per session"; still survives an ordinary refresh, which is all CLAUDE-P40-LTH1's own persistence requirement needs); double-click restores the default 60/40 split. **CLAUDE-P40-LTH1 (correction):** no longer ever `[hidden]` — a permanent fixture, the same treatment `shell.toolbox-eye-divider` already has (below); real `:focus-visible` outline added | Every authenticated page | active |
+| `shell.chat-divider-lock` (CLAUDE-EYE-TOOLBOX-LAYOUT-01, new) | `<button aria-pressed>` (`templates/_macros.html`'s `conversation_dock` macro — the resize handle itself lives there, not `base.html`, but is structural divider chrome, hence `shell.*` rather than `chat.*`) | 🔒 / 🔓 glyph only | The same compact lock-toggle pattern as `shell.toolbox-eye-lock` (below), applied to the Display/Chat resize handle (`#conversation-dock-resize-handle`). Persisted independently (`beehive:chat:height-locked:<project_id>`) — locking this split never affects, and is never affected by, the Eye/Toolbox lock | Only rendered when `project_id`/`workspace` are defined | active |
 
 ## Lists — cross-Project (`templates/base.html`, reviewer-wide)
 
@@ -545,14 +546,17 @@ Container/interaction-selection prototype — still no real evidence filtering, 
 | `spin.row-disclosure` / `spin.row-detail` (new, same stage — pattern, one per discipline) | `<button aria-expanded>` / `<div>` | "+" / "No investigation has run for this discipline yet." | Per-row progressive disclosure, collapsed by default | Same as workspace access | active |
 | `spin.pulse-slot` (new, CLAUDE-SPIN-01 — converged from the retired variant-a pulse-slot ref) | `.gauge-slot` | "Project Pulse — Future analytical layer" — neutral placeholder only, no fabricated score | Same as workspace access | active |
 
-## Right column: Toolbox above Eye (`templates/base.html`, CLAUDE-P40-EYE1)
+## Right column: Eye above Toolbox (`templates/base.html`, CLAUDE-P40-EYE1; order flipped CLAUDE-EYE-TOOLBOX-LAYOUT-01)
 
 Mirrors the Lists/Thumbnails split (CLAUDE-P40-VW7A-QA2) on the opposite
 side — `#workspace-right-column` is now the full-height column (a
 sibling of Lists AND `.workspace-main-column` inside `.app-shell-body`,
 spanning the same vertical extent as Display+Chat, never stopping at
-the Display/Chat divider), containing Toolbox (upper, see above) and
-the new Eye pane (lower) split by a draggable divider. The existing
+the Display/Chat divider), containing Eye (upper — CLAUDE-EYE-TOOLBOX-
+LAYOUT-01 moved it here; Eye is "current guidance, comparison state,
+findings, next-step instruction," Toolbox is "persistent working
+tool/mode") and Toolbox (lower, see above) split by a draggable,
+lockable divider. The existing
 `shell.toolbox-divider` show/hide control (see the Shell section above)
 now collapses/restores this WHOLE column, not Toolbox alone, **and**
 (product-owner browser correction) is also a real mouse-draggable/
@@ -569,7 +573,8 @@ no persistence, no editing, no annotation, and no AI interpretation.
 
 | Reference | Element | Label | Current behavior | Auth notes | Status |
 |---|---|---|---|---|---|
-| `shell.toolbox-eye-divider` | `<div role="separator">` (new) | (unlabeled divider) | Draggable (pointer + arrow-key) horizontal split between Toolbox and Eye; percentage-based, `localStorage`-persisted per-Project (matching Toolbox's own existing show/hide preference scoping); double-click restores the default 60/40 split; never `[hidden]` — Eye is a permanent pane, only the split proportion is adjustable | Only rendered when `project_id`/`workspace` are defined | active |
+| `shell.toolbox-eye-divider` | `<div role="separator">` (new) | (unlabeled divider) | Draggable (pointer + arrow-key) horizontal split between Eye (above) and Toolbox (below — CLAUDE-EYE-TOOLBOX-LAYOUT-01 flipped the order, `--toolbox-height` still names Toolbox's own size regardless); percentage-based, `localStorage`-persisted per-Project (matching Toolbox's own existing show/hide preference scoping); double-click restores the default 60/40 split; never `[hidden]` — Eye is a permanent pane, only the split proportion is adjustable. Lockable via `shell.toolbox-eye-lock` (below) — while locked, drag/keyboard/double-click resizing all no-op | Only rendered when `project_id`/`workspace` are defined | active |
+| `shell.toolbox-eye-lock` | `<button aria-pressed>` (new) | 🔒 / 🔓 glyph only | Compact lock toggle living inside `shell.toolbox-eye-divider`'s own strip; hidden at rest, revealed on divider hover/focus or its own focus, persistently visible while locked (`aria-pressed="true"`) — the one "tiny persistent lock-state cue" this pattern allows, never a full-width bright line. Locked state persisted per-Project (`beehive:panel:toolbox-eye-locked:{project_id}`), independent of `shell.chat-divider-lock` below | Only rendered when `project_id`/`workspace` are defined | active |
 | `eye.panel` | `<div>` (new) | "Eye" (header text) | The whole pane; contains the heading, the maximize toggle, and the drop target | Only rendered when `project_id`/`workspace` are defined | active |
 | `eye.heading` | `<h2>` (new) | "Eye" — static | — | active |
 | `eye.maximize` | `<button aria-pressed>` (new) | "Maximize Eye" / "Restore Eye" | **Two-dimensional** (product-owner browser correction): collapses Toolbox toward its practical minimum (height) AND expands the right column to its largest practical width (via `shell.toolbox-divider`'s own resize logic) in one action; restores BOTH dimensions exactly on the toggle-back click. The maximized width is deliberately never persisted, so a mid-maximize page reload can't leave the reviewer stuck there | Only rendered when `project_id`/`workspace` are defined | active |

@@ -141,10 +141,30 @@ document.addEventListener('DOMContentLoaded', () => {
         // there via drag, keyboard, or the toggle itself.
         const SIZE_MIDPOINT = (COMPACT_HEIGHT + EXPANDED_HEIGHT) / 2;
         const heightKey = `beehive:chat:height:${projectId}`;
+        const lockedKey = `beehive:chat:height-locked:${projectId}`;
         const sizeToggle = document.getElementById('conversation-size-toggle');
+        const lockBtn = document.getElementById('conversation-dock-lock-btn');
+        let locked = false;
 
         function clamp(px) {
             return Math.max(MIN_HEIGHT, Math.min(MAX_HEIGHT, px));
+        }
+
+        // CLAUDE-EYE-TOOLBOX-LAYOUT-01, Part 4: the SAME lockable-boundary
+        // behavior as the Eye/Toolbox splitter (templates/base.html's own
+        // #toolbox-eye-lock-btn) - independently persisted, independently
+        // toggled ("the two locks... must be independently lockable").
+        function setLocked(next, persist) {
+            locked = next;
+            handle.classList.toggle('locked', locked);
+            if (lockBtn) {
+                lockBtn.setAttribute('aria-pressed', String(locked));
+                lockBtn.textContent = locked ? '\u{1F512}' : '\u{1F513}';
+                lockBtn.setAttribute('aria-label', locked ? 'Unlock the Display/Chat split' : 'Lock the Display/Chat split');
+            }
+            if (persist !== false) {
+                try { window.localStorage.setItem(lockedKey, locked ? 'true' : 'false'); } catch (e) { /* ignore */ }
+            }
         }
 
         function syncSizeToggle(px) {
@@ -175,6 +195,22 @@ document.addEventListener('DOMContentLoaded', () => {
         try { stored = window.localStorage.getItem(heightKey); } catch (e) { /* ignore */ }
         applyHeight(stored ? parseInt(stored, 10) : COMPACT_HEIGHT, false);
 
+        let storedLocked = null;
+        try { storedLocked = window.localStorage.getItem(lockedKey); } catch (e) { /* ignore */ }
+        setLocked(storedLocked === 'true', false);
+
+        if (lockBtn) {
+            // Same reasoning as the Eye/Toolbox lock button: stop the
+            // click from also reaching the handle's own pointerdown
+            // (drag-start) listener, since the button is a descendant of
+            // the handle it sits inside.
+            lockBtn.addEventListener('pointerdown', (e) => { e.stopPropagation(); });
+            lockBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                setLocked(!locked);
+            });
+        }
+
         let dragStartY = null;
         let dragStartHeight = null;
         function onPointerMove(e) {
@@ -198,6 +234,7 @@ document.addEventListener('DOMContentLoaded', () => {
             document.removeEventListener('pointerup', onPointerUp);
         }
         handle.addEventListener('pointerdown', (e) => {
+            if (locked || (lockBtn && e.target === lockBtn)) return;
             dragStartY = e.clientY;
             dragStartHeight = parseInt(getComputedStyle(grid).getPropertyValue('--chat-height'), 10) || COMPACT_HEIGHT;
             handle.classList.add('dragging');
@@ -208,6 +245,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const KEY_STEP = 24;
         handle.addEventListener('keydown', (e) => {
+            if (locked) return;
             const current = parseInt(handle.getAttribute('aria-valuenow'), 10) || COMPACT_HEIGHT;
             if (e.key === 'ArrowUp') { applyHeight(current + KEY_STEP); e.preventDefault(); }
             else if (e.key === 'ArrowDown') { applyHeight(current - KEY_STEP); e.preventDefault(); }
@@ -217,6 +255,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (sizeToggle) {
             sizeToggle.addEventListener('click', () => {
+                if (locked) return;
                 const current = parseInt(handle.getAttribute('aria-valuenow'), 10) || COMPACT_HEIGHT;
                 const target = current > SIZE_MIDPOINT ? COMPACT_HEIGHT : EXPANDED_HEIGHT;
                 applyHeight(target);

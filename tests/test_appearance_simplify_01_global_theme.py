@@ -324,31 +324,47 @@ class DeepOceanGlassTreatmentTests(unittest.TestCase):
         for other_theme in ("appearance-dark", "appearance-tinted", "appearance-deep-forest"):
             self.assertNotIn(other_theme, preceding)
 
-    def test_divider_and_lock_controls_reveal_on_hover_focus_scoped_to_deep_ocean(self):
-        for selector in (".panel-divider", ".toolbox-eye-divider", ".conversation-dock-resize-handle"):
-            self.assertIn(f".app-shell.appearance-deep-ocean {selector}", self.main_css, selector)
-        rule = re.search(
-            r"\.app-shell\.appearance-deep-ocean \.panel-divider\[aria-expanded=\"true\"\]::before,.*?\{([^}]*)\}",
-            self.main_css, re.S,
-        )
-        self.assertIsNotNone(rule)
-        self.assertIn("opacity: 0;", rule.group(1))
+    # CLAUDE-EYE-TOOLBOX-LAYOUT-01 superseded the three tests that used to
+    # live here (test_divider_and_lock_controls_reveal_on_hover_focus_
+    # scoped_to_deep_ocean, test_collapsed_lists_toggle_stays_visible_at_
+    # rest_not_hidden, test_base_divider_rules_still_come_before_the_deep_
+    # ocean_override) - Part 5/6 of that stage's own Product Owner
+    # instruction ("Deep Ocean currently has no visible line between
+    # panels; other themes still show separator lines... do not make Deep
+    # Ocean the exception; do not leave old theme-specific borders active
+    # elsewhere") required the quiet-at-rest/reveal-on-hover-focus-drag
+    # treatment these tests asserted was DEEP-OCEAN-ONLY to become the
+    # SHARED base behavior for every one of the 5 Appearances instead. The
+    # `.app-shell.appearance-deep-ocean .panel-divider`/`.toolbox-eye-
+    # divider`/`.conversation-dock-resize-handle` scoped override block
+    # these tests exercised no longer exists - deleted, not weakened,
+    # because its entire content is now redundant with the generalized
+    # base rules (see ToolboxEyeDividerLockAndVisualGrammarTests below,
+    # tests/test_p40eye1_toolbox_eye_column.py's own updated coverage, and
+    # each selector's own base rule in main.css for the current,
+    # non-scoped invariant).
 
-    def test_collapsed_lists_toggle_stays_visible_at_rest_not_hidden(self):
-        # The one deliberate exception: aria-expanded="false" (collapsed)
-        # must NOT be hidden at rest, or a reviewer could never find the
-        # control to re-expand the panel.
-        self.assertNotIn('.app-shell.appearance-deep-ocean .panel-divider[aria-expanded="false"]::before {\n    opacity: 0;', self.main_css)
+    def test_no_stale_deep_ocean_only_divider_override_remains(self):
+        # Regression guard for the opposite direction now: a reviewer
+        # re-adding a Deep-Ocean-scoped divider-reveal block (reintroducing
+        # the "Deep Ocean is the exception" defect this stage fixed) would
+        # silently pass every other test in this file, since none of them
+        # inspect that specific combination any more.
+        self.assertNotIn(".app-shell.appearance-deep-ocean .panel-divider,", self.main_css)
+        self.assertNotIn(".app-shell.appearance-deep-ocean .toolbox-eye-divider {", self.main_css)
 
-    def test_base_divider_rules_still_come_before_the_deep_ocean_override(self):
-        # Regression guard against the exact bug this addendum's own
-        # implementation hit once already: a plain-text/regex search for
-        # ".conversation-dock-resize-handle::before {" must still find
-        # the REAL base rule (background: var(--divider-strong)) first,
-        # not this override (opacity: 0) - i.e. the override must be
-        # placed textually AFTER the base rule in the file.
-        base_idx = self.main_css.index(".conversation-dock-resize-handle::before {\n    content:")
-        override_idx = self.main_css.index(".app-shell.appearance-deep-ocean .conversation-dock-resize-handle::before {")
+    def test_genuinely_deep_ocean_specific_rules_still_come_after_their_base_rule(self):
+        # The narrower, still-true residual of the old regression guard:
+        # the rules that ARE still legitimately Deep-Ocean-only (the
+        # gradient .app-shell background, backdrop-filter, and the Menu
+        # bottom-border recolor) must stay textually AFTER every base rule
+        # they touch, so a plain textual/regex search for one of those
+        # base selectors still finds the base rule first - the exact
+        # ambiguity bug this addendum's own implementation hit once
+        # already (main.css's own comment on this block has the full
+        # story).
+        base_idx = self.main_css.index(".workspace-topbar {\n")
+        override_idx = self.main_css.index('.workspace-topbar.appearance-deep-ocean {\n    border-bottom-color:')
         self.assertLess(base_idx, override_idx)
 
 

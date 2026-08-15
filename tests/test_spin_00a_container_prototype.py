@@ -275,7 +275,7 @@ class SpinContainerRenderTests(_BaseSpinTestCase):
         # blank placeholder, never a "[0]" or any digit.
         client = self._client_as("spin_owner", 1)
         body = client.get(self._workspace_url(spin=True)).get_data(as_text=True)
-        spin_fragment = body[body.index('data-ui-ref="spin.pane"'):body.index('id="toolbox-eye-divider"')]
+        spin_fragment = body[body.index('data-ui-ref="spin.pane"'):body.index('</aside>')]
         self.assertEqual(spin_fragment.count('data-ui-ref="spin.findings"'), 13)
         self.assertIn('data-ui-ref="spin.all-findings"', spin_fragment)
         # Every findings box (13 discipline + 1 All) renders the same
@@ -289,7 +289,7 @@ class SpinContainerRenderTests(_BaseSpinTestCase):
         body = client.get(self._workspace_url(spin=True)).get_data(as_text=True)
         self.assertEqual(body.count('data-ui-ref="spin.row-disclosure"'), 13)
         self.assertEqual(body.count('data-ui-ref="spin.row-detail"'), 13)
-        spin_fragment = body[body.index('data-ui-ref="spin.pane"'):body.index('id="toolbox-eye-divider"')]
+        spin_fragment = body[body.index('data-ui-ref="spin.pane"'):body.index('</aside>')]
         self.assertEqual(spin_fragment.count('aria-expanded="false"'), 14)  # 13 discipline rows + All row
         self.assertNotIn('aria-expanded="true"', spin_fragment)
 
@@ -304,10 +304,15 @@ class SpinContainerRenderTests(_BaseSpinTestCase):
     def test_toggles_carry_switch_semantics(self):
         client = self._client_as("spin_owner", 1)
         body = client.get(self._workspace_url(spin=True)).get_data(as_text=True)
-        # id="toolbox-eye-divider" is base.html's own next sibling
-        # immediately after the Toolbox <aside> closes, so it reliably
-        # follows the Spin fragment in document order.
-        spin_fragment = body[body.index('data-ui-ref="spin.pane"'):body.index('id="toolbox-eye-divider"')]
+        # `</aside>` (workspace-toolbox-panel's own closing tag - the only
+        # <aside> in the templates, per _MACROS/base.html) reliably bounds
+        # the Spin fragment's end regardless of where the Toolbox <aside>
+        # sits relative to Eye/the divider - CLAUDE-EYE-TOOLBOX-LAYOUT-01
+        # moved Toolbox to AFTER the divider (was: id="toolbox-eye-divider"
+        # as the "next sibling immediately after the Toolbox <aside>
+        # closes" anchor, which stopped being true once Toolbox moved to
+        # the end of the column instead of the beginning).
+        spin_fragment = body[body.index('data-ui-ref="spin.pane"'):body.index('</aside>')]
         # CLAUDE-PROJECT-SURFACE-CONSOLIDATION-01 (Part I): 13 discipline
         # selectors + the All row's own selector, all unselected by default.
         self.assertEqual(spin_fragment.count('aria-pressed="false"'), 14)

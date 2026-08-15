@@ -111,15 +111,22 @@ class RightColumnStructureTests(_BaseTestCase):
         self.assertIn('id="toolbox-eye-divider"', body)
         self.assertIn('id="workspace-toolbox-panel"', body)
 
-    def test_toolbox_renders_before_divider_before_eye_in_dom_order(self):
+    def test_eye_renders_before_divider_before_toolbox_in_dom_order(self):
+        # CLAUDE-EYE-TOOLBOX-LAYOUT-01 flipped this order (was Toolbox
+        # above/Eye below) - Product Owner: "Eye above = current guidance,
+        # comparison state, findings, next-step instruction; Toolbox
+        # below = persistent working tool/mode." Renamed from
+        # test_toolbox_renders_before_divider_before_eye_in_dom_order
+        # rather than left silently reversed - same assertion shape, new
+        # expected order.
         doc = self._ingest("EYE1 Project 2", "spec.txt")
         client = self._client()
         body = client.get(f"/projects/{doc.project_id}/workspace").get_data(as_text=True)
-        toolbox_idx = body.index('id="workspace-toolbox-panel"')
-        divider_idx = body.index('id="toolbox-eye-divider"')
         eye_idx = body.index('id="eye-pane"')
-        self.assertLess(toolbox_idx, divider_idx)
-        self.assertLess(divider_idx, eye_idx)
+        divider_idx = body.index('id="toolbox-eye-divider"')
+        toolbox_idx = body.index('id="workspace-toolbox-panel"')
+        self.assertLess(eye_idx, divider_idx)
+        self.assertLess(divider_idx, toolbox_idx)
 
     def test_right_column_absent_outside_an_open_workspace(self):
         client = self._client()

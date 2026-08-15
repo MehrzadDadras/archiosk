@@ -193,9 +193,16 @@
    silent about them. #}
 {% macro conversation_dock(heading, message_count, post_url, scope_key, placeholder, include_anchor_fields=False, current_view=None, selected_source_id=None, project_id=None, current_context=None) %}
 <div class="accordion-section conversation-dock-panel" id="conversation-dock" role="region" aria-label="{{ heading }} conversation">
+    {# CLAUDE-EYE-TOOLBOX-LAYOUT-01, Part 4: the same lockable-boundary
+       treatment as the Eye/Toolbox splitter (base.html's own
+       #toolbox-eye-lock-btn) - independent of it (its own persistence
+       key, its own lock state - "the two locks... must be independently
+       lockable"). #}
     <div class="conversation-dock-resize-handle" id="conversation-dock-resize-handle"
          role="separator" aria-orientation="horizontal" aria-label="Resize conversation panel"
-         tabindex="0" aria-valuemin="120" aria-valuemax="640"></div>
+         tabindex="0" aria-valuemin="120" aria-valuemax="640">
+        <button type="button" class="divider-lock-btn" id="conversation-dock-lock-btn" data-ui-ref="shell.chat-divider-lock" aria-pressed="false" aria-label="Lock the Display/Chat split">&#128275;</button>
+    </div>
     {# CLAUDE-P40-VW8-QA: the old "{{ heading }} ({{ message_count }})"
        heading text (accordion-summary-text) that used to sit here read
        as visually/verbally heavy ("PROJECT CONVERSATION" - product-
