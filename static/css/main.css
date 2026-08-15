@@ -4934,6 +4934,33 @@ main:hover,
 .workspace-topbar.appearance-deep-ocean {
     border-bottom-color: var(--border);
 }
+/* CLAUDE-DEEP-OCEAN-COLOR-CORRECTION-01 (Product Owner: "the current
+   live Deep Ocean workspace has drifted into visibly green/teal panel
+   blocks... one Deep Ocean instrument, not multiple greenish boxes").
+   Root cause: .display-divisions's own base rule (above) paints
+   background: var(--border) behind its division(s), with each
+   .display-division painting --surface-primary OVER it and only a 1px
+   `gap` left to show the border color through - a real, working
+   hairline technique for every OPAQUE theme (Titanium/Black/Midnight
+   Blue/Deep Forest), where the division's own opaque fill fully
+   occludes everything except that 1px sliver. Deep Ocean's own
+   --surface-primary is deliberately TRANSLUCENT (rgba(10, 35, 42, .55)
+   - the glass effect), so it never fully occludes what's behind it:
+   the bright, saturated --ocean-border (rgba(176, 255, 244, .28) - a
+   cyan/mint tone, correct for hover/focus accents, wrong for a static
+   fill) shows through across the WHOLE division, not just the gap,
+   compositing into exactly the visible green/teal panel block reported
+   above Display. Scoped to Deep Ocean only - every other Appearance's
+   hairline technique already works correctly and is untouched.
+   --ocean-canvas (tokens.css) is the same dark navy as
+   --ocean-surface-primary - using it here means the "gap" now reads as
+   the SAME tone the division's own translucent fill already produces,
+   consistent with this correction's own "distinguish regions through
+   dark negative space and subtle tonal variation, not unrelated panel
+   colors," rather than inventing a new dedicated gap color. */
+.app-shell.appearance-deep-ocean .display-divisions {
+    background: var(--ocean-canvas);
+}
 /* CLAUDE-EYE-TOOLBOX-LAYOUT-01: the "splitter/lock controls reveal on
    hover/focus" treatment that used to live here, scoped to
    .appearance-deep-ocean only, is now the SHARED base behavior for
