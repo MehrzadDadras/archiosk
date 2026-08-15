@@ -207,15 +207,35 @@
         var isPanning = false;
         var panStart = null;
         var dragRect = null; // {x1,y1,x2,y2} in raw client pixels
+        var dragBoxEl = null; // the ONE transient in-progress drag-box DOM node
+        // Bounded drawing-interaction-integrity pass: regions/markers
+        // created THIS session stay visibly anchored on the drawing -
+        // previously cleared immediately after save, leaving no visual
+        // trace at all (the literal Product-Owner-reported "marker tool
+        // does not place a marker" defect). Stored in ORIGINAL-frame
+        // fractional coordinates (the same orientation-independent frame
+        // already sent to the server), so re-deriving on-screen position
+        // after a zoom/pan/rotate/mirror change is a pure forward
+        // transform (toDisplayPoint) each render, never a stored screen
+        // position that would itself need correcting. No server-side
+        // list/GET route exists yet (a real, already-documented MM4/MM5
+        // limitation - see this file's own top-of-file comment), so this
+        // is session-visible only, not a reload-persistent redraw; full
+        // cross-session persistence is explicitly deferred to the future
+        // Selection Family / Depository work, not this bounded pass.
+        var placedRegions = []; // {ox1,oy1,ox2,oy2,el}
+        var placedMarkers = []; // {ox,oy,el}
 
         function applyImageTransform() {
             var scaleX = mirrorH ? -1 : 1;
             var scaleY = mirrorV ? -1 : 1;
             imgEl.style.transform = 'rotate(' + rotation + 'deg) scale(' + scaleX + ',' + scaleY + ')';
+            refreshOverlay();
         }
 
         function applyPanZoomTransform() {
             panZoom.style.transform = 'translate(' + panX + 'px,' + panY + 'px) scale(' + zoom + ')';
+            refreshOverlay();
         }
 
         function updateZoomLabel() {
@@ -747,18 +767,98 @@
         }
 
         // -------- Region selection (Section 4/6/12) ----------------------
-        function clearOverlay() { overlay.textContent = ''; }
+        //
+        // Bounded drawing-interaction-integrity pass - ROOT CAUSE of the
+        // cursor-inaccurate region rectangle: `overlay` is a DOM child of
+        // `panZoom`, and `panZoom` gets `transform: translate(...)
+        // scale(zoom)` (applyPanZoomTransform above) - a CSS transform
+        // other than `none` makes an element the CONTAINING BLOCK for its
+        // own `position:absolute` descendants, so `overlay`'s children
+        // are positioned in panZoom's LOCAL (pre-scale) pixel space, not
+        // real screen pixels. The old code computed `clientRectLike.left
+        // - vpRect.left` - a RAW SCREEN-PIXEL delta from `viewport` (a
+        // DIFFERENT ancestor, not panZoom, and not corrected for zoom at
+        // all) - and assigned it directly as `box.style.left`, so the
+        // box was silently rendered a SECOND time through panZoom's own
+        // `scale(zoom)` on top of the values already being screen-space
+        // (correct only by accident at zoom=1, and only if panZoom's
+        // local origin ever coincided with viewport's, which it usually
+        // doesn't - .drawing-pan-zoom is flex-centered inside a taller
+        // .drawing-viewport). `panZoomLocalPoint` below is the one
+        // correct conversion (undo panZoom's own translate then scale),
+        // reused by every overlay element this section draws.
+        function panZoomLocalPoint(clientX, clientY) {
+            var pzRect = panZoom.getBoundingClientRect();
+            return { x: (clientX - pzRect.left) / zoom, y: (clientY - pzRect.top) / zoom };
+        }
+
+        function clearDragBox() {
+            if (dragBoxEl && dragBoxEl.parentNode) dragBoxEl.parentNode.removeChild(dragBoxEl);
+            dragBoxEl = null;
+        }
+
+        // Redraws every region/marker created THIS session at their
+        // correct current on-screen position - called after any zoom/
+        // pan/rotate/mirror change (applyPanZoomTransform/
+        // applyImageTransform above) so a placed region/marker never
+        // drifts from the drawing content it was anchored to. Reuses
+        // imgEl's own live getBoundingClientRect() (already the proven-
+        // correct source of truth commitRegion/commitMarker use to SAVE
+        // coordinates) composed with toDisplayPoint (the same orientation
+        // math the module header describes) - never a second, parallel
+        // coordinate system of its own.
+        function renderPlaced() {
+            var imgRect = imgEl.getBoundingClientRect();
+            if (imgRect.width <= 0 || imgRect.height <= 0) return;
+            placedRegions.forEach(function (r) {
+                var d1 = toDisplayPoint(r.ox1, r.oy1, rotation, mirrorH, mirrorV);
+                var d2 = toDisplayPoint(r.ox2, r.oy2, rotation, mirrorH, mirrorV);
+                var c1x = imgRect.left + Math.min(d1[0], d2[0]) * imgRect.width;
+                var c1y = imgRect.top + Math.min(d1[1], d2[1]) * imgRect.height;
+                var c2x = imgRect.left + Math.max(d1[0], d2[0]) * imgRect.width;
+                var c2y = imgRect.top + Math.max(d1[1], d2[1]) * imgRect.height;
+                var p1 = panZoomLocalPoint(c1x, c1y);
+                r.el.style.left = p1.x + 'px';
+                r.el.style.top = p1.y + 'px';
+                r.el.style.width = ((c2x - c1x) / zoom) + 'px';
+                r.el.style.height = ((c2y - c1y) / zoom) + 'px';
+            });
+            placedMarkers.forEach(function (m) {
+                var d = toDisplayPoint(m.ox, m.oy, rotation, mirrorH, mirrorV);
+                var cx = imgRect.left + d[0] * imgRect.width;
+                var cy = imgRect.top + d[1] * imgRect.height;
+                var p = panZoomLocalPoint(cx, cy);
+                m.el.style.left = p.x + 'px';
+                m.el.style.top = p.y + 'px';
+            });
+        }
+
+        // Also re-anchors the ACTIVE drag box (if a drag is genuinely in
+        // progress) so a wheel-zoom mid-drag doesn't leave it stale -
+        // dragRect itself stores raw, still-valid client pixels (real
+        // pointer positions already seen), only the RENDERED box needs
+        // correcting for the new zoom.
+        function refreshOverlay() {
+            renderPlaced();
+            if (dragRect) {
+                drawOverlayRect({
+                    left: Math.min(dragRect.x1, dragRect.x2), top: Math.min(dragRect.y1, dragRect.y2),
+                    width: Math.abs(dragRect.x2 - dragRect.x1), height: Math.abs(dragRect.y2 - dragRect.y1),
+                });
+            }
+        }
 
         function drawOverlayRect(clientRectLike) {
-            clearOverlay();
-            var vpRect = viewport.getBoundingClientRect();
-            var box = document.createElement('div');
-            box.className = 'drawing-region-box';
-            box.style.left = (clientRectLike.left - vpRect.left) + 'px';
-            box.style.top = (clientRectLike.top - vpRect.top) + 'px';
-            box.style.width = clientRectLike.width + 'px';
-            box.style.height = clientRectLike.height + 'px';
-            overlay.appendChild(box);
+            if (!dragBoxEl) {
+                dragBoxEl = document.createElement('div');
+                dragBoxEl.className = 'drawing-region-box';
+                overlay.appendChild(dragBoxEl);
+            }
+            var p1 = panZoomLocalPoint(clientRectLike.left, clientRectLike.top);
+            dragBoxEl.style.left = p1.x + 'px';
+            dragBoxEl.style.top = p1.y + 'px';
+            dragBoxEl.style.width = (clientRectLike.width / zoom) + 'px';
+            dragBoxEl.style.height = (clientRectLike.height / zoom) + 'px';
         }
 
         function commitRegion(x1, y1, x2, y2) {
@@ -781,12 +881,24 @@
                 body: JSON.stringify({ structural_unit_id: sheetUnit.id, x: nx, y: ny, width: nw, height: nh }),
             }).then(function (resp) { return resp.json().then(function (body) { return { ok: resp.ok, body: body }; }); })
                 .then(function (result) {
-                    clearOverlay();
+                    clearDragBox();
                     regionStatusEl.textContent = '';
                     if (!result.ok) {
                         regionStatusEl.textContent = 'Could not save that region: ' + (result.body.message || 'unknown error');
                         return;
                     }
+                    // Bounded drawing-interaction-integrity pass: keep a
+                    // real, correctly-anchored box visible for the rest
+                    // of this session (see placedRegions' own comment) -
+                    // "the region remains aligned with the same drawing
+                    // content after creation" is a visual proof
+                    // requirement, not just a server-side save.
+                    var placedEl = document.createElement('div');
+                    placedEl.className = 'drawing-region-box drawing-region-box-placed';
+                    placedEl.title = 'Region ' + (result.body.citation && result.body.citation.label || '');
+                    overlay.appendChild(placedEl);
+                    placedRegions.push({ ox1: nx, oy1: ny, ox2: nx + nw, oy2: ny + nh, el: placedEl });
+                    renderPlaced();
                     var label = result.body.citation && result.body.citation.label;
                     var regionIdCreated = result.body.region && result.body.region.id;
                     var span = document.createElement('span');
@@ -843,9 +955,13 @@
             var input = document.createElement('input');
             input.type = 'text';
             input.className = 'drawing-marker-note-input';
-            var vpRect = viewport.getBoundingClientRect();
-            input.style.left = (clientX - vpRect.left) + 'px';
-            input.style.top = (clientY - vpRect.top) + 'px';
+            // Same panZoom-local/zoom-corrected math as the region box
+            // (see panZoomLocalPoint's own comment) - the old vpRect-
+            // relative, zoom-uncorrected math placed this input away
+            // from the actual clicked point at any zoom other than 100%.
+            var noteP = panZoomLocalPoint(clientX, clientY);
+            input.style.left = noteP.x + 'px';
+            input.style.top = noteP.y + 'px';
             input.placeholder = 'Marker note';
             input.setAttribute('aria-label', 'Marker note');
             overlay.appendChild(input);
@@ -871,6 +987,35 @@
                         var span = document.createElement('span');
                         span.textContent = label ? ('Marker created: ' + label) : 'Marker created.';
                         regionStatusEl.appendChild(span);
+                        // Bounded drawing-interaction-integrity pass: the
+                        // literal reported defect - clicking with the
+                        // marker tool active produced a saved server
+                        // record but nothing a reviewer could actually
+                        // SEE on the drawing afterward ("does not
+                        // produce a useful result when clicked"). A
+                        // small pin glyph, anchored the same
+                        // zoom/Fit/rotate-safe way as a placed region
+                        // (renderPlaced), with the note as its
+                        // hover/identify affordance - real repository
+                        // evidence (governance/current/kernel-object-
+                        // model.md's own MM5 section) confirms the
+                        // ORIGINAL intended semantics were "click-to-
+                        // place, inline text-note input" with no
+                        // persistent glyph promised; this adds exactly
+                        // the missing visual confirmation the Product
+                        // Owner's report asks for, without changing what
+                        // a marker MEANS (still EVIDENCE_CLASS_USER_
+                        // ENTERED, still one required note, still no
+                        // delete route - see this pass's own report).
+                        var pinEl = document.createElement('div');
+                        pinEl.className = 'drawing-marker-pin';
+                        pinEl.textContent = '📍';
+                        pinEl.title = label ? (label + ': ' + note) : note;
+                        pinEl.setAttribute('role', 'img');
+                        pinEl.setAttribute('aria-label', 'Marker: ' + note);
+                        overlay.appendChild(pinEl);
+                        placedMarkers.push({ ox: o[0], oy: o[1], el: pinEl });
+                        renderPlaced();
                         var evidenceItemId = result.body.evidence_item && result.body.evidence_item.id;
                         addRelationshipsButton(regionStatusEl, evidenceItemId);
                     });
@@ -918,7 +1063,7 @@
                 if (Math.abs(drag.x2 - drag.x1) > 3 || Math.abs(drag.y2 - drag.y1) > 3) {
                     commitRegion(drag.x1, drag.y1, drag.x2, drag.y2);
                 } else {
-                    clearOverlay();
+                    clearDragBox();
                 }
             }
             isPanning = false;
@@ -947,7 +1092,7 @@
                 ensureSheetUnit();
             } else {
                 regionStatusEl.textContent = '';
-                clearOverlay();
+                clearDragBox();
             }
         });
         markerBtn.addEventListener('click', function () {
@@ -960,7 +1105,7 @@
                 ensureSheetUnit();
             } else {
                 regionStatusEl.textContent = '';
-                clearOverlay();
+                clearDragBox();
             }
         });
 

@@ -4878,6 +4878,35 @@ main:hover,
     border: 2px dashed var(--machine-blue);
     background: rgba(79, 169, 162, 0.15);
 }
+/* Bounded drawing-interaction-integrity pass: a committed region (this
+   session only - see drawing_image_viewer.js's own placedRegions
+   comment) reads as settled/quiet, distinct from the active dragging
+   box's own more prominent dashed treatment above - solid border,
+   lighter fill, so a reviewer isn't drawn to N old boxes while trying
+   to read the one currently being dragged. */
+.drawing-region-box-placed {
+    border: 1.5px solid var(--machine-blue);
+    background: rgba(79, 169, 162, 0.08);
+}
+/* The marker/pin glyph placed at commitMarker's success point (same
+   pass as above) - "Do not leave the toolbar icon visually selectable
+   while functionally inert": this is the missing visual confirmation a
+   marker actually landed. transform:translate(-50%,-100%) makes the
+   glyph's own visual tip (not its box center) sit exactly at the
+   anchored point, the standard map-pin convention; pointer-events:auto
+   re-enables interaction locally since the overlay itself is
+   pointer-events:none (same local re-enable .drawing-marker-note-input
+   already uses). title carries the note text as the "identify it
+   afterward" affordance (Section 2.6) - no separate click-to-reveal UI
+   invented for this bounded pass. */
+.drawing-marker-pin {
+    position: absolute;
+    transform: translate(-50%, -100%);
+    font-size: 1.1rem;
+    line-height: 1;
+    pointer-events: auto;
+    cursor: default;
+}
 .drawing-sheet-metadata {
     padding: 0.5rem 0.6rem;
     border: 1px solid var(--border);
