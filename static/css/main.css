@@ -2916,6 +2916,24 @@ main:has(.document-viewer-canvas-container) {
 .document-context-panel { margin: 0.6rem 0; }
 .document-context-panel summary { cursor: pointer; font-size: var(--text-sm); color: var(--machine-blue); }
 .document-context-text { font-size: var(--text-sm); color: var(--text-primary); white-space: pre-wrap; margin: 0.3rem 0; }
+/* Bounded GO QA/QC pass: Admin Document Mode - same restrained <details>
+   shape as .document-context-panel above, admin-only. Gauge colors reuse
+   tokens.css's own existing semantic accepted-green/attention-amber/
+   failure-red trio (already used the same way by the MM6 relationship-
+   river status badges) rather than minting new ones - Good=confirmed-
+   like, Review=needs-attention-like, Weak=failure-like. */
+.admin-document-mode-panel { margin: 0.6rem 0; }
+.admin-document-mode-panel summary { cursor: pointer; font-size: var(--text-sm); color: var(--machine-blue); }
+.admin-qac-gauge { font-size: var(--text-sm); margin: 0.3rem 0; }
+.admin-qac-gauge-good strong { color: var(--accepted-green); }
+.admin-qac-gauge-review strong { color: var(--attention-amber); }
+.admin-qac-gauge-weak strong { color: var(--failure-red); }
+.admin-qac-cause { font-size: var(--text-xs); color: var(--attention-amber); margin: 0.2rem 0 0.5rem; }
+.admin-qac-claims-list { list-style: none; margin: 0.5rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; }
+.admin-qac-claim { border-top: 1px solid var(--border); padding-top: 0.4rem; }
+.admin-qac-claim-field { font-size: var(--text-sm); font-weight: 600; margin: 0 0 0.2rem; }
+.admin-qac-claim-statement { font-size: var(--text-sm); color: var(--text-primary); margin: 0; }
+.admin-qac-phase-outcome { font-size: var(--text-sm); margin: 0 0 0.4rem; }
 /* CLAUDE-APPEARANCE-SIMPLIFY-01: retires the old .appearance-matrix
    table (per-surface Menu/Lists/Display/Toolbox/Chat rows, a "mixed"
    state note) entirely - Appearance is now ONE global choice, so there

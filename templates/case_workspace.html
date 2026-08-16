@@ -1152,6 +1152,55 @@
                 <button type="submit" data-ui-ref="display.document.context-submit">Save Document Context</button>
             </form>
         </details>
+        {% if is_admin %}
+        {# Bounded GO QA/QC pass (Section 4/5/6/11): Admin Document Mode -
+           a lightweight GO calibration bench, admin-only, extending the
+           existing Document Context panel above rather than a new page or
+           mode toggle (the same {% if is_admin %} gate already used 6
+           times elsewhere in this file). The ordinary PM/user-facing
+           Document Context panel above is completely unaffected - this
+           is an ADDITIONAL block, never a replacement of it. #}
+        <details class="admin-document-mode-panel" data-ui-ref="display.document.admin-qac">
+            <summary>Admin: GO Document Understanding</summary>
+            {% if document_context_quality %}
+            <p class="admin-qac-gauge admin-qac-gauge-{{ document_context_quality.gauge }}" data-ui-ref="display.document.admin-qac-gauge">
+                GO understanding: <strong>{{ document_context_quality.gauge|capitalize }}</strong>
+                <span class="pane-note">({{ document_context_quality.signals.claim_count }} claim(s), {{ (document_context_quality.signals.inference_load|default(0) * 100)|round|int }}% inferred)</span>
+            </p>
+            {% if document_context_quality.possible_cause %}
+            <p class="admin-qac-cause" data-ui-ref="display.document.admin-qac-cause">{{ document_context_quality.possible_cause }}</p>
+            {% endif %}
+            {% else %}
+            <p class="pane-note">No GO-drafted Document Context claims yet for this document.</p>
+            {% endif %}
+
+            <form class="workspace-form" method="post" action="{{ url_for('workspace.draft_document_context_claims_route', project_id=project_id, source_id=selected_source.id) }}" data-ui-ref="display.document.admin-qac-draft-form">
+                <button type="submit" data-ui-ref="display.document.admin-qac-draft-submit">Draft Document Context with GO</button>
+            </form>
+
+            {% if document_context_claims_view %}
+            <ul class="admin-qac-claims-list" data-ui-ref="display.document.admin-qac-claims">
+                {% for claim in document_context_claims_view %}
+                <li class="admin-qac-claim admin-qac-claim-{{ claim.review_state }}" data-ui-ref="display.document.admin-qac-claim">
+                    <p class="admin-qac-claim-field">{{ claim.field_kind|replace('_', ' ')|capitalize }}
+                        <span class="pane-note">({{ claim.content_class|replace('_', ' ') }}, {{ claim.review_state }})</span>
+                    </p>
+                    {% if claim.review_state == document_context_claim_accepted %}
+                    <p class="admin-qac-claim-statement">{{ claim.statement }}</p>
+                    {% else %}
+                    <form class="workspace-form" method="post" action="{{ url_for('workspace.review_document_context_claim_route', project_id=project_id, claim_id=claim.id) }}" data-ui-ref="display.document.admin-qac-review-form">
+                        <input type="hidden" name="source_id" value="{{ selected_source.id }}">
+                        <textarea name="statement" data-ui-ref="display.document.admin-qac-review-statement">{{ claim.statement }}</textarea>
+                        <button type="submit" name="outcome" value="{{ document_context_claim_accepted }}" data-ui-ref="display.document.admin-qac-accept">Accept</button>
+                        <button type="submit" name="outcome" value="{{ document_context_claim_rejected }}" data-ui-ref="display.document.admin-qac-reject">Reject</button>
+                    </form>
+                    {% endif %}
+                </li>
+                {% endfor %}
+            </ul>
+            {% endif %}
+        </details>
+        {% endif %}
         {% if selected_source.removed_at %}
         {# CLAUDE-P40-E2A, Section A: "ordinary document-viewer... routes
            must not treat it as active" - a removed Document's own
@@ -2194,6 +2243,34 @@
                     <button type="submit">Adjudicate</button>
                 </form>
                 {% endcall %}
+
+                {% if is_admin %}
+                {# Bounded GO QA/QC pass (Section 1-3): a GO-provisional
+                   phase-conformance assessment, deliberately separate from
+                   the RequirementAdjudication form above it - "GO must not
+                   judge a 30% submission by 90% expectations", and this is
+                   never itself an adjudication (see RequirementPhaseAssessment's
+                   own docstring). Admin-only. #}
+                {% call macros.subdisclosure('Admin: GO phase conformance') %}
+                {% if row.latest_phase_assessment %}
+                <p class="admin-qac-phase-outcome" data-ui-ref="display.requirements.admin-phase-assessment">
+                    <span class="review-state-badge">{{ row.latest_phase_assessment.outcome|replace('_', ' ') }}</span>
+                    <span class="pane-note">({{ row.latest_phase_assessment.phase_source|replace('_', ' ') }})</span>
+                    <br>{{ row.latest_phase_assessment.reasoning }}
+                </p>
+                {% else %}
+                <p class="pane-note">No phase-conformance assessment yet for this Requirement.</p>
+                {% endif %}
+                <form class="workspace-form" method="post" action="{{ url_for('workspace.assess_requirement_phase_route', project_id=project_id, requirement_id=requirement.id) }}" data-ui-ref="display.requirements.admin-assess-phase-form">
+                    <label style="display:block;font-size:0.85rem;color:var(--text-secondary);">
+                        <input type="checkbox" name="evidence_found">
+                        Evidence found for this Requirement
+                    </label>
+                    <input type="text" name="resolution_level" placeholder="Evidence resolution level (e.g. schematic) — optional">
+                    <button type="submit" data-ui-ref="display.requirements.admin-assess-phase-submit">Assess phase conformance</button>
+                </form>
+                {% endcall %}
+                {% endif %}
 
                 {% if row.revision_history %}
                 {% call macros.subdisclosure('Revision history (' ~ row.revision_history|length ~ ') — this Requirement\'s wording has changed') %}
