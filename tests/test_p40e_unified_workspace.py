@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import io
 import json
+import re
 import shutil
 import tempfile
 import unittest
@@ -300,6 +301,86 @@ class HotlinkTests(_BaseWorkspaceTestCase):
         body = client.get(f"/projects/{self.project_id}/workspace?case={case_id}").get_data(as_text=True)
         self.assertNotIn("<script>alert(1)</script>", body)
         self.assertIn("&lt;script&gt;alert(1)&lt;/script&gt;", body)
+
+
+class OriginMessageIdPilotTests(_BaseWorkspaceTestCase):
+    """CLAUDE-GO-NAVIGATION-CONTEXT-GAMES-01: bounded, reversible pilot -
+    see governance/specified-unbuilt/navigation-context-operational-map.md
+    ("Active pilot"). A Composer hotlink now carries the originating
+    message's own id so the destination can offer a quiet "Return to
+    conversation" link back to it - composing Anchor's own shape and the
+    pre-existing ?case=&preview_finding_id= redirect precedent, never a
+    new navigation framework."""
+
+    def _post_message_and_get_workspace_body(self, text):
+        client = self._client_as("p40e_owner", 1)
+        client.post(f"/projects/{self.project_id}/workspace/cases", data={"title": "Origin Pilot Case", "objective": ""})
+        case_id = self._store().get(self.project_id).cases[0]["id"]
+        client.post(
+            f"/projects/{self.project_id}/workspace/cases/{case_id}/messages",
+            data={"text": text},
+        )
+        # The human message specifically - a synchronous assistant reply
+        # may already have been appended after it, so conversation[-1]
+        # is not reliably the message whose own text contains the hotlink.
+        conversation = self._store().get(self.project_id).cases[0]["conversation"]
+        message_id = next(m["id"] for m in conversation if m["role"] == "human" and m["text"] == text)
+        body = client.get(f"/projects/{self.project_id}/workspace?case={case_id}").get_data(as_text=True)
+        return client, body, message_id
+
+    def test_hotlink_carries_the_originating_message_id(self):
+        client, body, message_id = self._post_message_and_get_workspace_body(f"Please check {_DRAWING_NAME} for consistency.")
+        self.assertIn(f"source=drawing-source-1&amp;origin_message_id={message_id}", body)
+
+    def test_no_origin_message_id_no_return_link(self):
+        # The overwhelming common case (a normal page load, no hotlink
+        # click) must render nothing extra - no persistent breadcrumb
+        # trail (Section 23/32's own "quiet surface" principle).
+        client = self._client_as("p40e_owner", 1)
+        body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
+        self.assertNotIn('data-ui-ref="menu.context.return-to-conversation"', body)
+
+    def test_following_the_hotlink_shows_the_return_link_pointing_at_the_real_message(self):
+        # Follows the REAL, rendered hotlink href (not a hand-built URL) -
+        # this is the actual end-to-end round trip a real click makes.
+        client, body, message_id = self._post_message_and_get_workspace_body(f"Please check {_DRAWING_NAME} for consistency.")
+        href_match = re.search(r'href="(/projects/[^"]*source=drawing-source-1[^"]*origin_message_id=[^"]*)"', body)
+        self.assertIsNotNone(href_match, body)
+        hotlink_href = href_match.group(1).replace("&amp;", "&")
+        # Real pilot finding: the message id alone isn't enough for a
+        # case-scoped conversation - the hotlink must ALSO carry the
+        # originating case (anchor_case_id, already available at
+        # generation time) or the conversation thread it points into
+        # never renders on the destination page at all.
+        self.assertIn(f"case={self._store().get(self.project_id).cases[0]['id']}", hotlink_href)
+
+        follow_up = client.get(hotlink_href).get_data(as_text=True)
+        self.assertIn('data-ui-ref="menu.context.return-to-conversation"', follow_up)
+        self.assertIn(f'href="#message-{message_id}"', follow_up)
+        # The real anchor the link targets must actually exist on THIS
+        # same page (the conversation dock still renders even when a
+        # Source is the active Display target).
+        self.assertIn(f'id="message-{message_id}"', follow_up)
+
+    def test_stale_or_foreign_origin_message_id_degrades_silently_not_an_error(self):
+        # Same "soft display hint, never an authorization boundary of its
+        # own" treatment ?current=/?preview_finding_id= already get - a
+        # made-up id must not 404 or crash, just render a link to a
+        # fragment that happens not to exist (a harmless browser no-op).
+        client = self._client_as("p40e_owner", 1)
+        resp = client.get(f"/projects/{self.project_id}/workspace?origin_message_id=not-a-real-message-id")
+        self.assertEqual(resp.status_code, 200)
+        body = resp.get_data(as_text=True)
+        self.assertIn('href="#message-not-a-real-message-id"', body)
+
+    def test_document_list_leaf_for_the_same_source_is_unaffected(self):
+        # The pilot only touches Composer hotlinks (app.py's
+        # render_conversation_hotlinks) - the unrelated Document List
+        # sidebar leaf for the same Source must never gain this param.
+        client, body, message_id = self._post_message_and_get_workspace_body(f"Please check {_DRAWING_NAME} for consistency.")
+        list_leaf_idx = body.index('data-ui-ref="lists.project.documents.leaf"')
+        list_leaf_tag = body[body.rindex("<a", 0, list_leaf_idx):body.index(">", list_leaf_idx)]
+        self.assertNotIn("origin_message_id", list_leaf_tag)
 
 
 class ResponsiveDomOrderTests(_BaseWorkspaceTestCase):

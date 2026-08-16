@@ -725,7 +725,26 @@ def _register_template_filters(app: Flask) -> None:
             rendered = []
             for segment in segments:
                 if segment["source_id"]:
-                    url = url_for("workspace.show_workspace", project_id=project_id, source=segment["source_id"])
+                    # CLAUDE-GO-NAVIGATION-CONTEXT-GAMES-01 pilot: carry the
+                    # originating message's own id so the destination can
+                    # offer a "Return to conversation" link - see
+                    # governance/specified-unbuilt/navigation-context-
+                    # operational-map.md ("Active pilot") and
+                    # routes/workspace.py's own origin_message_id comment.
+                    # A real pilot finding: the message id alone isn't
+                    # enough for a CASE-scoped conversation - that thread
+                    # only renders at all when ?case=<id> also selects it
+                    # (show_workspace's own active_case resolution), so
+                    # anchor_case_id (already an existing parameter here)
+                    # must ALSO be carried, or the return link would point
+                    # at a fragment that never renders on the destination
+                    # page. Project-scoped messages need no such param -
+                    # that thread renders unconditionally.
+                    url = url_for(
+                        "workspace.show_workspace", project_id=project_id, source=segment["source_id"],
+                        origin_message_id=message_id,
+                        case=(anchor_case_id if anchor_scope == "case" else None),
+                    )
                     rendered.append(Markup('<a href="{}">{}</a>').format(url, segment["text"]))
                 else:
                     rendered.append(escape(segment["text"]))
@@ -773,7 +792,13 @@ def _register_template_filters(app: Flask) -> None:
             chunk = escape(text[start:end])
             source_id = _source_id_at(start)
             if source_id:
-                url = url_for("workspace.show_workspace", project_id=project_id, source=source_id)
+                # CLAUDE-GO-NAVIGATION-CONTEXT-GAMES-01 pilot - see the
+                # no-tag-ranges branch above for the full comment.
+                url = url_for(
+                    "workspace.show_workspace", project_id=project_id, source=source_id,
+                    origin_message_id=message_id,
+                    case=(anchor_case_id if anchor_scope == "case" else None),
+                )
                 chunk = Markup('<a href="{}">{}</a>').format(url, chunk)
             tag_here = _tag_at(start)
             if tag_here:

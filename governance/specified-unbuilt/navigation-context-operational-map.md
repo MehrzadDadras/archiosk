@@ -90,4 +90,44 @@ rather than building a new navigation framework — not to ship a finished
 feature. Report the pilot's result here (and to the Product Owner) before
 widening it to any other surface (breadcrumbs, other cross-object links).
 
-**Result:** *(pending — implementation not yet started as of this entry)*
+**Result (2026-08-16, commit pending):** **Proves the composition approach
+works, with one real, discovered refinement.**
+
+Implementation: `app.py`'s `render_conversation_hotlinks` now appends
+`origin_message_id` (the citing message's own id, already an existing
+function parameter — no new data) to every Source hotlink URL it builds.
+`routes/workspace.py`'s `show_workspace` reads it back as a soft display
+hint (never validated server-side — same treatment `?current=`/
+`?preview_finding_id=` already get; a stale/foreign id just produces a dead
+`#fragment` link, which a browser already no-ops on safely, not an error).
+`templates/_app_menu.html` renders a small, quiet "← Return to conversation"
+link — reusing the already-existing `id="message-<id>"` DOM anchor on every
+conversation message (`templates/case_workspace.html`, unchanged) — only
+when the parameter is present. Zero new routes, zero new persistence,
+zero new schema.
+
+**The refinement, found by actually building this, not anticipated in
+advance:** the message id alone was not sufficient. A case-scoped
+conversation thread (as opposed to the project-scoped one) only renders on
+the destination page at all when `?case=<id>` also selects it — so the
+first implementation produced a "Return to conversation" link that pointed
+at a fragment nothing on the page actually had. Fixed by also carrying
+`anchor_case_id` (already an existing parameter passed into the same
+function) as `case=` when the citing message was case-scoped. This is
+itself useful new evidence for row 5/13 above: an origin pointer is not
+always a single id — it can require its own small, already-available
+supporting context to actually resolve, and that context should be
+identified by building and testing, not assumed complete from the schema
+alone.
+
+**Verified:** full suite clean (9 known pre-existing, unrelated failures
+only); 5 new dedicated tests (`tests/test_p40e_unified_workspace.py`,
+`OriginMessageIdPilotTests`) cover the real end-to-end round trip (following
+the actual rendered href, not a hand-built URL), the no-parameter common
+case (no link renders — quiet by default), and the stale-id degradation
+path. Live-deployed and browser-verified pending.
+
+**Recommendation:** the composition approach is sound and should NOT be
+generalized to other surfaces (breadcrumbs, other cross-object links) yet —
+report this result to the Product Owner first, per the pilot's own approved
+scope, before widening it.

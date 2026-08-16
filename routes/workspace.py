@@ -1180,6 +1180,19 @@ def show_workspace(project_id):
         if action_taken.startswith("rfi_intent:"):
             pending_rfi_finding_id = action_taken.split(":", 1)[1]
 
+    # CLAUDE-GO-NAVIGATION-CONTEXT-GAMES-01: bounded, reversible pilot -
+    # see governance/specified-unbuilt/navigation-context-operational-map.md
+    # ("Active pilot"). A Composer hotlink now carries the originating
+    # message's own id (app.py's render_conversation_hotlinks); this is
+    # a soft display hint only, same "never an authorization boundary of
+    # its own" treatment choose_project's own `current` param and
+    # preview_finding_id below already use - not validated against the
+    # conversation here (the worst-case failure is a dead #message-<id>
+    # fragment link, which a browser already no-ops on safely). The
+    # template renders a "Return to conversation" link only when this is
+    # present.
+    origin_message_id = request.args.get("origin_message_id")
+
     rfi_preview = None
     preview_finding_id = request.args.get("preview_finding_id")
     if preview_finding_id:
@@ -1736,6 +1749,7 @@ def show_workspace(project_id):
         pending_rfi_finding_id=pending_rfi_finding_id,
         rfi_preview=rfi_preview,
         preview_finding_id=preview_finding_id,
+        origin_message_id=origin_message_id,
         revision_notices=revision_notices,
         accepted_knowledge=accepted_knowledge_view,
         project_findings_applied_count=project_findings_applied_count,

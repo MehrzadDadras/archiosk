@@ -443,6 +443,26 @@
                     <span class="workspace-topbar-doc">{{ directory_view_label }}</span>
                     {% endif %}
                 </span>
+                {% if origin_message_id %}
+                {# CLAUDE-GO-NAVIGATION-CONTEXT-GAMES-01: bounded, reversible
+                   pilot testing whether purpose-aware return can be composed
+                   from existing primitives - see governance/specified-
+                   unbuilt/navigation-context-operational-map.md ("Active
+                   pilot") and routes/workspace.py's own origin_message_id
+                   comment. A quiet, restrained link (reuses
+                   .workspace-topbar-status's own "no border/background at
+                   rest, underline on hover" idiom - Section 23/32's own
+                   "quiet surface" principle: this is not a persistent
+                   breadcrumb trail, only appears when a real excursion
+                   origin exists) back to the SAME already-rendered
+                   #message-<id> anchor (templates/case_workspace.html's own
+                   existing conversation-message id, unchanged) - pure
+                   client-side fragment scroll, no new route, no server-side
+                   existence check (a stale/foreign id just fails to scroll,
+                   the same honest silent-degradation this app's hotlinks
+                   already exhibit when a cited Source no longer resolves). #}
+                <a class="workspace-topbar-status" data-ui-ref="menu.context.return-to-conversation" href="#message-{{ origin_message_id }}">&larr; Return to conversation</a>
+                {% endif %}
                 {% if operating_environment %}
                 {# CLAUDE-RFP-BOUNDARY-01, Section 11: a restrained,
                    persistent workspace-side indicator - "particularly
