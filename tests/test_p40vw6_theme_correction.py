@@ -826,5 +826,59 @@ class DeepOceanGlassMaterialTests(unittest.TestCase):
             self.assertIn("appearance-deep-ocean", selector_line, self.css[m.start():m.start() + 60])
 
 
+class DeepOceanMenuForegroundLayeringTests(unittest.TestCase):
+    """CLAUDE-MENU-FOREGROUND-LAYERING-01: the floating menu/popover
+    rule previously only added blur+glow on top of the inherited
+    --surface-primary background (.55 alpha) - the same density every
+    passive background tray also uses - so an open menu read as nearly
+    the same material as the tray bleeding through it. This adds a
+    denser, literal-copy-of-the-reference-card background-color so the
+    open menu genuinely reads as the foreground layer."""
+
+    def setUp(self):
+        self.tokens_css = _TOKENS_CSS_PATH.read_text(encoding="utf-8")
+        self.css = _MAIN_CSS_PATH.read_text(encoding="utf-8")
+
+    def test_new_foreground_token_is_a_literal_copy_of_the_gateway_reference(self):
+        self.assertIn("--ocean-glass-foreground: rgba(8, 28, 36, .72);", self.tokens_css)
+        idx = self.css.index(".gateway-shell .gateway-card-wide {")
+        body = self.css[idx:idx + 300]
+        self.assertIn("background-color: rgba(8, 28, 36, .72);", body)
+
+    def test_foreground_token_is_denser_than_the_passive_surface_it_replaces(self):
+        # .72 alpha (denser / more opaque) vs. .55 alpha inherited from
+        # --surface-primary - the whole point of the fix.
+        self.assertIn("rgba(10, 35, 42, .55)", self.tokens_css)  # --ocean-surface-primary, unchanged
+        self.assertIn("rgba(8, 28, 36, .72)", self.tokens_css)   # --ocean-glass-foreground, new
+
+    def test_menu_dropdown_panels_get_their_own_denser_background_in_deep_ocean(self):
+        idx = self.css.index(".workspace-topbar.appearance-deep-ocean .workspace-menubar-panel,")
+        block = self.css[idx:self.css.index("}", idx)]
+        self.assertIn("background-color: var(--ocean-glass-foreground);", block)
+        # Every listed selector must itself carry the .appearance-deep-ocean
+        # scope directly - never a bare, unscoped selector leaking into
+        # every other appearance mode.
+        header = self.css[idx:self.css.index("{", idx)]
+        for selector in header.split(","):
+            self.assertIn("appearance-deep-ocean", selector, selector)
+
+    def test_composer_dock_does_not_gain_the_denser_background(self):
+        # The Composer dock is a bounded panel, not a floating overlay -
+        # it keeps its glow-only treatment and never competes with a
+        # passive tray behind it, so it must not pick up the new token.
+        idx = self.css.rindex(".chat-region.appearance-deep-ocean .conversation-dock-panel {")
+        block = self.css[idx:self.css.index("}", idx)]
+        self.assertNotIn("--ocean-glass-foreground", block)
+
+    def test_other_appearance_modes_never_reference_the_foreground_token(self):
+        for mode_class in ("appearance-dark", "appearance-tinted", "appearance-deep-forest"):
+            self.assertNotIn(f".workspace-topbar.{mode_class} .workspace-menubar-panel", self.css)
+        for m in re.finditer(r"--ocean-glass-foreground", self.css):
+            selector_start = self.css.rfind("}", 0, m.start())
+            rule_start = self.css.rfind("{", selector_start, m.start())
+            selector_line = self.css[max(rule_start - 400, 0):rule_start]
+            self.assertIn("appearance-deep-ocean", selector_line, self.css[m.start():m.start() + 60])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -5767,12 +5767,28 @@ main:hover,
    mode. z-index 60/61 (already established, well above the narrow
    popup-shadowing regression CLAUDE-P40-VW6's own comment on the
    selector group below once diagnosed and fixed) remains untouched -
-   this only adds visual material, never repositions anything. */
+   this only adds visual material, never repositions anything.
+
+   CLAUDE-MENU-FOREGROUND-LAYERING-01: background-color added below.
+   Previously these floating overlays only ADDED blur+glow on top of
+   the --surface-primary background they inherit from the .workspace-
+   topbar.appearance-deep-ocean redefinition above - the same .55-
+   alpha density every passive background tray (project list, document
+   rail, toolbox) also uses, since those panels sit on the same
+   redefinition's cascade. Blurred-but-still-.55-alpha let the tray
+   shape/color bleed through an open menu instead of the menu owning
+   the foreground. --ocean-glass-foreground (tokens.css) is a literal
+   copy of .gateway-card-wide's own denser .72-alpha background - a
+   real floating-card-over-live-background precedent that never drew a
+   bleed-through report - so a genuinely foreground overlay now reads
+   as denser glass than the passive panel underneath it, without
+   inventing a new color or touching any other appearance mode. */
 .workspace-topbar.appearance-deep-ocean .workspace-menubar-panel,
 .workspace-topbar.appearance-deep-ocean .workspace-menubar-subpanel,
 .workspace-topbar.appearance-deep-ocean .workspace-layout-options,
 .workspace-topbar.appearance-deep-ocean .workspace-appearance-options,
 .workspace-topbar.appearance-deep-ocean .workspace-user-options {
+    background-color: var(--ocean-glass-foreground);
     -webkit-backdrop-filter: blur(var(--ocean-glass-blur));
     backdrop-filter: blur(var(--ocean-glass-blur));
     box-shadow: var(--ocean-glow);

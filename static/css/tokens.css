@@ -584,9 +584,23 @@
        .gateway-card-wide (this repository's own already-shipped,
        already-approved reference) actually READ as glass rather than
        plain dark navy. Both values below are a literal copy of that
-       rule's own two properties - not new numbers, not re-derived. */
+       rule's own two properties - not new numbers, not re-derived.
+
+       --ocean-glass-foreground (added under CLAUDE-MENU-FOREGROUND-
+       LAYERING-01): main.css's own floating-menu rule originally left
+       background-color inherited from --surface-primary (.55 alpha) -
+       the SAME density passive background trays use (project list,
+       document rail, toolbox), so an open menu and the passive panel
+       behind it read as near-identical material once blurred, letting
+       the tray bleed through instead of the menu owning the
+       foreground. .gateway-card-wide is itself already a floating
+       card over a live background and was never reported as bleeding
+       through, so its own background-color (.72 alpha - meaningfully
+       denser than .55) is reused here verbatim, same as the two
+       tokens above: not a new number, not re-derived. */
     --ocean-glass-blur: 14px;
     --ocean-glow: 0 24px 70px rgba(1, 8, 14, .5);
+    --ocean-glass-foreground: rgba(8, 28, 36, .72);
 
     /* CLAUDE-P40-DTAB1: same rationale as the light-mode block above -
        identical values across every dark theme, the same convention
