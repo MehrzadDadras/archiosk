@@ -202,14 +202,40 @@
                     <details class="workspace-menubar-menu" data-ui-ref="menu.file">
                         <summary class="workspace-topbar-btn">File</summary>
                         <div class="workspace-menubar-panel" role="group" aria-label="File">
-                            {# Add Document to the OPEN Project - not a second
-                               "New Project" (that already lives, admin-only,
-                               at Archiosk > Admin > New Project; duplicating
-                               it here regressed a pre-existing rule, "do not
-                               duplicate New Project elsewhere," and pointed
-                               at the wrong route besides - /upload always
-                               CREATES a Project, it never adds a Source to
-                               an already-open one). The real "add a Document
+                            {# CLAUDE-FILE-MENU-CANONICAL-COMMANDS-01: the
+                               canonical New Project / Open Project commands -
+                               conventional File-menu grammar (File > New,
+                               File > Open), reusing the SAME two routes
+                               every other entry point into these actions
+                               already uses, never a second implementation.
+                               New Project -> portal.upload, identical target/
+                               gate to Archiosk > Admin > New Project and the
+                               Gateway New Project card - a real, already-
+                               accepted duplication of GLOBAL COMMAND ACCESS
+                               vs. an ONBOARDING shortcut (this session's own
+                               redundant-UI audit named the Gateway/Admin
+                               pair exactly this way; File's own copy is the
+                               same duality, not a new one). Open Project ->
+                               portal.choose_project, the existing focused
+                               "which Project did you mean" picker
+                               (menu.context.switch-project already uses this
+                               same route) - reachable on every authenticated
+                               page, project open or not; `current` carries
+                               the open Project's id when there is one
+                               (url_for omits the query param entirely when
+                               None), same optional-parameter contract that
+                               route's own docstring already establishes. #}
+                            {% if is_admin %}
+                            <a class="workspace-menubar-item" data-ui-ref="menu.file.new-project" href="{{ url_for('portal.upload') }}">New Project&hellip;</a>
+                            {% else %}
+                            <span class="workspace-menubar-item workspace-menubar-item-disabled" data-ui-ref="menu.file.new-project.none" aria-disabled="true" title="Admin only">New Project (Admin only)</span>
+                            {% endif %}
+                            <a class="workspace-menubar-item" data-ui-ref="menu.file.open-project" href="{{ url_for('portal.choose_project', current=(project_id if project_id is defined else None)) }}">Open Project&hellip;</a>
+                            <hr class="workspace-menubar-separator" aria-hidden="true">
+                            {# Add Document to the OPEN Project - a DIFFERENT
+                               action from New Project above (this one adds a
+                               Source to the Project already open, never
+                               creates a new one). The real "add a Document
                                to this Project" action already has a decided
                                home (MANIFEST.md's own note on this, above:
                                Admin -> Project Data Management, same

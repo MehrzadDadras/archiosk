@@ -487,5 +487,90 @@ class DocumentAndExportMenuTests(_BaseTestCase):
         self.assertNotIn('data-ui-ref="menu.file.export.none"', body)
 
 
+class FileMenuNewOpenProjectTests(_BaseTestCase):
+    """CLAUDE-FILE-MENU-CANONICAL-COMMANDS-01: File > New Project / Open
+    Project must reuse the exact same routes every other entry point
+    into these actions already uses - never a second implementation -
+    and must be truthfully permission-aware."""
+
+    def test_new_project_present_and_targets_upload_for_admin(self):
+        client = self._client_as("menu_owner", 1, role="admin")
+        body = client.get("/projects").get_data(as_text=True)
+        idx = body.index('data-ui-ref="menu.file.new-project"')
+        tag = body[idx - 10:idx + 80]
+        self.assertIn('href="/upload"', tag)
+        self.assertNotIn('data-ui-ref="menu.file.new-project.none"', body)
+
+    def test_new_project_disabled_for_non_admin(self):
+        client = self._client_as("menu_reviewer", 2, role="read_only")
+        body = client.get("/projects").get_data(as_text=True)
+        self.assertIn('data-ui-ref="menu.file.new-project.none"', body)
+        self.assertNotIn('data-ui-ref="menu.file.new-project"', body)
+
+    def test_open_project_present_for_every_authenticated_user_and_targets_choose_project(self):
+        for username, uid, role in (("menu_owner", 1, "admin"), ("menu_reviewer", 2, "read_only")):
+            client = self._client_as(username, uid, role=role)
+            body = client.get("/projects").get_data(as_text=True)
+            idx = body.index('data-ui-ref="menu.file.open-project"')
+            tag = body[idx - 10:idx + 80]
+            self.assertIn('href="/projects/choose"', tag, username)
+
+    def test_open_project_carries_current_project_id_when_one_is_open(self):
+        doc = self._ingest(owner="menu_owner", project_name="Open Project Current Test")
+        client = self._client_as("menu_owner", 1)
+        body = client.get(f"/projects/{doc.project_id}/workspace").get_data(as_text=True)
+        idx = body.index('data-ui-ref="menu.file.open-project"')
+        tag = body[idx - 10:idx + 150]
+        self.assertIn(f'href="/projects/choose?current={doc.project_id}"', tag)
+
+    def test_new_project_and_open_project_never_duplicate_a_second_implementation(self):
+        # Same routes as the pre-existing Archiosk > Admin > New Project
+        # and the breadcrumb's own Switch Project link - never a
+        # second, parallel project-creation/project-open code path.
+        client = self._client_as("menu_owner", 1, role="admin")
+        body = client.get("/projects").get_data(as_text=True)
+        new_project_idx = body.index('data-ui-ref="menu.file.new-project"')
+        admin_new_project_idx = body.index('data-ui-ref="menu.archiosk.admin.new-project"')
+        self.assertIn('href="/upload"', body[new_project_idx - 10:new_project_idx + 80])
+        self.assertIn('href="/upload"', body[admin_new_project_idx - 10:admin_new_project_idx + 80])
+
+
+class MenuDeboxedFrameTests(unittest.TestCase):
+    """CLAUDE-MENU-DEBOXING-01: the top-menu triggers no longer sit
+    inside a permanently-visible box - the border is reserved (same
+    1px, transparent) so hover/focus/open never shift layout, and
+    becomes genuinely visible only on a real state (hover, keyboard
+    focus, or a truthfully-tracked open menu)."""
+
+    def setUp(self):
+        self.css = _MAIN_CSS_PATH.read_text(encoding="utf-8")
+        self.js = _APP_MENU_JS_PATH.read_text(encoding="utf-8")
+
+    def test_border_is_transparent_at_rest_not_absent(self):
+        idx = self.css.index(".workspace-topbar-btn {")
+        body = self.css[idx:self.css.index("}", idx)]
+        self.assertIn("border: 1px solid transparent;", body)
+
+    def test_hover_and_expanded_state_still_reveal_a_real_border(self):
+        idx = self.css.index(".workspace-topbar-btn:hover,")
+        body = self.css[idx:self.css.index("}", idx)]
+        self.assertIn('[aria-expanded="true"]', body)
+        self.assertIn("border-color: var(--border-strong);", body)
+
+    def test_focus_visible_also_reveals_the_border(self):
+        idx = self.css.index(".workspace-topbar-btn:focus-visible")
+        body = self.css[idx:self.css.index("}", idx)]
+        self.assertIn("border-color: var(--border-strong);", body)
+
+    def test_aria_expanded_is_now_genuinely_synced_not_dead_css(self):
+        # Before this stage, [aria-expanded="true"] matched nothing -
+        # native <details>/<summary> never sets it, and nothing in this
+        # codebase's JS did either for the menu bar specifically.
+        idx = self.js.index("topbar.addEventListener('toggle'")
+        body = self.js[idx:idx + 1000]
+        self.assertIn("querySelector(':scope > summary')", body)
+        self.assertIn("setAttribute('aria-expanded', String(target.open))", body)
+
+
 if __name__ == "__main__":
     unittest.main()

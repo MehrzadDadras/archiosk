@@ -2863,12 +2863,29 @@ main:has(.document-viewer-canvas-container) {
     gap: 0.5rem;
     flex-shrink: 0;
 }
+/* CLAUDE-MENU-DEBOXING-01: the permanent 1px border here used to render
+   at REST too - every one of the 8 top-level menu triggers (plus
+   Display Layout/Appearance/Account, which share this same class) sat
+   inside its own always-visible box, reading as a row of button tiles
+   rather than a restrained command surface (Product Owner, explicit:
+   "the top-menu icons do not need individual visible frames/boxes").
+   border-color: transparent (not border: none) keeps the exact same
+   1px box model at rest, so hover/focus/open never shifts layout by a
+   pixel - only the color changes, VS-Code-like "icon + spacing +
+   subtle response" rather than "icon enclosed permanently in a visible
+   frame." The hover/expanded rule below is unchanged in EFFECT (same
+   border-strong reveal) - see app_menu.js's own new aria-expanded
+   sync, added alongside this change, for why [aria-expanded="true"]
+   now actually matches something (it was dead CSS before - native
+   <details>/<summary> never set that attribute on its own), making
+   the open-menu frame a genuine, truthful state signal rather than a
+   decorative one. */
 .workspace-topbar-btn {
     font-family: var(--font-body);
     font-size: var(--text-sm);
     color: var(--text-secondary);
     background: none;
-    border: 1px solid var(--border);
+    border: 1px solid transparent;
     border-radius: 3px;
     padding: 0.35rem 0.65rem;
     cursor: pointer;
@@ -2879,6 +2896,16 @@ main:has(.document-viewer-canvas-container) {
 .workspace-topbar-btn:hover,
 .workspace-topbar-btn[aria-expanded="true"] {
     color: var(--text-primary);
+    border-color: var(--border-strong);
+}
+/* Keyboard focus must stay visible even though the frame itself is now
+   quiet at rest - the browser's own default focus outline already
+   provides this (untouched, never suppressed), but a subtle border
+   reveal on :focus-visible too keeps the same "which control has focus"
+   signal sighted keyboard users get from hover, matching Section 5's
+   own "preserve... keyboard focus visibility" requirement explicitly,
+   not merely by omission. */
+.workspace-topbar-btn:focus-visible {
     border-color: var(--border-strong);
 }
 /* CLAUDE-APP-MENU-01: the application menu bar - Archiosk | File | Edit |

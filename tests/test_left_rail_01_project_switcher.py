@@ -267,13 +267,23 @@ class AdminSurfaceRelocationTests(_BaseTestCase):
         body = client.get(f"/projects/{doc.project_id}/workspace").get_data(as_text=True)
         self.assertIn('data-ui-ref="menu.account.removed-projects"', body)
 
-    def test_no_duplicate_new_project_entry_point_inside_the_workspace(self):
-        # Section 5: "Do not duplicate New Project elsewhere inside the
-        # normal project workspace."
+    def test_new_project_entry_points_are_all_the_same_canonical_route(self):
+        # Section 5's original "no duplicate New Project entry point"
+        # premise is deliberately superseded by CLAUDE-FILE-MENU-
+        # CANONICAL-COMMANDS-01 (Product Owner, explicit): File > New
+        # Project was added alongside the pre-existing Archiosk > Admin
+        # > New Project - the same justified "global command access
+        # (File) vs. administrative surface (Archiosk > Admin)" duality
+        # this session's own redundant-UI audit already accepted for
+        # the Gateway/Admin pair. The real invariant that still holds:
+        # every entry point targets the exact same canonical route,
+        # never a second implementation.
         doc = self._ingest("Project Alpha")
         client = self._client()
         body = client.get(f"/projects/{doc.project_id}/workspace").get_data(as_text=True)
-        self.assertEqual(body.count('href="/upload"'), 1)
+        self.assertEqual(body.count('href="/upload"'), 2)
+        self.assertIn('data-ui-ref="menu.file.new-project"', body)
+        self.assertIn('data-ui-ref="menu.archiosk.admin.new-project"', body)
 
     def test_admin_functions_also_absent_from_portfolio_rail(self):
         # Portfolio browsing (no Project open) - same relocation applies,

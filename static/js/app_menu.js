@@ -43,6 +43,16 @@
         var target = e.target;
         if (!target || target.tagName !== 'DETAILS') return;
         if (target.open) closeOthers(target);
+        // CLAUDE-MENU-DEBOXING-01: native <details>/<summary> never sets
+        // aria-expanded on its own - .workspace-topbar-btn[aria-expanded=
+        // "true"] (main.css) was dead CSS, matching nothing, so "this
+        // menu is currently open" had no real visual signal at all
+        // beyond a fleeting :hover. Setting it here, on every toggle
+        // (including the programmatic ones closeOthers() triggers, which
+        // themselves dispatch a real 'toggle' event) makes that state
+        // genuine rather than decorative-only.
+        var summary = target.querySelector(':scope > summary');
+        if (summary) summary.setAttribute('aria-expanded', String(target.open));
     }, true);
 
     document.addEventListener('keydown', function (e) {
