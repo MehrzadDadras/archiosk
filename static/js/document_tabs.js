@@ -631,7 +631,16 @@
 
     // Exposed for pdf_viewer.js (Section 6: per-tab viewer state) - a
     // read-only lookup, never a second write path for tab metadata.
+    //
+    // CLAUDE-APP-MENU-01: closeAllTabs is the SAME pre-existing function
+    // the tab-strip overflow panel's own "Close All Tabs" button already
+    // calls (renderOverflowPanel above) - exposed here so the Window
+    // menu's own "Close All Tabs" command invokes the identical
+    // implementation rather than re-deriving it from fragile DOM text
+    // matching, or duplicating its logic.
     window.ArchioskDocumentTabs = {
-        isPinned: function (sourceId) { return !!findPinned(sourceId); }
+        isPinned: function (sourceId) { return !!findPinned(sourceId); },
+        closeAllTabs: closeAllTabs,
+        hasAnyTabs: function () { return pinned.length > 0 || !!preview; }
     };
 })();

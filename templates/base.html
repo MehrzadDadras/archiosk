@@ -52,84 +52,7 @@
            this replaces. #}
         {% if authenticated %}
         <div class="workspace-topbar">
-            <div class="workspace-topbar-identity">
-                {# CLAUDE-P40-BRAND1: the mark sits directly before the
-                   wordmark inside this SAME link (never a second,
-                   adjacent element) so there is exactly one tab stop and
-                   one accessible control here, not two competing ones.
-                   aria-label="Archiosk Home" is the link's own real
-                   accessible name (the mark stays aria-hidden, so
-                   without this the computed name would just be
-                   "Archiosk", not communicating that it navigates home) -
-                   the existing href/data-ui-ref/navigation behavior is
-                   completely unchanged, only the visible content and
-                   accessible name are new. #}
-                <a class="workspace-topbar-brand" data-ui-ref="menu.brand" href="{{ url_for('portal.index') }}" aria-label="Archiosk Home">{{ macros.archiosk_mark(size=24) }}<span class="workspace-topbar-brand-text">Archiosk</span></a>
-                {% if project_id is defined and workspace is defined %}
-                <span class="workspace-topbar-context" data-ui-ref="menu.context">
-                    {# CLAUDE-P40-VW7B, Section 5: "[ARCHIOSK mark] Archiosk
-                       -> Foreground Project -> current projection" - the
-                       Foreground Project's own name is now a real link
-                       into the Project Vestibule (routes/portal.py's
-                       choose_project, extended for this stage - see that
-                       route's own docstring), carrying `?current=` so the
-                       Vestibule can show this Project as "Currently
-                       entered" rather than just another card. A real,
-                       already-authorized navigation (workspace state is
-                       safely persisted per-Project already - see
-                       .lists-pane's own comment on why no interruption
-                       dialog guards this), not a new client-side
-                       mechanism. aria-label carries the actual purpose
-                       ("Switch Project") since the visible text alone
-                       (just the Project's own name) would not otherwise
-                       communicate that activating it navigates away, not
-                       merely identifies where you are.
-
-                       CLAUDE-POSTCAMEL-TOPMENU-FIX1: that aria-label/title
-                       pair is screen-reader/tooltip-only - a sighted user
-                       moving at normal speed has no resting-state visual
-                       signal that this is a control rather than plain
-                       breadcrumb text (a real product-owner finding
-                       during the P01 founder sanity-check). The trailing
-                       chevron below is the fix - `aria-hidden="true"`
-                       and inside this SAME link (the CLAUDE-P40-BRAND1
-                       brand-link precedent above: one tab stop, one
-                       accessible control, never a second adjacent
-                       element), so the existing aria-label remains the
-                       link's whole accessible name, unchanged, and no
-                       new accessibility surface is introduced. #}
-                    <a class="workspace-topbar-project" data-ui-ref="menu.context.switch-project" href="{{ url_for('portal.choose_project', current=project_id) }}" aria-label="{{ (workspace.display_title or document.filename) }} — Switch Project" title="Switch Project">{{ workspace.display_title or document.filename }}<span class="workspace-topbar-project-chevron" aria-hidden="true">&#9662;</span></a>
-                    {% if active_case %}
-                    <span class="workspace-topbar-sep" aria-hidden="true">/</span>
-                    <span class="workspace-topbar-doc">{{ active_case.title }}</span>
-                    {% elif selected_source %}
-                    <span class="workspace-topbar-sep" aria-hidden="true">/</span>
-                    <span class="workspace-topbar-doc">{{ selected_source.name }}</span>
-                    {% if selected_source.removed_at %}<span class="workspace-topbar-badge">removed</span>{% endif %}
-                    {% elif directory_view_label %}
-                    <span class="workspace-topbar-sep" aria-hidden="true">/</span>
-                    <span class="workspace-topbar-doc">{{ directory_view_label }}</span>
-                    {% endif %}
-                </span>
-                {% if operating_environment %}
-                {# CLAUDE-RFP-BOUNDARY-01, Section 11: a restrained,
-                   persistent workspace-side indicator - "particularly
-                   useful in Admin mode... an operational boundary
-                   indicator, not decoration... not a casual mode-switch
-                   button" - so this is a plain <span>, no click handler,
-                   no href. State-aware per this session's own Icon
-                   Intelligence pass: the accessible label/tooltip
-                   (side_indicator_tooltip, routes/workspace.py) explains
-                   what the side actually means, never just the bare
-                   label text repeated. Legacy/unclassified projects
-                   (operating_environment is None) show nothing here -
-                   the same "None means not established, never guessed"
-                   honesty environment_capabilities.py's own module
-                   docstring already establishes for the field itself. #}
-                <span class="workspace-side-indicator workspace-side-indicator-{{ operating_environment }}" data-ui-ref="menu.context.side-indicator" title="{{ side_indicator_tooltip }}" aria-label="{{ side_indicator_tooltip }}">{{ operating_environment_label }}{% if lifecycle_stage_label %} · {{ lifecycle_stage_label }}{% endif %}</span>
-                {% endif %}
-                {% endif %}
-            </div>
+            {% include "_app_menu.html" %}
             {# CLAUDE-P40-VW7A-QA (Move Document Controls into the Top
                Application Menu): the central region between the
                breadcrumb (.workspace-topbar-identity, above) and
@@ -233,99 +156,6 @@
             </div>
             <div class="workspace-topbar-controls">
                 {% if project_id is defined and workspace is defined %}
-                {# ---------------- Display-layout control (CLAUDE-P40-E3A, Section 6;
-                   CLAUDE-P40-VW4 replaced the single either/or orientation +
-                   one shared quantity with two INDEPENDENT numbers) --------
-                   Vertical divisions = side-by-side columns, Horizontal
-                   divisions = stacked rows, resulting Display count = their
-                   PRODUCT (a 2x3 arrangement and a 3x2 arrangement both
-                   total six Displays but are genuinely different
-                   arrangements - product-owner's own worked examples).
-                   Both steppers are permanently visible simultaneously
-                   (never hidden behind an either/or choice), each with its
-                   own increment/decrement (never a bare text field only),
-                   and an explicit Apply - nothing here silently re-renders
-                   on every keystroke. 6 is the practical ceiling on the
-                   PRODUCT (static/js/case_workspace.js's own
-                   MAX_DISPLAY_DIVISIONS): past 6 simultaneous Displays a
-                   typical 1280-1920px viewport gives each one too little
-                   room to usefully read an architectural drawing or
-                   document - a real usability floor, not a decorative
-                   round number. #}
-                <details class="workspace-layout-menu" id="workspace-layout-menu" data-ui-ref="menu.display-layout">
-                    <summary class="workspace-topbar-btn workspace-layout-summary">Display Layout</summary>
-                    <div class="workspace-layout-options" role="group" aria-label="Display Layout">
-                        <div class="workspace-layout-quantity" role="group" aria-label="Vertical divisions">
-                            <span class="workspace-layout-quantity-label">Vertical divisions</span>
-                            <button type="button" class="workspace-layout-stepper" id="display-vertical-decrement" data-ui-ref="menu.display-layout.vertical-decrement" aria-label="Decrease vertical divisions">&minus;</button>
-                            <span class="workspace-layout-quantity-value" id="display-vertical-value" aria-live="polite">1</span>
-                            <button type="button" class="workspace-layout-stepper" id="display-vertical-increment" data-ui-ref="menu.display-layout.vertical-increment" aria-label="Increase vertical divisions">+</button>
-                        </div>
-                        <div class="workspace-layout-quantity" role="group" aria-label="Horizontal divisions">
-                            <span class="workspace-layout-quantity-label">Horizontal divisions</span>
-                            <button type="button" class="workspace-layout-stepper" id="display-horizontal-decrement" data-ui-ref="menu.display-layout.horizontal-decrement" aria-label="Decrease horizontal divisions">&minus;</button>
-                            <span class="workspace-layout-quantity-value" id="display-horizontal-value" aria-live="polite">1</span>
-                            <button type="button" class="workspace-layout-stepper" id="display-horizontal-increment" data-ui-ref="menu.display-layout.horizontal-increment" aria-label="Increase horizontal divisions">+</button>
-                        </div>
-                        <p class="workspace-layout-limit-note">Maximum 6 Displays total (Vertical &times; Horizontal).</p>
-                        <button type="button" class="workspace-layout-apply" id="display-layout-apply" data-ui-ref="menu.display-layout.apply">Apply</button>
-                    </div>
-                </details>
-
-                {# ---------------- Appearance menu (CLAUDE-P40-E3A, Section 10;
-                   CLAUDE-P40-VW3 replaced the single plain/tinted checkbox
-                   per surface with a real Light/Dark/Tinted matrix;
-                   CLAUDE-P40-VW8-QA's Approved Theme Set renamed Dark to
-                   Black (a brief interim "Graphite" label was corrected
-                   back to Black - true #000000 - per explicit product-
-                   owner follow-up: "Do not use Graphite... must appear
-                   flat and matte"), Tinted to Midnight Blue, and added
-                   Deep Forest as a fourth choice; CLAUDE-POSTCAMEL-P02-
-                   ST1 renamed Light to Titanium - same restraint-through-
-                   relabeling precedent as Dark->Graphite->Black above:
-                   mode_value stays 'light', ref_suffix stays 'light',
-                   only mode_label changes; tokens.css's own :root
-                   material-scale values (previously a warm sand/
-                   parchment family) were replaced with a desaturated,
-                   restrained warm-neutral "Titanium" character in the
-                   same commit) --------
-                   CLAUDE-APPEARANCE-SIMPLIFY-01 (Product Owner live-browser
-                   correction): retires the five-independently-configurable-
-                   surface matrix above outright - "the selected appearance
-                   must apply coherently across the entire application... do
-                   not allow panel-by-panel theme mixing." ONE global choice
-                   now, five mutually exclusive options (Titanium/Black/
-                   Midnight Blue/Deep Forest/Deep Ocean - Deep Ocean new this
-                   stage, see tokens.css's own comment on where its palette
-                   was traced from). Still reviewer/device presentation state
-                   only (localStorage - see this stage's own JS below), never
-                   a Project-record write.
-
-                   The (mode_value, mode_label, ref_suffix) triples below
-                   deliberately decouple the STORED/applied value (new
-                   vocabulary: light/black/midnight-blue/deep-forest/
-                   deep-ocean) from the UI-reference suffix (light/dark/
-                   tinted/deep-forest/deep-ocean) - light/dark/tinted are the
-                   pre-existing, RETAINED identifiers (a label or palette
-                   revision does not require renumbering a control that
-                   still means the same choice - see tokens.css's own
-                   comment on the same point). #}
-                <details class="workspace-appearance-menu" id="workspace-appearance-menu" data-ui-ref="menu.appearance">
-                    <summary class="workspace-topbar-btn">Appearance</summary>
-                    <div class="workspace-appearance-options" role="group" aria-label="Appearance">
-                        <div class="appearance-global-options" role="radiogroup" aria-label="Appearance">
-                            {% for mode_value, mode_label, ref_suffix in [('light', 'Titanium', 'light'), ('black', 'Black', 'dark'), ('midnight-blue', 'Midnight Blue', 'tinted'), ('deep-forest', 'Deep Forest', 'deep-forest'), ('deep-ocean', 'Deep Ocean', 'deep-ocean')] %}
-                            <label class="appearance-global-option">
-                                <input type="radio" name="appearance-all" id="appearance-all-{{ ref_suffix }}"
-                                       data-appearance-all-mode="{{ mode_value }}"
-                                       data-ui-ref="menu.appearance.{{ ref_suffix }}">
-                                {{ mode_label }}
-                            </label>
-                            {% endfor %}
-                        </div>
-                    </div>
-                </details>
-
                 {# ---------------- Project Context (CLAUDE-POSTCAMEL-PROJECT-CONTEXT-01) --
                    Persistently reachable from every workspace surface - sits
                    inside the SAME {% if project_id is defined and workspace
@@ -429,43 +259,17 @@
                            (portal.logout, unchanged) - a placement change
                            only, never duplicated. #}
                         <a class="workspace-overflow-item" data-ui-ref="menu.account.sign-out" href="{{ url_for('portal.logout') }}">Sign out</a>
-                        {% if is_admin %}
-                        {# CLAUDE-LEFT-RAIL-01: administrative functions relocated
-                           here from the left PROJECTS rail (Product Owner
-                           decision: "PROJECTS = the projects I can work on and
-                           switch between... ADMIN = actions that create, govern,
-                           recover, or administer projects and the system").
-                           Same routes, same admin_required gates as before -
-                           only WHERE these render changed. Given a new NAMESPACE
-                           (menu.account.admin.*, not lists.*), not the old
-                           lists.new-project/lists.security/lists.operations/
-                           lists.system-data-management ref values - this is no
-                           longer part of Lists at all, and the old refs' own
-                           established meaning ("New Project is forbidden inside
-                           an opened Project, Security/Operations/PDM are
-                           reachable regardless") has collapsed into one single
-                           rule now that all four live in the same place with
-                           the same always-reachable-if-admin treatment; keeping
-                           the old names would misleadingly imply they're still
-                           Lists controls. Section 8's own "privilege-aware
-                           Admin, reuse existing authorization behavior" is
-                           satisfied by reusing is_admin exactly as the rail
-                           did - no new authorization surface invented. #}
-                        <span class="workspace-overflow-label" data-ui-ref="menu.account.admin">Admin</span>
-                        <a class="workspace-overflow-item" data-ui-ref="menu.account.admin.new-project" href="{{ url_for('portal.upload') }}">+ New Project</a>
-                        <a class="workspace-overflow-item" data-ui-ref="menu.account.admin.security" href="{{ url_for('security.department_home') }}">Security</a>
-                        <a class="workspace-overflow-item" data-ui-ref="menu.account.admin.operations" href="{{ url_for('operations.department_home') }}">Operations</a>
-                        {# CLAUDE-PROJECT-SURFACE-CONSOLIDATION-01: carries the
-                           currently open Project forward via ?project_id= (only
-                           when one is actually open - project_id is a template
-                           global only on Project-scoped pages) so the
-                           destination page can unmistakably identify which
-                           Project's evidence Add/Archive Documents would act
-                           on. Reached from the portfolio/no-project state, it
-                           omits the param and the destination renders its own
-                           honest "no active project" state instead of guessing. #}
-                        <a class="workspace-overflow-item" id="project-data-management" data-ui-ref="menu.account.admin.project-data-management" href="{{ url_for('portal.reset_project_data', project_id=(project_id if project_id is defined else None)) }}">Project Data Management</a>
-                        {% endif %}
+                        {# CLAUDE-APP-MENU-01: Admin (New Project/Security/
+                           Operations/Project Data Management) relocated again,
+                           this time from here into Archiosk -> Admin
+                           (menu.archiosk.admin.*) - same routes, same
+                           is_admin gate, unchanged, per this stage's own
+                           explicit "consolidate Admin under Archiosk"
+                           instruction. This Account menu now holds only
+                           session-identity actions (Sign out, Removed
+                           Projects, UI Reference Mode), not application/
+                           governance administration - see menu.archiosk.admin
+                           in the new menu bar above for the relocated set. #}
                         {# CLAUDE-LEFT-RAIL-01: NOT admin-gated, deliberately -
                            routes/portal.py's own removed_projects/
                            restore_project_route are @login_required only
@@ -2078,6 +1882,14 @@
        when ?spin=1 rendered `_spin_prototype.html`). #}
     <script src="{{ url_for('static', filename='js/spin_prototype.js') }}?v={{ static_version }}"></script>
     {% endif %}
+    {# CLAUDE-APP-MENU-01: the application menu bar's own JS - loaded
+       OUTSIDE the {% if project_id %} block above (unlike pdf_viewer.js/
+       eye_pane.js), since .workspace-menubar itself renders on every
+       authenticated page (base.html's own {% if authenticated %} gate),
+       not only inside an open Workspace. Self-guards (`if (!topbar)
+       return`) exactly like every other script in this cluster, so
+       loading it here is a safe no-op on any page without a topbar. #}
+    <script src="{{ url_for('static', filename='js/app_menu.js') }}?v={{ static_version }}"></script>
     <script nonce="{{ csp_nonce }}">
         // CLAUDE-P40-E3A / CLAUDE-LEFTPANEL-CALM-01: the recursive Lists
         // hierarchy - a branch starts open only if the page rendered it
@@ -2165,32 +1977,19 @@
         })();
     </script>
     <script nonce="{{ csp_nonce }}">
-        // CLAUDE-P40-E3A, Section 3/6: close the top-bar <details>
-        // menus (Display Layout, Appearance, Project Context, Account) on
-        // outside click or Escape - the native <details> element has no
-        // such behaviour on its own, and leaving one open after a click
-        // elsewhere would sit on top of Display indefinitely.
-        (function () {
-            var menus = Array.prototype.slice.call(
-                document.querySelectorAll('.workspace-layout-menu, .workspace-appearance-menu, .workspace-project-context-menu, .workspace-user-menu')
-            );
-            if (!menus.length) return;
-
-            document.addEventListener('click', function (e) {
-                menus.forEach(function (menu) {
-                    if (menu.open && !menu.contains(e.target)) menu.open = false;
-                });
-            });
-            document.addEventListener('keydown', function (e) {
-                if (e.key !== 'Escape') return;
-                menus.forEach(function (menu) {
-                    if (menu.open) {
-                        menu.open = false;
-                        menu.querySelector('summary').focus();
-                    }
-                });
-            });
-        })();
+        // CLAUDE-UI-ACTION-REDUNDANCY-REVIEW-01, Disposition 4 (extended
+        // to the same underlying principle - one canonical mechanism, not
+        // two): CLAUDE-P40-E3A's own outside-click/Escape closer for
+        // .workspace-layout-menu/.workspace-appearance-menu/.workspace-
+        // project-context-menu/.workspace-user-menu used to live here as
+        // its own separate IIFE. All four are <details> elements nested
+        // inside .workspace-topbar, and static/js/app_menu.js (loaded
+        // below) already provides the exact same outside-click/Escape
+        // behavior generically for EVERY <details> inside .workspace-
+        // topbar (its own allMenus()/closeOthers()) - this duplicate,
+        // narrower copy was pure dead-weight once that shipped, not a
+        // second real mechanism. Removed outright rather than left as
+        // silently-redundant code.
 
         // CLAUDE-P40-E3A, Section 6; CLAUDE-P40-VW7B: route a Document/
         // Investigation/Overview leaf click to whichever Display

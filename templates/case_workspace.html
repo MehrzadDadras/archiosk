@@ -1811,7 +1811,23 @@
             <details class="composer-plus">
                 <summary>+</summary>
                 <p class="composer-plus-links">
-                    <a href="#project-sources-add-document">Add Document</a>
+                    {# CLAUDE-UI-ACTION-REDUNDANCY-REVIEW-01, Disposition 5: this
+                       anchor never had a matching id anywhere on this page (a
+                       pre-existing, unrelated dead link) - repointed to the
+                       real, canonical Add-Document destination (Admin ->
+                       Project Data Management, the SAME workspace.
+                       add_document_source route templates/base.html's own
+                       File > Add Document now uses), admin-gated to match
+                       that route's own @admin_required, honest rather than a
+                       dead link for a non-admin viewer. The sibling three
+                       links on this same line (#active-work-new-case,
+                       #project-sources, #active-work-snapshot) are ALSO dead
+                       anchors, discovered during this fix but left untouched
+                       - out of this disposition's own explicit scope
+                       ("within the same canonical Add Document path"). #}
+                    {% if is_admin %}
+                    <a href="{{ url_for('portal.reset_project_data', project_id=project_id) }}">Add Document</a>
+                    {% endif %}
                     <a href="#active-work-new-case">Start Investigation</a>
                     <a href="#project-sources">Open Project Source</a>
                     <a href="#active-work-snapshot">Create Snapshot</a>

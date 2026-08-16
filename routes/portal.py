@@ -403,6 +403,18 @@ def _environment_projects(registry, store: CaseWorkspaceStore, environment_filte
     return projects
 
 
+@portal_bp.route('/about')
+@login_required
+def about():
+    """CLAUDE-APP-MENU-01: the Archiosk application menu's own "About" item
+    - honest, static facts already shown elsewhere (gateway.html's own
+    footer: "Flat-JSON registry" / "Static build v{{ static_version }}"),
+    never fabricated version/build metadata this app doesn't actually
+    track (no packaged release number, no git commit exposed to the
+    running process)."""
+    return render_template('about.html')
+
+
 @portal_bp.route('/gateway')
 @login_required
 def gateway():

@@ -1,0 +1,333 @@
+{# ============================================================
+   CLAUDE-APP-MENU-01, extracted into its own partial by
+   CLAUDE-UI-ACTION-REDUNDANCY-REVIEW-01 (Disposition 2/3): the
+   application menu bar + breadcrumb/side-indicator region, shared
+   VERBATIM by templates/base.html (the Workspace shell) and
+   templates/gateway_shell.html (Disposition 2 - Gateway gets the
+   same top-left identity + menu-bar language WITHOUT inheriting
+   Workspace/Lists-panel structure; Gateway simply never sets
+   project_id/workspace/selected_source/operating_environment/
+   can_publish_procurement_package, so every {% if ... is defined %}
+   guard already in this block renders nothing for those regions on
+   Gateway - no second, Gateway-specific menu implementation, no new
+   conditional logic added here for that purpose).
+
+   {% include %} shares the calling template's own context by
+   default, so every variable referenced below (project_id, workspace,
+   is_admin, selected_source, can_publish_procurement_package,
+   operating_environment, etc.) resolves exactly the same way it
+   already did when this markup lived inline in base.html - this
+   extraction is a pure move, not a rewrite. Both callers must also
+   load static/js/app_menu.js (the menu's own Escape/outside-click/
+   command-reuse behavior) and set static_version-qualified script src
+   the same way base.html already does. #}
+            <div class="workspace-topbar-identity">
+                {# CLAUDE-P40-BRAND1: the mark sits directly before the
+                   wordmark inside this SAME link (never a second,
+                   adjacent element) so there is exactly one tab stop and
+                   one accessible control here, not two competing ones.
+                   aria-label="Archiosk Home" is the link's own real
+                   accessible name (the mark stays aria-hidden, so
+                   without this the computed name would just be
+                   "Archiosk", not communicating that it navigates home) -
+                   the existing href/data-ui-ref/navigation behavior is
+                   completely unchanged, only the visible content and
+                   accessible name are new. #}
+                {# ---------------- Application menu bar (CLAUDE-APP-MENU-01) --------------
+                   Sits at the very top-left, above the working surfaces - the
+                   Product Owner's own explicit requirement. "Archiosk" is a
+                   plain menu entry now, NOT a logo: same .workspace-topbar-btn
+                   class every other item here gets (identical font/size/
+                   weight/alignment/interaction), no mark, no distinct sizing.
+                   Reuses the exact <details>/<summary> disclosure primitive
+                   Display Layout/Appearance/Account already established
+                   (CLAUDE-P40-E3A) rather than a new menu framework - every
+                   command inside is a plain <a>/<button> that either
+                   navigates to an existing route or clicks an existing
+                   control by id, never a second implementation of a command
+                   that already exists (Section 15 of the governing prompt).
+                   static/js/app_menu.js supplies the one generic, shared
+                   behavior none of the pre-existing topbar <details> had
+                   before this stage: Escape closes the open menu, opening
+                   one closes any other open one, outside-click closes, and
+                   context-sensitive items mirror the real control's own
+                   disabled state rather than carrying a second enabled/
+                   disabled flag of their own. #}
+                <nav class="workspace-menubar" data-ui-ref="menu.bar" aria-label="Application menu">
+                    <details class="workspace-menubar-menu" data-ui-ref="menu.archiosk">
+                        <summary class="workspace-topbar-btn">Archiosk</summary>
+                        <div class="workspace-menubar-panel" role="group" aria-label="Archiosk">
+                            <a class="workspace-menubar-item" data-ui-ref="menu.archiosk.home" href="{{ url_for('portal.index') }}" aria-label="Archiosk Home">Archiosk Home</a>
+                            <a class="workspace-menubar-item" data-ui-ref="menu.archiosk.about" href="{{ url_for('portal.about') }}">About</a>
+                            <hr class="workspace-menubar-separator" aria-hidden="true">
+                            {% if is_admin %}
+                            {# CLAUDE-LEFT-RAIL-01's own governed set, relocated
+                               here verbatim (same routes, same is_admin gate,
+                               same data - only the physical location and ref
+                               namespace change) per this stage's own explicit
+                               "consolidate Admin under Archiosk" instruction. #}
+                            <details class="workspace-menubar-submenu" data-ui-ref="menu.archiosk.admin">
+                                <summary class="workspace-menubar-item">Admin</summary>
+                                <div class="workspace-menubar-subpanel" role="group" aria-label="Admin">
+                                    <a class="workspace-menubar-item" data-ui-ref="menu.archiosk.admin.new-project" href="{{ url_for('portal.upload') }}">+ New Project</a>
+                                    <a class="workspace-menubar-item" data-ui-ref="menu.archiosk.admin.security" href="{{ url_for('security.department_home') }}">Security</a>
+                                    <a class="workspace-menubar-item" data-ui-ref="menu.archiosk.admin.operations" href="{{ url_for('operations.department_home') }}">Operations</a>
+                                    <a class="workspace-menubar-item" id="project-data-management" data-ui-ref="menu.archiosk.admin.project-data-management" href="{{ url_for('portal.reset_project_data', project_id=(project_id if project_id is defined else None)) }}">Project Data Management</a>
+                                </div>
+                            </details>
+                            {% endif %}
+                            {# Appearance: reviewer/device presentation state only
+                               (localStorage - see the radio inputs below), never
+                               Project-scoped - deliberately rendered regardless
+                               of whether a Project is open, unlike Display
+                               Layout below. Relocated verbatim from its old
+                               .workspace-topbar-controls location (same ids,
+                               same radio inputs, same static/js/case_workspace.js
+                               wiring - a physical move, not a reimplementation). #}
+                            <details class="workspace-appearance-menu workspace-menubar-submenu" id="workspace-appearance-menu" data-ui-ref="menu.appearance">
+                                <summary class="workspace-menubar-item">Appearance</summary>
+                                <div class="workspace-appearance-options" role="group" aria-label="Appearance">
+                                    <div class="appearance-global-options" role="radiogroup" aria-label="Appearance">
+                                        {% for mode_value, mode_label, ref_suffix in [('light', 'Titanium', 'light'), ('black', 'Black', 'dark'), ('midnight-blue', 'Midnight Blue', 'tinted'), ('deep-forest', 'Deep Forest', 'deep-forest'), ('deep-ocean', 'Deep Ocean', 'deep-ocean')] %}
+                                        <label class="appearance-global-option">
+                                            <input type="radio" name="appearance-all" id="appearance-all-{{ ref_suffix }}"
+                                                   data-appearance-all-mode="{{ mode_value }}"
+                                                   data-ui-ref="menu.appearance.{{ ref_suffix }}">
+                                            {{ mode_label }}
+                                        </label>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                            </details>
+                            {% if project_id is defined and workspace is defined %}
+                            {# Display Layout genuinely needs an open Workspace
+                               (it drives THIS project's own Display grid) -
+                               stays project-gated, unlike Appearance above.
+                               Relocated verbatim - same ids, same steppers,
+                               same static/js/case_workspace.js wiring. #}
+                            <details class="workspace-layout-menu workspace-menubar-submenu" id="workspace-layout-menu" data-ui-ref="menu.display-layout">
+                                <summary class="workspace-menubar-item">Display Layout</summary>
+                                <div class="workspace-layout-options" role="group" aria-label="Display Layout">
+                                    <div class="workspace-layout-quantity" role="group" aria-label="Vertical divisions">
+                                        <span class="workspace-layout-quantity-label">Vertical divisions</span>
+                                        <button type="button" class="workspace-layout-stepper" id="display-vertical-decrement" data-ui-ref="menu.display-layout.vertical-decrement" aria-label="Decrease vertical divisions">&minus;</button>
+                                        <span class="workspace-layout-quantity-value" id="display-vertical-value" aria-live="polite">1</span>
+                                        <button type="button" class="workspace-layout-stepper" id="display-vertical-increment" data-ui-ref="menu.display-layout.vertical-increment" aria-label="Increase vertical divisions">+</button>
+                                    </div>
+                                    <div class="workspace-layout-quantity" role="group" aria-label="Horizontal divisions">
+                                        <span class="workspace-layout-quantity-label">Horizontal divisions</span>
+                                        <button type="button" class="workspace-layout-stepper" id="display-horizontal-decrement" data-ui-ref="menu.display-layout.horizontal-decrement" aria-label="Decrease horizontal divisions">&minus;</button>
+                                        <span class="workspace-layout-quantity-value" id="display-horizontal-value" aria-live="polite">1</span>
+                                        <button type="button" class="workspace-layout-stepper" id="display-horizontal-increment" data-ui-ref="menu.display-layout.horizontal-increment" aria-label="Increase horizontal divisions">+</button>
+                                    </div>
+                                    <p class="workspace-layout-limit-note">Maximum 6 Displays total (Vertical &times; Horizontal).</p>
+                                    <button type="button" class="workspace-layout-apply" id="display-layout-apply" data-ui-ref="menu.display-layout.apply">Apply</button>
+                                </div>
+                            </details>
+                            {% endif %}
+                            <hr class="workspace-menubar-separator" aria-hidden="true">
+                            {# Exit: this is a browser application, not a native
+                               desktop one - there is no process to terminate.
+                               The closest truthful equivalent is ending the
+                               authenticated session (the SAME route/link
+                               Account -> Sign out already uses, never a second
+                               logout implementation). app_menu.js guards it
+                               with a plain native confirm() ONLY when a real,
+                               detectable in-progress edit exists (non-empty
+                               Composer text, an open rename input, a mid-
+                               stroke annotation) - there is no server-side
+                               draft object for a governed confirmation dialog
+                               to protect, since this app writes on submit, not
+                               on a "Save" verb (see the completion report). #}
+                            <a class="workspace-menubar-item" data-ui-ref="menu.archiosk.exit" href="{{ url_for('portal.logout') }}">Exit</a>
+                        </div>
+                    </details>
+                    <details class="workspace-menubar-menu" data-ui-ref="menu.file">
+                        <summary class="workspace-topbar-btn">File</summary>
+                        <div class="workspace-menubar-panel" role="group" aria-label="File">
+                            {# Add Document to the OPEN Project - not a second
+                               "New Project" (that already lives, admin-only,
+                               at Archiosk > Admin > New Project; duplicating
+                               it here regressed a pre-existing rule, "do not
+                               duplicate New Project elsewhere," and pointed
+                               at the wrong route besides - /upload always
+                               CREATES a Project, it never adds a Source to
+                               an already-open one). The real "add a Document
+                               to this Project" action already has a decided
+                               home (MANIFEST.md's own note on this, above:
+                               Admin -> Project Data Management, same
+                               workspace.add_document_source route) - this is
+                               a second, contextual entry point into that
+                               SAME page/route, not a second implementation.
+                               Admin-only (the route itself is), and only
+                               meaningful with a Project open. #}
+                            {% if project_id is defined and workspace is defined and is_admin %}
+                            <a class="workspace-menubar-item" data-ui-ref="menu.file.add-document" href="{{ url_for('portal.reset_project_data', project_id=project_id) }}">Add Document&hellip;</a>
+                            {% elif project_id is defined and workspace is defined %}
+                            <span class="workspace-menubar-item workspace-menubar-item-disabled" data-ui-ref="menu.file.add-document.none" aria-disabled="true" title="Admin only">Add Document (Admin only)</span>
+                            {% else %}
+                            <span class="workspace-menubar-item workspace-menubar-item-disabled" data-ui-ref="menu.file.add-document.none" aria-disabled="true" title="Open a Project first">Add Document (open a Project first)</span>
+                            {% endif %}
+                            <hr class="workspace-menubar-separator" aria-hidden="true">
+                            <button type="button" class="workspace-menubar-item" data-ui-ref="menu.file.print" data-reuse-control="doc-print">Print</button>
+                            <details class="workspace-menubar-submenu" data-ui-ref="menu.file.export">
+                                <summary class="workspace-menubar-item">Export</summary>
+                                <div class="workspace-menubar-subpanel" role="group" aria-label="Export">
+                                    {% if project_id is defined and workspace is defined %}
+                                    <a class="workspace-menubar-item" data-ui-ref="menu.file.export.rfi" href="{{ url_for('workspace.export_rfi', project_id=project_id) }}">Export RFI</a>
+                                    {% else %}
+                                    <span class="workspace-menubar-item workspace-menubar-item-disabled" data-ui-ref="menu.file.export.none" aria-disabled="true" title="Open a Project to export its RFI">No exports available here</span>
+                                    {% endif %}
+                                </div>
+                            </details>
+                            <hr class="workspace-menubar-separator" aria-hidden="true">
+                            <button type="button" class="workspace-menubar-item" data-ui-ref="menu.file.close-document" data-action="close-active-tab">Close Document</button>
+                            {% if can_publish_procurement_package %}
+                            <button type="button" class="workspace-menubar-item" data-ui-ref="menu.file.publish-rfp" data-action="open-publish-panel">Publish RFP&hellip;</button>
+                            {% endif %}
+                        </div>
+                    </details>
+                    <details class="workspace-menubar-menu" data-ui-ref="menu.edit">
+                        <summary class="workspace-topbar-btn">Edit</summary>
+                        <div class="workspace-menubar-panel" role="group" aria-label="Edit">
+                            <button type="button" class="workspace-menubar-item" data-ui-ref="menu.edit.undo" data-reuse-control="doc-annotate-undo">Undo Annotation</button>
+                            <button type="button" class="workspace-menubar-item" data-ui-ref="menu.edit.redo" data-reuse-control="doc-annotate-redo">Redo Annotation</button>
+                            <hr class="workspace-menubar-separator" aria-hidden="true">
+                            <button type="button" class="workspace-menubar-item" data-ui-ref="menu.edit.delete" data-reuse-control="doc-annotate-delete">Delete Annotation</button>
+                        </div>
+                    </details>
+                    <details class="workspace-menubar-menu" data-ui-ref="menu.view">
+                        <summary class="workspace-topbar-btn">View</summary>
+                        <div class="workspace-menubar-panel" role="group" aria-label="View">
+                            <button type="button" class="workspace-menubar-item" data-ui-ref="menu.view.zoom-in" data-reuse-control="doc-zoom-in">Zoom In</button>
+                            <button type="button" class="workspace-menubar-item" data-ui-ref="menu.view.zoom-out" data-reuse-control="doc-zoom-out">Zoom Out</button>
+                            <button type="button" class="workspace-menubar-item" data-ui-ref="menu.view.fit-width" data-reuse-control="doc-fit-width">Fit Width</button>
+                            <button type="button" class="workspace-menubar-item" data-ui-ref="menu.view.fit-page" data-reuse-control="doc-fit-page">Fit Page</button>
+                            <hr class="workspace-menubar-separator" aria-hidden="true">
+                            <button type="button" class="workspace-menubar-item" data-ui-ref="menu.view.fullscreen" data-action="toggle-fullscreen" aria-pressed="false">Fullscreen</button>
+                        </div>
+                    </details>
+                    <details class="workspace-menubar-menu" data-ui-ref="menu.document">
+                        <summary class="workspace-topbar-btn">Document</summary>
+                        <div class="workspace-menubar-panel" role="group" aria-label="Document">
+                            {% if selected_source %}
+                            <button type="button" class="workspace-menubar-item" data-ui-ref="menu.document.context" data-action="open-document-context">Document Context&hellip;</button>
+                            {% if is_admin %}
+                            <button type="button" class="workspace-menubar-item" data-ui-ref="menu.document.admin-understanding" data-action="open-admin-document-understanding">Admin: GO Document Understanding&hellip;</button>
+                            {% endif %}
+                            {% else %}
+                            <span class="workspace-menubar-item workspace-menubar-item-disabled" data-ui-ref="menu.document.none" aria-disabled="true" title="Select a document first">No document selected</span>
+                            {% endif %}
+                        </div>
+                    </details>
+                    <details class="workspace-menubar-menu" data-ui-ref="menu.tools">
+                        <summary class="workspace-topbar-btn">Tools</summary>
+                        <div class="workspace-menubar-panel" role="group" aria-label="Tools">
+                            <button type="button" class="workspace-menubar-item" data-ui-ref="menu.tools.annotate-text" data-reuse-control="doc-annotate-text">Text Annotation</button>
+                            <button type="button" class="workspace-menubar-item" data-ui-ref="menu.tools.annotate-highlight" data-reuse-control="doc-annotate-highlight">Highlight</button>
+                            <button type="button" class="workspace-menubar-item" data-ui-ref="menu.tools.annotate-ink" data-reuse-control="doc-annotate-ink">Draw</button>
+                            <button type="button" class="workspace-menubar-item" data-ui-ref="menu.tools.annotate-select" data-reuse-control="doc-annotate-select">Select / Delete Annotation</button>
+                            <button type="button" class="workspace-menubar-item" data-ui-ref="menu.tools.region-select" data-reuse-control="doc-region-select">Capture Drawing Region</button>
+                        </div>
+                    </details>
+                    <details class="workspace-menubar-menu" data-ui-ref="menu.window">
+                        <summary class="workspace-topbar-btn">Window</summary>
+                        <div class="workspace-menubar-panel" role="group" aria-label="Window">
+                            <button type="button" class="workspace-menubar-item" data-ui-ref="menu.window.hidden-tabs" data-action="open-hidden-tabs">Show Hidden Tabs&hellip;</button>
+                            <button type="button" class="workspace-menubar-item" data-ui-ref="menu.window.close-all-tabs" data-action="close-all-tabs">Close All Tabs</button>
+                            <hr class="workspace-menubar-separator" aria-hidden="true">
+                            <button type="button" class="workspace-menubar-item" data-ui-ref="menu.window.compare" data-reuse-control="toolbox-compare-btn" aria-pressed="false">Compare Documents</button>
+                        </div>
+                    </details>
+                    <details class="workspace-menubar-menu" data-ui-ref="menu.help">
+                        <summary class="workspace-topbar-btn">Help</summary>
+                        <div class="workspace-menubar-panel" role="group" aria-label="Help">
+                            <button type="button" class="workspace-menubar-item" data-ui-ref="menu.help.shortcuts" data-action="open-keyboard-shortcuts">Keyboard Shortcuts&hellip;</button>
+                        </div>
+                    </details>
+                </nav>
+                {# CLAUDE-APP-MENU-01: Help -> Keyboard Shortcuts - only the
+                   shortcuts that genuinely exist today (verified against
+                   the real JS, not aspirational): Escape closes an open
+                   menu (this stage's own new static/js/app_menu.js);
+                   Left/Right/Home/End/Space/Enter navigate the open
+                   Document tab strip when a tab has focus (static/js/
+                   document_tabs.js's own pre-existing onTabKeydown).
+                   Hidden by default, opened by the Help menu's own
+                   data-action="open-keyboard-shortcuts" (scrolls to and
+                   reveals this same element - never a second dialog
+                   framework). #}
+                <div class="workspace-menubar-shortcuts-panel" id="app-menu-keyboard-shortcuts" data-ui-ref="menu.help.shortcuts-panel" role="region" aria-label="Keyboard Shortcuts" tabindex="-1" hidden>
+                    <h2>Keyboard Shortcuts</h2>
+                    <dl>
+                        <dt>Escape</dt><dd>Close the open menu</dd>
+                        <dt>&larr; / &rarr;</dt><dd>Move between open Document tabs (when a tab has focus)</dd>
+                        <dt>Home / End</dt><dd>Jump to the first / last open Document tab</dd>
+                        <dt>Enter / Space</dt><dd>Activate the focused Document tab</dd>
+                    </dl>
+                </div>
+                {% if project_id is defined and workspace is defined %}
+                <span class="workspace-topbar-context" data-ui-ref="menu.context">
+                    {# CLAUDE-P40-VW7B, Section 5: "[ARCHIOSK mark] Archiosk
+                       -> Foreground Project -> current projection" - the
+                       Foreground Project's own name is now a real link
+                       into the Project Vestibule (routes/portal.py's
+                       choose_project, extended for this stage - see that
+                       route's own docstring), carrying `?current=` so the
+                       Vestibule can show this Project as "Currently
+                       entered" rather than just another card. A real,
+                       already-authorized navigation (workspace state is
+                       safely persisted per-Project already - see
+                       .lists-pane's own comment on why no interruption
+                       dialog guards this), not a new client-side
+                       mechanism. aria-label carries the actual purpose
+                       ("Switch Project") since the visible text alone
+                       (just the Project's own name) would not otherwise
+                       communicate that activating it navigates away, not
+                       merely identifies where you are.
+
+                       CLAUDE-POSTCAMEL-TOPMENU-FIX1: that aria-label/title
+                       pair is screen-reader/tooltip-only - a sighted user
+                       moving at normal speed has no resting-state visual
+                       signal that this is a control rather than plain
+                       breadcrumb text (a real product-owner finding
+                       during the P01 founder sanity-check). The trailing
+                       chevron below is the fix - `aria-hidden="true"`
+                       and inside this SAME link (the CLAUDE-P40-BRAND1
+                       brand-link precedent above: one tab stop, one
+                       accessible control, never a second adjacent
+                       element), so the existing aria-label remains the
+                       link's whole accessible name, unchanged, and no
+                       new accessibility surface is introduced. #}
+                    <a class="workspace-topbar-project" data-ui-ref="menu.context.switch-project" href="{{ url_for('portal.choose_project', current=project_id) }}" aria-label="{{ (workspace.display_title or document.filename) }} — Switch Project" title="Switch Project">{{ workspace.display_title or document.filename }}<span class="workspace-topbar-project-chevron" aria-hidden="true">&#9662;</span></a>
+                    {% if active_case %}
+                    <span class="workspace-topbar-sep" aria-hidden="true">/</span>
+                    <span class="workspace-topbar-doc">{{ active_case.title }}</span>
+                    {% elif selected_source %}
+                    <span class="workspace-topbar-sep" aria-hidden="true">/</span>
+                    <span class="workspace-topbar-doc">{{ selected_source.name }}</span>
+                    {% if selected_source.removed_at %}<span class="workspace-topbar-badge">removed</span>{% endif %}
+                    {% elif directory_view_label %}
+                    <span class="workspace-topbar-sep" aria-hidden="true">/</span>
+                    <span class="workspace-topbar-doc">{{ directory_view_label }}</span>
+                    {% endif %}
+                </span>
+                {% if operating_environment %}
+                {# CLAUDE-RFP-BOUNDARY-01, Section 11: a restrained,
+                   persistent workspace-side indicator - "particularly
+                   useful in Admin mode... an operational boundary
+                   indicator, not decoration... not a casual mode-switch
+                   button" - so this is a plain <span>, no click handler,
+                   no href. State-aware per this session's own Icon
+                   Intelligence pass: the accessible label/tooltip
+                   (side_indicator_tooltip, routes/workspace.py) explains
+                   what the side actually means, never just the bare
+                   label text repeated. Legacy/unclassified projects
+                   (operating_environment is None) show nothing here -
+                   the same "None means not established, never guessed"
+                   honesty environment_capabilities.py's own module
+                   docstring already establishes for the field itself. #}
+                <span class="workspace-side-indicator workspace-side-indicator-{{ operating_environment }}" data-ui-ref="menu.context.side-indicator" title="{{ side_indicator_tooltip }}" aria-label="{{ side_indicator_tooltip }}">{{ operating_environment_label }}{% if lifecycle_stage_label %} · {{ lifecycle_stage_label }}{% endif %}</span>
+                {% endif %}
+                {% endif %}
+            </div>

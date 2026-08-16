@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% import "_macros.html" as macros %}
+
+{% block title %}About Archiosk{% endblock %}
+
+{% block content %}
+{% call macros.page_header('Archiosk', subtitle='Architectural Project Investigation Workspace') %}
+{% endcall %}
+
+<p data-ui-ref="about.tagline">Flat-JSON registry &middot; Static build v{{ static_version }}</p>
+<p class="pane-note" data-ui-ref="about.note">No client-side build step; no external database. See <a href="{{ url_for('portal.index') }}">Archiosk Home</a> to continue.</p>
+{% endblock %}

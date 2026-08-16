@@ -18,12 +18,32 @@
 
    Gateway still needs a minimal top bar of its own, unlike the auth
    pages - real authenticated/is_admin/current_username, an account menu
-   (Sign out, Removed Projects, admin-only Security) so those functions
-   stay reachable now that they're not Lists leaves on this page (VW5's
-   own Section 3: "make them accessible through the appropriate central
-   Gateway action or authenticated account/admin menu" - server-side
-   authorization on each of those routes is unchanged and is the real
-   enforcement; this menu is discoverability only). #}
+   (Sign out, Removed Projects) so those functions stay reachable now
+   that they're not Lists leaves on this page (VW5's own Section 3:
+   "make them accessible through the appropriate central Gateway action
+   or authenticated account/admin menu" - server-side authorization on
+   each of those routes is unchanged and is the real enforcement; this
+   menu is discoverability only).
+
+   CLAUDE-UI-ACTION-REDUNDANCY-REVIEW-01, Disposition 2/3: Gateway now
+   also gets the SAME application-menu-bar identity/grammar as the rest
+   of the product (templates/_app_menu.html, {% include %}d verbatim,
+   the exact partial templates/base.html itself uses) - not a second
+   menu implementation, and not Gateway becoming the Workspace shell:
+   this include renders nothing Lists/Toolbox/Chat-shaped, since Gateway
+   never sets project_id/workspace/selected_source, and every command
+   that needs one already, honestly, shows a disabled state or simply
+   doesn't render (the same behavior base.html already has outside an
+   open Workspace - no new conditional logic was written for Gateway
+   specifically). The old small .workspace-topbar-brand text link is
+   retired here too, superseded by the shared menu's own Archiosk >
+   Archiosk Home item (Disposition 3) - the large centered gateway-card
+   identity lockup (gateway_base.html's own macros.archiosk_mark, below
+   {% block content %}) is UNTOUCHED, real page identity, not a control.
+   The Account menu's own former Security link is also retired here -
+   Archiosk > Admin > Security (admin-gated, same route) now covers it,
+   the same relocation base.html's own Account menu already went
+   through this session. #}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -63,9 +83,7 @@
     <div class="gateway-shell landing-page" id="landing-page">
         <canvas class="landing-field-canvas" id="landing-field-canvas" aria-hidden="true"></canvas>
         <div class="workspace-topbar">
-            <div class="workspace-topbar-identity">
-                <a class="workspace-topbar-brand" href="{{ url_for('portal.index') }}">Archiosk</a>
-            </div>
+            {% include "_app_menu.html" %}
             <div class="workspace-topbar-controls">
                 <details class="workspace-user-menu" id="workspace-user-menu" data-ui-ref="gateway.account">
                     <summary class="workspace-topbar-btn workspace-user-summary" aria-label="Account menu">
@@ -78,10 +96,14 @@
                             UI Reference Mode
                         </label>
                         <a class="workspace-overflow-item" href="{{ url_for('portal.removed_projects') }}">Removed Projects</a>
-                        {% if is_admin %}
-                        <a class="workspace-overflow-item" href="{{ url_for('security.department_home') }}">Security</a>
-                        {% endif %}
-                        <a class="workspace-overflow-item" href="{{ url_for('portal.logout') }}">Sign out</a>
+                        {# CLAUDE-UI-ACTION-REDUNDANCY-REVIEW-01, Disposition 2/3:
+                           Security relocated out of this menu - Archiosk > Admin >
+                           Security (the shared menu bar's own admin-gated item,
+                           just included above) now covers it, the same
+                           relocation base.html's own Account menu already went
+                           through this session (Security is no longer a
+                           menu.account.* ref there either). #}
+                        <a class="workspace-overflow-item" data-ui-ref="gateway.account.sign-out" href="{{ url_for('portal.logout') }}">Sign out</a>
                     </div>
                 </details>
             </div>
@@ -109,23 +131,16 @@
         {% block content %}{% endblock %}
     </div>
     <script nonce="{{ csp_nonce }}">
-        // Same outside-click/Escape-closes idiom base.html's own top-bar
-        // <details> menus use (CLAUDE-P40-E3A, Section 3/6) - kept
-        // consistent even though this shell is otherwise standalone.
-        (function () {
-            var menu = document.getElementById('workspace-user-menu');
-            if (!menu) return;
-            document.addEventListener('click', function (e) {
-                if (menu.open && !menu.contains(e.target)) menu.open = false;
-            });
-            document.addEventListener('keydown', function (e) {
-                if (e.key === 'Escape' && menu.open) {
-                    menu.open = false;
-                    var summary = menu.querySelector('summary');
-                    if (summary) summary.focus();
-                }
-            });
-        })();
+        // CLAUDE-UI-ACTION-REDUNDANCY-REVIEW-01, Disposition 2/3: this
+        // shell's own outside-click/Escape closer for #workspace-user-menu
+        // used to live here as its own small IIFE. Now that the shared
+        // application menu bar (templates/_app_menu.html) and its own
+        // static/js/app_menu.js are included/loaded on this page too
+        // (below), that script's generic allMenus()/closeOthers() already
+        // covers EVERY <details> inside .workspace-topbar - including
+        // #workspace-user-menu, which sits inside it - so this was a
+        // redundant, narrower duplicate of the exact same behavior, not a
+        // second real mechanism. Removed outright.
 
         // CLAUDE-P40-VW8-QA: same toggle wiring as base.html's own copy
         // (localStorage + one html-level class) - Gateway/the chooser
@@ -144,6 +159,15 @@
             });
         })();
     </script>
+    {# CLAUDE-UI-ACTION-REDUNDANCY-REVIEW-01, Disposition 2/3: the shared
+       application menu bar's own JS - Escape/outside-click/one-at-a-time,
+       command-reuse sync (a harmless no-op for every data-reuse-control
+       target Gateway itself has no matching id for), and the shared
+       guardDeparture() safe-departure guard (Disposition 4) covering
+       both menu.archiosk.exit and gateway.account.sign-out on this page.
+       Placed after the topbar markup above (script tags run at parse
+       time; app_menu.js queries .workspace-topbar immediately). #}
+    <script src="{{ url_for('static', filename='js/app_menu.js') }}?v={{ static_version }}"></script>
     {# CLAUDE-CA1D-GATEWAY-VISUAL-CONTINUITY-01: the shared background
        script -- ocean_field.js only, never landing.js itself (which
        also contains the knowledge field, spoken welcome greeting, and
