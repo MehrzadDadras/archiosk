@@ -27,10 +27,12 @@ to what's operationally load-bearing — do not expand it "just in case."
 15-21 (Multimodal Perception Games round) are accurate as of commit
 `6180ec0`; row 22 (`CLAUDE-FILE-PUBLISH-RFP-01`) and the "Active pilot —
 Image Search... Composer" / voice-fix sections are accurate as of commit
-`32fe808` (code) and live-deployed/verified at commit `72d5829` (all
-2026-08-16). If the referenced file/line has since changed, the row's own
-confidence should be treated as stale until re-verified, not trusted at
-face value.
+`32fe808` (code), live-deployed at commit `72d5829`, and fully
+success-path live-verified (both text Composer and the vision path, after
+a Product Owner production credential fix) as of 2026-08-16 under
+`CLAUDE-PRODUCTION-AUTH-CLEANUP-RELOCATION-01`. If the referenced
+file/line has since changed, the row's own confidence should be treated
+as stale until re-verified, not trusted at face value.
 
 ---
 
@@ -243,29 +245,59 @@ does **not** solve multi-turn referent continuity ("what about the image
 from two messages ago") — that remains open, matching the Product Owner's
 own explicit "do not build the full architecture yet" instruction.
 
-**Live-verified (2026-08-16, commit `72d5829` deployed to archiosk.com):**
-Game A end-to-end — pasted a synthetic unrelated image into a real
+**Live-verified twice (2026-08-16, commit `72d5829` deployed to
+archiosk.com) — both the failure path and, after a production credential
+fix, the real success path.**
+
+First pass: pasted a synthetic unrelated image into a real
 Design-Builder/Proponent project's Image Search, clicked Search (`"Not
 found - ARCHIOSK doesn't yet compare this image against the document set.
 Open in Composer and GO can look at it directly."`, the inline button
 correctly styled as a small in-sentence link, not an oversized standalone
-`.btn`), clicked "Open in Composer" — confirmed the redirect, the two new
-`CONVERSATION` messages, and (once a real, valid `ANTHROPIC_API_KEY` is
-available — see the production note below) a genuine model-generated
-interpretation. **A pre-existing, unrelated production infrastructure
-defect (invalid `ANTHROPIC_API_KEY` on the live server, confirmed via
-server logs and independently reproduced against the ORDINARY text
-Composer Q&A path) meant the live vision call itself returned a 401,
-which is exactly what this pilot's own honest degradation path is for** —
-the user-facing reply was `"GO couldn't look at the image just now: An
-error occurred calling the model."`, never a fabricated result. This
-proves the failure path live, under a real failure condition, not a
-mocked one — the success path (a genuine model-generated characterization)
-remains verified only via the hermetic test suite's mocked Anthropic
-client (`tests/test_perception_games_01_image_composer_pilot.py`) until
-the production API key is fixed, which is outside this pilot's scope (a
-credentials matter, not a code defect — see the Product Owner report for
-this round).
+`.btn`), clicked "Open in Composer" — confirmed the redirect and the two
+new `CONVERSATION` messages. The production `ANTHROPIC_API_KEY` was
+invalid at that point (a pre-existing, unrelated infrastructure defect,
+confirmed via server logs and independently reproduced against the
+ORDINARY text Composer path too — see `CLAUDE-PRODUCTION-AUTH-CLEANUP-
+RELOCATION-01`'s own diagnosis below), so the honest degradation path is
+what actually fired: `"GO couldn't look at the image just now: An error
+occurred calling the model."` — never a fabricated result. This proved
+the failure path live, under a real failure condition, not a mocked one.
+
+Second pass, after the Product Owner replaced the credential: pasted a
+freshly-generated, distinctive synthetic image (a red square and a blue
+circle on white, drawn via canvas so its content was verifiably known in
+advance) into a different real project's Image Search, same route through
+"Not found" → "Open in Composer". GO's real reply: `"This appears to be a
+simple graphic with a red square and a blue circle on a white background —
+likely a placeholder, test image, or basic design element. It doesn't
+appear to relate to '[project]' in any recognizable way. If you meant to
+upload a different file, you may want to try again."` — an accurate
+description of the actual pixel content (proving the vision call is real,
+not canned), honestly assessed non-relevance rather than fabricating a
+connection, and offered a next move. Minor nuance worth a future
+revalidation, not a defect: the reply named "ARCHIOSK" rather than the
+project's own `display_title` when assessing relevance — the system
+prompt's own "You are GO, ARCHIOSK's project assistant" framing likely
+bled into that clause; harmless (no false relevance claimed) but a
+candidate wording tweak if this surface is ever revisited. Also confirmed
+live: the project's Document count stayed unchanged (27 before and after)
+— no Source was registered for the test image, matching the "zero
+automatic persistence" requirement exactly.
+
+**Production credential note:** the underlying blocker was diagnosed as
+the credential itself being invalid/revoked at Anthropic's end, not an
+ARCHIOSK wiring defect — confirmed by testing the exact key in the
+running process's own environment directly against
+`https://api.anthropic.com/v1/models`, isolated from the application,
+before any Product Owner action. `archiosk-go.service` has exactly one
+env source (`EnvironmentFile=/var/www/archiosk/.env`, no competing
+`Environment=` override, no wrapper script) — a clean, single-source
+configuration with nothing left to reconcile. An unused, `inactive`/
+`disabled` legacy `archiosk.service` unit (pointing at a dead
+`/home/ubuntu/app.py`, referencing a separate, stale `/etc/archiosk.env`
+that doesn't even contain the key) was found but confirmed harmless — not
+part of the live path, not a competing source.
 
 **Product Owner disposition: accepted (implicit — implementation and
 verification proceeded exactly as this round's own approval specified).**
