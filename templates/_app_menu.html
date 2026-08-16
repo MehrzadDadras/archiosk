@@ -230,7 +230,55 @@
                             {% else %}
                             <span class="workspace-menubar-item workspace-menubar-item-disabled" data-ui-ref="menu.file.new-project.none" aria-disabled="true" title="Admin only">New Project (Admin only)</span>
                             {% endif %}
-                            <a class="workspace-menubar-item" data-ui-ref="menu.file.open-project" href="{{ url_for('portal.choose_project', current=(project_id if project_id is defined else None)) }}">Open Project&hellip;</a>
+                            {# CLAUDE-POST-SIGNIN-GATEWAY-SIMPLIFICATION-01,
+                               Addendum G: a direct chooser, not navigation
+                               to portal.choose_project's own full Vestibule
+                               page (that route/page are UNCHANGED and stay
+                               reachable elsewhere - "Switch Project" above,
+                               a direct /projects visit - this is a second,
+                               lighter surface over the SAME already-access-
+                               scoped data, never a second query: app.py's
+                               context processor already built
+                               menu_open_project_choices/
+                               menu_open_project_environment for every
+                               authenticated page). Each row is a real,
+                               directly-clickable <a> straight to
+                               workspace.show_workspace - no radio, no
+                               second submit button, opens on click. No
+                               branding/heading/onboarding copy/Removed
+                               Projects here - those stay the full
+                               Vestibule's own job. Filtered to
+                               menu_open_project_environment server-side
+                               (the caller's own currently-established
+                               side, when one is resolved) so this can
+                               never cross Owner/Proponent isolation;
+                               static/js/app_menu.js supplies plain
+                               client-side text filtering over these
+                               already-authorized rows only - not a second
+                               authorization mechanism. #}
+                            <details class="workspace-menubar-submenu" data-ui-ref="menu.file.open-project">
+                                <summary class="workspace-menubar-item">Open Project&hellip;</summary>
+                                <div class="workspace-menubar-subpanel workspace-open-project-panel" role="group" aria-label="Open Project">
+                                    {% set open_project_choices = menu_open_project_choices | default([]) %}
+                                    {% set open_project_environment = menu_open_project_environment | default(None) %}
+                                    {% if open_project_environment %}
+                                    {% set open_project_choices = open_project_choices | selectattr('operating_environment', 'equalto', open_project_environment) | list %}
+                                    {% endif %}
+                                    {% if open_project_choices %}
+                                    <input type="search" class="text-input workspace-open-project-search" data-ui-ref="menu.file.open-project.search" placeholder="Search your projects" aria-label="Search your projects" {% if open_project_choices | length < 6 %}hidden{% endif %}>
+                                    <ul class="workspace-open-project-list" data-ui-ref="menu.file.open-project.list">
+                                        {% for p in open_project_choices %}
+                                        <li><a class="workspace-menubar-item workspace-open-project-item" data-ui-ref="menu.file.open-project.item" href="{{ url_for('workspace.show_workspace', project_id=p.project_id) }}">{{ p.display_name }}</a></li>
+                                        {% endfor %}
+                                    </ul>
+                                    {% else %}
+                                    <span class="workspace-menubar-item workspace-menubar-item-disabled" data-ui-ref="menu.file.open-project.empty" aria-disabled="true">No projects available to open here yet.</span>
+                                    {% if is_admin %}
+                                    <a class="workspace-menubar-item" data-ui-ref="menu.file.open-project.new-project" href="{{ url_for('portal.upload', environment=open_project_environment or None) }}">New Project&hellip;</a>
+                                    {% endif %}
+                                    {% endif %}
+                                </div>
+                            </details>
                             <hr class="workspace-menubar-separator" aria-hidden="true">
                             {# Add Document to the OPEN Project - a DIFFERENT
                                action from New Project above (this one adds a

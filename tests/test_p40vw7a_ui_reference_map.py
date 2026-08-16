@@ -49,7 +49,10 @@ _BASE_HTML_PATH = _REPO_ROOT / "templates" / "base.html"
 _APP_MENU_HTML_PATH = _REPO_ROOT / "templates" / "_app_menu.html"
 _CASE_WORKSPACE_HTML_PATH = _REPO_ROOT / "templates" / "case_workspace.html"
 _MACROS_HTML_PATH = _REPO_ROOT / "templates" / "_macros.html"
-_GATEWAY_HTML_PATH = _REPO_ROOT / "templates" / "gateway.html"
+# CLAUDE-POST-SIGNIN-GATEWAY-SIMPLIFICATION-01, Option C: gateway.html
+# itself is retired (the route it used to render now only redirects) -
+# its own refs live on index.html now, scanned below.
+_INDEX_HTML_PATH = _REPO_ROOT / "templates" / "index.html"
 _GATEWAY_SHELL_HTML_PATH = _REPO_ROOT / "templates" / "gateway_shell.html"
 _PROJECT_CHOOSER_HTML_PATH = _REPO_ROOT / "templates" / "project_chooser.html"
 _LOGIN_HTML_PATH = _REPO_ROOT / "templates" / "login.html"
@@ -143,6 +146,16 @@ _APPEARANCE_DYNAMIC_REFS = {f"menu.appearance.{mode}" for mode in _APPEARANCE_MO
 # passes a non-None `ui_ref` - hardcoded here from that exact literal.
 _ERROR_PAGE_DYNAMIC_REFS = {"errors.upload-too-large"}
 
+# CLAUDE-POST-SIGNIN-GATEWAY-SIMPLIFICATION-01, Option C: index.html's
+# environment-choice cards render `data-ui-ref="index.choice.{{ env }}"`
+# - a Jinja loop variable, not literal text, same reason the Appearance
+# refs above need their own dynamic set. OPERATING_ENVIRONMENTS is the
+# same closed, exhaustive tuple index.html's own {% for env in
+# accessible_environments %} loop can only ever iterate over.
+from services.environment_capabilities import OPERATING_ENVIRONMENTS as _OPERATING_ENVIRONMENTS  # noqa: E402
+
+_INDEX_CHOICE_DYNAMIC_REFS = {f"index.choice.{env}" for env in _OPERATING_ENVIRONMENTS}
+
 # CLAUDE-P40-VW8-QA-R2A: found while adding this stage's own dynamic-ref
 # handling for upload_confirm.html - templates/upload.html's Operating
 # Environment radios (data-ui-ref="upload.operating-environment.
@@ -179,7 +192,7 @@ def _all_template_refs() -> set[str]:
     refs: set[str] = set()
     for path in (
         _BASE_HTML_PATH, _APP_MENU_HTML_PATH, _CASE_WORKSPACE_HTML_PATH, _MACROS_HTML_PATH,
-        _GATEWAY_HTML_PATH, _GATEWAY_SHELL_HTML_PATH, _PROJECT_CHOOSER_HTML_PATH,
+        _INDEX_HTML_PATH, _GATEWAY_SHELL_HTML_PATH, _PROJECT_CHOOSER_HTML_PATH,
         _LOGIN_HTML_PATH, _UPLOAD_HTML_PATH, _UPLOAD_CONFIRM_HTML_PATH, _ERROR_HTML_PATH,
         _SECURITY_DEPARTMENT_HTML_PATH, _PROJECTS_HTML_PATH, _REMOVED_PROJECTS_HTML_PATH, _APP_PY_PATH,
         _CONFIRM_DELETE_FOLDER_HTML_PATH, _OPERATIONS_HTML_PATH,
@@ -193,6 +206,7 @@ def _all_template_refs() -> set[str]:
     refs |= _ERROR_PAGE_DYNAMIC_REFS
     refs |= _UPLOAD_CONFIRM_DYNAMIC_REFS
     refs |= _UPLOAD_ENVIRONMENT_DYNAMIC_REFS
+    refs |= _INDEX_CHOICE_DYNAMIC_REFS
     return refs
 
 
@@ -257,12 +271,15 @@ class RegistryConsistencyTests(unittest.TestCase):
         # CLAUDE-PROJECT-SURFACE-CONSOLIDATION-01 added "pdm" - Project
         # Data Management's own new Add/Archive Documents content (see
         # UI_REFERENCE_MAP.md's own "Project Data Management" section).
+        # CLAUDE-POST-SIGNIN-GATEWAY-SIMPLIFICATION-01, Option C added
+        # "index" - the consolidated post-sign-in entry page (portal.index,
+        # `/`), replacing the retired separate Gateway shell.
         for ref in _all_template_refs():
             self.assertRegex(
                 ref,
                 r"^(menu|lists|display|toolbox|chat|eye|shell|gateway|auth|upload|errors|"
                 r"security|operations|projects-directory|removed-projects|"
-                r"landing|explore|start-trial|spin|pdm)\.[a-z0-9._\-]+$",
+                r"landing|explore|start-trial|spin|pdm|index)\.[a-z0-9._\-]+$",
                 ref,
             )
 
@@ -490,30 +507,47 @@ class SignInGatewayIsolationTests(_BaseTestCase):
             )
         self.assertIn("data-ui-ref=\"auth.signin.username\"", body)
 
-    def test_gateway_page_has_no_workspace_shell_refs(self):
-        # CLAUDE-UI-ACTION-REDUNDANCY-REVIEW-01, Disposition 2/3: a
-        # second evolution of the same invariant this class's own
-        # docstring already describes evolving once (VW8-QA allowing
-        # auth.*/gateway.* refs). menu.* is now deliberately, legitimately
-        # shared onto Gateway via templates/_app_menu.html - the same
-        # application menu bar every authenticated page gets, not a
-        # leaked Workspace-shell control. What VW5 actually protects -
-        # and what still holds, unchanged - is that Gateway never leaks
-        # genuine WORKSPACE content: lists.*/display.*/toolbox.*/chat.*.
+    def test_gateway_route_redirects_to_the_consolidated_entry_page(self):
+        # CLAUDE-POST-SIGNIN-GATEWAY-SIMPLIFICATION-01, Option C: /gateway
+        # no longer renders its own page - it's kept only as a redirect to
+        # / (routes/portal.py's gateway() docstring covers why the route
+        # itself was kept rather than deleted). See the next test for the
+        # real consolidated destination's own workspace-shell-leak proof.
         client = self._client_as("vw7a_owner", 1)
-        body = client.get("/gateway").get_data(as_text=True)
+        resp = client.get("/gateway")
+        self.assertEqual(resp.status_code, 302)
+        self.assertEqual(resp.headers["Location"], "/")
+
+    def test_index_page_has_no_active_project_workspace_refs(self):
+        # CLAUDE-UI-ACTION-REDUNDANCY-REVIEW-01, Disposition 2/3, revised
+        # by CLAUDE-POST-SIGNIN-GATEWAY-SIMPLIFICATION-01 Option C: the
+        # original "zero lists./display./toolbox./chat. refs" invariant
+        # protected a SEPARATE, deliberately minimal Gateway shell
+        # (gateway_shell.html, never including the Lists panel at all)
+        # from silently growing full workspace-shell content. Option C
+        # retired that separate shell - / now uses the SAME base.html
+        # shell as every other authenticated page (/projects, /upload),
+        # where lists.* (the reviewer-wide Projects rail) legitimately,
+        # deliberately renders regardless of whether a project is open
+        # (CLAUDE-LEFT-RAIL-01). What's still real and worth guarding:
+        # display.*/toolbox.*/chat.* only ever exist when project_id/
+        # workspace are actually defined, which they never are here.
+        client = self._client_as("vw7a_owner", 1)
+        body = client.get("/").get_data(as_text=True)
         for ref in _DATA_REF_RE.findall(body):
             self.assertFalse(
-                ref.startswith(("lists.", "display.", "toolbox.", "chat.")),
-                f"Gateway leaked a workspace-shell reference: {ref}",
+                ref.startswith(("display.", "toolbox.", "chat.")),
+                f"/ leaked an active-project-workspace reference: {ref}",
             )
         self.assertIn("data-ui-ref=\"menu.bar\"", body)
+        self.assertIn("data-ui-ref=\"lists.projects\"", body)
         self.assertNotIn("data-ui-ref=\"menu.display-layout\"", body)
-        # CLAUDE-GO-NEUTRAL-ENTRY-01: gateway.open-existing-client-owner
-        # and gateway.open-existing-design-builder (themselves a retired
-        # split of the original gateway.open-existing) converged back
-        # into one neutral, unfiltered ref.
-        self.assertIn("data-ui-ref=\"gateway.open-existing-projects\"", body)
+        # This test's own fixture project resolves a single accessible
+        # environment automatically (State 3 - see index.html's own
+        # comment), so the ported "Open Existing Project" disclosure
+        # renders under its new index.resolved.open-existing ref (was
+        # gateway.open-existing-projects on the now-retired gateway.html).
+        self.assertIn("data-ui-ref=\"index.resolved.open-existing\"", body)
 
 
 class UIReferenceModeToggleTests(_BaseTestCase):

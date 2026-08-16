@@ -31,7 +31,12 @@
    nothing meaningful to return to (a bare direct visit/new tab has no
    document.referrer at all). #}
 <div class="gateway-back-action">
-    <a href="{{ url_for('portal.gateway') }}" class="btn btn-ghost" id="gateway-back-link" data-ui-ref="gateway.chooser.back-top">&larr; Back</a>
+    {# CLAUDE-POST-SIGNIN-GATEWAY-SIMPLIFICATION-01, Option C: was
+       portal.gateway - that route now only redirects to portal.index
+       (see routes/portal.py's gateway() docstring), so this points
+       directly at the real consolidated destination instead of
+       bouncing through a pointless extra hop. #}
+    <a href="{{ url_for('portal.index') }}" class="btn btn-ghost" id="gateway-back-link" data-ui-ref="gateway.chooser.back-top">&larr; Back</a>
 </div>
 <script nonce="{{ csp_nonce }}">
 (function () {

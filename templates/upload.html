@@ -42,6 +42,87 @@
     </p>
 </section>
 
+{# CLAUDE-POST-SIGNIN-GATEWAY-SIMPLIFICATION-01, Addendum H: a lightweight,
+   collapsible Composer/help surface for this form specifically - "do not
+   make the user leave the setup flow" to ask what a field means. Reuses
+   the SAME project-less orientation composer pattern index.html's own
+   .gateway-orientation-form already established (same classes/JS shape,
+   same backend route) rather than building a project-creation-specific
+   chat implementation - only the backend's classifier differs (see
+   routes/portal.py's _classify_establish_project_help), reached via the
+   hidden `context=establish-project` field below. Wrapped in the app's
+   own native-disclosure grammar (macros.subdisclosure), collapsed by
+   default, so it never obscures the form fields beneath it. #}
+{% call macros.subdisclosure("Ask Archiosk about this form", html_id="upload-help", ui_ref="upload.help") %}
+<form class="gateway-orientation-form" id="upload-orientation-form" data-ui-ref="upload.help.form">
+    <input type="text" class="text-input" id="upload-orientation-input" name="message" placeholder="e.g. what does Client / Owner mean?" aria-label="Ask Archiosk about this form">
+    <input type="hidden" name="context" value="establish-project">
+    <button type="button" id="upload-orientation-voice" class="voice-input-button" data-ui-ref="upload.help.voice"
+            aria-label="Press and speak - audio is processed by your browser only and is never saved" hidden>&#127908;&#65039;</button>
+    <button type="submit" class="btn btn-ghost" data-ui-ref="upload.help.submit">Ask</button>
+    <span class="voice-input-status" id="upload-orientation-voice-status" data-ui-ref="upload.help.voice.status" aria-live="polite"></span>
+</form>
+<p class="gateway-orientation-reply" id="upload-orientation-reply" data-ui-ref="upload.help.reply" aria-live="polite" hidden></p>
+{% endcall %}
+<script src="{{ url_for('static', filename='js/voice_input.js') }}?v={{ static_version }}"></script>
+<script nonce="{{ csp_nonce }}">
+// CLAUDE-POST-SIGNIN-GATEWAY-SIMPLIFICATION-01, Addendum H: same ported
+// composer-wiring script as index.html's own copy - see that template's
+// own comment for the reasoning. Never auto-chooses a consequential
+// setting (operating environment, storage connection) - this widget only
+// ever explains, it never submits the real form on the user's behalf.
+(function () {
+    var form = document.getElementById('upload-orientation-form');
+    var input = document.getElementById('upload-orientation-input');
+    var replyEl = document.getElementById('upload-orientation-reply');
+    if (!form || !input) return;
+
+    function csrfToken() {
+        var meta = document.querySelector('meta[name="csrf-token"]');
+        return meta ? meta.content : '';
+    }
+
+    function showReply(text) {
+        if (!replyEl) return;
+        replyEl.textContent = text || '';
+        replyEl.hidden = !text;
+    }
+
+    function ask(message) {
+        var formData = new FormData(form);
+        formData.set('message', message);
+        fetch('{{ url_for("portal.gateway_orientation") }}', {
+            method: 'POST',
+            body: formData,
+            headers: { 'X-CSRFToken': csrfToken() },
+            credentials: 'same-origin',
+        }).then(function (resp) {
+            return resp.json();
+        }).then(function (data) {
+            showReply(data.text || '');
+        }).catch(function () {
+            showReply('Something went wrong - try again.');
+        });
+    }
+
+    form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        var message = input.value.trim();
+        if (!message) return;
+        ask(message);
+    });
+
+    if (window.ArchioskVoiceInput) {
+        window.ArchioskVoiceInput({
+            buttonId: 'upload-orientation-voice',
+            statusId: 'upload-orientation-voice-status',
+            onTranscript: function (transcript) { input.value = transcript; },
+            onEnd: function () { input.focus(); },
+        });
+    }
+})();
+</script>
+
 {% if error %}
 <p class="mono form-error" data-ui-ref="upload.error">{{ error }}</p>
 {% endif %}

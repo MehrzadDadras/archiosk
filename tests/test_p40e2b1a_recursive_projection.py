@@ -156,26 +156,39 @@ class NoDuplicatedChildHierarchyTests(_BaseTestCase):
         # "A Second Distinct Project" legitimately appears exactly ONCE
         # on a different, already-open Project's own page too - as a
         # plain lists.projects.leaf switch target, never duplicated.
+        # CLAUDE-POST-SIGNIN-GATEWAY-SIMPLIFICATION-01, Addendum G: the
+        # top menu's OWN File > Open Project chooser now ALSO lists every
+        # accessible project by name on every authenticated page - a
+        # separate, legitimate "find/open any project" utility (see that
+        # ref's own docstring), not a re-duplication of what each of
+        # these counts is actually checking (Lists/index.html dashboard
+        # content, never a SECOND occurrence within that same surface).
+        # Every count below is bumped by exactly the menu chooser's own
+        # one occurrence, still asserting the real invariant (no
+        # duplicate WITHIN the page's own main content).
         other = self._ingest(owner="p40e2b1a_owner", project_name="A Second Distinct Project")
         client = self._client_as("p40e2b1a_owner", 1)
+        # / (index.html) shows it twice in its own main content now
+        # (Lists leaf + State 3's own resolved-environment project list)
+        # plus once in the menu chooser.
         dashboard_body = client.get("/").get_data(as_text=True)
-        self.assertEqual(dashboard_body.count("A Second Distinct Project"), 1)
+        self.assertEqual(dashboard_body.count("A Second Distinct Project"), 3)
         other_project_open_body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
-        self.assertEqual(other_project_open_body.count("A Second Distinct Project"), 1)
+        self.assertEqual(other_project_open_body.count("A Second Distinct Project"), 2)
 
         own_page = client.get(f"/projects/{other.project_id}/workspace").get_data(as_text=True)
-        # On its own page it legitimately appears three times now
-        # (CLAUDE-P40-VW7B, Section 5): the top bar's own breadcrumb
-        # link (visible text), that SAME link's own aria-label (real
-        # text, "<name> — Switch Project" - not a visible SECOND
-        # occurrence on screen, only present in the accessibility tree,
-        # needed since the bare visible text alone would not otherwise
-        # communicate that activating the link navigates away), and the
-        # expanded Lists branch heading - what must never happen is a
-        # FOURTH occurrence inside Display itself (a duplicated card/
-        # heading, Section 4's own rule) - that check is unaffected and
-        # still the real point of this test.
-        self.assertEqual(own_page.count("A Second Distinct Project"), 3)
+        # On its own page it legitimately appears four times now
+        # (CLAUDE-P40-VW7B, Section 5 + Addendum G above): the top bar's
+        # own breadcrumb link (visible text), that SAME link's own
+        # aria-label (real text, "<name> — Switch Project" - not a
+        # visible SECOND occurrence on screen, only present in the
+        # accessibility tree), the expanded Lists branch heading, and
+        # the menu chooser's own item (this project is itself one of
+        # its own environment's accessible projects) - what must never
+        # happen is a FIFTH occurrence inside Display itself (a
+        # duplicated card/heading, Section 4's own rule) - that check is
+        # unaffected and still the real point of this test.
+        self.assertEqual(own_page.count("A Second Distinct Project"), 4)
         display_start = own_page.index('class="workspace-pane-display"')
         display_html = own_page[display_start:]
         self.assertNotIn("A Second Distinct Project", display_html)

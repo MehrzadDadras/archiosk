@@ -555,6 +555,7 @@ def _register_context_processors(app: Flask) -> None:
         from flask import request, session
 
         from services.auth import is_admin, is_authenticated
+        from services.case_workspace import CaseWorkspaceStore
 
         # CLAUDE-P40-D1: /login, /forgot-password, /reset-password render
         # templates/auth_shell.html, a standalone shell that never
@@ -571,6 +572,44 @@ def _register_context_processors(app: Flask) -> None:
         on_standalone_auth_page = request.endpoint in _STANDALONE_AUTH_ENDPOINTS
         authenticated = is_authenticated() and not on_standalone_auth_page
         skip_project_listing = request.endpoint in _NO_PROJECT_LISTING_ENDPOINTS
+
+        # CLAUDE-POST-SIGNIN-GATEWAY-SIMPLIFICATION-01, Addendum G: File >
+        # Open Project must list only projects "authorized to open in the
+        # currently established operating environment" - the rail's own
+        # _nav_recent_projects call (below) is reused for the choice list
+        # itself, never a second project query. Scope is: the OPEN
+        # project's own environment when one is genuinely open
+        # (request.view_args carries project_id on every workspace.*
+        # route - looked up directly, a single bounded per-project read,
+        # never searched for inside the capped recent list below, which
+        # could omit an older project entirely and silently mis-scope
+        # this); otherwise, an environment only if every one of this
+        # user's own (up to `limit`) accessible projects shares the same
+        # one - never a guess when they don't. Known, accepted edge case
+        # for that second branch only: a user with 30+ projects in one
+        # environment and at least one in a second could have that second
+        # environment's projects excluded from the up-to-30 list this
+        # reads, rather than doing a second full accessible-projects scan
+        # just to rule that out exactly - same "bounded, not unbounded"
+        # cost tradeoff this function's own docstring already makes for
+        # the rail.
+        menu_open_project_choices = []
+        menu_open_project_environment = None
+        if authenticated and not skip_project_listing:
+            menu_open_project_choices = _nav_recent_projects(app, limit=30)
+            open_project_id = request.view_args.get('project_id') if request.view_args else None
+            if open_project_id:
+                try:
+                    open_workspace = CaseWorkspaceStore(app.config["REGISTRY_STORE_PATH"]).get(open_project_id)
+                except TypeError:
+                    open_workspace = None
+                menu_open_project_environment = open_workspace.operating_environment if open_workspace else None
+            else:
+                environments = {
+                    p["operating_environment"] for p in menu_open_project_choices if p["operating_environment"]
+                }
+                if len(environments) == 1:
+                    menu_open_project_environment = next(iter(environments))
 
         return {
             "current_year": datetime.now(timezone.utc).year,
@@ -590,7 +629,14 @@ def _register_context_processors(app: Flask) -> None:
             # never cached. Admin-gated in the template, not here (same
             # split every other is_admin-conditioned template block uses).
             "ai_calls_disabled": os.getenv("AI_CALLS_DISABLED", "false").strip().lower() == "true",
-            "nav_recent_projects": _nav_recent_projects(app) if (authenticated and not skip_project_listing) else [],
+            # CLAUDE-POST-SIGNIN-GATEWAY-SIMPLIFICATION-01, Addendum G:
+            # was its own separate _nav_recent_projects(app) call (limit
+            # 15) - now a slice of the SAME up-to-30 list already fetched
+            # above for menu_open_project_choices, so this stays exactly
+            # one project query per request, not two.
+            "nav_recent_projects": menu_open_project_choices[:15],
+            "menu_open_project_choices": menu_open_project_choices,
+            "menu_open_project_environment": menu_open_project_environment,
             # CLAUDE-P40-E2B1, Section B: the single launcher panel's
             # identity/menu anchored at the bottom needs the reviewer's
             # own username - session["username"] already exists (set at
@@ -744,14 +790,21 @@ def _register_template_filters(app: Flask) -> None:
 
 def _nav_recent_projects(app: Flask, limit: int = 15) -> list:
     """
-    Read-only project list feeding the sidebar's "Projects" tree node.
-    Reuses the same RequirementsRegistry already used by
+    Read-only project list feeding the sidebar's "Projects" tree node -
+    and, since CLAUDE-POST-SIGNIN-GATEWAY-SIMPLIFICATION-01 Addendum G,
+    the File > Open Project menu chooser too (same list, sliced two
+    different ways by the context processor below - never a second
+    query). Reuses the same RequirementsRegistry already used by
     routes/portal.py's project directory; no new storage or domain
     behavior. Runs on every authenticated page render (the rail is part
-    of the shared shell) and is capped at `limit` projects, so the added
-    per-project CaseWorkspaceStore.get() below (needed for display_name -
-    see pagescape correction #11: a project's visible identity should be
-    its own display_title, not whichever filename happened to be
+    of the shared shell) and is capped at `limit` projects - the context
+    processor below calls this ONCE at a higher limit and slices the
+    result two different ways in plain Python (rail: first 15; menu:
+    all of it) rather than querying twice, so the added per-project
+    CaseWorkspaceStore.get() below (needed for
+    display_name - see pagescape correction #11: a project's visible
+    identity should be its own display_title, not whichever filename
+    happened to be
     ingested first) stays a bounded cost, not an unbounded one - the
     same per-project store-load cost portal.py's own _project_summary
     already pays for the Projects directory and Home.
@@ -840,7 +893,18 @@ def _nav_recent_projects(app: Flask, limit: int = 15) -> list:
         except TypeError:
             workspace = None
         display_name = (workspace.display_title if workspace else None) or d.filename
-        result.append({"project_id": d.project_id, "filename": d.filename, "display_name": display_name})
+        result.append({
+            "project_id": d.project_id,
+            "filename": d.filename,
+            "display_name": display_name,
+            # CLAUDE-POST-SIGNIN-GATEWAY-SIMPLIFICATION-01, Addendum G:
+            # additive field - nothing before this stage read it. Lets
+            # the File > Open Project menu chooser (built from this SAME
+            # already-access-scoped list, never a second query) scope
+            # itself to the caller's current operating environment
+            # without a second per-project workspace load.
+            "operating_environment": workspace.operating_environment if workspace else None,
+        })
     return result
 
 

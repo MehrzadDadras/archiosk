@@ -206,6 +206,22 @@
         });
     }
 
+    // -------- Open Project: plain client-side text filter over the
+    // already-authorized, already-rendered rows only (CLAUDE-POST-SIGNIN-
+    // GATEWAY-SIMPLIFICATION-01, Addendum G) - never a second fetch/
+    // authorization check, and never touches which rows exist, only
+    // which are hidden. ---------------------------------------------
+    var openProjectSearch = document.querySelector('.workspace-open-project-search');
+    if (openProjectSearch) {
+        openProjectSearch.addEventListener('input', function () {
+            var needle = openProjectSearch.value.trim().toLowerCase();
+            Array.prototype.forEach.call(document.querySelectorAll('.workspace-open-project-item'), function (item) {
+                var visible = !needle || item.textContent.toLowerCase().indexOf(needle) !== -1;
+                item.closest('li').hidden = !visible;
+            });
+        });
+    }
+
     guardDeparture(byRef('menu.archiosk.exit'));
     guardDeparture(byRef('menu.account.sign-out'));
     // Gateway's own separate Account-menu Sign out (templates/

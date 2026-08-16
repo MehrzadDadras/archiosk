@@ -1,22 +1,205 @@
 {% extends "base.html" %}
+{% import "_macros.html" as macros %}
 
 {% block title %}Archiosk{% endblock %}
 
-{# CLAUDE-P40-VW5: the anonymous branch this template used to have -
-   an identity line plus a "Sign in to get started" link - is gone.
-   routes/portal.py's own index() now redirects an unauthenticated
-   visit straight to /login before this template is ever reached, so
-   an `authenticated=False` render of this file can no longer happen
-   in practice; kept as a real conditional rather than assumed true
-   without an assertion (see this stage's own test coverage) purely
-   because Jinja can't express "this variable is always True here"
-   any other way. #}
+{# CLAUDE-POST-SIGNIN-GATEWAY-SIMPLIFICATION-01, Option C: this is now
+   the one consolidated post-sign-in destination - see routes/portal.py's
+   index() docstring for the full reasoning and the retired
+   templates/gateway.html this content was ported from (same routes,
+   same _environment_projects-shaped data, same orientation composer
+   backend - a physical move + environment-first sequencing added on
+   top, never a second implementation of any of it).
+
+   Three states, driven entirely by accessible_environments/
+   resolved_environment (both computed server-side, never guessed
+   here):
+     1. accessible_environments is empty - genuine first-time/
+        unclassified entry. No environment choice is possible (there is
+        nothing to choose from yet).
+     2. resolved_environment is unset but accessible_environments has
+        more than one member - an explicit, governed choice is required
+        (Disposition B's own two canonical labels/subtitles, never
+        Develop/Decipher as a competing vocabulary).
+     3. resolved_environment is set (either because exactly one
+        environment was accessible, or the user explicitly chose one
+        via ?environment=) - show that environment's own recent
+        projects.
+
+   {% if not is_authenticated %} never needs to be considered here -
+   routes/portal.py's index() renders landing.html instead before this
+   template is ever reached for an anonymous visit (CLAUDE-P40-VW5). #}
 {% block content %}
 <section class="entry">
-    {% if authenticated %}
-    <div class="entry-actions">
-        <a class="btn btn-primary" href="{{ url_for('portal.projects_list') }}">Open Project</a>
+    <h1 data-ui-ref="index.heading">Archiosk</h1>
+    {# CLAUDE-P40-E3A, Section 2/4: the Lists "Projects" heading became a
+       plain expand/collapse tree toggle (not a navigating link), so the
+       full administrative Projects directory - unfiltered by
+       operating environment, deliberately so, same as choose_project's
+       own unfiltered default (Option C's supersession is narrow: only
+       entry sequencing changed, not this page's own existing
+       reachability) - needs its own quiet, always-available access
+       point. Available in every state (1/2/3) since browsing every
+       accessible project has never depended on which side is
+       currently resolved. #}
+    <p class="pane-note"><a data-ui-ref="index.projects-directory" href="{{ url_for('portal.projects_list') }}">All projects</a></p>
+
+    {% if not accessible_environments %}
+    {# ---------------- State 1: genuine first-time / unclassified entry ---------------- #}
+    <p class="gateway-context-description" data-ui-ref="index.zero-state.copy">
+        {% if is_admin %}
+        No projects yet. Establish one to get started.
+        {% else %}
+        No projects are available to you yet. An administrator can establish one and grant you access.
+        {% endif %}
+    </p>
+    {% if is_admin %}
+    <div class="gateway-actions">
+        <a class="gateway-action gateway-action-primary" data-ui-ref="index.zero-state.new-project" href="{{ url_for('portal.upload') }}">
+            <span class="gateway-action-icon">+</span>
+            <span><strong>New Project</strong></span>
+        </a>
     </div>
     {% endif %}
+
+    {% elif not resolved_environment %}
+    {# ---------------- State 2: multiple accessible environments - explicit choice ----------------
+       CLAUDE-GO-NEUTRAL-ENTRY-01 supersession (narrow - see index()'s
+       own docstring): this is the one place a user is asked to
+       self-identify a side, and only because more than one is
+       genuinely, already authorized to them. #}
+    <p class="gateway-context-description" data-ui-ref="index.choice.copy">Choose where you&rsquo;d like to work.</p>
+    <div class="gateway-actions" data-ui-ref="index.choice">
+        {% for env in accessible_environments %}
+        <a class="gateway-action gateway-action-primary" data-ui-ref="index.choice.{{ env }}" href="{{ url_for('portal.index', environment=env) }}">
+            <span><strong>{{ operating_environment_labels[env] }}</strong>
+            <small>{{ operating_environment_subtitles[env] }}</small></span>
+        </a>
+        {% endfor %}
+    </div>
+
+    {% else %}
+    {# ---------------- State 3: a resolved environment - show its projects ---------------- #}
+    <p class="gateway-context-description" data-ui-ref="index.resolved.copy">
+        {{ operating_environment_labels[resolved_environment] }}
+        {% if accessible_environments | length > 1 %}
+        <span class="mono">&middot; <a data-ui-ref="index.resolved.switch" href="{{ url_for('portal.index') }}">switch</a></span>
+        {% endif %}
+    </p>
+    <div class="gateway-actions">
+        {% if is_admin %}
+        <a class="gateway-action gateway-action-primary" data-ui-ref="index.resolved.new-project" href="{{ url_for('portal.upload', environment=resolved_environment) }}">
+            <span class="gateway-action-icon">+</span>
+            <span><strong>New Project</strong></span>
+        </a>
+        {% endif %}
+    </div>
+    {% call macros.subdisclosure("Open Existing Project", html_id="index-open-existing", ui_ref="index.resolved.open-existing") %}
+        {% if recent_projects %}
+        <ul class="project-card-list" data-ui-ref="index.resolved.project-list">
+            {% for p in recent_projects %}
+            <li class="project-card">
+                <a class="project-card-link" data-ui-ref="index.resolved.project-list.item" href="{{ url_for('workspace.show_workspace', project_id=p.project_id) }}">
+                    <div class="project-card-main">
+                        <span class="project-card-name">{{ p.display_name }}</span>
+                    </div>
+                    <div class="project-card-meta">
+                        <span>Updated {{ p.last_activity | humanize }}</span>
+                    </div>
+                </a>
+            </li>
+            {% endfor %}
+        </ul>
+        {% if recent_projects | length >= 6 %}
+        <p class="pane-note"><a data-ui-ref="index.resolved.see-all" href="{{ url_for('portal.choose_project', environment=resolved_environment) }}">See all projects&hellip;</a></p>
+        {% endif %}
+        {% else %}
+        <p class="projects-empty" data-ui-ref="index.resolved.project-list.empty">No {{ operating_environment_labels[resolved_environment] }} projects yet.</p>
+        {% endif %}
+    {% endcall %}
+    {% endif %}
+
+    {# ---------------- Composer/orientation - every state above (CLAUDE-
+       POST-SIGNIN-GATEWAY-SIMPLIFICATION-01, Disposition B: "port only
+       the Gateway behavior still required in the consolidated
+       no-project entry state, including Composer/orientation
+       behavior"). Ported verbatim from the retired gateway.html (same
+       backend route, same rule-based responder, same voice wiring) -
+       the only addition is the hidden `environment` field, so a
+       resolved user's matches stay inside their own governed side
+       (routes/portal.py's gateway_orientation() docstring covers the
+       isolation reasoning). #}
+    <form class="gateway-orientation-form" id="index-orientation-form" data-ui-ref="index.orientation.form">
+        <input type="text" class="text-input" id="index-orientation-input" name="message" placeholder="Open a project, or ask what you can do here" aria-label="Ask Archiosk">
+        {% if resolved_environment %}<input type="hidden" name="environment" value="{{ resolved_environment }}">{% endif %}
+        <button type="button" id="index-orientation-voice" class="voice-input-button" data-ui-ref="index.orientation.voice"
+                aria-label="Press and speak - audio is processed by your browser only and is never saved" hidden>&#127908;&#65039;</button>
+        <button type="submit" class="btn btn-ghost" data-ui-ref="index.orientation.submit">Ask</button>
+        <span class="voice-input-status" id="index-orientation-voice-status" data-ui-ref="index.orientation.voice.status" aria-live="polite"></span>
+    </form>
+    <p class="gateway-orientation-reply" id="index-orientation-reply" data-ui-ref="index.orientation.reply" aria-live="polite" hidden></p>
 </section>
+{# base.html itself never loads voice_input.js (only case_workspace.html/
+   gateway.html do, each for their own composer) - needed here for the
+   SAME window.ArchioskVoiceInput the ported script below calls. #}
+<script src="{{ url_for('static', filename='js/voice_input.js') }}?v={{ static_version }}"></script>
+<script nonce="{{ csp_nonce }}">
+// CLAUDE-VOICE-CONSISTENCY-01 / CLAUDE-POST-SIGNIN-GATEWAY-SIMPLIFICATION-01:
+// ported verbatim from the retired gateway.html's own orientation
+// composer script - same backend route, same voice wiring, only the
+// element ids and the optional environment field are new.
+(function () {
+    var form = document.getElementById('index-orientation-form');
+    var input = document.getElementById('index-orientation-input');
+    var replyEl = document.getElementById('index-orientation-reply');
+    if (!form || !input) return;
+
+    function csrfToken() {
+        var meta = document.querySelector('meta[name="csrf-token"]');
+        return meta ? meta.content : '';
+    }
+
+    function showReply(text) {
+        if (!replyEl) return;
+        replyEl.textContent = text || '';
+        replyEl.hidden = !text;
+    }
+
+    function ask(message) {
+        var formData = new FormData(form);
+        formData.set('message', message);
+        fetch('{{ url_for("portal.gateway_orientation") }}', {
+            method: 'POST',
+            body: formData,
+            headers: { 'X-CSRFToken': csrfToken() },
+            credentials: 'same-origin',
+        }).then(function (resp) {
+            return resp.json();
+        }).then(function (data) {
+            showReply(data.text || '');
+            if (data.kind === 'navigate' && data.url) {
+                window.setTimeout(function () { window.location.href = data.url; }, 350);
+            }
+        }).catch(function () {
+            showReply('Something went wrong - try again.');
+        });
+    }
+
+    form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        var message = input.value.trim();
+        if (!message) return;
+        ask(message);
+    });
+
+    if (window.ArchioskVoiceInput) {
+        window.ArchioskVoiceInput({
+            buttonId: 'index-orientation-voice',
+            statusId: 'index-orientation-voice-status',
+            onTranscript: function (transcript) { input.value = transcript; },
+            onEnd: function () { input.focus(); },
+        });
+    }
+})();
+</script>
 {% endblock %}

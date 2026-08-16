@@ -251,11 +251,18 @@ class VestibuleTests(_BaseTestCase):
         self.assertNotIn('data-ui-ref="gateway.chooser.current"', without_current)
 
     def test_current_project_excluded_from_available_list(self):
+        # CLAUDE-POST-SIGNIN-GATEWAY-SIMPLIFICATION-01, Addendum G: the
+        # top menu's OWN File > Open Project chooser doesn't know about
+        # this route's own `current=` exclusion (a separate, independent
+        # surface - see that ref's own docstring) - it legitimately adds
+        # one more occurrence of the current project's name. The real
+        # invariant this test protects - the "Available Projects" list
+        # itself never re-lists the current project - is unaffected.
         doc = self._ingest("VW7B Vestibule Current 2")
         other = self._ingest("VW7B Vestibule Other 2")
         client = self._client()
         body = client.get(f"/projects/choose?current={doc.project_id}").get_data(as_text=True)
-        self.assertEqual(body.count("VW7B Vestibule Current 2"), 1)
+        self.assertEqual(body.count("VW7B Vestibule Current 2"), 2)
         self.assertIn("VW7B Vestibule Other 2", body)
 
     def test_unauthorized_current_param_silently_ignored_not_404(self):

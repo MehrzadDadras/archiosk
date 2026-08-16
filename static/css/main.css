@@ -307,6 +307,16 @@ a:focus-visible, button:focus-visible, input:focus-visible {
        functions, it's simply invisible until hovered). */
     scrollbar-color: transparent transparent;
 }
+/* CLAUDE-POST-SIGNIN-GATEWAY-SIMPLIFICATION-01, Addendum I: applied only
+   when Thumbnails/its divider are absent from the DOM entirely (a
+   genuinely project-less page - base.html's own template comment on
+   .lists-pane covers the reasoning). Without this, the fixed flex-basis
+   above would still cap Lists at 60% with nothing below it to fill the
+   remaining 40% - "preserve layout stability" (Addendum I's own words),
+   not merely hide a pane and leave dead space. */
+.lists-pane-full {
+    flex: 1 1 auto;
+}
 .lists-thumbnails-divider {
     flex-shrink: 0;
     width: 100%;
@@ -3084,6 +3094,34 @@ main:has(.document-viewer-canvas-container) {
     z-index: 61;
     min-width: 200px;
     max-width: min(320px, 94vw);
+}
+/* CLAUDE-POST-SIGNIN-GATEWAY-SIMPLIFICATION-01, Addendum G: File > Open
+   Project's own lightweight chooser - the same .workspace-menubar-
+   subpanel popover idiom above, widened slightly (project names run
+   longer than the other submenu items sharing that base rule) and
+   capped in height so a reviewer with many accessible projects gets an
+   internally-scrolling list, never a popover that grows off-screen. */
+.workspace-open-project-panel {
+    min-width: 260px;
+    max-width: min(360px, 94vw);
+}
+.workspace-open-project-search {
+    width: 100%;
+    margin-bottom: 0.3rem;
+    font-size: 0.85rem;
+}
+.workspace-open-project-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    max-height: min(320px, 60vh);
+    overflow-y: auto;
+}
+.workspace-open-project-item {
+    display: block;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 /* CLAUDE-CA1D-INSTRUMENT-RAIL-01: the "quiet global machine fact" line
    (Plan-Mode report, Section D.2) - deliberately NOT a peer of

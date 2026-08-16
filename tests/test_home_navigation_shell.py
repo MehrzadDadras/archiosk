@@ -99,12 +99,25 @@ class HomeNavigationShellTests(unittest.TestCase):
         # this test still protects - no SECOND, duplicate listing
         # alongside it - is checked as an exact-once count instead of an
         # absence.
-        self.assertEqual(body.count("rfp.md"), 1)
-        # On /projects itself, "rfp.md" legitimately appears twice now:
-        # once in Lists (present on every page, Section 2) and once in
-        # the actual /projects directory listing this page renders.
+        #
+        # CLAUDE-POST-SIGNIN-GATEWAY-SIMPLIFICATION-01, Addendum G: the
+        # top menu's OWN File > Open Project chooser now ALSO lists every
+        # accessible project by name (a separate, legitimate "find/open
+        # any project" utility, not a re-duplication of the Lists rail -
+        # see that ref's own docstring). Scope the exact-once count to
+        # everything AFTER the menu bar's own closing tag, so this test
+        # still proves what it's named for (no second listing inside the
+        # page's own main content) without being broken by an unrelated,
+        # deliberate second surface.
+        after_menu = body[body.index("</nav>"):]
+        self.assertEqual(after_menu.count("rfp.md"), 1)
+        # On /projects itself, "rfp.md" legitimately appears three times
+        # now: once in the top menu's File > Open Project chooser (every
+        # page), once in Lists (present on every page, Section 2), and
+        # once in the actual /projects directory listing this page
+        # renders.
         directory_body = client.get("/projects").get_data(as_text=True)
-        self.assertEqual(directory_body.count("rfp.md"), 2)
+        self.assertEqual(directory_body.count("rfp.md"), 3)
 
     def test_nav_rail_present_with_toggle(self):
         # CLAUDE-P40-E2B1: the old two-state (icon-only/labeled) side-rail
@@ -184,9 +197,13 @@ class HomeNavigationShellTests(unittest.TestCase):
         # authorization gap, since portal.upload is @admin_required
         # (routes/portal.py) - a read_only reviewer clicking it would
         # have hit a 403. Now gated behind is_admin, matching Section 4's
-        # "unauthorized... branches must never render". "Open Project"
-        # (index.html's own dashboard hero CTA, role-independent, out of
-        # this stage's shell-only scope) is unaffected and still present.
+        # "unauthorized... branches must never render".
+        #
+        # CLAUDE-POST-SIGNIN-GATEWAY-SIMPLIFICATION-01, Option C: the
+        # role-independent CTA into the full Projects directory is still
+        # present (index.html's own index.projects-directory ref), just
+        # relabeled "All projects" rather than "Open Project" as part of
+        # this stage's own three-state entry rework.
         client = self.flask_app.test_client()
         self._login(client, role="read_only")
 
@@ -194,7 +211,7 @@ class HomeNavigationShellTests(unittest.TestCase):
         body = response.get_data(as_text=True)
 
         self.assertNotIn(">New Project<", body)
-        self.assertIn(">Open Project<", body)
+        self.assertIn('data-ui-ref="index.projects-directory"', body)
 
 
 if __name__ == "__main__":

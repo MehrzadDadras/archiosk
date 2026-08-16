@@ -57,6 +57,20 @@ OPERATING_ENVIRONMENT_LABELS = {
     DESIGN_BUILDER_PROPONENT: "Design-Builder / Proponent",
 }
 
+# CLAUDE-POST-SIGNIN-GATEWAY-SIMPLIFICATION-01, Disposition B: the exact,
+# Product-Owner-specified intent subtitles shown alongside the label
+# above at authenticated entry, when a user is authorized for more than
+# one environment and must make an explicit governed choice. Kept beside
+# OPERATING_ENVIRONMENT_LABELS (same shape, same closed set) rather than
+# inline in a template, so this copy has exactly one home. Disposition B
+# is explicit that "Develop / Decipher" must never become a competing
+# primary vocabulary - these subtitles are plain-language elaboration of
+# the existing canonical labels, never a replacement for them.
+OPERATING_ENVIRONMENT_SUBTITLES = {
+    CLIENT_OWNER: "Prepare and issue the RFP",
+    DESIGN_BUILDER_PROPONENT: "Review and respond to the issued RFP",
+}
+
 
 def is_valid_operating_environment(value: str | None) -> bool:
     return value in OPERATING_ENVIRONMENTS

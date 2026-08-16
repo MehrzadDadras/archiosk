@@ -209,10 +209,14 @@ class ProtectedRouteTests(_BaseTestCase):
 
 class SuccessfulSignInTests(_BaseTestCase):
     def test_normal_sign_in_reaches_the_gateway(self):
+        # CLAUDE-POST-SIGNIN-GATEWAY-SIMPLIFICATION-01, Option C: was
+        # /gateway - _resolve_next_url's own default is now / directly
+        # (the consolidated post-sign-in destination), skipping the
+        # pointless extra redirect hop through the now-retired route.
         client = self.flask_app.test_client()
         resp = client.post("/login", data={"username": "vw5_admin", "password": "x"}, follow_redirects=False)
         self.assertEqual(resp.status_code, 302)
-        self.assertTrue(resp.headers["Location"].endswith("/gateway"))
+        self.assertEqual(resp.headers["Location"], "/")
 
     def test_safe_next_after_a_direct_protected_link_is_preserved(self):
         # Existing, already-security-tested behaviour (test_p40d1_auth_
@@ -310,8 +314,18 @@ class GatewayShellIsolationTests(_BaseTestCase):
         mock_nav.assert_not_called()
 
     def test_gateway_uses_the_standalone_shell_and_wide_centered_card(self):
+        # CLAUDE-POST-SIGNIN-GATEWAY-SIMPLIFICATION-01, Option C: /gateway
+        # itself no longer renders gateway_shell.html at all (it only
+        # redirects to the consolidated /, per routes/portal.py's
+        # gateway() docstring). /projects/choose is the one remaining
+        # route that still genuinely renders this standalone shell
+        # unchanged, so it's the real proof of this invariant now.
         client = self._client_as("vw5_admin", 1)
-        body = client.get("/gateway").get_data(as_text=True)
+        resp = client.get("/gateway")
+        self.assertEqual(resp.status_code, 302)
+        self.assertEqual(resp.headers["Location"], "/")
+
+        body = client.get("/projects/choose").get_data(as_text=True)
         # CLAUDE-CA1D-GATEWAY-VISUAL-CONTINUITY-01 added the shared
         # deep-ocean background (landing-page) alongside gateway-shell -
         # unrelated to the shell-isolation property this test guards.
@@ -334,31 +348,43 @@ class GatewayFunctionalChoicesTests(_BaseTestCase):
         no `?environment=` preset - the real commissioning step is
         `/upload`'s own required radio + confirmation checkbox,
         unchanged."""
+        # CLAUDE-POST-SIGNIN-GATEWAY-SIMPLIFICATION-01, Option C: unlike
+        # the old neutral gateway.html (which never established an
+        # environment context at all, so presetting one would have been
+        # a guess), index.html's own resolved-environment state DOES
+        # preset ?environment= on New Project once a side is genuinely
+        # already established - the same already-accepted pattern
+        # project_chooser.html's own zero-state "New Project" CTA
+        # already used (`environment=environment_filter or None`), not
+        # a new invention. /upload's own required radio + confirmation
+        # checkbox is still the real commissioning step - a preset only
+        # pre-selects the radio, it never bypasses confirmation.
         client = self._client_as("vw5_admin", 1)
-        body = client.get("/gateway").get_data(as_text=True)
+        body = client.get("/").get_data(as_text=True)
         self.assertNotIn("Client / Owner Projects", body)
         self.assertNotIn("Design-Builder / Proponent Projects", body)
-        self.assertIn('data-ui-ref="gateway.new-project"', body)
-        self.assertIn('href="/upload"', body)
-        self.assertNotIn('href="/upload?environment=', body)
+        self.assertIn('data-ui-ref="index.resolved.new-project"', body)
+        self.assertIn('href="/upload?environment=client_owner"', body)
 
     def test_non_admin_does_not_see_create_project_action(self):
         client = self._client_as("vw5_reviewer", 2, role="read_only")
-        body = client.get("/gateway").get_data(as_text=True)
-        self.assertNotIn('data-ui-ref="gateway.new-project"', body)
+        body = client.get("/").get_data(as_text=True)
+        self.assertNotIn('data-ui-ref="index.resolved.new-project"', body)
 
     def test_open_existing_project_action_present_and_functional(self):
         # CLAUDE-GO-NEUTRAL-ENTRY-01: one unfiltered inline reveal over
         # every authorized project, regardless of operating environment
         # - not partitioned into two context-scoped controls.
         # CLAUDE-CA1D-GATEWAY-INLINE-REOPEN-01: "Open Existing Project"
-        # is an inline reveal on the Gateway itself (fewest possible
-        # transitions to reopen a Project) rather than a navigating link
-        # to /projects/choose - the fixture's own project must appear
-        # directly in the Gateway's own inline list.
+        # is an inline reveal (fewest possible transitions to reopen a
+        # Project) rather than a navigating link to /projects/choose -
+        # the fixture's own project must appear directly in the list.
+        # CLAUDE-POST-SIGNIN-GATEWAY-SIMPLIFICATION-01, Option C: ported
+        # from the retired gateway.html to / under the new
+        # index.resolved.open-existing ref.
         client = self._client_as("vw5_admin", 1)
-        body = client.get("/gateway").get_data(as_text=True)
-        self.assertIn('data-ui-ref="gateway.open-existing-projects"', body)
+        body = client.get("/").get_data(as_text=True)
+        self.assertIn('data-ui-ref="index.resolved.open-existing"', body)
         self.assertIn(_DISTINCTIVE_PROJECT_NAME, body)
         # /projects/choose itself is unchanged and still independently
         # reachable (the header's "Switch Project" Vestibule uses it).
@@ -382,21 +408,25 @@ class GatewayFunctionalChoicesTests(_BaseTestCase):
 
 class NonWorkspaceFunctionAccessTests(_BaseTestCase):
     def test_removed_projects_reachable_from_gateway_for_any_authenticated_user(self):
+        # CLAUDE-POST-SIGNIN-GATEWAY-SIMPLIFICATION-01, Option C: /gateway
+        # itself now only redirects - both links live in the shared
+        # application menu bar (templates/_app_menu.html), reachable on
+        # every authenticated page including the consolidated /.
         for username, uid, role in (("vw5_admin", 1, "admin"), ("vw5_reviewer", 2, "read_only")):
             client = self._client_as(username, uid, role=role)
-            body = client.get("/gateway").get_data(as_text=True)
+            body = client.get("/").get_data(as_text=True)
             self.assertIn('href="/removed-projects"', body, username)
             resp = client.get("/removed-projects")
             self.assertEqual(resp.status_code, 200, username)
 
     def test_security_reachable_from_gateway_for_admin_only(self):
         client = self._client_as("vw5_admin", 1)
-        body = client.get("/gateway").get_data(as_text=True)
+        body = client.get("/").get_data(as_text=True)
         self.assertIn('href="/security/"', body)
 
     def test_security_link_absent_from_gateway_for_non_admin(self):
         client = self._client_as("vw5_reviewer", 2, role="read_only")
-        body = client.get("/gateway").get_data(as_text=True)
+        body = client.get("/").get_data(as_text=True)
         self.assertNotIn('href="/security/"', body)
         self.assertNotIn(">Security<", body)
 

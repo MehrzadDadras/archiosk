@@ -104,7 +104,11 @@ class PasswordResetTests(unittest.TestCase):
             "/login", data={"username": "legacy_no_email", "password": "legacy-pw-123"},
         )
         self.assertEqual(resp.status_code, 302)
-        self.assertIn("/gateway", resp.headers["Location"])
+        # CLAUDE-POST-SIGNIN-GATEWAY-SIMPLIFICATION-01, Option C: was
+        # /gateway - _resolve_next_url's own default is now / directly
+        # (the consolidated post-sign-in destination), skipping the
+        # pointless extra redirect hop through the now-retired route.
+        self.assertEqual(resp.headers["Location"], "/")
 
     # -- forgot-password request is neutral -----------------------------------
 

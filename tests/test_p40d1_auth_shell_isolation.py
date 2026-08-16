@@ -227,11 +227,24 @@ class AuthenticatedShellStillRendersNormallyTests(_BaseAuthShellTestCase):
         # authenticated page - that premise is exactly what VW5's own
         # product-owner correction overturned ("The Project Gateway
         # currently displays the left Lists panel. That is wrong.").
-        # Gateway now renders templates/gateway_shell.html, a genuinely
-        # standalone shell (see that file's own comment) - checked here
-        # is the new, deliberately different chrome.
+        # Gateway used to render templates/gateway_shell.html, a
+        # genuinely standalone shell - checked here was that chrome.
+        #
+        # CLAUDE-POST-SIGNIN-GATEWAY-SIMPLIFICATION-01, Option C: /gateway
+        # itself is now only a redirect to the consolidated / (which
+        # deliberately DOES use the real app-shell/launcher-panel chrome
+        # this test's own history was originally reacting against being
+        # absent from a shell-less page - / is not that page; it's the
+        # ordinary authenticated shell, same as every other page).
+        # /projects/choose is the one remaining route that still
+        # genuinely renders gateway_shell.html unchanged, so it's the
+        # real proof of this invariant now.
         client = self._client_as("shelluser", 1)
         resp = client.get("/gateway")
+        self.assertEqual(resp.status_code, 302)
+        self.assertEqual(resp.headers["Location"], "/")
+
+        resp = client.get("/projects/choose")
         self.assertEqual(resp.status_code, 200)
         body = resp.get_data(as_text=True)
         self.assertIn("gateway-shell", body)

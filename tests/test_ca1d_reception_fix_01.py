@@ -301,9 +301,16 @@ class ProjectGatewayBackActionTests(_BaseReceptionFixTestCase):
         self.assertLess(back_index, label_index, "Back action must render before the 'Project Gateway' label, not after")
 
     def test_back_action_has_a_safe_non_js_fallback_destination(self):
+        # CLAUDE-POST-SIGNIN-GATEWAY-SIMPLIFICATION-01, Option C: was
+        # /gateway - that route now only redirects to / (see
+        # routes/portal.py's gateway() docstring), so the back link
+        # points directly at the real destination instead of bouncing
+        # through a pointless extra hop.
         client = self._client_as("rf_owner", 1)
         body = client.get("/projects/choose").get_data(as_text=True)
-        self.assertIn('href="/gateway"', body)
+        idx = body.index('id="gateway-back-link"')
+        tag = body[body.rindex("<a", 0, idx):idx + 30]
+        self.assertIn('href="/"', tag)
 
     def test_redundant_bottom_back_to_gateway_link_is_gone(self):
         client = self._client_as("rf_owner", 1)

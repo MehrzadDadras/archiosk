@@ -24,6 +24,16 @@ client-side feature in this shell already trusts). No new backend
 endpoint - routes/workspace.py only gained one new boolean field
 ("is_pdf") on that existing JSON island.
 
+CLAUDE-POST-SIGNIN-GATEWAY-SIMPLIFICATION-01, Addendum I (narrow
+supersession): "permanent" above was always scoped to pages where a
+Document could, in principle, exist - an open project with no PDF
+currently selected (Overview/Investigation/Chat, still covered below).
+On a genuinely project-less page (no project_id/workspace at all -
+/upload, /projects, the consolidated entry page), Thumbnails and its
+divider are absent from the DOM entirely - see
+test_thumbnails_pane_absent_with_no_project_open, below, which replaced
+this file's own original (opposite) finding for that one page class.
+
 See tests/test_p40vw7a_qa2_thumbnails_annotations_layout.py for the
 structural-split/divider tests this stage updated in place (the ones
 whose assertions targeted the now-corrected hidden-by-default
@@ -151,15 +161,25 @@ class StructuralPaneTests(_BaseTestCase):
             tag = body[body.rindex("<div", 0, idx):body.index(">", idx)]
             self.assertNotIn("hidden", tag, query)
 
-    def test_thumbnails_pane_present_even_with_no_project_open(self):
-        # Lists is reviewer-wide (every authenticated page) - Thumbnails
-        # is its sibling, so it must be too (Section 1's "full-height
-        # left workspace column" - this column exists app-wide already).
+    def test_thumbnails_pane_absent_with_no_project_open(self):
+        # CLAUDE-POST-SIGNIN-GATEWAY-SIMPLIFICATION-01, Addendum I: a
+        # narrow, deliberate supersession of this file's own original
+        # "Thumbnails is reviewer-wide" finding above - LTH1's own
+        # concern (Lists silently filling the whole column with no
+        # visible split) was about a real, OPEN project where a PDF
+        # simply isn't selected yet (Overview/Investigation/Chat, all
+        # still covered by the WITHIN-a-project test above, unchanged).
+        # A genuinely project-less page (no project_id/workspace at
+        # all) can never have document context even in principle, so
+        # Thumbnails - and its now-meaningless divider - no longer
+        # render there; .lists-pane-full (main.css) gives Lists the
+        # full column back instead of leaving 40% dead space.
         self._ingest("LTH1 Project 3", "spec.pdf")
         client = self._client()
         body = client.get("/projects").get_data(as_text=True)
-        self.assertIn('id="thumbnails-pane"', body)
-        self.assertIn('id="lists-thumbnails-divider"', body)
+        self.assertNotIn('id="thumbnails-pane"', body)
+        self.assertNotIn('id="lists-thumbnails-divider"', body)
+        self.assertIn("lists-pane-full", body)
 
     def test_lists_and_thumbnails_have_independent_scroll_css(self):
         css = _MAIN_CSS_PATH.read_text(encoding="utf-8")

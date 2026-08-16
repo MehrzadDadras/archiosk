@@ -27,7 +27,7 @@ from unittest.mock import patch
 from werkzeug.datastructures import FileStorage
 from werkzeug.security import generate_password_hash
 
-from routes.portal import _classify_gateway_orientation
+from routes.portal import _classify_establish_project_help, _classify_gateway_orientation
 from services.bhive_parser import BHiveParser, ParsedDocument
 from services.ingestion import ingest_upload
 
@@ -87,6 +87,51 @@ class ClassifyGatewayOrientationTests(unittest.TestCase):
     def test_no_project_ever_matches_by_accident_on_empty_list(self):
         reply = _classify_gateway_orientation("anything at all", [], can_create_project=True)
         self.assertEqual(reply["kind"], "info")
+
+
+class ClassifyEstablishProjectHelpTests(unittest.TestCase):
+    """CLAUDE-POST-SIGNIN-GATEWAY-SIMPLIFICATION-01, Addendum H: the
+    New Project / Establish a Project form's own project-less help
+    classifier - a genuinely different domain from
+    _classify_gateway_orientation (explains this form's own fields,
+    never navigates to a project), so it never opens a
+    CaseWorkspaceStore or reaches interpret_message either - it doesn't
+    even take a `projects` argument."""
+
+    def test_empty_message_is_info_with_a_prompt(self):
+        reply = _classify_establish_project_help("")
+        self.assertEqual(reply["kind"], "info")
+        self.assertTrue(reply["text"])
+
+    def test_environment_question_explains_both_sides_without_choosing(self):
+        reply = _classify_establish_project_help("which operating environment should I choose?")
+        self.assertEqual(reply["kind"], "info")
+        self.assertIn("Owner", reply["text"])
+        self.assertIn("Proponent", reply["text"])
+
+    def test_change_later_question_is_answered_truthfully(self):
+        reply = _classify_establish_project_help("can I change this later?")
+        self.assertIn("locked permanently", reply["text"])
+
+    def test_connect_documents_question_explains_link_vs_upload(self):
+        reply = _classify_establish_project_help("should I connect documents now or later?")
+        self.assertIn("Link to Storage", reply["text"])
+
+    def test_naming_question_is_answered(self):
+        reply = _classify_establish_project_help("what should I name this project?")
+        self.assertIn("optional", reply["text"])
+
+    def test_unrecognized_message_falls_back_to_a_menu_of_topics(self):
+        reply = _classify_establish_project_help("what is the weather")
+        self.assertEqual(reply["kind"], "info")
+        self.assertNotIn("url", reply)
+
+    def test_never_returns_a_navigate_reply(self):
+        # This widget must never submit the real form or redirect the
+        # user on its own - it only ever explains.
+        for message in ("environment", "change later", "connect documents", "name", "", "anything"):
+            reply = _classify_establish_project_help(message)
+            self.assertEqual(reply["kind"], "info", message)
 
 
 class GatewayOrientationRouteTests(unittest.TestCase):
@@ -169,6 +214,27 @@ class GatewayOrientationRouteTests(unittest.TestCase):
         data = resp.get_json()
         self.assertEqual(data["kind"], "info")
 
+    def test_establish_project_context_routes_to_the_help_classifier_not_navigation(self):
+        # CLAUDE-POST-SIGNIN-GATEWAY-SIMPLIFICATION-01, Addendum H: a
+        # project genuinely named "environment" would otherwise match
+        # _classify_gateway_orientation's own substring project-name
+        # matcher and navigate - context=establish-project must route
+        # to the field-explanation classifier instead, never navigation.
+        self._ingest(owner="voice_owner", project_name="Environment Test Project")
+        client = self._client_as("voice_owner", 1)
+        resp = client.post("/gateway/orientation", data={"message": "which environment should I choose", "context": "establish-project"})
+        data = resp.get_json()
+        self.assertEqual(data["kind"], "info")
+        self.assertIn("Owner", data["text"])
+
+    def test_omitted_context_keeps_the_original_navigation_behavior(self):
+        doc = self._ingest(owner="voice_owner", project_name="Riverside Project")
+        client = self._client_as("voice_owner", 1)
+        resp = client.post("/gateway/orientation", data={"message": "open riverside project"})
+        data = resp.get_json()
+        self.assertEqual(data["kind"], "navigate")
+        self.assertIn(doc.project_id, data["url"])
+
 
 class GatewayOrientationMarkupTests(unittest.TestCase):
     def setUp(self):
@@ -184,16 +250,20 @@ class GatewayOrientationMarkupTests(unittest.TestCase):
             sess["username"] = "voice_markup_owner"
             sess["role"] = "admin"
 
-    def test_gateway_page_has_orientation_composer_and_voice_button(self):
-        body = self.client.get("/gateway").get_data(as_text=True)
-        self.assertIn('data-ui-ref="gateway.orientation.form"', body)
-        self.assertIn('data-ui-ref="gateway.orientation.voice"', body)
-        self.assertIn('data-ui-ref="gateway.orientation.submit"', body)
-        self.assertIn('id="gateway-orientation-reply"', body)
+    def test_index_page_has_orientation_composer_and_voice_button(self):
+        # CLAUDE-POST-SIGNIN-GATEWAY-SIMPLIFICATION-01, Option C: ported
+        # from the retired gateway.html to the consolidated / (index.html)
+        # entry page - same backend route, same voice wiring, new element
+        # ids/refs only (index.* rather than gateway.*).
+        body = self.client.get("/").get_data(as_text=True)
+        self.assertIn('data-ui-ref="index.orientation.form"', body)
+        self.assertIn('data-ui-ref="index.orientation.voice"', body)
+        self.assertIn('data-ui-ref="index.orientation.submit"', body)
+        self.assertIn('id="index-orientation-reply"', body)
 
     def test_voice_button_hidden_by_default_server_side(self):
-        body = self.client.get("/gateway").get_data(as_text=True)
-        voice_button_start = body.index('id="gateway-orientation-voice"')
+        body = self.client.get("/").get_data(as_text=True)
+        voice_button_start = body.index('id="index-orientation-voice"')
         button_open_tag = body.rindex("<button", 0, voice_button_start)
         button_close_tag = body.index(">", voice_button_start)
         self.assertIn("hidden", body[button_open_tag:button_close_tag])
@@ -201,21 +271,42 @@ class GatewayOrientationMarkupTests(unittest.TestCase):
     def test_shared_voice_engine_script_loads_before_the_page_wires_it_up(self):
         # Regression guard: voice_input.js defines window.ArchioskVoiceInput
         # synchronously at parse time - if its <script> tag rendered AFTER
-        # gateway.html's own inline script that calls it, the call would
+        # index.html's own inline script that calls it, the call would
         # silently no-op on every browser (not just unsupported ones),
         # since window.ArchioskVoiceInput wouldn't exist yet.
-        body = self.client.get("/gateway").get_data(as_text=True)
+        body = self.client.get("/").get_data(as_text=True)
         self.assertIn("voice_input.js", body)
         voice_engine_idx = body.index("voice_input.js")
         wiring_call_idx = body.index("window.ArchioskVoiceInput({")
         self.assertLess(voice_engine_idx, wiring_call_idx)
 
     def test_project_chooser_does_not_get_the_orientation_composer(self):
-        # Scoped to gateway.html only (the "Begin a session" screen the
-        # Product Owner actually named) - project_chooser.html overrides
-        # the same gateway_section_heading block with its own heading.
+        # project_chooser.html never had this composer and still doesn't -
+        # it's specific to the consolidated / entry page now.
         body = self.client.get("/projects/choose").get_data(as_text=True)
-        self.assertNotIn('data-ui-ref="gateway.orientation.form"', body)
+        self.assertNotIn('data-ui-ref="index.orientation.form"', body)
+
+    def test_upload_page_has_a_collapsible_help_composer_with_establish_project_context(self):
+        # CLAUDE-POST-SIGNIN-GATEWAY-SIMPLIFICATION-01, Addendum H.
+        body = self.client.get("/upload").get_data(as_text=True)
+        self.assertIn('data-ui-ref="upload.help"', body)
+        self.assertIn('data-ui-ref="upload.help.form"', body)
+        self.assertIn('data-ui-ref="upload.help.submit"', body)
+        self.assertIn('name="context" value="establish-project"', body)
+        # Collapsed by default - a real <details> with no `open` attribute
+        # - so it never obscures the form fields beneath it.
+        details_idx = body.rindex("<details", 0, body.index('data-ui-ref="upload.help"'))
+        details_tag = body[details_idx:body.index(">", details_idx)]
+        self.assertNotIn(" open", details_tag)
+
+    def test_upload_help_composer_never_appears_elsewhere(self):
+        # The real, canonical in-project Composer (case_workspace.html)
+        # and the consolidated entry page must never gain this
+        # establish-project-specific widget - it's genuinely scoped to
+        # this one form, not a variant reused elsewhere.
+        for path in ("/projects", "/"):
+            body = self.client.get(path).get_data(as_text=True)
+            self.assertNotIn('data-ui-ref="upload.help"', body, path)
 
 
 if __name__ == "__main__":

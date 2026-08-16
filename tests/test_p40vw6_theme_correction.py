@@ -718,12 +718,21 @@ class Vw5ShellBoundaryUnaffectedTests(_BaseTestCase):
         # CLAUDE-UI-ACTION-REDUNDANCY-REVIEW-01, Disposition 2/3: the
         # workspace-appearance-menu absence check is retired -
         # Appearance is now legitimately, deliberately shared onto
-        # Gateway via the application menu bar (one global mode choice,
-        # never per-surface). What this test actually guards - the OLD,
-        # retired per-surface "matrix" UI (appearance-matrix) - never
-        # existed on Gateway and still doesn't; that's the real invariant.
+        # every gateway_base.html-descended page via the application
+        # menu bar (one global mode choice, never per-surface). What
+        # this test actually guards - the OLD, retired per-surface
+        # "matrix" UI (appearance-matrix) - never existed on this shell
+        # family and still doesn't; that's the real invariant.
+        #
+        # CLAUDE-POST-SIGNIN-GATEWAY-SIMPLIFICATION-01, Option C: was
+        # /gateway - that route no longer renders gateway_shell.html at
+        # all (it now redirects to the consolidated /, which uses
+        # base.html/.app-shell instead). /projects/choose still
+        # genuinely extends gateway_base.html/gateway-shell (the
+        # Vestibule - unchanged, still reachable), so it's the real
+        # remaining proof of this invariant.
         client = self._client_as("vw6_owner", 1)
-        body = client.get("/gateway").get_data(as_text=True)
+        body = client.get("/projects/choose").get_data(as_text=True)
         self.assertNotIn("appearance-matrix", body)
         # CLAUDE-CA1D-GATEWAY-VISUAL-CONTINUITY-01 added the shared
         # deep-ocean background (landing-page) alongside gateway-shell -

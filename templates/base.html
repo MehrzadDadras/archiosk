@@ -356,7 +356,17 @@
                of its own selected at all (Section 3's own "do not clear
                thumbnails merely because the user moved into a related
                Investigation or conversation"). #}
-            <div class="lists-pane" id="lists-pane">
+            {# CLAUDE-POST-SIGNIN-GATEWAY-SIMPLIFICATION-01, Addendum I: on a
+               genuinely project-less page (no project_id/workspace at all -
+               /upload, /projects, the consolidated entry page, admin pages),
+               Thumbnails can never have real page content - unlike LTH1's
+               own "Overview/Investigation/Chat" concern below (a real,
+               open project where a PDF simply isn't selected yet), there is
+               no document context here even in principle. lists-pane-full
+               (main.css) gives Lists the full column height back exactly
+               like it had before LTH1 - LTH1's own fix is otherwise
+               UNCHANGED and still applies to every in-project page. #}
+            <div class="lists-pane{% if not (project_id is defined and workspace is defined) %} lists-pane-full{% endif %}" id="lists-pane">
             <div class="launcher-panel-body">
                 <ul class="tree" data-tree-root>
                     {# CLAUDE-LEFT-RAIL-01: PROJECTS is now the one, always-
@@ -680,6 +690,7 @@
                .lists-pane's own comment above for why; this divider is
                now a PERMANENT fixture, matching .toolbox-eye-divider's
                own "never [hidden]" treatment exactly. #}
+            {% if project_id is defined and workspace is defined %}
             <div class="lists-thumbnails-divider" id="lists-thumbnails-divider" data-ui-ref="shell.lists-thumbnails-divider"
                  role="separator" aria-orientation="horizontal" aria-label="Resize Lists/Thumbnails split"
                  tabindex="0" aria-valuemin="12" aria-valuemax="88"></div>
@@ -698,6 +709,7 @@
                 <p class="thumbnails-empty-state" id="thumbnails-empty-state" data-ui-ref="lists.thumbnails-pane.empty">Open a Document to view its pages.</p>
                 <div class="thumbnails-list" id="thumbnails-list" role="list" aria-label="Page thumbnails" data-ui-ref="lists.thumbnails-pane.list"></div>
             </div>
+            {% endif %}
         </nav>
         {# CLAUDE-P40-VW7B: the old "Project-switching interruption dialog"
            (CLAUDE-P40-VW8) is gone - its ONLY trigger was activating a

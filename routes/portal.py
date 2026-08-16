@@ -24,7 +24,11 @@ from services.auth import (
 )
 from services.rate_limit import limiter
 from services.case_workspace import CaseWorkspaceStore
-from services.environment_capabilities import OPERATING_ENVIRONMENT_LABELS, is_valid_operating_environment
+from services.environment_capabilities import (
+    OPERATING_ENVIRONMENT_LABELS,
+    OPERATING_ENVIRONMENT_SUBTITLES,
+    is_valid_operating_environment,
+)
 from services.governance import GovernanceError
 from services.ingestion import UploadError, get_governance_log, get_registry, ingest_folder_upload, ingest_upload
 from services.drawing_intake import (
@@ -176,6 +180,23 @@ def index():
     behavior below is completely unchanged; Sign In on that landing
     page still goes straight to portal.login, so direct /login access
     and the existing authentication flow are both fully preserved.
+
+    CLAUDE-POST-SIGNIN-GATEWAY-SIMPLIFICATION-01, Option C: this is now
+    ALSO the consolidated post-sign-in destination (see
+    _resolve_next_url, below, and the retired /gateway route further
+    down this file) - base.html's own shell already rendered correctly
+    with no project open on this exact route before this stage (proven,
+    not assumed: this route, /projects, and /upload all already did),
+    so consolidating onto it needed no new project-less-shell work, only
+    real content for the state itself. The one genuinely new piece is
+    the operating-environment entry sequence the Product Owner's own
+    disposition requires: establish/derive the user's authorized
+    operating environment(s) -> show that environment's own projects ->
+    enter a project -> GO orients. `?environment=<value>` is how a
+    multi-environment user's explicit choice (or a returning single-
+    environment user's own bookmark/link) reaches this route - resolved
+    ONLY against `accessible_environments` below, so an unauthorized or
+    stale value simply falls back to "ask," never a silent bypass.
     """
     if not is_authenticated():
         return render_template('landing.html')
@@ -184,15 +205,52 @@ def index():
     store = CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"])
     governance_log = get_governance_log(current_app)
 
-    documents = _accessible_documents(registry, store)
-    documents.sort(key=lambda d: d.ingested_at, reverse=True)
+    accessible_environments = _accessible_operating_environments(registry, store)
 
-    recent_projects = [
-        _project_summary(document, _safe_workspace(store, document.project_id), governance_log.read(document.project_id))
-        for document in documents[:6]
-    ]
+    requested_environment = request.args.get('environment', '')
+    if (
+        requested_environment
+        and is_valid_operating_environment(requested_environment)
+        and requested_environment in accessible_environments
+    ):
+        resolved_environment = requested_environment
+    elif len(accessible_environments) == 1:
+        # Exactly one authorized side - usher directly there, never ask
+        # a returning single-environment user to choose every time.
+        resolved_environment = accessible_environments[0]
+    else:
+        # Zero (genuine first-time/unclassified entry) or multiple
+        # (a real, governed choice is required) - neither resolves on
+        # its own; index.html renders the appropriate one of those two
+        # states from accessible_environments' own length.
+        resolved_environment = None
 
-    return render_template('index.html', recent_projects=recent_projects)
+    recent_projects = []
+    if resolved_environment:
+        accessible = _accessible_documents(registry, store)
+        workspaces_by_project = {
+            document.project_id: _safe_workspace(store, document.project_id)
+            for document in accessible
+        }
+        documents = [
+            d for d in accessible
+            if workspaces_by_project[d.project_id]
+            and workspaces_by_project[d.project_id].operating_environment == resolved_environment
+        ]
+        documents.sort(key=lambda d: d.ingested_at, reverse=True)
+        recent_projects = [
+            _project_summary(document, workspaces_by_project[document.project_id], governance_log.read(document.project_id))
+            for document in documents[:6]
+        ]
+
+    return render_template(
+        'index.html',
+        accessible_environments=accessible_environments,
+        resolved_environment=resolved_environment,
+        operating_environment_labels=OPERATING_ENVIRONMENT_LABELS,
+        operating_environment_subtitles=OPERATING_ENVIRONMENT_SUBTITLES,
+        recent_projects=recent_projects,
+    )
 
 
 @portal_bp.route('/health')
@@ -235,13 +293,20 @@ def health():
 
 
 def _resolve_next_url() -> str:
-    """?next= target after a successful/already-satisfied login - the
-    project gateway (pick ingest vs. dashboard) when none was given.
+    """?next= target after a successful/already-satisfied login.
+
+    CLAUDE-POST-SIGNIN-GATEWAY-SIMPLIFICATION-01, Option C: was
+    portal.gateway - that route now only redirects here (see gateway(),
+    below), so pointing new logins at it directly skips a pointless
+    extra hop. portal.index is now the one consolidated post-sign-in
+    destination: it establishes/derives the user's operating environment
+    and shows that environment's projects itself.
+
     Only follows same-site relative paths -- ?next=https://evil.example
     would otherwise redirect an authenticated session off-site."""
-    next_url = request.args.get('next') or url_for('portal.gateway')
+    next_url = request.args.get('next') or url_for('portal.index')
     if not next_url.startswith('/') or next_url.startswith('//'):
-        next_url = url_for('portal.gateway')
+        next_url = url_for('portal.index')
     return next_url
 
 
@@ -367,6 +432,42 @@ def reset_password():
     return redirect(url_for('portal.login'))
 
 
+def _accessible_operating_environments(registry, store: CaseWorkspaceStore) -> list[str]:
+    """CLAUDE-POST-SIGNIN-GATEWAY-SIMPLIFICATION-01, Option C: the set of
+    operating_environment values genuinely present among the CURRENT
+    user's own access-scoped projects - reuses _accessible_documents/
+    _safe_workspace verbatim (no new authorization surface, no new
+    User field), a pure read-time derivation, never persisted (the
+    same "never inferred, never stored redundantly" discipline
+    environment_capabilities.py's own module docstring already
+    establishes for the field itself). A project with no workspace
+    record or an unset/legacy environment contributes nothing here -
+    this only ever reports real, already-established values, never a
+    guess.
+
+    Governance note: entry-time environment derivation was previously
+    ruled out by CLAUDE-GO-NEUTRAL-ENTRY-01 ("the user enters ARCHIOSK,
+    not a stakeholder category" - Gateway's own project list stopped
+    being partitioned by environment because of that decision). The
+    Product Owner's own CLAUDE-POST-SIGNIN-GATEWAY-SIMPLIFICATION-01
+    disposition explicitly and NARROWLY supersedes that one decision
+    for this one purpose - establishing/deriving the user's governed
+    operating side before showing their project list at authenticated
+    entry. It is not a return to arbitrary Client/DB categorization
+    throughout the product: choose_project's own unfiltered default
+    stays unfiltered, and this function itself never partitions
+    anything - it only reports which side(s) a user is already
+    authorized for, so the caller can decide whether to ask.
+    """
+    documents = _accessible_documents(registry, store)
+    environments: set[str] = set()
+    for document in documents:
+        workspace = _safe_workspace(store, document.project_id)
+        if workspace and workspace.operating_environment:
+            environments.add(workspace.operating_environment)
+    return sorted(environments)
+
+
 def _environment_projects(registry, store: CaseWorkspaceStore, environment_filter: str = '') -> list[dict]:
     """The same access-scoped project summary shape `choose_project`
     builds (Section 12/CLAUDE-CA1D-PROJECT-GATEWAY-LABELS-01), reused
@@ -418,46 +519,23 @@ def about():
 @portal_bp.route('/gateway')
 @login_required
 def gateway():
-    """Post-login landing: pick "ingest a new document" vs "view dashboard"
-    instead of jumping straight into one, mirroring a project-selection
-    style entry point rather than a single default destination.
-
-    CLAUDE-GO-NEUTRAL-ENTRY-01: used to render TWO project lists here,
-    one per operating_environment ("Client / Owner Projects" /
-    "Design-Builder / Proponent Projects" front-door columns) - a real
-    Product Owner report named this as the wrong entry model: a user
-    enters ARCHIOSK, not a stakeholder category, and a Design-Builder
-    user should not see the Owner's own column sitting beside their
-    own merely to reach their own projects. operating_environment is
-    UNCHANGED as a real, governed, project-level fact (still required
-    and locked at creation - see CaseWorkspaceStore.
-    set_operating_environment/correct_operating_environment, still
-    gates RFI/decision-stage capability elsewhere) - it simply no
-    longer partitions this list. One unfiltered, already-access-scoped
-    call now serves every authorized project regardless of side - see
-    `_environment_projects`'s own updated comment.
-
-    CLAUDE-CA1D-GATEWAY-INLINE-REOPEN-01: "Open Existing Project" used to
-    be a plain `<a>` navigating to `portal.choose_project` - a second,
-    separate page just to reopen a Project. A PO correction named this as
-    more transitions than reopening needs: Gateway -> reveal projects ->
-    select -> workspace, not Gateway -> chooser page -> select -> workspace.
-    Projects are rendered inline (client-side reveal via a native
-    `<details>`, no navigation), reusing the exact same
-    `_environment_projects` data `choose_project` itself builds - no
-    new authorization surface. `choose_project`/`project_chooser.html`
-    are UNCHANGED and remain reachable: the header's "Switch Project"
-    Vestibule link still uses them (a different, legitimate use - reopening
-    while ALREADY inside a Project), and the plain unfiltered route is
-    still directly reachable by URL for anyone who wants the fuller
-    picker. Removed Projects/Security ("advanced management") were
-    already reachable from the Gateway's own account menu
-    (gateway_shell.html), not through this chooser - nothing to preserve
-    there that wasn't already independently preserved.
+    """CLAUDE-POST-SIGNIN-GATEWAY-SIMPLIFICATION-01, Option C: this route
+    used to render the separate authenticated Gateway shell
+    (gateway.html/gateway_base.html/gateway_shell.html) as its own
+    post-sign-in landing page. The Product Owner's own disposition
+    consolidated that landing state onto portal.index, which now does
+    everything this route used to (establish/derive operating
+    environment, show that environment's projects, orient a no-project
+    user) without a separate shell. This route is kept - not deleted -
+    as a redirect only: any bookmark, saved link, or external reference
+    to /gateway keeps working rather than 404ing, matching this
+    project's own "canonical home first, verify, then retire redundant
+    location" sequencing discipline. gateway_base.html/gateway_shell.html
+    themselves are UNCHANGED and still legitimately used elsewhere (the
+    Vestibule's project_chooser.html still extends them) - only this
+    route's own rendering responsibility moved.
     """
-    registry = get_registry(current_app)
-    store = CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"])
-    return render_template('gateway.html', projects=_environment_projects(registry, store))
+    return redirect(url_for('portal.index'))
 
 
 _GATEWAY_NEW_PROJECT_PATTERN = re.compile(r"new project|create a project|start a project", re.IGNORECASE)
@@ -503,21 +581,106 @@ def _classify_gateway_orientation(message: str, projects: list[dict], can_create
     }
 
 
+# CLAUDE-POST-SIGNIN-GATEWAY-SIMPLIFICATION-01, Addendum H: keyword ->
+# canned-answer pairs for the five questions the Product Owner's own
+# prompt names verbatim. Same authority-ladder scope as
+# _classify_gateway_orientation above (Level 2/3 only - explain, never
+# choose a consequential setting on the user's behalf) and the same
+# deterministic, no-AI-call shape - this is genuinely a different
+# domain (form-field meaning, not project navigation), so it's its own
+# small classifier rather than overloading the navigation one with
+# unrelated matching logic.
+_ESTABLISH_PROJECT_HELP_ANSWERS = (
+    (
+        ("environment", "owner", "proponent", "design-builder", "design builder", "side", "which one"),
+        "Client / Owner is for preparing and issuing the RFP; Design-Builder / Proponent is for reviewing and "
+        "responding to one already issued. Choose the side that describes your role in this specific project.",
+    ),
+    (
+        ("connect", "link", "storage"),
+        "You can connect or upload documents now, or add them later from File > Add Document once the project "
+        "exists. Link to Storage is shown but not yet available; Upload to Storage copies documents in now.",
+    ),
+    (
+        ("change", "wrong", "mistake"),
+        "No - the operating environment is locked permanently once the project is created. If you choose the "
+        "wrong one, you'll need to create a new project in the correct environment.",
+    ),
+    (
+        ("name", "call it", "title", "rename"),
+        "Project name is optional - it defaults to the file or folder name if you leave it blank. It must be "
+        "unique, and you can change it later from the project's own settings.",
+    ),
+)
+
+
+def _classify_establish_project_help(message: str) -> dict:
+    """CLAUDE-POST-SIGNIN-GATEWAY-SIMPLIFICATION-01, Addendum H: a
+    small, rule-based responder for the New Project / Establish a
+    Project form's own project-less Composer widget - explains field
+    meaning/consequences, never silently chooses a consequential
+    setting (operating environment, storage connection) on the user's
+    behalf. Every answer here is grounded in this form's own real,
+    current copy/behavior (templates/upload.html) - never a claim the
+    form itself doesn't already make.
+    """
+    lowered = message.strip().lower()
+    if not lowered:
+        return {"kind": "info", "text": "Ask about the operating environment, connecting documents, or naming your project."}
+
+    for keywords, answer in _ESTABLISH_PROJECT_HELP_ANSWERS:
+        if any(keyword in lowered for keyword in keywords):
+            return {"kind": "info", "text": answer}
+
+    return {
+        "kind": "info",
+        "text": "I can explain the operating environment choice, whether it can change later, connecting "
+                "documents, or naming your project - ask about any of those.",
+    }
+
+
 @portal_bp.route('/gateway/orientation', methods=['POST'])
 @login_required
 def gateway_orientation():
-    """CLAUDE-VOICE-CONSISTENCY-01: backend for the Project Gateway's
-    voice/text composer - see _classify_gateway_orientation's own
-    comment for the authority-ladder/scope reasoning. Authenticated
-    (matches every other Gateway route) but deliberately requires no
-    project_id - this is the one Gateway-level, project-less
+    """CLAUDE-VOICE-CONSISTENCY-01: backend for the project-less
+    Composer/orientation surface - see _classify_gateway_orientation's
+    own comment for the authority-ladder/scope reasoning. Authenticated
+    but deliberately requires no project_id - the one project-less
     conversational surface, and it stays that way by never touching
     CaseWorkspaceStore's conversational path.
+
+    CLAUDE-POST-SIGNIN-GATEWAY-SIMPLIFICATION-01, Option C: the URL
+    itself is unchanged (still /gateway/orientation - the endpoint is
+    an internal action, not user-facing navigation, so renaming it
+    would be pure churn), but its caller is now index.html's
+    no-project/orientation state rather than the retired gateway.html.
+    Optional ?environment= scopes project matching to the SAME operating
+    environment the calling page already resolved (index()'s own
+    resolved_environment) - preserves hard Owner/Proponent isolation in
+    what GO can navigate to from here, rather than silently reverting to
+    the unfiltered cross-environment match this endpoint used to make
+    when Gateway itself was neutral-entry. Omitted/invalid values fall
+    back to the prior unfiltered behavior (the zero/multi-environment
+    entry states, where no single environment is resolved yet).
+
+    Addendum H: optional ?context=establish-project routes to a SECOND,
+    genuinely different classifier (_classify_establish_project_help) -
+    upload.html's own composer widget sets this, since "explain this
+    form's own fields" is a different domain than "navigate to a
+    project", not a variant worth cramming into the same matching
+    logic. Any other/omitted context value keeps the original
+    navigation behavior, unchanged.
     """
     message = (request.form.get('message') or '')[:500]
+    context = request.form.get('context', '')
+    if context == 'establish-project':
+        return jsonify(_classify_establish_project_help(message))
+
+    environment = request.form.get('environment', '')
     registry = get_registry(current_app)
     store = CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"])
-    projects = _environment_projects(registry, store)
+    environment_filter = environment if is_valid_operating_environment(environment) else ''
+    projects = _environment_projects(registry, store, environment_filter=environment_filter)
     reply = _classify_gateway_orientation(message, projects, can_create_project=is_admin())
     return jsonify(reply)
 

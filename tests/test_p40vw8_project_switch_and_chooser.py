@@ -41,7 +41,10 @@ from services.ingestion import ingest_upload
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _BASE_HTML_PATH = _REPO_ROOT / "templates" / "base.html"
 _CHOOSER_HTML_PATH = _REPO_ROOT / "templates" / "project_chooser.html"
-_GATEWAY_HTML_PATH = _REPO_ROOT / "templates" / "gateway.html"
+# CLAUDE-POST-SIGNIN-GATEWAY-SIMPLIFICATION-01, Option C: gateway.html is
+# retired - its own inline "Open Existing Project" reveal ported to
+# index.html.
+_INDEX_HTML_PATH = _REPO_ROOT / "templates" / "index.html"
 
 
 def _fake_file(content: bytes, filename: str) -> FileStorage:
@@ -180,10 +183,19 @@ class ChooserRouteTests(_BaseTestCase):
         self.assertNotIn("Stranger Only Project", body)
 
     def test_chooser_search_filters_by_query(self):
+        # CLAUDE-POST-SIGNIN-GATEWAY-SIMPLIFICATION-01, Addendum G: the
+        # top menu's OWN File > Open Project chooser (templates/
+        # _app_menu.html) now also renders on this page, listing every
+        # accessible project unfiltered by this route's own ?q= (it's a
+        # separate, independent surface - see its own docstring). Scope
+        # the assertion to the Vestibule chooser's own results form only,
+        # not the whole page body, so this test still proves what it's
+        # named for.
         client = self._client_as("vw8_owner", 1)
         body = client.get("/projects/choose?q=Alpha").get_data(as_text=True)
-        self.assertIn("Alpha Terminal", body)
-        self.assertNotIn("Beta Substation", body)
+        results = body[body.index('id="project-open-form"'):]
+        self.assertIn("Alpha Terminal", results)
+        self.assertNotIn("Beta Substation", results)
 
     def test_chooser_requires_login(self):
         client = self.flask_app.test_client()
@@ -257,23 +269,38 @@ class GatewayLinkTests(unittest.TestCase):
     environment-agnostic gateway.open-existing ref in favor of two
     context-scoped ones; CLAUDE-GO-NEUTRAL-ENTRY-01 later retired THOSE
     too, converging back to one neutral, unfiltered reveal -
-    gateway.open-existing-projects - see UI_REFERENCE_MAP.md's own
+    gateway.open-existing-projects. CLAUDE-POST-SIGNIN-GATEWAY-
+    SIMPLIFICATION-01, Option C then retired gateway.html itself,
+    porting the same inline reveal onto index.html as
+    index.resolved.open-existing - see UI_REFERENCE_MAP.md's own
     retired-references table for the full lineage."""
 
-    def test_gateway_open_existing_is_present_as_an_inline_reveal(self):
+    def test_open_existing_is_present_as_an_inline_reveal(self):
         """CLAUDE-CA1D-GATEWAY-INLINE-REOPEN-01: a PO correction replaced
         the navigating `<a>` (to `portal.choose_project`) with an inline
-        `<details>` reveal on the Gateway itself - fewest transitions to
-        reopen a Project. `portal.choose_project`/project_chooser.html
-        are unchanged and still serve the header's "Switch Project"
-        Vestibule (menu.context.switch-project) - just no longer the
-        Gateway's own default reopening path."""
-        source = _GATEWAY_HTML_PATH.read_text(encoding="utf-8")
+        `<details>` reveal - fewest transitions to reopen a Project.
+        `portal.choose_project`/project_chooser.html are unchanged and
+        still serve the header's "Switch Project" Vestibule
+        (menu.context.switch-project) - just not this page's own
+        default reopening path."""
+        source = _INDEX_HTML_PATH.read_text(encoding="utf-8")
         # Passed as a macros.subdisclosure(..., ui_ref=...) call argument,
         # not a literal data-ui-ref="..." HTML attribute in this file's
         # own source (the attribute itself lives in _macros.html).
-        self.assertIn('ui_ref="gateway.open-existing-projects"', source)
-        self.assertNotIn("portal.choose_project", source)
+        self.assertIn('ui_ref="index.resolved.open-existing"', source)
+        # CLAUDE-POST-SIGNIN-GATEWAY-SIMPLIFICATION-01, Option C: unlike
+        # gateway.html's own unbounded inline list, this reveal shows
+        # only `recent_projects` (capped at 6) - a genuinely new, single,
+        # deliberate reference to portal.choose_project now exists as an
+        # overflow "See all projects..." link (index.resolved.see-all),
+        # reached only once that cap is hit. The invariant this test
+        # still protects: the reveal's own rows stay direct project links
+        # (workspace.show_workspace), never a navigating link to the
+        # chooser as the DEFAULT way to see them.
+        self.assertIn("index.resolved.see-all", source)
+        open_existing_idx = source.index('ui_ref="index.resolved.open-existing"')
+        reveal_body = source[open_existing_idx:source.index("{% endcall %}", open_existing_idx)]
+        self.assertIn("workspace.show_workspace", reveal_body)
 
 
 if __name__ == "__main__":

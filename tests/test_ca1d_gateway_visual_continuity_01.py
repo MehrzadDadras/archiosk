@@ -24,10 +24,27 @@ from werkzeug.security import generate_password_hash
 
 class _BaseGatewayVisualTestCase(unittest.TestCase):
     def setUp(self):
+        import shutil
+        import tempfile
+        from pathlib import Path
+
         import app as app_module
         from models import User, db
 
+        # CLAUDE-POST-SIGNIN-GATEWAY-SIMPLIFICATION-01, Option C addendum:
+        # this class's tests were originally read-only (never called
+        # ingest_upload), so it never needed its own isolated registry
+        # path - config.py's own REGISTRY_STORE_PATH default falls back
+        # to the real on-disk instance/registry directory otherwise.
+        # test_gateway_neutral_entry_actions_still_present now needs a
+        # real fixture project to reach index.html's resolved-environment
+        # state, so this must be isolated like every other test file that
+        # calls ingest_upload.
+        self.tmp_dir = Path(tempfile.mkdtemp(prefix="beehive_test_ca1d_gv_"))
+        self.addCleanup(shutil.rmtree, self.tmp_dir, ignore_errors=True)
+
         self.flask_app = app_module.create_app("testing")
+        self.flask_app.config["REGISTRY_STORE_PATH"] = str(self.tmp_dir)
         with self.flask_app.app_context():
             db.session.add(User(username="gv_admin", password_hash=generate_password_hash("x"), role="admin"))
             db.session.commit()
@@ -42,20 +59,32 @@ class _BaseGatewayVisualTestCase(unittest.TestCase):
 
 
 class GatewayShellVisualContinuityTests(_BaseGatewayVisualTestCase):
+    """CLAUDE-POST-SIGNIN-GATEWAY-SIMPLIFICATION-01, Option C: /gateway
+    itself no longer renders gateway_shell.html at all (it now only
+    redirects to the consolidated /, per routes/portal.py's gateway()
+    docstring) - every test below that used to hit /gateway for this
+    shell's own visual-continuity markup now hits /projects/choose
+    instead, the one remaining route that genuinely still extends
+    gateway_base.html/gateway_shell.html unchanged. The two tests
+    checking gateway.html's own specific New Project/Open Existing
+    Project/account-menu CONTENT (not just the shared background shell)
+    are retargeted to / (index.html) under their new index.* refs -
+    project_chooser.html never had that content even before this stage."""
+
     def test_gateway_page_loads_landing_css(self):
         client = self._client_as("gv_admin", 1)
-        body = client.get("/gateway").get_data(as_text=True)
+        body = client.get("/projects/choose").get_data(as_text=True)
         self.assertIn("css/landing.css", body)
 
     def test_gateway_page_has_the_ocean_background_markup(self):
         client = self._client_as("gv_admin", 1)
-        body = client.get("/gateway").get_data(as_text=True)
+        body = client.get("/projects/choose").get_data(as_text=True)
         self.assertIn('class="gateway-shell landing-page"', body)
         self.assertIn('id="landing-field-canvas"', body)
 
     def test_gateway_page_no_longer_has_the_old_blueprint_grid(self):
         client = self._client_as("gv_admin", 1)
-        body = client.get("/gateway").get_data(as_text=True)
+        body = client.get("/projects/choose").get_data(as_text=True)
         self.assertNotIn("blueprint-grid", body)
 
     def test_gateway_page_loads_ocean_field_js_not_the_full_landing_js(self):
@@ -64,13 +93,14 @@ class GatewayShellVisualContinuityTests(_BaseGatewayVisualTestCase):
         never landing.js itself (spoken welcome greeting, voice input,
         knowledge field -- none of which belong here)."""
         client = self._client_as("gv_admin", 1)
-        body = client.get("/gateway").get_data(as_text=True)
+        body = client.get("/projects/choose").get_data(as_text=True)
         self.assertIn("js/ocean_field.js", body)
         self.assertNotIn("js/landing.js", body)
 
     def test_project_chooser_shares_the_same_treatment(self):
         """The shared gateway_shell.html means /projects/choose gets
-        this consistently too, not just /gateway."""
+        this consistently too - now the only route this whole family
+        of markup checks (see the class's own docstring)."""
         client = self._client_as("gv_admin", 1)
         body = client.get("/projects/choose").get_data(as_text=True)
         self.assertIn("css/landing.css", body)
@@ -83,17 +113,50 @@ class GatewayShellVisualContinuityTests(_BaseGatewayVisualTestCase):
         CLAUDE-GO-NEUTRAL-ENTRY-01 restructure (the two-door
         Client/Owner vs Design-Builder/Proponent split it replaced is
         gone; the single neutral New Project / Open Existing Project
-        pair must still render inside the re-themed shell)."""
+        pair must still render). CLAUDE-POST-SIGNIN-GATEWAY-
+        SIMPLIFICATION-01, Option C: this content itself ported from
+        the retired gateway.html to / (index.html) under new refs. A
+        zero-project fixture would land in index.html's own State 1
+        (genuine first-time entry - no Open Existing disclosure at all,
+        since nothing exists to open yet, a deliberate difference from
+        gateway.html's own always-present-even-when-empty disclosure) -
+        this test ingests one project so the fixture resolves a single
+        environment (State 3), the state with both actions present,
+        matching this test's own original full intent."""
+        import io
+        import uuid
+        from datetime import datetime, timezone
+        from unittest.mock import patch
+
+        from werkzeug.datastructures import FileStorage
+
+        from services.bhive_parser import BHiveParser, ParsedDocument
+        from services.environment_capabilities import CLIENT_OWNER
+        from services.ingestion import ingest_upload
+
+        def fake_parse(self_parser, raw_bytes, filename_):
+            return ParsedDocument(
+                project_id=str(uuid.uuid4()), filename=filename_,
+                ingested_at=datetime.now(timezone.utc).isoformat(), parser_version="test",
+            )
+
+        with patch.object(BHiveParser, "parse", fake_parse):
+            with self.flask_app.app_context():
+                ingest_upload(
+                    FileStorage(stream=io.BytesIO(b"content"), filename="rfp.txt"), self.flask_app,
+                    operating_environment=CLIENT_OWNER, owner="gv_admin", project_name="Gateway Continuity Fixture",
+                )
+
         client = self._client_as("gv_admin", 1)
-        body = client.get("/gateway").get_data(as_text=True)
+        body = client.get("/").get_data(as_text=True)
         self.assertNotIn("Client / Owner Projects", body)
         self.assertNotIn("Design-Builder / Proponent Projects", body)
-        for ref in ("gateway.new-project", "gateway.open-existing-projects"):
-            self.assertIn(f'data-ui-ref="{ref}"', body)
+        self.assertIn('data-ui-ref="index.resolved.new-project"', body)
+        self.assertIn('data-ui-ref="index.resolved.open-existing"', body)
 
     def test_account_menu_still_present_and_functional_markup(self):
         client = self._client_as("gv_admin", 1)
-        body = client.get("/gateway").get_data(as_text=True)
+        body = client.get("/projects/choose").get_data(as_text=True)
         self.assertIn('data-ui-ref="gateway.account"', body)
         self.assertIn('id="workspace-user-menu"', body)
         self.assertIn("Sign out", body)

@@ -98,35 +98,52 @@ class GatewayNeutralEntryTests(_BaseGatewayLabelsTestCase):
     authorized project appears in ONE list regardless of its
     operating_environment; operating_environment itself is unchanged
     as a real, governed, project-level fact (still required and locked
-    at creation via /upload's own form)."""
+    at creation via /upload's own form).
+
+    CLAUDE-POST-SIGNIN-GATEWAY-SIMPLIFICATION-01, Option C narrowly
+    supersedes ONE piece of this class's own premise: entry now
+    establishes/derives the user's operating environment FIRST, then
+    shows only THAT environment's own projects - never one neutral
+    list spanning both sides at once (test_open_existing_shows_
+    projects_from_both_operating_environments_in_one_list, below, is
+    rewritten to prove the new, narrower behavior instead of the old
+    one). Every other test in this class - one admin-gated New Project
+    action, one Open Existing reveal, no stakeholder-category headings,
+    no environment preset on New Project, inline reveal not a second
+    navigation - is UNCHANGED in substance, just ported from the
+    retired gateway.html onto / (index.html) under new index.* refs."""
 
     def test_no_stakeholder_category_headings_at_the_front_door(self):
         client = self._client_as("gl_admin", 1)
-        body = client.get("/gateway").get_data(as_text=True)
+        body = client.get("/").get_data(as_text=True)
         self.assertNotIn("Client / Owner Projects", body)
         self.assertNotIn("Design-Builder / Proponent Projects", body)
 
     def test_gateway_offers_one_new_and_one_open_existing_action_for_admin(self):
+        self._ingest(owner="gl_admin", project_name="Fixture Project", environment=CLIENT_OWNER)
         client = self._client_as("gl_admin", 1)
-        body = client.get("/gateway").get_data(as_text=True)
-        self.assertIn('data-ui-ref="gateway.new-project"', body)
-        self.assertIn('data-ui-ref="gateway.open-existing-projects"', body)
+        body = client.get("/").get_data(as_text=True)
+        self.assertIn('data-ui-ref="index.resolved.new-project"', body)
+        self.assertIn('data-ui-ref="index.resolved.open-existing"', body)
         # Exactly one of each - not one per stakeholder category.
-        self.assertEqual(body.count('data-ui-ref="gateway.new-project"'), 1)
-        self.assertEqual(body.count('data-ui-ref="gateway.open-existing-projects"'), 1)
+        self.assertEqual(body.count('data-ui-ref="index.resolved.new-project"'), 1)
+        self.assertEqual(body.count('data-ui-ref="index.resolved.open-existing"'), 1)
 
     def test_new_project_hidden_from_non_admin_but_open_existing_still_shown(self):
+        self._ingest(owner="gl_reviewer", project_name="Fixture Project", environment=CLIENT_OWNER)
         client = self._client_as("gl_reviewer", 2, role="read_only")
-        body = client.get("/gateway").get_data(as_text=True)
-        self.assertNotIn('data-ui-ref="gateway.new-project"', body)
-        self.assertIn('data-ui-ref="gateway.open-existing-projects"', body)
+        body = client.get("/").get_data(as_text=True)
+        self.assertNotIn('data-ui-ref="index.resolved.new-project"', body)
+        self.assertIn('data-ui-ref="index.resolved.open-existing"', body)
 
     def test_new_project_link_carries_no_environment_preset(self):
         """The old two doors each deep-linked /upload?environment=... -
         the neutral action does not pre-decide which side a project
-        will be; that choice now lives entirely in /upload's own form."""
+        will be; that choice now lives entirely in /upload's own form.
+        A zero-project admin fixture (State 1) still offers New Project
+        with no preset - the same property this test always checked."""
         client = self._client_as("gl_admin", 1)
-        body = client.get("/gateway").get_data(as_text=True)
+        body = client.get("/").get_data(as_text=True)
         self.assertIn('href="/upload"', body)
         self.assertNotIn('href="/upload?environment=', body)
 
@@ -134,27 +151,65 @@ class GatewayNeutralEntryTests(_BaseGatewayLabelsTestCase):
         """CLAUDE-CA1D-GATEWAY-INLINE-REOPEN-01: a PO correction removed
         the extra transition through `portal.choose_project` - "Open
         Existing Project" reveals every authorized Project inline (a
-        `<details>` disclosure), never a navigating `<a>`."""
+        `<details>` disclosure), never a navigating `<a>`. Still true
+        on index.html's own ported reveal - portal.choose_project only
+        reappears as the explicit "See all projects..." overflow link
+        once the 6-project recency cap is hit, which one fixture
+        project never reaches."""
+        self._ingest(owner="gl_admin", project_name="Fixture Project", environment=CLIENT_OWNER)
         client = self._client_as("gl_admin", 1)
-        body = client.get("/gateway").get_data(as_text=True)
+        body = client.get("/").get_data(as_text=True)
         self.assertNotIn('href="/projects/choose?environment=', body)
-        self.assertIn('data-ui-ref="gateway.open-existing-projects"', body)
+        self.assertIn('data-ui-ref="index.resolved.open-existing"', body)
 
-    def test_open_existing_shows_projects_from_both_operating_environments_in_one_list(self):
+    def test_environments_are_never_mixed_in_one_list(self):
+        """CLAUDE-POST-SIGNIN-GATEWAY-SIMPLIFICATION-01, Option C
+        (narrow supersession - see class docstring): replaces this
+        test's own original premise (one neutral list spanning both
+        operating environments at once). Entry now establishes the
+        operating environment FIRST: a user authorized for both sides
+        lands in the explicit choice state (index.choice.*, no project
+        list at all yet), and each side's own project list only ever
+        shows that side's own projects once resolved - hard Owner/
+        Proponent isolation preserved, never a mixed list."""
         self._ingest(owner="gl_admin", project_name="Riverside Client Project", environment=CLIENT_OWNER)
         self._ingest(owner="gl_admin", project_name="Riverside Bidder Project", environment=DESIGN_BUILDER_PROPONENT)
         client = self._client_as("gl_admin", 1)
-        body = client.get("/gateway").get_data(as_text=True)
-        self.assertIn("Riverside Client Project", body)
-        self.assertIn("Riverside Bidder Project", body)
-        # A real selection, not a bare link - the same select-then-confirm
-        # pattern gateway.chooser itself already uses. Exactly one shared
-        # leaf ref, not one per stakeholder category.
-        self.assertEqual(body.count('data-ui-ref="gateway.open-existing-projects.leaf"'), 2)
+
+        # Two accessible environments, none resolved yet -> the explicit
+        # choice state, no project names rendered in the page's own main
+        # content. Scoped to <section class="entry"> only - the SEPARATE
+        # top-menu File > Open Project chooser (CLAUDE-POST-SIGNIN-
+        # GATEWAY-SIMPLIFICATION-01, Addendum G) is a global "find/open
+        # any authorized project" utility, deliberately unfiltered by
+        # environment when none is resolved yet (same "choose_project's
+        # own unfiltered default stays unfiltered" carve-out Option C's
+        # own narrow supersession already preserves) - a different
+        # surface with a different purpose, not a re-leak of the same
+        # mixed list this test is actually about.
+        unresolved_body = client.get("/").get_data(as_text=True)
+        entry_section = unresolved_body[unresolved_body.index('<section class="entry">'):]
+        self.assertIn('data-ui-ref="index.choice"', entry_section)
+        self.assertNotIn("Riverside Client Project", entry_section)
+        self.assertNotIn("Riverside Bidder Project", entry_section)
+
+        # Resolving one side shows only that side's own project in the
+        # main content (the menu chooser also narrows once resolved -
+        # see OpenProjectMenuFilterJsTests/FileMenuNewOpenProjectTests
+        # in test_app_menu_01.py for that surface's own coverage).
+        client_body = client.get("/?environment=client_owner").get_data(as_text=True)
+        client_entry = client_body[client_body.index('<section class="entry">'):]
+        self.assertIn("Riverside Client Project", client_entry)
+        self.assertNotIn("Riverside Bidder Project", client_entry)
+
+        proponent_body = client.get("/?environment=design_builder_proponent").get_data(as_text=True)
+        proponent_entry = proponent_body[proponent_body.index('<section class="entry">'):]
+        self.assertIn("Riverside Bidder Project", proponent_entry)
+        self.assertNotIn("Riverside Client Project", proponent_entry)
 
     def test_open_existing_empty_state_is_one_neutral_message(self):
         client = self._client_as("gl_admin", 1)
-        body = client.get("/gateway").get_data(as_text=True)
+        body = client.get("/").get_data(as_text=True)
         self.assertIn("No projects yet.", body)
         self.assertNotIn("No Client / Owner projects yet.", body)
         self.assertNotIn("No Design-Builder / Proponent projects yet.", body)
@@ -162,20 +217,27 @@ class GatewayNeutralEntryTests(_BaseGatewayLabelsTestCase):
 
 class ChooseProjectEnvironmentFilterTests(_BaseGatewayLabelsTestCase):
     def test_client_owner_filter_shows_only_client_owner_projects(self):
+        # CLAUDE-POST-SIGNIN-GATEWAY-SIMPLIFICATION-01, Addendum G: the
+        # top menu's OWN File > Open Project chooser now also renders on
+        # this page, unfiltered by this route's own ?environment= (a
+        # separate, independent surface - see its own docstring). Scope
+        # the assertion to the Vestibule chooser's own results form only.
         self._ingest(owner="gl_admin", project_name="Riverside Client Project", environment=CLIENT_OWNER)
         self._ingest(owner="gl_admin", project_name="Riverside Bidder Project", environment=DESIGN_BUILDER_PROPONENT)
         client = self._client_as("gl_admin", 1)
         body = client.get("/projects/choose?environment=client_owner").get_data(as_text=True)
-        self.assertIn("Riverside Client Project", body)
-        self.assertNotIn("Riverside Bidder Project", body)
+        results = body[body.index('id="project-open-form"'):]
+        self.assertIn("Riverside Client Project", results)
+        self.assertNotIn("Riverside Bidder Project", results)
 
     def test_design_builder_filter_shows_only_design_builder_projects(self):
         self._ingest(owner="gl_admin", project_name="Riverside Client Project", environment=CLIENT_OWNER)
         self._ingest(owner="gl_admin", project_name="Riverside Bidder Project", environment=DESIGN_BUILDER_PROPONENT)
         client = self._client_as("gl_admin", 1)
         body = client.get("/projects/choose?environment=design_builder_proponent").get_data(as_text=True)
-        self.assertIn("Riverside Bidder Project", body)
-        self.assertNotIn("Riverside Client Project", body)
+        results = body[body.index('id="project-open-form"'):]
+        self.assertIn("Riverside Bidder Project", results)
+        self.assertNotIn("Riverside Client Project", results)
 
     def test_no_filter_shows_both(self):
         self._ingest(owner="gl_admin", project_name="Riverside Client Project", environment=CLIENT_OWNER)

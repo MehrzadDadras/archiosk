@@ -507,21 +507,52 @@ class FileMenuNewOpenProjectTests(_BaseTestCase):
         self.assertIn('data-ui-ref="menu.file.new-project.none"', body)
         self.assertNotIn('data-ui-ref="menu.file.new-project"', body)
 
-    def test_open_project_present_for_every_authenticated_user_and_targets_choose_project(self):
-        for username, uid, role in (("menu_owner", 1, "admin"), ("menu_reviewer", 2, "read_only")):
-            client = self._client_as(username, uid, role=role)
-            body = client.get("/projects").get_data(as_text=True)
-            idx = body.index('data-ui-ref="menu.file.open-project"')
-            tag = body[idx - 10:idx + 80]
-            self.assertIn('href="/projects/choose"', tag, username)
-
-    def test_open_project_carries_current_project_id_when_one_is_open(self):
-        doc = self._ingest(owner="menu_owner", project_name="Open Project Current Test")
-        client = self._client_as("menu_owner", 1)
-        body = client.get(f"/projects/{doc.project_id}/workspace").get_data(as_text=True)
+    def test_open_project_is_a_direct_chooser_not_a_link_to_the_full_vestibule(self):
+        # CLAUDE-POST-SIGNIN-GATEWAY-SIMPLIFICATION-01, Addendum G: the
+        # ref itself is now a <details> submenu, not a plain <a href> to
+        # portal.choose_project - project_chooser.html/choose_project()
+        # are unchanged and stay reachable elsewhere (menu.context.
+        # switch-project), just no longer what File > Open Project opens.
+        doc = self._ingest(owner="menu_owner", project_name="Open Project Direct Test")
+        client = self._client_as("menu_owner", 1, role="admin")
+        body = client.get("/projects").get_data(as_text=True)
         idx = body.index('data-ui-ref="menu.file.open-project"')
-        tag = body[idx - 10:idx + 150]
-        self.assertIn(f'href="/projects/choose?current={doc.project_id}"', tag)
+        tag = body[idx - 70:idx + 60]
+        self.assertIn("<details", tag)
+        self.assertNotIn("/projects/choose", body[idx:idx + 400])
+        self.assertIn('data-ui-ref="menu.file.open-project.item"', body)
+        self.assertIn(f'href="/projects/{doc.project_id}/workspace"', body)
+
+    def test_open_project_rows_open_immediately_no_radio_or_second_button(self):
+        self._ingest(owner="menu_owner", project_name="Open Project No Radio Test")
+        client = self._client_as("menu_owner", 1, role="admin")
+        body = client.get("/projects").get_data(as_text=True)
+        panel_idx = body.index('data-ui-ref="menu.file.open-project"')
+        panel = body[panel_idx:body.index("</details>", panel_idx)]
+        self.assertNotIn('type="radio"', panel)
+        self.assertNotIn("Open Project</button>", panel)
+
+    def test_open_project_scoped_to_current_projects_environment_when_one_is_open(self):
+        owner_doc = self._ingest(owner="menu_owner", project_name="Owner Scope Test", operating_environment=CLIENT_OWNER)
+        proponent_doc = self._ingest(owner="menu_owner", project_name="Proponent Scope Test", operating_environment=DESIGN_BUILDER_PROPONENT)
+        client = self._client_as("menu_owner", 1, role="admin")
+        body = client.get(f"/projects/{owner_doc.project_id}/workspace").get_data(as_text=True)
+        panel_idx = body.index('data-ui-ref="menu.file.open-project"')
+        panel = body[panel_idx:body.index("</details>", panel_idx)]
+        self.assertIn(f'href="/projects/{owner_doc.project_id}/workspace"', panel)
+        self.assertNotIn(f'href="/projects/{proponent_doc.project_id}/workspace"', panel)
+
+    def test_open_project_empty_state_is_truthful_and_offers_new_project_to_admin(self):
+        client = self._client_as("menu_owner", 1, role="admin")
+        body = client.get("/projects").get_data(as_text=True)
+        self.assertIn('data-ui-ref="menu.file.open-project.empty"', body)
+        self.assertIn('data-ui-ref="menu.file.open-project.new-project"', body)
+
+    def test_open_project_empty_state_offers_no_new_project_link_to_non_admin(self):
+        client = self._client_as("menu_reviewer", 2, role="read_only")
+        body = client.get("/projects").get_data(as_text=True)
+        self.assertIn('data-ui-ref="menu.file.open-project.empty"', body)
+        self.assertNotIn('data-ui-ref="menu.file.open-project.new-project"', body)
 
     def test_new_project_and_open_project_never_duplicate_a_second_implementation(self):
         # Same routes as the pre-existing Archiosk > Admin > New Project
@@ -533,6 +564,49 @@ class FileMenuNewOpenProjectTests(_BaseTestCase):
         admin_new_project_idx = body.index('data-ui-ref="menu.archiosk.admin.new-project"')
         self.assertIn('href="/upload"', body[new_project_idx - 10:new_project_idx + 80])
         self.assertIn('href="/upload"', body[admin_new_project_idx - 10:admin_new_project_idx + 80])
+
+    def test_open_project_search_hidden_below_six_choices_present_above(self):
+        client = self._client_as("menu_owner", 1, role="admin")
+        for i in range(5):
+            self._ingest(owner="menu_owner", project_name=f"Search Threshold {i}")
+        body = client.get("/projects").get_data(as_text=True)
+        panel_idx = body.index('data-ui-ref="menu.file.open-project"')
+        panel = body[panel_idx:body.index("</details>", panel_idx)]
+        self.assertIn('data-ui-ref="menu.file.open-project.search"', panel)
+        search_idx = panel.index('data-ui-ref="menu.file.open-project.search"')
+        search_tag = panel[search_idx:panel.index(">", search_idx)]
+        self.assertIn("hidden", search_tag)
+
+        self._ingest(owner="menu_owner", project_name="Search Threshold 6")
+        body = client.get("/projects").get_data(as_text=True)
+        panel_idx = body.index('data-ui-ref="menu.file.open-project"')
+        panel = body[panel_idx:body.index("</details>", panel_idx)]
+        search_idx = panel.index('data-ui-ref="menu.file.open-project.search"')
+        search_tag = panel[search_idx:panel.index(">", search_idx)]
+        self.assertNotIn("hidden", search_tag)
+
+
+class OpenProjectMenuFilterJsTests(unittest.TestCase):
+    """CLAUDE-POST-SIGNIN-GATEWAY-SIMPLIFICATION-01, Addendum G: the
+    search input filters the already-rendered, already-authorized rows
+    client-side only - never a second fetch/authorization check."""
+
+    def setUp(self):
+        self.js = _APP_MENU_JS_PATH.read_text(encoding="utf-8")
+
+    def test_filter_reads_the_search_input_and_hides_non_matching_rows(self):
+        self.assertIn("workspace-open-project-search", self.js)
+        idx = self.js.index("workspace-open-project-search")
+        body = self.js[idx:idx + 700]
+        self.assertIn("workspace-open-project-item", body)
+        self.assertIn("addEventListener('input'", body)
+        self.assertIn(".hidden = !visible", body)
+
+    def test_filter_never_removes_rows_from_the_dom(self):
+        idx = self.js.index("workspace-open-project-search")
+        body = self.js[idx:idx + 700]
+        self.assertNotIn("removeChild", body)
+        self.assertNotIn(".remove()", body)
 
 
 class MenuDeboxedFrameTests(unittest.TestCase):
