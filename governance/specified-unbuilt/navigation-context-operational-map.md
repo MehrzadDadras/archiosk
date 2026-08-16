@@ -55,7 +55,8 @@ value.
 | 10 | Compare's on/off state and second-document selection are held in a plain in-memory JS variable (`static/js/eye_pane.js`) with **no persistence** — any navigation or refresh silently resets it. | High | dispositioned | Navigation Games Round 1, Game H1. Product Owner has already ruled this is intentional: "current-state evidence, not a future product decision." A timestamped Comparison Report remains a separate, outstanding, unrelated question — do not conflate the two. |
 | 11 | `Anchor` (`services/case_workspace.py`) is a generic, already-reused, open-world "what this is about" pointer (`anchor_type`, `anchor_id`, `source_id`, `location`, `description`) — the closest existing primitive to an origin/target pointer for a future excursion mechanism. | High | settled fact | Navigation Games Round 1, Section A |
 | 12 | The following governance-sounding names, referenced across both rounds of the Navigation Games prompts, are confirmed **absent** from both `governance/` and code — purely aspirational vocabulary in the prompts themselves, not descriptions of an existing mechanism: `CLAUDE-GO-TRAJECTORY-RECALL-01`, `CLAUDE-GO-CONTEXT-AWARENESS-01`, `CLAUDE-GO-USHERING-AGENT-01`, `CLAUDE-GO-WORK-PATH-NAVIGATION-01`, `CLAUDE-SURFACE-QUIET-CAPABILITY-01`, `CLAUDE-GATEKEEPER-01`, `CLAUDE-AGENT-ORCHESTRATION-GOVERNOR-01`, `CLAUDE-VALIDATION-ISOLATION-01`, `CLAUDE-CAPABILITY-RELOCATION-INTEGRITY-01`. The closest real, formal record of an attention/context model is `governance/specified-unbuilt/adaptive-attention-and-context-circulation.md` (status: **NOT AUTHORIZED**), which independently names the same primitives (`InvestigationStep`, `Relationship`, `GovernanceLog`, `Anchor`) as this document's own findings. | High | settled fact | Navigation Games Rounds 1 and 2, exhaustive repo-wide grep both times |
-| 13 | Smallest generalized fix for #5: an `Anchor`-shaped `origin_kind`/`origin_id`/`purpose` parameter set any "go look at something" link could carry, resolved server-side into a small, quiet, optional "Return to [origin]" affordance — composition of #6 and #11's existing shapes, not a new subsystem. | Medium | piloting | Navigation Games Round 1, Section G. Product Owner approved a bounded, reversible pilot scoped to Composer hotlinks only (see "Active pilot" below) — not yet generalized. |
+| 13 | Smallest generalized fix for #5: an `Anchor`-shaped `origin_kind`/`origin_id`/`purpose` parameter set any "go look at something" link could carry, resolved server-side into a small, quiet, optional "Return to [origin]" affordance — composition of #6 and #11's existing shapes, not a new subsystem. | Medium | dispositioned | Navigation Games Round 1, Section G. Product Owner accepted the Composer-hotlink pilot (row 14) as successful, 2026-08-16, but explicitly **do not widen to other surfaces** (breadcrumbs, other cross-object links) until further discovery games independently demonstrate a reusable pattern — see "Active pilot" below. |
+| 14 | **Product Owner-recorded pilot finding (verbatim, 2026-08-16):** "A reliable return pointer may require contextual state, not merely one originating object ID. In this pilot, `origin_message_id` alone was insufficient; `case` was also required to reconstruct the originating conversation correctly. Discover the minimum sufficient return envelope experimentally rather than assuming it from schema." | High | dispositioned | Composer hotlink origin-pointer pilot (commit `bdf10c8`) — see "Active pilot" below for the full technical account of how this was discovered |
 
 ---
 
@@ -125,9 +126,15 @@ only); 5 new dedicated tests (`tests/test_p40e_unified_workspace.py`,
 `OriginMessageIdPilotTests`) cover the real end-to-end round trip (following
 the actual rendered href, not a hand-built URL), the no-parameter common
 case (no link renders — quiet by default), and the stale-id degradation
-path. Live-deployed and browser-verified pending.
+path. Live-deployed and live-browser-verified on production (posted a real
+Composer message, clicked the resulting hotlink, confirmed `source=`/
+`origin_message_id=`/`case=` all carried correctly, confirmed the return
+link renders and navigates to the right `#message-<id>` fragment).
 
-**Recommendation:** the composition approach is sound and should NOT be
-generalized to other surfaces (breadcrumbs, other cross-object links) yet —
-report this result to the Product Owner first, per the pilot's own approved
-scope, before widening it.
+**Product Owner disposition (2026-08-16): accepted as successful.** Do
+**not** widen the origin-pointer mechanism to any other surface yet. Row 14
+above records the Product Owner's own verbatim finding from this pilot.
+Keep the current implementation limited to Composer Source hotlinks until
+additional discovery games independently demonstrate a reusable pattern —
+this is now a closed, bounded piece of the codebase, not a base to build on
+without a fresh authorization.
