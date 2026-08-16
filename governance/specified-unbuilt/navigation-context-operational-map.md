@@ -23,10 +23,11 @@ inventories (see `UI_REFERENCE_MAP.md` for that); prescribing an
 implementation before one is proven. Keep this file's own size proportional
 to what's operationally load-bearing — do not expand it "just in case."
 
-**Freshness anchor:** every row below is accurate as of commit `48b4468`
-(2026-08-16). If the referenced file/line has since changed, the row's own
-confidence should be treated as stale until re-verified, not trusted at face
-value.
+**Freshness anchor:** rows 1-14 are accurate as of commit `48b4468`; rows
+15-21 (Multimodal Perception Games round) are accurate as of commit
+`6180ec0` (both 2026-08-16). If the referenced file/line has since changed,
+the row's own confidence should be treated as stale until re-verified, not
+trusted at face value.
 
 ---
 
@@ -57,6 +58,13 @@ value.
 | 12 | The following governance-sounding names, referenced across both rounds of the Navigation Games prompts, are confirmed **absent** from both `governance/` and code — purely aspirational vocabulary in the prompts themselves, not descriptions of an existing mechanism: `CLAUDE-GO-TRAJECTORY-RECALL-01`, `CLAUDE-GO-CONTEXT-AWARENESS-01`, `CLAUDE-GO-USHERING-AGENT-01`, `CLAUDE-GO-WORK-PATH-NAVIGATION-01`, `CLAUDE-SURFACE-QUIET-CAPABILITY-01`, `CLAUDE-GATEKEEPER-01`, `CLAUDE-AGENT-ORCHESTRATION-GOVERNOR-01`, `CLAUDE-VALIDATION-ISOLATION-01`, `CLAUDE-CAPABILITY-RELOCATION-INTEGRITY-01`. The closest real, formal record of an attention/context model is `governance/specified-unbuilt/adaptive-attention-and-context-circulation.md` (status: **NOT AUTHORIZED**), which independently names the same primitives (`InvestigationStep`, `Relationship`, `GovernanceLog`, `Anchor`) as this document's own findings. | High | settled fact | Navigation Games Rounds 1 and 2, exhaustive repo-wide grep both times |
 | 13 | Smallest generalized fix for #5: an `Anchor`-shaped `origin_kind`/`origin_id`/`purpose` parameter set any "go look at something" link could carry, resolved server-side into a small, quiet, optional "Return to [origin]" affordance — composition of #6 and #11's existing shapes, not a new subsystem. | Medium | dispositioned | Navigation Games Round 1, Section G. Product Owner accepted the Composer-hotlink pilot (row 14) as successful, 2026-08-16, but explicitly **do not widen to other surfaces** (breadcrumbs, other cross-object links) until further discovery games independently demonstrate a reusable pattern — see "Active pilot" below. |
 | 14 | **Product Owner-recorded pilot finding (verbatim, 2026-08-16):** "A reliable return pointer may require contextual state, not merely one originating object ID. In this pilot, `origin_message_id` alone was insufficient; `case` was also required to reconstruct the originating conversation correctly. Discover the minimum sufficient return envelope experimentally rather than assuming it from schema." | High | dispositioned | Composer hotlink origin-pointer pilot (commit `bdf10c8`) — see "Active pilot" below for the full technical account of how this was discovered |
+| 15 | **No vision-capable Anthropic API call exists anywhere in this codebase.** `services/llm_gateway.py` (the shared call site every LLM-backed feature funnels through) and every caller (`bhive_parser.py`, `cross_modal_investigation.py`, `investigation_snapshot.py`) build `content` as a plain string; none construct an image content block. This falsifies the "disconnected nerves, not missing organs" hypothesis for vision specifically — the organ itself is absent, not merely unwired. | High | settled fact | Perception Games Round 1, forks investigating Composer intake and ingest/OCR machinery, cross-confirmed independently by both |
+| 16 | Document-set **Image Search** (`templates/base.html:502-523`, `static/js/document_marks.js:244-380`) is a UI-complete, backend-empty placeholder: clicking "Search" makes zero network calls and always returns the same static message regardless of image content — there is no match/no-match distinction because no search ever runs. The limitation is already honestly disclosed in the UI copy itself and in `governance/spare-parts-yard.md:151-204`. No escape hatch to Composer exists in code, markup, or JS. A pasted image is held only in browser memory (`FileReader`→dataURL), never uploaded. | High | open defect (dead end, no escape) | Perception Games Round 1, Image Search fork — direct code read of both files plus the referenced spare-parts-yard record |
+| 17 | **Composer is text-only end-to-end, client and server.** `static/js/case_workspace.js` has no paste/drop/file-input handler on the Composer form; `routes/workspace.py`'s `post_message`/`quick_start` accept only a text form field server-side; `ConversationMessage` (`services/case_workspace.py:1535-1604`) has no attachment field, live or dead. Even if vision capability existed, no path carries an image into a Composer turn today. | High | settled fact | Perception Games Round 1, Composer-intake fork |
+| 18 | `services/image_intelligence.py`'s `register_eye_capture` persists immediately and unconditionally into a governed Source/StructuralUnit on any valid image (calls `store.add_source(...)` directly) — there is no ephemeral/temporary staging tier anywhere in the image pipeline. ARCHIOSK currently has only two states for image content, "untouched" and "governed" — no middle "temporary conversational evidence" tier the kind row 5 in this document's own "Optional companion" framing (and the Product Owner's stated lifecycle goal) would need. | High | open gap | Perception Games Round 1, ingest/OCR-machinery fork |
+| 19 | **Voice is real but narrow.** `static/js/voice_input.js` uses the browser's native `SpeechRecognition` Web Speech API (not `MediaRecorder`/audio blobs — a deliberate design choice per the file's own comments) to transcribe speech directly into the Composer text field (`case_workspace.js:1171-1180`). Once inserted, a voice-originated message is indistinguishable from typed text to the backend — no voice-origin flag, no referent/context metadata reaches `conversation_interpreter.py`. `governance/specified-unbuilt/voice-conversational-presence.md`'s own claim that "no speech library... of any kind" exists is stale: this VOICE-1-shaped prototype has since shipped. | High | settled fact (partially supersedes a stale governance claim) | Perception Games Round 1, voice fork |
+| 20 | **Reproduced defect:** "Can you hear me?" is pattern-matched by `conversation_interpreter.py:739` into the generic social-utterance bucket (`_handle_conversational_utterance`) and answered "Hello [Name]. What are you working on?" — not a truthful statement about the transcription channel actually working. Confirmed by direct code trace, not yet live-browser-verified. | High | open defect (isolated, cheap to fix, independent of any vision work) | Perception Games Round 1, voice fork |
+| 21 | `Selection Family`/`Depository` (referenced in prompt vocabulary) are confirmed absent from implementation — a single passing mention in `governance/STATUS.md`, zero code anywhere in `services/`, `static/js/`, `templates/`. Same category as row 12's aspirational-only prompt vocabulary; extends row 12's list rather than replacing it. | High | settled fact | Perception Games Round 1, Composer-intake fork; corroborated by this session's own governance-wide grep for the round's other named concepts (`VOICE-INTENT-CONTEXT`, `COMPANION-NARRATION`, `PRESENT-TIME-AURA`, `INFORMATION-GEOMETRY`, `MINIMUM-SUFFICIENT-CONTEXT`, etc. — all zero hits outside this map's own rows) |
 
 ---
 
@@ -138,3 +146,36 @@ Keep the current implementation limited to Composer Source hotlinks until
 additional discovery games independently demonstrate a reusable pattern —
 this is now a closed, bounded piece of the codebase, not a base to build on
 without a fresh authorization.
+
+---
+
+## Perception Games round (`CLAUDE-GO-MULTIMODAL-PERCEPTION-GAMES-01`, 2026-08-16)
+
+**Scope:** architectural investigation only (four parallel read-only forks
+— document-set Image Search, Composer attachment intake, voice/audio,
+ingest/OCR/vision machinery). No implementation performed. See rows 15-21
+above for the individual findings; this section is the round's headline
+conclusion, kept short on purpose.
+
+**Headline finding:** ARCHIOSK has **no vision capability anywhere** — not
+in ingest, not in Composer, not in Image Search — because no file in the
+repository ever constructs an Anthropic vision content block (row 15). This
+is a stronger result than the prompt's own working hypothesis ("disconnected
+nerves, not missing organs"): for vision, the organ is missing outright. The
+nerves-vs-organs framing does hold for voice — real, working browser-native
+dictation exists (row 19), but it carries no context/referent metadata and
+mishandles a direct channel-status question (row 20).
+
+**Two independent, low-cost quick wins identified** (neither requires
+building vision capability first): (1) the "can you hear me" mismatch (row
+20) is a narrow, isolated `conversation_interpreter.py` intent-bucket fix;
+(2) Image Search's placeholder message (row 16) already discloses its own
+limitation honestly but offers no next move — failing the impatient-child
+test on dead-end grounds alone, independent of whether real search is ever
+built.
+
+**No pilot authorized this round.** The smallest reversible next
+experiment identified — a single new vision-capable Composer turn wired
+only to Image Search's existing "Send to Composer" gap, with the pasted
+image never persisted — is a recommendation awaiting Product Owner
+disposition, not yet built. Do not begin it without a fresh authorization.
