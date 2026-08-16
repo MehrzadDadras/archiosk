@@ -45,7 +45,7 @@ from flask import (
 from PIL import Image
 from werkzeug.utils import secure_filename
 
-from services.auth import admin_required, login_required, user_can_upload_to_storage
+from services.auth import admin_required, is_admin, login_required, user_can_upload_to_storage
 from services.case_workspace import (
     ADJUDICATION_ATTRIBUTION_AGENT_ASSESSMENT,
     ADJUDICATION_ATTRIBUTION_HUMAN_REVIEWED,
@@ -60,6 +60,9 @@ from services.case_workspace import (
     CONVERSATION_ANCHOR_SCOPE_GUIDANCE,
     CONVERSATION_ANCHOR_SCOPE_PROJECT,
     CONVERSATION_GUIDANCE_PROJECT_INTRO,
+    DOCUMENT_CONTEXT_CLAIM_STATE_ACCEPTED,
+    DOCUMENT_CONTEXT_CLAIM_STATE_REJECTED,
+    KNOWN_DOCUMENT_CONTEXT_FIELDS,
     FOLDER_ROOT_DATA_ROOM,
     FOLDER_ROOT_DESIGN_BUILDER,
     KNOWN_FOLDER_ROOTS,
@@ -94,6 +97,7 @@ from services.case_workspace import (
     OperatingEnvironmentAlreadySetError,
     REVIEWER_VALIDATION_STATES,
     resolve_requirement_adjudication_attribution,
+    assess_document_context_quality,
 )
 from services.environment_capabilities import (
     OPERATING_ENVIRONMENT_LABELS,
@@ -103,6 +107,7 @@ from services.environment_capabilities import (
     decision_stages_for_environment,
     is_valid_operating_environment,
 )
+from services.document_context_intelligence import draft_document_context_claims
 from services.conversation_interpreter import (
     _looks_like_contextual_reference,
     _looks_like_conversational_utterance,
@@ -555,6 +560,23 @@ def show_workspace(project_id):
     selected_source = next(
         (s for s in workspace.sources if s["id"] == selected_source_id), None,
     ) if selected_source_id else None
+
+    # Bounded GO QA/QC pass (Section 4/11): Admin Document Mode data for
+    # the active Source - computed only for admins, never for an ordinary
+    # PM/reviewer page load ("ordinary PM/user-facing document view
+    # should remain simple"). Document-level claims only here (page_
+    # anchor=None) - a page-scoped view is explicitly deferred, this pass
+    # only preserves the anchor for a future rollup, it does not build one.
+    document_context_claims_view = []
+    document_context_quality = None
+    if selected_source and is_admin():
+        # document_context_claims_for's own default (page_anchor=None)
+        # already means "document-level only" - no post-filter needed here.
+        document_context_claims_view = store.document_context_claims_for(workspace, selected_source["id"])
+        document_context_quality = assess_document_context_quality(
+            document_context_claims_view,
+            extraction_signal=store.extraction_signal_for_source(workspace, selected_source["id"]),
+        )
 
     # CLAUDE-SPIN-00A: an explicit, session-less, unpersisted request flag -
     # deliberately NOT routed through _set_persisted_selection below (this
@@ -1262,6 +1284,18 @@ def show_workspace(project_id):
             ],
             "evidence_findings": evidence_findings_view,
             "evidence_relationships": evidence_relationships_view,
+            # Bounded GO QA/QC pass (Section 1-3): the Requirement's own
+            # latest phase-aware conformance assessment, if GO has ever
+            # produced one - a passive read (requirement_phase_assessments_
+            # for is never called automatically on page load; a new
+            # assessment only happens via the explicit "Assess phase
+            # conformance" action below), so this adds no per-request cost
+            # to a Requirement nothing has assessed yet. None entirely for
+            # a non-admin - this is Admin Document Mode data.
+            "latest_phase_assessment": (
+                store.latest_requirement_phase_assessment_for(workspace, requirement["id"])
+                if is_admin() else None
+            ),
             # AcceptedKnowledge is deliberately project-wide, not Case-gated,
             # by the same pre-existing design as the "Accepted Knowledge"
             # panel itself (Apply is the explicit human act that graduates a
@@ -1707,6 +1741,10 @@ def show_workspace(project_id):
         selected_work_product_status=selected_work_product_status,
         selected_work_product_stale=selected_work_product_stale,
         known_content_classes=KNOWN_CONTENT_CLASSES,
+        document_context_claims_view=document_context_claims_view,
+        document_context_quality=document_context_quality,
+        document_context_claim_accepted=DOCUMENT_CONTEXT_CLAIM_STATE_ACCEPTED,
+        document_context_claim_rejected=DOCUMENT_CONTEXT_CLAIM_STATE_REJECTED,
         tasks_view=tasks_view,
         tasks_open_view=tasks_open_view,
         tasks_completed_view=tasks_completed_view,
@@ -2154,6 +2192,96 @@ def set_document_context_route(project_id, source_id):
 
     flash("Document Context updated.", "success")
     return redirect(url_for("workspace.show_workspace", project_id=project_id, source=source_id))
+
+
+@workspace_bp.route("/projects/<project_id>/workspace/sources/<source_id>/document-context-claims/draft", methods=["POST"])
+@admin_required
+def draft_document_context_claims_route(project_id, source_id):
+    """
+    Bounded GO QA/QC pass (Section 5): GO drafts Document Context claims
+    from this Source's already-extracted EvidenceItem text (never the
+    model's own world knowledge - see services.document_context_
+    intelligence's own docstring). Admin-only, same authority level every
+    prior modality-intelligence write route (MM2-MM6) already uses -
+    this is Admin Document Mode's own calibration action, not an ordinary
+    PM one. A no-key/timeout/malformed-output failure flashes the honest
+    reason and drafts nothing - never a fabricated claim.
+    """
+    _, store, workspace = _load_workspace_or_404(project_id)
+    source = next((s for s in workspace.sources if s["id"] == source_id), None)
+    if source is None:
+        flash("Source not found.", "error")
+        return redirect(url_for("workspace.show_workspace", project_id=project_id))
+
+    evidence_text = "\n\n".join(
+        e["content"] for e in workspace.evidence_items
+        if e["source_id"] == source_id and e.get("content_type") == "text" and e.get("content")
+    )
+    result = draft_document_context_claims(source["name"], evidence_text)
+    if not result["ran"]:
+        flash(f"Could not draft Document Context: {result['skipped_reason']}", "error")
+        return redirect(url_for("workspace.show_workspace", project_id=project_id, source=source_id))
+
+    for claim in result["claims"]:
+        store.draft_document_context_claim(
+            workspace, source_id, claim["field_kind"], claim["statement"],
+            created_by="GO", governance_log=_log(),
+        )
+    flash(f"GO drafted {len(result['claims'])} Document Context claim(s) for review.", "success")
+    return redirect(url_for("workspace.show_workspace", project_id=project_id, source=source_id))
+
+
+@workspace_bp.route("/projects/<project_id>/workspace/document-context-claims/<claim_id>/review", methods=["POST"])
+@admin_required
+def review_document_context_claim_route(project_id, claim_id):
+    """The one PM-facing disposition action for a GO-drafted Document
+    Context claim - accept (as-is or with edits) or reject. See
+    CaseWorkspaceStore.review_document_context_claim; this route is a
+    thin form-to-store bridge, no logic of its own."""
+    _, store, workspace = _load_workspace_or_404(project_id)
+    outcome = request.form.get("outcome")
+    edited_statement = request.form.get("statement")
+    source_id = request.form.get("source_id")
+
+    try:
+        store.review_document_context_claim(
+            workspace, claim_id, actor=_reviewer(), outcome=outcome,
+            edited_statement=edited_statement, governance_log=_log(),
+        )
+    except CaseWorkspaceError as exc:
+        flash(str(exc), "error")
+    return redirect(url_for("workspace.show_workspace", project_id=project_id, source=source_id))
+
+
+@workspace_bp.route("/projects/<project_id>/workspace/requirements/<requirement_id>/assess-phase", methods=["POST"])
+@admin_required
+def assess_requirement_phase_route(project_id, requirement_id):
+    """
+    Bounded GO QA/QC pass (Section 1-3): triggers ONE
+    RequirementPhaseAssessment via CaseWorkspaceStore.assess_requirement_
+    phase_conformance - "SOR Requirement + Current Phase Expectation +
+    Submitted Evidence -> Current Conformance Assessment." Admin-only
+    (Admin Document Mode calibration action, not an ordinary PM one).
+
+    `evidence_found`/`resolution_level` are this bounded pass's own
+    deliberately minimal stand-in for a full evidence picker (out of
+    scope - see this pass's own report) - a real evidence-reconciliation
+    UI is explicitly deferred to a future increment, matching
+    evaluate_information_sufficiency's own existing "observed is the
+    caller's explicit input, never auto-discovered" contract.
+    """
+    _, store, workspace = _load_workspace_or_404(project_id)
+    evidence_found = request.form.get("evidence_found") == "on"
+    resolution_level = (request.form.get("resolution_level") or "").strip() or None
+    observed = [{"resolution_level": resolution_level}] if evidence_found else []
+
+    try:
+        store.assess_requirement_phase_conformance(
+            workspace, requirement_id, observed=observed, created_by="GO", governance_log=_log(),
+        )
+    except CaseWorkspaceError as exc:
+        flash(str(exc), "error")
+    return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
 
 
 @workspace_bp.route("/projects/<project_id>/workspace/classify-environment", methods=["POST"])
