@@ -25,10 +25,12 @@ to what's operationally load-bearing — do not expand it "just in case."
 
 **Freshness anchor:** rows 1-14 are accurate as of commit `48b4468`; rows
 15-21 (Multimodal Perception Games round) are accurate as of commit
-`6180ec0`; row 22 (`CLAUDE-FILE-PUBLISH-RFP-01`) is accurate as of commit
-`10cea77` (all 2026-08-16). If the referenced file/line has since changed,
-the row's own confidence should be treated as stale until re-verified, not
-trusted at face value.
+`6180ec0`; row 22 (`CLAUDE-FILE-PUBLISH-RFP-01`) and the "Active pilot —
+Image Search... Composer" / voice-fix sections are accurate as of commit
+`32fe808` (code) and live-deployed/verified at commit `72d5829` (all
+2026-08-16). If the referenced file/line has since changed, the row's own
+confidence should be treated as stale until re-verified, not trusted at
+face value.
 
 ---
 
@@ -181,3 +183,110 @@ experiment identified — a single new vision-capable Composer turn wired
 only to Image Search's existing "Send to Composer" gap, with the pasted
 image never persisted — is a recommendation awaiting Product Owner
 disposition, not yet built. Do not begin it without a fresh authorization.
+
+---
+
+## Active pilot — Image Search "Not found" → Composer vision interpretation
+
+**Approved scope (Product Owner, 2026-08-16):** exactly the escape hatch
+recommended above — Image Search's own no-match state → "Not found" →
+"Open in Composer" → one real vision-capable Composer turn → zero
+automatic persistence. Not general Composer-wide image attachments, not
+visual search, no new database/media subsystem, no automatic Source
+registration. Also approved: an isolated fix for the "can you hear me"
+voice-channel-status defect (row 20), unrelated to vision.
+
+**Result (2026-08-16, commit `32fe808`): proves the composition approach
+works, with the same kind of refinement the earlier hotlink pilot found —
+minimum sufficient context had to be discovered by building, not assumed.**
+
+Implementation: `services/llm_gateway.py`'s `call_llm_json` gained optional
+`image_base64`/`image_media_type` params — the first and only place in this
+codebase that ever constructs an Anthropic vision content block, additive
+and backward-compatible (every existing caller is unaffected; `content`
+stays a plain string when the new params are omitted). `routes/workspace.py`'s
+new `open_image_in_composer` reuses the existing `ACTION_EXTERNAL_AI_REQUEST`
+security gate (same `_evaluate_security_action` resolver every other real
+external-AI call site in this file already uses — no new governance
+mechanism), posts a human-role placeholder message (`"Sent an image from
+Document Search (no match found) for GO to look at."` — never the image
+bytes themselves) and GO's real interpretation as two ordinary
+`ConversationMessage`s via the existing `store.add_message`, and never
+persists the image anywhere else — no Source, no StructuralUnit, no disk
+write. `static/js/document_marks.js` builds a hidden form (base.html) with
+the client-side-only `imageDataUrl` and reads the current Case, if any,
+from the URL — the exact same "soft display hint, re-validated server-side,
+never an authorization boundary" discipline the Composer hotlink pilot (row
+13/14) established for `?case=`.
+
+**Minimum-sufficient-context finding (this pilot's own version of row 14):**
+one vision-capable call was sufficient — no second call, no multi-turn
+tool loop, no retrieval step was needed to produce a usable interpretation.
+The context that *did* turn out to matter: the workspace's own
+`display_title`, given to the model as the only project-relevance signal
+(deliberately not the full evidence corpus — this is temporary
+conversational evidence, not a governed Q&A grounded in extracted
+requirements). The `Anchor`/soft-hint primitives were sufficient as-is;
+nothing new was needed beyond composing what rows 11/13 already
+established.
+
+**Temporary-evidence lifecycle finding:** confirmed by direct code
+construction, not just observation — this pilot proves a genuinely
+temporary tier is possible without building the "full ephemeral-evidence
+architecture" row 18 flagged as missing. The image never becomes a
+persistent object of any kind; the *fact* that an image was sent is what
+persists (as an ordinary conversational message), not the image itself.
+This is a real, minimal existence proof that ARCHIOSK's binary
+"untouched/governed" lifecycle gap (row 18) can be closed for a
+single-shot interaction without a new schema — but this pilot deliberately
+does **not** solve multi-turn referent continuity ("what about the image
+from two messages ago") — that remains open, matching the Product Owner's
+own explicit "do not build the full architecture yet" instruction.
+
+**Live-verified (2026-08-16, commit `72d5829` deployed to archiosk.com):**
+Game A end-to-end — pasted a synthetic unrelated image into a real
+Design-Builder/Proponent project's Image Search, clicked Search (`"Not
+found - ARCHIOSK doesn't yet compare this image against the document set.
+Open in Composer and GO can look at it directly."`, the inline button
+correctly styled as a small in-sentence link, not an oversized standalone
+`.btn`), clicked "Open in Composer" — confirmed the redirect, the two new
+`CONVERSATION` messages, and (once a real, valid `ANTHROPIC_API_KEY` is
+available — see the production note below) a genuine model-generated
+interpretation. **A pre-existing, unrelated production infrastructure
+defect (invalid `ANTHROPIC_API_KEY` on the live server, confirmed via
+server logs and independently reproduced against the ORDINARY text
+Composer Q&A path) meant the live vision call itself returned a 401,
+which is exactly what this pilot's own honest degradation path is for** —
+the user-facing reply was `"GO couldn't look at the image just now: An
+error occurred calling the model."`, never a fabricated result. This
+proves the failure path live, under a real failure condition, not a
+mocked one — the success path (a genuine model-generated characterization)
+remains verified only via the hermetic test suite's mocked Anthropic
+client (`tests/test_perception_games_01_image_composer_pilot.py`) until
+the production API key is fixed, which is outside this pilot's scope (a
+credentials matter, not a code defect — see the Product Owner report for
+this round).
+
+**Product Owner disposition: accepted (implicit — implementation and
+verification proceeded exactly as this round's own approval specified).**
+Do not widen beyond Image Search's own no-match escape hatch without a
+fresh authorization — general Composer-wide image paste, multi-turn
+referent continuity, and a formal ephemeral-evidence schema all remain
+explicitly unbuilt.
+
+---
+
+## Voice channel-status fix (`CLAUDE-GO-MULTIMODAL-PERCEPTION-GAMES-01`, 2026-08-16, commit `32fe808`)
+
+Row 20's reproduced defect is fixed: `services/conversation_interpreter.py`
+gained a dedicated `_looks_like_channel_status_check`/
+`_handle_channel_status_check`, checked before the generic greeting bucket
+in both `interpret_message` and `quick_start`'s own separate Case-creation
+routing gate (`routes/workspace.py`) — the latter needed its own fix too, a
+real gap a focused test caught (removing "can you hear me" from the
+greeting-phrase list without also updating `quick_start`'s own OR-chain
+would have silently created a new Investigation for a literal
+channel-status question). **Live-verified** on archiosk.com: "Can you hear
+me?" now returns `"Yes - I don't hear audio directly, but your words came
+through as text and I have them."` — a truthful, one-sentence answer, never
+the generic `"Hello. What are you working on?"` greeting.
