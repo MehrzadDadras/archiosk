@@ -21,6 +21,7 @@ implementationally separate (Prompt 4 #10):
 """
 from __future__ import annotations
 
+import base64
 import io
 import json
 import mimetypes
@@ -54,6 +55,7 @@ from services.case_workspace import (
     CASE_OUTCOME_STATES,
     CASE_ORIGIN_AUTONOMOUS,
     CASE_STATUS_ARCHIVED,
+    CONTENT_CLASS_AI_PROPOSED,
     CONTENT_CLASS_DETERMINISTIC_CALCULATION,
     CONTENT_CLASS_HUMAN_AUTHORED,
     CONVERSATION_ANCHOR_SCOPE_CASE,
@@ -113,6 +115,7 @@ from services.environment_capabilities import (
 from services.procurement_publication import PublicationExportError, build_published_package_zip
 from services.document_context_intelligence import draft_document_context_claims
 from services.conversation_interpreter import (
+    _looks_like_channel_status_check,
     _looks_like_contextual_reference,
     _looks_like_conversational_utterance,
     _looks_like_orientation_request,
@@ -3887,6 +3890,145 @@ def post_message(project_id, case_id):
     return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
 
 
+_MAX_IMAGE_BYTES = 5 * 1024 * 1024  # Anthropic's own base64-image ceiling; a hard, honest cap.
+
+
+def _parse_image_data_url(data_url: str) -> Optional[tuple[str, str]]:
+    """`(media_type, base64_data)`, or None if not a well-formed `data:image/...;base64,...`
+    URL - the exact shape static/js/document_marks.js's FileReader.readAsDataURL
+    already produces client-side, never trusted without this check."""
+    if not data_url or not data_url.startswith("data:image/"):
+        return None
+    header, _, payload = data_url.partition(",")
+    if not payload or not header.endswith(";base64"):
+        return None
+    return header[len("data:"):-len(";base64")], payload
+
+
+@workspace_bp.route("/projects/<project_id>/workspace/image-search/open-in-composer", methods=["POST"])
+@login_required
+def open_image_in_composer(project_id):
+    """
+    CLAUDE-GO-MULTIMODAL-PERCEPTION-GAMES-01, bounded pilot: the ONE
+    approved vision-capable path in this codebase - document-set Image
+    Search's own known no-match state -> "Open in Composer" -> one real
+    vision-capable Composer turn -> zero automatic persistence. Not a
+    general Composer image-paste feature (see Composer's own message
+    form, which still accepts text only) - this route exists only
+    because Image Search's honest "Not found" state (templates/base.html)
+    needs a real next move, per the operational map's own Perception
+    Games findings.
+
+    The image never touches disk or any Source/StructuralUnit - it is
+    read from the submitted form field, base64-decoded straight into the
+    one Anthropic vision call below (services.llm_gateway.call_llm_json),
+    and discarded when this request ends. Two ConversationMessages are
+    persisted the same way any other Composer turn's are (store.
+    add_message) - a human-role placeholder recording what the user
+    actually did (never the image bytes themselves) and GO's real
+    interpretation - but nothing here creates a governed Source, issues
+    correspondence, or otherwise changes project state beyond an
+    ordinary conversation turn.
+
+    `case` (optional form field) is read the same soft-hint way
+    static/js/document_marks.js reads it from the URL - a display/
+    routing convenience, re-validated here via _require_visible_case
+    exactly like every other case_id this file ever accepts from a
+    client, never trusted as an authorization boundary on its own
+    (CLAUDE-GO-NAVIGATION-CONTEXT-GAMES-01's own pilot established this
+    same discipline for origin_message_id/case on hotlinks).
+    """
+    _, store, workspace = _load_workspace_or_404(project_id)
+
+    case_id = (request.form.get("case") or "").strip() or None
+    case = None
+    if case_id is not None:
+        _require_visible_case(store, workspace, case_id)
+        case = next((c for c in workspace.cases if c["id"] == case_id), None)
+        if case is None:
+            abort(404)
+
+    parsed = _parse_image_data_url(request.form.get("image_data_url") or "")
+    if parsed is None:
+        flash("No image was received to send to Composer.", "error")
+        return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
+
+    media_type, image_b64 = parsed
+    # A rough, cheap ceiling check on the base64 string itself (~4/3 the
+    # decoded size) before ever decoding - avoids doing real work on an
+    # obviously-oversized payload.
+    if len(image_b64) * 3 / 4 > _MAX_IMAGE_BYTES:
+        flash("That image is too large to send to Composer (5MB limit).", "error")
+        return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
+
+    store.add_message(
+        workspace, case_id, role="human",
+        text="Sent an image from Document Search (no match found) for GO to look at.",
+        actor=_reviewer(), content_class=CONTENT_CLASS_HUMAN_AUTHORED,
+    )
+
+    from services.security_policy import ACTION_EXTERNAL_AI_REQUEST, DECISION_ALLOW, DECISION_ALLOW_APPROVED_ROUTE
+
+    policy_decision = _evaluate_security_action(workspace, ACTION_EXTERNAL_AI_REQUEST)
+    if policy_decision.decision not in (DECISION_ALLOW, DECISION_ALLOW_APPROVED_ROUTE):
+        store.add_message(
+            workspace, case_id, role="system",
+            text=(
+                f"Interpreting images with external AI is not permitted by this "
+                f"project's security policy (controlling layer: "
+                f"{policy_decision.controlling_layer}). {policy_decision.reason} "
+                f"Nothing was transmitted."
+            ),
+            content_class=CONTENT_CLASS_AI_PROPOSED,
+        )
+        return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
+
+    from services.llm_gateway import call_llm_json
+
+    system_prompt = (
+        "You are GO, ARCHIOSK's project assistant. The user just pasted an image "
+        "into this project's Document Search, and no match was found in the "
+        "authorized document set - this is the only context you have; treat it "
+        "as temporary conversational evidence, not an established project "
+        "record. Look at the image and respond naturally and briefly: say "
+        "plainly what it appears to be, and whether it looks related to this "
+        f'project ("{workspace.display_title}") based only on that name and '
+        "what you can see. Preserve uncertainty honestly - never claim a "
+        "relationship you can't actually support from the image itself. "
+        "Suggest the smallest useful next step only if one is genuinely "
+        "useful. Keep it to 1-3 sentences. Do not explain your own internal "
+        "process, do not mention tools or modalities by name, do not create "
+        "or propose creating any project record. Respond ONLY with a JSON "
+        'object of exactly this shape: {"reply": "<your response, ready to '
+        'show the user as-is>"}.'
+    )
+    outcome = call_llm_json(
+        user_prompt="What is this image, and does it relate to this project?",
+        system_prompt=system_prompt,
+        image_base64=image_b64, image_media_type=media_type,
+        max_tokens=400, log_label="Image Search -> Composer interpretation",
+    )
+    if outcome.ran and isinstance(outcome.parsed, dict) and outcome.parsed.get("reply"):
+        reply_text = str(outcome.parsed["reply"])
+    elif outcome.ran:
+        reply_text = "GO looked at the image but didn't return a usable response. Try again."
+    else:
+        reply_text = f"GO couldn't look at the image just now: {outcome.skipped_reason}"
+
+    # No separate GovernanceLog event here - same precedent
+    # _run_conversation_turn's own comment above already states ("every
+    # other conversational action... already has its own honest
+    # action_taken label without needing a governance event here"); this
+    # is an ordinary conversational turn, not a domain-governance action.
+    store.add_message(
+        workspace, case_id, role="system", text=reply_text,
+        action_taken="image_search_composer_interpretation",
+        content_class=CONTENT_CLASS_AI_PROPOSED,
+    )
+
+    return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
+
+
 @workspace_bp.route("/projects/<project_id>/workspace/quick-start", methods=["POST"])
 @login_required
 def quick_start(project_id):
@@ -3978,6 +4120,16 @@ def quick_start(project_id):
     lowered_text = text.lower()
     if (
         _looks_like_conversational_utterance(lowered_text)
+        # CLAUDE-GO-MULTIMODAL-PERCEPTION-GAMES-01: a literal channel-
+        # status question ("can you hear me?") is exactly as
+        # non-investigative as a greeting - same "Conversation !=
+        # Investigation" principle CA1C-CONV-FIX-02 already established
+        # for greetings above, extended to this now-separate bucket
+        # (services/conversation_interpreter.py's own
+        # _looks_like_channel_status_check) since interpret_message's
+        # internal routing alone doesn't gate whether quick_start creates
+        # a Case at all.
+        or _looks_like_channel_status_check(lowered_text)
         or anchor is not None
         or _looks_like_project_question(lowered_text)
         or _looks_like_orientation_request(lowered_text)

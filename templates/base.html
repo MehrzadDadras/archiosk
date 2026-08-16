@@ -518,8 +518,27 @@
                                         </div>
                                         {# Part 10: honest deferred state - no fabricated results, no OCR-as-
                                            image-search. See governance/spare-parts-yard.md's own new record for
-                                           the real capability this preserves a UI path toward. #}
-                                        <p class="documents-image-search-status" id="documents-image-search-status" data-ui-ref="lists.project.documents.image-search-status" aria-live="polite" hidden>Image/shape search is not yet available in ARCHIOSK - your query image is saved above, not discarded. See the Parts Yard record for what real visual search would require.</p>
+                                           the real capability this preserves a UI path toward.
+
+                                           CLAUDE-GO-MULTIMODAL-PERCEPTION-GAMES-01 pilot: the message now says
+                                           "Not found" (Product Owner's stated long-term contract - "find this
+                                           image in the document set" - is a real search that can genuinely
+                                           report no match; today's honest state IS a no-match, since no
+                                           comparison of any kind runs) with one principal escape path, "Open in
+                                           Composer" - never a second, competing set of options. Does not imply
+                                           real corpus-level visual matching occurred. #}
+                                        <p class="documents-image-search-status" id="documents-image-search-status" data-ui-ref="lists.project.documents.image-search-status" aria-live="polite" hidden>Not found - ARCHIOSK doesn't yet compare this image against the document set. <button type="button" class="documents-image-search-status-action" id="documents-image-search-open-composer" data-ui-ref="lists.project.documents.image-search-open-composer">Open in Composer</button> and GO can look at it directly.</p>
+                                        {# Submits the temporary, client-side-only image data URL (never
+                                           uploaded/persisted anywhere else) plus the current Case, if one is
+                                           open, into a single bounded Composer turn - see routes/workspace.py's
+                                           open_image_in_composer. Classic form-POST -> redirect, matching this
+                                           app's own no-fetch-layer convention (routes/workspace.py's own module
+                                           docstring); base.html's centralized CSRF script (below) covers this
+                                           form automatically since it's present in the DOM at load. #}
+                                        <form method="post" id="documents-image-search-open-composer-form" action="{{ url_for('workspace.open_image_in_composer', project_id=project_id) }}" hidden>
+                                            <input type="hidden" name="image_data_url" id="documents-image-search-open-composer-data">
+                                            <input type="hidden" name="case" id="documents-image-search-open-composer-case">
+                                        </form>
                                         <p class="documents-search-status" id="documents-search-status" data-ui-ref="lists.project.documents.search-status" aria-live="polite" hidden></p>
                                         <button type="button" class="documents-marked-filter-btn" id="documents-marked-filter-btn" data-ui-ref="lists.project.documents.marked-filter" aria-pressed="false" aria-label="Show only marked Documents" title="Marked">Marked</button>
                                         <ul class="tree-children"{% if selected_source %} data-tree-open{% endif %}>

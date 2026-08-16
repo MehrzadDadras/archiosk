@@ -251,6 +251,16 @@ def interpret_message(
             reply_text="No instruction was recognized in an empty message.",
         )
 
+    # CLAUDE-GO-MULTIMODAL-PERCEPTION-GAMES-01: checked before the
+    # generic greeting bucket below, for the same reason CA1C-CONV-FIX-02
+    # checks greetings before Investigation routing - a literal channel-
+    # status question ("can you hear me?") must never be evaluated
+    # against "is this a greeting" first, since it used to win that
+    # match and get answered with onboarding small talk instead of a
+    # truthful answer about the channel.
+    if _looks_like_channel_status_check(lowered):
+        return _handle_channel_status_check()
+
     # CLAUDE-CA1C-CONV-FIX-02: checked FIRST, before ANY Investigation-
     # shaped routing below (needs_case, is_requirement_investigation_
     # question, is_quantitative_question) - a greeting must never be
@@ -736,12 +746,42 @@ _CONVERSATIONAL_UTTERANCE_PHRASES = (
     "how are you", "how are things", "how is everything", "how's everything",
     "hows everything", "how's it going", "hows it going",
     "what's up", "whats up", "how do you do",
-    "do you hear me", "can you hear me", "are you there", "you there",
     "thanks", "thank you", "thx", "cheers", "much appreciated",
     "ok", "okay", "got it", "sounds good", "cool", "great", "nice",
     "alright", "all right",
     "bye", "goodbye", "see you", "see ya", "take care",
 )
+
+# CLAUDE-GO-MULTIMODAL-PERCEPTION-GAMES-01 (voice channel-status fix): a
+# literal question about whether the channel is working ("can you hear
+# me?") was previously matched into _CONVERSATIONAL_UTTERANCE_PHRASES
+# above and answered with the generic "Hello. What are you working on?"
+# greeting - a real, reproduced Perception Games defect (Game I): the
+# user asked a direct question and got onboarding small talk back, not a
+# truthful answer about the channel. Kept as its own small, exact-phrase
+# list (same discipline as the greeting list, not a NLU attempt)
+# deliberately separate from _CONVERSATIONAL_UTTERANCE_PHRASES so the two
+# concerns - "hello" vs. "is this working" - never collapse back into one
+# bucket. This is a narrow, isolated fix, not a voice architecture
+# redesign: by the time text reaches this module there is no signal
+# distinguishing voice-dictated from typed text (services/case_workspace.
+# py's ConversationMessage has no such field, and static/js/voice_input.js
+# only ever fills the same Composer text field a typed message would) -
+# so the honest answer is scoped to what's actually true and knowable
+# here: the message was received as text, transcribed from speech if it
+# was spoken, never as raw audio GO listens to directly. Deliberately
+# scoped to the voice/hearing channel only (the Product Owner's own
+# approved scope for this fix) - not widened to a "can you see this"
+# vision-channel counterpart, since Composer still has no way to receive
+# an image at all outside the separate, narrowly-bounded Image Search
+# pilot (see routes/workspace.py's open_image_in_composer).
+_CHANNEL_STATUS_CHECK_PHRASES = (
+    "do you hear me", "can you hear me", "are you there", "you there",
+)
+
+
+def _looks_like_channel_status_check(lowered: str) -> bool:
+    return _normalize_for_conversational_check(lowered) in _CHANNEL_STATUS_CHECK_PHRASES
 
 
 def _normalize_for_conversational_check(lowered: str) -> str:
@@ -777,6 +817,24 @@ def _handle_conversational_utterance(reviewer: str) -> InterpretationResult:
     return InterpretationResult(
         action_taken="conversational_utterance",
         reply_text=f"{greeting} What are you working on?",
+    )
+
+
+def _handle_channel_status_check() -> InterpretationResult:
+    """
+    A truthful, one-sentence answer to a literal channel-status question -
+    never the generic greeting reply _handle_conversational_utterance
+    gives. Scoped to what's actually true: this text arrived and is being
+    read, whether typed or transcribed from speech; GO never receives raw
+    audio (static/js/voice_input.js transcribes client-side before this
+    module ever sees the message).
+    """
+    return InterpretationResult(
+        action_taken="channel_status_check",
+        reply_text=(
+            "Yes - I don't hear audio directly, but your words came through as "
+            "text and I have them."
+        ),
     )
 
 

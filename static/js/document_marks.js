@@ -270,6 +270,13 @@
     var imageCollapsedReplaceBtn = document.getElementById('documents-image-search-collapsed-replace');
     var imageCollapsedClearBtn = document.getElementById('documents-image-search-collapsed-clear');
     var imageStatusEl = document.getElementById('documents-image-search-status');
+    // CLAUDE-GO-MULTIMODAL-PERCEPTION-GAMES-01 pilot: the one escape
+    // hatch out of the honest no-match state above - never a second,
+    // competing option alongside it.
+    var imageOpenComposerBtn = document.getElementById('documents-image-search-open-composer');
+    var imageOpenComposerForm = document.getElementById('documents-image-search-open-composer-form');
+    var imageOpenComposerData = document.getElementById('documents-image-search-open-composer-data');
+    var imageOpenComposerCase = document.getElementById('documents-image-search-open-composer-case');
 
     if (modeTextBtn && modeImageBtn && imageTray) {
         var searchMode = 'text';
@@ -373,6 +380,27 @@
                 imageIsCollapsed = true;
                 renderSearchMode();
                 if (imageStatusEl) imageStatusEl.hidden = false;
+            });
+        }
+
+        // CLAUDE-GO-MULTIMODAL-PERCEPTION-GAMES-01 pilot: passes the
+        // still-only-client-side imageDataUrl (never uploaded/persisted
+        // anywhere by this file) into ONE bounded Composer turn - see
+        // routes/workspace.py's open_image_in_composer. The current Case,
+        // if one is open, is read from the URL exactly the way every
+        // other read-only "what page is this" signal in this app is
+        // read - never trusted as an authorization boundary, only a soft
+        // display/routing hint (same discipline as the Composer hotlink
+        // origin-pointer pilot, ?case= there too).
+        if (imageOpenComposerBtn && imageOpenComposerForm && imageOpenComposerData) {
+            imageOpenComposerBtn.addEventListener('click', function () {
+                if (!imageDataUrl) return;
+                imageOpenComposerData.value = imageDataUrl;
+                if (imageOpenComposerCase) {
+                    var params = new URLSearchParams(window.location.search);
+                    imageOpenComposerCase.value = params.get('case') || '';
+                }
+                imageOpenComposerForm.submit();
             });
         }
 

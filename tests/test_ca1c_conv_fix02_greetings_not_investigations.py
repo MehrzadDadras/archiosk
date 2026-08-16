@@ -32,17 +32,29 @@ from werkzeug.security import generate_password_hash
 from services.bhive_parser import ParsedDocument, RequirementItem
 from services.case_workspace import CaseWorkspaceStore
 from services.conversation_interpreter import (
+    _handle_channel_status_check,
     _handle_conversational_utterance,
+    _looks_like_channel_status_check,
     _looks_like_conversational_utterance,
 )
 from services.requirements_registry import RequirementsRegistry
 
 # The exact examples this stage's own governing report names, plus the
-# two live-reproduced literal inputs ("hello", "hello hello").
+# two live-reproduced literal inputs ("hello", "hello hello"). "do you
+# hear me?" moved to CHANNEL_STATUS_CHECKS below
+# (CLAUDE-GO-MULTIMODAL-PERCEPTION-GAMES-01) - it is no longer classified
+# as a greeting, since answering it with the generic "Hello. What are
+# you working on?" reply was itself the reproduced defect that prompt
+# fixed.
 GREETINGS = [
     "hello", "hello hello", "hi", "good morning", "how are you?",
-    "do you hear me?", "thanks", "okay", "got it",
+    "thanks", "okay", "got it",
 ]
+
+# CLAUDE-GO-MULTIMODAL-PERCEPTION-GAMES-01 (Perception Games Game I,
+# reproduced then fixed): a literal channel-status question - answered
+# truthfully now, never with the generic greeting reply.
+CHANNEL_STATUS_CHECKS = ["can you hear me?", "do you hear me", "are you there?"]
 
 
 class ConversationalUtteranceDetectionTests(unittest.TestCase):
@@ -75,6 +87,18 @@ class ConversationalUtteranceDetectionTests(unittest.TestCase):
     def test_handler_degrades_gracefully_for_an_anonymous_reviewer(self):
         result = _handle_conversational_utterance("anonymous")
         self.assertEqual(result.reply_text, "Hello. What are you working on?")
+
+    def test_channel_status_checks_are_not_misclassified_as_a_greeting(self):
+        for text in CHANNEL_STATUS_CHECKS:
+            with self.subTest(text=text):
+                self.assertFalse(_looks_like_conversational_utterance(text.lower()), text)
+                self.assertTrue(_looks_like_channel_status_check(text.lower()), text)
+
+    def test_channel_status_handler_gives_a_truthful_answer_not_a_greeting(self):
+        result = _handle_channel_status_check()
+        self.assertEqual(result.action_taken, "channel_status_check")
+        self.assertNotIn("What are you working on?", result.reply_text)
+        self.assertIn("Yes", result.reply_text)
 
 
 class GreetingsDoNotCreateInvestigationsTests(unittest.TestCase):
@@ -141,6 +165,22 @@ class GreetingsDoNotCreateInvestigationsTests(unittest.TestCase):
         self.assertIn("Mehrzad", last_reply["text"])
         self.assertIn("What are you working on?", last_reply["text"])
         self.assertNotIn("Not covered by this project's extracted evidence", last_reply["text"])
+
+    def test_channel_status_check_does_not_create_an_investigation_and_is_answered_truthfully(self):
+        for text in CHANNEL_STATUS_CHECKS:
+            with self.subTest(text=text):
+                resp = self.client.post(
+                    f"/projects/{self.project_id}/workspace/quick-start",
+                    data={"text": text},
+                )
+                self.assertEqual(resp.status_code, 302)
+                self.assertNotIn("case=", resp.headers["Location"])
+                workspace = self.store.get(self.project_id)
+                self.assertEqual(len(workspace.cases), 4, f"{text!r} created a Case")
+                last_reply = workspace.project_conversation[-1]
+                self.assertEqual(last_reply["role"], "system")
+                self.assertNotIn("What are you working on?", last_reply["text"])
+                self.assertIn("Yes", last_reply["text"])
 
     def test_repeated_greeting_word_also_does_not_create_an_investigation(self):
         resp = self.client.post(

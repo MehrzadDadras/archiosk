@@ -849,6 +849,25 @@ html.launcher-hidden .launcher-panel { display: none; }
     color: var(--text-metadata);
     margin: 0 0 0.3rem;
 }
+/* CLAUDE-GO-MULTIMODAL-PERCEPTION-GAMES-01: an inline text-button inside
+   the small status line above - .btn/.btn-ghost's own padding (0.85rem
+   1.5rem) is sized for a standalone control, not a word embedded
+   mid-sentence in 0.7rem text. Same restrained treatment
+   .documents-image-search-collapsed-btn already established for small
+   inline controls in this same rail. */
+.documents-image-search-status-action {
+    font: inherit;
+    color: var(--text-primary);
+    background: none;
+    border: none;
+    padding: 0;
+    text-decoration: underline;
+    cursor: pointer;
+}
+.documents-image-search-status-action:hover,
+.documents-image-search-status-action:focus-visible {
+    color: var(--machine-blue);
+}
 /* Part 8: "a larger TEMPORARY image-search tray... use the existing
    restrained/glassy ARCHIOSK surface language" - same drop-target idiom
    Eye's own #eye-drop-target already established (dashed border only on

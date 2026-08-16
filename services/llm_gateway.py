@@ -109,6 +109,8 @@ def call_llm_json(
     timeout: Optional[float] = None,
     max_tokens: int = 1500,
     log_label: str = "LLM call",
+    image_base64: Optional[str] = None,
+    image_media_type: Optional[str] = None,
 ) -> LLMCallOutcome:
     """
     One request/response round trip - no tool use, no re-prompting, no
@@ -119,6 +121,17 @@ def call_llm_json(
     function never re-derives its own default when a caller already
     resolved/scaled one) - if None, the standard ANTHROPIC_TIMEOUT_SECONDS
     env default applies, same as every migrated call site already did.
+
+    CLAUDE-GO-MULTIMODAL-PERCEPTION-GAMES-01: `image_base64`/
+    `image_media_type` are optional and, when both given, prepend a
+    vision content block ahead of `user_prompt`'s own text block - the
+    first and only place in this codebase that constructs one (see the
+    Perception Games operational-map findings: no other call site in
+    this app has ever sent an image to the model). Every existing caller
+    that omits them is completely unaffected - `content` stays the exact
+    same plain string it always was, not a list, so this is a strictly
+    additive, backward-compatible change to the one shared gateway
+    rather than a second call path.
     """
     api_key = api_key or os.getenv("ANTHROPIC_API_KEY", "")
     if not api_key:
@@ -135,10 +148,21 @@ def call_llm_json(
 
     client = anthropic.Anthropic(api_key=api_key, timeout=timeout)
 
+    if image_base64 and image_media_type:
+        content = [
+            {
+                "type": "image",
+                "source": {"type": "base64", "media_type": image_media_type, "data": image_base64},
+            },
+            {"type": "text", "text": user_prompt},
+        ]
+    else:
+        content = user_prompt
+
     create_kwargs = {
         "model": model,
         "max_tokens": max_tokens,
-        "messages": [{"role": "user", "content": user_prompt}],
+        "messages": [{"role": "user", "content": content}],
     }
     if system_prompt:
         create_kwargs["system"] = system_prompt
