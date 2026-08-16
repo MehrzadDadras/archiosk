@@ -5716,6 +5716,49 @@ main:hover,
     color: var(--text-primary);
 }
 
+/* CLAUDE-DEEP-OCEAN-VISUAL-PARITY-01: the glass material itself.
+   tokens.css's own --ocean-* family was, until this stage, color-only
+   (surface/border/text) - the redefinition blocks above already cascade
+   those correctly into every Deep-Ocean-scoped surface (that part was
+   never broken), but nothing ever carried over the backdrop-filter
+   blur + box-shadow glow that make .gateway-shell .gateway-card-wide
+   (this repository's own already-shipped, already-approved reference -
+   see tokens.css's own derivation comment above --ocean-glass-blur/
+   --ocean-glow) actually READ as translucent glass rather than plain
+   flat dark navy. "Dark navy background + turquoise accent" was
+   Product Owner's own named anti-pattern for what NOT to reduce Deep
+   Ocean to.
+
+   Scoped to the genuinely floating/overlay surfaces - the menu bar's
+   own dropdown panels (this session's own CLAUDE-APP-MENU-01 work) and
+   the pre-existing Display Layout/Appearance/Account popovers - the
+   structural analog of a card floating over a canvas backdrop, exactly
+   like the reference. Layered on top of the translucent background
+   these surfaces already inherit from --surface-primary via the
+   .workspace-topbar.appearance-deep-ocean redefinition above - never a
+   second background definition, never touching any other appearance
+   mode. z-index 60/61 (already established, well above the narrow
+   popup-shadowing regression CLAUDE-P40-VW6's own comment on the
+   selector group below once diagnosed and fixed) remains untouched -
+   this only adds visual material, never repositions anything. */
+.workspace-topbar.appearance-deep-ocean .workspace-menubar-panel,
+.workspace-topbar.appearance-deep-ocean .workspace-menubar-subpanel,
+.workspace-topbar.appearance-deep-ocean .workspace-layout-options,
+.workspace-topbar.appearance-deep-ocean .workspace-appearance-options,
+.workspace-topbar.appearance-deep-ocean .workspace-user-options {
+    -webkit-backdrop-filter: blur(var(--ocean-glass-blur));
+    backdrop-filter: blur(var(--ocean-glass-blur));
+    box-shadow: var(--ocean-glow);
+}
+/* The Composer dock is a real, bounded panel (not a floating overlay),
+   so it gets the restrained half of the material - glow only, no blur
+   (Section 4's own "avoid... excessive blur" - blurring content behind
+   a panel that never floats over anything would be a pure decorative
+   gimmick, not a structural analog of the reference card). */
+.chat-region.appearance-deep-ocean .conversation-dock-panel {
+    box-shadow: var(--ocean-glow);
+}
+
 /* CLAUDE-P40-E2B: the drag/keyboard-operable divider between Display
    and Chat - a real ARIA separator (draggable via
    static/js/case_workspace.js's pointer handlers, and keyboard-

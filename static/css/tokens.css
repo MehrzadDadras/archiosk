@@ -575,6 +575,19 @@
     --ocean-risk-red: #E4826D;
     --ocean-risk-red-tint: #381F19;
 
+    /* CLAUDE-DEEP-OCEAN-VISUAL-PARITY-01: the two properties above never
+       made it into this token family the first time around - every
+       --ocean-* value here is color-only (surface/border/text), so the
+       Workspace's own .appearance-deep-ocean redefinition (main.css)
+       only ever produced flat translucent-color panels, never the
+       backdrop-filter blur + box-shadow glow that make .gateway-shell
+       .gateway-card-wide (this repository's own already-shipped,
+       already-approved reference) actually READ as glass rather than
+       plain dark navy. Both values below are a literal copy of that
+       rule's own two properties - not new numbers, not re-derived. */
+    --ocean-glass-blur: 14px;
+    --ocean-glow: 0 24px 70px rgba(1, 8, 14, .5);
+
     /* CLAUDE-P40-DTAB1: same rationale as the light-mode block above -
        identical values across every dark theme, the same convention
        every other accent color in this file already follows. Gateway's

@@ -758,5 +758,73 @@ class DocumentContentNotRecolouredTests(unittest.TestCase):
         self.assertNotIn("filter", rule.group(1))
 
 
+class DeepOceanGlassMaterialTests(unittest.TestCase):
+    """CLAUDE-DEEP-OCEAN-VISUAL-PARITY-01: Deep Ocean's own --ocean-*
+    token family was already color-correct (a literal copy of
+    .gateway-shell's own already-approved translucent palette) - what
+    was missing was the backdrop-filter blur + box-shadow glow that
+    make that palette actually READ as glass. Both new tokens are a
+    literal copy of .gateway-shell .gateway-card-wide's own two
+    properties, applied only to the genuinely floating/overlay
+    surfaces (menu dropdowns, the pre-existing Display Layout/
+    Appearance/Account popovers) plus a restrained glow-only treatment
+    for the one bounded (non-floating) panel named in scope, the
+    Composer dock."""
+
+    def setUp(self):
+        self.tokens_css = _TOKENS_CSS_PATH.read_text(encoding="utf-8")
+        self.css = _MAIN_CSS_PATH.read_text(encoding="utf-8")
+
+    def test_new_tokens_are_a_literal_copy_of_the_gateway_reference(self):
+        self.assertIn("--ocean-glass-blur: 14px;", self.tokens_css)
+        self.assertIn("--ocean-glow: 0 24px 70px rgba(1, 8, 14, .5);", self.tokens_css)
+        # The reference itself, unchanged - same literal values.
+        idx = self.css.index(".gateway-shell .gateway-card-wide {")
+        body = self.css[idx:idx + 300]
+        self.assertIn("blur(14px)", body)
+        self.assertIn("0 24px 70px rgba(1, 8, 14, .5)", body)
+
+    def test_menu_dropdown_panels_get_the_glass_treatment_in_deep_ocean_only(self):
+        idx = self.css.index(".workspace-topbar.appearance-deep-ocean .workspace-menubar-panel,")
+        block = self.css[idx:self.css.index("}", idx)]
+        self.assertIn("backdrop-filter: blur(var(--ocean-glass-blur));", block)
+        self.assertIn("box-shadow: var(--ocean-glow);", block)
+        # Every listed selector must itself carry the .appearance-deep-ocean
+        # scope directly - never a bare, unscoped selector that would leak
+        # the effect into every other appearance mode.
+        header = self.css[idx:self.css.index("{", idx)]
+        for selector in header.split(","):
+            self.assertIn("appearance-deep-ocean", selector, selector)
+
+    def test_composer_dock_gets_a_restrained_glow_only_no_blur(self):
+        # The SAME selector text also opens the earlier, pre-existing
+        # shared comma-list rule (tinted/dark/deep-forest/deep-ocean,
+        # background-color only) - find the LATER, standalone occurrence
+        # this stage added.
+        idx = self.css.rindex(".chat-region.appearance-deep-ocean .conversation-dock-panel {")
+        block = self.css[idx:self.css.index("}", idx)]
+        self.assertIn("box-shadow: var(--ocean-glow);", block)
+        self.assertNotIn("backdrop-filter", block)
+
+    def test_other_appearance_modes_never_get_backdrop_filter_or_the_ocean_glow(self):
+        # The dark/tinted/deep-forest equivalents of the same menu
+        # dropdown/popover selectors must never pick up blur or glow -
+        # this is a Deep-Ocean-only material, not a generic dark-mode one.
+        for mode_class in ("appearance-dark", "appearance-tinted", "appearance-deep-forest"):
+            self.assertNotIn(f".workspace-topbar.{mode_class} .workspace-menubar-panel", self.css)
+
+    def test_no_other_appearance_mode_rule_gained_a_stray_backdrop_filter(self):
+        # Structural guard: backdrop-filter/--ocean-glow anywhere in the
+        # file must always sit inside a rule whose OWN selector line
+        # mentions deep-ocean (either appearance-deep-ocean or the
+        # pre-existing, unrelated .gateway-shell reference this stage
+        # deliberately left untouched).
+        for m in re.finditer(r"backdrop-filter: blur\(var\(--ocean-glass-blur\)\)|box-shadow: var\(--ocean-glow\)", self.css):
+            selector_start = self.css.rfind("}", 0, m.start())
+            rule_start = self.css.rfind("{", selector_start, m.start())
+            selector_line = self.css[max(rule_start - 400, 0):rule_start]
+            self.assertIn("appearance-deep-ocean", selector_line, self.css[m.start():m.start() + 60])
+
+
 if __name__ == "__main__":
     unittest.main()
