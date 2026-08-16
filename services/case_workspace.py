@@ -365,6 +365,14 @@ OBJECT_KIND_CLAIM = "claim"
 # Claim's own evidence_links cite real objects - a report section can
 # reference another WorkProduct (e.g. "based_on" an earlier risk register).
 OBJECT_KIND_WORK_PRODUCT = "work_product"
+# Bounded GO QA/QC pass: RequirementPhaseAssessment and
+# DocumentContextClaim (both defined near RequirementAdjudication below)
+# get their own object kinds up front, the same way every other
+# persisted record in this module does, even before anything needs to
+# reference one generically - see OBJECT_KIND_CLAIM's own comment above
+# for the identical reasoning.
+OBJECT_KIND_REQUIREMENT_PHASE_ASSESSMENT = "requirement_phase_assessment"
+OBJECT_KIND_DOCUMENT_CONTEXT_CLAIM = "document_context_claim"
 
 KNOWN_OBJECT_KINDS = (
     OBJECT_KIND_SOURCE,
@@ -400,6 +408,8 @@ KNOWN_OBJECT_KINDS = (
     OBJECT_KIND_TASK,
     OBJECT_KIND_CLAIM,
     OBJECT_KIND_WORK_PRODUCT,
+    OBJECT_KIND_REQUIREMENT_PHASE_ASSESSMENT,
+    OBJECT_KIND_DOCUMENT_CONTEXT_CLAIM,
 )
 
 # -- Typed relationship vocabulary (Prompt 8 #1) -----------------------------
@@ -1829,6 +1839,176 @@ class RequirementAdjudication:
     attribution: Optional[str] = None  # KNOWN_ADJUDICATION_ATTRIBUTIONS
 
 
+# -- Bounded GO QA/QC phase-aware pass -------------------------------------
+# GO must not judge a 30% submission by 90% expectations - conformance is
+# assessed against BOTH the governing Requirement AND the project's current
+# design-phase expectation. A repository audit (done before writing any of
+# this - see the plan record, not conceptual assumption) found the entire
+# phase/maturity comparison engine already built and tested, just never
+# wired to anything: MaturityRecord/ExpectedInformationProfile/
+# ExpectationItem (Prompt 11/12, above) and evaluate_information_
+# sufficiency's own SUFFICIENCY_* vocabulary already implement this exact
+# "expected condition -> observed evidence -> assessment" model. This
+# section adds no new comparison logic - only what was genuinely missing:
+# a durable, GO-authored record of one such assessment, and (separately)
+# GO-drafted Document Context claims for Admin Document Mode.
+#
+# RequirementPhaseAssessment is deliberately NOT a RequirementAdjudication
+# field or a new RequirementAdjudication outcome - governance/STATUS.md's
+# own authorization table already closes that door ("Foundation Batch K
+# (RequirementAdjudication)... further feature expansion NOT AUTHORIZED"),
+# and this module's own repeated discipline never conflates adjacent-but-
+# distinct questions onto one object anyway (Disposition vs
+# ReviewerValidation, ComposerFinding vs Finding, Requirement.status vs
+# adjudication outcome). This mirrors ComposerFinding's own relationship
+# to Finding instead: a smaller, provisional, freely-machine-writable
+# record: GO may assess, characterize, and flag; only a human, through the
+# pre-existing, unmodified RequirementAdjudication route, converts an
+# assessment into anything consequential.
+GO_QAC_PHASE_SOURCE_PROJECT_DEFINED = "project_defined"
+GO_QAC_PHASE_SOURCE_INFERRED = "inferred"
+
+KNOWN_GO_QAC_PHASE_SOURCES = (
+    GO_QAC_PHASE_SOURCE_PROJECT_DEFINED,
+    GO_QAC_PHASE_SOURCE_INFERRED,
+)
+
+
+@dataclass
+class RequirementPhaseAssessment:
+    """
+    A GO-authored, provisional characterization of ONE Requirement's
+    conformance AT THE PROJECT'S CURRENT DESIGN PHASE. `outcome` is one
+    of the SUFFICIENCY_* values evaluate_information_sufficiency already
+    returns, reused verbatim - see assess_requirement_phase_conformance,
+    which builds this record by calling that pre-existing function, not
+    by re-deriving its logic.
+
+    `phase_source` records whether the maturity/expectation actually used
+    was a real project-defined MaturityRecord/ExpectedInformationProfile
+    (GO_QAC_PHASE_SOURCE_PROJECT_DEFINED) or a generic fallback assumption
+    with no project-specific profile found (GO_QAC_PHASE_SOURCE_INFERRED)
+    - "if the project is silent and GO relies on a generic maturity
+    assumption, clearly mark that as non-contractual/inferred/secondary
+    guidance." `expectation_item_id`/`maturity_record_id` are both None
+    exactly when phase_source is INFERRED - never guessed or backfilled.
+
+    Append-only like every other machine-authored characterization in
+    this module (ComposerFinding, Claim) - a later assessment of the same
+    Requirement, at a later project phase, is a NEW row (see
+    requirement_phase_assessments_for, ordered by created_at), never an
+    overwrite. This row-per-assessment history IS the 30%->60%->90%->IFC
+    trajectory the governing request asks to preserve - no separate
+    trajectory object needed for this bounded pass.
+    """
+
+    id: str
+    project_id: str
+    requirement_id: str
+    outcome: str  # SUFFICIENCY_* (reused verbatim)
+    phase_source: str  # KNOWN_GO_QAC_PHASE_SOURCES
+    reasoning: str
+    created_at: str
+    created_by: str
+    expectation_item_id: Optional[str] = None
+    maturity_record_id: Optional[str] = None
+    current_maturity_value: Optional[str] = None
+    expected_maturity_value: Optional[str] = None
+    detail: dict = field(default_factory=dict)  # evaluate_information_sufficiency's own passthrough detail
+
+
+# Section 5's own list of structured aspects a Document Context claim may
+# characterize. Open-world (normalize_open_world_value) - a document with
+# a structured aspect this list didn't anticipate is recorded honestly
+# under its own name, never forced into an existing one or rejected.
+DOCUMENT_CONTEXT_FIELD_DOCUMENT_IDENTITY = "document_identity"
+DOCUMENT_CONTEXT_FIELD_ISSUER = "issuer"
+DOCUMENT_CONTEXT_FIELD_DATE_REVISION = "date_revision"
+DOCUMENT_CONTEXT_FIELD_DOCUMENT_TYPE = "document_type"
+DOCUMENT_CONTEXT_FIELD_PURPOSE = "purpose"
+DOCUMENT_CONTEXT_FIELD_RELATIONSHIP_TO_PROJECT = "relationship_to_project"
+DOCUMENT_CONTEXT_FIELD_REFERENCED_CLAUSE = "referenced_clause"
+DOCUMENT_CONTEXT_FIELD_OBLIGATION = "obligation"
+DOCUMENT_CONTEXT_FIELD_SIGNIFICANCE = "significance"
+
+KNOWN_DOCUMENT_CONTEXT_FIELDS = (
+    DOCUMENT_CONTEXT_FIELD_DOCUMENT_IDENTITY,
+    DOCUMENT_CONTEXT_FIELD_ISSUER,
+    DOCUMENT_CONTEXT_FIELD_DATE_REVISION,
+    DOCUMENT_CONTEXT_FIELD_DOCUMENT_TYPE,
+    DOCUMENT_CONTEXT_FIELD_PURPOSE,
+    DOCUMENT_CONTEXT_FIELD_RELATIONSHIP_TO_PROJECT,
+    DOCUMENT_CONTEXT_FIELD_REFERENCED_CLAUSE,
+    DOCUMENT_CONTEXT_FIELD_OBLIGATION,
+    DOCUMENT_CONTEXT_FIELD_SIGNIFICANCE,
+)
+
+# The PM disposition axis - deliberately separate from CONTENT_CLASS_*
+# (the AUTHORSHIP axis, see DocumentContextClaim's own docstring below).
+DOCUMENT_CONTEXT_CLAIM_STATE_PROPOSED = "proposed"
+DOCUMENT_CONTEXT_CLAIM_STATE_ACCEPTED = "accepted"
+DOCUMENT_CONTEXT_CLAIM_STATE_REJECTED = "rejected"
+
+KNOWN_DOCUMENT_CONTEXT_CLAIM_STATES = (
+    DOCUMENT_CONTEXT_CLAIM_STATE_PROPOSED,
+    DOCUMENT_CONTEXT_CLAIM_STATE_ACCEPTED,
+    DOCUMENT_CONTEXT_CLAIM_STATE_REJECTED,
+)
+
+
+@dataclass
+class DocumentContextClaim:
+    """
+    Section 5's "GO drafts -> PM reviews/edits -> PM accepts" flow: one
+    GO-drafted, individually reviewable statement characterizing a Source
+    (or one page/sheet of it, via page_anchor). Distinct from the
+    pre-existing, purely-human Source.note "Document Context" free-text
+    field (set_source_note) - this module never treats an AI-drafted
+    claim as equivalent to that field's own already-established,
+    unmediated PM-authored content; the two coexist, they are not merged.
+
+    `content_class` reuses CONTENT_CLASS_* verbatim (already used by
+    ComposerFinding) as the AUTHORSHIP axis: ai_proposed (GO drafted,
+    untouched), edited_ai_proposal (a PM edited GO's draft),
+    human_authored (a PM wrote it from scratch). `review_state` is a
+    SEPARATE, orthogonal DISPOSITION axis (proposed/accepted/rejected) -
+    the same never-conflate-distinct-questions discipline Disposition/
+    ReviewerValidation keep separate from each other elsewhere in this
+    module.
+
+    Deliberately carries NO automatic minor-vs-material edit-severity
+    classification - a Product Owner correction made during this pass's
+    own planning: materiality must never be inferred from a text-
+    similarity heuristic, and stays either untracked (content_class's
+    3 states are the only signal this pass stores) or explicitly
+    human-set later. `original_statement` (immutable, GO's own first
+    draft) is kept purely so a reviewer can SEE the diff, never so this
+    module can CLASSIFY it.
+
+    `page_anchor` is optional and deliberately unstructured (a plain
+    dict, e.g. {"page_number": 4} or {"sheet_number": "A-101"}), mirroring
+    Anchor's own open-shape `location` field - None means a document-level
+    claim (the common case for most of KNOWN_DOCUMENT_CONTEXT_FIELDS), a
+    populated anchor scopes it to one page/sheet so a future pass can
+    identify which SPECIFIC pages GO struggled with, without this pass
+    building that rollup itself.
+    """
+
+    id: str
+    project_id: str
+    source_id: str
+    field_kind: str  # open-world, KNOWN_DOCUMENT_CONTEXT_FIELDS
+    statement: str
+    original_statement: str
+    content_class: str  # CONTENT_CLASS_* (reused verbatim)
+    created_at: str
+    created_by: str
+    review_state: str = DOCUMENT_CONTEXT_CLAIM_STATE_PROPOSED
+    page_anchor: Optional[dict] = None
+    reviewed_by: Optional[str] = None
+    reviewed_at: Optional[str] = None
+
+
 @dataclass
 class AnalysisTrigger:
     """
@@ -2619,6 +2799,89 @@ def evaluate_information_sufficiency(
                 detail["maturity_comparison"] = "indeterminate - value(s) not in a known ordered vocabulary"
 
     return {"outcome": SUFFICIENCY_EXPECTED_AND_FOUND, "detail": detail}
+
+
+# -- Bounded GO QA/QC pass: Admin Document Mode quality gauge (Section 4/6) --
+# A deliberately restrained, 3-state scale - "do not invent fake scientific
+# precision" (Section 4) taken literally: no numeric confidence score.
+DOCUMENT_QUALITY_GAUGE_GOOD = "good"
+DOCUMENT_QUALITY_GAUGE_REVIEW = "review"
+DOCUMENT_QUALITY_GAUGE_WEAK = "weak"
+
+KNOWN_DOCUMENT_QUALITY_GAUGES = (
+    DOCUMENT_QUALITY_GAUGE_GOOD,
+    DOCUMENT_QUALITY_GAUGE_REVIEW,
+    DOCUMENT_QUALITY_GAUGE_WEAK,
+)
+
+
+def assess_document_context_quality(claims: list[dict], extraction_signal: Optional[str] = None) -> dict:
+    """
+    "How well is GO understanding this source material?" - a pure,
+    derived aggregation, the same "given explicit inputs, never go
+    searching for its own evidence" contract evaluate_information_
+    sufficiency already established. Given the DocumentContextClaim list
+    for one Source (or one page_anchor - see document_context_claims_for)
+    and an optional REAL, already-recorded extraction-quality signal, it
+    never recomputes or guesses either input itself.
+
+    `extraction_signal`, when given, is one of PDF_CLASSIFICATION_* (see
+    extraction_signal_for_source, which re-derives this from already-
+    persisted StructuralUnit/AddressableRegion records - it does not
+    change how or when the original MM2 registration writes anything) or
+    METADATA_RELIABILITY_UNAVAILABLE for a drawing sheet with no
+    extractable title-block fields. `possible_cause` is populated ONLY
+    from this real signal or from the claim correction rate itself -
+    never a guessed explanation for a cause this function has no actual
+    evidence for (Section 6: "Do not assert a cause without evidence").
+    """
+    if not claims:
+        return {
+            "gauge": DOCUMENT_QUALITY_GAUGE_REVIEW,
+            "signals": {
+                "claim_count": 0,
+                "inference_load": 0,
+                "correction_rate": 0,
+                "rejected_count": 0,
+                "extraction_signal": extraction_signal,
+            },
+            "possible_cause": None,
+        }
+
+    total = len(claims)
+    inferred = sum(1 for c in claims if c["content_class"] == CONTENT_CLASS_AI_PROPOSED)
+    corrected = sum(1 for c in claims if c["content_class"] == CONTENT_CLASS_EDITED_AI_PROPOSAL)
+    rejected = sum(1 for c in claims if c["review_state"] == DOCUMENT_CONTEXT_CLAIM_STATE_REJECTED)
+    inference_load = inferred / total
+    correction_rate = (corrected + rejected) / total
+
+    possible_cause = None
+    if extraction_signal in (PDF_CLASSIFICATION_IMAGE_ONLY, METADATA_RELIABILITY_UNAVAILABLE):
+        possible_cause = "Possible cause — investigate: low-quality scan or no extractable text layer found for this source."
+    elif extraction_signal == PDF_CLASSIFICATION_MIXED:
+        possible_cause = "Possible cause — investigate: this source mixes text-native and image-only pages."
+
+    if rejected == total or correction_rate >= 0.5:
+        gauge = DOCUMENT_QUALITY_GAUGE_WEAK
+        if possible_cause is None:
+            possible_cause = "Possible cause — investigate: most GO-drafted context on this source needed PM correction or rejection."
+    elif correction_rate > 0 or extraction_signal in (PDF_CLASSIFICATION_IMAGE_ONLY, PDF_CLASSIFICATION_MIXED):
+        gauge = DOCUMENT_QUALITY_GAUGE_REVIEW
+    else:
+        gauge = DOCUMENT_QUALITY_GAUGE_GOOD
+        possible_cause = None  # only ever surfaced for Review/Weak
+
+    return {
+        "gauge": gauge,
+        "signals": {
+            "claim_count": total,
+            "inference_load": round(inference_load, 2),
+            "correction_rate": round(correction_rate, 2),
+            "rejected_count": rejected,
+            "extraction_signal": extraction_signal,
+        },
+        "possible_cause": possible_cause,
+    }
 
 
 @dataclass
@@ -3806,6 +4069,8 @@ class ProjectWorkspace:
     table_rows: list[dict] = field(default_factory=list)
     source_references: list[dict] = field(default_factory=list)
     requirement_adjudications: list[dict] = field(default_factory=list)
+    requirement_phase_assessments: list[dict] = field(default_factory=list)  # bounded GO QA/QC pass
+    document_context_claims: list[dict] = field(default_factory=list)  # bounded GO QA/QC pass
     carried_forward_adoptions: list[dict] = field(default_factory=list)
     investigation_steps: list[dict] = field(default_factory=list)  # CLAUDE-P08 - see InvestigationStep
     case_outcomes: list[dict] = field(default_factory=list)  # CLAUDE-P11 - see CaseOutcome
@@ -5214,6 +5479,169 @@ class CaseWorkspaceStore:
                 correlation_id=source_id,
             )
         return source
+
+    # -- Bounded GO QA/QC pass: Document Context Claims (Section 5) -----------
+    # "GO drafts -> PM reviews/edits -> PM accepts", deliberately separate
+    # from set_source_note above (the pre-existing, purely-human Document
+    # Context field) - see DocumentContextClaim's own docstring for why.
+
+    def draft_document_context_claim(
+        self,
+        workspace: ProjectWorkspace,
+        source_id: str,
+        field_kind: str,
+        statement: str,
+        created_by: str,
+        page_anchor: Optional[dict] = None,
+        governance_log: Optional[GovernanceLog] = None,
+    ) -> dict:
+        """GO's own first-pass claim - always starts ai_proposed/proposed,
+        regardless of how confidently it was drafted (Section 5: "Do not
+        present inference as established fact" - even a confident draft
+        is a PROPOSAL until a PM reviews it, the same discipline Claim's
+        own adoption_state already applies elsewhere in this module)."""
+        source = self._find(workspace.sources, source_id)
+        if source is None:
+            raise CaseWorkspaceError(f"Source {source_id} was not found.")
+        if not statement or not statement.strip():
+            raise CaseWorkspaceError("A Document Context claim requires a real statement.")
+
+        claim = DocumentContextClaim(
+            id=_new_id(),
+            project_id=workspace.project_id,
+            source_id=source_id,
+            field_kind=normalize_open_world_value(field_kind, KNOWN_DOCUMENT_CONTEXT_FIELDS),
+            statement=statement.strip(),
+            original_statement=statement.strip(),
+            content_class=CONTENT_CLASS_AI_PROPOSED,
+            created_at=_now(),
+            created_by=created_by,
+            page_anchor=page_anchor,
+        )
+        workspace.document_context_claims.append(asdict(claim))
+        self.save(workspace)
+
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id, event_type="document_context_claim_drafted",
+                actor=created_by, role="system",
+                payload={"claim_id": claim.id, "source_id": source_id, "field_kind": claim.field_kind},
+                correlation_id=claim.id,
+            )
+        return asdict(claim)
+
+    def review_document_context_claim(
+        self,
+        workspace: ProjectWorkspace,
+        claim_id: str,
+        actor: str,
+        outcome: str,
+        edited_statement: Optional[str] = None,
+        governance_log: Optional[GovernanceLog] = None,
+    ) -> dict:
+        """
+        The one PM-facing disposition action - accept (unchanged or with
+        edits) or reject. `outcome` must be DOCUMENT_CONTEXT_CLAIM_STATE_
+        ACCEPTED or _REJECTED (never _PROPOSED - that is only ever the
+        initial, machine-set state, not something a review action revisits
+        back to).
+
+        content_class transitions only on real edits (an actual text
+        change), and only ever ai_proposed -> edited_ai_proposal - never
+        a computed minor/material distinction (Product Owner correction:
+        materiality is never inferred from a text-similarity heuristic).
+        A claim already human_authored (Section 5's "PM writes one from
+        scratch" case, not built by this bounded pass's own routes but
+        reserved on the model) is left untouched by this method's own
+        content_class logic - it was never GO's draft to begin with.
+        """
+        claim = self._find(workspace.document_context_claims, claim_id)
+        if claim is None:
+            raise CaseWorkspaceError(f"Document Context claim {claim_id} was not found.")
+        if outcome not in (DOCUMENT_CONTEXT_CLAIM_STATE_ACCEPTED, DOCUMENT_CONTEXT_CLAIM_STATE_REJECTED):
+            raise CaseWorkspaceError(
+                f"'{outcome}' is not a valid review outcome. "
+                f"Use one of: {DOCUMENT_CONTEXT_CLAIM_STATE_ACCEPTED}, {DOCUMENT_CONTEXT_CLAIM_STATE_REJECTED}."
+            )
+
+        if edited_statement is not None:
+            edited_statement = edited_statement.strip()
+            if edited_statement and edited_statement != claim["statement"]:
+                claim["statement"] = edited_statement
+                if claim["content_class"] == CONTENT_CLASS_AI_PROPOSED:
+                    claim["content_class"] = CONTENT_CLASS_EDITED_AI_PROPOSAL
+
+        claim["review_state"] = outcome
+        claim["reviewed_by"] = actor
+        claim["reviewed_at"] = _now()
+        self.save(workspace)
+
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id, event_type="document_context_claim_reviewed",
+                actor=actor, role="human",
+                payload={"claim_id": claim_id, "outcome": outcome, "content_class": claim["content_class"]},
+                correlation_id=claim_id,
+            )
+        return claim
+
+    def document_context_claims_for(
+        self, workspace: ProjectWorkspace, source_id: str, page_anchor: Optional[dict] = None,
+    ) -> list[dict]:
+        """Claims for a Source at exactly the given anchor - the default
+        page_anchor=None returns ONLY document-level claims (matching
+        DocumentContextClaim's own "None means document-level" field
+        contract exactly, not "every claim regardless of anchor"); a
+        page_anchor scopes to that exact page/sheet only. Document-level
+        and page-level claims are never mixed in one call's result -
+        a caller wanting both makes two calls, deliberately, rather than
+        this method silently blending two different views."""
+        claims = [c for c in workspace.document_context_claims if c["source_id"] == source_id]
+        return [c for c in claims if c.get("page_anchor") == page_anchor]
+
+    def extraction_signal_for_source(self, workspace: ProjectWorkspace, source_id: str) -> Optional[str]:
+        """
+        A REAL, already-recorded extraction-quality signal for
+        assess_document_context_quality to read - never a new one this
+        pass invents. For a PDF: re-derives PDF_CLASSIFICATION_TEXT_
+        NATIVE/IMAGE_ONLY/MIXED from already-persisted StructuralUnit
+        ("page") + AddressableRegion records, using the exact same
+        pages-with-text-vs-total rule register_pdf_page_structure itself
+        already applies at registration time - a READ-ONLY re-derivation,
+        not a second write path, so this pass makes no change whatsoever
+        to that already-shipped, already-tested MM2 registration code.
+        For a drawing/image (MM4/MM5): reads whether the sheet's own
+        modality_metadata fields resolved to METADATA_RELIABILITY_
+        UNAVAILABLE across the board. Returns None when no structural
+        unit exists yet for this Source (nothing registered to read).
+        """
+        page_units = [
+            u for u in workspace.structural_units
+            if u["source_id"] == source_id and u["unit_type"] == "page"
+        ]
+        if page_units:
+            pages_with_evidence = sum(
+                1 for u in page_units
+                if any(r for r in workspace.addressable_regions if r["structural_unit_id"] == u["id"])
+            )
+            if pages_with_evidence == 0:
+                return PDF_CLASSIFICATION_IMAGE_ONLY
+            if pages_with_evidence == len(page_units):
+                return PDF_CLASSIFICATION_TEXT_NATIVE
+            return PDF_CLASSIFICATION_MIXED
+
+        sheet_units = [
+            u for u in workspace.structural_units
+            if u["source_id"] == source_id and u["unit_type"] in ("sheet", "image")
+        ]
+        for unit in sheet_units:
+            fields = (unit.get("modality_metadata") or {}).get("fields") or {}
+            if fields and all(
+                (info or {}).get("reliability") == METADATA_RELIABILITY_UNAVAILABLE
+                for info in fields.values()
+            ):
+                return METADATA_RELIABILITY_UNAVAILABLE
+        return None
 
     @staticmethod
     def source_signature_for(workspace: "ProjectWorkspace") -> str:
@@ -9666,6 +10094,151 @@ class CaseWorkspaceStore:
             if adjudication and finding_id in (adjudication.get("evidence_finding_ids") or []):
                 linked.append(requirement)
         return linked
+
+    # -- Bounded GO QA/QC pass: phase-aware Requirement conformance -----------
+    # "SOR Requirement + Current Phase Expectation + Submitted Evidence ->
+    # Current Conformance Assessment." No new comparison logic - this
+    # assembles evaluate_information_sufficiency's two inputs (a matching
+    # ExpectationItem, if the project defines one; the current project
+    # MaturityRecord for the same scope) and records the result via the
+    # SAME pre-existing, already-tested function, called unchanged.
+
+    def assess_requirement_phase_conformance(
+        self,
+        workspace: ProjectWorkspace,
+        requirement_id: str,
+        observed: list[dict],
+        created_by: str,
+        governance_log: Optional[GovernanceLog] = None,
+    ) -> dict:
+        """
+        Requirement -> discipline-scope bridge: Requirement.subject_domain
+        (free text, open-world) is matched against MaturityRecord/
+        ExpectedInformationProfile scope_id (scope_type=OBJECT_KIND_
+        DISCIPLINE), case/whitespace-normalized - subject_domain was never
+        guaranteed to match a profile's own scope_id spelling exactly. A
+        match failure or an empty subject_domain both resolve to
+        phase_source=INFERRED, never a hard error: a Requirement with no
+        recorded discipline can still be phase-assessed, just without a
+        project-specific stage expectation.
+
+        `observed` is the caller's own explicit evidence-descriptor list,
+        preserved exactly as evaluate_information_sufficiency's own
+        precedent already established ("deliberately NOT auto-discovered
+        from the whole workspace... left to a later workflow") - this
+        method does not go searching the project for evidence itself.
+
+        Without a matching ExpectationItem, `expected_maturity` stays
+        None - evaluate_information_sufficiency's own stage-insufficiency
+        check is then simply never reached (its own `if expected_maturity`
+        guard), so this method correctly abstains from ever guessing a
+        fabricated generic milestone heuristic rather than inventing one
+        ("clearly mark... as non-contractual/inferred/secondary guidance" -
+        the honest limitation IS the marking, not a manufactured
+        substitute expectation; building a real generic-milestone
+        heuristic library is explicitly deferred, see this pass's own
+        report).
+        """
+        requirement = self._find(workspace.requirements, requirement_id)
+        if requirement is None:
+            raise CaseWorkspaceError(f"Requirement {requirement_id} was not found.")
+
+        scope_id = (requirement.get("subject_domain") or "").strip()
+        maturity_record = self._maturity_for_scope_normalized(workspace, scope_id) if scope_id else None
+        expectation_item = self._expectation_item_for_requirement(workspace, scope_id, requirement_id) if scope_id else None
+        phase_source = GO_QAC_PHASE_SOURCE_PROJECT_DEFINED if expectation_item else GO_QAC_PHASE_SOURCE_INFERRED
+
+        milestone_condition = None
+        if expectation_item and expectation_item.get("milestone_trigger_id"):
+            obligation = self._find(workspace.temporal_obligations, expectation_item["milestone_trigger_id"])
+            if obligation is not None:
+                milestone_condition = evaluate_temporal_condition(obligation, datetime.now(timezone.utc))
+
+        item_for_eval = expectation_item or {"status": EXPECTATION_ITEM_STATUS_ACTIVE, "expected_maturity": None}
+        result = evaluate_information_sufficiency(item_for_eval, observed, milestone_condition)
+
+        if phase_source == GO_QAC_PHASE_SOURCE_PROJECT_DEFINED:
+            reasoning = "Evaluated against a project-defined phase expectation"
+        else:
+            reasoning = (
+                "No project-defined phase expectation found for this Requirement's "
+                "discipline - evaluated without a stage-specific insufficiency check "
+                "(non-contractual/inferred/secondary guidance only)"
+            )
+        if maturity_record:
+            reasoning += f"; current recorded {scope_id} design maturity: {maturity_record['value']}."
+        else:
+            reasoning += "."
+
+        record = RequirementPhaseAssessment(
+            id=_new_id(),
+            project_id=workspace.project_id,
+            requirement_id=requirement_id,
+            outcome=result["outcome"],
+            phase_source=phase_source,
+            reasoning=reasoning,
+            created_at=_now(),
+            created_by=created_by,
+            expectation_item_id=expectation_item.get("id") if expectation_item else None,
+            maturity_record_id=maturity_record.get("id") if maturity_record else None,
+            current_maturity_value=maturity_record.get("value") if maturity_record else None,
+            expected_maturity_value=(expectation_item or {}).get("expected_maturity"),
+            detail=result.get("detail", {}),
+        )
+        workspace.requirement_phase_assessments.append(asdict(record))
+        self.save(workspace)
+
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id, event_type="requirement_phase_assessed",
+                actor=created_by, role="system",
+                payload={
+                    "assessment_id": record.id, "requirement_id": requirement_id,
+                    "outcome": record.outcome, "phase_source": phase_source,
+                },
+                correlation_id=record.id,
+            )
+        return asdict(record)
+
+    @staticmethod
+    def _maturity_for_scope_normalized(workspace: ProjectWorkspace, scope_id: str) -> Optional[dict]:
+        """Case/whitespace-insensitive fallback over maturity_for_scope's
+        own exact-match lookup - see assess_requirement_phase_conformance's
+        own docstring for why an exact match can't be assumed here."""
+        needle = scope_id.strip().lower()
+        matches = [
+            m for m in workspace.maturity_records
+            if m["maturity_type"] == MATURITY_TYPE_DESIGN
+            and m["scope_type"] == OBJECT_KIND_DISCIPLINE
+            and m["scope_id"].strip().lower() == needle
+            and m["status"] == MATURITY_STATUS_ACTIVE
+        ]
+        return matches[-1] if matches else None
+
+    @staticmethod
+    def _expectation_item_for_requirement(workspace: ProjectWorkspace, scope_id: str, requirement_id: str) -> Optional[dict]:
+        needle = scope_id.strip().lower()
+        for profile in workspace.expected_information_profiles:
+            if not (
+                profile["scope_type"] == OBJECT_KIND_DISCIPLINE
+                and profile["scope_id"].strip().lower() == needle
+                and profile["status"] == PROFILE_STATUS_ACTIVE
+            ):
+                continue
+            for item in profile.get("items", []):
+                if item.get("related_object_type") == OBJECT_KIND_REQUIREMENT and item.get("related_object_id") == requirement_id:
+                    return item
+        return None
+
+    def requirement_phase_assessments_for(self, workspace: ProjectWorkspace, requirement_id: str) -> list[dict]:
+        """Full trajectory, oldest first - the 30%->60%->90%->IFC history
+        this bounded pass preserves as this table's own row-per-assessment
+        append-only order, no separate trajectory object."""
+        return [a for a in workspace.requirement_phase_assessments if a["requirement_id"] == requirement_id]
+
+    def latest_requirement_phase_assessment_for(self, workspace: ProjectWorkspace, requirement_id: str) -> Optional[dict]:
+        records = self.requirement_phase_assessments_for(workspace, requirement_id)
+        return records[-1] if records else None
 
     # -- requirement item promotion bridge (ratified governance baseline) ----------
 
