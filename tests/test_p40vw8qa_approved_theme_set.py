@@ -38,6 +38,7 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 _TOKENS_CSS_PATH = _REPO_ROOT / "static" / "css" / "tokens.css"
 _MAIN_CSS_PATH = _REPO_ROOT / "static" / "css" / "main.css"
 _BASE_HTML_PATH = _REPO_ROOT / "templates" / "base.html"
+_APP_MENU_HTML_PATH = _REPO_ROOT / "templates" / "_app_menu.html"
 
 sys.path.insert(0, str(_REPO_ROOT / "tools"))
 import derive_theme_palettes as dtp  # noqa: E402
@@ -250,7 +251,10 @@ class AppearanceMatrixLabelTests(unittest.TestCase):
     headers/per-surface row template."""
 
     def setUp(self):
-        self.source = _BASE_HTML_PATH.read_text(encoding="utf-8")
+        # CLAUDE-UI-ACTION-REDUNDANCY-REVIEW-01, Disposition 2/3: the
+        # Appearance mode tuple/radio-group moved out of base.html's own
+        # source into the shared templates/_app_menu.html partial.
+        self.source = _APP_MENU_HTML_PATH.read_text(encoding="utf-8")
 
     def test_five_labels_present(self):
         # CLAUDE-POSTCAMEL-P02-ST1: Light relabeled Titanium. Labels

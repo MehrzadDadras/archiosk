@@ -127,36 +127,27 @@ class HeaderAndBrandTests(unittest.TestCase):
         self.assertNotIn("Beehive", body)
 
     def test_brand_lockup_reads_archiosk_only(self):
-        # CLAUDE-P40-E2B1: the brand mark moved from the old side-rail
-        # (.side-rail-brand-label) to the application-wide top bar
-        # (.workspace-topbar-brand, base.html) - see that template's own
-        # note on why identity now lives there instead of the launcher
-        # panel.
-        # CLAUDE-P40-VW7A added a data-ui-ref="menu.brand" attribute to this
-        # same element (UI_REFERENCE_MAP.md) - selector updated to allow
-        # attributes between the class and href, not asserting their
-        # absence (this test's own subject is the visible text, not the
-        # exact attribute ordering).
-        # CLAUDE-P40-BRAND1 added a decorative archiosk_mark() SVG icon
-        # directly before the wordmark, inside the same link (see that
-        # template's own comment on why it's one shared tab-stop, not
-        # two) - the wordmark text itself now lives in its own
-        # .workspace-topbar-brand-text span, and the SVG spans multiple
-        # lines, so a plain-substring check (not a single-line regex) is
-        # used to pin down that the VISIBLE TEXT reads "Archiosk" only,
-        # nothing appended after it - this test's own actual subject,
-        # unchanged by the icon.
+        # CLAUDE-P40-E2B1/VW7A/BRAND1's own history is preserved in git,
+        # not repeated here - CLAUDE-APP-MENU-01 (Product Owner, explicit:
+        # "Archiosk is not a separate logo... same font/size/weight/
+        # alignment/interaction as the neighboring menu items") retires
+        # the icon+enlarged-wordmark single-link treatment this test used
+        # to check. This test's own actual subject survives unchanged
+        # through that retirement, though: the visible identity text
+        # reads "Archiosk" only, nothing appended - now the plain
+        # <summary> label of the first application-menu entry
+        # (data-ui-ref="menu.archiosk"), styled identically to its File/
+        # Edit/View/... neighbors via the shared .workspace-topbar-btn
+        # class, not a distinct rule of its own (see
+        # test_p40brand1_brand_mark.py's own HeaderMarkupTests for the
+        # full structural proof of that).
         body = self.client.get("/").get_data(as_text=True)
-        self.assertIn('workspace-topbar-brand"', body)
-        idx = body.index('workspace-topbar-brand"')
-        tag_close = body.index(">", idx)
-        self.assertIn('href="/"', body[idx:tag_close])
-        element_close = body.index("</a>", tag_close)
-        self.assertTrue(
-            body[tag_close + 1:element_close].endswith(
-                '<span class="workspace-topbar-brand-text">Archiosk</span>'
-            )
-        )
+        self.assertIn('data-ui-ref="menu.archiosk"', body)
+        idx = body.index('data-ui-ref="menu.archiosk"')
+        summary_start = body.index("<summary", idx)
+        summary_tag_close = body.index(">", summary_start)
+        summary_close = body.index("</summary>", summary_tag_close)
+        self.assertEqual(body[summary_tag_close + 1:summary_close].strip(), "Archiosk")
 
     def test_search_toggle_and_nav_toggle_are_gone(self):
         # CLAUDE-P40-E2B1, Section F: "Remove superseded Home, search,

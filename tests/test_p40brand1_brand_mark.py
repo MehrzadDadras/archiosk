@@ -38,6 +38,7 @@ from werkzeug.security import generate_password_hash
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _MACROS_HTML_PATH = _REPO_ROOT / "templates" / "_macros.html"
 _BASE_HTML_PATH = _REPO_ROOT / "templates" / "base.html"
+_APP_MENU_HTML_PATH = _REPO_ROOT / "templates" / "_app_menu.html"
 _MAIN_CSS_PATH = _REPO_ROOT / "static" / "css" / "main.css"
 _TOKENS_CSS_PATH = _REPO_ROOT / "static" / "css" / "tokens.css"
 _CHECK_CONTRAST_PATH = _REPO_ROOT / "tools" / "check_contrast.py"
@@ -182,42 +183,71 @@ class MacroGeometryTests(unittest.TestCase):
 
 
 class HeaderMarkupTests(unittest.TestCase):
+    """CLAUDE-APP-MENU-01 (Product Owner, explicit): "Archiosk is not a
+    separate logo... render using the same font/size/weight/alignment/
+    interaction as the neighboring menu items [File/Edit/View/...]." This
+    retires CLAUDE-P40-BRAND1's own icon+enlarged-wordmark single-link
+    treatment for base.html's authenticated topbar specifically - the
+    mark/macro/gateway_shell.html's own separate pre-authentication brand
+    treatment are completely untouched (see RepositoryGroundingTests/
+    MacroGeometryTests above, still green - only THIS class's own base.html
+    assertions changed). "Archiosk" is now the first entry in the new
+    application menu bar (.workspace-menubar, data-ui-ref="menu.archiosk"),
+    styled identically to File/Edit/View/etc. via the shared
+    .workspace-topbar-btn class those already used - not a new rule of its
+    own. Home-navigation (the former data-ui-ref="menu.brand" link) still
+    exists, unchanged in behavior (same href, same aria-label) - just
+    relocated inside the Archiosk menu's own panel as its first item
+    (data-ui-ref="menu.archiosk.home"), since "Archiosk" itself is now a
+    menu trigger, not a navigable link."""
+
     def setUp(self):
         self.source = _BASE_HTML_PATH.read_text(encoding="utf-8")
-        idx = self.source.index('data-ui-ref="menu.brand"')
-        self.tag_start = self.source.rindex("<a", 0, idx)
-        self.tag_end = self.source.index("</a>", idx) + len("</a>")
-        self.element = self.source[self.tag_start:self.tag_end]
+        # CLAUDE-UI-ACTION-REDUNDANCY-REVIEW-01, Disposition 2/3: the
+        # Archiosk menu's own markup (menu.archiosk, menu.archiosk.home)
+        # moved out of base.html's own source into the shared
+        # templates/_app_menu.html partial ({% include %}d by base.html
+        # AND gateway_shell.html) - assertions about that markup read
+        # this file now, not base.html directly.
+        self.app_menu_source = _APP_MENU_HTML_PATH.read_text(encoding="utf-8")
 
     def test_macros_imported(self):
         self.assertIn('{% import "_macros.html" as macros %}', self.source)
 
-    def test_brand_link_calls_the_shared_macro(self):
-        self.assertIn("macros.archiosk_mark(", self.element)
+    def test_archiosk_menu_summary_uses_the_same_class_as_its_neighbors(self):
+        idx = self.app_menu_source.index('data-ui-ref="menu.archiosk"')
+        block = self.app_menu_source[idx:self.app_menu_source.index("</details>", idx)]
+        summary_tag = block[block.index("<summary"):block.index(">", block.index("<summary")) + 1]
+        self.assertIn('class="workspace-topbar-btn"', summary_tag)
+        # No mark, no enlarged/bold wordmark class of its own.
+        self.assertNotIn("archiosk_mark(", summary_tag)
+        self.assertNotIn("workspace-topbar-brand-text", summary_tag)
 
-    def test_brand_link_is_a_single_anchor_no_nested_tab_stop(self):
-        # Exactly one <a ...> open tag within this element's own markup -
-        # the icon and wordmark share one link/tab-stop, never two.
-        self.assertEqual(self.element.count("<a "), 1)
-        self.assertEqual(self.element.count("</a>"), 1)
+    def test_no_mark_or_brand_treatment_remains_in_the_authenticated_topbar(self):
+        # The macro is still legitimately called elsewhere (gateway_shell.html,
+        # untouched) - this only asserts base.html's own authenticated
+        # .workspace-topbar (including its shared _app_menu.html include)
+        # no longer calls it.
+        topbar_start = self.source.index('class="workspace-topbar"')
+        topbar_end = self.source.index("workspace-topbar-document-controls", topbar_start)
+        topbar_region = self.source[topbar_start:topbar_end]
+        self.assertNotIn("archiosk_mark(", topbar_region)
+        self.assertNotIn('class="workspace-topbar-brand"', topbar_region)
+        self.assertNotIn("archiosk_mark(", self.app_menu_source)
+        self.assertNotIn('class="workspace-topbar-brand"', self.app_menu_source)
 
-    def test_brand_link_has_accessible_name_covering_icon_and_text(self):
-        self.assertIn('aria-label="Archiosk Home"', self.element)
-
-    def test_brand_link_href_and_data_ui_ref_unchanged(self):
-        self.assertIn("data-ui-ref=\"menu.brand\"", self.element)
-        self.assertIn("url_for('portal.index')", self.element)
-
-    def test_svg_mark_itself_carries_no_separate_ui_ref(self):
-        # The mark must never become its own competing data-ui-ref -
-        # only the outer link carries one, exactly once.
-        self.assertEqual(self.element.count("data-ui-ref"), 1)
-
-    def test_wordmark_text_present(self):
-        self.assertIn(">Archiosk</span>", self.element)
+    def test_home_navigation_relocated_not_removed(self):
+        idx = self.app_menu_source.index('data-ui-ref="menu.archiosk.home"')
+        tag = self.app_menu_source[self.app_menu_source.rindex("<a", 0, idx):self.app_menu_source.index(">", idx) + 1]
+        self.assertIn('aria-label="Archiosk Home"', tag)
+        self.assertIn("url_for('portal.index')", tag)
 
 
 class HeaderRenderingTests(unittest.TestCase):
+    """See HeaderMarkupTests' own docstring - CLAUDE-APP-MENU-01 retires
+    the rendered icon+wordmark link for base.html's authenticated topbar
+    specifically; home-navigation itself still renders, relocated."""
+
     def setUp(self):
         import app as app_module
         from models import User, db
@@ -231,28 +261,22 @@ class HeaderRenderingTests(unittest.TestCase):
             sess["username"] = "brand1_owner"
             sess["role"] = "admin"
 
-    def test_brand_mark_renders_on_authenticated_pages(self):
+    def test_no_archiosk_mark_renders_on_authenticated_pages(self):
         for url in ("/", "/projects", "/upload"):
             body = self.client.get(url).get_data(as_text=True)
-            self.assertIn('class="archiosk-mark"', body, url)
-            self.assertIn('aria-label="Archiosk Home"', body, url)
+            self.assertNotIn('class="archiosk-mark"', body, url)
 
-    def test_only_one_archiosk_mark_rendered_per_page(self):
+    def test_archiosk_menu_renders_with_plain_text_label(self):
         body = self.client.get("/").get_data(as_text=True)
-        self.assertEqual(body.count('class="archiosk-mark"'), 1)
+        idx = body.index('data-ui-ref="menu.archiosk"')
+        block = body[idx:body.index("</details>", idx)]
+        self.assertIn(">Archiosk</summary>", block)
 
-    def test_brand_link_navigates_home(self):
+    def test_home_navigation_still_renders_and_links_home(self):
         body = self.client.get("/").get_data(as_text=True)
-        idx = body.index('data-ui-ref="menu.brand"')
+        idx = body.index('data-ui-ref="menu.archiosk.home"')
         tag = body[body.rindex("<a", 0, idx):body.index(">", idx) + 1]
         self.assertIn('href="/"', tag)
-
-    def test_rendered_svg_mark_carries_no_separate_ui_ref(self):
-        body = self.client.get("/").get_data(as_text=True)
-        idx = body.index('data-ui-ref="menu.brand"')
-        element = body[body.rindex("<a", 0, idx):body.index("</a>", idx) + len("</a>")]
-        self.assertIn("<svg", element)
-        self.assertEqual(element.count("data-ui-ref"), 1)
 
 
 class BrandCssTests(unittest.TestCase):

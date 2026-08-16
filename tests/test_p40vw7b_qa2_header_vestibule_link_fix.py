@@ -193,8 +193,27 @@ class HeaderLinkCorrectnessTests(_BaseTestCase):
         # scoped broadly enough to reach .workspace-topbar-identity/
         # .workspace-topbar-project (the exact class of bug this stage
         # ruled out during diagnosis).
+        #
+        # CLAUDE-APP-MENU-01's own static/js/app_menu.js legitimately
+        # scopes itself to .workspace-topbar (document.querySelector) -
+        # it is the application menu bar's own generic Escape/outside-
+        # click/one-at-a-time behavior. Its one preventDefault() call is
+        # scoped to the Exit link's own unsaved-input confirm() guard
+        # (byRef('menu.archiosk.exit')), never the generic outside-click
+        # handler that closes open menus - so a click on
+        # .workspace-topbar-identity/.workspace-topbar-project still
+        # navigates normally, and this does not recreate the historical
+        # bug class this test guards against. Named and excluded
+        # explicitly rather than weakening the invariant for every other
+        # file.
         for js_path in (_REPO_ROOT / "static" / "js").glob("*.js"):
             js = js_path.read_text(encoding="utf-8")
+            if js_path.name == "app_menu.js":
+                outside_click = js[js.index("document.addEventListener('click'"):]
+                outside_click = outside_click[:outside_click.index("});") + 3]
+                self.assertNotIn("preventDefault", outside_click, js_path.name)
+                self.assertNotIn("stopPropagation", outside_click, js_path.name)
+                continue
             self.assertNotIn("workspace-topbar", js, js_path.name)
 
     def test_link_still_single_tab_stop_no_duplicate_control(self):
@@ -206,10 +225,14 @@ class HeaderLinkCorrectnessTests(_BaseTestCase):
         self.assertEqual(element.count("<a "), 1)
 
     def test_brand_mark_retains_its_own_destination_unaffected(self):
+        # CLAUDE-APP-MENU-01 retired menu.brand (the icon+wordmark
+        # single-link treatment) - the same href/aria-label survive
+        # unchanged as menu.archiosk.home, now the first item inside the
+        # Archiosk menu panel rather than the clickable summary itself.
         doc = self._ingest("Nipigon Ramp", "Nipigan Starter.pdf")
         client = self._client()
         body = client.get(f"/projects/{doc.project_id}/workspace").get_data(as_text=True)
-        idx = body.index('data-ui-ref="menu.brand"')
+        idx = body.index('data-ui-ref="menu.archiosk.home"')
         tag = body[body.rindex("<a", 0, idx):body.index(">", idx) + 1]
         self.assertIn('href="/"', tag)
         self.assertIn('aria-label="Archiosk Home"', tag)

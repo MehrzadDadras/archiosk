@@ -264,11 +264,18 @@ class LogoutTests(_BaseTestCase):
 
 class GatewayShellIsolationTests(_BaseTestCase):
     def test_gateway_contains_no_lists_panel(self):
+        # CLAUDE-UI-ACTION-REDUNDANCY-REVIEW-01, Disposition 2/3: the
+        # bare "+ New Project" text check is retired - Gateway's shared
+        # Archiosk > Admin menu (templates/_app_menu.html) now
+        # legitimately renders a "+ New Project" item too (the SAME
+        # admin-gated portal.upload destination the Gateway New Project
+        # card already used), not a leaked Lists-panel leaf. The real
+        # invariant this test protects - no Lists-panel STRUCTURE - is
+        # still checked via the three markers below, unaffected.
         client = self._client_as("vw5_admin", 1)
         body = client.get("/gateway").get_data(as_text=True)
         self.assertNotIn("launcher-panel", body)
         self.assertNotIn("tree-root", body)
-        self.assertNotIn("+ New Project", body)
         self.assertNotIn("tree-children", body)
 
     def test_gateway_reserves_no_empty_left_column(self):
@@ -279,11 +286,20 @@ class GatewayShellIsolationTests(_BaseTestCase):
         self.assertNotIn("app-shell-body", body)
 
     def test_gateway_contains_no_toolbox_display_or_chat_dock(self):
+        # CLAUDE-UI-ACTION-REDUNDANCY-REVIEW-01, Disposition 2/3:
+        # workspace-appearance-menu removed from this forbidden-marker
+        # list - Appearance is reviewer/device presentation state only
+        # (never Project-scoped), deliberately shared onto every
+        # authenticated page including Gateway via templates/
+        # _app_menu.html, same as it already is on base.html outside an
+        # open Workspace. workspace-layout-menu stays forbidden - Display
+        # Layout genuinely needs an open Workspace and remains gated off
+        # Gateway (Gateway never sets project_id/workspace).
         client = self._client_as("vw5_admin", 1)
         body = client.get("/gateway").get_data(as_text=True)
         for marker in (
             "workspace-pane-toolbox", "workspace-pane-display", "display-divisions",
-            "display-context-menu", "workspace-layout-menu", "workspace-appearance-menu",
+            "display-context-menu", "workspace-layout-menu",
             "chat-region", "conversation-dock",
         ):
             self.assertNotIn(marker, body, marker)

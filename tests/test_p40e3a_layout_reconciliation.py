@@ -103,15 +103,27 @@ class _BaseTestCase(unittest.TestCase):
 
 class TopBarContractTests(_BaseTestCase):
     def test_identity_breadcrumb_and_user_menu_present(self):
+        # CLAUDE-APP-MENU-01: .workspace-topbar-brand itself retired from
+        # this authenticated topbar (see test_p40brand1_brand_mark.py's
+        # own HeaderMarkupTests docstring) - the application menu bar
+        # (data-ui-ref="menu.archiosk") is its replacement identity
+        # anchor here.
         client = self._client_as("e3a_owner", 1)
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
-        self.assertIn('class="workspace-topbar-brand"', body)
+        self.assertIn('data-ui-ref="menu.archiosk"', body)
         self.assertIn('class="workspace-topbar-context"', body)
         self.assertIn('id="workspace-user-menu"', body)
         self.assertIn("e3a_owner", body)
         self.assertIn(f'href="{"/logout"}"', body)
 
-    def test_display_layout_and_appearance_menus_only_within_a_workspace(self):
+    def test_display_layout_only_within_a_workspace_appearance_everywhere(self):
+        # CLAUDE-APP-MENU-01: Appearance relocated into the always-present
+        # Archiosk menu and deliberately UNGATED from project_id - it is
+        # reviewer/device presentation state (localStorage), never a
+        # Project-record write, so it never had a real reason to require
+        # an open Workspace; making it universally reachable is a genuine
+        # correction, not a regression. Display Layout stays workspace-
+        # only (it drives THAT project's own Display grid, unchanged).
         client = self._client_as("e3a_owner", 1)
         workspace_body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
         self.assertIn('id="workspace-layout-menu"', workspace_body)
@@ -120,7 +132,7 @@ class TopBarContractTests(_BaseTestCase):
         for url in ("/", "/projects", "/upload", "/removed-projects"):
             body = client.get(url).get_data(as_text=True)
             self.assertNotIn('id="workspace-layout-menu"', body, url)
-            self.assertNotIn('id="workspace-appearance-menu"', body, url)
+            self.assertIn('id="workspace-appearance-menu"', body, url)
 
     def test_excluded_top_bar_controls_never_render(self):
         # Section 3: "Do not restore: Home; global search magnifier;
@@ -165,6 +177,12 @@ class TopBarContractTests(_BaseTestCase):
         body_without_real_controls = re.sub(r'<button[^>]*id="conv-selection-undo"[^>]*>[^<]*</button>', "", body)
         body_without_real_controls = re.sub(r'<button[^>]*id="doc-annotate-undo"[^>]*>[^<]*</button>', "", body_without_real_controls)
         body_without_real_controls = re.sub(r'<button[^>]*id="doc-annotate-redo"[^>]*>[^<]*</button>', "", body_without_real_controls)
+        # CLAUDE-APP-MENU-01: the Edit menu's own "Undo Annotation"/"Redo
+        # Annotation" items - real, reusing #doc-annotate-undo/-redo
+        # verbatim via data-reuse-control (static/js/app_menu.js), never
+        # a second implementation - same narrowing precedent as above.
+        body_without_real_controls = re.sub(r'<button[^>]*data-reuse-control="doc-annotate-undo"[^>]*>[^<]*</button>', "", body_without_real_controls)
+        body_without_real_controls = re.sub(r'<button[^>]*data-reuse-control="doc-annotate-redo"[^>]*>[^<]*</button>', "", body_without_real_controls)
         for token in ("Undo", "Redo", "drawing-tool", "paint-bucket", "color-palette", "chat-tag"):
             self.assertNotIn(token, body_without_real_controls, token)
 

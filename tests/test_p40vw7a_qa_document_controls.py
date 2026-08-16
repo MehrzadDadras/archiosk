@@ -49,6 +49,7 @@ import services.case_workspace as cw
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _BASE_HTML_PATH = _REPO_ROOT / "templates" / "base.html"
+_APP_MENU_HTML_PATH = _REPO_ROOT / "templates" / "_app_menu.html"
 _CASE_WORKSPACE_HTML_PATH = _REPO_ROOT / "templates" / "case_workspace.html"
 _MAIN_CSS_PATH = _REPO_ROOT / "static" / "css" / "main.css"
 _PDF_VIEWER_JS_PATH = _REPO_ROOT / "static" / "js" / "pdf_viewer.js"
@@ -180,11 +181,27 @@ class TopMenuControlsMarkupTests(unittest.TestCase):
         self.assertIn("hidden", tag)
 
     def test_region_sits_between_breadcrumb_and_right_side_controls(self):
-        context_idx = self.html.index('data-ui-ref="menu.context"')
+        # CLAUDE-APP-MENU-01 relocated Display Layout into the Archiosk
+        # menu (top-left, before the breadcrumb) - it no longer marks
+        # the "right side" of the top bar. menu.account (the user/
+        # session menu, still in .workspace-topbar-controls on the
+        # right) is the current right-side marker.
+        #
+        # CLAUDE-UI-ACTION-REDUNDANCY-REVIEW-01, Disposition 2/3: the
+        # breadcrumb (menu.context) moved out of base.html's own source
+        # into the shared templates/_app_menu.html partial, {% include
+        # %}d before #workspace-document-controls in base.html's own
+        # remaining source - proven here as two facts rather than one
+        # cross-file string search: the include site comes before the
+        # document-controls region (and that before menu.account), and
+        # menu.context genuinely lives inside the included file.
+        include_idx = self.html.index('{% include "_app_menu.html" %}')
         controls_idx = self.html.index('id="workspace-document-controls"')
-        display_layout_idx = self.html.index('data-ui-ref="menu.display-layout"')
-        self.assertLess(context_idx, controls_idx)
-        self.assertLess(controls_idx, display_layout_idx)
+        account_idx = self.html.index('data-ui-ref="menu.account"')
+        self.assertLess(include_idx, controls_idx)
+        self.assertLess(controls_idx, account_idx)
+        app_menu_html = _APP_MENU_HTML_PATH.read_text(encoding="utf-8")
+        self.assertIn('data-ui-ref="menu.context"', app_menu_html)
 
     def test_all_essential_controls_present_with_refs(self):
         for ref in (

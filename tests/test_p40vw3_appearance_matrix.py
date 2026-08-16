@@ -223,13 +223,19 @@ class GlobalAppearanceStructureTests(_BaseTestCase):
 # ---------------------------------------------------------------------------
 
 class PreservationTests(_BaseTestCase):
-    def test_appearance_menu_still_only_within_a_workspace(self):
+    def test_appearance_menu_now_reachable_everywhere_not_only_within_a_workspace(self):
+        # CLAUDE-APP-MENU-01 deliberately removed Appearance's own
+        # project_id/workspace gate when relocating it into the Archiosk
+        # menu - reviewer/device presentation state only, never a
+        # Project-record write, so it never had a real reason to require
+        # an open Workspace (see UI_REFERENCE_MAP.md's own menu.appearance
+        # row and templates/base.html's comment at that relocation).
         client = self._client_as("vw3_owner", 1)
         workspace_body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
         self.assertIn('id="workspace-appearance-menu"', workspace_body)
         for url in ("/", "/projects", "/upload"):
             body = client.get(url).get_data(as_text=True)
-            self.assertNotIn('id="workspace-appearance-menu"', body, url)
+            self.assertIn('id="workspace-appearance-menu"', body, url)
 
     def test_menu_surface_target_element_present_even_outside_a_workspace(self):
         # The Menu (topbar) surface itself renders on every authenticated

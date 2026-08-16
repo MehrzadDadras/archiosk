@@ -196,7 +196,24 @@ class ChooserRouteTests(_BaseTestCase):
         # The chooser extends gateway_base.html, not base.html - no
         # Lists panel, no per-project Delete forms, no sort control.
         self.assertNotIn('id="launcher-panel"', body)
-        self.assertNotIn("Delete", body)
+        # CLAUDE-UI-ACTION-REDUNDANCY-REVIEW-01, Disposition 2/3: the
+        # shared application menu bar (templates/_app_menu.html) now
+        # renders on this page too, and its real Edit/Tools items
+        # legitimately say "Delete Annotation"/"Select / Delete
+        # Annotation" - narrow the check to those two known, real
+        # controls (same "exclude the genuinely real one, not the
+        # invariant" precedent test_p40e3a_layout_reconciliation.py's
+        # own test_no_nonfunctional_drawing_or_tagging_controls already
+        # established) rather than a bare substring check.
+        body_without_menu_controls = body
+        for ref in ("menu.edit.delete", "menu.tools.annotate-select"):
+            idx = body_without_menu_controls.find(f'data-ui-ref="{ref}"')
+            if idx == -1:
+                continue
+            start = body_without_menu_controls.rindex("<button", 0, idx)
+            end = body_without_menu_controls.index("</button>", idx) + len("</button>")
+            body_without_menu_controls = body_without_menu_controls[:start] + body_without_menu_controls[end:]
+        self.assertNotIn("Delete", body_without_menu_controls)
 
     def test_chooser_leaf_links_to_the_real_authorized_workspace_route(self):
         client = self._client_as("vw8_owner", 1)

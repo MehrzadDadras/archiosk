@@ -500,10 +500,16 @@ class RegressionGuardTests(_BaseTestCase):
         self.assertIn('id="eye-pane"', html)
 
     def test_brand_mark_still_renders_in_the_header(self):
+        # CLAUDE-APP-MENU-01 retired the icon+wordmark single-link brand
+        # treatment (class="archiosk-mark") in base.html's own top bar in
+        # favor of a plain "Archiosk" menu entry styled like its File/
+        # Edit/View/... neighbors - see test_p40brand1_brand_mark.py's
+        # own HeaderMarkupTests for the full record. The application
+        # identity itself is still present, just as a menu entry now.
         doc = self._ingest("LTH1 Regression Project", "spec.pdf")
         client = self._client()
         body = client.get(f"/projects/{doc.project_id}/workspace").get_data(as_text=True)
-        self.assertIn('class="archiosk-mark"', body)
+        self.assertIn('data-ui-ref="menu.archiosk"', body)
 
     def test_document_navigation_still_a_real_link_not_client_routing(self):
         doc = self._ingest("LTH1 Regression Project 2", "spec.pdf")

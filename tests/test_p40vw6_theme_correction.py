@@ -121,6 +121,7 @@ from services.ingestion import ingest_upload
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _BASE_HTML_PATH = _REPO_ROOT / "templates" / "base.html"
+_APP_MENU_HTML_PATH = _REPO_ROOT / "templates" / "_app_menu.html"
 _AUTH_SHELL_HTML_PATH = _REPO_ROOT / "templates" / "auth_shell.html"
 _GATEWAY_SHELL_HTML_PATH = _REPO_ROOT / "templates" / "gateway_shell.html"
 _TOKENS_CSS_PATH = _REPO_ROOT / "static" / "css" / "tokens.css"
@@ -686,10 +687,20 @@ class Vw4DisplayLayoutReadabilityTests(unittest.TestCase):
         # The Display Layout <details> is a descendant of .workspace-
         # topbar in base.html, so it automatically inherits whichever
         # mode Menu is set to - confirmed structurally here.
+        #
+        # CLAUDE-UI-ACTION-REDUNDANCY-REVIEW-01, Disposition 2/3: the
+        # Display Layout markup itself moved into the shared
+        # templates/_app_menu.html partial ({% include %}d by base.html
+        # inside .workspace-topbar, before #workspace-user-menu) - the
+        # nesting proof now spans both files: the include site is still
+        # between topbar-start and #workspace-user-menu in base.html's
+        # own source, and the id itself lives inside the included file.
         html = _BASE_HTML_PATH.read_text(encoding="utf-8")
+        app_menu_html = _APP_MENU_HTML_PATH.read_text(encoding="utf-8")
         topbar_start = html.index('<div class="workspace-topbar">')
         topbar_end = html.index('id="workspace-user-menu"', topbar_start)
-        self.assertIn('id="workspace-layout-menu"', html[topbar_start:topbar_end])
+        self.assertIn('{% include "_app_menu.html" %}', html[topbar_start:topbar_end])
+        self.assertIn('id="workspace-layout-menu"', app_menu_html)
 
 
 # ---------------------------------------------------------------------------
@@ -704,10 +715,16 @@ class Vw5ShellBoundaryUnaffectedTests(_BaseTestCase):
         self.assertNotIn("workspace-appearance-menu", body)
 
     def test_gateway_shell_still_has_no_appearance_matrix(self):
+        # CLAUDE-UI-ACTION-REDUNDANCY-REVIEW-01, Disposition 2/3: the
+        # workspace-appearance-menu absence check is retired -
+        # Appearance is now legitimately, deliberately shared onto
+        # Gateway via the application menu bar (one global mode choice,
+        # never per-surface). What this test actually guards - the OLD,
+        # retired per-surface "matrix" UI (appearance-matrix) - never
+        # existed on Gateway and still doesn't; that's the real invariant.
         client = self._client_as("vw6_owner", 1)
         body = client.get("/gateway").get_data(as_text=True)
         self.assertNotIn("appearance-matrix", body)
-        self.assertNotIn("workspace-appearance-menu", body)
         # CLAUDE-CA1D-GATEWAY-VISUAL-CONTINUITY-01 added the shared
         # deep-ocean background (landing-page) alongside gateway-shell -
         # unrelated to the appearance-matrix work this test guards.

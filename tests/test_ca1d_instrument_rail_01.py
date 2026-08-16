@@ -123,12 +123,17 @@ class OperationsPageAccessTests(_BaseInstrumentRailTestCase):
         # authenticated page, exactly as before, just a different ref
         # namespace (menu.account.admin.operations, not lists.operations)
         # reflecting where it actually lives now.
+        #
+        # CLAUDE-APP-MENU-01: relocated again, out of the Account menu
+        # entirely (which now holds only session-identity actions) and
+        # into the new Archiosk application menu - menu.archiosk.admin.
+        # operations, not the retired menu.account.admin.operations.
         admin_body = self._admin_client().get("/projects").get_data(as_text=True)
-        self.assertIn('data-ui-ref="menu.account.admin.operations"', admin_body)
+        self.assertIn('data-ui-ref="menu.archiosk.admin.operations"', admin_body)
         self.assertIn('href="/operations/"', admin_body)
 
         reader_body = self._reader_client().get("/projects").get_data(as_text=True)
-        self.assertNotIn('data-ui-ref="menu.account.admin.operations"', reader_body)
+        self.assertNotIn('data-ui-ref="menu.archiosk.admin.operations"', reader_body)
 
 
 class TopBarStatusLineTests(_BaseInstrumentRailTestCase):

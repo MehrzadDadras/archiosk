@@ -40,6 +40,13 @@ from services.ingestion import ingest_upload
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _BASE_HTML_PATH = _REPO_ROOT / "templates" / "base.html"
+# CLAUDE-UI-ACTION-REDUNDANCY-REVIEW-01, Disposition 2/3: the entire
+# application menu bar (every menu.* ref) was extracted out of
+# base.html's own source into this shared partial, {% include %}d by
+# both base.html and gateway_shell.html - a plain source-text scan of
+# base.html alone would no longer find any menu.* ref at all now that
+# they only live here.
+_APP_MENU_HTML_PATH = _REPO_ROOT / "templates" / "_app_menu.html"
 _CASE_WORKSPACE_HTML_PATH = _REPO_ROOT / "templates" / "case_workspace.html"
 _MACROS_HTML_PATH = _REPO_ROOT / "templates" / "_macros.html"
 _GATEWAY_HTML_PATH = _REPO_ROOT / "templates" / "gateway.html"
@@ -171,7 +178,7 @@ _UPLOAD_CONFIRM_DYNAMIC_REFS = {
 def _all_template_refs() -> set[str]:
     refs: set[str] = set()
     for path in (
-        _BASE_HTML_PATH, _CASE_WORKSPACE_HTML_PATH, _MACROS_HTML_PATH,
+        _BASE_HTML_PATH, _APP_MENU_HTML_PATH, _CASE_WORKSPACE_HTML_PATH, _MACROS_HTML_PATH,
         _GATEWAY_HTML_PATH, _GATEWAY_SHELL_HTML_PATH, _PROJECT_CHOOSER_HTML_PATH,
         _LOGIN_HTML_PATH, _UPLOAD_HTML_PATH, _UPLOAD_CONFIRM_HTML_PATH, _ERROR_HTML_PATH,
         _SECURITY_DEPARTMENT_HTML_PATH, _PROJECTS_HTML_PATH, _REMOVED_PROJECTS_HTML_PATH, _APP_PY_PATH,
@@ -353,9 +360,13 @@ class RootFamilyReferencePresenceTests(_BaseTestCase):
             self.assertIn(f'data-ui-ref="{ref}"', body, ref)
 
     def test_menu_refs_present_on_every_authenticated_page(self):
+        # CLAUDE-APP-MENU-01: menu.brand (icon+wordmark single link) is
+        # retired - menu.bar/menu.archiosk (the application menu bar and
+        # its first entry) are the current equivalents.
         client = self._client_as("vw7a_owner", 1)
         body = client.get("/projects").get_data(as_text=True)
-        self.assertIn('data-ui-ref="menu.brand"', body)
+        self.assertIn('data-ui-ref="menu.bar"', body)
+        self.assertIn('data-ui-ref="menu.archiosk"', body)
         self.assertIn('data-ui-ref="menu.account"', body)
 
     def test_document_and_investigation_leaf_refs_present(self):
@@ -418,20 +429,23 @@ class AuthorizationAwareReferenceTests(_BaseTestCase):
         # places (a portfolio-only Lists branch vs. an always-rendered
         # admin Lists branch). All four (New Project, Security,
         # Operations, Project Data Management) now live in exactly ONE
-        # place - the top-right Account/Admin menu - with exactly the
-        # SAME "reachable from any page, admin only" treatment, so the
-        # old asymmetry no longer applies: every one of them is present,
-        # under the new menu.account.admin.* ref namespace, not the old
-        # lists.* one (which no longer describes where they render).
+        # place with the same "reachable from any page, admin only"
+        # treatment.
+        #
+        # CLAUDE-APP-MENU-01: that one place moved again - out of the
+        # Account menu (which now holds only session-identity actions)
+        # and into the new Archiosk application menu, under
+        # menu.archiosk.admin.* rather than the retired menu.account.admin.*.
         client = self._client_as("vw7a_admin", 4, role="admin")
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
         self.assertNotIn('data-ui-ref="lists.new-project"', body)
         self.assertNotIn('data-ui-ref="lists.security"', body)
         self.assertNotIn('data-ui-ref="lists.system-data-management"', body)
-        self.assertIn('data-ui-ref="menu.account.admin.new-project"', body)
-        self.assertIn('data-ui-ref="menu.account.admin.security"', body)
-        self.assertIn('data-ui-ref="menu.account.admin.operations"', body)
-        self.assertIn('data-ui-ref="menu.account.admin.project-data-management"', body)
+        self.assertNotIn('data-ui-ref="menu.account.admin.new-project"', body)
+        self.assertIn('data-ui-ref="menu.archiosk.admin.new-project"', body)
+        self.assertIn('data-ui-ref="menu.archiosk.admin.security"', body)
+        self.assertIn('data-ui-ref="menu.archiosk.admin.operations"', body)
+        self.assertIn('data-ui-ref="menu.archiosk.admin.project-data-management"', body)
 
     def test_remove_project_ref_owner_or_admin_only(self):
         # CLAUDE-GO-DNA-01 (Panel Zoning): Remove Project moved from Lists'
@@ -477,13 +491,24 @@ class SignInGatewayIsolationTests(_BaseTestCase):
         self.assertIn("data-ui-ref=\"auth.signin.username\"", body)
 
     def test_gateway_page_has_no_workspace_shell_refs(self):
+        # CLAUDE-UI-ACTION-REDUNDANCY-REVIEW-01, Disposition 2/3: a
+        # second evolution of the same invariant this class's own
+        # docstring already describes evolving once (VW8-QA allowing
+        # auth.*/gateway.* refs). menu.* is now deliberately, legitimately
+        # shared onto Gateway via templates/_app_menu.html - the same
+        # application menu bar every authenticated page gets, not a
+        # leaked Workspace-shell control. What VW5 actually protects -
+        # and what still holds, unchanged - is that Gateway never leaks
+        # genuine WORKSPACE content: lists.*/display.*/toolbox.*/chat.*.
         client = self._client_as("vw7a_owner", 1)
         body = client.get("/gateway").get_data(as_text=True)
         for ref in _DATA_REF_RE.findall(body):
             self.assertFalse(
-                ref.startswith(("lists.", "display.", "toolbox.", "chat.", "menu.")),
+                ref.startswith(("lists.", "display.", "toolbox.", "chat.")),
                 f"Gateway leaked a workspace-shell reference: {ref}",
             )
+        self.assertIn("data-ui-ref=\"menu.bar\"", body)
+        self.assertNotIn("data-ui-ref=\"menu.display-layout\"", body)
         # CLAUDE-GO-NEUTRAL-ENTRY-01: gateway.open-existing-client-owner
         # and gateway.open-existing-design-builder (themselves a retired
         # split of the original gateway.open-existing) converged back

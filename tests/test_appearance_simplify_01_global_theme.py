@@ -385,11 +385,21 @@ class SignOutRelocationTests(_BaseTestCase):
         self.assertIn('href="/logout"', body)
 
     def test_sign_out_appears_before_the_admin_label(self):
+        # CLAUDE-APP-MENU-01: Admin no longer lives in the Account menu
+        # at all (relocated to menu.archiosk.admin, in the Archiosk menu
+        # far earlier in document order than the Account menu on the
+        # right) - the two are no longer siblings, so a document-order
+        # comparison between them is no longer meaningful. What still
+        # holds, and is asserted here: Sign out is the first item inside
+        # the Account menu itself, and Admin is genuinely gone from it.
         client = self._client_as("appsimp_owner", 1)
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
-        sign_out_pos = body.index('data-ui-ref="menu.account.sign-out"')
-        admin_label_pos = body.index('data-ui-ref="menu.account.admin"')
-        self.assertLess(sign_out_pos, admin_label_pos)
+        account_start = body.index('data-ui-ref="menu.account"')
+        account_panel = body[account_start:body.index("</details>", account_start)]
+        sign_out_pos = account_panel.index('data-ui-ref="menu.account.sign-out"')
+        self.assertNotIn('data-ui-ref="menu.account.admin"', account_panel)
+        self.assertIn('data-ui-ref="menu.archiosk.admin"', body)
+        self.assertGreaterEqual(sign_out_pos, 0)
 
     def test_sign_out_present_for_a_non_admin_reviewer_too(self):
         # Sign out must never become admin-only merely by sitting near

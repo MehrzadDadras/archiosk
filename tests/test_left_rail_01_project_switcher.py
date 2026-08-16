@@ -222,13 +222,16 @@ class AdminSurfaceRelocationTests(_BaseTestCase):
         self.assertNotIn('data-ui-ref="lists.system-data-management"', body)
 
     def test_admin_functions_reachable_from_account_menu_for_an_admin(self):
+        # CLAUDE-APP-MENU-01: relocated again, out of the Account menu
+        # entirely and into the new Archiosk application menu -
+        # menu.archiosk.admin.*, not the retired menu.account.admin.*.
         doc = self._ingest("Project Alpha")
         client = self._client()
         body = client.get(f"/projects/{doc.project_id}/workspace").get_data(as_text=True)
-        self.assertIn('data-ui-ref="menu.account.admin.new-project"', body)
-        self.assertIn('data-ui-ref="menu.account.admin.security"', body)
-        self.assertIn('data-ui-ref="menu.account.admin.operations"', body)
-        self.assertIn('data-ui-ref="menu.account.admin.project-data-management"', body)
+        self.assertIn('data-ui-ref="menu.archiosk.admin.new-project"', body)
+        self.assertIn('data-ui-ref="menu.archiosk.admin.security"', body)
+        self.assertIn('data-ui-ref="menu.archiosk.admin.operations"', body)
+        self.assertIn('data-ui-ref="menu.archiosk.admin.project-data-management"', body)
         self.assertIn('href="/upload"', body)
         self.assertIn('href="/security/"', body)
         self.assertIn('href="/operations/"', body)
@@ -275,12 +278,14 @@ class AdminSurfaceRelocationTests(_BaseTestCase):
     def test_admin_functions_also_absent_from_portfolio_rail(self):
         # Portfolio browsing (no Project open) - same relocation applies,
         # not only the opened-Project state.
+        # CLAUDE-APP-MENU-01: menu.archiosk.admin.new-project, not the
+        # retired menu.account.admin.new-project.
         self._ingest("Project Alpha")
         client = self._client()
         body = client.get("/projects").get_data(as_text=True)
         self.assertNotIn('data-ui-ref="lists.new-project"', body)
         self.assertNotIn('data-ui-ref="lists.security"', body)
-        self.assertIn('data-ui-ref="menu.account.admin.new-project"', body)
+        self.assertIn('data-ui-ref="menu.archiosk.admin.new-project"', body)
 
 
 if __name__ == "__main__":

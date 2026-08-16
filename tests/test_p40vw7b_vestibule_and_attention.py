@@ -154,7 +154,8 @@ class OpenedProjectPortfolioRemovalTests(_BaseTestCase):
         self.assertIn(other.project_id, body)
         self.assertNotIn('data-ui-ref="lists.new-project"', body)
         self.assertNotIn('data-ui-ref="lists.removed-projects"', body)
-        self.assertIn('data-ui-ref="menu.account.admin.new-project"', body)
+        # CLAUDE-APP-MENU-01: relocated again into the Archiosk menu.
+        self.assertIn('data-ui-ref="menu.archiosk.admin.new-project"', body)
         self.assertIn('data-ui-ref="menu.account.removed-projects"', body)
 
     def test_opened_project_lists_still_shows_its_own_family(self):
@@ -183,11 +184,14 @@ class OpenedProjectPortfolioRemovalTests(_BaseTestCase):
         # now via the top-right Account/Admin menu (menu.account.admin.*)
         # rather than a Lists admin branch, since Lists no longer carries
         # any admin-function items at all.
+        #
+        # CLAUDE-APP-MENU-01: relocated again into the Archiosk menu -
+        # menu.archiosk.admin.*, not the retired menu.account.admin.*.
         doc = self._ingest("VW7B Project D")
         client = self._client()
         body = client.get(f"/projects/{doc.project_id}/workspace").get_data(as_text=True)
-        self.assertIn('data-ui-ref="menu.account.admin.security"', body)
-        self.assertIn('data-ui-ref="menu.account.admin.project-data-management"', body)
+        self.assertIn('data-ui-ref="menu.archiosk.admin.security"', body)
+        self.assertIn('data-ui-ref="menu.archiosk.admin.project-data-management"', body)
 
     def test_removed_project_tombstone_does_not_crash_and_falls_back_to_portfolio(self):
         doc = self._ingest("VW7B Project E")
