@@ -99,9 +99,25 @@
         saveMarks(Object.keys(markedSet));
     }
 
+    // CLAUDE-ICON-INTELLIGENCE-01: state-aware tooltip/label - "Mark
+    // document" (inactive) / "Remove mark" (active) is the short,
+    // explanatory title this pass's own Section 2 asks for; aria-label
+    // keeps the fuller per-document form already established elsewhere
+    // on this row (Keep/Eye), never a generic "Mark"/"Checkbox".
+    function markRowName(cb) {
+        var row = cb.closest('.tree-node-document');
+        var nameEl = row ? row.querySelector('.tree-leaf') : null;
+        return nameEl ? nameEl.textContent : '';
+    }
+
     function syncCheckboxes() {
         Array.prototype.forEach.call(checkboxes, function (cb) {
-            cb.checked = isMarked(cb.getAttribute('data-source-id'));
+            var marked = isMarked(cb.getAttribute('data-source-id'));
+            cb.checked = marked;
+            cb.title = marked ? 'Remove mark' : 'Mark document';
+            cb.setAttribute('aria-label', marked
+                ? ('Remove mark from ' + markRowName(cb))
+                : ('Mark ' + markRowName(cb) + ' for review'));
         });
     }
     syncCheckboxes();
@@ -214,6 +230,7 @@
         cb.addEventListener('click', function (e) { e.stopPropagation(); });
         cb.addEventListener('change', function () {
             setMarked(cb.getAttribute('data-source-id'), cb.checked);
+            syncCheckboxes();
             applyFilter();
         });
     });

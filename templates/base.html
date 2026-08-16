@@ -705,7 +705,12 @@
                                                    working state (localStorage, static/js/document_marks.js),
                                                    never a governed project finding/mutation. Distinct from Main/
                                                    Eye/Toolbox routing - deliberately does nothing else. #}
-                                                <input type="checkbox" class="pm-mark-checkbox" data-ui-ref="lists.project.documents.mark" data-source-id="{{ s.id }}" aria-label="Mark {{ s.name }} for review">
+                                                {# CLAUDE-ICON-INTELLIGENCE-01: state-aware title/aria-label, kept
+                                                   in sync with the real .checked state by static/js/document_
+                                                   marks.js's own syncCheckboxes() (same hydration pattern as
+                                                   .keep-open-btn/.eye-send-btn below) - this server-rendered
+                                                   default is the pre-JS/no-JS fallback only. #}
+                                                <input type="checkbox" class="pm-mark-checkbox" data-ui-ref="lists.project.documents.mark" data-source-id="{{ s.id }}" aria-label="Mark {{ s.name }} for review" title="Mark document">
                                                 {# ADDENDUM - DOCUMENT-ROW CONTROL ORDER / MARK VS KEEP: "Keep this
                                                    document open for continued work... promotes/projects the
                                                    document into the persistent Main working-tab set... avoids
@@ -716,7 +721,19 @@
                                                    newly exposed here as a direct per-row rail control, not a new
                                                    tab system. Visually/functionally distinct from PM Mark
                                                    immediately before it - a triangle, never a second square. #}
-                                                <button type="button" class="keep-open-btn" data-ui-ref="lists.project.documents.keep-open" data-source-id="{{ s.id }}" aria-pressed="false" aria-label="Keep {{ s.name }} open as a retained tab" title="Keep open">&#9656;</button>
+                                                {# CLAUDE-ICON-INTELLIGENCE-01: hollow (inactive) vs filled
+                                                   (persistently kept on Main) is now the real visual signal -
+                                                   static/js/document_tabs.js's own syncKeepOpenButtons() swaps
+                                                   this glyph (U+25B9 hollow / U+25B8 filled) and the title/
+                                                   aria-label together, from the SAME real pinned-tab state
+                                                   (findPinned) already driving aria-pressed - never a separate
+                                                   flag. The literal glyph rendered here server-side is only the
+                                                   pre-JS fallback (kept as the pre-existing filled &#9656; -
+                                                   test_keep_glyph_is_a_triangle_not_a_square's own established
+                                                   assertion - syncKeepOpenButtons() corrects it to hollow on
+                                                   load for the real, common unpinned case, same hydration
+                                                   pattern as .pm-mark-checkbox above). #}
+                                                <button type="button" class="keep-open-btn" data-ui-ref="lists.project.documents.keep-open" data-source-id="{{ s.id }}" aria-pressed="false" aria-label="Keep {{ s.name }} open as a retained tab" title="Keep on Main">&#9656;</button>
                                                 {# CLAUDE-EYE-COMPARE-01: a compact, always-present per-row action -
                                                    "the simplest existing application grammar that works reliably"
                                                    (Product Owner) - client-side only (window.ArchioskEyePane.
@@ -725,14 +742,34 @@
                                                    so Document A can stay open in Display while Document B loads
                                                    into Eye. Pure GET of the existing source_file route - no
                                                    mutation, no new backend endpoint. #}
-                                                <button type="button" class="eye-send-btn" data-ui-ref="lists.project.documents.send-to-eye" data-source-id="{{ s.id }}" data-source-name="{{ s.name }}" data-source-kind="{{ s.kind }}" data-project-id="{{ project_id }}" aria-pressed="false" aria-label="Open {{ s.name }} in Eye" title="Open in Eye">&#128065;</button>
+                                                {# CLAUDE-ICON-INTELLIGENCE-01: "Compare document"/"Remove from
+                                                   comparison" - explanatory wording per this pass's own Section
+                                                   7, state-aware via the SAME currentEyeSourceId comparison
+                                                   already driving aria-pressed (updateEyeSendButtonStates()).
+                                                   Also gains a real disabled state this pass (Gear/Main-tool
+                                                   state owns the other rows - see toolbox-send-btn below and
+                                                   updateMainToolRowState() in eye_pane.js). #}
+                                                <button type="button" class="eye-send-btn" data-ui-ref="lists.project.documents.send-to-eye" data-source-id="{{ s.id }}" data-source-name="{{ s.name }}" data-source-kind="{{ s.kind }}" data-project-id="{{ project_id }}" aria-pressed="false" aria-label="Compare {{ s.name }}" title="Compare document">&#128065;</button>
                                                 {# CLAUDE-LEFTRAIL-ROUTING-01, Part 3: a mode switch, not a document
                                                    destination - identical action on every row (deliberately not
                                                    data-source-id-scoped) so it's always in reach without scrolling
                                                    to one global control. Clears Eye/Compare and lets the existing
                                                    eyeHasContent()-driven .eye-inactive collapse (static/js/eye_pane.js's
-                                                   own refreshEyeLayout) do the rest - no new layout state invented. #}
-                                                <button type="button" class="toolbox-send-btn" data-ui-ref="lists.project.documents.send-to-toolbox" aria-pressed="false" aria-label="Switch right side to Toolbox tools" title="Toolbox tools">&#9881;</button>
+                                                   own refreshEyeLayout) do the rest - no new layout state invented.
+
+                                                   CLAUDE-ICON-INTELLIGENCE-01: "Open document tools" replaces the
+                                                   more mechanism-y "Toolbox tools" (Section 7's own explanatory-
+                                                   wording preference). This pass adds two new real states, both
+                                                   owned/applied by eye_pane.js's refreshEyeLayout()/
+                                                   updateMainToolRowState(), never a second parallel toggle: (1)
+                                                   disabled + "Unavailable while comparing documents" for every
+                                                   row while Eye's own Compare toggle is active (comparison owns
+                                                   the workspace state - clicking Gear would otherwise silently
+                                                   end it); (2) a highlighted .main-tool-active-row on ONLY the
+                                                   Main document's own Gear once activated, with every OTHER
+                                                   row's Eye/Keep disabled ("Unavailable while document tools are
+                                                   open elsewhere") for as long as that state holds. #}
+                                                <button type="button" class="toolbox-send-btn" data-ui-ref="lists.project.documents.send-to-toolbox" aria-pressed="false" aria-label="Open document tools" title="Open document tools">&#9881;</button>
                                             </li>
                                             {% else %}
                                             {# CLAUDE-P40-VW7B: a coherent empty state, matching the

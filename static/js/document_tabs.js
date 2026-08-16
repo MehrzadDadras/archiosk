@@ -232,15 +232,42 @@
     // from render() itself so it can never drift from the real pinned
     // set regardless of which action last mutated it.
     var keepOpenButtons = document.querySelectorAll('.keep-open-btn');
+    // CLAUDE-ICON-INTELLIGENCE-01: "outline -> filled = selected/
+    // persistent active state" (Section 1) - U+25B9 (hollow) / U+25B8
+    // (filled, the pre-existing glyph) swap alongside aria-pressed,
+    // from the SAME real pinned state, plus the state-aware "Keep on
+    // Main"/"Release from Main" title+aria-label Section 3 asks for.
+    var KEEP_GLYPH_INACTIVE = '▹';
+    var KEEP_GLYPH_ACTIVE = '▸';
     function syncKeepOpenButtons() {
         Array.prototype.forEach.call(keepOpenButtons, function (btn) {
+            var pinnedNow = !!findPinned(btn.getAttribute('data-source-id'));
             btn.setAttribute('aria-pressed', String(!!findPinned(btn.getAttribute('data-source-id'))));
+            if (!btn.disabled) {
+                btn.textContent = pinnedNow ? KEEP_GLYPH_ACTIVE : KEEP_GLYPH_INACTIVE;
+                var row = btn.closest('.tree-node-document');
+                var nameEl = row ? row.querySelector('.tree-leaf') : null;
+                var name = nameEl ? nameEl.textContent : '';
+                btn.title = pinnedNow ? 'Release from Main' : 'Keep on Main';
+                btn.setAttribute('aria-label', pinnedNow
+                    ? ('Release ' + name + ' from the retained Main tabs')
+                    : ('Keep ' + name + ' open as a retained tab'));
+            }
         });
+        // CLAUDE-ICON-INTELLIGENCE-01: Gear/Main-tool row-suppression
+        // (Section 5) is owned by eye_pane.js's own refreshEyeLayout -
+        // re-asserted here after every pin/unpin so a Keep click on the
+        // Main row can never leave a stale suppressed state on the
+        // other rows (e.g. after the Main document itself changes which
+        // row is "Main" via ordinary navigation, on next render()).
+        if (window.ArchioskEyeLayout && window.ArchioskEyeLayout.refresh) window.ArchioskEyeLayout.refresh();
     }
     Array.prototype.forEach.call(keepOpenButtons, function (btn) {
         btn.addEventListener('click', function (e) {
             e.preventDefault();
             e.stopPropagation();
+            var sourceId = btn.getAttribute('data-source-id');
+            if (findPinned(sourceId)) { unpinTab(sourceId); return; }
             pinTab(btn.getAttribute('data-source-id'));
         });
     });
@@ -314,6 +341,22 @@
         }
         if (preview && preview.id === sourceId) { preview = null; savePreview(null); }
         savePinned(pinned);
+        render();
+    }
+
+    // CLAUDE-ICON-INTELLIGENCE-01: the Triangle's own "Release from
+    // Main" counterpart to pinTab() above - same removal/fallback
+    // shape as closeTab()'s non-preview path, exposed as its own named
+    // function since the rail's Keep control (unlike a tab's Close
+    // button) only ever removes the pin, never touches preview state.
+    function unpinTab(sourceId) {
+        var idx = -1;
+        for (var i = 0; i < pinned.length; i++) { if (pinned[i].id === sourceId) { idx = i; break; } }
+        if (idx === -1) return;
+        var wasActive = sourceId === selectedSourceId;
+        pinned.splice(idx, 1);
+        savePinned(pinned);
+        if (wasActive) { activateFallback(sourceId); return; }
         render();
     }
 

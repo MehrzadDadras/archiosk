@@ -99,6 +99,16 @@
     var currentEyeSourceName = null;
     var currentEyeSourceKind = null;
 
+    // CLAUDE-ICON-INTELLIGENCE-01: Section 5's "Gear/Main-tool state" -
+    // true only while the right side is in Toolbox mode BECAUSE the
+    // reviewer explicitly clicked a Gear/Tool icon (not merely because
+    // Eye happens to be empty, the ordinary resting state - see
+    // refreshEyeLayout below, which is the one place this is reset).
+    var toolboxActivatedByGear = false;
+
+    // CLAUDE-ICON-INTELLIGENCE-01: "Compare document"/"Remove from
+    // comparison" - Section 7's own explanatory wording, state-aware
+    // from the same currentEyeSourceId comparison driving aria-pressed.
     function updateEyeSendButtonStates() {
         Array.prototype.forEach.call(document.querySelectorAll('.eye-send-btn'), function (btn) {
             var isActive = !!currentEyeSourceId && btn.getAttribute('data-source-id') === currentEyeSourceId;
@@ -113,7 +123,62 @@
             var row = btn.closest('.tree-node-document');
             var leaf = row ? row.querySelector('.tree-leaf') : null;
             if (leaf) leaf.classList.toggle('eye-projected', isActive);
+            if (!btn.disabled) {
+                var name = btn.getAttribute('data-source-name') || '';
+                btn.title = isActive ? 'Remove from comparison' : 'Compare document';
+                btn.setAttribute('aria-label', isActive ? ('Remove ' + name + ' from comparison') : ('Compare ' + name));
+            }
         });
+    }
+
+    // CLAUDE-ICON-INTELLIGENCE-01 (Section 5): while the Main document's
+    // own Gear owns the active Main-tool state, every OTHER row's Eye +
+    // Keep controls are genuinely unavailable (native disabled, not
+    // merely dimmed) - the Main row's own controls are untouched. Finds
+    // "the Main document" the same way the rest of this app already
+    // does: selected_source's own server-rendered .tree-leaf.active,
+    // never a second, separately-tracked notion of "current."
+    function updateMainToolRowState(active) {
+        var mainLeaf = document.querySelector('.tree-node-document .tree-leaf.active');
+        var mainRow = mainLeaf ? mainLeaf.closest('.tree-node-document') : null;
+        var mainSourceId = mainRow ? mainRow.getAttribute('data-source-id') : null;
+        var UNAVAILABLE = 'Unavailable while document tools are open elsewhere';
+        Array.prototype.forEach.call(document.querySelectorAll('.tree-node-document'), function (row) {
+            var sourceId = row.getAttribute('data-source-id');
+            var isMainRow = !!mainSourceId && sourceId === mainSourceId;
+            var suppress = !!(active && mainSourceId && !isMainRow);
+            var eyeBtn = row.querySelector('.eye-send-btn');
+            var keepBtn = row.querySelector('.keep-open-btn');
+            var gearBtn = row.querySelector('.toolbox-send-btn');
+            if (eyeBtn) {
+                eyeBtn.disabled = suppress;
+                if (suppress) {
+                    eyeBtn.title = UNAVAILABLE;
+                    eyeBtn.setAttribute('aria-label', UNAVAILABLE);
+                }
+            }
+            if (keepBtn) {
+                keepBtn.disabled = suppress;
+                if (suppress) {
+                    keepBtn.title = UNAVAILABLE;
+                    keepBtn.setAttribute('aria-label', UNAVAILABLE);
+                } else {
+                    var isPinned = !!(window.ArchioskDocumentTabs && window.ArchioskDocumentTabs.isPinned(sourceId));
+                    var nameEl = row.querySelector('.tree-leaf');
+                    var name = nameEl ? nameEl.textContent : '';
+                    keepBtn.title = isPinned ? 'Release from Main' : 'Keep on Main';
+                    keepBtn.setAttribute('aria-label', isPinned
+                        ? ('Release ' + name + ' from the retained Main tabs')
+                        : ('Keep ' + name + ' open as a retained tab'));
+                }
+            }
+            if (gearBtn) gearBtn.classList.toggle('main-tool-active-row', !!(active && isMainRow));
+        });
+        // Restores every non-suppressed Eye button's normal Compare/
+        // Remove title (the loop above only ever overrides it for
+        // suppressed rows) - cheap, idempotent, and the one place that
+        // needs to run after every row's disabled flag is finalized.
+        updateEyeSendButtonStates();
     }
 
     function eyeHasContent() {
@@ -127,12 +192,28 @@
         var rightColumn = document.getElementById('workspace-right-column');
         if (!rightColumn) return;
         var inToolboxMode = !eyeDetached && !eyeHasContent();
+        // CLAUDE-ICON-INTELLIGENCE-01: the Main-tool state is only ever
+        // "active because Gear was clicked" - the instant Eye gains any
+        // content (an image, a document, or Compare) inToolboxMode goes
+        // false and this resets, so a later idle return to Toolbox mode
+        // (Eye cleared without Gear) never resurrects a stale highlight.
+        if (!inToolboxMode) toolboxActivatedByGear = false;
         rightColumn.classList.toggle('eye-inactive', inToolboxMode);
         // Part 4/7: a restrained indication of which mode the right side
         // is currently in, mirrored on every row's identical Tool icon.
+        //
+        // CLAUDE-ICON-INTELLIGENCE-01 (Section 4): "comparison owns the
+        // relevant workspace state" - Gear is genuinely disabled (native
+        // disabled, not merely dimmed) for as long as Compare is active,
+        // since its own click handler below would otherwise silently end
+        // the comparison the reviewer is in the middle of setting up.
         Array.prototype.forEach.call(document.querySelectorAll('.toolbox-send-btn'), function (btn) {
             btn.setAttribute('aria-pressed', String(inToolboxMode));
+            btn.disabled = compareActive;
+            btn.title = compareActive ? 'Unavailable while comparing documents' : 'Open document tools';
+            btn.setAttribute('aria-label', compareActive ? 'Unavailable while comparing documents' : 'Open document tools');
         });
+        updateMainToolRowState(inToolboxMode && toolboxActivatedByGear);
     }
     window.ArchioskEyeLayout = { refresh: refreshEyeLayout };
 
@@ -546,10 +627,16 @@
     // turning Compare off (the same two things that, per addendum A's
     // eyeHasContent(), are the only reasons the right side would show Eye
     // instead of a full-height Toolbox - no separate mode flag needed).
+    //
+    // CLAUDE-ICON-INTELLIGENCE-01 (Section 5): this click is the one real
+    // "Gear/Main-tool state activated" trigger - toolboxActivatedByGear
+    // is set BEFORE the three calls below, each of which already ends in
+    // refreshEyeLayout() and must see the flag as true there.
     Array.prototype.forEach.call(document.querySelectorAll('.toolbox-send-btn'), function (btn) {
         btn.addEventListener('click', function (e) {
             e.preventDefault();
             e.stopPropagation();
+            toolboxActivatedByGear = true;
             clearPreview();
             clearDocumentView();
             setCompareActive(false);

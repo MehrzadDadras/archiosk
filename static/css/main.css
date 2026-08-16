@@ -1008,6 +1008,7 @@ html.launcher-hidden .launcher-panel { display: none; }
       the checked state below supplies the mark indicator instead. */
 .pm-mark-checkbox {
     flex-shrink: 0;
+    position: relative;
     width: 12px;
     height: 12px;
     margin: 0;
@@ -1018,9 +1019,26 @@ html.launcher-hidden .launcher-panel { display: none; }
     border: 1px solid var(--text-metadata);
     border-radius: 2px;
 }
+/* CLAUDE-ICON-INTELLIGENCE-01: "X/check/badge = recorded/persistent
+   state" (Section 1's own vocabulary) - stays transparent, never a
+   solid fill (explicitly not "a solid white block"); the X itself is
+   the recorded-state signal, drawn with a pseudo-element since
+   appearance:none already opted this control out of native checkbox
+   rendering. */
 .pm-mark-checkbox:checked {
-    background: var(--machine-blue);
+    background: transparent;
     border-color: var(--machine-blue);
+}
+.pm-mark-checkbox:checked::after {
+    content: "\2715";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 9px;
+    line-height: 1;
+    color: var(--machine-blue);
+    font-weight: 700;
 }
 .pm-mark-checkbox:hover {
     border-color: var(--machine-blue);
@@ -1143,6 +1161,40 @@ html.launcher-hidden .launcher-panel { display: none; }
 .toolbox-send-btn[aria-pressed="true"] {
     color: var(--machine-blue);
     font-weight: 700;
+}
+/* CLAUDE-ICON-INTELLIGENCE-01: "Greyed-out must always mean actually
+   unavailable" - reuses the SAME disabled grammar already established
+   for .doc-control-btn/.conv-selection-btn elsewhere in this file
+   (color: var(--text-disabled); cursor: default), rather than
+   inventing a second disabled treatment. Placed after the three
+   [aria-pressed="true"] rules above so it wins on equal specificity -
+   a control that is both "pressed" and disabled must still read as
+   unavailable, not active. */
+.keep-open-btn:disabled,
+.eye-send-btn:disabled,
+.toolbox-send-btn:disabled {
+    color: var(--text-disabled);
+    cursor: default;
+}
+.keep-open-btn:disabled:hover,
+.eye-send-btn:disabled:hover,
+.toolbox-send-btn:disabled:hover {
+    background: none;
+    color: var(--text-disabled);
+}
+/* Gear/Main-tool state (Section 5): the one row whose document is both
+   projected on Main AND owns the active Main-tool state gets a real,
+   distinguishing highlight - aria-pressed alone can't do this (it's
+   already true on EVERY row's identical Gear whenever the right side
+   is in Toolbox mode, the ordinary resting state - see refreshEyeLayout
+   in eye_pane.js). --surface-selected is the SAME contrast-verified
+   "this is the selected/current one" token already used for
+   .launcher-link.active/.chip.active/.doc-annotation-tool[aria-pressed=
+   "true"] elsewhere in this file - reused here rather than inventing a
+   new highlight treatment. */
+.toolbox-send-btn.main-tool-active-row {
+    background: var(--surface-selected);
+    color: var(--machine-blue);
 }
 
 /* CLAUDE-P40-VW7: Tasks/Tags branches - reuse the tree idiom above as-

@@ -130,8 +130,23 @@ class KeepOpenStructureTests(unittest.TestCase):
 
     def test_keep_button_click_calls_existing_pin_tab(self):
         idx = self.js.index("Array.prototype.forEach.call(keepOpenButtons, function (btn) {\n        btn.addEventListener")
-        body = self.js[idx:idx + 300]
+        body = self.js[idx:idx + 400]
         self.assertIn("pinTab(btn.getAttribute('data-source-id'));", body)
+
+    def test_keep_button_click_toggles_off_via_unpin_tab_when_already_pinned(self):
+        # CLAUDE-ICON-INTELLIGENCE-01 (Section 3): "Release from Main" -
+        # a second real capability alongside the pre-existing pinTab()
+        # call above, not a replacement of it.
+        idx = self.js.index("Array.prototype.forEach.call(keepOpenButtons, function (btn) {\n        btn.addEventListener")
+        body = self.js[idx:idx + 400]
+        self.assertIn("if (findPinned(sourceId)) { unpinTab(sourceId); return; }", body)
+
+    def test_unpin_tab_mirrors_pin_tab_removal_shape(self):
+        body = self.js[self.js.index("function unpinTab("):]
+        body = body[:body.index("\n    }\n")]
+        self.assertIn("pinned.splice(idx, 1);", body)
+        self.assertIn("savePinned(pinned);", body)
+        self.assertIn("activateFallback(sourceId);", body)
 
     def test_keep_button_state_synced_from_render(self):
         body = self.js[self.js.index("function render()"):]
