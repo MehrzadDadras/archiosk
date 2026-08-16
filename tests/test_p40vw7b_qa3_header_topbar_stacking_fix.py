@@ -368,5 +368,139 @@ class ArchiosMenuDropdownRealBrowserVisibilityTests(unittest.TestCase):
                 browser.close()
 
 
+@unittest.skipUnless(_BROWSER_AVAILABLE, _SKIP_REASON)
+class ArchiosMenuIdentityActivityRealBrowserTests(unittest.TestCase):
+    """CLAUDE-ARCHIOSK-IDENTITY-ACTIVITY-INDICATOR-01: real-browser proof
+    that the top-left activity indicator is driven by the ACTUAL
+    registered Composer submit handler (static/js/case_workspace.js),
+    not a re-implemented stand-in - a genuine `dispatchEvent(new
+    Event('submit', ...))` on the real form, read synchronously in the
+    same evaluate() call before the browser's own default navigation
+    (there is no live server here for that navigation to complete
+    against)."""
+
+    @classmethod
+    def setUpClass(cls):
+        import app as app_module
+        from models import User, db
+        cls.tmp_dir = Path(tempfile.mkdtemp(prefix="beehive_test_identity_activity_"))
+        cls.flask_app = app_module.create_app("testing")
+        cls.flask_app.config["REGISTRY_STORE_PATH"] = str(cls.tmp_dir)
+        with cls.flask_app.app_context():
+            db.session.add(User(
+                username="identact_owner", password_hash=generate_password_hash("x"), role="admin",
+            ))
+            db.session.commit()
+        with patch.object(BHiveParser, "parse", _fake_parse):
+            with cls.flask_app.app_context():
+                fs = FileStorage(stream=io.BytesIO(b"%PDF-1.4 fake content"), filename="spec.pdf")
+                doc = ingest_upload(
+                    fs, cls.flask_app, operating_environment=CLIENT_OWNER,
+                    owner="identact_owner", project_name="Identity Activity Indicator Project",
+                )
+        cls.project_id = doc.project_id
+        cls.tokens_css = _TOKENS_CSS_PATH.read_text(encoding="utf-8")
+        cls.main_css = _MAIN_CSS_PATH.read_text(encoding="utf-8")
+        cls.case_workspace_js = (_REPO_ROOT / "static" / "js" / "case_workspace.js").read_text(encoding="utf-8")
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmp_dir, ignore_errors=True)
+
+    def _client(self):
+        client = self.flask_app.test_client()
+        with client.session_transaction() as sess:
+            sess["user_id"] = 1
+            sess["username"] = "identact_owner"
+            sess["role"] = "admin"
+        return client
+
+    def _standalone_workspace_page(self) -> str:
+        client = self._client()
+        body_html = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
+        combined_style = f"<style>{self.tokens_css}\n{self.main_css}</style>"
+        html, n = re.subn(
+            r'<link[^>]*href="[^"]*tokens\.css[^"]*"[^>]*>\s*'
+            r'<link[^>]*href="[^"]*main\.css[^"]*"[^>]*>',
+            lambda _match: combined_style,
+            body_html,
+            count=1,
+        )
+        assert n == 1, "expected exactly one tokens.css+main.css <link> pair to inline"
+        # Inline case_workspace.js's own <script src> for real (the test
+        # needs the REAL registered submit handler, not a re-simulated
+        # one) - first, before the generic strip below, since the src
+        # URL carries a ?v=<STATIC_VERSION> suffix after ".js" that a
+        # single combined regex's own lookbehind can't see past.
+        html, n_js = re.subn(
+            r'<script[^>]+src="[^"]*case_workspace\.js[^"]*"[^>]*></script>',
+            lambda _match: f"<script>{self.case_workspace_js}</script>",
+            html,
+        )
+        assert n_js == 1, "expected exactly one case_workspace.js <script src> tag to inline"
+        # Strip every OTHER external <script src> (no live server to fetch
+        # them from, and they're not needed for this test's own evidence).
+        html = re.sub(r'<script[^>]+src="[^"]*"[^>]*></script>', "", html)
+        return html
+
+    def test_mark_and_activity_indicator_are_visually_distinct_at_idle(self):
+        html = self._standalone_workspace_page()
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            try:
+                page = browser.new_page(viewport={"width": 1400, "height": 900})
+                page.set_content(html, wait_until="load")
+                mark = page.query_selector(".workspace-app-mark")
+                self.assertIsNotNone(mark)
+                self.assertTrue(mark.is_visible())
+                activity = page.query_selector("#workspace-app-activity")
+                self.assertIsNotNone(activity)
+                self.assertFalse(activity.is_visible(), "idle state must be quiet - no dots rendered at rest")
+            finally:
+                browser.close()
+
+    def test_real_composer_submit_activates_the_indicator(self):
+        html = self._standalone_workspace_page()
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            try:
+                page = browser.new_page(viewport={"width": 1400, "height": 900})
+                # case_workspace.js reads window.sessionStorage during its
+                # own DOMContentLoaded setup - set_content() leaves the
+                # page on an opaque/no-origin document where every storage
+                # API throws "Access is denied", aborting that handler
+                # before it ever reaches the submit-listener registration
+                # this test needs. Route a real http origin instead so
+                # storage APIs work exactly like a genuine page load, and
+                # navigate there for real (not set_content()) so
+                # DOMContentLoaded fires naturally, in order, for this
+                # inline script exactly like the deployed one.
+                page.route("**/hermetic-test-page", lambda route: route.fulfill(body=html, content_type="text/html"))
+                page.goto("http://hermetic-test-page/hermetic-test-page", wait_until="load")
+                result = page.evaluate(
+                    """
+                    () => {
+                        const input = document.getElementById('dock-composer-input');
+                        const form = input.closest('form');
+                        input.value = 'A real test message';
+                        form.dispatchEvent(new Event('submit', {bubbles: true, cancelable: true}));
+                        const activity = document.getElementById('workspace-app-activity');
+                        return {
+                            hidden: activity.hidden,
+                            working: activity.classList.contains('working'),
+                            title: activity.title,
+                            ariaLabel: activity.getAttribute('aria-label'),
+                        };
+                    }
+                    """
+                )
+                self.assertFalse(result["hidden"], "the real registered submit handler must reveal the indicator")
+                self.assertTrue(result["working"])
+                self.assertEqual(result["title"], "GO working")
+                self.assertEqual(result["ariaLabel"], "GO working")
+            finally:
+                browser.close()
+
+
 if __name__ == "__main__":
     unittest.main()

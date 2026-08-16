@@ -2892,6 +2892,76 @@ main:has(.document-viewer-canvas-container) {
    than inventing a second one - this rule intentionally does not touch
    those three's own tested selector group above; it duplicates the same
    properties for the menu bar's own panels instead. */
+/* CLAUDE-ARCHIOSK-IDENTITY-ACTIVITY-INDICATOR-01: the stationary identity
+   mark (Section 1) - small (16px), restrained --text-metadata (the same
+   "clearly readable, not decorative" tier as timestamps/ids elsewhere),
+   vertically centered via the shared align-items:baseline on
+   .workspace-topbar-identity actually needing center alignment for this
+   one non-text glyph specifically - align-self overrides just this
+   child. Never itself a menu item: no href, no cursor:pointer, no
+   hover/focus treatment of any kind. */
+.workspace-app-mark {
+    display: inline-flex;
+    align-items: center;
+    align-self: center;
+    color: var(--text-metadata);
+    flex-shrink: 0;
+}
+/* Section 2/3/4: the three-dot working indicator. Hidden by default
+   (Section 3/7 - idle is quiet, nothing rendered at rest, not merely
+   dim) - static/js/case_workspace.js's own Composer submit handler
+   removes [hidden] and adds .working the instant a real request is in
+   flight; the next full page load starts hidden again on its own,
+   matching #dock-composer-execution-status's own established self-
+   clearing discipline one element over. --machine-blue (tokens.css's
+   own "machine/system/reference" semantic) is the only color used -
+   this is motion, not a state change, so no second color is ever
+   introduced merely to animate. */
+.workspace-app-activity {
+    display: inline-flex;
+    flex-direction: column;
+    justify-content: center;
+    align-self: center;
+    gap: 2px;
+    width: 8px;
+    height: 16px;
+    margin-right: 0.15rem;
+}
+.workspace-app-activity[hidden] {
+    display: none;
+}
+.workspace-app-activity-dot {
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: var(--machine-blue);
+    opacity: 0.25;
+}
+.workspace-app-activity.working .workspace-app-activity-dot {
+    animation: workspace-app-activity-fall 1.35s ease-in-out infinite;
+}
+.workspace-app-activity.working .workspace-app-activity-dot:nth-child(2) {
+    animation-delay: 0.3s;
+}
+.workspace-app-activity.working .workspace-app-activity-dot:nth-child(3) {
+    animation-delay: 0.6s;
+}
+/* Section 3: "avoid aggressive flashing, bouncing, novelty animation,
+   excessive speed... subtle enough for continuous use in a professional
+   instrument." A dim baseline (0.25 opacity, above) with each dot
+   briefly reaching full opacity in top->middle->bottom sequence, then a
+   real pause (55%-100%) before repeating - a restrained pulse, not a
+   spinner. */
+@keyframes workspace-app-activity-fall {
+    0%, 55%, 100% { opacity: 0.25; }
+    15%, 30% { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .workspace-app-activity.working .workspace-app-activity-dot {
+        animation: none;
+        opacity: 0.7;
+    }
+}
 .workspace-menubar {
     display: flex;
     align-items: center;

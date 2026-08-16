@@ -20,8 +20,65 @@
    extraction is a pure move, not a rewrite. Both callers must also
    load static/js/app_menu.js (the menu's own Escape/outside-click/
    command-reuse behavior) and set static_version-qualified script src
-   the same way base.html already does. #}
+   the same way base.html already does.
+
+   CLAUDE-ARCHIOSK-IDENTITY-ACTIVITY-INDICATOR-01: this file's own
+   {% import %} is self-contained (never relies on the including
+   template having already imported _macros.html itself) - base.html
+   does, but gateway_shell.html does not, and {% include %} only shares
+   variables already bound in the CALLING template's context, not a
+   second template's own imports. #}
+            {% import "_macros.html" as macros %}
             <div class="workspace-topbar-identity">
+                {# CLAUDE-ARCHIOSK-IDENTITY-ACTIVITY-INDICATOR-01, Section 1:
+                   a small, persistent, stationary identity mark at the
+                   absolute top-left corner, immediately before the
+                   Archiosk menu trigger - NOT itself a menu item (no
+                   href, no <details>/<summary>, not inside menu.archiosk's
+                   own <details>), not the working/activity indicator
+                   (that is the SEPARATE element immediately after it,
+                   below). Reuses macros.archiosk_mark() verbatim - the
+                   one and only mark that has ever existed in this
+                   repository (see that macro's own header comment) -
+                   never a new brand asset. Restrained: --text-metadata
+                   (the same "clearly readable, not decorative" tier
+                   metadata/labels already use elsewhere), NOT the bold
+                   --brand-gold the now-retired CLAUDE-P40-BRAND1 treatment
+                   used - Section 1's own "must not visually dominate the
+                   menu bar" requirement, and genuinely distinct from
+                   Archiosk's own plain-menu-item treatment (Product
+                   Owner, explicit, CLAUDE-APP-MENU-01: "not a separate
+                   logo") since this sits OUTSIDE that menu item
+                   entirely, never inside its summary/trigger. #}
+                <span class="workspace-app-mark" data-ui-ref="menu.archiosk.mark" aria-hidden="true">{{ macros.archiosk_mark(size=16) }}</span>
+                {# Section 2/3/4: the canonical GO/system working indicator -
+                   three vertically-arranged dots, downward-progressing
+                   opacity pulse (top -> middle -> bottom, repeating) while
+                   genuine background work is active. Hidden by default
+                   (Section 3/7: "idle/quiet = no active work" - nothing
+                   rendered, not merely dim, so the identity corner stays
+                   genuinely quiet at rest). Driven by the ALREADY-EXISTING
+                   truthful signal this app has for "GO is working" -
+                   static/js/case_workspace.js's own classic, un-
+                   intercepted Composer form-submit handler, the same one
+                   that already sets #dock-composer-execution-status's
+                   text - never a second, parallel activity mechanism, and
+                   never a client-side timer (Section 4: "not arbitrary
+                   timers"). Because this is a full-page-reload
+                   architecture with no background-job infrastructure
+                   (confirmed repository-wide), the indicator is
+                   necessarily self-clearing the exact same way that
+                   status span already is: the next page load starts
+                   hidden again, with no persisted "still working" state
+                   to ever go stale. No click handler (Section 7: "do not
+                   invent a new activity dashboard merely for this
+                   prompt" - no truthful high-level work-status surface
+                   exists yet for a click to open). #}
+                <span class="workspace-app-activity" id="workspace-app-activity" data-ui-ref="menu.archiosk.activity" role="status" title="GO idle" aria-label="GO idle" hidden>
+                    <i class="workspace-app-activity-dot" aria-hidden="true"></i>
+                    <i class="workspace-app-activity-dot" aria-hidden="true"></i>
+                    <i class="workspace-app-activity-dot" aria-hidden="true"></i>
+                </span>
                 {# CLAUDE-P40-BRAND1: the mark sits directly before the
                    wordmark inside this SAME link (never a second,
                    adjacent element) so there is exactly one tab stop and

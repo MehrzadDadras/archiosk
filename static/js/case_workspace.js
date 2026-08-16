@@ -993,6 +993,22 @@ document.addEventListener('DOMContentLoaded', () => {
             // endpoint, no async infrastructure added.
             const executionStatus = document.getElementById('dock-composer-execution-status');
             if (executionStatus) executionStatus.textContent = 'Working on your request…';
+            // CLAUDE-ARCHIOSK-IDENTITY-ACTIVITY-INDICATOR-01: the SAME real
+            // signal that already sets executionStatus's text above also
+            // drives the top-left three-dot working indicator - one
+            // handler, one truthful moment, never a second "GO is working"
+            // mechanism. Self-clearing for the identical reason
+            // executionStatus is: this is a classic, un-intercepted submit,
+            // so the current DOM (including this [hidden] removal and
+            // .working class) survives only for the real duration of the
+            // server round trip, then the whole page is replaced.
+            const appActivity = document.getElementById('workspace-app-activity');
+            if (appActivity) {
+                appActivity.hidden = false;
+                appActivity.classList.add('working');
+                appActivity.title = 'GO working';
+                appActivity.setAttribute('aria-label', 'GO working');
+            }
             // CLAUDE-CA1D-COMPOSER-ENTER-FIX-01: was `e.target.querySelector
             // ('button[type="submit"]')`, which returns the FIRST submit
             // button in DOM order - since CLAUDE-CA1D-COMPOSER-CONTEXT-

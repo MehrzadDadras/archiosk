@@ -199,7 +199,18 @@ class HeaderMarkupTests(unittest.TestCase):
     exists, unchanged in behavior (same href, same aria-label) - just
     relocated inside the Archiosk menu's own panel as its first item
     (data-ui-ref="menu.archiosk.home"), since "Archiosk" itself is now a
-    menu trigger, not a navigable link."""
+    menu trigger, not a navigable link.
+
+    CLAUDE-ARCHIOSK-IDENTITY-ACTIVITY-INDICATOR-01 (Product Owner,
+    explicit) reintroduced archiosk_mark() into this same authenticated
+    topbar afterward - but as .workspace-app-mark, a small, separate,
+    stationary identity element sitting BEFORE the menu bar, decorative
+    and non-interactive. This does not contradict CLAUDE-APP-MENU-01's
+    own invariant above: the Archiosk MENU ITEM still carries no mark of
+    its own (still plain .workspace-topbar-btn text, still no href on
+    the mark, still never merged into the menu trigger's own summary) -
+    only the narrower "the macro is never called anywhere in this
+    topbar" premise changed, deliberately."""
 
     def setUp(self):
         self.source = _BASE_HTML_PATH.read_text(encoding="utf-8")
@@ -223,18 +234,27 @@ class HeaderMarkupTests(unittest.TestCase):
         self.assertNotIn("archiosk_mark(", summary_tag)
         self.assertNotIn("workspace-topbar-brand-text", summary_tag)
 
-    def test_no_mark_or_brand_treatment_remains_in_the_authenticated_topbar(self):
-        # The macro is still legitimately called elsewhere (gateway_shell.html,
-        # untouched) - this only asserts base.html's own authenticated
-        # .workspace-topbar (including its shared _app_menu.html include)
-        # no longer calls it.
-        topbar_start = self.source.index('class="workspace-topbar"')
-        topbar_end = self.source.index("workspace-topbar-document-controls", topbar_start)
-        topbar_region = self.source[topbar_start:topbar_end]
-        self.assertNotIn("archiosk_mark(", topbar_region)
-        self.assertNotIn('class="workspace-topbar-brand"', topbar_region)
-        self.assertNotIn("archiosk_mark(", self.app_menu_source)
+    def test_mark_reintroduced_outside_the_menu_item_never_the_old_brand_link(self):
+        # CLAUDE-ARCHIOSK-IDENTITY-ACTIVITY-INDICATOR-01 (Product Owner,
+        # explicit) reintroduced archiosk_mark() in the authenticated
+        # topbar - but as a small, separate, stationary identity element
+        # (.workspace-app-mark, decorative, no href) sitting BEFORE the
+        # menu bar, never inside menu.archiosk's own <details>/<summary>
+        # and never the old .workspace-topbar-brand single-link/wordmark
+        # treatment this file's own HeaderMarkupTests originally retired.
+        # That retirement's real invariant - "Archiosk" the MENU ITEM
+        # carries no mark/enlarged-wordmark of its own - still holds;
+        # only the narrower "archiosk_mark() is never called here at all"
+        # assertion needed updating for this deliberate, authorized
+        # change.
+        self.assertIn("archiosk_mark(", self.app_menu_source)
         self.assertNotIn('class="workspace-topbar-brand"', self.app_menu_source)
+        mark_idx = self.app_menu_source.index('class="workspace-app-mark"')
+        archiosk_menu_idx = self.app_menu_source.index('data-ui-ref="menu.archiosk"')
+        self.assertLess(mark_idx, archiosk_menu_idx, "the mark must sit BEFORE the Archiosk menu item, never inside it")
+        summary_start = self.app_menu_source.index("<summary", archiosk_menu_idx)
+        summary_end = self.app_menu_source.index("</summary>", summary_start)
+        self.assertNotIn("archiosk_mark(", self.app_menu_source[summary_start:summary_end])
 
     def test_home_navigation_relocated_not_removed(self):
         idx = self.app_menu_source.index('data-ui-ref="menu.archiosk.home"')
@@ -261,10 +281,19 @@ class HeaderRenderingTests(unittest.TestCase):
             sess["username"] = "brand1_owner"
             sess["role"] = "admin"
 
-    def test_no_archiosk_mark_renders_on_authenticated_pages(self):
+    def test_archiosk_mark_renders_as_the_separate_stationary_identity_only(self):
+        # CLAUDE-ARCHIOSK-IDENTITY-ACTIVITY-INDICATOR-01: the mark is
+        # back, but only inside .workspace-app-mark (decorative, no
+        # href, sitting before the menu bar) - never inside the Archiosk
+        # menu item's own clickable summary, and never the old bold/gold
+        # single-link .workspace-topbar-brand treatment.
         for url in ("/", "/projects", "/upload"):
             body = self.client.get(url).get_data(as_text=True)
-            self.assertNotIn('class="archiosk-mark"', body, url)
+            self.assertIn('class="archiosk-mark"', body, url)
+            self.assertNotIn('class="workspace-topbar-brand"', body, url)
+            wrapper_idx = body.index('class="workspace-app-mark"')
+            mark_idx = body.index('class="archiosk-mark"')
+            self.assertLess(abs(mark_idx - wrapper_idx), 200, "the mark must render inside its own restrained wrapper, not loose in the page")
 
     def test_archiosk_menu_renders_with_plain_text_label(self):
         body = self.client.get("/").get_data(as_text=True)

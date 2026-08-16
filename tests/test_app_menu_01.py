@@ -224,6 +224,97 @@ class MenubarCssTests(unittest.TestCase):
         self.assertIn(".workspace-layout-options,\n.workspace-appearance-options,\n.workspace-user-options {", self.css)
 
 
+class IdentityMarkAndActivityIndicatorTests(unittest.TestCase):
+    """CLAUDE-ARCHIOSK-IDENTITY-ACTIVITY-INDICATOR-01 - stationary identity
+    mark + three-dot working indicator, both structurally distinct from
+    the Archiosk menu item itself (Section 1: neither may substitute for
+    the other)."""
+
+    def setUp(self):
+        self.html = _APP_MENU_HTML_PATH.read_text(encoding="utf-8")
+        self.css = _MAIN_CSS_PATH.read_text(encoding="utf-8")
+        self.js = _APP_MENU_JS_PATH.read_text(encoding="utf-8")
+
+    def test_mark_reuses_the_one_existing_archiosk_mark_macro(self):
+        # Not a new brand asset - macros.archiosk_mark() verbatim.
+        idx = self.html.index('class="workspace-app-mark"')
+        tag = self.html[idx - 40:idx + 200]
+        self.assertIn("macros.archiosk_mark(", tag)
+
+    def test_mark_sits_before_the_nav_not_inside_any_menu_item(self):
+        mark_idx = self.html.index('class="workspace-app-mark"')
+        nav_idx = self.html.index('class="workspace-menubar"')
+        archiosk_menu_idx = self.html.index('data-ui-ref="menu.archiosk"')
+        self.assertLess(mark_idx, nav_idx)
+        self.assertLess(mark_idx, archiosk_menu_idx)
+        # Not inside any <details>/<summary> - no menu semantics of its own.
+        span = self.html[mark_idx - 10:mark_idx + 5]
+        self.assertNotIn("<details", span)
+        self.assertNotIn("<summary", span)
+
+    def test_mark_is_decorative_not_a_second_tab_stop(self):
+        idx = self.html.index('class="workspace-app-mark"')
+        tag = self.html[idx - 10:idx + 100]
+        self.assertIn('aria-hidden="true"', tag)
+        self.assertNotIn("<a ", tag)
+        self.assertNotIn("href=", tag)
+
+    def test_activity_indicator_is_a_separate_element_from_the_mark(self):
+        mark_idx = self.html.index('class="workspace-app-mark"')
+        activity_idx = self.html.index('id="workspace-app-activity"')
+        self.assertLess(mark_idx, activity_idx)
+        self.assertLess(activity_idx, self.html.index('class="workspace-menubar"'))
+
+    def test_activity_indicator_hidden_by_default_with_three_dots(self):
+        idx = self.html.index('id="workspace-app-activity"')
+        tag = self.html[idx - 30:idx + 200]
+        self.assertIn("hidden", tag)
+        block_end = self.html.index("</span>", idx)
+        block = self.html[idx:block_end]
+        self.assertEqual(block.count('class="workspace-app-activity-dot"'), 3)
+
+    def test_activity_indicator_has_truthful_idle_tooltip_and_no_click_handler(self):
+        idx = self.html.index('id="workspace-app-activity"')
+        tag = self.html[idx - 30:idx + 250]
+        self.assertIn('title="GO idle"', tag)
+        self.assertIn('aria-label="GO idle"', tag)
+        self.assertNotIn("<button", tag)
+        self.assertNotIn("<a ", tag)
+        self.assertNotIn("onclick", tag)
+
+    def test_css_uses_machine_blue_not_a_new_semantic_color(self):
+        idx = self.css.index(".workspace-app-activity-dot {")
+        body = self.css[idx:idx + 300]
+        self.assertIn("var(--machine-blue)", body)
+
+    def test_animation_respects_reduced_motion(self):
+        idx = self.css.index("@keyframes workspace-app-activity-fall")
+        after = self.css[idx:idx + 1200]
+        self.assertIn("prefers-reduced-motion", after)
+        self.assertIn("animation: none", after)
+
+    def test_animation_reads_top_to_middle_to_bottom(self):
+        idx = self.css.index(".workspace-app-activity.working .workspace-app-activity-dot:nth-child(2)")
+        body = self.css[idx:idx + 400]
+        self.assertIn("animation-delay: 0.3s", body)
+        idx3 = self.css.index(".workspace-app-activity.working .workspace-app-activity-dot:nth-child(3)")
+        body3 = self.css[idx3:idx3 + 400]
+        self.assertIn("animation-delay: 0.6s", body3)
+
+    def test_js_activation_reuses_the_existing_composer_execution_signal(self):
+        # The SAME handler that already sets dock-composer-execution-status
+        # also drives the indicator - never a second "GO is working"
+        # mechanism, never a client-side timer.
+        js = (_REPO_ROOT / "static" / "js" / "case_workspace.js").read_text(encoding="utf-8")
+        idx = js.index("const executionStatus = document.getElementById('dock-composer-execution-status')")
+        block = js[idx:idx + 1200]
+        self.assertIn("getElementById('workspace-app-activity')", block)
+        self.assertIn("appActivity.hidden = false", block)
+        self.assertIn("classList.add('working')", block)
+        self.assertNotIn("setInterval", block)
+        self.assertNotIn("setTimeout", block)
+
+
 # ---------------------------------------------------------------------------
 # Live rendering: authorization-aware presence/absence via the real app.
 # ---------------------------------------------------------------------------
@@ -285,6 +376,14 @@ class MenuRendersEverywhereTests(_BaseTestCase):
         body = client.get("/projects").get_data(as_text=True)
         self.assertIn('data-ui-ref="menu.appearance"', body)
         self.assertNotIn('data-ui-ref="menu.display-layout"', body)
+
+    def test_identity_mark_and_activity_indicator_render_on_every_authenticated_page(self):
+        client = self._client_as("menu_owner", 1)
+        body = client.get("/projects").get_data(as_text=True)
+        self.assertIn('class="workspace-app-mark"', body)
+        self.assertIn('id="workspace-app-activity"', body)
+        idx = body.index('id="workspace-app-activity"')
+        self.assertIn("hidden", body[idx - 20:idx + 200])
 
     def test_menu_bar_renders_inside_an_open_project_too(self):
         doc = self._ingest(owner="menu_owner", project_name="North Bayview Menu Test")
