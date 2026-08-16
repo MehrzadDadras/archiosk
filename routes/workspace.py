@@ -100,6 +100,9 @@ from services.case_workspace import (
     assess_document_context_quality,
 )
 from services.environment_capabilities import (
+    CLIENT_OWNER,
+    LIFECYCLE_PRE_PUBLICATION,
+    LIFECYCLE_STAGE_LABELS,
     OPERATING_ENVIRONMENT_LABELS,
     allowed_participant_roles,
     capability_availability,
@@ -107,6 +110,7 @@ from services.environment_capabilities import (
     decision_stages_for_environment,
     is_valid_operating_environment,
 )
+from services.procurement_publication import PublicationExportError, build_published_package_zip
 from services.document_context_intelligence import draft_document_context_claims
 from services.conversation_interpreter import (
     _looks_like_contextual_reference,
@@ -263,6 +267,26 @@ def _reviewer() -> str:
 
 def _log() -> GovernanceLog:
     return GovernanceLog(current_app.config["REGISTRY_STORE_PATH"])
+
+
+def _side_indicator_tooltip(operating_environment: Optional[str]) -> str:
+    """
+    CLAUDE-RFP-BOUNDARY-01, Section 11's own literal wording: a restrained,
+    operational-boundary explanation for the persistent side badge, never
+    a mode-switch prompt. Legacy/unclassified projects (operating_
+    environment is None) get no badge at all -- see the template's own
+    {% if operating_environment %} guard -- so this only needs the two
+    real values.
+    """
+    if operating_environment == CLIENT_OWNER:
+        return (
+            "Owner workspace — pre-publication material is private and "
+            "unavailable to Proponent workspaces."
+        )
+    return (
+        "Proponent workspace — GO can access only material authorized "
+        "for this Proponent project."
+    )
 
 
 def _load_workspace_or_404(project_id: str, allow_removed: bool = False):
@@ -1782,6 +1806,19 @@ def show_workspace(project_id):
         operating_environment=workspace.operating_environment,
         operating_environment_label=OPERATING_ENVIRONMENT_LABELS.get(workspace.operating_environment),
         operating_environments=OPERATING_ENVIRONMENT_LABELS,
+        # CLAUDE-RFP-BOUNDARY-01: lifecycle_stage's own template-layer
+        # visibility, same pattern as operating_environment immediately
+        # above -- the publish route itself (publish_procurement_package_
+        # route, admin-gated + CaseWorkspaceStore.publish_procurement_
+        # package's own CLIENT_OWNER/pre_publication checks) is the real
+        # enforcement, never this flag alone.
+        lifecycle_stage=workspace.lifecycle_stage,
+        lifecycle_stage_label=LIFECYCLE_STAGE_LABELS.get(workspace.lifecycle_stage),
+        can_publish_procurement_package=(
+            workspace.operating_environment == CLIENT_OWNER
+            and workspace.lifecycle_stage == LIFECYCLE_PRE_PUBLICATION
+        ),
+        side_indicator_tooltip=_side_indicator_tooltip(workspace.operating_environment),
         # CLAUDE-P30: template-layer visibility only -- the routes
         # themselves (_require_capability) are the real enforcement,
         # never these two flags alone. See environment_capabilities.py's
@@ -5389,4 +5426,52 @@ def export_rfi(project_id):
         mimetype="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         as_attachment=True,
         download_name=f"RFI-{project_id}.docx",
+    )
+
+
+@workspace_bp.route("/projects/<project_id>/workspace/publish-procurement-package", methods=["POST"])
+@admin_required
+def publish_procurement_package_route(project_id):
+    """
+    CLAUDE-RFP-BOUNDARY-01: the Owner-side "Publish RFP" action --
+    governance/specified-unbuilt/cross-boundary-architecture.md's own
+    "authorized publication -> immutable Published Procurement
+    Instrument" design, given fresh explicit authorization by this
+    stage's own governing prompt. Admin-gated (this is a deliberate,
+    one-time, project-wide boundary crossing, the same authority level
+    register_folder_paths_route above already requires for a comparable
+    "explicit, deliberate declaration" action) and further gated inside
+    CaseWorkspaceStore.publish_procurement_package itself (CLIENT_OWNER
+    + pre_publication only) -- this route never re-derives that check
+    itself, matching this file's own "the store method is the real
+    enforcement" convention (see can_originate_rfi's own comment above).
+
+    `source_ids`/`founding_source_id` are explicit form fields -- never
+    "publish everything current selected_source implies." The response
+    is the zip itself (services.procurement_publication.
+    build_published_package_zip), streamed directly, not written to any
+    new persistent storage of its own -- the same "export artifact,
+    never a second document store" precedent export_rfi above already
+    establishes for RFI drafts.
+    """
+    _, store, workspace = _load_workspace_or_404(project_id)
+
+    source_ids = [sid for sid in request.form.getlist("source_ids") if sid]
+    founding_source_id = request.form.get("founding_source_id") or ""
+
+    try:
+        selected = store.publish_procurement_package(
+            workspace, source_ids=source_ids, founding_source_id=founding_source_id,
+            actor=_reviewer(), governance_log=_log(),
+        )
+        package_bytes = build_published_package_zip(selected)
+    except (CaseWorkspaceError, PublicationExportError) as exc:
+        flash(str(exc), "error")
+        return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
+
+    return send_file(
+        io.BytesIO(package_bytes),
+        mimetype="application/zip",
+        as_attachment=True,
+        download_name=f"published-procurement-package-{project_id}.zip",
     )
