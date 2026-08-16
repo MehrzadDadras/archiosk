@@ -320,6 +320,16 @@ def ingest_upload(
     store.set_operating_environment(
         workspace, operating_environment, actor=actor or _DEFAULT_ACTOR, governance_log=governance_log,
     )
+    # CLAUDE-RFP-BOUNDARY-01: lifecycle_stage's own initial-establishment
+    # call, at the same project-creation call site operating_environment
+    # is locked immediately above -- see ProjectWorkspace.lifecycle_stage's
+    # own field comment for why this is a second, distinct method rather
+    # than folded into set_operating_environment itself. This one call
+    # site covers ingest_folder_upload too, since that function's own
+    # founding file always goes through this same ingest_upload.
+    store.set_initial_lifecycle_stage(
+        workspace, actor=actor or _DEFAULT_ACTOR, governance_log=governance_log,
+    )
     # CLAUDE-P32: locked onto the project at the moment of creation, the
     # same treatment operating_environment gets immediately above --
     # every new project has a real, deterministic owner from the moment

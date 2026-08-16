@@ -395,3 +395,81 @@ def decision_stages_for_environment(operating_environment: str) -> tuple[str, ..
     if stages is None:
         raise ValueError(f"{operating_environment!r} has no Go/No-Go decision-stage vocabulary.")
     return stages
+
+
+# ===========================================================================
+# CLAUDE-RFP-BOUNDARY-01 -- Procurement package lifecycle stage
+# ===========================================================================
+#
+# A SEPARATE axis from operating_environment (CLIENT_OWNER project vs.
+# DESIGN_BUILDER_PROPONENT project answers "whose side"; lifecycle_stage
+# answers "what stage is this specific project's own procurement package
+# in"). Conflating the two would make "OWNER + RESPONSE" or "PROPONENT +
+# PRE_PUBLICATION" representable, which is never a real state - see
+# governance/specified-unbuilt/cross-boundary-architecture.md's own
+# "Owner Private Project -> authorized publication -> ... -> independent,
+# physically separate Proponent Project" design, now given the fresh,
+# explicit authorization CLAUDE-GO-DNA-01/CLAUDE-RFP27-TERRITORY-01's own
+# precedent already established is required before drawing on a
+# specified-unbuilt document.
+#
+# Closed set, same "deliberate new value, never inferred" discipline as
+# OPERATING_ENVIRONMENTS above - a new stage is a deliberate product
+# decision, never free text that happens to get accepted.
+LIFECYCLE_PRE_PUBLICATION = "pre_publication"
+LIFECYCLE_PUBLISHED = "published"
+LIFECYCLE_RESPONSE = "response"
+LIFECYCLE_EVALUATION = "evaluation"
+
+# All four are named here because Part 3 of the governing prompt asks for
+# the vocabulary to exist ("lifecycle values equivalent to PRE_PUBLICATION
+# / PUBLISHED / RESPONSE / EVALUATION"). Only two transitions are actually
+# wired this stage: a CLIENT_OWNER project starts PRE_PUBLICATION and may
+# move to PUBLISHED exactly once (CaseWorkspaceStore.publish_procurement_
+# package); a DESIGN_BUILDER_PROPONENT project starts RESPONSE directly,
+# since one only ever comes into being after a publication exists to
+# receive. EVALUATION is registered, recognized, and deliberately not
+# reachable by any code path yet - a future Owner-side "reviewing
+# submitted proposals" stage, out of scope for this pass's own North
+# Bayview Stage A/B exercise. Same "named and not yet authorized" honesty
+# CAPABILITY_FUTURE_NOT_AUTHORIZED already establishes above, applied to a
+# stage value instead of a capability.
+LIFECYCLE_STAGES = (
+    LIFECYCLE_PRE_PUBLICATION,
+    LIFECYCLE_PUBLISHED,
+    LIFECYCLE_RESPONSE,
+    LIFECYCLE_EVALUATION,
+)
+
+LIFECYCLE_STAGE_LABELS = {
+    LIFECYCLE_PRE_PUBLICATION: "Pre-Publication",
+    LIFECYCLE_PUBLISHED: "Published",
+    LIFECYCLE_RESPONSE: "Response",
+    LIFECYCLE_EVALUATION: "Evaluation",
+}
+
+# Which lifecycle stage a brand-new project starts at, keyed by its own
+# operating_environment - the two are set at the same call site
+# (services/ingestion.py's ingest_upload/ingest_folder_upload) but remain
+# textually distinct fields/vocabularies, never merged into one.
+_INITIAL_LIFECYCLE_STAGE_BY_ENVIRONMENT = {
+    CLIENT_OWNER: LIFECYCLE_PRE_PUBLICATION,
+    DESIGN_BUILDER_PROPONENT: LIFECYCLE_RESPONSE,
+}
+
+
+def is_valid_lifecycle_stage(value: str | None) -> bool:
+    return value in LIFECYCLE_STAGES
+
+
+def initial_lifecycle_stage(operating_environment: str) -> str:
+    """
+    Raises ValueError for an unrecognized environment - mirrors
+    decision_stages_for_environment's own "no ungated fallback" choice:
+    a lifecycle stage is only meaningful once the environment it belongs
+    to is already known and valid.
+    """
+    stage = _INITIAL_LIFECYCLE_STAGE_BY_ENVIRONMENT.get(operating_environment)
+    if stage is None:
+        raise ValueError(f"{operating_environment!r} has no initial lifecycle stage.")
+    return stage

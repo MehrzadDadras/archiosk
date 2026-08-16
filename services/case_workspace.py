@@ -4316,6 +4316,21 @@ class ProjectWorkspace:
     operating_environment: Optional[str] = None
     operating_environment_set_by: Optional[str] = None
     operating_environment_set_at: Optional[str] = None
+    # CLAUDE-RFP-BOUNDARY-01: Procurement package lifecycle stage - a
+    # SEPARATE axis from operating_environment above (see services/
+    # environment_capabilities.py's own module comment on why "whose
+    # side" and "what stage" are never conflated into one field). None
+    # means the same "legacy or not-yet-fully-created" honest gap
+    # operating_environment already establishes. Set once, at creation,
+    # to environment_capabilities.initial_lifecycle_stage's answer for
+    # this project's own operating_environment; the one further
+    # transition this stage supports (CLIENT_OWNER project only,
+    # pre_publication -> published) goes through
+    # CaseWorkspaceStore.publish_procurement_package, never a generic
+    # setter - there is no update path for any other transition.
+    lifecycle_stage: Optional[str] = None
+    lifecycle_stage_set_by: Optional[str] = None
+    lifecycle_stage_set_at: Optional[str] = None
 
     # CLAUDE-MM7: Governed Investigation, Analytical Reasoning, and
     # Trustworthy Answers - purely additive, same backward-compatible
@@ -5887,6 +5902,169 @@ class CaseWorkspaceStore:
                 },
             )
         return workspace
+
+    def set_initial_lifecycle_stage(
+        self,
+        workspace: ProjectWorkspace,
+        actor: str,
+        governance_log: Optional[GovernanceLog] = None,
+    ) -> ProjectWorkspace:
+        """
+        CLAUDE-RFP-BOUNDARY-01: the lifecycle_stage counterpart to
+        set_operating_environment above - called at the same project-
+        creation call site (services/ingestion.py's ingest_upload/
+        ingest_folder_upload), immediately after operating_environment is
+        itself locked, since the initial stage is a pure function of it
+        (environment_capabilities.initial_lifecycle_stage). Kept as its
+        own method rather than folded into set_operating_environment
+        itself: the two fields answer genuinely different questions (see
+        ProjectWorkspace.lifecycle_stage's own field comment), and
+        set_operating_environment's own narrow, already-documented
+        contract ("the ONLY method anywhere that ever writes it") stays
+        true to its word.
+
+        Locked the same way: raises CaseWorkspaceError if lifecycle_stage
+        is already set (never re-set - there is no "correct" exception
+        path for this field the way operating_environment has one; there
+        is no known-wrong-from-the-start case for a value purely derived
+        from operating_environment, which is itself immutable after this
+        call). Requires operating_environment to already be locked.
+        """
+        if workspace.operating_environment is None:
+            raise CaseWorkspaceError(
+                f"Project {workspace.project_id!r} has no operating_environment yet -- "
+                "lifecycle_stage cannot be established before it.",
+            )
+        if workspace.lifecycle_stage is not None:
+            raise CaseWorkspaceError(
+                f"Project {workspace.project_id!r} already has a lifecycle_stage "
+                f"({workspace.lifecycle_stage!r}) -- it cannot be re-established.",
+            )
+
+        from services.environment_capabilities import initial_lifecycle_stage
+
+        stage = initial_lifecycle_stage(workspace.operating_environment)
+        workspace.lifecycle_stage = stage
+        workspace.lifecycle_stage_set_by = actor
+        workspace.lifecycle_stage_set_at = _now()
+        self.save(workspace)
+
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id, event_type="lifecycle_stage_established",
+                actor=actor, role="system",
+                payload={"lifecycle_stage": stage},
+            )
+        return workspace
+
+    def publish_procurement_package(
+        self,
+        workspace: ProjectWorkspace,
+        source_ids: list[str],
+        founding_source_id: str,
+        actor: str,
+        governance_log: Optional[GovernanceLog] = None,
+    ) -> list[dict]:
+        """
+        CLAUDE-RFP-BOUNDARY-01: the one governed act that moves a
+        CLIENT_OWNER project's lifecycle_stage from pre_publication to
+        published, and the one place that decides which Sources become
+        part of the Published Procurement Instrument (governance/
+        specified-unbuilt/cross-boundary-architecture.md's own
+        "authorized publication -> immutable Published Procurement
+        Instrument" design, given fresh explicit authorization by this
+        stage's own governing prompt -- see that document's own "NOT
+        AUTHORIZED -- specified only" status in governance/STATUS.md
+        before this). Returns the selected Source dicts, in source_ids
+        order -- NOT an exported artifact; building the actual zip is
+        services.procurement_publication.build_published_package_zip's
+        job, the same governed-state/export-artifact split services/
+        rfi_export.py already establishes for RFI drafts.
+
+        `source_ids` is an explicit, caller-supplied list -- never
+        "publish every Source in the project." An empty selection, an
+        unknown id, a removed Source, or a Source with no stored file all
+        raise honestly rather than silently including/excluding
+        something -- only material deliberately included may cross this
+        boundary. `founding_source_id` must be one of source_ids --
+        required because the ONLY existing mechanism the receiving
+        Proponent project uses to register this package (services.
+        ingestion.ingest_folder_upload) itself requires a founding_index
+        it "never infers... itself"; this is where that answer gets
+        decided, by the Owner, at publish time, not left implicit for
+        whoever does the Proponent-side registration later.
+
+        One-time, like set_operating_environment: raises if this project
+        is not CLIENT_OWNER, or its lifecycle_stage is not currently
+        pre_publication (covers both "already published" and "never had
+        a lifecycle_stage established" -- both honest reasons to refuse,
+        never silently coerced).
+
+        Deliberately touches nothing else: no Finding, ReviewerValidation,
+        Disposition, conversation/Composer history, DocumentContextClaim,
+        RequirementPhaseAssessment, or GovernanceLog entry beyond the one
+        this call itself appends is read or exported -- see this method's
+        own governance-log payload below, which records ids and Source
+        metadata only, never document content, so the log entry itself
+        can never become a second leak vector.
+        """
+        from services.environment_capabilities import CLIENT_OWNER, LIFECYCLE_PRE_PUBLICATION, LIFECYCLE_PUBLISHED
+
+        if workspace.operating_environment != CLIENT_OWNER:
+            raise CaseWorkspaceError(
+                f"Project {workspace.project_id!r} is not a Client/Owner project -- "
+                "only a Client/Owner project can publish a procurement package.",
+            )
+        if workspace.lifecycle_stage != LIFECYCLE_PRE_PUBLICATION:
+            raise CaseWorkspaceError(
+                f"Project {workspace.project_id!r} is not in pre_publication "
+                f"(currently {workspace.lifecycle_stage!r}) -- it cannot be published again.",
+            )
+        if not source_ids:
+            raise CaseWorkspaceError("At least one Source must be selected to publish.")
+        if founding_source_id not in source_ids:
+            raise CaseWorkspaceError("The founding document must be one of the selected Sources.")
+
+        sources_by_id = {s["id"]: s for s in workspace.sources}
+        selected: list[dict] = []
+        for source_id in source_ids:
+            source = sources_by_id.get(source_id)
+            if source is None:
+                raise CaseWorkspaceError(f"Source {source_id!r} does not belong to this project.")
+            if source.get("removed_at"):
+                raise CaseWorkspaceError(f"Source {source_id!r} has been removed and cannot be published.")
+            if not source.get("file_path"):
+                raise CaseWorkspaceError(f"Source {source_id!r} has no stored file to publish.")
+            selected.append(source)
+
+        workspace.lifecycle_stage = LIFECYCLE_PUBLISHED
+        workspace.lifecycle_stage_set_by = actor
+        workspace.lifecycle_stage_set_at = _now()
+        self.save(workspace)
+
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id, event_type="procurement_package_published",
+                actor=actor, role="system",
+                payload={
+                    "source_ids": list(source_ids),
+                    "founding_source_id": founding_source_id,
+                    "sources": [
+                        {
+                            "id": s["id"],
+                            "name": s["name"],
+                            "document_id": s.get("document_id"),
+                            "revision": s.get("revision"),
+                            "issue_date": s.get("issue_date"),
+                            "issuer": s.get("issuer"),
+                            "document_status": s.get("document_status"),
+                            "document_authority": s.get("document_authority"),
+                        }
+                        for s in selected
+                    ],
+                },
+            )
+        return selected
 
     def record_go_no_go_decision(
         self,
