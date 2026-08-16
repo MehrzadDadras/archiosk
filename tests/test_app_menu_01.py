@@ -457,6 +457,19 @@ class PublishMenuCommandTests(_BaseTestCase):
         body = client.get(f"/projects/{doc.project_id}/workspace").get_data(as_text=True)
         self.assertNotIn('data-ui-ref="menu.file.publish-rfp"', body)
 
+    def test_publish_absent_for_non_admin_actor_on_an_otherwise_eligible_project(self):
+        # CLAUDE-FILE-PUBLISH-RFP-01: a real non-admin (read_only) actor on
+        # a project that IS an eligible Owner pre-publication project (the
+        # only other gate this command checks) must not see an
+        # enabled-looking command that dead-ends on click - the Toolbox
+        # panel it scrolls to is itself is_admin-gated and won't exist in
+        # this actor's DOM at all. Reuses the same menu_reviewer/read_only
+        # actor this file's own _BaseTestCase.setUp already creates.
+        doc = self._ingest(owner="menu_owner", project_name="Owner Pre-Pub Non-Admin Menu Test", operating_environment=CLIENT_OWNER)
+        client = self._client_as("menu_reviewer", 2, role="read_only")
+        body = client.get(f"/projects/{doc.project_id}/workspace").get_data(as_text=True)
+        self.assertNotIn('data-ui-ref="menu.file.publish-rfp"', body)
+
 
 class DocumentAndExportMenuTests(_BaseTestCase):
     def test_document_menu_shows_placeholder_with_no_selection(self):

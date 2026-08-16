@@ -313,7 +313,18 @@
                             </details>
                             <hr class="workspace-menubar-separator" aria-hidden="true">
                             <button type="button" class="workspace-menubar-item" data-ui-ref="menu.file.close-document" data-action="close-active-tab">Close Document</button>
-                            {% if can_publish_procurement_package %}
+                            {# CLAUDE-FILE-PUBLISH-RFP-01: is_admin here matches the canonical
+                               Toolbox panel's own condition (case_workspace.html's "Publish
+                               Procurement Package" subdisclosure) and publish_procurement_
+                               package_route's own @admin_required exactly - one effective
+                               availability truth reused by both invocation surfaces, never a
+                               second menu-only authorization rule. Without it, a real
+                               non-admin (read_only) actor on an otherwise-eligible Owner
+                               project would see an enabled-looking command that silently did
+                               nothing on click, since the Toolbox panel it scrolls to doesn't
+                               render for them at all - a dead end, not a truthful disabled
+                               state. #}
+                            {% if is_admin and can_publish_procurement_package %}
                             <button type="button" class="workspace-menubar-item" data-ui-ref="menu.file.publish-rfp" data-action="open-publish-panel">Publish RFP&hellip;</button>
                             {% endif %}
                         </div>
