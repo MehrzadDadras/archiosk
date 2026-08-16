@@ -111,6 +111,23 @@
                     <span class="workspace-topbar-doc">{{ directory_view_label }}</span>
                     {% endif %}
                 </span>
+                {% if operating_environment %}
+                {# CLAUDE-RFP-BOUNDARY-01, Section 11: a restrained,
+                   persistent workspace-side indicator - "particularly
+                   useful in Admin mode... an operational boundary
+                   indicator, not decoration... not a casual mode-switch
+                   button" - so this is a plain <span>, no click handler,
+                   no href. State-aware per this session's own Icon
+                   Intelligence pass: the accessible label/tooltip
+                   (side_indicator_tooltip, routes/workspace.py) explains
+                   what the side actually means, never just the bare
+                   label text repeated. Legacy/unclassified projects
+                   (operating_environment is None) show nothing here -
+                   the same "None means not established, never guessed"
+                   honesty environment_capabilities.py's own module
+                   docstring already establishes for the field itself. #}
+                <span class="workspace-side-indicator workspace-side-indicator-{{ operating_environment }}" data-ui-ref="menu.context.side-indicator" title="{{ side_indicator_tooltip }}" aria-label="{{ side_indicator_tooltip }}">{{ operating_environment_label }}{% if lifecycle_stage_label %} · {{ lifecycle_stage_label }}{% endif %}</span>
+                {% endif %}
                 {% endif %}
             </div>
             {# CLAUDE-P40-VW7A-QA (Move Document Controls into the Top

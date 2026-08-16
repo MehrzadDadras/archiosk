@@ -3286,6 +3286,42 @@
             </form>
         {% endcall %}
         {% endif %}
+        {% if is_admin and can_publish_procurement_package %}
+        {# CLAUDE-RFP-BOUNDARY-01: the Owner-side "Publish RFP" action -
+           admin-only (matches publish_procurement_package_route's own
+           @admin_required), only rendered at all once
+           can_publish_procurement_package is true (CLIENT_OWNER project,
+           still pre_publication - see routes/workspace.py's show_workspace).
+           Deliberately an explicit per-Source selection, never "publish
+           everything" - governance/specified-unbuilt/cross-boundary-
+           architecture.md's own "only material deliberately included may
+           cross" design, and CaseWorkspaceStore.publish_procurement_
+           package enforces this server-side regardless of what this form
+           submits. The founding-document radio exists because the ONLY
+           existing mechanism the Proponent side uses to register the
+           resulting package (services.ingestion.ingest_folder_upload)
+           requires one - decided here, by the Owner, at publish time. #}
+        {% call macros.subdisclosure("Publish Procurement Package", ui_ref="toolbox.project-admin.publish") %}
+            <p class="pane-note">Select which registered documents become part of the published package, and which one is the founding document. Only what you select here ever leaves this project — no findings, QA/QC notes, conversation history, or draft revisions are ever included.</p>
+            <form method="post" action="{{ url_for('workspace.publish_procurement_package_route', project_id=project_id) }}" data-ui-ref="toolbox.project-admin.publish-form">
+                <ul class="publish-source-list">
+                {% for s in active_sources %}
+                    <li class="publish-source-item">
+                        <label class="publish-source-include">
+                            <input type="checkbox" name="source_ids" value="{{ s.id }}" data-ui-ref="toolbox.project-admin.publish-include">
+                            {{ s.name }}
+                        </label>
+                        <label class="publish-source-founding">
+                            <input type="radio" name="founding_source_id" value="{{ s.id }}" data-ui-ref="toolbox.project-admin.publish-founding">
+                            Founding document
+                        </label>
+                    </li>
+                {% endfor %}
+                </ul>
+                <button type="submit" class="btn btn-primary" data-ui-ref="toolbox.project-admin.publish-submit">Publish RFP</button>
+            </form>
+        {% endcall %}
+        {% endif %}
     </section>
     {% endif %}
 {% endblock %}

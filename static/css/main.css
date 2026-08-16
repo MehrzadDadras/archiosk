@@ -2675,6 +2675,52 @@ main:has(.document-viewer-canvas-container) {
     color: var(--attention-amber);
     margin-left: 0.4rem;
 }
+/* CLAUDE-RFP-BOUNDARY-01: the persistent workspace-side indicator
+   (Section 11) - --machine-blue (tokens.css: "machine/system/reference"),
+   never --accepted-green/--failure-red, since Owner vs Proponent is an
+   identity fact, not a good/bad status judgment; both sides get the
+   IDENTICAL treatment for the same reason - color-differentiating them
+   would wrongly imply one side is a "better" state than the other. A
+   plain bordered pill (no fill), same restrained "reserve stronger
+   accent color for meaningful states" discipline .current-project's own
+   border-only treatment already established nearby. */
+.workspace-side-indicator {
+    display: inline-flex;
+    align-items: center;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--machine-blue);
+    border: 1px solid var(--machine-blue);
+    border-radius: 3px;
+    padding: 0.05rem 0.4rem;
+    margin-left: 0.5rem;
+    white-space: nowrap;
+    cursor: default;
+}
+/* CLAUDE-RFP-BOUNDARY-01: the Owner-side Publish Procurement Package
+   selection list - plain, restrained rows, same 0.85rem/border-bottom
+   idiom this file already uses for compact list surfaces (see
+   .finding-review-actions/.review-btn nearby). */
+.publish-source-list {
+    list-style: none;
+    margin: 0.6rem 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+}
+.publish-source-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    font-size: 0.85rem;
+    padding: 0.35rem 0;
+    border-bottom: 1px solid var(--border);
+}
+.publish-source-item:last-child { border-bottom: none; }
+.publish-source-include { display: flex; align-items: center; gap: 0.4rem; flex: 1 1 auto; min-width: 0; }
+.publish-source-founding { display: flex; align-items: center; gap: 0.3rem; flex-shrink: 0; color: var(--text-secondary); font-size: 0.8rem; }
 /* CLAUDE-P40-VW7A-QA (Move Document Controls into the Top Application
    Menu): the central region between the breadcrumb and Display Layout/
    Appearance/Account - flex:1 so it claims whatever space is left
