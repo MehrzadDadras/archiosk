@@ -253,5 +253,120 @@ class HeaderProjectLinkRealBrowserGeometryTests(unittest.TestCase):
                 browser.close()
 
 
+@unittest.skipUnless(_BROWSER_AVAILABLE, _SKIP_REASON)
+class ArchiosMenuDropdownRealBrowserVisibilityTests(unittest.TestCase):
+    """CLAUDE-ARCHIOSK-IDENTITY-ACTIVITY-INDICATOR-01 (live-browser catch,
+    caught during this pass's own deploy verification, not by any prior
+    test): a real click opening the Archiosk menu on the just-deployed
+    live site produced NOTHING visible - JS confirmed the <details> was
+    genuinely open, the panel's own computed style was display:flex/
+    opacity:1/z-index:60, yet document.elementFromPoint() at its own
+    center found nothing there. Root cause: .workspace-topbar-identity
+    (CLAUDE-APP-MENU-01's own new container for the whole menu bar) had
+    inherited a pre-existing overflow:hidden rule from BEFORE it held any
+    dropdown menu (the identity block used to be just a brand link, and
+    that overflow:hidden clipped its own box for other reasons) - once
+    every top-level menu's position:absolute panel lives inside this
+    same box, that overflow:hidden clips them all invisible the instant
+    they open. No pytest DOM-only test could ever have caught this - it
+    is purely a real-CSS-layout/paint fact, exactly the class of bug
+    HeaderProjectLinkRealBrowserGeometryTests above already exists to
+    catch for the breadcrumb link. Fix: overflow:hidden removed from
+    .workspace-topbar-identity outright (the breadcrumb's own truncation
+    already has its own independent overflow:hidden/text-overflow:
+    ellipsis on .workspace-topbar-context, unaffected by this removal)."""
+
+    @classmethod
+    def setUpClass(cls):
+        import app as app_module
+        from models import User, db
+        cls.tmp_dir = Path(tempfile.mkdtemp(prefix="beehive_test_menu_dropdown_"))
+        cls.flask_app = app_module.create_app("testing")
+        cls.flask_app.config["REGISTRY_STORE_PATH"] = str(cls.tmp_dir)
+        with cls.flask_app.app_context():
+            db.session.add(User(
+                username="menudd_owner", password_hash=generate_password_hash("x"), role="admin",
+            ))
+            db.session.commit()
+        cls.tokens_css = _TOKENS_CSS_PATH.read_text(encoding="utf-8")
+        cls.main_css = _MAIN_CSS_PATH.read_text(encoding="utf-8")
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmp_dir, ignore_errors=True)
+
+    def _client(self):
+        client = self.flask_app.test_client()
+        with client.session_transaction() as sess:
+            sess["user_id"] = 1
+            sess["username"] = "menudd_owner"
+            sess["role"] = "admin"
+        return client
+
+    def _standalone_projects_page(self) -> str:
+        client = self._client()
+        body_html = client.get("/projects").get_data(as_text=True)
+        combined_style = f"<style>{self.tokens_css}\n{self.main_css}</style>"
+        html, n = re.subn(
+            r'<link[^>]*href="[^"]*tokens\.css[^"]*"[^>]*>\s*'
+            r'<link[^>]*href="[^"]*main\.css[^"]*"[^>]*>',
+            lambda _match: combined_style,
+            body_html,
+            count=1,
+        )
+        assert n == 1, "expected exactly one tokens.css+main.css <link> pair to inline"
+        html = re.sub(r'<script[^>]+src="[^"]*"[^>]*></script>', "", html)
+        return html
+
+    def test_archiosk_menu_panel_is_genuinely_hit_testable_when_open(self):
+        html = self._standalone_projects_page()
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            try:
+                page = browser.new_page(viewport={"width": 1400, "height": 900})
+                page.set_content(html, wait_until="load")
+                summary = page.query_selector('[data-ui-ref="menu.archiosk"] summary')
+                self.assertIsNotNone(summary)
+                summary.click()
+                panel = page.query_selector('[data-ui-ref="menu.archiosk"] .workspace-menubar-panel')
+                self.assertIsNotNone(panel)
+                hit_finds_panel = page.evaluate(
+                    "(el) => { const r = el.getBoundingClientRect(); "
+                    "const cx = r.x + r.width / 2; const cy = r.y + Math.min(10, r.height / 2); "
+                    "const hit = document.elementFromPoint(cx, cy); "
+                    "return !!(hit && hit.closest('.workspace-menubar-panel')); }",
+                    panel,
+                )
+                self.assertTrue(hit_finds_panel, "the open Archiosk menu panel must genuinely receive hits, not just exist in the DOM")
+                home_link = page.query_selector('[data-ui-ref="menu.archiosk.home"]')
+                self.assertIsNotNone(home_link)
+                self.assertTrue(home_link.is_visible())
+                # A real .click() (Playwright refuses to click an obscured
+                # element) is the strongest available proof.
+                home_link.click(timeout=5000)
+            finally:
+                browser.close()
+
+    def test_topbar_identity_no_longer_clips_its_own_dropdown_children(self):
+        html = self._standalone_projects_page()
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            try:
+                page = browser.new_page(viewport={"width": 1400, "height": 900})
+                page.set_content(html, wait_until="load")
+                overflow = page.evaluate(
+                    "() => getComputedStyle(document.querySelector('.workspace-topbar-identity')).overflow"
+                )
+                self.assertEqual(overflow, "visible")
+                # The breadcrumb's own independent truncation must still hold.
+                context_overflow = page.evaluate(
+                    "() => { const el = document.querySelector('.workspace-topbar-context'); "
+                    "return el ? getComputedStyle(el).overflow : 'no-element-outside-a-workspace'; }"
+                )
+                self.assertIn(context_overflow, ("hidden", "no-element-outside-a-workspace"))
+            finally:
+                browser.close()
+
+
 if __name__ == "__main__":
     unittest.main()

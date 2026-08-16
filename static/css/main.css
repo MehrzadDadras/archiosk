@@ -2574,7 +2574,18 @@ main:has(.document-viewer-canvas-container) {
    unclickable rather than merely truncated. flex-wrap:wrap lets the
    breadcrumb drop to its own line below the menu bar instead - the
    SAME "two-line header, still fully clickable" fallback QA2's own
-   comment above already established for .workspace-topbar itself. */
+   comment above already established for .workspace-topbar itself.
+
+   CLAUDE-ARCHIOSK-IDENTITY-ACTIVITY-INDICATOR-01 (live-browser catch):
+   overflow:hidden REMOVED entirely, not just narrowed - it clipped every
+   menu dropdown's own .workspace-menubar-panel (position:absolute,
+   intentionally extending below this box) invisible, on every menu, on
+   every page, the instant a real click opened one - a live-only defect
+   pytest's own DOM-only tests never render CSS layout/paint for and so
+   could never have caught. .workspace-topbar-context (the breadcrumb)
+   already carries its own independent overflow:hidden/text-overflow:
+   ellipsis for truncation, below - nothing here still depended on this
+   parent's own copy. */
 .workspace-topbar-identity {
     display: flex;
     align-items: baseline;
@@ -2583,7 +2594,6 @@ main:has(.document-viewer-canvas-container) {
     min-width: 0;
     max-width: 100%;
     flex-shrink: 0;
-    overflow: hidden;
 }
 /* CLAUDE-P40-BRAND1 (product-owner correction): "Archiosk" used to be
    0.85rem/--text-metadata (a MUTED, secondary color) - smaller and
