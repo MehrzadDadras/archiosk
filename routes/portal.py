@@ -37,6 +37,10 @@ from services.drawing_intake import (
 from services.password_reset import (
     complete_password_reset, get_valid_reset_token, is_dev_fallback_active, request_password_reset,
 )
+from services.verification_access import (
+    consume_verification_token, get_valid_verification_token, is_verification_session,
+    revoke_verification_access,
+)
 from services.requirements_registry import RequirementsRegistry
 from services.trial_request import submit_trial_request
 
@@ -457,6 +461,57 @@ def reset_password():
 
     complete_password_reset(token_row, new_password)
     flash("Your password has been updated. Sign in with your new password.", 'success')
+    return redirect(url_for('portal.login'))
+
+
+@portal_bp.route('/verification-access/<token>')
+@limiter.limit("10 per hour")
+def verification_access_login(token):
+    """
+    CLAUDE-LIVE-VERIFICATION-ACCOUNT-MECHANISM-01: the one-time link
+    tools/manage_verification_access.py's `create` command prints.
+    Deliberately public/unauthenticated-reachable -- establishing a
+    session FROM one is the entire point, the same shape reset_password
+    above already uses safely for an equally sensitive action (this
+    codebase already trusts "safe because the token is unguessable,
+    single-use, and short-lived", not "safe because a login gate sits in
+    front of it"). One generic "invalid or expired" outcome for every
+    invalid case, matching reset_password's own refusal to distinguish
+    missing/unknown/used/expired.
+    """
+    token_row = get_valid_verification_token(token)
+    if token_row is None:
+        flash("This verification link is invalid or has expired.", 'error')
+        return redirect(url_for('portal.login'))
+
+    user = consume_verification_token(token_row)
+    log_in(user)
+    flash(
+        "Signed in as a temporary live-verification identity - no real project authority. "
+        "End this session (Sign out, or the self-revoke action) when verification is done.",
+        'success',
+    )
+    return redirect(_resolve_next_url())
+
+
+@portal_bp.route('/verification-access/end', methods=['POST'])
+@admin_required
+def verification_access_end():
+    """
+    Self-revoke: lets the verification identity's OWN session end and
+    delete itself in one step, without requiring a maintainer to run the
+    CLI's `revoke` command for the common case. Scoped narrowly -- only
+    ever acts when the CURRENT session actually IS the verification
+    identity (is_verification_session()), never a general "delete any
+    account" capability a real admin could point at someone else's
+    account. A real admin hitting this route by mistake gets a plain
+    403, not a silent no-op that could look like it worked.
+    """
+    if not is_verification_session():
+        abort(403)
+    revoke_verification_access()
+    log_out()
+    flash("Verification access ended and removed.", 'success')
     return redirect(url_for('portal.login'))
 
 

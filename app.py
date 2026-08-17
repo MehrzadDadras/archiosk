@@ -556,6 +556,7 @@ def _register_context_processors(app: Flask) -> None:
 
         from services.auth import is_admin, is_authenticated
         from services.case_workspace import CaseWorkspaceStore
+        from services.verification_access import is_verification_session
 
         # CLAUDE-P40-D1: /login, /forgot-password, /reset-password render
         # templates/auth_shell.html, a standalone shell that never
@@ -637,6 +638,14 @@ def _register_context_processors(app: Flask) -> None:
             # standalone-auth-page guard as is_admin above - no menu bar
             # exists there for a badge to appear in anyway.
             "developer_mode": is_admin() and not on_standalone_auth_page and bool(session.get("developer_mode")),
+            # CLAUDE-LIVE-VERIFICATION-ACCOUNT-MECHANISM-01: a persistent,
+            # unmistakable indicator whenever the CURRENT session is the
+            # dedicated ephemeral verification identity (services.
+            # verification_access.is_verification_session - a fixed-
+            # username check, never a client-settable flag), so this
+            # session's own real product authority is never confusable
+            # with a real admin's, on either operating environment.
+            "verification_session": authenticated and is_verification_session(),
             # CLAUDE-CA1D-INSTRUMENT-RAIL-01: the one quiet global machine
             # fact proven this tranche -- reads the exact same
             # AI_CALLS_DISABLED env var services/bhive_parser.py's own

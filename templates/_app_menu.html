@@ -445,6 +445,22 @@
                    same discipline as that indicator's own precedent). #}
                 <span class="workspace-developer-mode-badge" data-ui-ref="menu.developer-mode-badge" title="Developer Mode is active - toggle from Archiosk > Admin" aria-label="Developer Mode is active">Developer Mode</span>
                 {% endif %}
+                {% if verification_session %}
+                {# CLAUDE-LIVE-VERIFICATION-ACCOUNT-MECHANISM-01: same
+                   "persistent, unmistakable indicator, not decoration"
+                   idiom as the Developer Mode badge immediately above -
+                   this session's own real product authority (an
+                   ephemeral, admin-role identity created solely for
+                   bounded live-browser proof work) must never be
+                   confusable with a real admin's own session. Also
+                   outside the project_id guard, for the same reason. #}
+                <span class="workspace-verification-session-badge" data-ui-ref="menu.verification-session-badge" title="Temporary live-verification identity - no real project authority" aria-label="Temporary live-verification identity active">
+                    Live Verification Session
+                    <form method="post" action="{{ url_for('portal.verification_access_end') }}" style="display:inline;">
+                        <button type="submit" data-ui-ref="menu.verification-session-end">End</button>
+                    </form>
+                </span>
+                {% endif %}
                 {% if project_id is defined and workspace is defined %}
                 <span class="workspace-topbar-context" data-ui-ref="menu.context">
                     {# CLAUDE-P40-VW7B, Section 5: "[ARCHIOSK mark] Archiosk

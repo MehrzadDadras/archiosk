@@ -2772,6 +2772,44 @@ main:has(.document-viewer-canvas-container) {
     white-space: nowrap;
     cursor: default;
 }
+/* CLAUDE-LIVE-VERIFICATION-ACCOUNT-MECHANISM-01: same filled-badge shape
+   as .workspace-developer-mode-badge immediately above, deliberately a
+   DIFFERENT semantic color so the two are never mistakable for one
+   another at a glance - reuses --attention-amber ("needs evidence /
+   pending attention", tokens.css's own grammar) rather than adding an
+   8th semantic color: a live-verification session genuinely IS a
+   pending-attention state (temporary, should be ended when done), not
+   decoration. Contrast verified: --surface-primary on --attention-amber
+   is 7.08:1, comfortably above the 4.5:1 floor. */
+.workspace-verification-session-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--surface-primary);
+    background: var(--attention-amber);
+    border-radius: 3px;
+    padding: 0.1rem 0.45rem;
+    margin-left: 0.5rem;
+    white-space: nowrap;
+    cursor: default;
+}
+.workspace-verification-session-badge form {
+    display: inline;
+}
+.workspace-verification-session-badge button {
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--surface-primary);
+    background: transparent;
+    border: 1px solid var(--surface-primary);
+    border-radius: 2px;
+    padding: 0 0.3rem;
+    cursor: pointer;
+}
 /* CLAUDE-RFP-BOUNDARY-01: the Owner-side Publish Procurement Package
    selection list - plain, restrained rows, same 0.85rem/border-bottom
    idiom this file already uses for compact list surfaces (see

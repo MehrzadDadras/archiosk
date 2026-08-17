@@ -131,3 +131,35 @@ class PasswordResetToken(db.Model):
 
     def __repr__(self) -> str:
         return f"<PasswordResetToken user_id={self.user_id} used={self.used_at is not None}>"
+
+
+class VerificationAccessToken(db.Model):
+    """CLAUDE-LIVE-VERIFICATION-ACCOUNT-MECHANISM-01: a single-use, expiring
+    LOGIN token (not a password-reset token) for a dedicated, ephemeral
+    verification identity (see services/verification_access.py). Same
+    "never store the real secret" shape as PasswordResetToken -- only
+    `token_hash` is ever persisted, the raw token exists solely in the
+    one-time link a maintainer generates via tools/manage_verification_
+    access.py's own `create` command, never through a web route (this
+    codebase has no self-registration route for ACCOUNTS, and this is
+    account provisioning, not a self-service password change like
+    PasswordResetToken's own use case).
+
+    `created_at`/`used_at` are this token's own audit record, same
+    precedent as PasswordResetToken. The linked User row (see
+    services/verification_access.py's VERIFICATION_ACCOUNT_USERNAME) is
+    itself deleted by the `revoke` CLI command, cascading this token away
+    with it -- there is deliberately no long-lived verification account
+    sitting at rest between uses.
+    """
+    __tablename__ = "verification_access_tokens"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    token_hash = db.Column(db.String(64), unique=True, nullable=False, index=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    expires_at = db.Column(db.DateTime, nullable=False)
+    used_at = db.Column(db.DateTime, nullable=True)
+
+    def __repr__(self) -> str:
+        return f"<VerificationAccessToken user_id={self.user_id} used={self.used_at is not None}>"
