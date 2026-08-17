@@ -53,6 +53,7 @@ from services.capability_registry import (
     CAPABILITIES,
     find_capability_by_phrase,
 )
+from services.environment_capabilities import working_material_root_label
 from services.drawing_analysis import analyze_drawing, make_comparison_artifact
 from services.conversational_turn import gather_project_evidence
 from services.project_qa import answer_project_question
@@ -1000,7 +1001,10 @@ def _handle_folder_reference(workspace: ProjectWorkspace, folder: dict) -> Inter
     child_folder_count = sum(
         1 for f in workspace.folders if f.get("parent_folder_id") == folder["id"] and not f.get("removed_at")
     )
-    root_label = "Data Room" if folder["root"] == FOLDER_ROOT_DATA_ROOM else "Design-Builder Workspace"
+    root_label = (
+        "Data Room" if folder["root"] == FOLDER_ROOT_DATA_ROOM
+        else working_material_root_label(workspace.operating_environment)
+    )
 
     if source_count == 0 and child_folder_count == 0:
         reply = f'"{folder["name"]}" exists in {root_label} and is currently empty - no Documents or subfolders registered in it yet.'
@@ -1379,12 +1383,13 @@ def _handle_organize_advice(
         )
 
     structure_lines = "\n".join(f"- {group}" for group in present_groups)
+    root_label = working_material_root_label(workspace.operating_environment)
     reply = (
         f"Yes. Keep \"{source['name']}\" intact and organize it virtually first - nothing physical is "
         "created or moved unless you ask.\n\n"
         "Recommended structure (based on what's actually extracted from this project so far):\n"
         f"{structure_lines}\n\n"
-        "This creates a real, governed Design-Builder Workspace structure, not a change to the "
+        f"This creates a real, governed {root_label} structure, not a change to the "
         "original document."
     )
     return InterpretationResult(

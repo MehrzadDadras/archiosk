@@ -522,7 +522,7 @@ class DisplayBehaviorTests(_BaseTestCase):
         body = client.get(f"/projects/{doc.project_id}/workspace?view=files").get_data(as_text=True)
         self.assertIn('data-ui-ref="display.files.data-room"', body)
         self.assertIn('data-ui-ref="display.files.design-builder"', body)
-        self.assertLess(body.index("Data Room"), body.index("Design-Builder Workspace"))
+        self.assertLess(body.index("Data Room"), body.index("Owner Workspace"))
 
     def test_data_room_shows_compatibility_view_of_existing_documents(self):
         doc = self._ingest("VW9 Compatibility View Project", filename="issued_spec.pdf")
@@ -590,7 +590,7 @@ class DisplayBehaviorTests(_BaseTestCase):
         self.assertEqual(resp.status_code, 200)
         body = resp.get_data(as_text=True)
         self.assertIn("Data Room", body)
-        self.assertIn("Design-Builder Workspace", body)
+        self.assertIn("Owner Workspace", body)
         # panel_shell.html (minimal standalone document), not the full
         # application shell - the content block itself (including
         # #display-divisions) is genuinely shared between panel_shell.html

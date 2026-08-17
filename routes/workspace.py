@@ -112,6 +112,7 @@ from services.environment_capabilities import (
     capability_denial_reason,
     decision_stages_for_environment,
     is_valid_operating_environment,
+    working_material_root_label,
 )
 from services.procurement_publication import PublicationExportError, build_published_package_zip
 from services.document_context_intelligence import draft_document_context_claims
@@ -1851,6 +1852,24 @@ def show_workspace(project_id):
         operating_environment=workspace.operating_environment,
         operating_environment_label=OPERATING_ENVIRONMENT_LABELS.get(workspace.operating_environment),
         operating_environments=OPERATING_ENVIRONMENT_LABELS,
+        # Files view's second root (services/case_workspace.py's
+        # FOLDER_ROOT_DESIGN_BUILDER - editable, team-organized working
+        # material, as opposed to Data Room's externally-issued material)
+        # was VW9's own generic Files-shell label, written before
+        # operating_environment existed as a concept, and rendered
+        # identically regardless of environment. On a CLIENT_OWNER
+        # project that literal text wrongly implies access to or
+        # coexistence with a Design-Builder/Proponent workspace, which
+        # does not exist pre-publication (or ever, inside this same
+        # project record) - a real Owner/Proponent publication-boundary
+        # leak, not just cosmetic. The underlying mechanism (folder
+        # root, route names, the "design_builder" form value, its
+        # data-ui-ref) is unchanged - only the user-facing label is
+        # environment-aware. Shared with Composer's own folder-reference/
+        # organize-advice replies via environment_capabilities.py's
+        # working_material_root_label, so this project's Files panel and
+        # its conversational replies never disagree.
+        working_material_root_label=working_material_root_label(workspace.operating_environment),
         # CLAUDE-RFP-BOUNDARY-01: lifecycle_stage's own template-layer
         # visibility, same pattern as operating_environment immediately
         # above -- the publish route itself (publish_procurement_package_

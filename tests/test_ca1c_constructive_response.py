@@ -164,6 +164,14 @@ class CapabilityQuestionConversationTests(_BaseTestCase):
         client = self._client()
         self._discuss(client, "Can you create these folders for me?")
         body = client.get(f"/projects/{self.project_id}/workspace?view=conversation").get_data(as_text=True)
+        # CLAUDE-GO-NAVIGATION-CONTEXT-GAMES-01 follow-up: this reply comes
+        # from capability_registry.py's static, deliberately workspace-
+        # blind capability description (CA1C's own "by construction, no
+        # workspace consulted" design for self-referential "what can you
+        # do" answers) - it names the mechanism by its canonical internal
+        # name, not a per-project claim of coexistence with a Proponent
+        # workspace, so it intentionally still says "Design-Builder
+        # Workspace" even inside a CLIENT_OWNER project.
         self.assertIn("Design-Builder Workspace", body)
         self.assertNotIn("not covered by", body.lower())
 

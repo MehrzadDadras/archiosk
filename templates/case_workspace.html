@@ -2403,7 +2403,7 @@
                 <p class="pane-note">
                     Controlled source material issued or received from an external
                     authority, client, owner, procurement body, or consultant.
-                    Design-Builder Workspace's own folder controls cannot reach or
+                    {{ working_material_root_label }}'s own folder controls cannot reach or
                     reorganize this root - real hierarchy here comes only from
                     Data Room reconciliation (CLAUDE-RFP27-TERRITORY-01), a
                     deliberate, admin-gated, governed action, never ordinary
@@ -2586,7 +2586,7 @@
                             <input type="radio" name="root" value="data_room" checked> Data Room
                         </label>
                         <label class="operating-environment-option">
-                            <input type="radio" name="root" value="design_builder"> Design-Builder Workspace
+                            <input type="radio" name="root" value="design_builder"> {{ working_material_root_label }}
                         </label>
                         <textarea name="paths" placeholder="One relative folder path per line" required data-ui-ref="display.files.data-room.register-paths.paths"></textarea>
                         <button type="submit" data-ui-ref="display.files.data-room.register-paths.submit">Register</button>
@@ -2598,7 +2598,7 @@
 
             {# ---------------- Design-Builder Workspace (editable) --------- #}
             <section class="files-root files-root-design-builder" data-ui-ref="display.files.design-builder">
-                <p class="workspace-pane-label">Design-Builder Workspace</p>
+                <p class="workspace-pane-label">{{ working_material_root_label }}</p>
                 <p class="pane-note">
                     Editable working organization created by the Project team -
                     folders, working documents, and derived material. Reorganize
@@ -2613,7 +2613,7 @@
                    way Overview's own internal accordions never change
                    that breadcrumb either. #}
                 <p class="files-breadcrumb" data-ui-ref="display.files.design-builder.breadcrumb">
-                    <a href="{{ url_for('workspace.show_workspace', project_id=project_id, view='files') }}">Design-Builder Workspace</a>
+                    <a href="{{ url_for('workspace.show_workspace', project_id=project_id, view='files') }}">{{ working_material_root_label }}</a>
                     {% for ancestor in folder_ancestors %}
                     &rsaquo; <a href="{{ url_for('workspace.show_workspace', project_id=project_id, view='files', folder=ancestor.id) }}">{{ ancestor.name }}</a>
                     {% endfor %}
@@ -2659,7 +2659,7 @@
                                 </form>
                                 <form method="post" action="{{ url_for('workspace.move_folder_route', project_id=project_id, folder_id=folder.id) }}">
                                     <select name="parent_folder_id" data-ui-ref="display.files.design-builder.folder-row.move.destination">
-                                        <option value="">Design-Builder Workspace (root)</option>
+                                        <option value="">{{ working_material_root_label }} (root)</option>
                                         {% for candidate in design_builder_move_targets.get(folder.id, []) %}
                                         <option value="{{ candidate.id }}">{{ candidate.path_label }}</option>
                                         {% endfor %}

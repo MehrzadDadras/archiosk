@@ -71,6 +71,25 @@ OPERATING_ENVIRONMENT_SUBTITLES = {
     DESIGN_BUILDER_PROPONENT: "Review and respond to the issued RFP",
 }
 
+# CLAUDE-GO-NAVIGATION-CONTEXT-GAMES-01 follow-up: the Files surface's
+# second, editable working-material root (services/case_workspace.py's
+# FOLDER_ROOT_DESIGN_BUILDER) was named and labeled "Design-Builder
+# Workspace" before operating_environment existed as a concept, and
+# every call site rendered that literal text unconditionally. On a
+# CLIENT_OWNER project that wrongly implies access to or coexistence
+# with a Design-Builder/Proponent workspace, which never exists inside
+# the same project record - a real Owner/Proponent publication-boundary
+# leak, not merely cosmetic. One shared helper so every surface that
+# names this root (the Files template, Composer's own folder-reference
+# and organize-advice replies) stays consistent rather than each
+# hardcoding its own copy of this three-way branch.
+def working_material_root_label(operating_environment: str | None) -> str:
+    if operating_environment == DESIGN_BUILDER_PROPONENT:
+        return "Design-Builder Workspace"
+    if operating_environment == CLIENT_OWNER:
+        return "Owner Workspace"
+    return "Project Workspace"
+
 
 def is_valid_operating_environment(value: str | None) -> bool:
     return value in OPERATING_ENVIRONMENTS

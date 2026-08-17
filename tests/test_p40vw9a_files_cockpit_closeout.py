@@ -324,7 +324,7 @@ class RealBrowserFolderMenuTests(_BaseTestCase):
                 # Outside click dismisses the open menu (page header
                 # text, well above the folder list, is never covered by
                 # any panel).
-                page.click("text=Design-Builder Workspace")
+                page.click("text=Owner Workspace")
                 page.wait_for_function("document.querySelectorAll('.files-folder-actions')[1].open === false")
                 self.assertIsNone(last.get_attribute("open"))
             finally:
