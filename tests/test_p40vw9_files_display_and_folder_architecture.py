@@ -83,7 +83,7 @@ from werkzeug.datastructures import FileStorage
 from werkzeug.security import generate_password_hash
 
 from services.bhive_parser import BHiveParser, ParsedDocument
-from services.environment_capabilities import CLIENT_OWNER
+from services.environment_capabilities import CLIENT_OWNER, DESIGN_BUILDER_PROPONENT
 from services.ingestion import PendingReconcileStore, ingest_upload
 import services.case_workspace as cw
 import routes.workspace as workspace_routes
@@ -112,7 +112,7 @@ class _BaseTestCase(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
 
-    def _ingest(self, project_name, filename="spec.pdf", content=b"content", owner="vw9_owner"):
+    def _ingest(self, project_name, filename="spec.pdf", content=b"content", owner="vw9_owner", operating_environment=CLIENT_OWNER):
         def fake_parse(self_parser, raw_bytes, filename_):
             return ParsedDocument(
                 project_id=str(uuid.uuid4()), filename=filename_,
@@ -122,7 +122,7 @@ class _BaseTestCase(unittest.TestCase):
             with self.flask_app.app_context():
                 return ingest_upload(
                     _fake_file(content, filename), self.flask_app,
-                    operating_environment=CLIENT_OWNER, owner=owner, project_name=project_name,
+                    operating_environment=operating_environment, owner=owner, project_name=project_name,
                 )
 
     def _client(self, username="vw9_owner", user_id=1, role="admin"):
@@ -523,6 +523,25 @@ class DisplayBehaviorTests(_BaseTestCase):
         self.assertIn('data-ui-ref="display.files.data-room"', body)
         self.assertIn('data-ui-ref="display.files.design-builder"', body)
         self.assertLess(body.index("Data Room"), body.index("Owner Workspace"))
+
+    def test_working_material_root_label_is_environment_aware(self):
+        # CLAUDE-GO-NAVIGATION-CONTEXT-GAMES-01 follow-up: the second Files
+        # root's label must reflect the project's own operating_environment,
+        # never a single hardcoded string regardless of it - a CLIENT_OWNER
+        # project must never render text implying a Design-Builder/Proponent
+        # workspace, and a real DESIGN_BUILDER_PROPONENT project must still
+        # see its own genuinely accurate "Design-Builder Workspace" label.
+        owner_doc = self._ingest("VW9 Owner Env Project", operating_environment=CLIENT_OWNER)
+        proponent_doc = self._ingest("VW9 Proponent Env Project", operating_environment=DESIGN_BUILDER_PROPONENT)
+        client = self._client()
+
+        owner_body = client.get(f"/projects/{owner_doc.project_id}/workspace?view=files").get_data(as_text=True)
+        self.assertIn("Owner Workspace", owner_body)
+        self.assertNotIn("Design-Builder Workspace", owner_body)
+
+        proponent_body = client.get(f"/projects/{proponent_doc.project_id}/workspace?view=files").get_data(as_text=True)
+        self.assertIn("Design-Builder Workspace", proponent_body)
+        self.assertNotIn("Owner Workspace", proponent_body)
 
     def test_data_room_shows_compatibility_view_of_existing_documents(self):
         doc = self._ingest("VW9 Compatibility View Project", filename="issued_spec.pdf")
