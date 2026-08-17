@@ -2474,16 +2474,108 @@
                 {% call macros.subdisclosure('Data Room admin actions', ui_ref='display.files.data-room.admin-actions') %}
                     <p class="pane-note">
                         Select the authoritative Data Room folder on your own machine.
-                        Every eligible file inside it (subfolders included) is compared
-                        against what's already registered - a byte-identical match is
-                        relinked to its existing Source, never duplicated; a genuinely
-                        new file is registered and its content ingested as real
-                        project evidence. Nothing already registered is ever removed.
+                        Reconcile compares it against what's already registered and
+                        reports the difference - nothing is added, relinked, or removed
+                        until you review that report and approve it.
                     </p>
                     <form method="post" enctype="multipart/form-data" action="{{ url_for('workspace.reconcile_data_room_route', project_id=project_id) }}" data-ui-ref="display.files.data-room.reconcile.form">
                         <input type="file" name="folder_files" webkitdirectory directory multiple required data-ui-ref="display.files.data-room.reconcile.picker">
                         <button type="submit" data-ui-ref="display.files.data-room.reconcile.submit">Reconcile</button>
                     </form>
+                    {# CLAUDE-DATA-ROOM-RECONCILE-01: the analyze-first report -
+                       rendered inline in this SAME disclosure (never a second,
+                       competing Reconcile surface), only once show_workspace has
+                       resolved a real, still-valid ?reconcile_preview= staging
+                       record for THIS project. Section 10's own "avoid flooding...
+                       emphasize exceptions, not unchanged inventory": unchanged is
+                       a plain count in the summary line, never its own list. #}
+                    {% if reconcile_preview %}
+                    <div class="pane-note" data-ui-ref="display.files.data-room.reconcile.report" style="margin-top:0.8rem; padding:0.6rem; border:1px solid var(--border); border-radius:4px;">
+                        <p style="margin:0 0 0.5rem;">
+                            <strong>{{ reconcile_preview.summary.total_scanned }} source file(s) compared</strong> —
+                            {{ reconcile_preview.summary.unchanged }} already registered and unchanged,
+                            {{ reconcile_preview.summary.new }} new,
+                            {{ reconcile_preview.summary.modified }} modified,
+                            {{ reconcile_preview.summary.missing }} missing,
+                            {{ reconcile_preview.summary.renamed }} renamed/moved,
+                            {{ reconcile_preview.summary.ineligible }} skipped/ineligible{% if reconcile_preview.summary.ambiguous %},
+                            {{ reconcile_preview.summary.ambiguous }} ambiguous{% endif %}.
+                        </p>
+
+                        {% if reconcile_preview.by_status.new %}
+                        {% call macros.subdisclosure('New (' ~ reconcile_preview.by_status.new|length ~ ')', ui_ref='display.files.data-room.reconcile.report.new') %}
+                        <ul class="source-list">
+                            {% for item in reconcile_preview.by_status.new %}
+                            <li class="source-item">{{ item.relative_path }}</li>
+                            {% endfor %}
+                        </ul>
+                        {% endcall %}
+                        {% endif %}
+
+                        {% if reconcile_preview.by_status.modified %}
+                        {% call macros.subdisclosure('Modified (' ~ reconcile_preview.by_status.modified|length ~ ')', ui_ref='display.files.data-room.reconcile.report.modified') %}
+                        <p class="pane-note">Content at a known path has changed. Nothing was overwritten - review the new revision yourself before deciding what to do with it.</p>
+                        <ul class="source-list">
+                            {% for item in reconcile_preview.by_status.modified %}
+                            <li class="source-item">{{ item.relative_path }} — was registered as "{{ item.source_name }}"</li>
+                            {% endfor %}
+                        </ul>
+                        {% endcall %}
+                        {% endif %}
+
+                        {% if reconcile_preview.by_status.missing %}
+                        {% call macros.subdisclosure('Missing (' ~ reconcile_preview.by_status.missing|length ~ ')', ui_ref='display.files.data-room.reconcile.report.missing') %}
+                        <p class="pane-note">Previously registered here but not found in this scan. Nothing was deleted - the registered evidence and its history are untouched.</p>
+                        <ul class="source-list">
+                            {% for item in reconcile_preview.by_status.missing %}
+                            <li class="source-item">{{ item.source_name }} ({{ item.origin_reference }})</li>
+                            {% endfor %}
+                        </ul>
+                        {% endcall %}
+                        {% endif %}
+
+                        {% if reconcile_preview.by_status.renamed %}
+                        {% call macros.subdisclosure('Renamed / moved (' ~ reconcile_preview.by_status.renamed|length ~ ')', ui_ref='display.files.data-room.reconcile.report.renamed') %}
+                        <ul class="source-list">
+                            {% for item in reconcile_preview.by_status.renamed %}
+                            <li class="source-item">{{ item.previous_relative_path }} → {{ item.relative_path }}</li>
+                            {% endfor %}
+                        </ul>
+                        {% endcall %}
+                        {% endif %}
+
+                        {% if reconcile_preview.by_status.ineligible %}
+                        {% call macros.subdisclosure('Skipped / ineligible (' ~ reconcile_preview.by_status.ineligible|length ~ ')', ui_ref='display.files.data-room.reconcile.report.ineligible') %}
+                        <ul class="source-list">
+                            {% for item in reconcile_preview.by_status.ineligible %}
+                            <li class="source-item">{{ item.relative_path }} — {{ item.reason }}</li>
+                            {% endfor %}
+                        </ul>
+                        {% endcall %}
+                        {% endif %}
+
+                        {% if reconcile_preview.by_status.ambiguous %}
+                        {% call macros.subdisclosure('Ambiguous (' ~ reconcile_preview.by_status.ambiguous|length ~ ')', ui_ref='display.files.data-room.reconcile.report.ambiguous') %}
+                        <ul class="source-list">
+                            {% for item in reconcile_preview.by_status.ambiguous %}
+                            <li class="source-item">{{ item.relative_path }} — {{ item.reason }}</li>
+                            {% endfor %}
+                        </ul>
+                        {% endcall %}
+                        {% endif %}
+
+                        <div style="margin-top:0.6rem; display:flex; gap:0.5rem;">
+                            {% if reconcile_preview.summary.new %}
+                            <form method="post" action="{{ url_for('workspace.reconcile_data_room_confirm_route', project_id=project_id, staging_id=reconcile_preview.staging_id) }}">
+                                <button type="submit" class="btn btn-primary" data-ui-ref="display.files.data-room.reconcile.confirm">Add {{ reconcile_preview.summary.new }} new document{{ 's' if reconcile_preview.summary.new != 1 else '' }}</button>
+                            </form>
+                            {% endif %}
+                            <form method="post" action="{{ url_for('workspace.reconcile_data_room_discard_route', project_id=project_id, staging_id=reconcile_preview.staging_id) }}">
+                                <button type="submit" class="btn btn-ghost" data-ui-ref="display.files.data-room.reconcile.discard">Discard</button>
+                            </form>
+                        </div>
+                    </div>
+                    {% endif %}
                     <p class="pane-note" style="margin-top:0.8rem;">
                         For real project territory that has no files yet (a file upload
                         can never report an empty folder) - one relative path per line,

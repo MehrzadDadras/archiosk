@@ -84,7 +84,7 @@ from werkzeug.security import generate_password_hash
 
 from services.bhive_parser import BHiveParser, ParsedDocument
 from services.environment_capabilities import CLIENT_OWNER
-from services.ingestion import ingest_upload
+from services.ingestion import PendingReconcileStore, ingest_upload
 import services.case_workspace as cw
 import routes.workspace as workspace_routes
 
@@ -775,21 +775,28 @@ class TerritoryRouteTests(_BaseTestCase):
         ws = self.store.get(doc.project_id)
         self.assertEqual(ws.folders, [])
 
-    def test_reconcile_data_room_route_end_to_end(self):
-        # .txt content is genuinely, directly extractable text - avoids
-        # exercising the real pypdf parser against fabricated PDF bytes
-        # (that's what the mocked-parser unit tests above already cover).
+    def test_reconcile_data_room_route_previews_without_mutating(self):
+        # CLAUDE-DATA-ROOM-RECONCILE-01: the route no longer registers
+        # anything in this one request - "analyze and report before
+        # modifying governed project evidence" - it stages the result
+        # and redirects to a preview, real registration only happens
+        # from the separate confirm route (below).
         doc = self._ingest("RFP27 Reconcile Route Project")
         client = self._client()
         resp = client.post(
             f"/projects/{doc.project_id}/workspace/data-room/reconcile",
             data={"folder_files": [_fake_file(b"genuinely new evidence", "Schedule-4.txt")]},
             content_type="multipart/form-data",
-            follow_redirects=True,
         )
-        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.status_code, 302)
+        self.assertIn("reconcile_preview=", resp.headers["Location"])
         ws = self.store.get(doc.project_id)
-        self.assertTrue(any(s["name"] == "Schedule-4.txt" for s in ws.sources))
+        self.assertFalse(any(s["name"] == "Schedule-4.txt" for s in ws.sources))
+
+        followed = client.get(resp.headers["Location"])
+        body = followed.get_data(as_text=True)
+        self.assertIn("Schedule-4.txt", body)
+        self.assertIn('data-ui-ref="display.files.data-room.reconcile.confirm"', body)
 
     def test_reconcile_data_room_route_requires_admin(self):
         doc = self._ingest("RFP27 Reconcile Route Auth Project")
@@ -808,6 +815,199 @@ class TerritoryRouteTests(_BaseTestCase):
         # login_required-only routes' 404-on-non-owner pattern used
         # elsewhere in this file.
         self.assertEqual(resp.status_code, 403)
+
+
+class ReconcilePreviewClassificationTests(_BaseTestCase):
+    """CLAUDE-DATA-ROOM-RECONCILE-01: services.ingestion.preview_data_room_reconcile
+    - the read-only classification engine - unit-tested directly, same
+    split this file's own ReconcileDataRoomUploadTests already uses for
+    the registration side."""
+
+    def _preview(self, project_id, files_and_paths):
+        from services.ingestion import preview_data_room_reconcile
+        files = [_fake_file(content, Path(path).name) for path, content in files_and_paths]
+        paths = [path for path, _content in files_and_paths]
+        with self.flask_app.app_context():
+            return preview_data_room_reconcile(files, paths, project_id, self.flask_app)
+
+    def test_game_a_no_change_reports_no_actionable_delta(self):
+        doc = self._ingest("Reconcile Preview No Change")
+        content = b"unchanged content"
+        # Establish a real, path-known Source first via an actual
+        # reconcile pass - the plain single-file _ingest helper's own
+        # founding Source has no origin_reference (single-file upload
+        # never carries a corpus-relative path), so it is out of scope
+        # for path/content comparison by design, not a test gap.
+        from services.ingestion import reconcile_data_room_upload
+        with self.flask_app.app_context():
+            reconcile_data_room_upload(
+                [_fake_file(content, "spec.txt")], ["Data Room/spec.txt"],
+                doc.project_id, self.flask_app, actor="vw9_owner",
+            )
+        report, new_files = self._preview(doc.project_id, [("Data Room/spec.txt", content)])
+        self.assertEqual(report["summary"]["new"], 0)
+        self.assertEqual(report["summary"]["modified"], 0)
+        self.assertEqual(report["summary"]["missing"], 0)
+        self.assertEqual(report["summary"]["unchanged"], 1)
+        self.assertEqual(new_files, [])
+
+    def test_game_b_new_eligible_file_detected_and_addable(self):
+        doc = self._ingest("Reconcile Preview New File")
+        report, new_files = self._preview(doc.project_id, [("Data Room/Addendum-01.pdf", b"brand new content")])
+        self.assertEqual(report["summary"]["new"], 1)
+        self.assertEqual(report["by_status"]["new"][0]["relative_path"], "Data Room/Addendum-01.pdf")
+        self.assertEqual(len(new_files), 1)
+        ws = self.store.get(doc.project_id)
+        self.assertEqual(len(ws.sources), 1)  # the founding Source only - preview never mutates
+
+    def test_game_c_new_ineligible_file_classified_not_offered(self):
+        doc = self._ingest("Reconcile Preview Ineligible File")
+        report, new_files = self._preview(doc.project_id, [("Reference Design/drawing.svg", b"<svg></svg>")])
+        self.assertEqual(report["summary"]["ineligible"], 1)
+        self.assertIn("Unsupported file type", report["by_status"]["ineligible"][0]["reason"])
+        self.assertEqual(new_files, [])  # never offered as a normal ingest
+
+    def test_game_d_modified_existing_file_detected_without_overwrite(self):
+        doc = self._ingest("Reconcile Preview Modified File")
+        from services.ingestion import reconcile_data_room_upload
+        with self.flask_app.app_context():
+            reconcile_data_room_upload(
+                [_fake_file(b"original content", "Addendum-01.txt")], ["Data Room/Addendum-01.txt"],
+                doc.project_id, self.flask_app, actor="vw9_owner",
+            )
+        report, new_files = self._preview(doc.project_id, [("Data Room/Addendum-01.txt", b"REVISED content")])
+        self.assertEqual(report["summary"]["modified"], 1)
+        self.assertEqual(report["summary"]["new"], 0)
+        self.assertEqual(new_files, [])  # never silently registered as a second Source
+        ws = self.store.get(doc.project_id)
+        # The original Source's own content is untouched.
+        modified_source = next(s for s in ws.sources if s["name"] == "Addendum-01.txt")
+        self.assertEqual(report["by_status"]["modified"][0]["source_id"], modified_source["id"])
+
+    def test_game_e_missing_previously_registered_file_preserved_and_flagged(self):
+        doc = self._ingest("Reconcile Preview Missing File")
+        from services.ingestion import reconcile_data_room_upload
+        with self.flask_app.app_context():
+            reconcile_data_room_upload(
+                [_fake_file(b"about to go missing", "Addendum-01.txt")], ["Data Room/Addendum-01.txt"],
+                doc.project_id, self.flask_app, actor="vw9_owner",
+            )
+        sources_before = len(self.store.get(doc.project_id).sources)
+        report, new_files = self._preview(doc.project_id, [])  # an empty rescan - nothing present
+        self.assertEqual(report["summary"]["missing"], 1)
+        self.assertEqual(report["by_status"]["missing"][0]["origin_reference"], "Data Room/Addendum-01.txt")
+        ws = self.store.get(doc.project_id)
+        self.assertEqual(len(ws.sources), sources_before)  # never deleted
+
+    def test_renamed_file_detected_via_content_identity(self):
+        doc = self._ingest("Reconcile Preview Renamed File")
+        content = b"moved but not changed"
+        from services.ingestion import reconcile_data_room_upload
+        with self.flask_app.app_context():
+            reconcile_data_room_upload(
+                [_fake_file(content, "old-name.txt")], ["Old Folder/old-name.txt"],
+                doc.project_id, self.flask_app, actor="vw9_owner",
+            )
+        report, new_files = self._preview(doc.project_id, [("New Folder/new-name.txt", content)])
+        self.assertEqual(report["summary"]["renamed"], 1)
+        self.assertEqual(report["summary"]["missing"], 0)  # the old path is accounted for, not "missing"
+        self.assertEqual(report["by_status"]["renamed"][0]["previous_relative_path"], "Old Folder/old-name.txt")
+
+    def test_ambiguous_duplicate_within_same_scan(self):
+        doc = self._ingest("Reconcile Preview Ambiguous Duplicate")
+        content = b"same content twice in one folder"
+        report, new_files = self._preview(doc.project_id, [
+            ("Data Room/copy-a.pdf", content), ("Data Room/copy-b.pdf", content),
+        ])
+        self.assertEqual(report["summary"]["new"], 1)
+        self.assertEqual(report["summary"]["ambiguous"], 1)
+        self.assertEqual(len(new_files), 1)
+
+
+class ReconcileConfirmDiscardTests(_BaseTestCase):
+    """CLAUDE-DATA-ROOM-RECONCILE-01: the confirm/discard routes, plus
+    Games F (idempotent repeat), G (cancel), H (project isolation)."""
+
+    def _preview_via_route(self, client, project_id, files_and_paths):
+        files = [_fake_file(content, Path(path).name) for path, content in files_and_paths]
+        for f, (path, _content) in zip(files, files_and_paths):
+            f.filename = path  # webkitRelativePath-renamed, same as the real client-side script
+        resp = client.post(
+            f"/projects/{project_id}/workspace/data-room/reconcile",
+            data={"folder_files": files}, content_type="multipart/form-data",
+        )
+        self.assertEqual(resp.status_code, 302)
+        staging_id = resp.headers["Location"].split("reconcile_preview=")[1]
+        return staging_id
+
+    def test_confirm_adds_only_the_new_eligible_files_once(self):
+        doc = self._ingest("Reconcile Confirm New File")
+        client = self._client()
+        staging_id = self._preview_via_route(client, doc.project_id, [("Data Room/Addendum-01.txt", b"new evidence")])
+        ws = self.store.get(doc.project_id)
+        self.assertFalse(any(s["name"] == "Addendum-01.txt" for s in ws.sources))
+
+        resp = client.post(f"/projects/{doc.project_id}/workspace/data-room/reconcile/{staging_id}/confirm")
+        self.assertEqual(resp.status_code, 302)
+        ws2 = self.store.get(doc.project_id)
+        matches = [s for s in ws2.sources if s["name"] == "Addendum-01.txt"]
+        self.assertEqual(len(matches), 1)  # exactly one - never duplicated
+
+    def test_game_f_repeat_reconcile_after_confirm_is_stable(self):
+        doc = self._ingest("Reconcile Repeat Idempotent")
+        client = self._client()
+        staging_id = self._preview_via_route(client, doc.project_id, [("Data Room/Addendum-01.txt", b"new evidence")])
+        client.post(f"/projects/{doc.project_id}/workspace/data-room/reconcile/{staging_id}/confirm")
+        sources_after_first = len(self.store.get(doc.project_id).sources)
+
+        # Re-running Reconcile against the SAME real corpus state now
+        # classifies that same file as unchanged, not new again.
+        staging_id_2 = self._preview_via_route(client, doc.project_id, [("Data Room/Addendum-01.txt", b"new evidence")])
+        manifest = PendingReconcileStore(self.tmp_dir).get(staging_id_2)
+        self.assertEqual(manifest["report"]["summary"]["new"], 0)
+        self.assertGreaterEqual(manifest["report"]["summary"]["unchanged"], 1)
+        client.post(f"/projects/{doc.project_id}/workspace/data-room/reconcile/{staging_id_2}/confirm")
+        self.assertEqual(len(self.store.get(doc.project_id).sources), sources_after_first)  # stable
+
+    def test_game_g_discard_never_mutates(self):
+        doc = self._ingest("Reconcile Discard No Mutation")
+        client = self._client()
+        staging_id = self._preview_via_route(client, doc.project_id, [("Data Room/Addendum-01.pdf", b"new evidence")])
+        sources_before = len(self.store.get(doc.project_id).sources)
+
+        resp = client.post(f"/projects/{doc.project_id}/workspace/data-room/reconcile/{staging_id}/discard")
+        self.assertEqual(resp.status_code, 302)
+        self.assertEqual(len(self.store.get(doc.project_id).sources), sources_before)
+        self.assertIsNone(PendingReconcileStore(self.tmp_dir).get(staging_id))  # actually cleaned up
+
+    def test_game_h_project_isolation_cannot_confirm_into_another_project(self):
+        doc_a = self._ingest("Reconcile Isolation Project A")
+        doc_b = self._ingest("Reconcile Isolation Project B")
+        client = self._client()
+        staging_id = self._preview_via_route(client, doc_a.project_id, [("Data Room/Addendum-01.pdf", b"new evidence")])
+
+        # Confirming project A's staging_id against project B's own URL
+        # must 404, never silently apply it to the wrong project.
+        resp = client.post(f"/projects/{doc_b.project_id}/workspace/data-room/reconcile/{staging_id}/confirm")
+        self.assertEqual(resp.status_code, 404)
+        self.assertFalse(any(s["name"] == "Addendum-01.pdf" for s in self.store.get(doc_b.project_id).sources))
+
+    def test_game_i_non_admin_cannot_confirm_or_discard(self):
+        doc = self._ingest("Reconcile Auth Confirm Discard")
+        client = self._client()
+        staging_id = self._preview_via_route(client, doc.project_id, [("Data Room/Addendum-01.pdf", b"new evidence")])
+
+        from models import User, db
+        with self.flask_app.app_context():
+            db.session.add(User(username="vw9_reader2", password_hash=generate_password_hash("x"), role="read_only"))
+            db.session.commit()
+        reader = self._client(username="vw9_reader2", user_id=4, role="read_only")
+        self.assertEqual(
+            reader.post(f"/projects/{doc.project_id}/workspace/data-room/reconcile/{staging_id}/confirm").status_code, 403,
+        )
+        self.assertEqual(
+            reader.post(f"/projects/{doc.project_id}/workspace/data-room/reconcile/{staging_id}/discard").status_code, 403,
+        )
 
 
 class GoFolderReferenceTests(_BaseTestCase):

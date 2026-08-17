@@ -8,6 +8,8 @@ duplicated (and drifting) across a JSON endpoint and an HTML form handler.
 from __future__ import annotations
 
 import hashlib
+import json
+import time
 import uuid
 from pathlib import Path
 from typing import Optional
@@ -639,3 +641,293 @@ def reconcile_data_room_upload(
         results.append({"filename": filename, "relative_path": relative_path, "status": "added", "reason": None, "source_id": source["id"]})
 
     return results
+
+
+# -- Data Room reconciliation preview (CLAUDE-DATA-ROOM-RECONCILE-01) --------
+# `reconcile_data_room_upload` above is real and correct for the one thing
+# it already does (compare-and-register in a single request), but it never
+# gave the reviewer a chance to see what would happen before it happened -
+# real evidence this stage's own North Bayview proof case surfaced (a
+# newly-added .xlsx workbook needed to be classified and explained, not
+# silently registered or silently dropped). This module adds a genuinely
+# read-only comparison pass, plus a small staging store so a reviewer's
+# "Add N new document(s)" decision is a SEPARATE, later request -
+# `reconcile_data_room_upload` itself is unchanged and still the thing that
+# actually performs registration, called again (idempotently - hash-dedup
+# makes a second call over the same files safe) only once approved. Not a
+# parallel Source registry: every comparison here reads workspace.sources
+# directly, the same single source of truth every other Source-aware route
+# already uses.
+RECONCILE_STATUS_UNCHANGED = "unchanged"
+RECONCILE_STATUS_NEW = "new"
+RECONCILE_STATUS_MODIFIED = "modified"
+RECONCILE_STATUS_MISSING = "missing"
+RECONCILE_STATUS_RENAMED = "renamed"
+RECONCILE_STATUS_INELIGIBLE = "ineligible"
+RECONCILE_STATUS_AMBIGUOUS = "ambiguous"
+KNOWN_RECONCILE_STATUSES = (
+    RECONCILE_STATUS_UNCHANGED, RECONCILE_STATUS_NEW, RECONCILE_STATUS_MODIFIED,
+    RECONCILE_STATUS_MISSING, RECONCILE_STATUS_RENAMED, RECONCILE_STATUS_INELIGIBLE,
+    RECONCILE_STATUS_AMBIGUOUS,
+)
+
+
+def preview_data_room_reconcile(
+    files: list[FileStorage], relative_paths: list[str], project_id: str, app: Flask,
+) -> tuple[dict, list[tuple[str, str, bytes]]]:
+    """
+    Read-only comparison of a real, browser-selected folder against this
+    project's already-registered Sources - never calls add_source,
+    set_source_folder, or ensure_folder_path. Returns `(report,
+    new_eligible_files)`: `report` is JSON-serializable (summary counts +
+    one list per non-empty classification, `unchanged` reported as a count
+    only - Section 10's own "avoid flooding... emphasize exceptions, not
+    unchanged inventory"); `new_eligible_files` is `(relative_path,
+    filename, raw_bytes)` for exactly the files a confirm step could safely
+    register, handed to `PendingReconcileStore.create` by the caller.
+
+    Classification, in the order each file is actually checked:
+    - INELIGIBLE: unsupported extension or oversize (same rules
+      reconcile_data_room_upload already enforces - never a second,
+      looser or stricter bar).
+    - AMBIGUOUS: identical content to another file already seen earlier in
+      THIS SAME scan - never guessed as a rename/duplicate, surfaced for a
+      human to look at instead.
+    - UNCHANGED / RENAMED: content hash matches an already-registered,
+      active Source. Same relative_path as that Source's own
+      origin_reference -> UNCHANGED; a different one -> RENAMED (content
+      identity is what's defensible here, not path guessing).
+    - MODIFIED: no content-hash match, but relative_path matches an
+      already-registered Source's own origin_reference - a known identity
+      whose content has changed. Never auto-registered as a second Source
+      and never overwrites the first - Section 7's own explicit
+      requirement; a human decision this pass does not yet offer an action
+      for.
+    - NEW: neither content nor path matches anything already registered -
+      genuinely new, eligible evidence.
+
+    After the scan, any already-registered Source (origin_type=upload,
+    removed_at=None, a real origin_reference) whose origin_reference was
+    never matched by ANY file in this scan (neither by path nor by
+    content) is MISSING - never deleted, never mutated, only reported
+    (Section 7's own "do not delete it... flag the relationship as
+    missing/unavailable... preserve historical evidence").
+    """
+    store = CaseWorkspaceStore(app.config["REGISTRY_STORE_PATH"])
+    workspace = store.get(project_id)
+    if workspace is None:
+        raise UploadError(f"Project {project_id} was not found.")
+
+    allowed = app.config["ALLOWED_UPLOAD_EXTENSIONS"]
+    max_bytes = app.config.get("MAX_CONTENT_LENGTH")
+
+    # Removed (soft-deleted) Sources are deliberately excluded from
+    # comparison - a human already decided that Source is no longer
+    # active project evidence; a Reconcile scan re-surfacing it as
+    # "missing" or silently re-matching it would second-guess that
+    # decision, not respect it.
+    active_sources = [s for s in workspace.sources if not s.get("removed_at")]
+    by_hash = {s["file_hash"]: s for s in active_sources if s.get("file_hash")}
+    by_origin_ref = {
+        s["origin_reference"]: s for s in active_sources
+        if s.get("origin_type") == SOURCE_ORIGIN_TYPE_UPLOAD and s.get("origin_reference")
+    }
+
+    items: dict[str, list[dict]] = {status: [] for status in KNOWN_RECONCILE_STATUSES}
+    new_eligible_files: list[tuple[str, str, bytes]] = []
+    seen_origin_refs: set[str] = set()
+    seen_hashes_this_scan: set[str] = set()
+
+    for file_storage, relative_path in zip(files, relative_paths):
+        if not relative_path:
+            items[RECONCILE_STATUS_INELIGIBLE].append(
+                {"filename": "(unnamed file)", "relative_path": relative_path, "reason": "No filename."}
+            )
+            continue
+
+        rel = Path(relative_path.replace("\\", "/"))
+        filename = rel.name
+        ext = rel.suffix.lower()
+
+        if ext not in allowed:
+            items[RECONCILE_STATUS_INELIGIBLE].append({
+                "filename": filename, "relative_path": relative_path,
+                "reason": f"Unsupported file type '{ext}'.",
+            })
+            continue
+
+        raw_bytes = file_storage.read()
+        if max_bytes and len(raw_bytes) > max_bytes:
+            items[RECONCILE_STATUS_INELIGIBLE].append({
+                "filename": filename, "relative_path": relative_path,
+                "reason": f"File exceeds the {max_bytes // (1024 * 1024)}MB size limit.",
+            })
+            continue
+
+        file_hash = hashlib.sha256(raw_bytes).hexdigest()
+
+        if file_hash in seen_hashes_this_scan:
+            items[RECONCILE_STATUS_AMBIGUOUS].append({
+                "filename": filename, "relative_path": relative_path,
+                "reason": "Identical content to another file already scanned in this same folder - possible duplicate, not guessed as a rename.",
+            })
+            continue
+        seen_hashes_this_scan.add(file_hash)
+
+        existing_by_hash = by_hash.get(file_hash)
+        if existing_by_hash is not None:
+            seen_origin_refs.add(existing_by_hash.get("origin_reference"))
+            if existing_by_hash.get("origin_reference") == relative_path:
+                items[RECONCILE_STATUS_UNCHANGED].append({
+                    "filename": filename, "relative_path": relative_path,
+                    "source_id": existing_by_hash["id"], "source_name": existing_by_hash["name"],
+                })
+            else:
+                items[RECONCILE_STATUS_RENAMED].append({
+                    "filename": filename, "relative_path": relative_path,
+                    "source_id": existing_by_hash["id"], "source_name": existing_by_hash["name"],
+                    "previous_relative_path": existing_by_hash.get("origin_reference"),
+                })
+            continue
+
+        existing_by_path = by_origin_ref.get(relative_path)
+        if existing_by_path is not None:
+            seen_origin_refs.add(relative_path)
+            items[RECONCILE_STATUS_MODIFIED].append({
+                "filename": filename, "relative_path": relative_path,
+                "source_id": existing_by_path["id"], "source_name": existing_by_path["name"],
+            })
+            continue
+
+        items[RECONCILE_STATUS_NEW].append({"filename": filename, "relative_path": relative_path})
+        new_eligible_files.append((relative_path, filename, raw_bytes))
+
+    for origin_ref, source in by_origin_ref.items():
+        if origin_ref not in seen_origin_refs:
+            items[RECONCILE_STATUS_MISSING].append({
+                "source_id": source["id"], "source_name": source["name"], "origin_reference": origin_ref,
+            })
+
+    summary = {status: len(items[status]) for status in KNOWN_RECONCILE_STATUSES}
+    summary["total_scanned"] = len(relative_paths)
+
+    report = {
+        "project_id": project_id,
+        "created_at": time.time(),
+        "summary": summary,
+        # Deliberately "by_status", not "items" - a dict literally has its
+        # own .items() method, and Jinja's dot-access resolves an
+        # attribute (the bound method) before falling back to key access,
+        # so `report.items.new` in a template would silently see that
+        # method object, never this dict's own "new" key. A real bug this
+        # stage's own test suite caught, not guessed in advance.
+        "by_status": items,
+    }
+    return report, new_eligible_files
+
+
+# CLAUDE-DATA-ROOM-RECONCILE-01: same flat-JSON + sibling-raw-bytes-file
+# staging pattern services/drawing_intake.py's own PendingUploadStore
+# already established for the single-file "analyze, then confirm" flow -
+# pluralized here (a reconciliation preview may have zero to many new
+# eligible files, not exactly one), never a database table, never Flask
+# session (raw bytes have no business round-tripping through a signed
+# cookie). Deliberately a SEPARATE subdirectory/class from
+# PendingUploadStore rather than a generalized one - the two manifests
+# hold genuinely different shapes (drawing-intake candidates vs. a full
+# reconciliation report), and this codebase's own established practice
+# (see reconcile_data_room_upload's own docstring) is to duplicate a
+# short, already-proven shape at a second call site rather than force a
+# shared abstraction across two things that happen to look similar today
+# but may diverge tomorrow.
+_RECONCILE_STAGING_SUBDIR = "pending_reconciles"
+_RECONCILE_STAGING_TTL_SECONDS = 24 * 60 * 60
+
+
+class PendingReconcileStore:
+    def __init__(self, store_path: str | Path):
+        self.dir = Path(store_path) / _RECONCILE_STAGING_SUBDIR
+        self.dir.mkdir(parents=True, exist_ok=True)
+
+    def create(
+        self, project_id: str, report: dict, new_eligible_files: list[tuple[str, str, bytes]],
+        actor: Optional[str], role: Optional[str],
+    ) -> str:
+        self._sweep_expired()
+        staging_id = uuid.uuid4().hex
+        staged_dir = self.dir / staging_id
+        staged_dir.mkdir(parents=True, exist_ok=True)
+
+        staged_files = []
+        for index, (relative_path, filename, raw_bytes) in enumerate(new_eligible_files):
+            safe_name = secure_filename(filename)
+            raw_path = staged_dir / f"{index}_{safe_name}"
+            raw_path.write_bytes(raw_bytes)
+            staged_files.append({"relative_path": relative_path, "filename": filename, "raw_path": str(raw_path)})
+
+        manifest = {
+            "staging_id": staging_id,
+            "project_id": project_id,
+            "created_at": time.time(),
+            "report": report,
+            "staged_files": staged_files,
+            "actor": actor,
+            "role": role,
+        }
+        self._manifest_path(staging_id).write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+        return staging_id
+
+    def get(self, staging_id: str) -> Optional[dict]:
+        path = self._manifest_path(staging_id)
+        if not path.exists():
+            return None
+        return json.loads(path.read_text(encoding="utf-8"))
+
+    def get_new_eligible_files(self, staging_id: str) -> list[tuple[str, str, bytes]]:
+        manifest = self.get(staging_id)
+        if manifest is None:
+            return []
+        result = []
+        for entry in manifest["staged_files"]:
+            raw_path = Path(entry["raw_path"])
+            if not raw_path.exists():
+                continue
+            result.append((entry["relative_path"], entry["filename"], raw_path.read_bytes()))
+        return result
+
+    def discard(self, staging_id: str) -> None:
+        manifest = self.get(staging_id)
+        if manifest is None:
+            return
+        for entry in manifest["staged_files"]:
+            Path(entry["raw_path"]).unlink(missing_ok=True)
+        staged_dir = self.dir / secure_filename(staging_id)
+        if staged_dir.exists():
+            try:
+                staged_dir.rmdir()
+            except OSError:
+                pass  # not empty (unexpected extra file) - leave it, never fail the request over cleanup
+        self._manifest_path(staging_id).unlink(missing_ok=True)
+
+    def _manifest_path(self, staging_id: str) -> Path:
+        # staging_id is always our own uuid4().hex output (never taken
+        # from a request path segment without validation upstream) -
+        # still defensively confined via secure_filename, same discipline
+        # PendingUploadStore's own _manifest_path already established.
+        return self.dir / f"{secure_filename(staging_id)}.json"
+
+    def _sweep_expired(self) -> None:
+        """Best-effort cleanup of abandoned reconciliation previews (a
+        reviewer who ran Reconcile but never confirmed or discarded) -
+        runs opportunistically on the next create(), matching
+        PendingUploadStore's own established discipline exactly - no
+        background worker/cron (this codebase deliberately has none)."""
+        now = time.time()
+        for manifest_path in self.dir.glob("*.json"):
+            try:
+                manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+                created_at = manifest.get("created_at", 0)
+            except (OSError, ValueError):
+                created_at = 0
+            if now - created_at > _RECONCILE_STAGING_TTL_SECONDS:
+                self.discard(manifest.get("staging_id") or manifest_path.stem)

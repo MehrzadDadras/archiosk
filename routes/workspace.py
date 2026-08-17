@@ -44,6 +44,7 @@ from flask import (
     url_for,
 )
 from PIL import Image
+from werkzeug.datastructures import FileStorage
 from werkzeug.utils import secure_filename
 
 from services.auth import admin_required, is_admin, login_required, user_can_upload_to_storage
@@ -126,7 +127,15 @@ from services.conversation_interpreter import (
     interpret_message,
 )
 from services.governance import GovernanceLog
-from services.ingestion import UploadError, document_source_payload, get_registry, reconcile_data_room_upload, reject_if_display_name_taken
+from services.ingestion import (
+    PendingReconcileStore,
+    UploadError,
+    document_source_payload,
+    get_registry,
+    preview_data_room_reconcile,
+    reconcile_data_room_upload,
+    reject_if_display_name_taken,
+)
 from services.investigation_snapshot import build_archive_snapshot
 from services.project_clock import open_project
 from services.rfi_export import RFIExportError, build_rfi_docx, build_rfi_draft_docx
@@ -812,6 +821,7 @@ def show_workspace(project_id):
     data_room_children: list = []
     data_room_folder_sources: list = []
     data_room_unfiled_sources: list = []
+    reconcile_preview = None
     if directory_view == "files":
         requested_folder_id = request.args.get("folder")
         if requested_folder_id:
@@ -880,6 +890,23 @@ def show_workspace(project_id):
         # set Section 7 originally introduced, now honestly scoped to
         # ONLY the still-unfiled subset rather than every Source.
         data_room_unfiled_sources = [s for s in data_room_sources if not s.get("folder_id")]
+
+        # CLAUDE-DATA-ROOM-RECONCILE-01: renders the most recent
+        # reconciliation preview inline in the SAME Data Room admin-
+        # actions disclosure the Reconcile form already lives in - never
+        # a second, competing Reconcile page/route. `?reconcile_preview=`
+        # is a soft display hint like every other query-param this view
+        # already reads (`?folder=`, `?data_room_folder=`) - re-validated
+        # against this project's own id before ever being shown, never
+        # trusted as an authorization boundary on its own. A missing or
+        # expired staging_id degrades to simply not showing a report
+        # (None), never an error - the reviewer can just run Reconcile
+        # again.
+        requested_reconcile_preview_id = request.args.get("reconcile_preview")
+        if requested_reconcile_preview_id:
+            manifest = PendingReconcileStore(current_app.config["REGISTRY_STORE_PATH"]).get(requested_reconcile_preview_id)
+            if manifest is not None and manifest.get("project_id") == project_id:
+                reconcile_preview = {"staging_id": requested_reconcile_preview_id, **manifest["report"]}
 
         # Move-target candidates per visible folder row: every OTHER
         # active Design-Builder folder in the project, excluding the
@@ -1736,6 +1763,7 @@ def show_workspace(project_id):
         data_room_children=data_room_children,
         data_room_folder_sources=data_room_folder_sources,
         data_room_unfiled_sources=data_room_unfiled_sources,
+        reconcile_preview=reconcile_preview,
         show_new_case_form=show_new_case_form,
         show_continue_from_archive=show_continue_from_archive,
         current_project_context=current_project_context,
@@ -2606,6 +2634,16 @@ def restore_project_route(project_id):
 # same "no new authorization path" discipline this stage's own governing
 # prompt requires.
 
+def _fake_file_storage(raw_bytes: bytes, filename: str) -> FileStorage:
+    """CLAUDE-DATA-ROOM-RECONCILE-01: reconcile_data_room_upload's own
+    signature expects real werkzeug FileStorage objects (it calls
+    `.read()` on each) - the confirm route re-hands it the SAME bytes a
+    prior request already staged to disk, never a second upload, so this
+    wraps them back into the shape that function already expects rather
+    than changing that function's own signature for one caller."""
+    return FileStorage(stream=io.BytesIO(raw_bytes), filename=filename)
+
+
 def _files_redirect(project_id, folder_id=None):
     if folder_id:
         return redirect(url_for("workspace.show_workspace", project_id=project_id, view="files", folder=folder_id))
@@ -2671,27 +2709,81 @@ def register_folder_paths_route(project_id):
 @workspace_bp.route("/projects/<project_id>/workspace/data-room/reconcile", methods=["POST"])
 @admin_required
 def reconcile_data_room_route(project_id):
-    """CLAUDE-RFP27-TERRITORY-01 (Part 4): the Data Room discovery/
-    reconciliation action - "local/external project territory changes
-    -> ARCHIOSK discovers the change." Deterministic, explicit-Refresh
-    (never automatic background polling/filesystem-watching - the
-    governing prompt's own "prefer deterministic, read-only discovery
-    before aggressive automation"), reusing the exact same browser
-    folder-select convention `portal.upload`'s own folder mode already
-    established (files renamed to their own webkitRelativePath client-
-    side before submission - see templates/upload.html's own script -
-    so relative_paths is derived the same way portal.py's own folder-
-    upload handler already derives it: [f.filename for f in files]).
-    Admin-gated: registers real project evidence and can relink existing
-    Source identity, a consequential, project-wide action, not ordinary
-    per-Document housekeeping."""
-    _, store, workspace = _load_workspace_or_404(project_id)
+    """CLAUDE-RFP27-TERRITORY-01 (Part 4) / CLAUDE-DATA-ROOM-RECONCILE-01:
+    the Data Room discovery/reconciliation action - "local/external
+    project territory changes -> ARCHIOSK discovers the change."
+    Deterministic, explicit-Refresh (never automatic background polling/
+    filesystem-watching), reusing the exact same browser folder-select
+    convention `portal.upload`'s own folder mode already established.
+
+    CLAUDE-DATA-ROOM-RECONCILE-01: this route now ONLY analyzes and
+    reports - "the first action should analyze and report before
+    modifying governed project evidence" was a real Product Owner
+    requirement this route's own prior one-shot behavior violated (it
+    used to call reconcile_data_room_upload directly here, registering
+    new Sources in the same request that discovered them). It now calls
+    the read-only preview_data_room_reconcile instead, stages the
+    result + any newly-eligible files' raw bytes via
+    PendingReconcileStore, and redirects to the SAME Files view with
+    `?reconcile_preview=<staging_id>` - show_workspace loads and renders
+    that report inline in the existing Data Room admin-actions
+    disclosure (never a second, competing Reconcile surface).
+    Registration itself only ever happens from the reviewer's own
+    explicit later confirm (reconcile_data_room_confirm_route, below),
+    which reuses reconcile_data_room_upload unchanged - this route never
+    duplicates that registration logic."""
+    _load_workspace_or_404(project_id)
     files = [f for f in request.files.getlist("folder_files") if f and f.filename]
     if not files:
         flash("No folder was selected.", "error")
         return _files_redirect(project_id)
     relative_paths = [f.filename for f in files]
 
+    try:
+        report, new_eligible_files = preview_data_room_reconcile(files, relative_paths, project_id, current_app)
+    except UploadError as exc:
+        flash(str(exc), "error")
+        return _files_redirect(project_id)
+
+    staging_store = PendingReconcileStore(current_app.config["REGISTRY_STORE_PATH"])
+    staging_id = staging_store.create(
+        project_id, report, new_eligible_files, actor=_reviewer(), role=session.get("role"),
+    )
+    return redirect(url_for("workspace.show_workspace", project_id=project_id, view="files", reconcile_preview=staging_id))
+
+
+@workspace_bp.route("/projects/<project_id>/workspace/data-room/reconcile/<staging_id>/confirm", methods=["POST"])
+@admin_required
+def reconcile_data_room_confirm_route(project_id, staging_id):
+    """CLAUDE-DATA-ROOM-RECONCILE-01: the one, explicit, human-approved
+    action a reconciliation preview can trigger this pass - "Add N new
+    document(s)". Never touches MODIFIED/MISSING/RENAMED/INELIGIBLE/
+    AMBIGUOUS items (Section 5's own "must not automatically... ingest
+    ambiguous material... supersede a Source... replace a changed
+    document" - this pass offers no action for any of those, by
+    design). Re-validates the staging record actually belongs to THIS
+    project before acting (project isolation, same discipline every
+    other id-scoped route in this file already uses) - a staging_id
+    from a different project a reviewer isn't even looking at right now
+    simply 404s, never silently reconciles the wrong project. Reuses
+    reconcile_data_room_upload UNCHANGED for the actual registration
+    (hash-dedup makes this call safe/idempotent even if the preview's
+    own classification and this confirm's own re-registration somehow
+    disagreed) rather than duplicating that logic a second time."""
+    _, store, workspace = _load_workspace_or_404(project_id)
+    manifest = PendingReconcileStore(current_app.config["REGISTRY_STORE_PATH"]).get(staging_id)
+    if manifest is None or manifest.get("project_id") != project_id:
+        abort(404)
+
+    staging_store = PendingReconcileStore(current_app.config["REGISTRY_STORE_PATH"])
+    new_eligible_files = staging_store.get_new_eligible_files(staging_id)
+    if not new_eligible_files:
+        flash("Nothing to add - that reconciliation preview has no new eligible files (or has expired).", "error")
+        staging_store.discard(staging_id)
+        return _files_redirect(project_id)
+
+    files = [_fake_file_storage(raw_bytes, filename) for _relative_path, filename, raw_bytes in new_eligible_files]
+    relative_paths = [relative_path for relative_path, _filename, _raw_bytes in new_eligible_files]
     try:
         results = reconcile_data_room_upload(
             files, relative_paths, project_id, current_app,
@@ -2701,13 +2793,25 @@ def reconcile_data_room_route(project_id):
         flash(str(exc), "error")
         return _files_redirect(project_id)
 
+    staging_store.discard(staging_id)
     added = [r for r in results if r["status"] == "added"]
-    relinked = [r for r in results if r["status"] == "relinked"]
-    skipped = [r for r in results if r["status"] == "skipped"]
-    summary = f"Data Room reconciled: {len(added)} added, {len(relinked)} relinked (not duplicated), {len(skipped)} skipped."
-    flash(summary, "success" if (added or relinked) else "error")
-    if skipped:
-        flash("Skipped: " + "; ".join(f'{r["filename"]} ({r["reason"]})' for r in skipped[:5]), "error")
+    flash(f"Added {len(added)} new document(s) to the Data Room.", "success" if added else "error")
+    return _files_redirect(project_id)
+
+
+@workspace_bp.route("/projects/<project_id>/workspace/data-room/reconcile/<staging_id>/discard", methods=["POST"])
+@admin_required
+def reconcile_data_room_discard_route(project_id, staging_id):
+    """CLAUDE-DATA-ROOM-RECONCILE-01 (Game G - Cancel): abandons a
+    reconciliation preview without registering anything - nothing was
+    ever mutated by the preview itself, so this only ever needs to clean
+    up the staged raw bytes. Same project-isolation re-check as the
+    confirm route above."""
+    _load_workspace_or_404(project_id)
+    staging_store = PendingReconcileStore(current_app.config["REGISTRY_STORE_PATH"])
+    manifest = staging_store.get(staging_id)
+    if manifest is not None and manifest.get("project_id") == project_id:
+        staging_store.discard(staging_id)
     return _files_redirect(project_id)
 
 
