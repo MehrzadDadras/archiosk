@@ -659,5 +659,87 @@ class MenuDeboxedFrameTests(unittest.TestCase):
         self.assertIn("setAttribute('aria-expanded', String(target.open))", body)
 
 
+class DeveloperModeTests(_BaseTestCase):
+    """CLAUDE-DEVELOPER-MODE-COCKPIT-01, Addendum E: orientation-only
+    Developer Mode - a real, session-based, admin_required-gated toggle,
+    never a client-only/localStorage mechanism a non-admin could spoof."""
+
+    def _toggle(self, client):
+        return client.post("/developer-mode/toggle")
+
+    def test_menu_item_absent_for_non_admin(self):
+        doc = self._ingest(owner="menu_owner", project_name="Dev Mode Non-Admin Menu Test")
+        client = self._client_as("menu_reviewer", 2, role="read_only")
+        body = client.get(f"/projects/{doc.project_id}/workspace").get_data(as_text=True)
+        self.assertNotIn('data-ui-ref="menu.archiosk.admin.developer-mode-toggle"', body)
+
+    def test_toggle_route_rejects_non_admin(self):
+        client = self._client_as("menu_reviewer", 2, role="read_only")
+        resp = self._toggle(client)
+        self.assertEqual(resp.status_code, 403)
+
+    def test_toggle_route_requires_login(self):
+        client = self.flask_app.test_client()
+        resp = self._toggle(client)
+        self.assertEqual(resp.status_code, 302)
+        self.assertIn("/login", resp.headers["Location"])
+
+    def test_off_by_default_for_admin(self):
+        client = self._client_as("menu_owner", 1)
+        body = client.get("/projects").get_data(as_text=True)
+        self.assertIn("Enter Developer Mode", body)
+        self.assertNotIn("Exit Developer Mode", body)
+        self.assertNotIn('data-ui-ref="menu.developer-mode-badge"', body)
+
+    def test_admin_can_toggle_on_and_badge_appears_everywhere(self):
+        client = self._client_as("menu_owner", 1)
+        resp = self._toggle(client)
+        self.assertEqual(resp.status_code, 302)
+
+        # Project-less page.
+        body = client.get("/projects").get_data(as_text=True)
+        self.assertIn('data-ui-ref="menu.developer-mode-badge"', body)
+        self.assertIn("Exit Developer Mode", body)
+        self.assertNotIn("Enter Developer Mode", body)
+
+        # A real open Project - still visible, and does not sit inside
+        # the project-context breadcrumb (no project authority implied).
+        doc = self._ingest(owner="menu_owner", project_name="Dev Mode Badge Project Test")
+        body = client.get(f"/projects/{doc.project_id}/workspace").get_data(as_text=True)
+        self.assertIn('data-ui-ref="menu.developer-mode-badge"', body)
+
+    def test_toggle_off_again_removes_the_badge(self):
+        client = self._client_as("menu_owner", 1)
+        self._toggle(client)
+        self._toggle(client)
+        body = client.get("/projects").get_data(as_text=True)
+        self.assertNotIn('data-ui-ref="menu.developer-mode-badge"', body)
+        self.assertIn("Enter Developer Mode", body)
+
+    def test_badge_absent_on_standalone_auth_pages_even_when_on(self):
+        client = self._client_as("menu_owner", 1)
+        self._toggle(client)
+        # /login renders auth_shell.html, not the workspace menu bar at
+        # all - same standalone-auth-page guard is_admin itself already
+        # gets in app.py's inject_globals.
+        body = client.get("/login").get_data(as_text=True)
+        self.assertNotIn('data-ui-ref="menu.developer-mode-badge"', body)
+
+    def test_does_not_grant_or_imply_any_project_authority(self):
+        # A read_only user's own session can never carry developer_mode
+        # at all (the toggle route already rejects them) - this test
+        # proves the converse too: an admin's own developer_mode=True
+        # never changes what a DIFFERENT, non-admin session can do or
+        # see on a real project.
+        doc = self._ingest(owner="menu_owner", project_name="Dev Mode Authority Test", operating_environment=CLIENT_OWNER)
+        admin_client = self._client_as("menu_owner", 1)
+        self._toggle(admin_client)
+
+        reviewer_client = self._client_as("menu_reviewer", 2, role="read_only")
+        body = reviewer_client.get(f"/projects/{doc.project_id}/workspace").get_data(as_text=True)
+        self.assertNotIn('data-ui-ref="menu.developer-mode-badge"', body)
+        self.assertNotIn('data-ui-ref="menu.file.publish-rfp"', body)
+
+
 if __name__ == "__main__":
     unittest.main()

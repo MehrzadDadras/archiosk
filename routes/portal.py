@@ -157,6 +157,34 @@ def _project_summary(document, workspace, events) -> dict:
     }
 
 
+@portal_bp.route('/developer-mode/toggle', methods=['POST'])
+@admin_required
+def toggle_developer_mode():
+    """
+    CLAUDE-DEVELOPER-MODE-COCKPIT-01, Addendum E: the one toggle for this
+    stage's orientation-only Developer Mode - a plain reviewer-session
+    flag, never project-scoped and never implying Client/Owner,
+    Proponent, or any project authority (see app.py's inject_globals,
+    the one place this flag is ever read into template context, for the
+    is_admin() re-check that also applies at render time). admin_required
+    is the existing, real authorization boundary this reuses rather than
+    inventing a second one - a non-admin can never reach this route at
+    all (403 via admin_required), so developer_mode can never become
+    true in their session through any client-side manipulation, unlike a
+    localStorage-only toggle (see UI Reference Mode, templates/base.html)
+    would allow.
+
+    This stage grants no capability beyond a persistent visual state -
+    no terminal, no repo explorer, no editor - so the redirect target
+    only needs to be a safe, always-valid page, not "back to exactly
+    where you were": Archiosk Home, matching the fixed-destination
+    pattern this app's other menu actions already use (Security,
+    Operations), not an unprecedented request.referrer-based redirect.
+    """
+    session['developer_mode'] = not session.get('developer_mode', False)
+    return redirect(url_for('portal.index'))
+
+
 @portal_bp.route('/')
 def index():
     """

@@ -2750,6 +2750,28 @@ main:has(.document-viewer-canvas-container) {
     white-space: nowrap;
     cursor: default;
 }
+/* CLAUDE-DEVELOPER-MODE-COCKPIT-01, Addendum E: reuses --machine-blue
+   (system/reference, not a new 7th semantic color - tokens.css's own
+   "add a new semantic color only when a new kind of information
+   genuinely needs distinguishing" discipline) but FILLED rather than
+   .workspace-side-indicator's outline, so the two never read as the
+   same kind of badge at a glance - one is project-environment state,
+   this one is reviewer-session state, and they can legitimately both
+   be visible at once. */
+.workspace-developer-mode-badge {
+    display: inline-flex;
+    align-items: center;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--surface-primary);
+    background: var(--machine-blue);
+    border-radius: 3px;
+    padding: 0.1rem 0.45rem;
+    margin-left: 0.5rem;
+    white-space: nowrap;
+    cursor: default;
+}
 /* CLAUDE-RFP-BOUNDARY-01: the Owner-side Publish Procurement Package
    selection list - plain, restrained rows, same 0.85rem/border-bottom
    idiom this file already uses for compact list surfaces (see

@@ -622,6 +622,21 @@ def _register_context_processors(app: Flask) -> None:
             "csp_nonce": get_csp_nonce(),
             "authenticated": authenticated,
             "is_admin": is_admin() and not on_standalone_auth_page,
+            # CLAUDE-DEVELOPER-MODE-COCKPIT-01, Addendum E: the one place
+            # this flag is ever read into template context - a plain
+            # reviewer-session boolean (routes/portal.py's
+            # toggle_developer_mode, admin_required-gated), never a
+            # localStorage/client-only flag like UI Reference Mode below,
+            # precisely because this one is authorization-sensitive: the
+            # server, not the browser, is the source of truth for whether
+            # it is on. `and is_admin()` here is defense-in-depth, not the
+            # only gate (the toggle route itself is admin_required) - a
+            # session that somehow carried a stale developer_mode=True
+            # after a role change still can't display as developer_mode
+            # in any template once is_admin() itself goes false. Same
+            # standalone-auth-page guard as is_admin above - no menu bar
+            # exists there for a badge to appear in anyway.
+            "developer_mode": is_admin() and not on_standalone_auth_page and bool(session.get("developer_mode")),
             # CLAUDE-CA1D-INSTRUMENT-RAIL-01: the one quiet global machine
             # fact proven this tranche -- reads the exact same
             # AI_CALLS_DISABLED env var services/bhive_parser.py's own

@@ -130,6 +130,20 @@
                                     <a class="workspace-menubar-item" data-ui-ref="menu.archiosk.admin.security" href="{{ url_for('security.department_home') }}">Security</a>
                                     <a class="workspace-menubar-item" data-ui-ref="menu.archiosk.admin.operations" href="{{ url_for('operations.department_home') }}">Operations</a>
                                     <a class="workspace-menubar-item" id="project-data-management" data-ui-ref="menu.archiosk.admin.project-data-management" href="{{ url_for('portal.reset_project_data', project_id=(project_id if project_id is defined else None)) }}">Project Data Management</a>
+                                    <hr class="workspace-menubar-separator" aria-hidden="true">
+                                    {# CLAUDE-DEVELOPER-MODE-COCKPIT-01, Addendum E: orientation-only
+                                       first pass - a real form-POST toggle (routes/portal.py's
+                                       toggle_developer_mode, admin_required), not a second,
+                                       client-only mechanism like UI Reference Mode below. Inside the
+                                       SAME is_admin-gated Admin group as every other item here, not
+                                       a separately-authorized surface - "authorized" for this stage
+                                       means exactly what it already means everywhere else in this
+                                       menu. The label itself states current state, matching Publish
+                                       RFP/Remove Project's own "the button says what happens next"
+                                       idiom. #}
+                                    <form method="post" action="{{ url_for('portal.toggle_developer_mode') }}">
+                                        <button type="submit" class="workspace-menubar-item" data-ui-ref="menu.archiosk.admin.developer-mode-toggle">{% if developer_mode %}Exit Developer Mode{% else %}Enter Developer Mode{% endif %}</button>
+                                    </form>
                                 </div>
                             </details>
                             {% endif %}
@@ -408,6 +422,29 @@
                         <dt>Enter / Space</dt><dd>Activate the focused Document tab</dd>
                     </dl>
                 </div>
+                {% if developer_mode %}
+                {# CLAUDE-DEVELOPER-MODE-COCKPIT-01, Addendum E: the one
+                   persistent, unmistakable indicator this stage exists
+                   to provide - "When I am developing ARCHIOSK, I should
+                   always know that I am in Developer Mode" (Product
+                   Owner's own words). Deliberately OUTSIDE the
+                   `project_id is defined` guard below (unlike
+                   .workspace-side-indicator, which only ever appears
+                   inside an open Project) - this is a reviewer-wide
+                   session state, not a project-scoped one, so it must
+                   render on every authenticated page, project open or
+                   not (Projects directory, Establish a Project, etc.),
+                   matching this stage's own explicit "must not imply...
+                   any project authority" requirement: it is not part of
+                   the project-context breadcrumb at all. Plain <span>,
+                   no click handler - same "operational boundary
+                   indicator, not decoration, not a casual mode-switch
+                   button" idiom CLAUDE-RFP-BOUNDARY-01 already
+                   established for the side-indicator (the actual
+                   mode-switch is the Archiosk > Admin menu item above,
+                   same discipline as that indicator's own precedent). #}
+                <span class="workspace-developer-mode-badge" data-ui-ref="menu.developer-mode-badge" title="Developer Mode is active - toggle from Archiosk > Admin" aria-label="Developer Mode is active">Developer Mode</span>
+                {% endif %}
                 {% if project_id is defined and workspace is defined %}
                 <span class="workspace-topbar-context" data-ui-ref="menu.context">
                     {# CLAUDE-P40-VW7B, Section 5: "[ARCHIOSK mark] Archiosk
