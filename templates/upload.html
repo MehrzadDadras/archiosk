@@ -329,7 +329,18 @@
     // server-side against the submitted files' own filenames (see
     // routes/portal.py's upload_folder).
     (function () {
-        var ELIGIBLE_EXTENSIONS = ['.pdf', '.docx', '.txt', '.csv', '.md'];
+        // CLAUDE-SPREADSHEET-SOURCE-ELIGIBILITY-01: two DIFFERENT lists on
+        // purpose, not one. .xlsx is a genuinely registerable non-founding
+        // Source (services/ingestion.py's _register_source_content routes
+        // it through the real spreadsheet pipeline) but is explicitly
+        // refused server-side as a FOUNDING document (ingest_upload's own
+        // guard - a spreadsheet's structure isn't prose suitable for case
+        // classification). Before this stage both concepts shared one
+        // list, so a folder containing an .xlsx would have honestly said
+        // "will be skipped" for a file that actually registers fine - a
+        // real UI-honesty gap this split closes, not a hypothetical one.
+        var REGISTERABLE_EXTENSIONS = ['.pdf', '.docx', '.txt', '.csv', '.md', '.xlsx'];
+        var FOUNDING_ELIGIBLE_EXTENSIONS = ['.pdf', '.docx', '.txt', '.csv', '.md'];
 
         var pickerButton = document.getElementById('folder-picker-button');
         var pickerInput = document.getElementById('folder-picker-input');
@@ -345,12 +356,20 @@
         var selectedFiles = [];   // File[], renamed so .name === relative path
         var eligibleRelativePaths = [];
 
-        function isEligible(relativePath) {
+        function matchesExtensionList(relativePath, extensions) {
             var lower = relativePath.toLowerCase();
-            for (var i = 0; i < ELIGIBLE_EXTENSIONS.length; i++) {
-                if (lower.endsWith(ELIGIBLE_EXTENSIONS[i])) return true;
+            for (var i = 0; i < extensions.length; i++) {
+                if (lower.endsWith(extensions[i])) return true;
             }
             return false;
+        }
+
+        function isEligible(relativePath) {
+            return matchesExtensionList(relativePath, REGISTERABLE_EXTENSIONS);
+        }
+
+        function isFoundingEligible(relativePath) {
+            return matchesExtensionList(relativePath, FOUNDING_ELIGIBLE_EXTENSIONS);
         }
 
         function isTopLevel(relativePath) {
@@ -413,21 +432,37 @@
             if (!eligibleRelativePaths.length) {
                 foundingPickerEl.hidden = true;
                 submitButton.disabled = true;
-                errorEl.textContent = 'No eligible documents (PDF, DOCX, TXT, CSV, MD) were found in that folder.';
+                errorEl.textContent = 'No eligible documents (PDF, DOCX, TXT, CSV, MD, XLSX) were found in that folder.';
                 errorEl.hidden = false;
                 return;
             }
 
-            var topLevelCandidates = eligibleRelativePaths.filter(isTopLevel);
+            // Founding-document candidates are a NARROWER set than "eligible
+            // to register at all" - a spreadsheet can be added as a real
+            // Source but can never be the founding document (see the
+            // extension-list comment above), so it must never appear in
+            // this picker even if it's the only top-level file.
+            var foundingEligiblePaths = eligibleRelativePaths.filter(isFoundingEligible);
+            if (!foundingEligiblePaths.length) {
+                foundingPickerEl.hidden = true;
+                submitButton.disabled = true;
+                errorEl.textContent = 'That folder has eligible files, but none can be the founding document ' +
+                    '(PDF, DOCX, TXT, CSV, or MD required - a spreadsheet alone is not enough). ' +
+                    'Add one, or use "Or upload a single file" for the founding document first.';
+                errorEl.hidden = false;
+                return;
+            }
+
+            var topLevelCandidates = foundingEligiblePaths.filter(isTopLevel);
             foundingPickerEl.hidden = false;
             if (topLevelCandidates.length === 1) {
-                renderFoundingCandidates(eligibleRelativePaths, topLevelCandidates[0]);
+                renderFoundingCandidates(foundingEligiblePaths, topLevelCandidates[0]);
                 setFounding(topLevelCandidates[0]);
             } else {
                 // Zero or multiple top-level candidates - never guess;
                 // require an explicit choice (submit stays disabled until
                 // one is made).
-                renderFoundingCandidates(eligibleRelativePaths, null);
+                renderFoundingCandidates(foundingEligiblePaths, null);
                 setFounding('');
             }
         });

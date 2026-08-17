@@ -23,6 +23,10 @@ from services.case_workspace import (
     FOLDER_ROOT_DATA_ROOM,
     SOURCE_KIND_PROJECT_DOCUMENT,
     SOURCE_ORIGIN_TYPE_UPLOAD,
+    SPREADSHEET_CLASSIFICATION_ENCRYPTED_OR_UNSUPPORTED,
+    SPREADSHEET_CLASSIFICATION_EXCESSIVE_SIZE,
+    SPREADSHEET_CLASSIFICATION_MALFORMED,
+    SPREADSHEET_CLASSIFICATION_SUPPORTED,
     CaseWorkspaceStore,
 )
 from services.governance import GovernanceLog
@@ -213,6 +217,22 @@ def ingest_upload(
         raise UploadError(
             f"Unsupported file type '{ext}'. Allowed types: {', '.join(sorted(allowed))}."
         )
+    # CLAUDE-SPREADSHEET-SOURCE-ELIGIBILITY-01: .xlsx is a genuinely
+    # eligible Source (see ALLOWED_UPLOAD_EXTENSIONS above), but never as
+    # the FOUNDING document specifically - this path calls classify()/
+    # _check_consistency() below, which expect prose-shaped extracted
+    # text, and a spreadsheet's real structure (sheets/rows/cells) has no
+    # honest prose rendering (Section 4's own "do not flatten a workbook
+    # into misleading prose", extended here to founding-document
+    # classification, not just display). Refused explicitly, with a
+    # constructive alternative, rather than left to fail opaquely inside
+    # BHiveParser's own extraction.
+    if ext == ".xlsx":
+        raise UploadError(
+            "A spreadsheet (.xlsx) cannot be a project's founding document - its structure isn't "
+            "prose suitable for case classification. Upload a PDF/DOCX/TXT/MD as the founding "
+            "document, then add this workbook via folder upload or Data Room Reconcile."
+        )
 
     project_name = (project_name or "").strip() or None
     _reject_if_name_taken(app, project_name or filename)
@@ -351,6 +371,62 @@ def ingest_upload(
     return document
 
 
+def _register_source_content(
+    store: CaseWorkspaceStore, workspace, source: dict, raw_bytes: bytes, filename: str,
+    parser: BHiveParser, actor: str, governance_log: Optional[GovernanceLog],
+) -> tuple[str, Optional[str]]:
+    """
+    CLAUDE-SPREADSHEET-SOURCE-ELIGIBILITY-01: extracts and registers
+    governed evidence for a just-created, non-founding Source, shared by
+    ingest_folder_upload and reconcile_data_room_upload (previously two
+    near-identical inline blocks). `.xlsx` is routed through the real,
+    already-hardened spreadsheet pipeline (services/spreadsheet_
+    intelligence.py's inspect_workbook -- macro/zip-bomb/OLE2/malformed
+    detection already built in, CLAUDE-MM3) and CaseWorkspaceStore.
+    register_spreadsheet_structure (sheet/row/cell evidence) -- never
+    BHiveParser, which has no .xlsx branch and would otherwise either
+    raise or (worse) silently misread binary zip bytes as prose. Every
+    other allowed extension is completely unchanged: BHiveParser._extract
+    + register_plain_text_structure, exactly as before this helper
+    existed.
+
+    Returns (status, reason): status is "added" or "skipped"; reason is
+    None on success or a human-readable explanation on skip. Never
+    raises -- a refused/unreadable file is always an honest skip here,
+    matching both callers' own existing per-file failure handling.
+    """
+    if Path(filename).suffix.lower() == ".xlsx":
+        from services.spreadsheet_intelligence import (
+            inspect_workbook,
+            _spreadsheet_extractor_version,  # noqa: SLF001 - same reach-in precedent as parser._extract below
+        )
+        inspection = inspect_workbook(raw_bytes, filename)
+        if inspection["classification"] != SPREADSHEET_CLASSIFICATION_SUPPORTED:
+            reason_by_classification = {
+                SPREADSHEET_CLASSIFICATION_MALFORMED: "the workbook could not be read (malformed or corrupt)",
+                SPREADSHEET_CLASSIFICATION_ENCRYPTED_OR_UNSUPPORTED: "the workbook is password-protected, macro-enabled, or otherwise unsupported",
+                SPREADSHEET_CLASSIFICATION_EXCESSIVE_SIZE: "the workbook exceeds the supported size/dimension limits",
+            }
+            reason = reason_by_classification.get(inspection["classification"], inspection["classification"])
+            return "skipped", f"Registered as a Source, but its content could not be extracted: {reason}."
+        store.register_spreadsheet_structure(
+            workspace, source_id=source["id"], sheets=inspection["sheets"],
+            extractor_version=_spreadsheet_extractor_version(), actor=actor, governance_log=governance_log,
+        )
+        return "added", None
+
+    try:
+        text = parser._extract(raw_bytes, filename)  # noqa: SLF001 - same shared stage ingest_upload's own parse() uses internally
+    except ParserError as exc:
+        return "skipped", f"Registered as a Source, but its content could not be extracted: {exc}"
+
+    store.register_plain_text_structure(
+        workspace, source_id=source["id"], text=text,
+        extractor_version=parser.__class__.__name__, actor=actor, governance_log=governance_log,
+    )
+    return "added", None
+
+
 def ingest_folder_upload(
     files: list[FileStorage],
     relative_paths: list[str],
@@ -476,21 +552,11 @@ def ingest_folder_upload(
             governance_log=governance_log, actor=actor or _DEFAULT_ACTOR,
         )
 
-        try:
-            text = parser._extract(raw_bytes, filename)  # noqa: SLF001 - same shared stage ingest_upload's own parse() uses internally
-        except ParserError as exc:
-            results.append({
-                "filename": filename, "relative_path": relative_path, "status": "skipped",
-                "reason": f"Added as a Source, but its content could not be extracted: {exc}",
-            })
-            continue
-
-        store.register_plain_text_structure(
-            workspace, source_id=source["id"], text=text,
-            extractor_version=parser.__class__.__name__, actor=actor or _DEFAULT_ACTOR,
-            governance_log=governance_log,
+        status, reason = _register_source_content(
+            store, workspace, source, raw_bytes, filename, parser,
+            actor=actor or _DEFAULT_ACTOR, governance_log=governance_log,
         )
-        results.append({"filename": filename, "relative_path": relative_path, "status": "added", "reason": None})
+        results.append({"filename": filename, "relative_path": relative_path, "status": status, "reason": reason})
 
     return founding_document, results
 
@@ -623,22 +689,14 @@ def reconcile_data_room_upload(
             folder_id=folder_id, governance_log=governance_log, actor=actor or _DEFAULT_ACTOR,
         )
 
-        try:
-            text = parser._extract(raw_bytes, filename)  # noqa: SLF001 - same shared stage ingest_upload/ingest_folder_upload's own parse() uses internally
-        except ParserError as exc:
-            results.append({
-                "filename": filename, "relative_path": relative_path, "status": "skipped",
-                "reason": f"Registered as a Source, but its content could not be extracted: {exc}",
-                "source_id": source["id"],
-            })
-            continue
-
-        store.register_plain_text_structure(
-            workspace, source_id=source["id"], text=text,
-            extractor_version=parser.__class__.__name__, actor=actor or _DEFAULT_ACTOR,
-            governance_log=governance_log,
+        status, reason = _register_source_content(
+            store, workspace, source, raw_bytes, filename, parser,
+            actor=actor or _DEFAULT_ACTOR, governance_log=governance_log,
         )
-        results.append({"filename": filename, "relative_path": relative_path, "status": "added", "reason": None, "source_id": source["id"]})
+        results.append({
+            "filename": filename, "relative_path": relative_path, "status": status, "reason": reason,
+            "source_id": source["id"],
+        })
 
     return results
 

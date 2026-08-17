@@ -39,7 +39,16 @@ class BaseConfig:
 
     # -- Upload / parsing limits ------------------------------------------
     MAX_CONTENT_LENGTH = int(os.getenv("MAX_UPLOAD_MB", "25")) * 1024 * 1024
-    ALLOWED_UPLOAD_EXTENSIONS = {".pdf", ".docx", ".txt", ".csv", ".md"}
+    # CLAUDE-SPREADSHEET-SOURCE-ELIGIBILITY-01: .xlsx added here - a real,
+    # already-hardened extraction/security pipeline for it already existed
+    # (services/spreadsheet_intelligence.py, CLAUDE-MM3) and was already
+    # reachable for adding a spreadsheet to an EXISTING project, but this
+    # specific list (new-project/folder-upload/Data-Room-Reconcile
+    # eligibility, services/ingestion.py) was never revisited to include
+    # it - a legacy scope gap, not a security boundary or parser
+    # limitation. See services/ingestion.py's own extension branch for
+    # where .xlsx is routed to that pipeline instead of BHiveParser.
+    ALLOWED_UPLOAD_EXTENSIONS = {".pdf", ".docx", ".txt", ".csv", ".md", ".xlsx"}
 
     # -- Static asset cache-busting ----------------------------------------
     # Appended as a ?v= query string on static asset URLs (see base.html).
