@@ -432,5 +432,40 @@
             }
         });
     })();
+
+    // CLAUDE-CLIENT-RFP-PROJECT-CREATION-01 (Game E - retry/duplicate
+    // behavior): a real double-submit reproduced live during this
+    // stage's own verification - a slow request (many files, plus a
+    // real external-AI classification call for the founding document)
+    // left a genuine window where a second click on the same button
+    // fired a second identical request before the first had finished
+    // committing, so services/ingestion.py's own _reject_if_name_taken
+    // uniqueness check (which only looks at ALREADY-persisted projects)
+    // did not yet see the first one and let both through - two real,
+    // fully-registered, identically-named projects. Neither submit
+    // button was ever disabled once a genuine submission actually
+    // started (only "not yet valid," from the two IIFEs above). This
+    // closes that specific window: the instant either real submission
+    // begins, both buttons disable immediately, so a second click
+    // during the same pending request can never fire a second request.
+    // A residual, out-of-scope case remains and is intentionally not
+    // fixed here: two genuinely separate browser tabs/requests racing
+    // the server directly (curl, or two tabs) - a server-side lock/
+    // idempotency token would be needed for that, real additional scope
+    // this stage does not cover.
+    (function () {
+        var form = document.getElementById('project-creation-form');
+        var singleButton = document.getElementById('single-file-submit-button');
+        var folderButton = document.getElementById('folder-submit-button');
+        if (!form) return;
+        form.addEventListener('submit', function () {
+            if (singleButton) { singleButton.disabled = true; }
+            if (folderButton) { folderButton.disabled = true; }
+            var active = document.activeElement;
+            if (active && active.tagName === 'BUTTON') {
+                active.textContent = 'Uploading…';
+            }
+        });
+    })();
 </script>
 {% endblock %}

@@ -143,6 +143,21 @@ class SingleFilePathWordingTests(_BaseTestCase):
         self.assertIn('data-ui-ref="upload.submit"', body)
         self.assertIn("Create project and parse document", body)
 
+    def test_form_disables_both_submit_buttons_on_actual_submission(self):
+        # CLAUDE-CLIENT-RFP-PROJECT-CREATION-01 (Game E): a real
+        # double-submit was reproduced live during this stage's own
+        # verification - a slow request left a window where a second
+        # click fired a second identical request before the first had
+        # finished committing, creating two real, identically-named
+        # projects (services/ingestion.py's _reject_if_name_taken only
+        # sees already-persisted projects). Static-content check only -
+        # the actual dynamic behavior needs live-browser verification,
+        # which this stage's own report records separately.
+        body = self._body()
+        self.assertIn("form.addEventListener('submit', function () {", body)
+        self.assertIn("singleButton.disabled = true;", body)
+        self.assertIn("folderButton.disabled = true;", body)
+
     def test_single_file_submit_button_starts_disabled(self):
         # CLAUDE-CLIENT-RFP-PROJECT-CREATION-01: a real Product Owner
         # pressed this button with no file chosen and only learned "No
