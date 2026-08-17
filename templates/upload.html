@@ -250,7 +250,7 @@
             type="file" name="file" accept=".pdf,.docx,.txt,.csv,.md"
             id="upload-file-input" data-ui-ref="upload.file"
             data-max-upload-bytes="{{ max_upload_mb * 1024 * 1024 }}" data-max-upload-mb="{{ max_upload_mb }}">
-        <button type="submit" class="btn btn-ghost" id="single-file-submit-button" data-ui-ref="upload.submit">
+        <button type="submit" class="btn btn-ghost" id="single-file-submit-button" data-ui-ref="upload.submit" disabled>
             Create project and parse document
         </button>
     </fieldset>
@@ -263,11 +263,21 @@
     // actually enforces the limit; this only saves a reviewer the
     // round-trip for the common case where the browser already knows
     // the file's size before anything is uploaded.
+    //
+    // CLAUDE-CLIENT-RFP-PROJECT-CREATION-01: single-file-submit-button
+    // now starts disabled (template) and is only ever enabled once a
+    // real, size-valid file is actually chosen - the same "disabled
+    // until valid" discipline folder-submit-button already used below.
+    // A real Product Owner pressed this button with nothing chosen and
+    // only learned "No file was provided" after a full server round
+    // trip; a disabled button makes that misleading ready state
+    // impossible rather than relying on a server error as guidance.
     (function () {
         var input = document.getElementById('upload-file-input');
         var errorEl = document.getElementById('upload-size-error');
         var form = document.getElementById('project-creation-form');
-        if (!input || !errorEl || !form) return;
+        var submitButton = document.getElementById('single-file-submit-button');
+        if (!input || !errorEl || !form || !submitButton) return;
         var maxBytes = parseInt(input.getAttribute('data-max-upload-bytes'), 10);
         var maxMb = input.getAttribute('data-max-upload-mb');
 
@@ -275,6 +285,7 @@
             var file = input.files && input.files[0];
             if (!file) {
                 errorEl.hidden = true;
+                submitButton.disabled = true;
                 return true;
             }
             if (file.size > maxBytes) {
@@ -282,9 +293,11 @@
                 errorEl.textContent = 'This file is ' + actualMb + ' MB. The current maximum is ' +
                     maxMb + ' MB. Choose a smaller file or reduce its size before uploading.';
                 errorEl.hidden = false;
+                submitButton.disabled = true;
                 return false;
             }
             errorEl.hidden = true;
+            submitButton.disabled = false;
             return true;
         }
 

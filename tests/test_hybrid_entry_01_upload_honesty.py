@@ -143,6 +143,19 @@ class SingleFilePathWordingTests(_BaseTestCase):
         self.assertIn('data-ui-ref="upload.submit"', body)
         self.assertIn("Create project and parse document", body)
 
+    def test_single_file_submit_button_starts_disabled(self):
+        # CLAUDE-CLIENT-RFP-PROJECT-CREATION-01: a real Product Owner
+        # pressed this button with no file chosen and only learned "No
+        # file was provided" after a full server round trip - the same
+        # "disabled until valid" discipline folder-submit-button already
+        # uses (test_folder_submit_button_still_starts_disabled, above)
+        # now applies here too, so the misleading ready state can never
+        # be reached at all.
+        body = self._body()
+        button_start = body.index('id="single-file-submit-button"')
+        button_end = body.index(">", button_start)
+        self.assertIn("disabled", body[button_start:button_end])
+
 
 class MechanismNotRemovedRegressionTests(_BaseTestCase):
     """CLAUDE-HYBRID-ENTRY-01 is a wording/labeling correction only - the
