@@ -52,12 +52,13 @@ Source registration, real GO grounding) remain deliberately NOT live-
 verified pending a sanctioned live-verification account mechanism, per
 explicit 2026-08-17 Product Owner disposition (see row 32); rows 34-36
 (`CLAUDE-LIVE-VERIFICATION-ACCOUNT-MECHANISM-01`) establish that
-mechanism as of commit `de23798`, hermetically verified (19 tests, full
+mechanism as of commit `5902bbd`, hermetically verified (19 tests, full
 lifecycle, plus a genuine test-contamination bug found and fixed
-pre-commit - row 36) as of 2026-08-17 - not yet deployed/activated at
-the time this row was written (see the round's own report for current
-state). Once activated by the Product Owner, this mechanism is what
-row 32's three still-open items are waiting on. If the
+pre-commit - row 36), live-deployed to production and health-checked
+as of 2026-08-17 - not yet ACTIVATED (no `create` command has been run
+by the Product Owner, no verification pass has happened through it
+yet). Once activated, this mechanism is what row 32's three still-open
+items are waiting on. If the
 referenced file/line has since changed, the row's own confidence should
 be treated as stale until re-verified, not trusted at face value.
 
