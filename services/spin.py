@@ -182,10 +182,21 @@ def run_spin(
         spin_kind, document_filename, candidate_requirements, governed_requirements, milestones,
         display_title, additional_document_evidence, changed_source_keys, prior_findings,
     )
+    # CLAUDE-DELTA-SPIN-02: live acceptance testing found a second-order
+    # consequence of raising max_tokens 4000 -> 8000 below - a larger
+    # permitted output takes proportionally longer to generate, and the
+    # previous 90s ceiling (project_qa.py/project_briefing.py's own
+    # shared default, correct for THEIR smaller max_tokens) started
+    # producing honest "Request timed out after 90s" failures instead of
+    # truncation ones - same underlying problem, different failure mode,
+    # still blocking the acceptance behavior. 140s leaves a 10s margin
+    # under this deployment's own real ceiling (deploy/gunicorn.conf.py's
+    # `timeout = 150`, deploy/nginx.conf's `proxy_read_timeout 150s` on
+    # location / - confirmed by direct inspection, not assumed).
     base_timeout = resolve_timeout_from_env(timeout, DEFAULT_TIMEOUT_SECONDS)
     timeout = scale_timeout_for_prompt_size(
         base_timeout, prompt,
-        base_chars_before_scaling=4000, seconds_per_extra_1000_chars=3.0, max_timeout=90.0,
+        base_chars_before_scaling=4000, seconds_per_extra_1000_chars=3.0, max_timeout=140.0,
     )
 
     # CLAUDE-DELTA-SPIN-02: live acceptance testing against the North
