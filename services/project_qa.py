@@ -42,7 +42,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import Optional
 
-from services.conversational_turn import build_bounded_history
+from services.conversational_turn import build_bounded_history, select_relevant_document_evidence
 from services.llm_gateway import call_llm_json, resolve_timeout_from_env, scale_timeout_for_prompt_size
 
 logger = logging.getLogger(__name__)
@@ -88,13 +88,12 @@ _MAX_COMPOSER_FINDINGS = 10
 _MAX_CANDIDATE_ITEMS_IN_PROMPT = 40
 _MAX_GOVERNED_REQUIREMENTS_IN_PROMPT = 40
 _MAX_MILESTONES_IN_PROMPT = 20
-# CLAUDE-CA1D-RECEPTION-FIX-01 (folder establishment): a folder can
-# contain many non-founding documents, each with many paragraphs -
-# bounded the same way every other prompt section already is, so this
-# can't grow the prompt unboundedly regardless of how large a selected
-# folder was.
-_MAX_ADDITIONAL_DOCUMENTS_IN_PROMPT = 15
-_MAX_EXCERPTS_PER_ADDITIONAL_DOCUMENT = 8
+# CLAUDE-GO-GROUNDING-EVIDENCE-SELECTION-01: the additional-document cap/
+# excerpt-per-document cap used to be duplicated here AND in services.
+# conversational_turn.py (same two numbers, two places that could drift).
+# Now defined exactly once, in conversational_turn.py, as select_
+# relevant_document_evidence's own default parameters - this module just
+# calls that function (below) rather than slicing the list itself.
 # CLAUDE-CA1D-COMPOSER-SPINE-01 (Stage 0): the token-aware history-
 # bounding walk (was _select_bounded_history/_RECENT_HISTORY_CHAR_BUDGET
 # etc., originally added here by CLAUDE-POSTCAMEL-CA1A) now lives in
@@ -117,6 +116,19 @@ BEHAVIORAL_CONTRACT = (
     "- If the evidence is genuinely insufficient, say so plainly rather than "
     "guessing.\n"
     "- Distinguish stated fact from your own interpretation.\n"
+    # CLAUDE-GO-GROUNDING-EVIDENCE-SELECTION-01 (Section 4): evidence
+    # SELECTION and evidence AUTHORITY are different questions - a
+    # document being relevant enough to include here never means its
+    # own content is binding. Some source documents explicitly mark
+    # their own status (e.g. "non-binding owner reference," "PROPOSED,"
+    # "draft") - carry that status forward exactly as stated, never
+    # upgrade it because the document was recently added, closely
+    # matches the question, or is the only thing that answers it.\n"
+    "- If a document's own content states or implies it is non-binding, "
+    "reference-only, proposed, draft, or otherwise not yet authoritative, "
+    "say so explicitly in your answer - never present it as a confirmed "
+    "requirement or binding fact merely because it was the evidence that "
+    "answered the question.\n"
     "- Recent conversation history, if given, is for conversational "
     "continuity only. It is not additional project evidence, and a prior "
     "reply - including your own - is never to be treated as newly-"
@@ -531,17 +543,42 @@ def _build_prompt(
     # through full classification; these did not - "extracted text",
     # never "requirements", for anything here).
     if additional_document_evidence:
-        shown = additional_document_evidence[:_MAX_ADDITIONAL_DOCUMENTS_IN_PROMPT]
+        # CLAUDE-GO-GROUNDING-EVIDENCE-SELECTION-01: relevance-scored,
+        # never merely "the first N by registration order" - see that
+        # function's own docstring for the full scoring model. ui_context
+        # (validated server-side, never a raw client id - see
+        # conversation_interpreter.py's own resolution) supplies which
+        # Source, if any, the reviewer currently has open.
+        ui_context = ui_context or {}
+        shown = select_relevant_document_evidence(
+            additional_document_evidence, question,
+            selected_source_id=ui_context.get("selected_source_id"),
+            selected_source_name=ui_context.get("selected_source_name"),
+        )
+        # Section 3/7 (explicit-document guarantee, failure honesty): every
+        # document's NAME is listed here regardless of whether its excerpts
+        # made the selection below, so the model can truthfully distinguish
+        # "this document exists in the project but I wasn't given enough of
+        # its content" from "no such document exists in this project at
+        # all" - the two used to be indistinguishable to it.
+        all_names = [d.get("relative_path") or d.get("filename", "") for d in additional_document_evidence]
         lines.append(
-            f"\nOther project documents (from the same folder establishment as the "
-            f"founding document above; extracted text, not yet run through requirement "
-            f"classification) - {len(additional_document_evidence)} total, showing up to "
-            f"{_MAX_ADDITIONAL_DOCUMENTS_IN_PROMPT}:"
+            f"\nAll other project documents by name ({len(all_names)} total - not their "
+            f"content, just confirming what exists in this project):"
+        )
+        for name in all_names:
+            lines.append(f"- {name}")
+        lines.append(
+            f"\nExtracted text for the {len(shown)} of those documents most relevant to this "
+            f"question (not yet run through requirement classification). If a document you "
+            f"need is named above but has no extracted text below, or too little to answer "
+            f"confidently, say so plainly rather than answering from a different, less "
+            f"relevant document:"
         )
         for doc in shown:
             label = doc.get("relative_path") or doc.get("filename", "")
             lines.append(f"- {label}:")
-            for excerpt in doc.get("excerpts", [])[:_MAX_EXCERPTS_PER_ADDITIONAL_DOCUMENT]:
+            for excerpt in doc.get("excerpts", []):
                 lines.append(f"  - {excerpt}")
 
     # CLAUDE-POSTCAMEL-CA1 (Section 5, bounded multi-turn continuity): a

@@ -487,6 +487,11 @@ def interpret_message(
             ui_context={
                 "current_view": validated_current_view,
                 "selected_source_name": validated_selected_source["name"] if validated_selected_source else None,
+                # CLAUDE-GO-GROUNDING-EVIDENCE-SELECTION-01: the id, not
+                # just the display name, so select_relevant_document_
+                # evidence can match the currently-open Source reliably
+                # even if two Sources happen to share a name.
+                "selected_source_id": validated_selected_source["id"] if validated_selected_source else None,
             },
         )
 

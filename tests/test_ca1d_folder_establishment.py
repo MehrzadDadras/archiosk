@@ -242,7 +242,13 @@ class AdditionalDocumentEvidencePromptTests(unittest.TestCase):
                  "excerpts": ["Site access requires a 48-hour notice."]},
             ],
         )
-        self.assertIn("Other project documents", prompt)
+        # CLAUDE-GO-GROUNDING-EVIDENCE-SELECTION-01: this section's own
+        # heading text changed (the old "Other project documents" single
+        # section became a two-part "all names" + "selected excerpts"
+        # shape - see that stage's own selection function) - still
+        # clearly labeled and bounded, just worded differently.
+        self.assertIn("All other project documents by name", prompt)
+        self.assertIn("Extracted text for the", prompt)
         self.assertIn("exhibits/Exhibit_A.txt", prompt)
         self.assertIn("Site access requires a 48-hour notice.", prompt)
         # Never conflated with the founding document's own classified requirements.
@@ -255,7 +261,7 @@ class AdditionalDocumentEvidencePromptTests(unittest.TestCase):
             candidate_requirements=[], governed_requirements=[], milestones=[],
             additional_document_evidence=None,
         )
-        self.assertNotIn("Other project documents", prompt)
+        self.assertNotIn("All other project documents by name", prompt)
 
     def test_additional_documents_are_bounded_not_unbounded(self):
         many_docs = [
@@ -268,9 +274,15 @@ class AdditionalDocumentEvidencePromptTests(unittest.TestCase):
             candidate_requirements=[], governed_requirements=[], milestones=[],
             additional_document_evidence=many_docs,
         )
-        # 15 is _MAX_ADDITIONAL_DOCUMENTS_IN_PROMPT - not all 50 should appear.
+        # CLAUDE-GO-GROUNDING-EVIDENCE-SELECTION-01: every document's own
+        # NAME is now listed regardless of selection (Section 3/7 honesty
+        # - "exists but not selected" must be distinguishable from
+        # "doesn't exist") - doc49.txt's NAME legitimately appears, but
+        # its EXCERPT content must still never make the bounded,
+        # relevance-selected set (15 is the still-enforced ceiling).
         self.assertIn("doc0.txt", prompt)
-        self.assertNotIn("doc49.txt", prompt)
+        self.assertIn("doc49.txt", prompt)  # named, honestly
+        self.assertNotIn("Excerpt 49", prompt)  # but its content is not in the selected/bounded set
 
 
 class UploadFolderRouteTests(_BaseFolderEstablishmentTestCase):

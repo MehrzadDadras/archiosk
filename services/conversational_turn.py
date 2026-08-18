@@ -31,6 +31,7 @@ new UI/voice architecture, and not an implementation of Voice itself.
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -142,6 +143,18 @@ def gather_project_evidence(workspace: ProjectWorkspace, store) -> ProjectEviden
                 "filename": source.get("name"),
                 "relative_path": source.get("origin_reference"),
                 "excerpts": excerpts,
+                # CLAUDE-GO-GROUNDING-EVIDENCE-SELECTION-01: additive keys,
+                # backward-compatible with any caller reading only the
+                # three keys above - used by select_relevant_document_
+                # evidence (below) to score relevance instead of relying
+                # on this list's own incidental order (Source-registration
+                # order, which used to be the ONLY signal downstream
+                # prompt-builders had, silently excluding anything
+                # registered after the first _MAX_ADDITIONAL_DOCUMENTS_IN_
+                # PROMPT documents regardless of relevance).
+                "source_id": source_id,
+                "added_at": source.get("added_at"),
+                "document_authority": source.get("document_authority"),
             })
 
     return ProjectEvidence(
@@ -152,6 +165,219 @@ def gather_project_evidence(workspace: ProjectWorkspace, store) -> ProjectEviden
         milestones=milestones,
         additional_document_evidence=additional_document_evidence,
     )
+
+
+# -- CLAUDE-GO-GROUNDING-EVIDENCE-SELECTION-01 ------------------------------
+# Root cause of the defect this replaces: `additional_document_evidence`
+# above is built by iterating `workspace.evidence_items` in plain
+# insertion order (a Python dict preserves the order its keys were first
+# added - see excerpts_by_source above), which is Source-REGISTRATION
+# order, nothing else. Every prompt-builder that later did
+# `additional_document_evidence[:_MAX_ADDITIONAL_DOCUMENTS_IN_PROMPT]`
+# was therefore always keeping the OLDEST-registered documents and
+# discarding everything registered after the cap - regardless of
+# whether the discarded document was the one the reviewer explicitly
+# named, was more relevant to the actual question, was more
+# authoritative, or was the very evidence a Data Room Reconcile pass
+# had just added. Confirmed live on North Bayview (CLAUDE-SPREADSHEET-
+# SOURCE-ELIGIBILITY-01 + CLAUDE-LIVE-VERIFICATION-ACCOUNT-MECHANISM-01):
+# asking about a workbook registered 36th of 42 Sources produced "not
+# present in any of the extracted documents," a technically-honest but
+# practically-wrong answer, since the workbook's own evidence was real
+# and present in the store, just never reaching the prompt at all.
+#
+# The cap itself (_MAX_ADDITIONAL_DOCUMENTS_IN_PROMPT/_MAX_EXCERPTS_PER_
+# ADDITIONAL_DOCUMENT) is a legitimate, still-needed prompt-size/token
+# protection (its own original comment: "bounded the same way every
+# other prompt section already is, so this can't grow the prompt
+# unboundedly") - kept unchanged as the ceiling. What changes is WHICH
+# evidence fills that ceiling: relevance-scored, not merely oldest-
+# first. "Preserve evidence. Organize understanding. Compress
+# attention." - this is the compression step, applied to WHAT is worth
+# keeping, not merely HOW MUCH.
+
+_STOPWORDS = frozenset({
+    "the", "a", "an", "and", "or", "of", "to", "in", "on", "for", "is", "are",
+    "was", "were", "what", "which", "who", "whom", "this", "that", "these",
+    "those", "with", "from", "by", "at", "as", "it", "its", "be", "been",
+    "being", "do", "does", "did", "has", "have", "had", "can", "could",
+    "will", "would", "should", "about", "into", "i", "you", "your", "my",
+    "me", "we", "our", "if", "not", "no", "yes",
+})
+
+# A document the reviewer names outright is the strongest possible signal
+# (Section 3's "explicit-document guarantee") - deliberately a RATIO plus
+# a minimum count, not either alone: a ratio alone would let a two-word
+# filename ("RFI Log") match almost any question containing "log"; a
+# count alone would unfairly disadvantage a short filename that's fully
+# quoted. Both together mean "most of this document's own distinguishing
+# words appear in the question," which is what "explicitly named" means
+# in practice.
+_EXPLICIT_MATCH_MIN_OVERLAP_WORDS = 2
+_EXPLICIT_MATCH_MIN_OVERLAP_RATIO = 0.5
+
+# A document that IS the explicit match (or the one currently open) gets
+# a much larger excerpt allowance than an incidentally-relevant one -
+# tabular/spreadsheet evidence in particular has no reliable per-row
+# keyword signal (a data row like "UD-001, Facility-wide distribution of
+# the 58 courtrooms..." doesn't repeat the sheet's own name or column
+# headers), so keyword-filtering individual rows out of a document the
+# reviewer specifically asked about would silently drop the very rows
+# that answer the question. 80 is generous enough to cover a real,
+# moderately-sized single workbook's full row count end to end (the
+# North Bayview specimen's own proof case is 80 rows across 5 sheets)
+# while staying a bounded constant, not "no cap."
+_MAX_EXCERPTS_FOR_PRIORITY_DOCUMENT = 80
+
+# Authority is a real, already-modeled field (services.case_workspace.
+# KNOWN_DOCUMENT_AUTHORITY_LEVELS) but is honestly absent (None) on most
+# Sources today - the folder-upload/Reconcile ingestion paths that
+# register the vast majority of real project documents never set it
+# (Section 1's own "determine exactly why" - not yet wired in, not a
+# decision this task's own scope authorizes revisiting). Used only as a
+# SMALL tiebreaker when present, never as a requirement for inclusion -
+# an unpopulated field must never silently exclude an otherwise-relevant
+# document.
+_AUTHORITY_SCORE_BY_LEVEL = {
+    "contractual": 3, "project_agreement": 3,
+    "issued_for_procurement": 2,
+    "reference": 1, "informational": 1,
+    "indicative": 0, "draft": 0,
+}
+
+
+def _significant_words(text: str) -> set[str]:
+    """Lowercase, alphanumeric tokens of length >= 3, common English
+    function words dropped - not a linguistic feature system, just enough
+    to stop near-universal words ("the", "what") from spuriously
+    "matching" almost any document or question."""
+    tokens = re.findall(r"[a-z0-9]+", (text or "").lower())
+    return {t for t in tokens if len(t) >= 3 and t not in _STOPWORDS}
+
+
+def _document_name_words(doc: dict) -> set[str]:
+    label = doc.get("relative_path") or doc.get("filename") or ""
+    stem = re.sub(r"\.[a-zA-Z0-9]{1,5}$", "", label)  # strip a file extension only
+    return _significant_words(stem)
+
+
+def _is_explicit_name_match(doc_words: set[str], question_words: set[str]) -> bool:
+    if not doc_words:
+        return False
+    overlap = doc_words & question_words
+    return (
+        len(overlap) >= _EXPLICIT_MATCH_MIN_OVERLAP_WORDS
+        and len(overlap) / len(doc_words) >= _EXPLICIT_MATCH_MIN_OVERLAP_RATIO
+    )
+
+
+def _is_current_document(doc: dict, selected_source_id: Optional[str], selected_source_name: Optional[str]) -> bool:
+    if selected_source_id and doc.get("source_id") == selected_source_id:
+        return True
+    if selected_source_name and doc.get("filename") == selected_source_name:
+        return True
+    return False
+
+
+def select_relevant_document_evidence(
+    additional_document_evidence: list[dict],
+    question: str,
+    selected_source_id: Optional[str] = None,
+    selected_source_name: Optional[str] = None,
+    max_documents: int = _MAX_ADDITIONAL_DOCUMENTS_IN_PROMPT,
+    max_excerpts_per_document: int = _MAX_EXCERPTS_PER_ADDITIONAL_DOCUMENT,
+) -> list[dict]:
+    """
+    Replaces plain `additional_document_evidence[:max_documents]` with a
+    relevance-scored selection. Returns AT MOST `max_documents` entries,
+    each `{"filename", "relative_path", "excerpts"}` (excerpts already
+    trimmed to that document's own allowance) - same shape callers
+    already expect, so this is a drop-in replacement for the old slice,
+    not a new contract.
+
+    Scoring, highest tier first (a document can qualify for more than
+    one tier; tiers are additive, not exclusive, so a document that is
+    BOTH explicitly named AND currently open scores higher than either
+    alone):
+      - Explicitly named in the question (_is_explicit_name_match) -
+        the dominant signal; effectively guarantees inclusion.
+      - Currently open/selected Source - a reviewer looking at
+        something is very likely asking about it even without naming it.
+      - Keyword overlap between the question and this document's own
+        filename + excerpt text - the general relevance signal for
+        everything else.
+      - document_authority, when populated - a small tiebreaker only
+        (Section 4: authority and relevance are different questions;
+        this never promotes an otherwise-irrelevant document).
+      - Recency (Source.added_at) - the smallest tiebreaker of all,
+        used only to break remaining ties sensibly (newer favored over
+        older when nothing else distinguishes two documents) rather
+        than the OLD behavior of registration order being the only
+        signal that mattered.
+
+    A document scoring exactly zero on every tier is still eligible if
+    there's room left under max_documents once every genuinely relevant
+    document has been placed (bounded retrieval never means empty
+    retrieval for a broad/ambiguous question - Section 8, Game D) -
+    ties among zero-scoring documents fall back to recency.
+    """
+    if not additional_document_evidence:
+        return []
+
+    question_words = _significant_words(question)
+
+    # Recency rank: index 0 = most recent. Missing/unparseable added_at
+    # sorts last (oldest-equivalent) rather than raising - honest
+    # degradation, not a crash, for the (currently common) case of a
+    # Source predating this field's own introduction.
+    def _added_at_key(doc: dict) -> str:
+        return doc.get("added_at") or ""
+
+    by_recency = sorted(additional_document_evidence, key=_added_at_key, reverse=True)
+    recency_rank = {id(doc): i for i, doc in enumerate(by_recency)}
+    total_docs = len(additional_document_evidence)
+
+    scored: list[tuple[int, bool, dict]] = []
+    for doc in additional_document_evidence:
+        doc_words = _document_name_words(doc)
+        explicit_match = _is_explicit_name_match(doc_words, question_words)
+        is_current = _is_current_document(doc, selected_source_id, selected_source_name)
+
+        content_words = set(doc_words)
+        for excerpt in doc.get("excerpts", [])[:20]:  # bounded scan - scoring, not the final selection
+            content_words |= _significant_words(excerpt)
+        keyword_overlap = len(question_words & content_words)
+
+        authority_score = _AUTHORITY_SCORE_BY_LEVEL.get((doc.get("document_authority") or "").lower(), 0)
+        recency_score = total_docs - recency_rank[id(doc)]  # higher for more recent
+
+        score = 0
+        if explicit_match:
+            score += 1_000_000
+        if is_current:
+            score += 500_000
+        score += keyword_overlap * 100
+        score += authority_score * 10
+        score += recency_score  # smallest weight - pure tiebreaker
+
+        is_priority_document = explicit_match or is_current
+        scored.append((score, is_priority_document, doc))
+
+    # Stable sort (Python's sort is stable) - among exactly-equal scores,
+    # original (registration) order survives as the final, harmless
+    # tiebreaker, same as it always implicitly was, just no longer the
+    # PRIMARY signal.
+    scored.sort(key=lambda entry: entry[0], reverse=True)
+
+    selected: list[dict] = []
+    for _score, is_priority_document, doc in scored[:max_documents]:
+        excerpt_cap = _MAX_EXCERPTS_FOR_PRIORITY_DOCUMENT if is_priority_document else max_excerpts_per_document
+        selected.append({
+            "filename": doc.get("filename"),
+            "relative_path": doc.get("relative_path"),
+            "excerpts": doc.get("excerpts", [])[:excerpt_cap],
+        })
+    return selected
 
 
 # CLAUDE-CA1D-COMPOSER-SPINE-01 (Stage 2): Context Envelope, narrowest-
@@ -300,6 +526,14 @@ CONVERSATIONAL_TURN_BEHAVIORAL_CONTRACT = (
     "- If the evidence is genuinely insufficient, say so plainly rather than "
     "guessing.\n"
     "- Distinguish stated fact from your own interpretation.\n"
+    # CLAUDE-GO-GROUNDING-EVIDENCE-SELECTION-01 (Section 4): same rule as
+    # project_qa.py's own BEHAVIORAL_CONTRACT - evidence selection and
+    # evidence authority are different questions.
+    "- If a document's own content states or implies it is non-binding, "
+    "reference-only, proposed, draft, or otherwise not yet authoritative, "
+    "say so explicitly - never present it as a confirmed requirement or "
+    "binding fact merely because it was the evidence that answered the "
+    "question.\n"
     "- Recent conversation history, if given, is for conversational "
     "continuity only, never additional project evidence - a prior reply, "
     "including your own, is never newly-established project truth.\n"
@@ -532,16 +766,35 @@ def _build_conversational_turn_prompt(
             lines.append(f"- {m.get('label', '')}")
 
     if evidence.additional_document_evidence:
-        shown = evidence.additional_document_evidence[:_MAX_ADDITIONAL_DOCUMENTS_IN_PROMPT]
+        # CLAUDE-GO-GROUNDING-EVIDENCE-SELECTION-01: same relevance-scored
+        # selection project_qa.py's own _build_prompt now uses, not a
+        # plain registration-order slice - see select_relevant_document_
+        # evidence's own docstring above for the full model. This
+        # prompt builder isn't wired into interpret_message's dispatch
+        # chain yet (Stage 3, still gated), but fixing it now means Stage
+        # 3 doesn't ship with the same defect reintroduced.
+        selected_source_id = envelope.selected_source.get("id") if envelope.selected_source else None
+        selected_source_name = envelope.selected_source.get("name") if envelope.selected_source else None
+        shown = select_relevant_document_evidence(
+            evidence.additional_document_evidence, text,
+            selected_source_id=selected_source_id, selected_source_name=selected_source_name,
+        )
+        all_names = [d.get("relative_path") or d.get("filename", "") for d in evidence.additional_document_evidence]
         lines.append(
-            f"\nOther project documents (extracted text, not yet run through requirement "
-            f"classification) - {len(evidence.additional_document_evidence)} total, showing "
-            f"up to {_MAX_ADDITIONAL_DOCUMENTS_IN_PROMPT}:"
+            f"\nAll other project documents by name ({len(all_names)} total - not their "
+            f"content, just confirming what exists in this project):"
+        )
+        for name in all_names:
+            lines.append(f"- {name}")
+        lines.append(
+            f"\nExtracted text for the {len(shown)} of those documents most relevant to this "
+            f"message (not yet run through requirement classification). If a document you "
+            f"need is named above but has no extracted text below, say so plainly:"
         )
         for doc in shown:
             label = doc.get("relative_path") or doc.get("filename", "")
             lines.append(f"- {label}:")
-            for excerpt in doc.get("excerpts", [])[:_MAX_EXCERPTS_PER_ADDITIONAL_DOCUMENT]:
+            for excerpt in doc.get("excerpts", []):
                 lines.append(f"  - {excerpt}")
 
     bounded_history = build_bounded_history(recent_history) if recent_history else []
