@@ -7971,3 +7971,121 @@ this inventory and the authorization table.)
 CaseWorkspaceStore seam: smallest, zero write-path risk, existing create
 route already live." (Alternatives: `set_requirement_status`, or Expected
 Information Profile if a larger single subsystem is preferred first.)
+
+## Delta Spin engine + first Spin Surface slice — accepted (CLAUDE-DELTA-SPIN-01/02, CLAUDE-SPIN-SURFACE-01/02)
+
+Starting state: `dd825a4` (clean, North Bayview reconciled to 55 Documents,
+no prior Spin capability - repository-wide grep for "Delta Spin"/"First
+Spin" returned zero code matches; `governance/specified-unbuilt/
+spin-project-intelligence-preview.md` explicitly marked the whole concept
+NOT AUTHORIZED). Ending state: `5b5af4c`, live and deployed, both the Delta
+Spin engine and its first human-facing surface formally Product-Owner-
+accepted.
+
+### What shipped (four commits, `dd825a4..5b5af4c`)
+
+1. **`62fcfb1` (CLAUDE-DELTA-SPIN-01)** - the first governed Delta Spin
+   implementation: `services/spin.py` (new, mirrors `services/project_qa.py`'s
+   Anthropic-call pattern, reuses its `BEHAVIORAL_CONTRACT`), `SpinRun` +
+   `KNOWN_SPIN_DELTA_CLASSIFICATIONS` (new/strengthened/weakened/resolved/
+   unchanged/superseded/indeterminate/new_verification_gap) in
+   `services/case_workspace.py`, `ComposerFinding` extended with three
+   additive fields (`spin_run_id`/`delta_classification`/
+   `related_prior_understanding` - a Spin-produced finding reuses
+   `ComposerFinding` rather than a second finding type, per that governing
+   record's own recommendation), a Toolbox `Spin` section with First/Delta
+   Spin triggers. 38 focused tests, full suite green.
+2. **`02a4c49` + `f0ef9cb` (CLAUDE-DELTA-SPIN-02)** - live changed-evidence
+   acceptance testing (a temporary project ingesting the real North Bayview
+   G1 sample corpus, First Spin, a real governed Reconcile to the G2 corpus,
+   Delta Spin against that baseline) found and fixed two real, live-only
+   defects the earlier zero-delta live test never exercised: `max_tokens`
+   truncation (4000 -> 8000) and, as a direct second-order consequence, an
+   insufficient timeout ceiling (90s -> Spin-specific 140s, confirmed
+   against this deployment's real 150s gunicorn/nginx limits). Live-
+   reproved after each fix; the second, populated Delta Spin run
+   independently re-derived findings matching this session's own earlier
+   manual North Bayview investigation (the OS-08 v1.0a->v1.1 supersession,
+   the "not adopted as a requirement" third-bay framing, the PA Schedule 14
+   commissioning-gap) without ever being told them, plus a genuinely new
+   cross-disciplinary finding (OS-08 security -> commissioning -> PA
+   Schedule 20 payment-mechanism deduction risk) this session's own manual
+   work never found.
+3. **CLAUDE-SPIN-SURFACE-01 (design only, no code)** - the accepted product
+   architecture for a longitudinal Spin history/State-Report/evolution-
+   matrix surface, grounded in direct inspection of `STABLE_DIRECTORY_KINDS`
+   (the real extension point) and the already-built-but-unwired
+   `MaturityRecord`/`ExpectedInformationProfile`/`evaluate_information_
+   sufficiency` phase-conformance engine (`CLAUDE-GO-QAC-01`) as the target
+   reuse point for a future document-maturity column. Named, not built:
+   Local Spin, the full evolution matrix, persisted authority/`Supersession`
+   relationships (MM6's `Relationship`/`record_evidence_relationship`
+   named as the closest existing primitive for that future step).
+4. **`5b5af4c` (CLAUDE-SPIN-SURFACE-02)** - the smallest coherent slice of
+   that design: `"spin"` registered as a fourth `STABLE_DIRECTORY_KINDS`
+   stable-singleton view (`display.spin`), a pure derived `_build_spin_
+   state_report` view-model function (classification counts, evidence
+   delta from `source_signature` diffing, reassessed-finding count - no new
+   persistence), full unhidden Spin history with per-run drill-down via
+   `?spin_run=<id>`. The Toolbox's own `toolbox.spin` section shrank to
+   triggers + a one-line latest-run summary + a link into the new tab
+   (relocation, not duplication - same precedent `CLAUDE-GO-DNA-01`'s Panel
+   Zoning already established). Minimum-viable naming-conflict fix: the
+   older, unrelated, client-side-only "Spin — Evidence Isolation
+   (prototype)" launcher and its own page renamed to "Evidence Isolation
+   (Legacy Prototype)" / button text "SPIN" -> "APPLY" (visible text only,
+   every `spin.*` ui_ref left unchanged). 15 new focused tests plus 3
+   updated pre-existing tests (two in `test_delta_spin_01.py` whose
+   assertions had to follow the relocated content, one in
+   `test_spin_00a_container_prototype.py` for the rename). Live-validated
+   against the same temporary acceptance project, including a failed run's
+   own State Report and the renamed prototype page.
+
+### Full suite state at each accepted checkpoint
+- `62fcfb1`: 4049 passed / 10 known / 0 new.
+- `f0ef9cb`: 4049 passed / 10 known / 0 new (unchanged - both fixes were
+  narrow constant changes, no new tests required at the engine layer).
+- `5b5af4c`: 4064 passed (4049 + 15 new) / 10 known (unchanged) / 0 new.
+The "10 known" failures are the same pre-existing, unrelated CSS/JS/
+Playwright UI tests throughout this whole arc - never touched, never
+counted as new.
+
+### Temporary acceptance project - preserved, not cleaned up
+`CLAUDE-DELTA-SPIN-02-Acceptance-NorthBayview-G1`, project id
+`2e918a07-b7cc-483b-a888-d0224d9d4a61` (Client/Owner environment), live on
+`archiosk.com`. Contains a real G1 First Spin (18 findings, after 3 earlier
+honest `max_tokens`/timeout failures also still preserved), a real governed
+G1->G2 Reconcile (13 new / 2 missing / 1 renamed, confirmed and imported),
+and two independent Delta Spin runs (18 and 17 findings) against that same
+baseline - the concrete acceptance evidence behind both engine and surface
+sign-off. Deliberately left in place per the governing prompts' own
+explicit "do not delete automatically" instruction - a future session
+should get Product Owner confirmation before removing it.
+
+### Known residual, explicitly deferred, not a blocker
+The Spin State Report's classification-summary line renders the raw
+internal vocabulary token verbatim (`NEW_VERIFICATION_GAP`, underscore,
+all-caps) rather than a humanized "NEW VERIFICATION GAP" - found during the
+final live validation pass, Product-Owner-acknowledged as cosmetic and
+explicitly deferred to a later surface-polish pass, not fixed in this arc.
+
+### Explicitly NOT authorized/built by any of this work (per each governing
+prompt's own repeated scope boundary - do not assume future authorization)
+Local/Document Spin (and its own promotion-to-project-thread mechanism);
+the Project Spin -> Local Spin recommendation column; Document Phase
+Completeness/Maturity (even though its own target reuse point is now
+identified); the full evolution matrix (thread-identity strategy (a) -
+text-anchored via `related_prior_understanding` - is the recommended
+starting mechanism when that work is authorized, not thread-id schema
+strategy (b)); persisted authority/Supersession relationships; the larger
+ARCHIOSK visual-language programme; Publish; Builder; RFI automation.
+
+## Recommended next prompt
+Either (a) a small, isolated text-formatting fix for the deferred
+`NEW_VERIFICATION_GAP` display issue, if the Product Owner wants it picked
+up opportunistically before the next real slice, or (b) the next Spin
+Surface slice explicitly named as future work in CLAUDE-SPIN-SURFACE-01/02
+(Local Spin generation, extending `CLAUDE-GO-QAC-01`'s phase-conformance
+engine to the Source grain for document maturity, or the full evolution
+matrix using thread-identity strategy (a)) - whichever the Product Owner
+prioritizes; none of the three has been started.
