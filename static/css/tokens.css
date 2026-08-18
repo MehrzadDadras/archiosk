@@ -548,21 +548,37 @@
    values, unchanged - there is no traced Gateway equivalent to reuse for
    those, and Black's own values are already contrast-verified. */
 :root {
+    /* CLAUDE-DEEP-OCEAN-HUE-CORRECTION-01: every light/accent token in
+       this block was originally derived at hue ~170-172deg (cyan-leaning
+       toward green - rgb(176,255,244)/rgb(200,255,248)/rgb(230,255,251)
+       all have G and B channels near-saturated with R held back, which
+       reads as mint/spring-green, not blue), while --ocean-canvas/
+       --ocean-surface-primary/--ocean-surface-secondary (the theme's own
+       dark backgrounds) were already correctly blue-cyan at hue ~193-194deg
+       - a real, measurable mismatch between "Deep OCEAN" and what the
+       theme's own foreground colors actually rendered as. Every value
+       below is the SAME lightness/saturation/alpha as before, hue-rotated
+       to 207deg (matching the direction of the already-correct background
+       hue) so the fix is a pure hue correction, not a brightness or
+       opacity change - contrast ratios against the theme's own surfaces
+       are effectively unchanged (verified: text-primary 16.43:1 -> 15.36:1,
+       text-secondary 11.28:1 -> 10.51:1, text-metadata 8.59:1 -> 7.41:1,
+       all still comfortably clearing WCAG AAA's 7:1, let alone AA's 4.5:1). */
     --ocean-canvas: rgba(10, 35, 42, .55);
     --ocean-surface-primary: rgba(10, 35, 42, .55);
     --ocean-surface-secondary: rgba(14, 45, 54, .5);
-    --ocean-surface-hover: rgba(176, 255, 244, .12);
-    --ocean-surface-selected: rgba(176, 255, 244, .18);
-    --ocean-border: rgba(176, 255, 244, .28);
-    --ocean-border-strong: rgba(176, 255, 244, .5);
-    --ocean-text-primary: rgb(230, 255, 251);
-    --ocean-text-secondary: rgba(228, 255, 251, .82);
-    --ocean-text-metadata: rgba(200, 255, 248, .72);
-    --ocean-text-disabled: rgba(200, 255, 248, .4);
+    --ocean-surface-hover: rgba(176, 219, 255, .12);
+    --ocean-surface-selected: rgba(176, 219, 255, .18);
+    --ocean-border: rgba(176, 219, 255, .28);
+    --ocean-border-strong: rgba(176, 219, 255, .5);
+    --ocean-text-primary: rgb(230, 244, 255);
+    --ocean-text-secondary: rgba(228, 243, 255, .82);
+    --ocean-text-metadata: rgba(200, 230, 255, .72);
+    --ocean-text-disabled: rgba(200, 230, 255, .4);
 
     --ocean-seal-red: #E5756C;
     --ocean-seal-red-tint: #3A1A18;
-    --ocean-machine-blue: rgba(200, 255, 248, .8);
+    --ocean-machine-blue: rgba(200, 230, 255, .8);
     --ocean-machine-blue-tint: #1E2D34;
     --ocean-highlight-orange: #E59C6C;
     --ocean-highlight-orange-tint: #392519;

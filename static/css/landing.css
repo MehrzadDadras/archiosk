@@ -245,7 +245,7 @@
     font-size: clamp(2.6rem, 8vw, 5.6rem);
     letter-spacing: .16em;
     text-transform: uppercase;
-    color: rgba(230, 255, 251, .92);
+    color: rgba(230, 244, 255, .92);
     text-shadow: 0 0 22px rgba(165, 255, 244, .22), 0 0 54px rgba(79, 255, 231, .10);
     margin: 0;
     opacity: 0;
@@ -348,7 +348,7 @@
 .landing-action-secondary {
     color: rgba(232, 255, 251, .92);
     background: rgba(20, 60, 70, .38);
-    border: 1px solid rgba(176, 255, 244, .28);
+    border: 1px solid rgba(176, 219, 255, .28);
 }
 .landing-action:hover, .landing-action:focus-visible {
     transform: translateY(-2px);
@@ -356,7 +356,7 @@
     box-shadow: 0 0 34px rgba(100, 255, 236, .28);
 }
 .landing-action:focus-visible {
-    outline: 2px solid rgba(200, 255, 248, .8);
+    outline: 2px solid rgba(200, 230, 255, .8);
     outline-offset: 3px;
 }
 
@@ -396,16 +396,16 @@
     font-size: 1.05rem;
     color: rgba(210, 255, 248, .75);
     background: transparent;
-    border: 1px solid rgba(176, 255, 244, .22);
+    border: 1px solid rgba(176, 219, 255, .22);
     cursor: pointer;
     transition: border-color 220ms ease, color 220ms ease, box-shadow 220ms ease;
 }
 .landing-voice-button:hover, .landing-voice-button:focus-visible {
-    color: rgba(230, 255, 251, .95);
-    border-color: rgba(176, 255, 244, .5);
+    color: rgba(230, 244, 255, .95);
+    border-color: rgba(176, 219, 255, .5);
 }
 .landing-voice-button:focus-visible {
-    outline: 2px solid rgba(200, 255, 248, .8);
+    outline: 2px solid rgba(200, 230, 255, .8);
     outline-offset: 3px;
 }
 /* Section 7: "restrained aperture pulse... quiet change in microphone
@@ -414,7 +414,7 @@
    the authenticated composer's own "no separate recording timer/
    waveform UI" minimalism. */
 .landing-voice-button.voice-input-listening {
-    color: rgba(230, 255, 251, .98);
+    color: rgba(230, 244, 255, .98);
     border-color: rgba(150, 255, 238, .8);
     box-shadow: 0 0 0 0 rgba(150, 255, 238, .5);
     animation: landingVoicePulse 1.8s ease-in-out infinite;
@@ -436,8 +436,8 @@
     padding: 14px 18px;
     border-radius: 12px;
     background: rgba(20, 60, 70, .28);
-    border: 1px solid rgba(176, 255, 244, .18);
-    color: rgba(228, 255, 251, .82);
+    border: 1px solid rgba(176, 219, 255, .18);
+    color: rgba(228, 243, 255, .82);
     font-size: .88rem;
     line-height: 1.55;
 }
@@ -462,7 +462,7 @@
     font-size: .72rem;
     letter-spacing: .08em;
 }
-.landing-footer a { color: rgba(200, 255, 248, .62); }
+.landing-footer a { color: rgba(200, 230, 255, .62); }
 
 /* Explore / Start Trial pages: same field/atmosphere, a plainer
    document-like content column instead of the centered hero. */
@@ -476,20 +476,20 @@
 .landing-doc-back {
     display: inline-block;
     margin-bottom: 40px;
-    color: rgba(200, 255, 248, .7);
+    color: rgba(200, 230, 255, .7);
     font-size: .82rem;
     font-weight: 700;
     letter-spacing: .12em;
     text-transform: uppercase;
     text-decoration: none;
 }
-.landing-doc-back:hover, .landing-doc-back:focus-visible { color: rgba(230, 255, 251, .95); }
+.landing-doc-back:hover, .landing-doc-back:focus-visible { color: rgba(230, 244, 255, .95); }
 .landing-doc h1 {
     font-family: Georgia, "Times New Roman", serif;
     font-weight: 400;
     font-size: clamp(2rem, 5vw, 3rem);
     letter-spacing: .04em;
-    color: rgba(230, 255, 251, .94);
+    color: rgba(230, 244, 255, .94);
     margin: 0 0 6px;
 }
 .landing-doc-kicker {
@@ -543,7 +543,7 @@
     flex-direction: column;
     gap: 6px;
     font-size: .85rem;
-    color: rgba(200, 255, 248, .72);
+    color: rgba(200, 230, 255, .72);
 }
 .landing-form-field input,
 .landing-form-field textarea {
@@ -551,16 +551,16 @@
     font-size: .95rem;
     color: rgba(234, 255, 251, .95);
     background: rgba(10, 35, 42, .55);
-    border: 1px solid rgba(176, 255, 244, .28);
+    border: 1px solid rgba(176, 219, 255, .28);
     border-radius: 6px;
     padding: 10px 12px;
     resize: vertical;
 }
 .landing-form-field input:focus-visible,
 .landing-form-field textarea:focus-visible {
-    outline: 2px solid rgba(200, 255, 248, .8);
+    outline: 2px solid rgba(200, 230, 255, .8);
     outline-offset: 1px;
-    border-color: rgba(176, 255, 244, .6);
+    border-color: rgba(176, 219, 255, .6);
 }
 .landing-form-error {
     margin: 0;

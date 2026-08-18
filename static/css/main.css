@@ -2288,14 +2288,14 @@ main:has(.document-viewer-canvas-container) {
    Nothing outside this one scoped card is affected -- the rest of the
    authenticated app keeps its existing light theme exactly as before. */
 .gateway-card-compact {
-    --text-primary: rgb(230, 255, 251);
-    --text-secondary: rgba(228, 255, 251, .82);
-    --text-metadata: rgba(200, 255, 248, .72);
-    --text-disabled: rgba(200, 255, 248, .4);
+    --text-primary: rgb(230, 244, 255);
+    --text-secondary: rgba(228, 243, 255, .82);
+    --text-metadata: rgba(200, 230, 255, .72);
+    --text-disabled: rgba(200, 230, 255, .4);
     --surface-primary: rgba(10, 35, 42, .55);
-    --border: rgba(176, 255, 244, .28);
-    --border-strong: rgba(176, 255, 244, .5);
-    --machine-blue: rgba(200, 255, 248, .8);
+    --border: rgba(176, 219, 255, .28);
+    --border-strong: rgba(176, 219, 255, .5);
+    --machine-blue: rgba(200, 230, 255, .8);
     --failure-red: rgba(255, 170, 150, .95);
     /* CLAUDE-BOTTLENECK-ADOPTION-01: was never redefined here before
        (nothing in this card used --brand-gold pre-adoption) - without
@@ -2308,7 +2308,7 @@ main:has(.document-viewer-canvas-container) {
     background-color: rgba(8, 28, 36, .72);
     -webkit-backdrop-filter: blur(14px);
     backdrop-filter: blur(14px);
-    border: 1px solid rgba(176, 255, 244, .22);
+    border: 1px solid rgba(176, 219, 255, .22);
     box-shadow: 0 24px 70px rgba(1, 8, 14, .5);
 }
 /* The card and footer must paint above the fixed, z-index:0 ocean
@@ -2408,27 +2408,34 @@ main:has(.document-viewer-canvas-container) {
    background/border rule to override). base.html's own separate,
    app-wide .workspace-topbar usage is never nested inside .gateway-shell,
    so it keeps its existing light theme untouched. */
+/* CLAUDE-DEEP-OCEAN-HUE-CORRECTION-01: same hue correction as tokens.css's
+   own --ocean-* family (see that file's own comment for the full
+   before/after/contrast-verification record) - every value below must
+   stay byte-identical to tokens.css's own --ocean-* values
+   (test_appearance_simplify_01_global_theme.py's own literal-copy parity
+   test enforces this), so this is the SAME fix applied at its other
+   required location, not a second, independent correction. */
 .gateway-shell {
-    --text-primary: rgb(230, 255, 251);
-    --text-secondary: rgba(228, 255, 251, .82);
-    --text-metadata: rgba(200, 255, 248, .72);
-    --text-disabled: rgba(200, 255, 248, .4);
+    --text-primary: rgb(230, 244, 255);
+    --text-secondary: rgba(228, 243, 255, .82);
+    --text-metadata: rgba(200, 230, 255, .72);
+    --text-disabled: rgba(200, 230, 255, .4);
     --surface-primary: rgba(10, 35, 42, .55);
     --surface-secondary: rgba(14, 45, 54, .5);
-    --surface-hover: rgba(176, 255, 244, .12);
-    --surface-selected: rgba(176, 255, 244, .18);
-    --border: rgba(176, 255, 244, .28);
-    --border-strong: rgba(176, 255, 244, .5);
-    --divider-strong: rgba(176, 255, 244, .32);
+    --surface-hover: rgba(176, 219, 255, .12);
+    --surface-selected: rgba(176, 219, 255, .18);
+    --border: rgba(176, 219, 255, .28);
+    --border-strong: rgba(176, 219, 255, .5);
+    --divider-strong: rgba(176, 219, 255, .32);
     --brand-gold: var(--bee-yellow);
-    --machine-blue: rgba(200, 255, 248, .8);
+    --machine-blue: rgba(200, 230, 255, .8);
     --failure-red: rgba(255, 170, 150, .95);
 }
 .gateway-shell .gateway-card-wide {
     background-color: rgba(8, 28, 36, .72);
     -webkit-backdrop-filter: blur(14px);
     backdrop-filter: blur(14px);
-    border: 1px solid rgba(176, 255, 244, .22);
+    border: 1px solid rgba(176, 219, 255, .22);
     box-shadow: 0 24px 70px rgba(1, 8, 14, .5);
 }
 /* The card and flash messages must paint above the fixed, z-index:0
@@ -6067,7 +6074,7 @@ main:hover,
    occludes everything except that 1px sliver. Deep Ocean's own
    --surface-primary is deliberately TRANSLUCENT (rgba(10, 35, 42, .55)
    - the glass effect), so it never fully occludes what's behind it:
-   the bright, saturated --ocean-border (rgba(176, 255, 244, .28) - a
+   the bright, saturated --ocean-border (rgba(176, 219, 255, .28) - a
    cyan/mint tone, correct for hover/focus accents, wrong for a static
    fill) shows through across the WHOLE division, not just the gap,
    compositing into exactly the visible green/teal panel block reported
