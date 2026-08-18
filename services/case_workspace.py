@@ -1751,6 +1751,104 @@ class ComposerFinding:
     review_state: str = COMPOSER_FINDING_STATE_MACHINE_UNREVIEWED
     content_class: str = CONTENT_CLASS_AI_PROPOSED
     source_message_id: Optional[str] = None
+    # CLAUDE-DELTA-SPIN-01: additive provenance for a finding produced by
+    # a comprehensive Spin run (services/spin.py) rather than an ordinary
+    # Composer chat turn - deliberately the SAME object (see this stage's
+    # own governing record, governance/specified-unbuilt/spin-project-
+    # intelligence-preview.md: "a Spin-produced finding should very likely
+    # be the SAME object, distinguished by provenance... not a second
+    # finding type"). All three fields are None for every pre-existing and
+    # ordinary chat-emitted finding - a plain, backward-compatible
+    # addition, not a schema migration. `spin_run_id` is the SpinRun (see
+    # below) that produced this finding. `delta_classification` (one of
+    # KNOWN_SPIN_DELTA_CLASSIFICATIONS, below) is set only for a
+    # delta_spin-kind run's own findings - never guessed, never set for a
+    # first_spin finding (a First Spin has no prior state to classify
+    # against). `related_prior_understanding` is a plain, human-readable
+    # citation (same posture as source_reference above - descriptive text,
+    # not a forced id-resolution) naming which earlier understanding/
+    # finding this one reassesses, when the model honestly named one.
+    spin_run_id: Optional[str] = None
+    delta_classification: Optional[str] = None
+    related_prior_understanding: Optional[str] = None
+
+
+# CLAUDE-DELTA-SPIN-01: the "Spin run" grouping named, but explicitly not
+# built, by governance/specified-unbuilt/spin-project-intelligence-
+# preview.md ("no concept of a 'Spin run' as a distinct, dated,
+# comprehensive event; no run-level grouping; no comparison between one
+# Spin's finding set and a later one"). This is the smallest addition that
+# makes that comparison possible: one record per comprehensive pass,
+# carrying which ComposerFinding ids it produced and (for a delta_spin)
+# which earlier SpinRun it was compared against. It does not replace
+# ComposerFinding, add a second finding type, or implement Pass/Build
+# (still not built, still out of scope per that same governing record).
+SPIN_KIND_FIRST = "first_spin"
+SPIN_KIND_DELTA = "delta_spin"
+KNOWN_SPIN_KINDS = (SPIN_KIND_FIRST, SPIN_KIND_DELTA)
+
+# CLAUDE-DELTA-SPIN-01: the closed classification vocabulary a delta_spin
+# run's own findings are labelled with - describes the PROJECT UNDERSTANDING
+# condition a finding represents relative to the baseline SpinRun, never a
+# mere file/document status. A first_spin run never sets this (nothing
+# preceded it to classify against).
+SPIN_DELTA_NEW = "new"
+SPIN_DELTA_STRENGTHENED = "strengthened"
+SPIN_DELTA_WEAKENED = "weakened"
+SPIN_DELTA_RESOLVED = "resolved"
+SPIN_DELTA_UNCHANGED = "unchanged"
+SPIN_DELTA_SUPERSEDED = "superseded"
+SPIN_DELTA_INDETERMINATE = "indeterminate"
+SPIN_DELTA_NEW_VERIFICATION_GAP = "new_verification_gap"
+KNOWN_SPIN_DELTA_CLASSIFICATIONS = (
+    SPIN_DELTA_NEW, SPIN_DELTA_STRENGTHENED, SPIN_DELTA_WEAKENED, SPIN_DELTA_RESOLVED,
+    SPIN_DELTA_UNCHANGED, SPIN_DELTA_SUPERSEDED, SPIN_DELTA_INDETERMINATE,
+    SPIN_DELTA_NEW_VERIFICATION_GAP,
+)
+
+
+@dataclass
+class SpinRun:
+    """One comprehensive, dated Spin pass over a Project's evidence -
+    see the module comment above for why this exists as its own object
+    rather than being inferred from ComposerFinding timestamps alone (a
+    run also needs to record what evidence SCOPE it reasoned over and,
+    for a delta_spin, which earlier run it was compared against - neither
+    is a per-finding fact).
+
+    `source_signature` is the SAME fingerprint CaseWorkspaceStore.
+    source_signature_for already computes for project_briefing staleness
+    detection (sorted, comma-joined Source ids) - reused here, not
+    reinvented, as the honest record of "what evidence state existed when
+    this run reasoned," and the basis for computing a real evidence delta
+    (new/removed Source ids) between a delta_spin run and its baseline.
+
+    `scoped_source_ids`, when not None, means this run deliberately
+    reasoned over a NARROWER evidence set than the Project's full current
+    Source list (see services.spin's own comprehensive-selection
+    docstring) - always an explicit, caller-supplied scope (mirroring
+    CLAUDE-RFP-BOUNDARY-01's publish_procurement_package's own "never
+    infer, always explicit" discipline for a bounded selection), never
+    silently inferred from filenames or dates.
+
+    `ran=False` (with `skipped_reason` set) mirrors ProjectBriefingResult/
+    ProjectQAResult's own honest-degrade contract - a run that could not
+    actually call the model still gets a persisted, visible record of the
+    attempt, never silently discarded."""
+
+    id: str
+    project_id: str
+    spin_kind: str  # KNOWN_SPIN_KINDS
+    created_at: str
+    created_by: Optional[str] = None
+    ran: bool = True
+    skipped_reason: Optional[str] = None
+    baseline_spin_run_id: Optional[str] = None  # delta_spin only
+    source_signature: Optional[str] = None
+    scoped_source_ids: Optional[list] = None
+    finding_ids: list = field(default_factory=list)  # ComposerFinding ids this run produced
+    provider: Optional[str] = None
+    model: Optional[str] = None
 
 
 @dataclass
@@ -4090,6 +4188,21 @@ class ProjectWorkspace:
     # Composer-emitted, project-scoped characterizations, separate from
     # workspace.findings (Case/Analysis-bound Findings above).
     composer_findings: list[dict] = field(default_factory=list)  # see ComposerFinding
+    # CLAUDE-DELTA-SPIN-01: comprehensive Spin runs (see SpinRun) - kept as
+    # its own list, parallel to composer_findings above, rather than
+    # folded into it: a run is the container/grouping, a finding is one
+    # of potentially several things it produced (the same "step
+    # is the audit-trail, a Claim is one of what it produced"
+    # relationship CLAUDE-MM7's InvestigationStep/Claim already
+    # established elsewhere in this module).
+    spin_runs: list[dict] = field(default_factory=list)  # see SpinRun
+    # CLAUDE-DELTA-SPIN-01: duplicate-call/idempotency guard for a Spin
+    # run's own real Anthropic call, the SAME pattern as
+    # project_briefing_generation_started_at above (see
+    # spin_generation_in_progress_for/start_spin_generation) - a second
+    # concurrent Spin trigger while one is already in flight must not
+    # start a second real, billed call.
+    spin_generation_started_at: Optional[str] = None
     # CLAUDE-P40-VW9: Design-Builder Workspace working folders (see Folder
     # above) - purely additive, same backward-compatible pattern as tags/
     # tag_occurrences/tasks above (a legacy record predating this stage
@@ -7893,6 +8006,9 @@ class CaseWorkspaceStore:
         urgency: Optional[str] = None,
         project_stage: Optional[str] = None,
         source_message_id: Optional[str] = None,
+        spin_run_id: Optional[str] = None,
+        delta_classification: Optional[str] = None,
+        related_prior_understanding: Optional[str] = None,
     ) -> dict:
         """CLAUDE-GO-RIGHT-PANEL-01: the one write path that promotes a
         Composer-emitted characterization (services.project_qa's
@@ -7908,10 +8024,21 @@ class CaseWorkspaceStore:
         record_analysis's own Findings already have; nothing here
         changes durable Requirement/RFI/Work Product state, so gating
         it would be inventing a new authority tier this stage's own
-        prompt does not ask for."""
+        prompt does not ask for.
+
+        CLAUDE-DELTA-SPIN-01: `spin_run_id`/`delta_classification`/
+        `related_prior_understanding` are purely additive, all default
+        None - an ordinary chat-emitted finding (every existing caller)
+        is completely unaffected. `delta_classification`, when given, is
+        validated against KNOWN_SPIN_DELTA_CLASSIFICATIONS the same way
+        `color`/`validation`/etc. are validated elsewhere in this module -
+        a caller passing a bad value is a programming error, not a value
+        this store silently accepts."""
         stripped_tag = (tag or "").strip()
         if not stripped_tag:
             raise CaseWorkspaceError("A Composer Finding must have a non-empty tag/title.")
+        if delta_classification is not None and delta_classification not in KNOWN_SPIN_DELTA_CLASSIFICATIONS:
+            raise CaseWorkspaceError(f"Unknown Spin delta classification {delta_classification!r}.")
         finding = ComposerFinding(
             id=_new_id(),
             project_id=workspace.project_id,
@@ -7924,10 +8051,132 @@ class CaseWorkspaceStore:
             urgency=(urgency or "").strip() or None,
             project_stage=(project_stage or "").strip() or None,
             source_message_id=source_message_id,
+            spin_run_id=spin_run_id,
+            delta_classification=delta_classification,
+            related_prior_understanding=(related_prior_understanding or "").strip() or None,
         )
         workspace.composer_findings.append(asdict(finding))
         self.save(workspace)
         return asdict(finding)
+
+    # CLAUDE-DELTA-SPIN-01: >= services.spin's own max scaled timeout
+    # (90s, matching services.project_qa/project_briefing's own ceiling)
+    # with margin, same discipline as PROJECT_BRIEFING_GENERATION_TIMEOUT_
+    # SECONDS above - a genuinely in-flight comprehensive Spin call must
+    # never be treated as abandoned before it could honestly have finished
+    # or timed out on its own.
+    SPIN_GENERATION_TIMEOUT_SECONDS = 120
+
+    def start_spin_generation(self, workspace: ProjectWorkspace, actor: str) -> ProjectWorkspace:
+        """Same idempotency-guard pattern as start_project_briefing_
+        generation - set immediately before the real Anthropic call
+        begins, cleared by record_spin_run once it completes (success or
+        honest failure)."""
+        workspace.spin_generation_started_at = _now()
+        self.save(workspace)
+        return workspace
+
+    @classmethod
+    def spin_generation_in_progress_for(cls, workspace: ProjectWorkspace) -> bool:
+        """Same abandoned-start recovery as generation_in_progress_for
+        above - a start timestamp older than the timeout window is
+        treated as abandoned (e.g. a killed/recycled worker), never a
+        permanently stuck flag with no way to retry."""
+        started_at = workspace.spin_generation_started_at
+        if not started_at:
+            return False
+        try:
+            started = datetime.fromisoformat(started_at)
+        except ValueError:
+            return False
+        elapsed = (datetime.now(timezone.utc) - started).total_seconds()
+        return elapsed < cls.SPIN_GENERATION_TIMEOUT_SECONDS
+
+    def latest_spin_run_for(self, workspace: ProjectWorkspace, spin_kind: Optional[str] = None) -> Optional[dict]:
+        """Newest-first by created_at, optionally filtered to one
+        spin_kind - used to auto-resolve a Delta Spin's own baseline when
+        the caller does not explicitly name one (the most recent
+        first_spin run), never guessing at a baseline that was never
+        actually run."""
+        candidates = [
+            r for r in workspace.spin_runs
+            if spin_kind is None or r.get("spin_kind") == spin_kind
+        ]
+        if not candidates:
+            return None
+        return max(candidates, key=lambda r: r.get("created_at") or "")
+
+    def record_spin_run(
+        self,
+        workspace: ProjectWorkspace,
+        spin_kind: str,
+        actor: str,
+        findings: list[dict],
+        source_signature: str,
+        baseline_spin_run_id: Optional[str] = None,
+        scoped_source_ids: Optional[list] = None,
+        ran: bool = True,
+        skipped_reason: Optional[str] = None,
+        provider: Optional[str] = None,
+        model: Optional[str] = None,
+        governance_log: Optional[GovernanceLog] = None,
+    ) -> dict:
+        """The one write path for a completed (or honestly-failed) Spin
+        attempt - persists the SpinRun record itself, then promotes each
+        of `findings` (already-parsed dicts, services.spin.SpinResult.
+        findings) into a real ComposerFinding via add_composer_finding
+        above, tagged with this run's own id. Clears the in-progress flag
+        unconditionally (a completed attempt, successful or not, is by
+        definition no longer in progress) - same discipline
+        set_project_briefing already applies to its own flag.
+
+        `findings` is empty whenever `ran` is False - this method does
+        not itself enforce that (services.spin already guarantees it),
+        it only persists whatever it is given."""
+        if spin_kind not in KNOWN_SPIN_KINDS:
+            raise CaseWorkspaceError(f"Unknown Spin kind {spin_kind!r}.")
+
+        run = SpinRun(
+            id=_new_id(),
+            project_id=workspace.project_id,
+            spin_kind=spin_kind,
+            created_at=_now(),
+            created_by=actor,
+            ran=ran,
+            skipped_reason=skipped_reason,
+            baseline_spin_run_id=baseline_spin_run_id,
+            source_signature=source_signature,
+            scoped_source_ids=list(scoped_source_ids) if scoped_source_ids is not None else None,
+            provider=provider,
+            model=model,
+        )
+
+        finding_ids: list[str] = []
+        for item in findings:
+            recorded = self.add_composer_finding(
+                workspace, tag=item.get("tag", ""), source_reference=item.get("source_reference", ""),
+                concern=item.get("concern", ""), unresolved_question=item.get("unresolved_question", ""),
+                created_by=actor, urgency=item.get("urgency"), project_stage=item.get("project_stage"),
+                spin_run_id=run.id, delta_classification=item.get("delta_classification"),
+                related_prior_understanding=item.get("related_prior_understanding"),
+            )
+            finding_ids.append(recorded["id"])
+        run.finding_ids = finding_ids
+
+        workspace.spin_generation_started_at = None
+        workspace.spin_runs.append(asdict(run))
+        self.save(workspace)
+
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id, event_type="spin_run_recorded",
+                actor=actor, role="system",
+                payload={
+                    "spin_run_id": run.id, "spin_kind": spin_kind, "ran": ran,
+                    "baseline_spin_run_id": baseline_spin_run_id, "finding_count": len(finding_ids),
+                },
+            )
+        return asdict(run)
 
     def _validate_source_anchor(self, workspace: ProjectWorkspace, source_anchor: dict) -> dict:
         """Real validation, not just shape-checking - confirms the

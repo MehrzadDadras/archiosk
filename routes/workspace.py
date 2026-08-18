@@ -90,6 +90,9 @@ from services.case_workspace import (
     SOURCE_KIND_DRAWING,
     SOURCE_KIND_PROJECT_DOCUMENT,
     SOURCE_KIND_TEXT_RECORD,
+    SPIN_KIND_DELTA,
+    SPIN_KIND_FIRST,
+    KNOWN_SPIN_KINDS,
     TAG_COLOR_PALETTE,
     TASK_STATUS_COMPLETED,
     Anchor,
@@ -1160,10 +1163,30 @@ def show_workspace(project_id):
     # (oldest first) rather than stored on the record itself - display
     # numbering is a presentation concern, not part of the record's own
     # identity (the real id is still the UUID).
-    composer_findings_view = [
+    composer_findings_view_all = [
         {**cf, "display_id": f"F-{idx:03d}"}
         for idx, cf in enumerate(workspace.composer_findings, start=1)
-    ][::-1]
+    ]
+    # CLAUDE-DELTA-SPIN-01: chat-emitted findings (spin_run_id is None)
+    # stay in the ordinary Findings panel below, unchanged; a Spin-
+    # produced finding renders inside its own run instead (spin_runs_view,
+    # below) - Section "UI/Product surface" own "distinguishable from
+    # First Spin" requirement, so a comprehensive Spin's own output is
+    # never silently mixed into the lightweight per-question Findings
+    # list it did not come from.
+    composer_findings_view = [cf for cf in composer_findings_view_all if not cf.get("spin_run_id")][::-1]
+
+    spin_runs_view = []
+    for run in sorted(workspace.spin_runs, key=lambda r: r.get("created_at") or "", reverse=True):
+        run_findings = [cf for cf in composer_findings_view_all if cf.get("spin_run_id") == run["id"]]
+        baseline = next((r for r in workspace.spin_runs if r["id"] == run.get("baseline_spin_run_id")), None)
+        spin_runs_view.append({
+            **run,
+            "kind_label": "Delta Spin" if run["spin_kind"] == SPIN_KIND_DELTA else "First Spin",
+            "findings": run_findings,
+            "baseline_created_at": baseline.get("created_at") if baseline else None,
+        })
+    has_first_spin = any(r["spin_kind"] == SPIN_KIND_FIRST and r.get("ran", True) for r in workspace.spin_runs)
 
     if active_case is not None:
         for finding_id in active_case["finding_ids"]:
@@ -1772,6 +1795,9 @@ def show_workspace(project_id):
         needs_attention_view=needs_attention_view,
         findings_view=findings_view,
         composer_findings_view=composer_findings_view,
+        spin_runs_view=spin_runs_view,
+        has_first_spin=has_first_spin,
+        spin_generation_in_progress=store.spin_generation_in_progress_for(workspace),
         focused_finding_id=focused_finding_id,
         applied_count=applied_count,
         awaiting_apply_count=awaiting_apply_count,
@@ -2026,7 +2052,7 @@ def toggle_star(project_id):
     return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
 
 
-def _project_briefing_ai_status(workspace) -> tuple[str, object]:
+def _external_ai_status(workspace) -> tuple[str, object]:
     """
     CLAUDE-P38-D2: the one place that turns a raw SecurityDecision into
     the three states this feature actually treats differently -
@@ -2038,6 +2064,13 @@ def _project_briefing_ai_status(workspace) -> tuple[str, object]:
     controlling_layer are still returned for an honest message, never
     collapsed into identical copy regardless of which one it was).
     Read-only - safe to call from a GET handler.
+
+    CLAUDE-DELTA-SPIN-01: generalized from _project_briefing_ai_status
+    (kept below as a thin, behavior-preserving alias for that route's own
+    existing call site) - the underlying policy question ("is external AI
+    permitted for this project right now") is identical for Project
+    Briefing generation and a Spin run; this is the same
+    ACTION_EXTERNAL_AI_REQUEST gate, not a second policy.
     """
     from services.security_policy import (
         ACTION_EXTERNAL_AI_REQUEST, DECISION_ALLOW, DECISION_ALLOW_APPROVED_ROUTE, DECISION_REQUIRE_APPROVAL,
@@ -2049,6 +2082,12 @@ def _project_briefing_ai_status(workspace) -> tuple[str, object]:
     if decision.decision == DECISION_REQUIRE_APPROVAL:
         return "require_approval", decision
     return "denied", decision
+
+
+def _project_briefing_ai_status(workspace) -> tuple[str, object]:
+    """Unchanged behavior - now a thin alias for _external_ai_status
+    (see that function's own docstring)."""
+    return _external_ai_status(workspace)
 
 
 @workspace_bp.route("/projects/<project_id>/workspace/briefing/generate", methods=["POST"])
@@ -2129,6 +2168,136 @@ def generate_project_briefing_route(project_id):
         actor=_reviewer(), governance_log=_log(),
     )
     flash("Project briefing generated.", "success")
+    return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
+
+
+@workspace_bp.route("/projects/<project_id>/workspace/spin/run", methods=["POST"])
+@login_required
+def run_spin_route(project_id):
+    """
+    CLAUDE-DELTA-SPIN-01: the one trigger for a comprehensive Spin pass -
+    services/spin.py's own generation call, persisted via
+    CaseWorkspaceStore.record_spin_run. Deliberately a plain, explicit,
+    reviewer-clicked POST (no auto-submitting interstitial like Project
+    Briefing's own automatic-on-ingestion path) - a comprehensive Spin is
+    a deliberate act a PM chooses to run, not something that should fire
+    automatically on every page load. Same security-policy gate
+    (_external_ai_status/ACTION_EXTERNAL_AI_REQUEST) and same
+    duplicate-call/idempotency guard pattern as generate_project_
+    briefing_route above - one governed external-AI action, never
+    bypassed, only which trigger reaches it differs.
+
+    A delta_spin run always needs a baseline: an explicit
+    `baseline_spin_run_id` form field, or (when omitted) the most recent
+    first_spin run for this project. If neither exists, this route
+    refuses rather than fabricating a baseline - Section 9's own "do not
+    fix the project" boundary applies equally to never inventing prior
+    understanding that was never actually recorded.
+    """
+    document, store, workspace = _load_workspace_or_404(project_id)
+
+    spin_kind = (request.form.get("spin_kind") or "").strip()
+    if spin_kind not in KNOWN_SPIN_KINDS:
+        flash("Unknown Spin type requested.", "error")
+        return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
+
+    status, decision = _external_ai_status(workspace)
+    if status == "denied":
+        flash(
+            f"Spin cannot run: external AI is not permitted by this project's security "
+            f"policy (controlling layer: {decision.controlling_layer}).",
+            "error",
+        )
+        return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
+    if status == "require_approval" and (request.form.get("confirm") or "").strip() != "once":
+        flash(
+            f"Spin awaits approval (controlling layer: {decision.controlling_layer}) - "
+            f"{decision.reason} Use the approval action to proceed.",
+            "error",
+        )
+        return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
+
+    if store.spin_generation_in_progress_for(workspace):
+        return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
+
+    baseline_run = None
+    baseline_spin_run_id = None
+    if spin_kind == SPIN_KIND_DELTA:
+        requested_baseline_id = (request.form.get("baseline_spin_run_id") or "").strip() or None
+        if requested_baseline_id:
+            baseline_run = next((r for r in workspace.spin_runs if r["id"] == requested_baseline_id), None)
+            if baseline_run is None:
+                flash("The selected baseline Spin run could not be found.", "error")
+                return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
+        else:
+            baseline_run = store.latest_spin_run_for(workspace, spin_kind=SPIN_KIND_FIRST)
+        if baseline_run is None or not baseline_run.get("ran", True):
+            flash(
+                "Delta Spin needs a completed First Spin to compare against. Run First Spin first.",
+                "error",
+            )
+            return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
+        baseline_spin_run_id = baseline_run["id"]
+
+    store.start_spin_generation(workspace, actor=_reviewer())
+
+    from services.conversational_turn import gather_project_evidence
+    from services.spin import run_spin
+
+    workspace = store.get(project_id)  # re-fetch: version may have advanced since load
+    evidence = gather_project_evidence(workspace, store)
+
+    changed_source_keys = None
+    prior_findings = None
+    if spin_kind == SPIN_KIND_DELTA:
+        baseline_ids = {
+            sid for sid in (baseline_run.get("source_signature") or "").split(",") if sid
+        }
+        current_ids = {s["id"] for s in workspace.sources}
+        sources_by_id = {s["id"]: s for s in workspace.sources}
+        changed_source_keys = {
+            (sources_by_id[sid].get("origin_reference") or sources_by_id[sid].get("name"))
+            for sid in (current_ids - baseline_ids)
+            if sid in sources_by_id
+        }
+        prior_findings = [
+            cf for cf in workspace.composer_findings if cf.get("spin_run_id") == baseline_spin_run_id
+        ]
+
+    result = run_spin(
+        spin_kind=spin_kind,
+        document_filename=evidence.document_filename,
+        candidate_requirements=evidence.candidate_requirements,
+        governed_requirements=evidence.governed_requirements,
+        milestones=evidence.milestones,
+        additional_document_evidence=evidence.additional_document_evidence,
+        changed_source_keys=changed_source_keys,
+        prior_findings=prior_findings,
+        display_title=evidence.display_title,
+    )
+
+    workspace = store.get(project_id)  # re-fetch: version may have advanced since the call
+    source_signature = store.source_signature_for(workspace)
+
+    if not result.ran:
+        store.record_spin_run(
+            workspace, spin_kind=spin_kind, actor=_reviewer(), findings=[],
+            source_signature=source_signature, baseline_spin_run_id=baseline_spin_run_id,
+            ran=False, skipped_reason=result.skipped_reason, governance_log=_log(),
+        )
+        flash(f"Spin could not run: {result.skipped_reason}", "error")
+        return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
+
+    store.record_spin_run(
+        workspace, spin_kind=spin_kind, actor=_reviewer(), findings=result.findings,
+        source_signature=source_signature, baseline_spin_run_id=baseline_spin_run_id,
+        ran=True, provider=result.provider, model=result.model, governance_log=_log(),
+    )
+    flash(
+        ("Delta Spin" if spin_kind == SPIN_KIND_DELTA else "First Spin")
+        + f" complete - {len(result.findings)} finding(s).",
+        "success",
+    )
     return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
 
 

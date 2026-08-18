@@ -3148,6 +3148,77 @@
        chain) - so it never competes with the more specific Toolbox views. #}
     <section class="workspace-pane" data-ui-ref="toolbox.project-intelligence">
 
+        {# ---------------- Spin (CLAUDE-DELTA-SPIN-01) ------------------------------
+           A comprehensive, whole-project-evidence pass, distinct from the
+           lightweight per-question Composer Findings panel below (see
+           services.spin's own module docstring and governance/specified-unbuilt/
+           spin-project-intelligence-preview.md for why this is a separate,
+           explicitly-triggered act, never automatic). Renders as its own,
+           clearly-labelled section - "First Spin"/"Delta Spin" runs never mix
+           into the ordinary Findings list, and each run's own findings show their
+           delta_classification prominently, not buried. Deliberately minimal
+           chrome (reuses macros.subdisclosure and existing badge classes) - the
+           larger ARCHIOSK visual-language programme is out of scope here. #}
+        <div data-ui-ref="toolbox.spin">
+            <h3>Spin</h3>
+            <p class="pane-note">
+                A comprehensive machine review of this project's evidence. First Spin
+                characterizes the project as a whole; Delta Spin characterizes what has
+                materially changed in project understanding since an earlier Spin.
+            </p>
+            {% if spin_generation_in_progress %}
+            <p class="pane-note" data-ui-ref="toolbox.spin.in-progress">A Spin is currently running&hellip;</p>
+            {% else %}
+            <p>
+                <form method="post" action="{{ url_for('workspace.run_spin_route', project_id=project_id) }}" style="display:inline;">
+                    <input type="hidden" name="spin_kind" value="first_spin">
+                    <button type="submit" data-ui-ref="toolbox.spin.run-first">Run First Spin</button>
+                </form>
+                {% if has_first_spin %}
+                <form method="post" action="{{ url_for('workspace.run_spin_route', project_id=project_id) }}" style="display:inline;">
+                    <input type="hidden" name="spin_kind" value="delta_spin">
+                    <button type="submit" data-ui-ref="toolbox.spin.run-delta">Run Delta Spin</button>
+                </form>
+                {% else %}
+                <span class="pane-note">(Run First Spin before Delta Spin is available.)</span>
+                {% endif %}
+            </p>
+            {% endif %}
+            {% for run in spin_runs_view %}
+            {% call macros.subdisclosure(
+                run.kind_label ~ " — " ~ run.created_at[:10] ~ (" (failed)" if not run.ran else " (" ~ run.findings|length ~ " finding(s))"),
+                ui_ref="toolbox.spin.run"
+            ) %}
+                {% if not run.ran %}
+                <p class="history-entry"><strong>Could not run:</strong> {{ run.skipped_reason }}</p>
+                {% else %}
+                {% if run.baseline_created_at %}
+                <p class="history-entry"><strong>Compared against:</strong> First Spin of {{ run.baseline_created_at[:10] }}</p>
+                {% endif %}
+                {% for f in run.findings %}
+                <div class="history-entry" data-ui-ref="toolbox.spin.run.finding">
+                    <p><strong>{{ f.display_id }} — {{ f.tag }}</strong>
+                        {% if f.delta_classification %}
+                        <span class="review-state-badge review-state-unreviewed" data-ui-ref="toolbox.spin.run.finding.classification">{{ f.delta_classification|upper }}</span>
+                        {% endif %}
+                    </p>
+                    {% if f.source_reference %}<p class="history-entry"><strong>Source:</strong> {{ f.source_reference }}</p>{% endif %}
+                    <p class="history-entry"><strong>Concern:</strong> {{ f.concern }}</p>
+                    <p class="history-entry"><strong>Unresolved question:</strong> {{ f.unresolved_question }}</p>
+                    {% if f.related_prior_understanding %}
+                    <p class="history-entry"><strong>Reassesses:</strong> {{ f.related_prior_understanding }}</p>
+                    {% endif %}
+                </div>
+                {% else %}
+                <p class="pane-note">No findings from this run.</p>
+                {% endfor %}
+                {% endif %}
+            {% endcall %}
+            {% else %}
+            <p class="pane-note" data-ui-ref="toolbox.spin.empty">No Spin runs yet.</p>
+            {% endfor %}
+        </div>
+
         {% if composer_findings_view %}
         {# ---------------- Composer Findings (CLAUDE-GO-RIGHT-PANEL-01) --------------
            The project owns the intelligence; Chat discovers and discusses
