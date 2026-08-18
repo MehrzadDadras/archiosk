@@ -233,12 +233,17 @@ speculative external-AI output directly into governance docs or
 commit messages as if it were already verified — verify it here
 first, the same as any other proposal.
 
-**No provenance-tagging system beyond what already exists.** Commit
+**No general provenance-tagging system beyond what already exists.** Commit
 messages already carry authorship/reasoning/evidence for every
 substantial change in this repo's history — that's sufficient
-traceability at this project's current scale. Don't add prompt IDs,
-agent-name headers, or acceptance-record files; that's overhead this
-project doesn't need yet, and duplicates what the commit already says.
+traceability at this project's current scale. The former deferral of prompt
+IDs, agent-name headers, and acceptance records was lifted by explicit
+Product Owner authorization for prospective prompt preservation. The bounded
+exception is `governance/prompt-depository/PROMPT_REGISTER.md`; follow its
+stable-ID, verbatim-text, lineage, and prompt/result-separation contract. Do
+not create a parallel prompt register, migrate historical prompts without
+separate authorization, or extend this exception into a general provenance
+tagging system.
 
 **Branches, PRs, issues, ADRs:** this repository's entire history is
 direct commits to `main` — no feature branches, no PRs, no tags, no
