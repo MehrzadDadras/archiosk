@@ -47,8 +47,17 @@
    own "preserve existing latent engagement-order data... but do not surface
    it in the UI" - a real future capability (GO explaining at which
    introduction step a mismatch appeared) will want that ordering; nothing
-   renders it today. #}
-{% call macros.tool_pane("Spin — Evidence Isolation", ui_ref="spin.pane") %}
+   renders it today.
+
+   CLAUDE-SPIN-SURFACE-02: visible text renamed away from "Spin" (title and
+   the SPIN button itself) once services/spin.py's real, accepted Delta Spin
+   capability and its own Spin tab/Toolbox section made that name genuinely
+   ambiguous - a PM must never mistake this page's own client-side-only
+   discipline selector for the real Spin history it now sits beside.
+   ui_ref values (`spin.*`) are intentionally left unchanged - they are not
+   user-visible and renaming them would only risk breaking
+   static/js/spin_prototype.js's own selectors for no visible benefit. #}
+{% call macros.tool_pane("Evidence Isolation (Legacy Prototype)", ui_ref="spin.pane") %}
     <div class="spin-status-strip" data-ui-ref="spin.status-strip">
         <span class="review-state-badge review-state-baseline" data-spin-status data-ui-ref="spin.status">Baseline</span>
         <div class="active-set-summary" style="margin:0;">
@@ -57,7 +66,7 @@
         </div>
     </div>
 
-    <button type="button" class="btn btn-primary spin-trigger" data-spin-action="spin" data-ui-ref="spin.trigger">SPIN</button>
+    <button type="button" class="btn btn-primary spin-trigger" data-spin-action="spin" data-ui-ref="spin.trigger">APPLY</button>
 
     <p class="pane-note">
         Select disciplines below, then press SPIN. Selecting a discipline does not run

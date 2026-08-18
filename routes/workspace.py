@@ -92,6 +92,7 @@ from services.case_workspace import (
     SOURCE_KIND_TEXT_RECORD,
     SPIN_KIND_DELTA,
     SPIN_KIND_FIRST,
+    KNOWN_SPIN_DELTA_CLASSIFICATIONS,
     KNOWN_SPIN_KINDS,
     TAG_COLOR_PALETTE,
     TASK_STATUS_COMPLETED,
@@ -215,6 +216,14 @@ STABLE_DIRECTORY_KINDS = {
     # already computed unconditionally on every render, so no new
     # computation was needed to give it a real URL.
     "requirements": "Requirements",
+    # CLAUDE-SPIN-SURFACE-02: Spin's own longitudinal history/state-report
+    # surface - same stable-singleton shape as Files/Requirements above
+    # (Project-scoped, no per-instance id, no duplicate-open concept). Its
+    # own content branch (`directory_view == 'spin'`) reads spin_runs_view/
+    # spin_state_report, already computed unconditionally below (the same
+    # data the Toolbox's own shrunk summary now links into, never a second
+    # copy of it).
+    "spin": "Spin",
 }
 
 # Requirement-evidence explainability: maps the EXISTING, already-governed
@@ -1185,8 +1194,29 @@ def show_workspace(project_id):
             "kind_label": "Delta Spin" if run["spin_kind"] == SPIN_KIND_DELTA else "First Spin",
             "findings": run_findings,
             "baseline_created_at": baseline.get("created_at") if baseline else None,
+            # CLAUDE-SPIN-SURFACE-02: carried alongside baseline_created_at
+            # (same lookup, same baseline) purely so _build_spin_state_report
+            # can derive an honest evidence delta - never a new persisted
+            # field, just threading an already-fetched value through.
+            "baseline_source_signature": baseline.get("source_signature") if baseline else None,
         })
     has_first_spin = any(r["spin_kind"] == SPIN_KIND_FIRST and r.get("ran", True) for r in workspace.spin_runs)
+
+    # CLAUDE-SPIN-SURFACE-02: the Spin tab's own selected-run resolution -
+    # an explicit, validated ?spin_run=<id> (never trusted blindly - must
+    # match a real run in THIS workspace, the same per-workspace validation
+    # discipline every other id-bearing query param in this route already
+    # follows) or, absent one, the most recent run. None when there is no
+    # Spin history yet.
+    requested_spin_run_id = request.args.get("spin_run")
+    selected_spin_run_view = None
+    if requested_spin_run_id:
+        selected_spin_run_view = next(
+            (r for r in spin_runs_view if r["id"] == requested_spin_run_id), None
+        )
+    if selected_spin_run_view is None and spin_runs_view:
+        selected_spin_run_view = spin_runs_view[0]
+    spin_state_report = _build_spin_state_report(selected_spin_run_view) if selected_spin_run_view else None
 
     if active_case is not None:
         for finding_id in active_case["finding_ids"]:
@@ -1798,6 +1828,8 @@ def show_workspace(project_id):
         spin_runs_view=spin_runs_view,
         has_first_spin=has_first_spin,
         spin_generation_in_progress=store.spin_generation_in_progress_for(workspace),
+        selected_spin_run_view=selected_spin_run_view,
+        spin_state_report=spin_state_report,
         focused_finding_id=focused_finding_id,
         applied_count=applied_count,
         awaiting_apply_count=awaiting_apply_count,
@@ -2050,6 +2082,72 @@ def toggle_star(project_id):
     _, store, workspace = _load_workspace_or_404(project_id)
     store.set_starred(workspace, not workspace.starred)
     return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
+
+
+def _build_spin_state_report(run_view: dict) -> dict:
+    """
+    CLAUDE-SPIN-SURFACE-02: a pure, derived summary of one `spin_runs_view`
+    entry - never a second persisted copy of anything. Every field here is
+    computed at render time from `SpinRun`/`ComposerFinding` data that
+    already exists (`run_view` is a spin_runs_view entry: **run + kind_label
+    + findings + baseline_created_at). This function creates nothing, calls
+    nothing, and has no side effect - purely a view-model shaping step, the
+    same "derive, don't duplicate" discipline composer_findings_view/
+    spin_runs_view themselves already follow.
+
+    `evidence_delta` (new/missing Source id counts) is derived from
+    source_signature - the same sorted, comma-joined Source-id fingerprint
+    CaseWorkspaceStore.source_signature_for already computes - diffed
+    against the baseline run's own stored signature, when a baseline
+    exists. This deliberately cannot reconstruct a "renamed" count (that is
+    Reconcile's own transient staging concept, never persisted on SpinRun)
+    - reported honestly as not available rather than approximated.
+
+    `started_at`/`duration` are deliberately NOT included: SpinRun only
+    persists `created_at` (completion time) - the in-progress marker
+    (`ProjectWorkspace.spin_generation_started_at`) is a transient,
+    workspace-level flag cleared on completion, never copied onto the run
+    record itself. Inventing a start time here would be a fabrication this
+    function's own "never duplicate, never guess" discipline forbids.
+    """
+    findings = run_view.get("findings", [])
+    is_delta = run_view.get("spin_kind") == SPIN_KIND_DELTA
+
+    classification_counts = {}
+    unclassified_count = 0
+    if is_delta:
+        classification_counts = {value: 0 for value in KNOWN_SPIN_DELTA_CLASSIFICATIONS}
+        for f in findings:
+            classification = f.get("delta_classification")
+            if classification in classification_counts:
+                classification_counts[classification] += 1
+            else:
+                unclassified_count += 1
+
+    reassessed_count = sum(1 for f in findings if f.get("related_prior_understanding"))
+
+    source_signature = run_view.get("source_signature") or ""
+    current_ids = {sid for sid in source_signature.split(",") if sid}
+    sources_examined = len(current_ids)
+
+    evidence_delta = None
+    if is_delta and run_view.get("baseline_source_signature") is not None:
+        baseline_ids = {
+            sid for sid in (run_view.get("baseline_source_signature") or "").split(",") if sid
+        }
+        evidence_delta = {
+            "new_count": len(current_ids - baseline_ids),
+            "missing_count": len(baseline_ids - current_ids),
+        }
+
+    return {
+        "is_delta": is_delta,
+        "classification_counts": classification_counts,
+        "unclassified_count": unclassified_count,
+        "reassessed_count": reassessed_count,
+        "sources_examined": sources_examined,
+        "evidence_delta": evidence_delta,
+    }
 
 
 def _external_ai_status(workspace) -> tuple[str, object]:

@@ -181,7 +181,11 @@ class SpinContainerRenderTests(_BaseSpinTestCase):
         client = self._client_as("spin_owner", 1)
         body = client.get(self._workspace_url(spin=True)).get_data(as_text=True)
         self.assertIn('data-ui-ref="spin.pane"', body)
-        self.assertIn("Spin — Evidence Isolation", body)
+        # CLAUDE-SPIN-SURFACE-02: renamed away from "Spin — Evidence
+        # Isolation" once the real, accepted Spin capability made that
+        # label ambiguous - visible text only, ui_ref unchanged (see
+        # UI_REFERENCE_MAP.md).
+        self.assertIn("Evidence Isolation (Legacy Prototype)", body)
 
     def test_spin_mode_suppresses_the_default_project_intelligence_view(self):
         client = self._client_as("spin_owner", 1)

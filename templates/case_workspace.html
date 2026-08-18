@@ -2682,6 +2682,141 @@
             </section>
         </div>
     </div>
+{% elif directory_view == 'spin' %}
+    {# ---------------- Spin (CLAUDE-SPIN-SURFACE-02) -----------------------
+       The longitudinal Spin history / State Report surface - same stable-
+       singleton shape as Files/Requirements above (back-link + heading +
+       panel-suppression). Reads spin_runs_view/spin_state_report/
+       selected_spin_run_view, already computed unconditionally by this
+       route - a relocation of what used to render only inline in the
+       Toolbox, not a reimplementation (see toolbox.spin's own shrunk
+       summary below, which now links here instead of duplicating this
+       content). SpinRun/ComposerFinding themselves are completely
+       untouched - this whole branch is navigation/rendering only. #}
+    <div class="project-home spin-surface" data-ui-ref="display.spin">
+        {% if not panel_only %}
+        <p class="project-home-back">
+            <a href="{{ url_for('workspace.show_workspace', project_id=project_id, view='overview') }}">&larr; Overview</a>
+        </p>
+        {% endif %}
+        <h1 class="new-case-form-heading">Spin</h1>
+        <p class="pane-note">
+            The project's own accumulated Spin history - what was understood, what
+            changed, and what remains open, across First Spin and every Delta Spin
+            since.
+        </p>
+
+        {% with flashed = get_flashed_messages(with_categories=true) %}
+        {% if flashed %}
+        <div class="flash-stack">
+            {% for category, message in flashed %}
+            <div class="flash-message flash-{{ category }}">{{ message }}</div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% endwith %}
+
+        {% if spin_generation_in_progress %}
+        <p class="pane-note" data-ui-ref="display.spin.active">A Spin is currently running&hellip; this page reflects the last completed run until it finishes.</p>
+        {% endif %}
+
+        {% if not spin_runs_view %}
+        <p class="pane-note" data-ui-ref="display.spin.empty">
+            No Spin has run yet for this project. Use the Spin section in the Toolbox
+            to run First Spin.
+        </p>
+        {% else %}
+
+        <h2>History</h2>
+        <div data-ui-ref="display.spin.history">
+            {% for run in spin_runs_view %}
+            <p class="history-entry" data-ui-ref="display.spin.history.leaf"{% if selected_spin_run_view and run.id == selected_spin_run_view.id %} style="font-weight:600;"{% endif %}>
+                <a href="{{ url_for('workspace.show_workspace', project_id=project_id, view='spin', spin_run=run.id) }}">
+                    {{ run.kind_label }} &mdash; {{ run.created_at[:10] }}
+                </a>
+                &middot;
+                {% if not run.ran %}<span class="review-state-badge">failed</span>
+                {% else %}{{ run.findings|length }} finding(s){% endif %}
+                {% if selected_spin_run_view and run.id == selected_spin_run_view.id %} <span class="pane-note">(viewing)</span>{% endif %}
+            </p>
+            {% endfor %}
+        </div>
+
+        {% if selected_spin_run_view %}
+        <h2>Spin State Report</h2>
+        <div data-ui-ref="display.spin.report">
+            <p class="workspace-pane-label">
+                {{ selected_spin_run_view.kind_label }}
+                <span class="review-state-badge{% if not selected_spin_run_view.ran %} review-state-not-verified{% endif %}">{{ 'failed' if not selected_spin_run_view.ran else 'complete' }}</span>
+            </p>
+            <p class="history-entry"><strong>Spin Run ID:</strong> {{ selected_spin_run_view.id }}</p>
+            <p class="history-entry"><strong>Completed:</strong> {{ selected_spin_run_view.created_at }}
+                <span class="pane-note">(start time and duration are not separately recorded)</span></p>
+
+            {% if selected_spin_run_view.baseline_spin_run_id %}
+            <p class="history-entry">
+                <strong>Baseline:</strong>
+                <a href="{{ url_for('workspace.show_workspace', project_id=project_id, view='spin', spin_run=selected_spin_run_view.baseline_spin_run_id) }}">
+                    First Spin of {{ selected_spin_run_view.baseline_created_at[:10] if selected_spin_run_view.baseline_created_at else 'unknown date' }}
+                </a>
+            </p>
+            {% endif %}
+
+            {% if not selected_spin_run_view.ran %}
+            <p class="history-entry"><strong>Could not run:</strong> {{ selected_spin_run_view.skipped_reason }}</p>
+            {% else %}
+            <p class="history-entry"><strong>Sources examined:</strong> {{ spin_state_report.sources_examined }}</p>
+            {% if spin_state_report.evidence_delta %}
+            <p class="history-entry">
+                <strong>Evidence delta since baseline:</strong>
+                {{ spin_state_report.evidence_delta.new_count }} new &middot;
+                {{ spin_state_report.evidence_delta.missing_count }} missing
+                <span class="pane-note">(renamed/moved documents are not separately distinguishable from this record)</span>
+            </p>
+            {% endif %}
+            <p class="history-entry"><strong>Total findings:</strong> {{ selected_spin_run_view.findings|length }}</p>
+
+            {% if spin_state_report.is_delta %}
+            <p class="history-entry"><strong>Prior findings reassessed:</strong> {{ spin_state_report.reassessed_count }}</p>
+            <p class="history-entry"><strong>Classification summary:</strong>
+                {% for classification, count in spin_state_report.classification_counts.items() %}
+                {% if count %}{{ classification|upper }}&nbsp;&times;{{ count }}{% if not loop.last %}, {% endif %}{% endif %}
+                {% endfor %}
+                {% if spin_state_report.unclassified_count %}, unclassified &times;{{ spin_state_report.unclassified_count }}{% endif %}
+            </p>
+            {% else %}
+            <p class="pane-note">First Spin establishes a baseline - no prior state to classify against.</p>
+            {% endif %}
+
+            <h3>Findings</h3>
+            {% for f in selected_spin_run_view.findings %}
+            {% call macros.subdisclosure(f.display_id ~ " — " ~ f.tag, ui_ref="display.spin.report.finding") %}
+                <p class="finding-confidence">
+                    <span class="review-state-badge review-state-unreviewed">Machine Finding &middot; Unreviewed</span>
+                    {% if f.delta_classification %}
+                    <span class="review-state-badge review-state-unreviewed" data-ui-ref="display.spin.report.finding.classification">{{ f.delta_classification|upper }}</span>
+                    {% endif %}
+                </p>
+                {% if f.source_reference %}<p class="history-entry"><strong>Source:</strong> {{ f.source_reference }}</p>{% endif %}
+                <p class="history-entry"><strong>Concern:</strong> {{ f.concern }}</p>
+                <p class="history-entry"><strong>Unresolved question:</strong> {{ f.unresolved_question }}</p>
+                {% if f.related_prior_understanding %}
+                <p class="history-entry"><strong>Reassesses:</strong> {{ f.related_prior_understanding }}</p>
+                {% endif %}
+                {% if active_sources %}
+                <p class="history-entry">
+                    <a href="{{ url_for('workspace.show_workspace', project_id=project_id, source=active_sources[0].id) }}">Open supporting source document</a>
+                </p>
+                {% endif %}
+            {% endcall %}
+            {% else %}
+            <p class="pane-note">No findings from this run.</p>
+            {% endfor %}
+            {% endif %}
+        </div>
+        {% endif %}
+        {% endif %}
+    </div>
 {% elif show_new_case_form %}
     {# CLAUDE-P40-VW8-QA (New Investigation Action in Lists): a focused
        CREATE form only - never the full Overview/management page
@@ -3184,39 +3319,26 @@
                 {% endif %}
             </p>
             {% endif %}
-            {% for run in spin_runs_view %}
-            {% call macros.subdisclosure(
-                run.kind_label ~ " — " ~ run.created_at[:10] ~ (" (failed)" if not run.ran else " (" ~ run.findings|length ~ " finding(s))"),
-                ui_ref="toolbox.spin.run"
-            ) %}
-                {% if not run.ran %}
-                <p class="history-entry"><strong>Could not run:</strong> {{ run.skipped_reason }}</p>
-                {% else %}
-                {% if run.baseline_created_at %}
-                <p class="history-entry"><strong>Compared against:</strong> First Spin of {{ run.baseline_created_at[:10] }}</p>
-                {% endif %}
-                {% for f in run.findings %}
-                <div class="history-entry" data-ui-ref="toolbox.spin.run.finding">
-                    <p><strong>{{ f.display_id }} — {{ f.tag }}</strong>
-                        {% if f.delta_classification %}
-                        <span class="review-state-badge review-state-unreviewed" data-ui-ref="toolbox.spin.run.finding.classification">{{ f.delta_classification|upper }}</span>
-                        {% endif %}
-                    </p>
-                    {% if f.source_reference %}<p class="history-entry"><strong>Source:</strong> {{ f.source_reference }}</p>{% endif %}
-                    <p class="history-entry"><strong>Concern:</strong> {{ f.concern }}</p>
-                    <p class="history-entry"><strong>Unresolved question:</strong> {{ f.unresolved_question }}</p>
-                    {% if f.related_prior_understanding %}
-                    <p class="history-entry"><strong>Reassesses:</strong> {{ f.related_prior_understanding }}</p>
-                    {% endif %}
-                </div>
-                {% else %}
-                <p class="pane-note">No findings from this run.</p>
-                {% endfor %}
-                {% endif %}
-            {% endcall %}
+            {# CLAUDE-SPIN-SURFACE-02: relocated - the full per-run/per-
+               finding listing that used to render inline here now lives on
+               the dedicated Spin tab (display.spin, case_workspace.html's
+               own directory_view == 'spin' branch), the same "physically
+               relocated, same underlying data, never hidden or deleted"
+               precedent CLAUDE-GO-DNA-01's own Panel Zoning already
+               established for Requirements/Investigations/etc. This section
+               keeps only the trigger buttons (the action point, per this
+               stage's own real-estate discipline) and a one-line summary of
+               the latest run. #}
+            {% if spin_runs_view %}
+            {% set latest_spin_run = spin_runs_view[0] %}
+            <p class="pane-note" data-ui-ref="toolbox.spin.latest-summary">
+                Latest: {{ latest_spin_run.kind_label }} &mdash; {{ latest_spin_run.created_at[:10] }} &middot;
+                {% if not latest_spin_run.ran %}failed{% else %}{{ latest_spin_run.findings|length }} finding(s){% endif %}
+            </p>
+            <p><a href="{{ url_for('workspace.show_workspace', project_id=project_id, view='spin') }}" data-ui-ref="toolbox.spin.history-link">View Spin History &rarr;</a></p>
             {% else %}
             <p class="pane-note" data-ui-ref="toolbox.spin.empty">No Spin runs yet.</p>
-            {% endfor %}
+            {% endif %}
         </div>
 
         {% if composer_findings_view %}
@@ -3432,7 +3554,8 @@
             </div>
         {% endcall %}
 
-        {# ---------------- Spin launcher (CLAUDE-SPIN-00A, grammar finalized CLAUDE-SPIN-01) ---
+        {# ---------------- Evidence Isolation legacy prototype launcher (CLAUDE-SPIN-00A,
+           grammar finalized CLAUDE-SPIN-01) -----------------------------------
            A prototype-stage entry point - see `templates/_spin_prototype.html`'s
            own header comment for the full scope boundary (no real evidence
            filtering, no persistence). The Product Owner selected the
@@ -3443,14 +3566,22 @@
            query-param idiom every other Toolbox selection already uses
            (?source=/?requirement=/?finding=), resolved entirely
            client-side once rendered - no new authorization surface, since
-           reaching this page at all already required project authorization. #}
-        {% call macros.subdisclosure("Spin — Evidence Isolation (prototype)", ui_ref="toolbox.spin-launcher") %}
+           reaching this page at all already required project authorization.
+
+           CLAUDE-SPIN-SURFACE-02: renamed (visible text only, ui_ref values
+           unchanged - see UI_REFERENCE_MAP.md) to resolve the naming
+           collision with the real, accepted Spin capability
+           (services/spin.py, the toolbox.spin section above and the Spin
+           tab) - this remains an unrelated, unbuilt, client-side-only
+           control-grammar exploration and must never read as though it were
+           connected to real Spin history. #}
+        {% call macros.subdisclosure("Evidence Isolation (legacy prototype, unrelated to Spin)", ui_ref="toolbox.spin-launcher") %}
             <p class="pane-note">
                 Turn the project down to the smallest meaningful relationship, then
                 progressively reintroduce disciplines - prototype only, no evidence
-                is actually filtered yet.
+                is actually filtered yet. Unrelated to the Spin capability above.
             </p>
-            <a class="btn btn-ghost" data-ui-ref="toolbox.spin-launcher.open" href="{{ url_for('workspace.show_workspace', project_id=project_id, spin=1) }}">Open Spin</a>
+            <a class="btn btn-ghost" data-ui-ref="toolbox.spin-launcher.open" href="{{ url_for('workspace.show_workspace', project_id=project_id, spin=1) }}">Open Prototype</a>
         {% endcall %}
 
         {% if is_project_owner or is_admin %}

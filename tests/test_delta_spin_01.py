@@ -419,9 +419,16 @@ class RunSpinRouteTests(unittest.TestCase):
         )
         resp = self._run_spin(SPIN_KIND_FIRST, response_json)
         body = resp.get_data(as_text=True)
+        # CLAUDE-SPIN-SURFACE-02: the Toolbox now shows only a one-line
+        # summary (kind + count) - full finding detail lives on the Spin
+        # tab (display.spin), checked separately below.
         self.assertIn("First Spin", body)
-        self.assertIn("Submission deadline", body)
-        self.assertNotIn("None", body)  # delta_classification is None - must never render literally
+        self.assertIn('data-ui-ref="toolbox.spin.latest-summary"', body)
+
+        spin_tab_resp = self.client.get(f"/projects/{self.project_id}/workspace?view=spin")
+        spin_tab_body = spin_tab_resp.get_data(as_text=True)
+        self.assertIn("Submission deadline", spin_tab_body)
+        self.assertNotIn("None", spin_tab_body)  # delta_classification is None - must never render literally
 
         workspace = self.store.get(self.project_id)
         self.assertEqual(len(workspace.spin_runs), 1)
@@ -445,10 +452,14 @@ class RunSpinRouteTests(unittest.TestCase):
         )
         resp = self._run_spin(SPIN_KIND_DELTA, delta_json)
         body = resp.get_data(as_text=True)
-        self.assertIn("Delta Spin", body)
-        self.assertIn("RESOLVED", body)
-        self.assertIn("Reassesses", body)
-        self.assertIn("Height discrepancy", body)
+        self.assertIn("Delta Spin", body)  # Toolbox summary line still names the kind
+
+        spin_tab_resp = self.client.get(f"/projects/{self.project_id}/workspace?view=spin")
+        spin_tab_body = spin_tab_resp.get_data(as_text=True)
+        self.assertIn("Delta Spin", spin_tab_body)
+        self.assertIn("RESOLVED", spin_tab_body)
+        self.assertIn("Reassesses", spin_tab_body)
+        self.assertIn("Height discrepancy", spin_tab_body)
 
         workspace = self.store.get(self.project_id)
         delta_run = next(r for r in workspace.spin_runs if r["spin_kind"] == SPIN_KIND_DELTA)
@@ -471,8 +482,18 @@ class RunSpinRouteTests(unittest.TestCase):
         body = resp.get_data(as_text=True)
         self.assertIn('data-ui-ref="toolbox.composer-findings"', body)
         self.assertIn("Ordinary chat finding", body)
-        self.assertIn('data-ui-ref="toolbox.spin.run"', body)
-        self.assertIn("Spin finding", body)
+        self.assertNotIn("Spin finding", body)  # Spin-produced findings never render inline in the Toolbox any more
+
+        # The Toolbox (still rendered alongside Display on every page) may
+        # legitimately still show "Ordinary chat finding" in its own
+        # toolbox.composer-findings section - that co-presence is expected,
+        # not a leak. What matters is that it's never grouped as a Spin
+        # finding: display.spin.report.finding only ever wraps Spin-produced
+        # findings.
+        spin_tab_resp = self.client.get(f"/projects/{self.project_id}/workspace?view=spin")
+        spin_tab_body = spin_tab_resp.get_data(as_text=True)
+        self.assertIn('data-ui-ref="display.spin.report.finding"', spin_tab_body)
+        self.assertIn("Spin finding", spin_tab_body)
 
     def test_failed_spin_persists_honest_failure_record(self):
         with patch("anthropic.Anthropic") as MockClient, \
