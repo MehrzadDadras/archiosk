@@ -2743,11 +2743,10 @@
         </div>
 
         {% if selected_spin_run_view %}
-        <h2>Spin State Report</h2>
         <div data-ui-ref="display.spin.report">
-            <p class="workspace-pane-label">
+            <p class="spin-report-headline">
                 {{ selected_spin_run_view.kind_label }}{% if selected_spin_run_view.world %} &middot; {{ selected_spin_run_view.world|title }} Mode{% endif %}
-                <span class="review-state-badge{% if not selected_spin_run_view.ran %} review-state-not-verified{% endif %}">{{ 'failed' if not selected_spin_run_view.ran else 'complete' }}</span>
+                <span class="review-state-badge{% if not selected_spin_run_view.ran %} review-state-not-verified{% endif %}" style="font-size:var(--text-sm);vertical-align:middle;">{{ 'failed' if not selected_spin_run_view.ran else 'complete' }}</span>
             </p>
             {% if selected_spin_run_view.world %}
             <p class="history-entry" data-ui-ref="display.spin.report.world">
@@ -2813,8 +2812,23 @@
             {% endif %}
 
             <h3>Findings</h3>
-            {% for f in selected_spin_run_view.findings %}
-            {% call macros.subdisclosure(f.display_id ~ " — " ~ f.tag, ui_ref="display.spin.report.finding") %}
+            {# CLAUDE-BAUHAUS-CONSTRUCTIVIST-UI-01: composition, not a
+               uniform list - spin_state_report.presented_findings is
+               already ordered by classification-driven rank (routes/
+               workspace.py's own _SPIN_CLASSIFICATION_TREATMENT). Each
+               finding's own weight_class controls scale/density/default
+               disclosure state; the accent bar (border-left) is set
+               inline since its exact px/style/color is real per-finding
+               data. The classification itself still renders verbatim in
+               full (Product Owner: "keep the full 8-value vocabulary
+               semantically intact") - composition changes how it's
+               PRESENTED, never what it says. #}
+            {% for f in spin_state_report.presented_findings %}
+            <details class="spin-finding {{ f.weight_class }}"
+                      {% if f.weight_class in ('spin-weight-max', 'spin-weight-high') %}open{% endif %}
+                      data-ui-ref="display.spin.report.finding"
+                      style="border-left:{{ f.bar_px }}px {{ f.border_style }} var(--{{ f.accent }});">
+                <summary class="spin-finding-tag">{{ f.display_id }} — {{ f.tag }}</summary>
                 <p class="finding-confidence">
                     <span class="review-state-badge review-state-unreviewed">Machine Finding &middot; Unreviewed</span>
                     {% if f.delta_classification %}
@@ -2832,7 +2846,7 @@
                     <a href="{{ url_for('workspace.show_workspace', project_id=project_id, source=active_sources[0].id) }}">Open supporting source document</a>
                 </p>
                 {% endif %}
-            {% endcall %}
+            </details>
             {% else %}
             <p class="pane-note">No findings from this run.</p>
             {% endfor %}

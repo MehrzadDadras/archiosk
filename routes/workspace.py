@@ -2086,6 +2086,64 @@ def toggle_star(project_id):
     return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
 
 
+# CLAUDE-BAUHAUS-CONSTRUCTIVIST-UI-01: a per-classification PRESENTATION
+# treatment for the Spin State Report - purely additive view-model
+# annotation, never a change to the governed delta_classification value
+# itself (still rendered verbatim, in full, on every finding - Product
+# Owner constraint: "keep the full 8-value vocabulary semantically
+# intact"). Deliberately NOT a 2-bucket collapse and NOT color-coded
+# severity (Product Owner constraint: "do not equate severity with
+# louder decoration... gain different visual consequence through
+# composition, scale, position, density, spacing, interruption, or
+# structural treatment - not simply different coloured badges"):
+#
+# - `rank` controls render ORDER (lower = earlier/more prominent
+#   position) - a compositional, not decorative, hierarchy signal.
+# - `weight_class` selects the CSS scale/density treatment (defined in
+#   main.css: .spin-weight-max/-high/-base/-quiet) - typography and
+#   spacing carry the primary consequence signal, not color.
+# - `bar_px`/`border_style` vary the LEFT ACCENT BAR's own thickness and
+#   line style (solid vs dashed) - a structural marker (indeterminate's
+#   own genuine uncertainty is expressed as a dashed line, not a color),
+#   reusing the exact `.finding-card { border-left: 4px solid
+#   var(--machine-blue); }` idiom this app's own Investigation Findings
+#   already established elsewhere, not a new visual device.
+# - `accent` stays --machine-blue (already documented as "machine-
+#   generated Finding markers") for 6 of 8 values; only `resolved`
+#   (--accepted-green, "accepted/confirmed") and `new_verification_gap`
+#   (--attention-amber, "needs evidence/pending attention") get their
+#   own color, because both already have an EXACT pre-existing semantic
+#   match in tokens.css's own grammar - never a rainbow of 8 hues
+#   (Section 9's own "avoid rainbow categorization").
+#
+# A first_spin finding (classification always None) uses
+# _SPIN_DEFAULT_TREATMENT - a single, moderate, uniform presence
+# (weight_class "spin-weight-high", not "-max") since a baseline pass
+# has nothing yet to be more or less consequential RELATIVE TO; treating
+# every baseline finding as maximally urgent would itself be exactly the
+# "louder decoration" the Product Owner's own constraint warns against.
+_SPIN_CLASSIFICATION_TREATMENT = {
+    "new_verification_gap": {"rank": 0, "weight_class": "spin-weight-max",   "accent": "attention-amber", "bar_px": 4, "border_style": "solid"},
+    "new":                  {"rank": 1, "weight_class": "spin-weight-max",   "accent": "machine-blue",    "bar_px": 4, "border_style": "solid"},
+    "strengthened":         {"rank": 2, "weight_class": "spin-weight-high",  "accent": "machine-blue",    "bar_px": 3, "border_style": "solid"},
+    "indeterminate":        {"rank": 3, "weight_class": "spin-weight-high",  "accent": "machine-blue",    "bar_px": 3, "border_style": "dashed"},
+    "weakened":             {"rank": 4, "weight_class": "spin-weight-base",  "accent": "machine-blue",    "bar_px": 2, "border_style": "solid"},
+    "superseded":           {"rank": 5, "weight_class": "spin-weight-base",  "accent": "machine-blue",    "bar_px": 2, "border_style": "solid"},
+    "resolved":             {"rank": 6, "weight_class": "spin-weight-quiet", "accent": "accepted-green",  "bar_px": 1, "border_style": "solid"},
+    "unchanged":            {"rank": 7, "weight_class": "spin-weight-quiet", "accent": "machine-blue",    "bar_px": 1, "border_style": "solid"},
+}
+_SPIN_DEFAULT_TREATMENT = {"rank": 1, "weight_class": "spin-weight-high", "accent": "machine-blue", "bar_px": 3, "border_style": "solid"}
+
+
+def _spin_finding_presentation(finding: dict) -> dict:
+    """Purely additive view-model annotation - `finding` itself (and its
+    real `delta_classification`) is never mutated, only copied with the
+    presentation fields above merged in."""
+    classification = finding.get("delta_classification")
+    treatment = _SPIN_CLASSIFICATION_TREATMENT.get(classification, _SPIN_DEFAULT_TREATMENT)
+    return {**finding, **treatment}
+
+
 def _build_spin_state_report(run_view: dict) -> dict:
     """
     CLAUDE-SPIN-SURFACE-02: a pure, derived summary of one `spin_runs_view`
@@ -2152,6 +2210,18 @@ def _build_spin_state_report(run_view: dict) -> dict:
 
         world_objective = SPIN_WORLD_OBJECTIVES.get(run_view["world"])
 
+    # CLAUDE-BAUHAUS-CONSTRUCTIVIST-UI-01: presented findings, ordered by
+    # `rank` (compositional position, see _SPIN_CLASSIFICATION_TREATMENT's
+    # own docstring) - a stable sort, so findings sharing a rank keep the
+    # model's own original order among themselves. The underlying
+    # `selected_spin_run_view.findings` list (used elsewhere - Toolbox
+    # summary, existing tests) is left completely untouched; this is a
+    # separate, additive, render-only ordering.
+    presented_findings = sorted(
+        (_spin_finding_presentation(f) for f in findings),
+        key=lambda f: f["rank"],
+    )
+
     return {
         "is_delta": is_delta,
         "classification_counts": classification_counts,
@@ -2160,6 +2230,7 @@ def _build_spin_state_report(run_view: dict) -> dict:
         "sources_examined": sources_examined,
         "evidence_delta": evidence_delta,
         "world_objective": world_objective,
+        "presented_findings": presented_findings,
     }
 
 

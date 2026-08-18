@@ -24,6 +24,8 @@ No broad historical prompt migration has been performed.
 
 | Prompt ID | Title | Agent | Status | Product Owner acceptance | Record |
 |---|---|---|---|---|---|
+| CLAUDE-BAUHAUS-CONSTRUCTIVIST-UI-01 | Scientific-Artistic Surface Recomposition for ARCHIOSK/GO | Claude | RUN | Accepted; bounded first visual slice subsequently implemented | [Record](CLAUDE-BAUHAUS-CONSTRUCTIVIST-UI-01.md) |
+| CLAUDE-BAUHAUS-CONSTRUCTIVIST-UI-01A | Proceed — Bauhaus/Constructivist First Slice | Claude | RUN | Accepted; authorized bounded first implementation slice and retained Product Owner visual-acceptance gate | [Record](CLAUDE-BAUHAUS-CONSTRUCTIVIST-UI-01A.md) |
 | CODEX-PROMPT-DEPOSITORY-01A-1 | Locate the Authoritative Prompt Depository Home | Codex | RUN | Accepted by subsequent Product Owner continuation | [Record](CODEX-PROMPT-DEPOSITORY-01A-1.md) |
 | CODEX-PROMPT-DEPOSITORY-01B-1 | Verify the Prompt Depository Contract | Codex | RUN | Accepted by CODEX-PROMPT-DEPOSITORY-01B-2 | [Record](CODEX-PROMPT-DEPOSITORY-01B-1.md) |
 

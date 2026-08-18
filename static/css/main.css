@@ -7160,6 +7160,95 @@ main:hover,
     letter-spacing: 0.05em;
 }
 
+/* CLAUDE-BAUHAUS-CONSTRUCTIVIST-UI-01: the Spin State Report's own
+   finding composition - consequence expressed through scale, spacing,
+   disclosure state, and left-accent-bar structure (reusing .finding-
+   card's own established "left border marks machine-produced" idiom
+   above), never through a rainbow of badge colors. See routes/
+   workspace.py's own _SPIN_CLASSIFICATION_TREATMENT for the full
+   per-classification reasoning (Product Owner constraint: "severity
+   should gain visual consequence through composition, scale, position,
+   density, spacing, interruption, or structural treatment - not simply
+   different coloured badges"). No background fill, no border-radius, no
+   box-shadow - continuing this app's own existing de-boxing direction
+   (Section: "no cards, shadows, rounded containers"); the accent bar
+   itself (border-left width/style/color) is the one structural device
+   carrying identity, set inline per-finding since its exact px/color/
+   style is real per-finding data, not one of a small fixed set of
+   classes. */
+.spin-finding {
+    padding-top: var(--space-8);
+    padding-bottom: var(--space-8);
+    padding-left: var(--space-9);
+}
+.spin-finding > summary {
+    list-style: none;
+    cursor: pointer;
+}
+.spin-finding > summary::-webkit-details-marker { display: none; }
+.spin-finding-tag {
+    font-family: var(--font-display);
+    display: block;
+}
+/* Attention tier (new / new_verification_gap): maximum scale, generous
+   isolation (Section 10's own "negative space is active material" -
+   isolate consequential information) - rendered pre-expanded (the
+   `open` attribute is set per-finding in the template, based on the
+   same classification-driven weight, never decoratively) so the
+   PM sees the full concern without an extra click. */
+.spin-weight-max {
+    margin-bottom: var(--space-12);
+}
+.spin-weight-max .spin-finding-tag {
+    font-size: var(--text-xl);
+    font-weight: 300;
+    letter-spacing: 0.01em;
+}
+/* Elevated tier (strengthened / indeterminate): real but lesser scale
+   contrast than max - also pre-expanded. */
+.spin-weight-high {
+    margin-bottom: var(--space-11);
+}
+.spin-weight-high .spin-finding-tag {
+    font-size: var(--text-lg);
+    font-weight: 500;
+}
+/* Base tier (weakened / superseded): ordinary body-control scale,
+   collapsed by default (a deliberate click away, not hidden). */
+.spin-weight-base {
+    margin-bottom: var(--space-9);
+}
+.spin-weight-base .spin-finding-tag {
+    font-size: var(--text-md);
+    font-weight: 500;
+}
+/* Quiet/settled tier (resolved / unchanged): the receding end of the
+   composition (Product Owner: "let unchanged information recede... stay
+   inspectable without competing") - smaller scale, tight vertical
+   density, collapsed, secondary text color rather than primary. */
+.spin-weight-quiet {
+    padding-top: var(--space-5);
+    padding-bottom: var(--space-5);
+    margin-bottom: var(--space-4);
+}
+.spin-weight-quiet .spin-finding-tag {
+    font-size: var(--text-sm);
+    font-weight: 500;
+    color: var(--text-secondary);
+}
+/* The report's own headline (kind + world + status) - real typographic
+   authority at the entry point to the whole report, the same "light
+   weight where large text stays comfortably readable" rule tokens.css's
+   own header already establishes for every other large heading in the
+   app (Hero, Gateway brand, Dashboard head) - Spin's own report simply
+   never used it before now. */
+.spin-report-headline {
+    font-family: var(--font-display);
+    font-size: var(--text-2xl);
+    font-weight: 300;
+    margin: 0 0 var(--space-6);
+}
+
 .finding-artifact-thumb {
     display: block;
     max-width: 100%;
