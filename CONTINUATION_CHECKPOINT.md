@@ -8089,3 +8089,120 @@ Surface slice explicitly named as future work in CLAUDE-SPIN-SURFACE-01/02
 engine to the Source grain for document maturity, or the full evolution
 matrix using thread-identity strategy (a)) - whichever the Product Owner
 prioritizes; none of the three has been started.
+
+---
+
+## Session checkpoint: CLAUDE-HOLODECK-WORLDS-SPIN-01, Deep Ocean hue fix,
+## CLAUDE-BAUHAUS-CONSTRUCTIVIST-UI-01 - pushed, deployment outstanding
+
+Four changesets committed and pushed to `origin/main` this session, in
+dependency order:
+
+1. `172b2b1` - Governance: establish the Prompt Depository
+   (`governance/prompt-depository/PROMPT_REGISTER.md`), per explicit
+   Product Owner authorization lifting the prior "no provenance tagging"
+   stance. Bounded exception, not a general provenance system - see
+   `CLAUDE.md`'s own "No general provenance-tagging system" section.
+2. `f829f27` - CLAUDE-HOLODECK-WORLDS-SPIN-01: Survival Mode, the first
+   Spin World. `SPIN_WORLD_SURVIVAL`/`KNOWN_SPIN_WORLDS`
+   (`services/case_workspace.py`), `SPIN_WORLD_OBJECTIVES` +
+   `_SURVIVAL_MODE_INSTRUCTIONS` + `games_played` self-reported trace
+   (`services/spin.py`), an optional `world` form field on
+   `run_spin_route` (ordinary triggers with no world posted are
+   unaffected - `test_ordinary_spin_run_unaffected_by_world_feature`), a
+   "Survival Mode" checkbox on both Spin trigger forms, and a World/
+   Objective + Games Played section on the Spin State Report. 22 new
+   tests (`tests/test_holodeck_worlds_spin_01.py`).
+3. `1d83d42` - Fix Deep Ocean theme: corrected a systemic cyan-green hue
+   bug (~172 degrees) to the intended blue-cyan (~207 degrees) across
+   `tokens.css`'s `--ocean-*` tokens and its two byte-identical-parity
+   duplicates in `main.css` (`.gateway-shell`, `.gateway-card-compact`)
+   and `landing.css`. **Product Owner accepted; this correction must be
+   preserved** - do not revert to the older `rgba(176, 255, 244, ...)`
+   green/aqua direction. See the new "Deep Ocean accepted visual
+   baseline" note added to this file's own `CLAUDE.md` (Color / visual
+   changes section) recording the same constraint durably.
+4. `4274808` (HEAD) - CLAUDE-BAUHAUS-CONSTRUCTIVIST-UI-01: bounded first
+   visual slice - Spin State Report composition. Per-classification
+   presentation treatment (`_SPIN_CLASSIFICATION_TREATMENT` in
+   `routes/workspace.py`: rank/weight_class/accent/bar_px/border_style
+   for all 8 `delta_classification` values, only 2 non-default accent
+   colors), rendered via `.spin-finding`/`.spin-weight-max/-high/-base/
+   -quiet`/`.spin-report-headline` (`main.css`) and a rewritten Findings
+   loop (`templates/case_workspace.html`) consuming the new
+   `spin_state_report.presented_findings`. 22 new tests
+   (`tests/test_bauhaus_spin_findings_01.py`); full Spin-related suite
+   (97 tests) green.
+
+Full regression suite run before this arc's commits were split out:
+4109 passed / 9 failed (the same pre-existing, unrelated flaky set as
+every prior checkpoint in this file) / 0 new failures.
+
+### Deployment status: OUTSTANDING as of this checkpoint - do not assume live
+`git rev-parse HEAD` and `git rev-parse origin/main` both resolve to
+`4274808` - the repository itself is fully in sync. **Production
+(archiosk.com) is not.** Verified directly against the live server:
+
+- `GET /health` returns `{"status":"ok"}` - **this does NOT prove the new
+  code is deployed.** It reflects process liveness/registry health only,
+  not which commit's static assets or Python/template code is running.
+- Cache-busted `fetch()` of `https://archiosk.com/static/css/main.css`
+  (fresh request, `cache: 'no-store'`, confirmed via `?cb=<timestamp>`
+  querystring so no CDN/browser cache could be in play) shows:
+  - the OLD Deep Ocean value `rgba(176, 255, 244, ...)` still live;
+  - the accepted correction `rgba(176, 219, 255, ...)` **not** live;
+  - `.spin-report-headline` and `.spin-weight-max` (Bauhaus CSS) **not**
+    present in the served stylesheet at all.
+- DOM checks on the live acceptance project's own Spin tab
+  (`archiosk.com/projects/2e918a07-b7cc-483b-a888-d0224d9d4a61/
+  workspace?view=spin`) show the OLD `<h2>Spin State Report</h2>` /
+  `.workspace-pane-label` / `macros.subdisclosure` markup, and zero
+  elements matching `[data-ui-ref="toolbox.spin.world-survival"]` - the
+  Survival Mode control and Bauhaus Spin State Report markup are both
+  absent from the live surface.
+
+An earlier live visual judgement was given by the Product Owner (Deep
+Ocean accepted, Bauhaus rejected as "not visibly strong enough") based
+on looking at archiosk.com **before this discrepancy was caught**. Once
+shown the direct evidence above, the Product Owner withdrew both
+verdicts, then clarified the final disposition:
+
+- **Deep Ocean: ACCEPTED, independent of live-deployment status.** The
+  blue-leaning hue correction itself is approved and must be preserved
+  when deployment occurs - the earlier live sighting being invalid does
+  not put the design decision back in question, only the "I confirmed
+  it live" claim.
+- **Bauhaus/Constructivist Spin State Report: PENDING live visual
+  judgement.** The earlier rejection is void (it wasn't looking at this
+  code). Do not revert or widen the Bauhaus work based on that voided
+  verdict. Do not record Bauhaus/Constructivist principles into
+  governance until an actual live review happens post-deployment.
+- **Survival Mode / Project World: PENDING live verification.** The
+  required live deliverable (run Survival Mode against real project
+  evidence on the preserved acceptance project, show the actual
+  `games_played` trace) has still never been completed - blocked purely
+  on deployment, not on any remaining code work.
+
+### Next session: do not repeat the mistake above
+Before reporting any live visual/functional review as complete, verify
+the specific commit is actually served (a cache-busted content check or
+DOM marker unique to the change, not just `/health` or "the page looks
+different") FIRST. A stale/partial deploy is easy to mistake visually
+for the real thing. Once `4274808` (or later) is confirmed live by that
+method, the outstanding work is exactly the three items above - no new
+code, no additional commits needed unless the live review surfaces a
+real defect.
+
+### Note on working-tree state at session close
+At session close, `CLAUDE.md` and `governance/prompt-depository/` showed
+uncommitted changes this session did not make (a new "Deep Ocean
+accepted visual baseline" note in `CLAUDE.md`, and four new prompt
+records - two attributed to Agent "Claude" covering a Holodeck-Worlds
+terminology correction, two attributed to Agent "Codex" covering a
+"Project North Star" transition/advancement-rule direction neither
+this session's own conversation nor this checkpoint has any other
+record of). This looks like concurrent activity from another
+agent/process against the same working directory, not leftover work
+from this session. Left entirely untouched (neither committed nor
+discarded) rather than guessed at - a future session should investigate
+provenance before acting on it either way.
