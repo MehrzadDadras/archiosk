@@ -1787,6 +1787,21 @@ SPIN_KIND_FIRST = "first_spin"
 SPIN_KIND_DELTA = "delta_spin"
 KNOWN_SPIN_KINDS = (SPIN_KIND_FIRST, SPIN_KIND_DELTA)
 
+# CLAUDE-HOLODECK-WORLDS-SPIN-01: a World changes Spin's own rules of
+# attention (what counts as consequential) without changing the engine -
+# same SpinRun/ComposerFinding/run_spin call, a different framing layered
+# onto the SAME prompt (see services/spin.py's own SPIN_WORLD_OBJECTIVES).
+# Deliberately ONE real value for now (Section 9's own "prove ONE strong
+# World first, do not create a static catalogue") - open-world shaped
+# (KNOWN_SPIN_WORLDS is a tuple, not a hardcoded two-value enum check) so a
+# second World is a vocabulary addition, not a schema migration, the same
+# discipline KNOWN_SPIN_DELTA_CLASSIFICATIONS already established. `None`
+# (no world set) is the ordinary, unaffected Spin behavior - every
+# pre-existing First/Delta Spin run is a `world=None` run, completely
+# untouched by this addition.
+SPIN_WORLD_SURVIVAL = "survival"
+KNOWN_SPIN_WORLDS = (SPIN_WORLD_SURVIVAL,)
+
 # CLAUDE-DELTA-SPIN-01: the closed classification vocabulary a delta_spin
 # run's own findings are labelled with - describes the PROJECT UNDERSTANDING
 # condition a finding represents relative to the baseline SpinRun, never a
@@ -1849,6 +1864,18 @@ class SpinRun:
     finding_ids: list = field(default_factory=list)  # ComposerFinding ids this run produced
     provider: Optional[str] = None
     model: Optional[str] = None
+    # CLAUDE-HOLODECK-WORLDS-SPIN-01: `world` is None for every ordinary
+    # Spin run (unaffected) or one of KNOWN_SPIN_WORLDS when this run was
+    # deliberately framed with a World's own rules of attention.
+    # `games_played` is the model's OWN self-reported investigative trace
+    # for that run (list of {"game","triggered_by","finding"} dicts,
+    # defensively parsed like every other model-supplied field in this
+    # module) - an inspectable record of which Spin-Games it recognized
+    # itself as having effectively played and why, never hidden chain-of-
+    # thought, never fabricated by this store (services.spin already
+    # guarantees the shape before this ever reaches record_spin_run).
+    world: Optional[str] = None
+    games_played: list = field(default_factory=list)
 
 
 @dataclass
@@ -8119,6 +8146,8 @@ class CaseWorkspaceStore:
         skipped_reason: Optional[str] = None,
         provider: Optional[str] = None,
         model: Optional[str] = None,
+        world: Optional[str] = None,
+        games_played: Optional[list] = None,
         governance_log: Optional[GovernanceLog] = None,
     ) -> dict:
         """The one write path for a completed (or honestly-failed) Spin
@@ -8132,9 +8161,15 @@ class CaseWorkspaceStore:
 
         `findings` is empty whenever `ran` is False - this method does
         not itself enforce that (services.spin already guarantees it),
-        it only persists whatever it is given."""
+        it only persists whatever it is given.
+
+        CLAUDE-HOLODECK-WORLDS-SPIN-01: `world`/`games_played` are purely
+        additive - both default None/empty, so every existing caller
+        (ordinary First/Delta Spin) is completely unaffected."""
         if spin_kind not in KNOWN_SPIN_KINDS:
             raise CaseWorkspaceError(f"Unknown Spin kind {spin_kind!r}.")
+        if world is not None and world not in KNOWN_SPIN_WORLDS:
+            raise CaseWorkspaceError(f"Unknown Spin world {world!r}.")
 
         run = SpinRun(
             id=_new_id(),
@@ -8149,6 +8184,8 @@ class CaseWorkspaceStore:
             scoped_source_ids=list(scoped_source_ids) if scoped_source_ids is not None else None,
             provider=provider,
             model=model,
+            world=world,
+            games_played=list(games_played) if games_played is not None else [],
         )
 
         finding_ids: list[str] = []

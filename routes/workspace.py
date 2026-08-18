@@ -92,8 +92,10 @@ from services.case_workspace import (
     SOURCE_KIND_TEXT_RECORD,
     SPIN_KIND_DELTA,
     SPIN_KIND_FIRST,
+    SPIN_WORLD_SURVIVAL,
     KNOWN_SPIN_DELTA_CLASSIFICATIONS,
     KNOWN_SPIN_KINDS,
+    KNOWN_SPIN_WORLDS,
     TAG_COLOR_PALETTE,
     TASK_STATUS_COMPLETED,
     Anchor,
@@ -2140,6 +2142,16 @@ def _build_spin_state_report(run_view: dict) -> dict:
             "missing_count": len(baseline_ids - current_ids),
         }
 
+    # CLAUDE-HOLODECK-WORLDS-SPIN-01: the World's own objective text is
+    # product-defined (services.spin.SPIN_WORLD_OBJECTIVES), looked up
+    # here rather than duplicated - the same string is also given to the
+    # model as its own framing, so the two can never drift apart.
+    world_objective = None
+    if run_view.get("world"):
+        from services.spin import SPIN_WORLD_OBJECTIVES
+
+        world_objective = SPIN_WORLD_OBJECTIVES.get(run_view["world"])
+
     return {
         "is_delta": is_delta,
         "classification_counts": classification_counts,
@@ -2147,6 +2159,7 @@ def _build_spin_state_report(run_view: dict) -> dict:
         "reassessed_count": reassessed_count,
         "sources_examined": sources_examined,
         "evidence_delta": evidence_delta,
+        "world_objective": world_objective,
     }
 
 
@@ -2299,6 +2312,13 @@ def run_spin_route(project_id):
         flash("Unknown Spin type requested.", "error")
         return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
 
+    # CLAUDE-HOLODECK-WORLDS-SPIN-01: optional, purely additive - an
+    # ordinary trigger (no `world` field posted) behaves exactly as before.
+    world = (request.form.get("world") or "").strip() or None
+    if world is not None and world not in KNOWN_SPIN_WORLDS:
+        flash("Unknown Spin world requested.", "error")
+        return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
+
     status, decision = _external_ai_status(workspace)
     if status == "denied":
         flash(
@@ -2372,6 +2392,7 @@ def run_spin_route(project_id):
         changed_source_keys=changed_source_keys,
         prior_findings=prior_findings,
         display_title=evidence.display_title,
+        world=world,
     )
 
     workspace = store.get(project_id)  # re-fetch: version may have advanced since the call
@@ -2381,7 +2402,7 @@ def run_spin_route(project_id):
         store.record_spin_run(
             workspace, spin_kind=spin_kind, actor=_reviewer(), findings=[],
             source_signature=source_signature, baseline_spin_run_id=baseline_spin_run_id,
-            ran=False, skipped_reason=result.skipped_reason, governance_log=_log(),
+            ran=False, skipped_reason=result.skipped_reason, world=world, governance_log=_log(),
         )
         flash(f"Spin could not run: {result.skipped_reason}", "error")
         return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
@@ -2389,10 +2410,12 @@ def run_spin_route(project_id):
     store.record_spin_run(
         workspace, spin_kind=spin_kind, actor=_reviewer(), findings=result.findings,
         source_signature=source_signature, baseline_spin_run_id=baseline_spin_run_id,
-        ran=True, provider=result.provider, model=result.model, governance_log=_log(),
+        ran=True, provider=result.provider, model=result.model,
+        world=world, games_played=result.games_played, governance_log=_log(),
     )
     flash(
         ("Delta Spin" if spin_kind == SPIN_KIND_DELTA else "First Spin")
+        + (f" ({world.title()} Mode)" if world else "")
         + f" complete - {len(result.findings)} finding(s).",
         "success",
     )

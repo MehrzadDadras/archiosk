@@ -39,7 +39,13 @@ import logging
 from dataclasses import dataclass, field
 from typing import Optional
 
-from services.case_workspace import KNOWN_SPIN_DELTA_CLASSIFICATIONS, SPIN_KIND_DELTA, SPIN_KIND_FIRST
+from services.case_workspace import (
+    KNOWN_SPIN_DELTA_CLASSIFICATIONS,
+    KNOWN_SPIN_WORLDS,
+    SPIN_KIND_DELTA,
+    SPIN_KIND_FIRST,
+    SPIN_WORLD_SURVIVAL,
+)
 from services.llm_gateway import call_llm_json, resolve_timeout_from_env, scale_timeout_for_prompt_size
 from services.project_qa import BEHAVIORAL_CONTRACT as _PROJECT_QA_BEHAVIORAL_CONTRACT
 
@@ -79,6 +85,67 @@ _MAX_PRIOR_FINDINGS_IN_PROMPT = 40
 # ceiling than a single-question Composer turn (10) since it is
 # characterizing the whole project, not one answer.
 _MAX_SPIN_FINDINGS = 20
+
+# CLAUDE-HOLODECK-WORLDS-SPIN-01: same defensive-ceiling discipline,
+# applied to the new games_played self-report - the actual backstop
+# against an unbounded trace list, independent of the prompt's own
+# suggested example sequence.
+_MAX_GAMES_PLAYED = 10
+
+# CLAUDE-HOLODECK-WORLDS-SPIN-01: a World's own objective is PRODUCT-
+# DEFINED, stable text - never model-generated, never derived from
+# evidence. Displayed verbatim in the Spin State Report (routes/
+# workspace.py) and given to the model verbatim as its own framing - the
+# same object serves both purposes so the two can never drift apart.
+SPIN_WORLD_OBJECTIVES = {
+    SPIN_WORLD_SURVIVAL: (
+        "Find consequential conditions that could materially harm project "
+        "success if overlooked."
+    ),
+}
+
+# CLAUDE-HOLODECK-WORLDS-SPIN-01: Survival Mode's own attention framing -
+# appended to the ordinary Spin prompt (never replacing it, never
+# touching BEHAVIORAL_CONTRACT's own authority-preservation rules above)
+# only when world=SPIN_WORLD_SURVIVAL. This is the entire mechanism by
+# which a "World" changes what Spin pays attention to: a different
+# framing layer over the SAME single call, never a second engine.
+_SURVIVAL_MODE_INSTRUCTIONS = (
+    "\n\nYou are performing this Spin in SURVIVAL MODE. Your objective in "
+    "this pass is specifically: " + SPIN_WORLD_OBJECTIVES[SPIN_WORLD_SURVIVAL] + " "
+    "Prioritize your attention toward evidence and relationships bearing on: "
+    "disqualification or eligibility risk, mandatory requirements, "
+    "conflicting instructions, unresolved addenda, hidden or ambiguous "
+    "scope, authority ambiguity (which document actually governs), design "
+    "or coordination gaps, a change that does not appear to have propagated "
+    "to everywhere it should have, procurement traps, schedule dependencies "
+    "that could block delivery, cost exposure, safety consequences, "
+    "commissioning gaps, operational incompatibility, and evidence the "
+    "project team appears to be relying on incorrectly. This is NOT license "
+    "to pad the findings list or manufacture drama - an ordinary, "
+    "well-coordinated condition is not a survival finding merely because "
+    "you looked at it. Prioritize by genuine consequence, not by count.\n"
+    "For EACH finding you emit in this Survival pass, also self-report, "
+    "honestly, which investigative move(s) you effectively used to reach "
+    "it - a 'games_played' array alongside your findings. This is a report "
+    "of your OWN reasoning path, not a fixed checklist to run mechanically: "
+    "only report a move that genuinely happened for a genuine reason. "
+    "Games may include (not a closed list - use the name that most "
+    "accurately describes what you actually did): 'Change Game' (a change "
+    "in evidence or requirement prompted the investigation), 'Propagation "
+    "Game' (you traced a change or requirement to its downstream "
+    "consequences across disciplines/documents), 'Conflict Game' (you "
+    "found two pieces of evidence that disagree), 'Authority Game' (you "
+    "determined which document actually governs), 'Convergence Game' (you "
+    "tested whether several related strands of evidence agree with each "
+    "other), 'Missing Evidence Game' (expected evidence was absent). Each "
+    "games_played entry: {\"game\": \"<name>\", \"triggered_by\": \"<what "
+    "evidence or earlier discovery caused you to make this move>\", "
+    "\"finding\": \"<which finding tag, if any, this move led to - empty "
+    "string if it did not lead to a reportable finding>\"}. Never fabricate "
+    "a move that did not genuinely occur, and never pad this list to match "
+    "the example names above."
+)
 
 # CLAUDE-DELTA-SPIN-01: extends services.project_qa.BEHAVIORAL_CONTRACT
 # (imported, not copied) with Spin-specific rules - the authority-
@@ -152,6 +219,10 @@ class SpinResult:
     provider: Optional[str] = None
     model: Optional[str] = None
     requested_at: Optional[str] = None
+    # CLAUDE-HOLODECK-WORLDS-SPIN-01: empty for every ordinary (world=None)
+    # Spin - only populated when a World's own prompt addition asked for
+    # it. See _parse_games_played for the defensive-parsing contract.
+    games_played: list[dict] = field(default_factory=list)
 
 
 def run_spin(
@@ -164,6 +235,7 @@ def run_spin(
     changed_source_keys: Optional[set] = None,
     prior_findings: Optional[list[dict]] = None,
     display_title: Optional[str] = None,
+    world: Optional[str] = None,
     api_key: Optional[str] = None,
     model: Optional[str] = None,
     timeout: Optional[float] = None,
@@ -177,10 +249,18 @@ def run_spin(
     the caller has already determined are new or changed since the
     baseline run's own recorded source_signature (see routes/workspace.py
     - a real, explicit diff of Source ids, never inferred here from
-    filenames or dates)."""
+    filenames or dates).
+
+    CLAUDE-HOLODECK-WORLDS-SPIN-01: `world`, when given, must be one of
+    KNOWN_SPIN_WORLDS (validated by the caller/store, not re-validated
+    here defensively - matches this module's own existing trust boundary
+    with routes/workspace.py). `None` (the default) is ordinary Spin,
+    completely unaffected by anything this addition introduced."""
+    if world is not None and world not in KNOWN_SPIN_WORLDS:
+        raise ValueError(f"Unknown Spin world {world!r}.")
     prompt = _build_prompt(
         spin_kind, document_filename, candidate_requirements, governed_requirements, milestones,
-        display_title, additional_document_evidence, changed_source_keys, prior_findings,
+        display_title, additional_document_evidence, changed_source_keys, prior_findings, world,
     )
     # CLAUDE-DELTA-SPIN-02: live acceptance testing found a second-order
     # consequence of raising max_tokens 4000 -> 8000 below - a larger
@@ -223,8 +303,9 @@ def run_spin(
 
     parsed = outcome.parsed
     findings = _parse_spin_findings(parsed.get("findings"), spin_kind=spin_kind)
+    games_played = _parse_games_played(parsed.get("games_played")) if world else []
     return SpinResult(
-        ran=True, findings=findings,
+        ran=True, findings=findings, games_played=games_played,
         provider=outcome.provider, model=outcome.model, requested_at=outcome.requested_at,
     )
 
@@ -272,6 +353,35 @@ def _parse_spin_findings(raw, spin_kind: str) -> list[dict]:
         if len(parsed_findings) >= _MAX_SPIN_FINDINGS:
             break
     return parsed_findings
+
+
+def _parse_games_played(raw) -> list[dict]:
+    """Same defensive-parsing discipline as _parse_spin_findings - the
+    model's own JSON self-report is read back, never trusted on faith. A
+    malformed item (no non-empty "game") is dropped outright; the list is
+    hard-capped at _MAX_GAMES_PLAYED regardless of what the model
+    returned. This is an inspectable trace of the model's OWN reasoning
+    path (Section 12's own "concise inspectable trace... not hidden
+    chain-of-thought"), never executed as instructions and never used to
+    trigger a second real call - a single-call self-report, not a
+    multi-step agentic loop."""
+    if not isinstance(raw, list):
+        return []
+    parsed_games: list[dict] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        game = str(item.get("game", "")).strip()
+        if not game:
+            continue
+        parsed_games.append({
+            "game": game,
+            "triggered_by": str(item.get("triggered_by", "")).strip(),
+            "finding": str(item.get("finding", "")).strip(),
+        })
+        if len(parsed_games) >= _MAX_GAMES_PLAYED:
+            break
+    return parsed_games
 
 
 def _select_comprehensive_document_evidence(
@@ -331,6 +441,7 @@ def _build_prompt(
     additional_document_evidence: Optional[list[dict]] = None,
     changed_source_keys: Optional[set] = None,
     prior_findings: Optional[list[dict]] = None,
+    world: Optional[str] = None,
 ) -> str:
     is_delta = spin_kind == SPIN_KIND_DELTA
     lines = [
@@ -351,6 +462,10 @@ def _build_prompt(
         "Answer ONLY from the governed evidence given below - never invent a party, duty, "
         "date, dependency, requirement, or fact not present in it. This is NOT the full "
         "source document text, only what has already been extracted from it.",
+    ]
+    if world:
+        lines.append(_SURVIVAL_MODE_INSTRUCTIONS)
+    lines += [
         "",
         f"Source document: {document_filename}",
     ]
@@ -449,8 +564,16 @@ def _build_prompt(
             'with no prior counterpart>"'
             if is_delta else ""
         )
-        + "}, ...]}. Never pad the findings list to a fixed count, and never invent "
+        + "}, ...]"
+        + (
+            ', "games_played": [{"game": "<name>", "triggered_by": "<what caused this '
+            'move>", "finding": "<which finding tag this led to, if any - empty string '
+            'if none>"}, ...]'
+            if world else ""
+        )
+        + "}. Never pad the findings list to a fixed count, and never invent "
         "one merely to fill it - an honest, shorter list is always better than a "
         "padded one."
+        + (' Never pad "games_played" either - report only moves that genuinely occurred.' if world else "")
     )
     return "\n".join(lines)
