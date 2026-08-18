@@ -188,9 +188,23 @@ def run_spin(
         base_chars_before_scaling=4000, seconds_per_extra_1000_chars=3.0, max_timeout=90.0,
     )
 
+    # CLAUDE-DELTA-SPIN-02: live acceptance testing against the North
+    # Bayview G1 evidence state found a real, reproducible truncation
+    # defect - stop_reason=max_tokens at 4000, discarding the entire run
+    # (services.llm_gateway.call_llm_json's own honest-degrade: a
+    # truncated response is never partially parsed, the whole attempt is
+    # reported as ran=False). A comprehensive Spin can return up to
+    # _MAX_SPIN_FINDINGS (20) findings, each with several free-text
+    # fields (plus delta_classification/related_prior_understanding for a
+    # delta_spin) - roughly double project_qa.py's own _MAX_COMPOSER_
+    # FINDINGS (10) ceiling, which itself already needed 3000 tokens
+    # (CLAUDE-CA1D-COMPOSER-TIMEOUT-FIX-01, same truncation failure mode).
+    # 8000 is the smallest round increase confirmed to clear this
+    # specific reproduction; well under claude-sonnet-4-6's own output
+    # ceiling.
     outcome = call_llm_json(
         user_prompt=prompt, system_prompt=BEHAVIORAL_CONTRACT,
-        api_key=api_key, model=model, timeout=timeout, max_tokens=4000,
+        api_key=api_key, model=model, timeout=timeout, max_tokens=8000,
         log_label=f"Spin ({spin_kind})",
     )
     if not outcome.ran:
