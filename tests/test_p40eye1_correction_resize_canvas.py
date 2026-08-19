@@ -55,17 +55,13 @@ _EYE_PANE_JS_PATH = _REPO_ROOT / "static" / "js" / "eye_pane.js"
 
 
 def _rule_body(css: str, selector: str) -> str:
-    needle = re.compile(re.escape(selector) + r"(?![\w\-\"])")
-    pos = 0
-    while True:
-        match = needle.search(css, pos)
-        assert match, f"no CSS rule found for selector {selector!r}"
-        brace_open = css.index("{", match.end())
-        between = css[match.end():brace_open]
-        if re.fullmatch(r'[\w\s,.#\[\]"=\-:>]*', between):
-            brace_close = css.index("}", brace_open)
-            return css[brace_open + 1:brace_close]
-        pos = match.end()
+    rule = re.search(
+        r"^" + re.escape(selector) + r"\s*\{(?P<body>[^}]*)\}",
+        css,
+        re.M | re.S,
+    )
+    assert rule, f"no literal CSS rule found for selector {selector!r}"
+    return rule.group("body")
 
 
 class RightColumnWidthDragTests(unittest.TestCase):

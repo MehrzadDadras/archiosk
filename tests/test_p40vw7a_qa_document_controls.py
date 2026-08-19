@@ -311,7 +311,11 @@ class PdfViewerAdapterJsTests(unittest.TestCase):
         self.assertIn("/static/js/vendor/pdfjs/pdf.worker.min.mjs", self.js)
 
     def test_mount_and_unmount_exposed(self):
-        self.assertIn("window.ArchioskPdfViewer = { mount: mount, unmount: unmount }", self.js)
+        api = self.js[self.js.index("window.ArchioskPdfViewer = {"):]
+        api = api[:api.index("};") + 2]
+        self.assertIn("mount: mainSurface.mount", api)
+        self.assertIn("unmount: mainSurface.unmount", api)
+        self.assertIn("createSurface: createPdfSurface", api)
 
     def test_auto_mount_checks_for_the_real_container_element(self):
         self.assertIn("document-viewer-pdf-canvas", self.js)
@@ -343,9 +347,11 @@ class PdfViewerAdapterJsTests(unittest.TestCase):
         self.assertIn("pageTextCache[n]", body)
 
     def test_print_opens_the_real_file_not_a_stub(self):
+        self.assertIn("print: function () { if (currentUrl) window.open(currentUrl, '_blank'); }", self.js)
         idx = self.js.index("printBtn.addEventListener")
-        body = self.js[idx: idx + 600]
-        self.assertIn("window.open(downloadLink.href", body)
+        body = self.js[idx: idx + 400]
+        self.assertIn("var s = getFocused();", body)
+        self.assertIn("if (s) s.print();", body)
 
     def test_download_link_gets_the_real_url_and_filename(self):
         self.assertIn("downloadLink.href = url", self.js)

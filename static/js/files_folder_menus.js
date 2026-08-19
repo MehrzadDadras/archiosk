@@ -34,10 +34,21 @@
             menus.forEach(function (other) {
                 if (other !== menu && other.open) other.open = false;
             });
+            // Keep the next in-flow folder trigger inside Display's own
+            // scroll viewport. Chat is a separate bounded flex sibling;
+            // an expanded action row must not leave the next trigger at
+            // coordinates occupied by Composer's empty-state surface.
+            var row = menu.closest('.files-folder-row');
+            var nextRow = row && row.nextElementSibling;
+            if (nextRow && nextRow.scrollIntoView) nextRow.scrollIntoView({ block: 'nearest' });
         });
     });
 
     document.addEventListener('mousedown', function (e) {
+        // Clicking another menu is not an outside dismissal. Let its
+        // native click open it first; the toggle handler above then
+        // closes the previous menu without moving the target mid-click.
+        if (e.target.closest && e.target.closest('.files-folder-actions')) return;
         menus.forEach(function (menu) {
             if (menu.open && !menu.contains(e.target)) menu.open = false;
         });

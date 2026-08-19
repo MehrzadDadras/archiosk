@@ -460,7 +460,10 @@ class PdfViewerStatePersistenceTests(unittest.TestCase):
         self.assertIn("canvasContainer.addEventListener('scroll', saveViewStateSoon);", self.js)
 
     def test_state_flushed_synchronously_on_pagehide(self):
-        self.assertIn("window.addEventListener('pagehide', saveViewStateNow);", self.js)
+        pagehide = self.js[self.js.index("window.addEventListener('pagehide'"):]
+        pagehide = pagehide[:pagehide.index("});") + 3]
+        self.assertIn("Object.keys(surfaces).forEach", pagehide)
+        self.assertIn("surfaces[n].saveViewStateNow();", pagehide)
 
     def test_auto_mount_passes_source_id_from_dom(self):
         self.assertIn("autoMountEl.dataset.sourceId || ''", self.js)

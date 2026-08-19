@@ -953,7 +953,7 @@ html.launcher-hidden .launcher-panel { display: none; }
     background: none;
     color: var(--text-metadata);
     font-family: var(--font-body);
-    font-size: 0.68rem;
+    font-size: 0.7rem;
     padding: 0.1rem 0.3rem;
     border-radius: 3px;
     cursor: pointer;
@@ -1064,7 +1064,7 @@ html.launcher-hidden .launcher-panel { display: none; }
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    font-size: 9px;
+    font-size: 11px;
     line-height: 1;
     color: var(--machine-blue);
     font-weight: 700;
@@ -2807,7 +2807,7 @@ main:has(.document-viewer-canvas-container) {
     display: inline;
 }
 .workspace-verification-session-badge button {
-    font-size: 0.65rem;
+    font-size: 0.7rem;
     text-transform: uppercase;
     letter-spacing: 0.03em;
     color: var(--surface-primary);
@@ -4482,7 +4482,7 @@ html.toolbox-hidden .workspace-right-column {
     border-radius: 3px;
     background: var(--surface-secondary);
     color: var(--text-secondary);
-    font-size: 0.65rem;
+    font-size: 0.7rem;
     line-height: 18px;
     text-align: center;
     cursor: pointer;
@@ -5625,6 +5625,10 @@ main:hover,
    divider line must stay full-width, unaffected by this inset. */
 .conversation-dock-panel {
     height: 100%;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
     display: flex;
     flex-direction: column;
     overflow: hidden;

@@ -521,7 +521,8 @@ class AnnotationJsTests(unittest.TestCase):
         self.assertIn("redoStack.push(entry)", undo_fn)
 
     def test_escape_cancels_the_active_tool(self):
-        self.assertIn("e.key === 'Escape' && activeTool", self.js)
+        self.assertIn("escapeActiveTool: function () { if (activeTool) setActiveTool(activeTool); }", self.js)
+        self.assertIn("if (e.key === 'Escape') { var m = surfaces.main; if (m) m.escapeActiveTool(); }", self.js)
 
     def test_select_tool_only_acts_when_active(self):
         pointerdown_fn = self.js[self.js.index("function onOverlayPointerDown("):self.js.index("function onOverlayPointerMove(")]
