@@ -1,7 +1,8 @@
 # Specified But Unbuilt — External Intelligence Airlock and Constructive Boundary Response
 
-**Status:** Specified. **One narrowly bounded mission — Mission 01 — is now AUTHORIZED for implementation**
-(`CLAUDE-AIRLOCK-AUTH-01`, 2026-08-19); everything else in this document, including the whole of Part 2,
+**Status:** Specified. **One narrowly bounded mission — Mission 01, extended by the Mission 01A
+delivery-route continuation — is now AUTHORIZED for implementation** (`CLAUDE-AIRLOCK-AUTH-01` and
+`CLAUDE-AIRLOCK-M01A-AUTH`, 2026-08-19); everything else in this document, including the whole of Part 2,
 remains NOT AUTHORIZED. See "Product Owner authorization — External Intelligence Airlock Mission 01" at the
 end of this document for the exact bounded scope and the STOP boundary. As at that authorization, zero code
 exists for anything in this document. Originally recorded
@@ -303,3 +304,90 @@ never `BEHAVIORAL_CONTRACT`. The existing prompt-injection boundary is `services
 (CLAUDE-P27-B), written for uploaded documents; this document's own mapping table records that
 inbound handling *composes with* it. That is a recorded design intent, not existing code — Mission
 01 must actually apply it rather than assume it.
+
+### Mission 01A — one deterministic e-Laws content route (`CLAUDE-AIRLOCK-M01A-AUTH`)
+
+**Recorded 2026-08-19**, after Mission 01's first real attempt. A narrow continuation of the same
+investigation, the same regulation, and the same government authority — appended to this record
+rather than filed as a separate Airlock document, so one record continues to govern the whole
+boundary. Nothing in the Mission 01 authorization above is withdrawn, relaxed, or widened by it;
+this subsection adds a delivery route, not a source.
+
+#### Why a continuation was needed
+
+Mission 01 **stopped correctly**: the authorized Ontario e-Laws URL returned only a JavaScript
+application shell and no regulation text. No Airlock implementation was retained and no canonical
+state changed. The mission did not breach or fail a security boundary — it established that the
+approved authority does not serve its text at the approved address. That is a delivery-mechanism
+problem, not an authority problem, and it is the only thing Mission 01A exists to solve.
+
+#### What is authorized
+
+> determine and use one deterministic official Ontario e-Laws content-delivery route necessary to
+> retrieve the regulation text already represented by the previously approved e-Laws page.
+
+Mission 01A may authorize **exactly one** of the following, and only after repository-grounded
+inspection has identified the real delivery mechanism:
+
+- a deterministic official `ontario.ca` / Ontario e-Laws route that returns the legislative text;
+- a fixed versioned e-Laws regulation route representing the same regulation;
+- or a deterministic first-party application-data endpoint used by that official page to deliver
+  its own legislative content.
+
+**The route must be identified and fixed by trusted code. The LLM may not choose it.** This is the
+load-bearing control of Mission 01A, not a stylistic preference: a model-selected endpoint would
+make the retrieval target a function of untrusted output, which is precisely the transitive trust
+this boundary exists to prevent. The route is a constant in code, established by human inspection,
+and reviewable in a diff.
+
+#### The delivery-mechanism distinction
+
+A first-party deterministic content endpoint or versioned route belonging to the same official
+Ontario e-Laws publication is authorized **only as the delivery mechanism for the already-approved
+authority**. It is a different address for the same approved document — not a new source, not a new
+authority, and not a widening of what may be retrieved.
+
+**This is not permission to crawl `ontario.ca`.** One fixed route, one regulation, one
+investigation.
+
+#### Still prohibited under Mission 01A
+
+General web browsing; search-engine content as evidence; arbitrary URLs; arbitrary follow-on links;
+another jurisdiction; unofficial mirrors; blogs; third-party Code sites; PDF/binary ingestion;
+browser automation; agentic discovery; recursive fetching; model-selected endpoints; multiple
+alternative sources; Mission 02; promotion; new persisted schema.
+
+Every prohibition already recorded for Mission 01 remains in force in addition to these. If the
+identified route returns a PDF or other binary, Mission 01A is **out of scope and stops** — binary
+ingestion is not authorized by any route.
+
+#### Boundaries carried forward unchanged
+
+- **Airlock = movement boundary. Vestibule = admission/authority-status boundary.** Mission 01A
+  authorizes one crossing at a corrected address; it authorizes no admission.
+- Retrieved material remains **externally researched and unvalidated** —
+  `evidence_class = EVIDENCE_CLASS_EXTERNALLY_RESEARCHED`, `validation_status=None`.
+- **Zero automatic promotion.** No promotion path exists in Mission 01A by any route, human
+  included.
+- **Single-shot, tool-less interpretation** through the existing `call_llm_json()` boundary. No
+  agentic loop, no autonomous context expansion, no second model call fed from the first call's
+  output.
+- **Deterministic citation/provenance verification** by trusted code, never by the model.
+- **No new persisted schema.**
+- **STOP after one successful real evidence item.** One item is the whole objective; a second
+  retrieval, a second regulation, or a second route each require their own fresh authorization.
+
+#### Two consequences of a data-delivery route, recorded so they are not discovered late
+
+1. **A first-party application-data endpoint returns untrusted content exactly as a page does.**
+   JSON or XML from an official host is still external material: it enters the **user** prompt
+   only, never the system prompt or `BEHAVIORAL_CONTRACT`, and receives the same prompt-injection
+   treatment recorded above for retrieved page text. "First-party" describes provenance, not
+   trustworthiness of content.
+2. **The citation/provenance check must bind to the regulation's identity, not to the URL.** A
+   deterministic route proves where bytes came from; it does not prove which regulation, edition,
+   or consolidation date they represent. The integrity check must verify the retrieved text
+   carries the expected e-Laws regulation identity and version/effective date — otherwise a
+   correct-looking route silently satisfies the check while delivering the wrong consolidation.
+   This is the same "temporal validity is explicit" discipline `constitutional-invariants.md` #4
+   already requires of every other governed record.
