@@ -8,6 +8,8 @@ This directory is the authoritative repository location for preserved ARCHIOSK/G
 
 Prompt records preserve Product Owner intent and execution provenance. They do not replace constitutional invariants, programme authorization in `governance/STATUS.md`, tested application behavior, or commit history.
 
+Prompt history is not a set of equally current authorities. Resolve conflicts, corrections, supersession, absorption, and partial scope under the repository's [ratified governance-precedence rule](../governance-of-governance/amendment-and-ratification.md#precedence-among-ratified-records).
+
 ## Preservation rules
 
 1. A Prompt ID is permanent. Never renumber, reuse, or silently change it.
@@ -26,8 +28,45 @@ No broad historical prompt migration has been performed.
 |---|---|---|---|---|---|
 | CLAUDE-BAUHAUS-CONSTRUCTIVIST-UI-01 | Scientific-Artistic Surface Recomposition for ARCHIOSK/GO | Claude | RUN | Accepted; bounded first visual slice subsequently implemented | [Record](CLAUDE-BAUHAUS-CONSTRUCTIVIST-UI-01.md) |
 | CLAUDE-BAUHAUS-CONSTRUCTIVIST-UI-01A | Proceed — Bauhaus/Constructivist First Slice | Claude | RUN | Accepted; authorized bounded first implementation slice and retained Product Owner visual-acceptance gate | [Record](CLAUDE-BAUHAUS-CONSTRUCTIVIST-UI-01A.md) |
+| CLAUDE-HOLODECK-WORLDS-SPIN-01 | Reconstitute the Holodeck World Model and Advance Spin Through Worlds | Claude | SUPERSEDED | Accepted historically; only its PM-facing use of “Holodeck” was later corrected | [Record](CLAUDE-HOLODECK-WORLDS-SPIN-01.md) |
+| CLAUDE-PROJECT-WORLD-NAMING-01 | Project World Naming Correction — Preserve Holodeck for GO-LEARNING-01 | Claude | RUN | Accepted and used as the governing terminology correction | [Record](CLAUDE-PROJECT-WORLD-NAMING-01.md) |
+| CODEX-NORTH-BAYVIEW-TO-PROJECT-NORTH-STAR-01 | North Bayview → Project North Star Transition | Codex | APPROVED | Explicit Product Owner direction | [Record](CODEX-NORTH-BAYVIEW-TO-PROJECT-NORTH-STAR-01.md) |
 | CODEX-PROMPT-DEPOSITORY-01A-1 | Locate the Authoritative Prompt Depository Home | Codex | RUN | Accepted by subsequent Product Owner continuation | [Record](CODEX-PROMPT-DEPOSITORY-01A-1.md) |
 | CODEX-PROMPT-DEPOSITORY-01B-1 | Verify the Prompt Depository Contract | Codex | RUN | Accepted by CODEX-PROMPT-DEPOSITORY-01B-2 | [Record](CODEX-PROMPT-DEPOSITORY-01B-1.md) |
+| CODEX-PROJECT-NORTH-STAR-ADVANCEMENT-RULE-01 | Project North Star — Spin-Led Advancement Rule | Codex | APPROVED | Explicit Product Owner direction | [Record](CODEX-PROJECT-NORTH-STAR-ADVANCEMENT-RULE-01.md) |
+| GO-ADAPTIVE-ATTENTION-01 | Adaptive Attention — Dynamic System Hierarchy / Gear-Attention Architecture | Unassigned | DEFERRED | Confirmed future programme direction; implementation remains unauthorized | [Record](GO-ADAPTIVE-ATTENTION-01.md) |
+| GO-ADAPTIVE-WORKBENCH-01 | Adaptive Workbench — Context-Responsive Project Workspace | Unassigned | APPROVED | Product Owner-authorized distinct programme; one bounded Workbench increment is implemented while the larger grammar remains unbuilt | [Record](GO-ADAPTIVE-WORKBENCH-01.md) |
+| GO-CAMEL-MM-01 | Camel / MM1–MM9 — Multimodal Project Intelligence Programme | Unassigned | APPROVED | Product Owner-adopted and substantially implemented programme | [Record](GO-CAMEL-MM-01.md) |
+| GO-COMPOSER-01 | Composer — Governed Findings, Questions, and Next-Step Interaction | Unassigned | APPROVED | Product Owner-adopted and implemented interaction model | [Record](GO-COMPOSER-01.md) |
+| GO-DT1-01 | DT1 — Terminal Eye / Engineering Observatory | Unassigned | DEFERRED | Confirmed Product Owner programme direction; implementation remains GO LATER and unauthorized | [Record](GO-DT1-01.md) |
+| GO-EXECUTION-01 | Instrument Rail — Delegated Execution Continuity | Unassigned | DEFERRED | Confirmed future programme direction; durable delegated execution continuity remains unimplemented | [Record](GO-EXECUTION-01.md) |
+| GO-EXTERNAL-VESTIBULE-01 | External Source Vestibule — Governed Entry of Outside Evidence | Unassigned | DEFERRED | Confirmed future programme direction; evidence admission remains distinct from the External Intelligence Airlock and unimplemented | [Record](GO-EXTERNAL-VESTIBULE-01.md) |
+| GO-EXPERIENCE-CORPUS-01 | Experience Corpus — Learn How to Investigate Without Learning What to Believe | Unassigned | DEFERRED | Governing concept confirmed; Experience Corpus in all forms remains unauthorized | [Record](GO-EXPERIENCE-CORPUS-01.md) |
+| GO-FIRST-RUN-01 | First-Run Experience — New-User Preview and Product Orientation | Unassigned | DEFERRED | Confirmed future programme direction; First-Run/New-User Preview remains a useful but non-required and unauthorized aid | [Record](GO-FIRST-RUN-01.md) |
+| GO-HELIX-01 | Helix — Progressive Project Convergence | Unassigned | APPROVED | Product Owner-adopted governing concept corroborated by preserved programme evidence | [Record](GO-HELIX-01.md) |
+| GO-GEMINI-DOC-REVIEW-01 | Gemini C6/C8 — Document-Review Absorption into Spin-Games | Unassigned | APPROVED | Product Owner-adopted absorption direction corroborated by preserved programme evidence | [Record](GO-GEMINI-DOC-REVIEW-01.md) |
+| GO-INTAKE-FUTURE-01 | GO-Native Document Intake — Governed Project Evidence Entry | Unassigned | DEFERRED | Confirmed future programme direction; governed ingestion/Reconcile exist but native intake remains unimplemented | [Record](GO-INTAKE-FUTURE-01.md) |
+| GO-LAMS-01 | LAMS — Layered Architectural Memory System | Unassigned | DEFERRED | Confirmed Product Owner programme direction; implementation not authorized | [Record](GO-LAMS-01.md) |
+| GO-LEADERSHIP-01 | Distributed Leadership — Recursive Delegation River | Unassigned | DEFERRED | Confirmed future programme direction; delegation architecture remains unimplemented | [Record](GO-LEADERSHIP-01.md) |
+| GO-LIVING-KNOWLEDGE-01 | Living Body of Knowledge — Contextual Knowledge Navigation | Unassigned | DEFERRED | Confirmed future programme direction; project-knowledge navigation remains unimplemented | [Record](GO-LIVING-KNOWLEDGE-01.md) |
+| GO-MERGED-HISTORY-01 | Merged History — Project Timeline Across Evidence, Decisions, and Change | Unassigned | DEFERRED | Confirmed future programme direction; decentralized history remains authoritative and a merged event/history view remains unauthorized | [Record](GO-MERGED-HISTORY-01.md) |
+| GO-NAVIGATION-CONTEXT-01 | Navigation Context — Project-Aware Orientation and Return Paths | Unassigned | APPROVED | Product Owner-approved distinct programme; canonical operational map and bounded Composer return-pointer pilot exist while wider navigation work remains governed | [Record](GO-NAVIGATION-CONTEXT-01.md) |
+| GO-NEUTRAL-ENTRY-01 | Neutral Entry — Unified Project Gateway and Operating-Environment Lock | Unassigned | APPROVED | Product Owner-adopted and implemented neutral-entry model; current gateway evolution preserves the governed project-context lock | [Record](GO-NEUTRAL-ENTRY-01.md) |
+| GO-PM-SITUATIONAL-GAUGE-01 | PM Situational Gauge — Spin Room Attention and Project State Panel | Unassigned | DEFERRED | Confirmed future programme direction; gauge and custom-focus state remain unimplemented | [Record](GO-PM-SITUATIONAL-GAUGE-01.md) |
+| GO-PREAWARD-ADJUDICATION-01 | Pre-Award Design-Build Pursuit and Design-Development Adjudication Engine | Unassigned | APPROVED | Product Owner-adopted programme supported by bounded Requirements, QAC, investigation, evidence, and RFI lineage | [Record](GO-PREAWARD-ADJUDICATION-01.md) |
+| GO-PRESENTATION-01 | Presentation Intelligence — PowerPoint as Project Intent and Coordination Surface | Unassigned | DEFERRED | Confirmed future programme direction; Presentation Intelligence remains GO LATER and unauthorized | [Record](GO-PRESENTATION-01.md) |
+| GO-PROJECT-MEMORY-01 | Project Memory as Narrative — Organizational Episode Memory | Unassigned | DEFERRED | Confirmed future programme direction; narrative project memory remains unimplemented | [Record](GO-PROJECT-MEMORY-01.md) |
+| GO-PROJECT-OBJECT-REGISTRY-01 | Project Object Registry — Stable Human-Readable Project Object Identity | Unassigned | DEFERRED | Confirmed future programme direction; Registry/Numbering remains an unauthorized usability residual and is not required before commissioning | [Record](GO-PROJECT-OBJECT-REGISTRY-01.md) |
+| GO-RIVER-01 | River — Evidence Relationship and Consequence Flow | Unassigned | APPROVED | Product Owner-adopted and implemented relationship model | [Record](GO-RIVER-01.md) |
+| GO-RFP-PUBLICATION-BARRIER-01 | RFP Publication Barrier — Client Authoring to Blind Builder Intake | Unassigned | APPROVED | Product Owner-adopted and bounded implementation no-leak tested under `CLAUDE-RFP-BOUNDARY-01` | [Record](GO-RFP-PUBLICATION-BARRIER-01.md) |
+| GO-RISK-MONTE-CARLO-01 | Risk Intelligence — Risk Registers and Monte Carlo Contingency | Unassigned | DEFERRED | Confirmed future programme direction; bounded risk-register support exists while the canonical Risk schema and Monte Carlo engine remain unauthorized | [Record](GO-RISK-MONTE-CARLO-01.md) |
+| GO-SELF-COMMISSIONING-01 | Self-Project Commissioning — OPR, Verification, Deficiency, Recommissioning | Unassigned | APPROVED | Product Owner-adopted and substantially exercised; final independent commissioning remains outstanding | [Record](GO-SELF-COMMISSIONING-01.md) |
+| GO-SPIN-GAMES-01 | Prompt-Spin-Games — Composable Investigative Strategies | Unassigned | APPROVED | Product Owner-adopted governing concept corroborated by preserved programme evidence | [Record](GO-SPIN-GAMES-01.md) |
+| GO-SURFACE-TRUST-01 | Surface Trust — Apple Factor / Premium Professional Instrument | Unassigned | APPROVED | Broad Surface Trust principle and corrected Deep Ocean baseline accepted; wider implementation remains incomplete | [Record](GO-SURFACE-TRUST-01.md) |
+| GO-TOOL-MAKING-01 | Tool Making — Governed Capability Composition and Internal Tool Generation | Unassigned | APPROVED | Governing Tool Making direction adopted; audited capability registry exists while generated-tool lifecycle remains unbuilt | [Record](GO-TOOL-MAKING-01.md) |
+| GO-TRUST-SECURITY-01 | Trust Exchange — Security Policy, Client Requirements, and Recommissioning | Unassigned | DEFERRED | Confirmed future programme direction; Trust Exchange remains unauthorized | [Record](GO-TRUST-SECURITY-01.md) |
+| GO-UNIVERSAL-VENUE-01 | Universal Venue — Director Workspace and Broader Governed World Platform | Unassigned | DEFERRED | Confirmed future architectural possibility; professional project use remains primary and the broader Venue/Director programme remains unauthorized | [Record](GO-UNIVERSAL-VENUE-01.md) |
+| GO-VOICE-01 | Voice — Shoulder-Counsellor and Ushering Agent Programme | Unassigned | APPROVED | Product Owner-adopted Voice/Ushering direction with bounded implementation | [Record](GO-VOICE-01.md) |
 
 ## Prompt record format
 

@@ -14,6 +14,14 @@ The same discipline `constitutional-invariants.md` #1 requires of project data a
 
 Nothing in `history-mapping.md`'s corpus is ever edited to "fix" it retroactively. If a historic document's content is wrong, superseded, or embarrassing, the correction is a *new* document that supersedes it, with the historic document preserved verbatim and the supersession relationship recorded — the same non-destructive-correction discipline (constitutional invariant 5) applied to governance material itself, not just project data.
 
+## Precedence among ratified records
+
+When two authoritative programme or governance records materially conflict, the later explicit Product Owner-ratified decision governs unless that later decision explicitly preserves the earlier rule. Historical records remain preserved for lineage, but do not regain authority merely because they are older or more broadly worded. Product Owner corrections may explicitly narrow or override earlier governance.
+
+`SUPERSEDED` means the identified earlier rule no longer governs within the stated superseded scope. A partial supersession leaves every unaffected part of the earlier record in force. `ABSORBED` means the governing concept continues through the identified successor rather than ending. These relationships must identify their scope and successor; similarity or overlap alone is not supersession or absorption.
+
+Current canonical or implemented governance remains authoritative unless a later ratified Product Owner decision changes it. A preserved history or prompt corpus is therefore not a flat set of equally current authorities: status, lineage, scope, ratification, and chronology must be resolved before applying a record.
+
 ## ADR identity is durable, not filing-order
 
 **General principle, not a one-off fact about ADR-032:** an ADR's number is a permanent, citable identity, not a position in a sequence. Renumbering an ADR to preserve tidy sequential filing is not free — it invalidates every existing citation to that number, in code comments, in other documents, anywhere. ADR-032 remains a permanent landmark identity specifically because it is already cited by number in live code (`src/ai/AICapability.ts`'s docstring cites "ADR-032-R08" directly) — a concrete, evidenced cost of renumbering, not a hypothetical one. Any future ADR numbering scheme should assume gaps and out-of-sequence landmark numbers are normal and acceptable, and should never assume sequential numbers can be safely renumbered later without cost.

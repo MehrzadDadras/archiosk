@@ -1,5 +1,16 @@
 # Specified But Unbuilt — the Camel Multimodal Programme (MM1–MM9)
 
+> **Current-status clarification:** The historical status paragraph below
+> describes this programme when it was first recorded. Later, separately
+> authorized and tested Product Owner tranches implemented MM1 through MM9 in
+> bounded form. Current implementation status is governed by
+> [`governance/STATUS.md`](../STATUS.md) and the
+> [current kernel object model](../current/kernel-object-model.md); the original
+> stage-intent text remains here as history. Explicit exclusions and larger
+> capabilities those newer records still identify as unbuilt remain unbuilt.
+> Under the [ratified precedence rule](../governance-of-governance/amendment-and-ratification.md#precedence-among-ratified-records),
+> those later Product Owner-ratified decisions govern their authorized scope.
+
 **Status:** Specified, not implemented. Zero code exists for anything in
 this document. Recorded here under `CLAUDE-P40-VW9A` to close a real
 continuity gap: this programme (codename "Camel") was maintained

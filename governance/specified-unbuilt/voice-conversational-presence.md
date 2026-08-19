@@ -1,5 +1,17 @@
 # Specified But Unbuilt — Governed Voice / Conversational Presence
 
+> **Current-status clarification:** The historical status paragraph below
+> describes the state when this architecture record was written. Later
+> Product Owner-authorized work implemented Voice-Typer and bounded Level 2/3
+> Ushering behaviour; the current scope and limits are governed by the
+> **Governed Voice / Conversational Presence** entry in
+> [`governance/STATUS.md`](../STATUS.md) and the registered programme boundary
+> in [`GO-VOICE-01`](../prompt-depository/GO-VOICE-01.md). The Shoulder
+> Counsellor profile, Context Envelope, higher-authority Levels 4/5, and other
+> larger scope still identified there remain unimplemented or unauthorized.
+> The original design history below is preserved. Later ratified decisions
+> govern their bounded scope under the [precedence rule](../governance-of-governance/amendment-and-ratification.md#precedence-among-ratified-records).
+
 **Status:** Specified, not implemented. Zero code exists for anything in this document — no
 speech/audio library, no microphone permission handling, no dependency of any kind. Recorded
 under `CLAUDE-FUTURE-VOICE-A1`/`CLAUDE-FUTURE-VOICE-REC1` (2026-08-07), following a

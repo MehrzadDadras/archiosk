@@ -128,6 +128,19 @@ contrast ratio), not by eye, and check the result against every
 existing text/background pairing that uses the token you're changing,
 not just the one you're focused on.
 
+**Deep Ocean accepted visual baseline:** preserve the corrected,
+blue-leaning Deep Ocean treatment. The
+`CLAUDE-DEEP-OCEAN-HUE-CORRECTION-01` change from the older
+`rgba(176, 255, 244, ...)` green/aqua direction to the newer
+`rgba(176, 219, 255, ...)` direction is intentional and Product Owner
+accepted; do not revert it unless the Product Owner explicitly changes
+this constraint. `static/css/tokens.css` holds the canonical
+`--ocean-*` values and correction rationale, and
+`tests/test_appearance_simplify_01_global_theme.py` enforces parity at
+required duplicate-use sites. This acceptance does not extend to the
+Bauhaus/Constructivist experiment, which remains pending live visual
+judgement after deployment.
+
 ## Recurring procedures — use the skill, don't re-derive it
 
 - **`restart-app`** — clean-kill the whole dev-server reloader chain and

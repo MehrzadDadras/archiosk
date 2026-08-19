@@ -1,5 +1,18 @@
 # Bug Eye — Data Room Source Continuity (recorded CLAUDE-POSTCAMEL-COMM-I3B)
 
+> **Current-status clarification:** The broad historical prohibition below
+> predates the later, bounded Product Owner authorization recorded as **Data
+> Room Corpus and Folder Territory Completeness (`CLAUDE-RFP27-TERRITORY-01`)**
+> in [`governance/STATUS.md`](../STATUS.md). That later tranche authorized only
+> explicit Data Room folder registration/reconciliation, `Source.folder_id`,
+> and deterministic reuse of the existing file hash for deduplication within
+> its stated scope. It did **not** authorize Bug Eye's external-locator watcher,
+> background daemon, confidence-scored relocation matching, automatic
+> rerouting, or automatic missing-link repair; Bug Eye itself remains
+> unauthorized. The original prohibition below is preserved as historical
+> scope language, narrowed only where the later ratified decision expressly
+> governs under the [precedence rule](../governance-of-governance/amendment-and-ratification.md#precedence-among-ratified-records).
+
 **Status: NOT AUTHORIZED.** Recorded as a named future programme per
 `CLAUDE-POSTCAMEL-COMM-I3B` Section 6, which required the concept
 preserved without implementation. This document is a concept

@@ -1,5 +1,19 @@
 # Specified But Unbuilt — Spin: Comprehensive Project Intelligence Preview
 
+> **Current-status clarification:** The historical status and “None of this is
+> built” language below predates later bounded, tested implementations of
+> persisted Spin runs, First/Delta Spin, the Spin State Report/history surface,
+> and Survival Mode/Project World framing. Their current implemented contracts
+> are recorded in [`UI_REFERENCE_MAP.md`](../../UI_REFERENCE_MAP.md), the
+> current `services/spin.py`/`SpinRun` implementation, and the preserved
+> [`GO-SPIN-GAMES-01`](../prompt-depository/GO-SPIN-GAMES-01.md) and
+> [Project World lineage](../prompt-depository/CLAUDE-PROJECT-WORLD-NAMING-01.md).
+> This document's larger preview-era programme— including unimplemented
+> Pass/Build, generalized custom-focus, and other sections that later records
+> do not mark implemented—remains unbuilt. The original history below is
+> preserved; later Product Owner-ratified decisions govern their bounded scope
+> under the [precedence rule](../governance-of-governance/amendment-and-ratification.md#precedence-among-ratified-records).
+
 **Status:** Named, concept-preservation only, following the same pattern already established for
 `adaptive-attention-and-context-circulation.md`/`trust-exchange-and-security-commissioning.md`/
 `bug-eye-data-room-source-continuity.md`. **NOT AUTHORIZED** for implementation or further design.
