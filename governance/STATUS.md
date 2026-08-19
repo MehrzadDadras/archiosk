@@ -128,3 +128,14 @@ If any future session is tempted to build something from `specified-unbuilt/` or
 - What's acknowledged but not designed: `deferred-reserved/reservations.md`
 - How this baseline itself may change: `governance-of-governance/amendment-and-ratification.md`
 - What exists in the historic Explorer corpus and where it maps: `history-mapping.md`
+
+## Current PSD analysis terminology
+
+The formal capability name is **Smoke Management Analysis (SMA)**. Earlier
+current-status shorthand such as “smoke-management investigation” refers to
+SMA when describing the PSD/OBC-ladder work. **Project Smoke Detector (PSD)**
+is the synthetic test project/context; **SMA** is the governed analysis
+capability exercised with that context. SMA is broader than, and must not be
+equated with, a **Smoke Control System**, which is only one possible engineered
+subsystem or outcome within the analysis. Historical prompt text, source
+evidence, generic industry terminology, and OBC wording remain unchanged.

@@ -143,6 +143,19 @@ Concretely:
 The current synthetic identity in use is **Project Smoke Detector (PSD)**
 (`CLAUDE-PSD-FOUNDATION-01`, 2026-08-19).
 
+The formal capability name is **Smoke Management Analysis (SMA)**. SMA is
+the broader governed investigation of how smoke-related requirements,
+conditions, systems, exceptions, thresholds, and project facts interact. It
+may examine smoke control, HVAC operation or shutdown, smoke/fire dampers,
+detection, fire alarm, compartmentation, egress and locking, detention or
+staff-controlled operation, suppression, emergency power, Alternative
+Solutions, and Code applicability. **Smoke Management Analysis is not a
+Smoke Control System**: a Smoke Control System is only one possible engineered
+subsystem or outcome considered by SMA. Preserve generic industry terms and
+source/OBC wording verbatim; do not rename source evidence to match this
+product capability name. **PSD is the synthetic test project/context; SMA is
+the governed analysis capability being developed and tested using PSD.**
+
 ## Two different "confirm" vocabularies — don't mix them
 
 `routes/workspace.py`'s Approval Gate (Apply, Issue RFI, adjudication,
