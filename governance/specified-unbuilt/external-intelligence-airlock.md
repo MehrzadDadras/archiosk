@@ -1,9 +1,10 @@
 # Specified But Unbuilt — External Intelligence Airlock and Constructive Boundary Response
 
-**Status:** Specified. **One narrowly bounded mission — Mission 01, extended by the Mission 01A
-delivery-route continuation — is now AUTHORIZED for implementation** (`CLAUDE-AIRLOCK-AUTH-01` and
-`CLAUDE-AIRLOCK-M01A-AUTH`, 2026-08-19); everything else in this document, including the whole of Part 2,
-remains NOT AUTHORIZED. See "Product Owner authorization — External Intelligence Airlock Mission 01" at the
+**Status:** Specified. **Three narrowly bounded missions — Mission 01, its Mission 01A delivery-route
+continuation, and the Mission 02 definition bootstrap — are now AUTHORIZED for implementation**
+(`CLAUDE-AIRLOCK-AUTH-01`, `CLAUDE-AIRLOCK-M01A-AUTH`, `CLAUDE-AIRLOCK-M02-AUTH`, 2026-08-19); everything
+else in this document, including the whole of Part 2, remains NOT AUTHORIZED. Mission 03 and beyond are
+not authorized. See "Product Owner authorization — External Intelligence Airlock Mission 01" at the
 end of this document for the exact bounded scope and the STOP boundary. As at that authorization, zero code
 exists for anything in this document. Originally recorded
 under `CLAUDE-CGP-02` (the cockpit gate preceding the Camel MM1–MM9 build stages) as a
@@ -391,3 +392,122 @@ ingestion is not authorized by any route.
    correct-looking route silently satisfies the check while delivering the wrong consolidation.
    This is the same "temporal validity is explicit" discipline `constitutional-invariants.md` #4
    already requires of every other governed record.
+
+### Mission 02 — classification-framework definition bootstrap (`CLAUDE-AIRLOCK-M02-AUTH`)
+
+**Recorded 2026-08-19.** A third bounded mission under the same Airlock boundary, appended to this
+record rather than filed separately, so one document continues to govern the whole boundary.
+Mission 01 and Mission 01A are unchanged by it. Mission 02 is a **vocabulary/bootstrap mission
+only** — it retrieves what terms *mean in the regulation*, before anything is reasoned with them.
+
+#### Why a vocabulary mission comes first
+
+Provision addresses cannot originate from the model, and a substantive provision cannot be
+requested before its address is verified. Definitions are reachable *structurally*; substantive
+provisions are not. Mission 02 therefore resolves authority over vocabulary before any substantive
+retrieval — the same "authority resolution before reasoning" discipline this corpus applies to
+project documents, applied to the terms themselves.
+
+#### What is authorized
+
+Retrieve and verify the Ontario Building Code definitions needed to interpret the already-
+established SRPC project-side classification claims, **before** any substantive Code provision
+investigation begins.
+
+- **Regulation:** O. Reg. 163/24 **only**, via the same deterministic official Ontario e-Laws
+  delivery route already proven under Mission 01A. No other source, regulation, jurisdiction, or
+  delivery mechanism is authorized.
+- **Terms:** only the definition entries corresponding to these five pre-authorized concepts, and
+  only if they exist in the regulation's definition structure — (1) contained use / contained-use
+  vocabulary; (2) impeded egress / impeded-egress vocabulary; (3) high building; (4) post-disaster
+  building; (5) major occupancy.
+- Where the regulation uses an exact official spelling or term variant for one of these concepts,
+  **trusted deterministic parsing** may bind the project phrase to that official term, and only
+  where the relationship is structurally evident. **The LLM may not choose additional terms.**
+
+#### Location discipline
+
+Trusted code may locate the regulation's definition structure by deterministic structural
+traversal, fixed heading/anchor text, or verified provision labels. **The model may not choose
+where to look.** No general search, no recursive discovery, no follow-on provision retrieval, no
+model-selected navigation.
+
+If an authorized concept is not present in the bounded definition structure, **STOP and report it
+as not located**. Do not widen the mission to find it elsewhere.
+
+#### Interpretation and deterministic verification
+
+Exactly **one** existing tool-less `call_llm_json()` interpretation. External Code text remains
+untrusted input throughout. For every returned definition, trusted code must deterministically
+verify: regulation identity; version/consolidation identity; official term identity;
+provision/location identity; exact quoted wording under bounded normalization; and correspondence
+between the requested authorized concept and the returned official definition.
+
+**If any requested item fails deterministic verification, that item is not admitted. A second LLM
+call is not permitted** — a failed item is a reportable outcome, never a reason to retry.
+
+#### Persistence — existing mechanisms only
+
+Verified items may be represented only as `evidence_class = externally_researched_evidence` with
+`validation_status = None`, plus the `GovernanceLog` mission trace. Crossing the Airlock does not
+make the material project authority. **No promotion. No `ReferenceStandard` admission yet. No
+Project Code Profile. No River relationship. No Code-aware Spin. No project compliance finding. No
+new persisted schema.**
+
+**Mission 02 must have no canonical project effect.**
+
+#### Explicitly out of scope
+
+Do not retrieve: substantive occupancy provisions; controlled-egress provisions; locking
+provisions; smoke-control provisions; HVAC provisions; fire-alarm provisions; tables; referenced
+provisions; Alternative Solution material; another regulation.
+
+Do not determine: whether SRPC is a high building; whether B1 rules apply; whether detention doors
+must release; whether smoke control is required; whether the project complies. Those are later
+governed comparisons, each requiring their own authorization.
+
+Every prohibition already recorded for Mission 01 and Mission 01A remains in force in addition to
+these.
+
+#### STOP conditions
+
+STOP if the definition structure cannot be deterministically located; any authorized concept
+requires following another provision; version identity becomes ambiguous; the route changes; a term
+is absent from the bounded definition structure; deterministic quote/location verification fails;
+the model proposes an unrequested term; or more than one LLM call would be required.
+
+A STOP **may recommend** the next bounded mission. It **may not execute** one.
+
+#### Two deliberate, bounded extensions of Mission 01A — surfaced, not silently absorbed
+
+Mission 02 departs from two boundaries recorded for Mission 01A. Both are explicit Product Owner
+decisions scoped to Mission 02 alone; neither amends Mission 01A, whose own wording above is left
+unedited (`constitutional-invariants.md` #5, and #10 — authority conflicts surface rather than
+resolve silently).
+
+1. **Evidence-item count.** Mission 01A records "STOP after one successful real evidence item."
+   Mission 02 permits up to five verified items — one per authorized concept. The count is bounded
+   by a closed, pre-authorized concept list, not by the model's judgement, so the control is the
+   list rather than the number.
+2. **Single-provision assumption.** Mission 01A was framed as one provision or a tightly bounded
+   related provision set. Mission 02 states that the authorized terms must not be assumed to occur
+   in one provision. The bound is relocated, not relaxed: it moves from "one provision" to "the
+   regulation's definition structure, located deterministically, with no widening beyond it" — and
+   the no-general-search, no-recursive-discovery, no-follow-on-retrieval prohibitions are what hold
+   it.
+
+Neither extension touches the movement boundary, the untrusted-input treatment, the single-call
+limit, the quarantine representation, or the no-promotion rule.
+
+#### Boundaries carried forward unchanged
+
+- **Airlock = movement boundary. Vestibule = admission/authority-status boundary.** Mission 02
+  authorizes crossings; it authorizes no admission.
+- Retrieved material remains externally researched and unvalidated.
+- Zero automatic promotion, by any route, human included.
+- Single-shot, tool-less interpretation; no agentic loop; no autonomous context expansion; no
+  second model call fed from the first call's output.
+- Deterministic verification by trusted code, never by the model.
+- Route fixed in trusted code, never model-selected.
+- No new persisted schema; no `EXTERNAL_CANDIDATE`.
+- Mission 03 and beyond remain unauthorized.
