@@ -361,14 +361,16 @@ class RootFamilyReferencePresenceTests(_BaseTestCase):
         # RFI/Conversation/Tasks/Tags moved to their toolbox.* equivalents,
         # rendered in the Toolbox's own "nothing selected" Project
         # Intelligence view (no Investigation/Document selected here, so
-        # it renders). lists.project.documents stays in Lists - genuinely
-        # file-territory.
+        # it renders). Project files stay in Lists directly beneath the
+        # Project root; the visible lists.project.documents wrapper is
+        # retired while lists.project.documents.leaf remains file-territory.
         # CLAUDE-PROJECT-SURFACE-CONSOLIDATION-01: lists.project.tools
         # dropped from this list - retired outright (Part B2), not
         # merely relocated within Lists like the refs above.
         client = self._client_as("vw7a_owner", 1)
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
-        for ref in ("lists.project.self", "lists.project.documents"):
+        for ref in ("lists.project.self", "lists.project.search-controls",
+                    "lists.project.documents.leaf"):
             self.assertIn(f'data-ui-ref="{ref}"', body, ref)
         for ref in (
             "toolbox.investigations", "toolbox.rfi",
@@ -570,10 +572,11 @@ class UIReferenceModeToggleTests(_BaseTestCase):
 # ---------------------------------------------------------------------------
 
 class NoBehaviorChangeSpotCheckTests(_BaseTestCase):
-    def test_documents_count_and_navigation_unchanged(self):
+    def test_document_navigation_unchanged_without_visible_wrapper(self):
         client = self._client_as("vw7a_owner", 1)
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
-        self.assertIn("Documents <span", body)
+        self.assertNotIn("Documents <span", body)
+        self.assertIn('data-ui-ref="lists.project.documents.leaf"', body)
         source_id = self._store().get(self.project_id).sources[0]["id"]
         self.assertIn(f'href="/projects/{self.project_id}/workspace?source={source_id}"', body)
 

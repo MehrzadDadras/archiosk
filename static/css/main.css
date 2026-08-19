@@ -800,6 +800,43 @@ html.launcher-hidden .launcher-panel { display: none; }
     gap: 0.2rem;
     margin: 0.3rem 0 0.3rem;
 }
+.project-tree-controls {
+    margin: 0 0 0.45rem;
+    padding: 0 0.35rem 0.4rem;
+    border-bottom: 1px solid var(--border);
+}
+.project-tree-controls .documents-search-mode-toggle {
+    margin-bottom: 0;
+}
+.project-tree-controls .documents-marked-filter-btn {
+    flex: 1 1 auto;
+    margin: 0;
+}
+.project-tree-row {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+}
+.project-tree-row .current-project {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+.project-tree-disclosure {
+    width: auto;
+    flex: 0 0 auto;
+    padding: 0.3rem 0.1rem 0.3rem 0.25rem;
+    color: var(--text-secondary);
+}
+.project-tree-disclosure .tree-label {
+    overflow: visible;
+}
+.project-documents-projection > .tree-toggle {
+    display: none;
+}
+.project-documents-projection > .project-source-tree {
+    padding-left: 0;
+    border-left: 0;
+}
 .documents-search-mode-btn {
     flex: 1 1 auto;
     padding: 0.15rem 0.4rem;

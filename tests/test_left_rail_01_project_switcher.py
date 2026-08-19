@@ -84,6 +84,33 @@ class OneProjectCaseTests(_BaseTestCase):
         # compensate for "nothing else to switch to."
         self.assertNotIn('data-ui-ref="lists.projects.leaf"', body)
 
+    def test_search_and_filters_precede_the_project_tree_without_a_visible_documents_wrapper(self):
+        doc = self._ingest("Project Smoke Detector (PSD)", filename="PSD_Owner_Program_Founding_Document.docx")
+        body = self._client().get(f"/projects/{doc.project_id}/workspace").get_data(as_text=True)
+
+        search = body.index('id="documents-search-input"')
+        filters = body.index('id="documents-search-mode-text"')
+        tree = body.index('data-tree-root')
+        project = body.index('data-ui-ref="lists.project.self"')
+        source = body.index('data-ui-ref="lists.project.documents.leaf"')
+        self.assertLess(search, filters)
+        self.assertLess(filters, tree)
+        self.assertLess(tree, project)
+        self.assertLess(project, source)
+        self.assertNotIn('>Documents <span class="launcher-count">', body)
+
+    def test_current_project_closes_before_sibling_project_rows(self):
+        current = self._ingest("Project Smoke Detector (PSD)", filename="psd-owner-program.docx")
+        self._ingest("Separate Sibling Project", filename="sibling.pdf")
+        body = self._client().get(f"/projects/{current.project_id}/workspace").get_data(as_text=True)
+
+        source = body.index("psd-owner-program.docx")
+        sibling = body.index('data-ui-ref="lists.projects.leaf"')
+        self.assertLess(source, sibling)
+        between = body[source:sibling]
+        self.assertIn("</ul>", between)
+        self.assertIn("</li>", between)
+
 
 class MultipleProjectCaseTests(_BaseTestCase):
     def test_other_accessible_projects_render_as_switch_targets(self):

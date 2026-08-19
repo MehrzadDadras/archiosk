@@ -368,6 +368,39 @@
                UNCHANGED and still applies to every in-project page. #}
             <div class="lists-pane{% if not (project_id is defined and workspace is defined) %} lists-pane-full{% endif %}" id="lists-pane">
             <div class="launcher-panel-body">
+                {% if project_id is defined and workspace is defined %}
+                <div class="project-tree-controls" data-ui-ref="lists.project.search-controls">
+                    <input type="search" class="documents-search-input" id="documents-search-input" data-ui-ref="lists.project.documents.search" placeholder="Search..." aria-label="Search current project files by name">
+                    <div class="documents-search-mode-toggle" role="radiogroup" aria-label="Content filters">
+                        <button type="button" class="documents-search-mode-btn" id="documents-search-mode-text" data-ui-ref="lists.project.documents.search-mode-text" data-mode="text" aria-pressed="true">Text</button>
+                        <button type="button" class="documents-search-mode-btn" id="documents-search-mode-image" data-ui-ref="lists.project.documents.search-mode-image" data-mode="image" aria-pressed="false">Image</button>
+                        <button type="button" class="documents-marked-filter-btn" id="documents-marked-filter-btn" data-ui-ref="lists.project.documents.marked-filter" aria-pressed="false" aria-label="Show only marked files" title="Marked">Marked</button>
+                    </div>
+                    <div class="documents-image-search-tray" id="documents-image-search-tray" data-ui-ref="lists.project.documents.image-tray" tabindex="0" role="group" aria-label="Image search - paste, drop, or capture an image" hidden>
+                        <p class="documents-image-search-empty" id="documents-image-search-empty">Paste, drop, or capture an image to search</p>
+                        <div class="documents-image-search-preview" id="documents-image-search-preview" hidden>
+                            <img class="documents-image-search-preview-img" id="documents-image-search-preview-img" alt="Image search query">
+                            <div class="documents-image-search-preview-actions">
+                                <button type="button" class="btn btn-ghost" id="documents-image-search-run" data-ui-ref="lists.project.documents.image-search-run">Search</button>
+                                <button type="button" class="btn btn-ghost" id="documents-image-search-replace" data-ui-ref="lists.project.documents.image-search-replace">Replace</button>
+                                <button type="button" class="btn btn-ghost" id="documents-image-search-clear" data-ui-ref="lists.project.documents.image-search-clear">Clear</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="documents-image-search-collapsed" id="documents-image-search-collapsed" data-ui-ref="lists.project.documents.image-search-collapsed" hidden>
+                        <img class="documents-image-search-collapsed-thumb" id="documents-image-search-collapsed-thumb" alt="Current image query">
+                        <button type="button" class="documents-image-search-collapsed-btn" id="documents-image-search-expand" data-ui-ref="lists.project.documents.image-search-expand" aria-label="Expand image search" title="Expand image search">&#10530;</button>
+                        <button type="button" class="documents-image-search-collapsed-btn" id="documents-image-search-collapsed-replace" data-ui-ref="lists.project.documents.image-search-collapsed-replace" aria-label="Replace image search query" title="Replace image search query">&#8635;</button>
+                        <button type="button" class="documents-image-search-collapsed-btn" id="documents-image-search-collapsed-clear" data-ui-ref="lists.project.documents.image-search-collapsed-clear" aria-label="Clear image search query" title="Clear image search query">&#215;</button>
+                    </div>
+                    <p class="documents-image-search-status" id="documents-image-search-status" data-ui-ref="lists.project.documents.image-search-status" aria-live="polite" hidden>Not found - ARCHIOSK doesn't yet compare this image against the document set. <button type="button" class="documents-image-search-status-action" id="documents-image-search-open-composer" data-ui-ref="lists.project.documents.image-search-open-composer">Open in Composer</button> and GO can look at it directly.</p>
+                    <form method="post" id="documents-image-search-open-composer-form" action="{{ url_for('workspace.open_image_in_composer', project_id=project_id) }}" hidden>
+                        <input type="hidden" name="image_data_url" id="documents-image-search-open-composer-data">
+                        <input type="hidden" name="case" id="documents-image-search-open-composer-case">
+                    </form>
+                    <p class="documents-search-status" id="documents-search-status" data-ui-ref="lists.project.documents.search-status" aria-live="polite" hidden></p>
+                </div>
+                {% endif %}
                 <ul class="tree" data-tree-root>
                     {# CLAUDE-LEFT-RAIL-01: PROJECTS is now the one, always-
                        present rail purpose - a live active-project switcher,
@@ -470,9 +503,15 @@
                            ROOT-I1's own numbering scaffold) carries over from the
                            retired "Overview" leaf onto this link - the same
                            destination that leaf's own removal folded into. #}
-                        <a class="tree-leaf launcher-link current-project" data-ui-ref="lists.project.self" data-root-branch="1.1" data-root-label="Identity &amp; Overview" aria-current="true" href="{{ url_for('workspace.show_workspace', project_id=project_id) }}">{{ workspace.display_title or document.filename }}</a>
+                        <div class="project-tree-row">
+                            <button type="button" class="tree-toggle project-tree-disclosure" data-tree-parent data-tree-owns="source" aria-expanded="true" aria-label="Collapse {{ workspace.display_title or document.filename }} files">
+                                <span class="tree-label" aria-hidden="true"></span>
+                            </button>
+                            <a class="tree-leaf launcher-link current-project" data-ui-ref="lists.project.self" data-root-branch="1.1" data-root-label="Identity &amp; Overview" aria-current="true" href="{{ url_for('workspace.show_workspace', project_id=project_id) }}">{{ workspace.display_title or document.filename }}</a>
+                        </div>
                         <ul class="tree-children" data-tree-open>
-                                    <li class="tree-node" data-tree-node data-root-branch="2.1" data-root-label="Documents">
+                                    <li class="tree-node project-documents-projection" data-tree-node data-root-branch="2.1" data-root-label="Project files">
+                                        {% if false %}
                                         <button type="button" class="tree-toggle launcher-link" data-tree-parent data-tree-owns="source" data-ui-ref="lists.project.documents" aria-expanded="{{ 'true' if selected_source else 'false' }}">
                                             <span class="tree-label">Documents <span class="launcher-count">{{ active_sources|length }}</span></span>
                                         </button>
@@ -541,7 +580,8 @@
                                         </form>
                                         <p class="documents-search-status" id="documents-search-status" data-ui-ref="lists.project.documents.search-status" aria-live="polite" hidden></p>
                                         <button type="button" class="documents-marked-filter-btn" id="documents-marked-filter-btn" data-ui-ref="lists.project.documents.marked-filter" aria-pressed="false" aria-label="Show only marked Documents" title="Marked">Marked</button>
-                                        <ul class="tree-children"{% if selected_source %} data-tree-open{% endif %}>
+                                        {% endif %}
+                                        <ul class="tree-children project-source-tree" data-tree-open>
                                             {% for s in active_sources %}
                                             <li class="tree-node tree-node-document" data-tree-node data-source-id="{{ s.id }}">
                                                 {# ADDENDUM - FINAL DOCUMENT-ROW CONTROL ORDER: "Name = Probe, □ =
@@ -666,6 +706,8 @@
                        grammar; see governance/spare-parts-yard.md for the
                        durable record (reason parked, promotion trigger,
                        untouched original routes/forms). #}
+                        </ul>
+                    </li>
                     {% endif %}
                     {# CLAUDE-LEFT-RAIL-01: every OTHER accessible Project as a
                        plain direct switch target - reuses nav_recent_projects

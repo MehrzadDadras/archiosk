@@ -177,18 +177,19 @@ class NoDuplicatedChildHierarchyTests(_BaseTestCase):
         self.assertEqual(other_project_open_body.count("A Second Distinct Project"), 2)
 
         own_page = client.get(f"/projects/{other.project_id}/workspace").get_data(as_text=True)
-        # On its own page it legitimately appears four times now
+        # On its own page it legitimately appears five times now
         # (CLAUDE-P40-VW7B, Section 5 + Addendum G above): the top bar's
         # own breadcrumb link (visible text), that SAME link's own
         # aria-label (real text, "<name> — Switch Project" - not a
         # visible SECOND occurrence on screen, only present in the
         # accessibility tree), the expanded Lists branch heading, and
-        # the menu chooser's own item (this project is itself one of
+        # the project disclosure's accessible label, and the menu chooser's
+        # own item (this project is itself one of
         # its own environment's accessible projects) - what must never
         # happen is a FIFTH occurrence inside Display itself (a
         # duplicated card/heading, Section 4's own rule) - that check is
         # unaffected and still the real point of this test.
-        self.assertEqual(own_page.count("A Second Distinct Project"), 4)
+        self.assertEqual(own_page.count("A Second Distinct Project"), 5)
         display_start = own_page.index('class="workspace-pane-display"')
         display_html = own_page[display_start:]
         self.assertNotIn("A Second Distinct Project", display_html)
@@ -196,14 +197,15 @@ class NoDuplicatedChildHierarchyTests(_BaseTestCase):
     def test_documents_investigations_chats_are_listed_in_the_panel_for_the_active_project(self):
         # CLAUDE-GO-DNA-01 (Panel Zoning): Investigations/Conversation
         # relocated out of the Lists <nav class="launcher-panel"> into
-        # the Toolbox's own Project Intelligence view - Documents (file
-        # territory) is the only one of these three that stays in Lists.
+        # the Toolbox's own Project Intelligence view. File territory
+        # stays in Lists, now directly under the Project without a visible
+        # Documents wrapper.
         client = self._client_as("p40e2b1a_owner", 1)
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
         launcher_start = body.index('<nav class="launcher-panel"')
         launcher_end = body.index("</nav>", launcher_start)
         panel_html = body[launcher_start:launcher_end]
-        self.assertIn("Documents", panel_html)
+        self.assertNotIn('>Documents <span class="launcher-count">', panel_html)
         self.assertIn("rfp.txt", panel_html)
         self.assertIn('data-ui-ref="toolbox.investigations"', body)
         self.assertIn('data-ui-ref="toolbox.conversation"', body)
@@ -223,8 +225,8 @@ class NoDuplicatedChildHierarchyTests(_BaseTestCase):
         home_panel = panel_html(client.get("/").get_data(as_text=True))
         workspace_panel = panel_html(client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True))
         self.assertNotEqual(home_panel, workspace_panel)
-        self.assertNotIn("Documents", home_panel)
-        self.assertIn("Documents", workspace_panel)
+        self.assertNotIn('data-ui-ref="lists.project.documents.leaf"', home_panel)
+        self.assertIn('data-ui-ref="lists.project.documents.leaf"', workspace_panel)
 
 
 # ---------------------------------------------------------------------------
