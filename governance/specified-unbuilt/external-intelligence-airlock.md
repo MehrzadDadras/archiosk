@@ -542,7 +542,7 @@ The `governance/STATUS.md` correction that moved the exclusion boundary from Mis
 
 > **Mission 02 is AUTHORIZED but MUST NOT EXECUTE until both conditions below are satisfied.**
 
-**Condition A — Mission 01A implementation is committed and synchronized.**
+**Condition A — Mission 01A implementation is committed and synchronized. — SATISFIED.**
 
 Mission 02 reuses Mission 01A's delivery route. Executing Mission 02 against an implementation that
 exists only in a working tree would mean the route Mission 02 depends on is not in the system of
@@ -550,27 +550,46 @@ record — a pushed commit is the only thing that makes it real (`CLAUDE.md`, sy
 Mission 01A's implementation must be committed and pushed **after its required validation**, not
 merely present on disk.
 
-Known untracked implementation files at the time this hold was recorded:
+**Satisfied by `22ec1ff0641c5fb45456982e517b4eebc677e5be`** ("CODEX-AIRLOCK-M01A: prove
+deterministic e-Laws retrieval and quarantined verification"), verified at
+`CLAUDE-PSD-FOUNDATION-01` to be an ancestor of `HEAD`, present on `origin/main`, and to contain
+both files this hold named while they were untracked —
+`services/external_intelligence_airlock.py` and
+`tests/test_external_intelligence_airlock_m01a.py`. Neither was touched, staged, or committed by
+this hold itself.
 
-- `services/external_intelligence_airlock.py`
-- `tests/test_external_intelligence_airlock_m01a.py`
+**Condition B — Project Smoke Detector context must be resolved before Mission 02 execution.**
 
-Neither was touched, staged, or committed by this hold.
+*(Recorded `CLAUDE-PSD-FOUNDATION-01`, 2026-08-19, superseding this condition's original wording,
+which named the real-world project. The Product Owner's synthetic-identity decision — see
+`CLAUDE.md`, "Synthetic test-project identity" — replaces that real identity with the synthetic
+canonical name **Project Smoke Detector (PSD)** for the ARCHIOSK test project. Original source
+material keeps its real provenance and is not renamed or sanitized.)*
 
-**Condition B — the target project context is resolved.**
+Condition B is satisfied **only** when all of the following hold:
 
-Before Mission 02 executes, one of the following must be established:
+1. **Project Smoke Detector exists** — created through the normal ARCHIOSK project-creation
+   mechanism, not by any bespoke or side-channel route;
+2. **its canonical project ID is known**;
+3. **its project/environment identity is confirmed**;
+4. **Mission 02 has an explicit evidence destination/context.**
 
-1. **SRPC exists as an ARCHIOSK project** — its canonical project ID is identified, and the
-   intended evidence destination/context is confirmed; **or**
-2. **SRPC does not yet exist as an ARCHIOSK project** — in which case Mission 02 must remain a
-   **non-project external-authority research exercise**, unless the Product Owner separately
-   authorizes project creation/registration.
+**The prior read-only inspection of `instance/registry/` is not project creation**, and nothing in
+this record may be read as inferring that PSD already exists. Reading a registry establishes
+absence or presence; it never creates anything.
 
 **No external evidence may be attached to an assumed or invented project container.** This is not a
 procedural nicety: `constitutional-invariants.md` #8 makes project boundaries strict and #3 makes
-provenance mandatory, and evidence written into a guessed container satisfies neither. An honest
-non-project research exercise is a legitimate outcome; a fabricated destination is not.
+provenance mandatory, and evidence written into a guessed container satisfies neither.
+
+**Residual real-identity references, surfaced not silently rewritten.** The Mission 01, 01A and 02
+scope statements recorded above still name the real-world project abbreviation, because those
+sentences record *what the Product Owner actually authorized* and rewriting them would edit a
+ratified authorization's own scope after the fact (`constitutional-invariants.md` #5). The synthetic
+identity governs the ARCHIOSK **test-project container**, which is what Condition B now names; it
+does not retroactively rename the investigation those missions were authorized for. If the Product
+Owner wants those scope statements restated under the synthetic identity as well, that is a
+deliberate, separately-authorized amendment — not something this record does on its own.
 
 ##### Verifying the conditions
 
@@ -584,7 +603,8 @@ authorization for project creation/registration, which this record does not gran
 ##### Read-only observation recorded at hold time, not a resolution of Condition B
 
 A read-only inspection of the local development registry (`instance/registry/`, git-ignored, local
-only) found seven project records, **none of which is SRPC**. This is recorded as an observation
+only) found seven project records, none of which was the real-world project, and none of which is
+**Project Smoke Detector**. This is recorded as an observation
 about one environment at one moment. It is **not** a resolution of Condition B: `instance/` is
 deliberately outside version control, this repository's own doctrine treats deployed/environment
 state as evidence rather than truth, and the authoritative check must be made against whichever
@@ -592,6 +612,6 @@ environment Mission 02 would actually run in. Condition B remains open.
 
 ##### What this hold does not do
 
-It does not create the SRPC project, execute Mission 02, touch the untracked Mission 01A
+It does not create Project Smoke Detector, execute Mission 02, touch the Mission 01A
 implementation, revoke or rewrite any authorization, or introduce a separate hold/precondition
 mechanism — the hold lives beside the authorization it conditions, in this same record.

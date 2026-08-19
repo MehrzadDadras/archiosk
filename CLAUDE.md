@@ -108,6 +108,41 @@ location. Use a transient file outside the repo (session scratchpad),
 delete it immediately after use, and never echo the credential back in
 a message.
 
+## Synthetic test-project identity
+
+An ARCHIOSK/GO test project built from real-world research material may
+carry a deliberately **synthetic project identity** — a name that is not
+the real-world project's. This is a Product Owner security/liability
+decision, not a cosmetic one.
+
+**A synthetic identity must never falsify provenance.** The separation is:
+
+- **Real source material** — preserved as source evidence, with its real
+  provenance intact.
+- **ARCHIOSK test-project identity** — synthetic.
+
+Concretely:
+
+- The project's display/name identity may be synthetic.
+- Original source names, document identifiers, and provenance stay
+  truthful. Never rename, sanitize, or rewrite a source document to match
+  a synthetic identity — that would make the evidence lie, and
+  `governance/constitutional-invariants.md` #3 (provenance is mandatory)
+  is what forbids it.
+- Source evidence is never silently reclassified as synthetic evidence.
+- Real owner/client/site/project identifiers do not become canonical
+  test-project identity unless a test specifically requires one of them
+  **as source evidence**.
+- Do not persist a synthetic↔real mapping unless something actually needs
+  it. An unnecessary mapping file recreates the exposure the synthetic
+  identity was adopted to avoid.
+- Durable ARCHIOSK test artifacts — reports, prompts, governance records —
+  use the synthetic identity wherever the real identity is not needed for
+  evidence provenance.
+
+The current synthetic identity in use is **Project Smoke Detector (PSD)**
+(`CLAUDE-PSD-FOUNDATION-01`, 2026-08-19).
+
 ## Two different "confirm" vocabularies — don't mix them
 
 `routes/workspace.py`'s Approval Gate (Apply, Issue RFI, adjudication,
