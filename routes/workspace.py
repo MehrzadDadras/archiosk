@@ -2464,6 +2464,21 @@ def run_spin_route(project_id):
         prior_findings=prior_findings,
         display_title=evidence.display_title,
         world=world,
+        maturity_context=[
+            m for m in workspace.maturity_records if m.get("status") == "active"
+        ],
+        expectation_context=[
+            {
+                "scope_type": p.get("scope_type"),
+                "scope_id": p.get("scope_id"),
+                "description": item.get("description"),
+                "expected_maturity": item.get("expected_maturity"),
+                "status": item.get("status"),
+            }
+            for p in workspace.expected_information_profiles
+            if p.get("status") == "active"
+            for item in p.get("items", [])
+        ],
     )
 
     workspace = store.get(project_id)  # re-fetch: version may have advanced since the call
@@ -2483,6 +2498,7 @@ def run_spin_route(project_id):
         source_signature=source_signature, baseline_spin_run_id=baseline_spin_run_id,
         ran=True, provider=result.provider, model=result.model,
         world=world, games_played=result.games_played, governance_log=_log(),
+        helix_assessments=result.helix_assessments,
     )
     flash(
         ("Delta Spin" if spin_kind == SPIN_KIND_DELTA else "First Spin")

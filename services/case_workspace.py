@@ -1876,6 +1876,11 @@ class SpinRun:
     # guarantees the shape before this ever reaches record_spin_run).
     world: Optional[str] = None
     games_played: list = field(default_factory=list)
+    # CODEX-HELIX-QA-ABSORPTION-01: bounded, per-interface QA context
+    # produced by the same Spin call. This is intentionally embedded in
+    # the run rather than becoming a parallel Helix engine or finding
+    # table. Each item keeps expected fit separate from observed result.
+    helix_assessments: list = field(default_factory=list)
 
 
 @dataclass
@@ -8148,6 +8153,7 @@ class CaseWorkspaceStore:
         model: Optional[str] = None,
         world: Optional[str] = None,
         games_played: Optional[list] = None,
+        helix_assessments: Optional[list] = None,
         governance_log: Optional[GovernanceLog] = None,
     ) -> dict:
         """The one write path for a completed (or honestly-failed) Spin
@@ -8186,6 +8192,7 @@ class CaseWorkspaceStore:
             model=model,
             world=world,
             games_played=list(games_played) if games_played is not None else [],
+            helix_assessments=list(helix_assessments) if helix_assessments is not None else [],
         )
 
         finding_ids: list[str] = []
@@ -8211,6 +8218,7 @@ class CaseWorkspaceStore:
                 payload={
                     "spin_run_id": run.id, "spin_kind": spin_kind, "ran": ran,
                     "baseline_spin_run_id": baseline_spin_run_id, "finding_count": len(finding_ids),
+                    "helix_assessment_count": len(run.helix_assessments),
                 },
             )
         return asdict(run)

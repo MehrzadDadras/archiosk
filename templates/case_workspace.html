@@ -2811,6 +2811,37 @@
             </div>
             {% endif %}
 
+            {% if selected_spin_run_view.helix_assessments %}
+            <h3>Progressive Helix QA</h3>
+            <p class="pane-note">
+                Interface-specific expected fit compared with observed evidence. Stage labels
+                are contextual evidence, not universal technical standards.
+            </p>
+            <div data-ui-ref="display.spin.report.helix-qa">
+                {% for h in selected_spin_run_view.helix_assessments %}
+                <details class="spin-finding" data-ui-ref="display.spin.report.helix-qa.interface">
+                    <summary class="spin-finding-tag">{{ h.interface }} &middot; {{ h.assessment|replace('_', ' ')|upper }}</summary>
+                    <p class="history-entry"><strong>Spin axis:</strong> {{ h.spin_axis|upper }}</p>
+                    {% if h.strands %}<p class="history-entry"><strong>Strands:</strong> {{ h.strands|join(' ↔ ') }}</p>{% endif %}
+                    <p class="history-entry"><strong>Expected fit now:</strong> {{ h.expectation_state|replace('_', ' ') }}{% if h.claimed_maturity %} at {{ h.claimed_maturity }}{% endif %}</p>
+                    {% if h.maturity_source %}<p class="history-entry"><strong>Why expected now:</strong> {{ h.maturity_source }}{% if h.expectation_rationale %} &mdash; {{ h.expectation_rationale }}{% endif %}</p>
+                    {% elif h.expectation_rationale %}<p class="history-entry"><strong>Expectation rationale:</strong> {{ h.expectation_rationale }}</p>{% endif %}
+                    {% if h.dimension_relationship_class %}<p class="history-entry"><strong>Dimensional relationship:</strong> {{ h.dimension_relationship_class|replace('_', ' ') }}</p>{% endif %}
+                    {% for e in h.observed_evidence %}
+                    <p class="history-entry" data-ui-ref="display.spin.report.helix-qa.evidence">
+                        <strong>Evidence:</strong> {{ e.source_reference }}{% if e.revision %} &middot; {{ e.revision }}{% endif %}{% if e.region %} &middot; {{ e.region }}{% endif %}{% if e.observed_value %}<br>{{ e.observed_value }}{% endif %}{% if e.confidence %} <span class="pane-note">({{ e.confidence }})</span>{% endif %}
+                    </p>
+                    {% endfor %}
+                    <p class="history-entry"><strong>Evidence sufficiency:</strong> {{ h.evidence_sufficiency|replace('_', ' ') }}</p>
+                    {% if h.consequence %}<p class="history-entry"><strong>Consequence:</strong> {{ h.consequence }}</p>{% endif %}
+                    {% if h.uncertainty %}<p class="history-entry"><strong>Uncertainty:</strong> {{ h.uncertainty }}</p>{% endif %}
+                    {% if h.follow_on_game %}<p class="history-entry"><strong>Spin continuation:</strong> {{ h.follow_on_game }}</p>{% endif %}
+                    {% if h.governed_question %}<p class="history-entry"><strong>Governed question:</strong> {{ h.governed_question }}</p>{% endif %}
+                </details>
+                {% endfor %}
+            </div>
+            {% endif %}
+
             <h3>Findings</h3>
             {# CLAUDE-BAUHAUS-CONSTRUCTIVIST-UI-01: composition, not a
                uniform list - spin_state_report.presented_findings is

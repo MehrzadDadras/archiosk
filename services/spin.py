@@ -55,7 +55,7 @@ DEFAULT_TIMEOUT_SECONDS = 45.0
 
 # CLAUDE-DELTA-SPIN-01: bump on meaningful prompt/schema changes, same
 # discipline as services/project_qa.py's PROJECT_QA_PROMPT_VERSION.
-SPIN_PROMPT_VERSION = "delta-spin-01"
+SPIN_PROMPT_VERSION = "helix-qa-01"
 
 _MAX_CANDIDATE_ITEMS_IN_PROMPT = 40
 _MAX_GOVERNED_REQUIREMENTS_IN_PROMPT = 40
@@ -91,6 +91,32 @@ _MAX_SPIN_FINDINGS = 20
 # against an unbounded trace list, independent of the prompt's own
 # suggested example sequence.
 _MAX_GAMES_PLAYED = 10
+_MAX_HELIX_ASSESSMENTS = 20
+
+# CODEX-HELIX-QA-ABSORPTION-01: deliberately small, Spin-local QA
+# vocabulary. These values describe one interface assessment; they are
+# not project-wide health, LOD, trade-priority, or engineering rules.
+HELIX_AXIS_HORIZONTAL = "horizontal"
+HELIX_AXIS_LONGITUDINAL = "longitudinal"
+HELIX_AXIS_BOTH = "both"
+KNOWN_HELIX_AXES = (HELIX_AXIS_HORIZONTAL, HELIX_AXIS_LONGITUDINAL, HELIX_AXIS_BOTH)
+
+KNOWN_HELIX_EXPECTATION_STATES = (
+    "mandatory_stage_fit", "partially_converged", "planned_deferred",
+    "conditional_interface", "project_specific_rule", "not_applicable",
+)
+KNOWN_HELIX_ASSESSMENTS = (
+    "converged", "dimension_conflict", "positional_conflict", "semantic_mismatch",
+    "handshake_deficit", "propagation_lag", "stage_maturity_mismatch",
+    "residual_ambiguity", "evidence_unavailable", "legitimate_deferred",
+)
+KNOWN_HELIX_EVIDENCE_SUFFICIENCY = (
+    "directly_supportable", "visual_vector_supportable", "evidence_type_insufficient",
+)
+KNOWN_DIMENSION_RELATIONSHIP_CLASSES = (
+    "exact_fit", "threshold_limit", "envelope_reservation", "informational",
+    "uncertain_unclassified",
+)
 
 # CLAUDE-HOLODECK-WORLDS-SPIN-01: a World's own objective is PRODUCT-
 # DEFINED, stable text - never model-generated, never derived from
@@ -223,6 +249,10 @@ class SpinResult:
     # Spin - only populated when a World's own prompt addition asked for
     # it. See _parse_games_played for the defensive-parsing contract.
     games_played: list[dict] = field(default_factory=list)
+    # Per-interface Progressive Helix QA assessments. Kept distinct from
+    # findings: expectation and observation are inspectable context for a
+    # finding, not a second finding taxonomy.
+    helix_assessments: list[dict] = field(default_factory=list)
 
 
 def run_spin(
@@ -232,6 +262,8 @@ def run_spin(
     governed_requirements: list[dict],
     milestones: list[dict],
     additional_document_evidence: Optional[list[dict]] = None,
+    maturity_context: Optional[list[dict]] = None,
+    expectation_context: Optional[list[dict]] = None,
     changed_source_keys: Optional[set] = None,
     prior_findings: Optional[list[dict]] = None,
     display_title: Optional[str] = None,
@@ -261,6 +293,7 @@ def run_spin(
     prompt = _build_prompt(
         spin_kind, document_filename, candidate_requirements, governed_requirements, milestones,
         display_title, additional_document_evidence, changed_source_keys, prior_findings, world,
+        maturity_context, expectation_context,
     )
     # CLAUDE-DELTA-SPIN-02: live acceptance testing found a second-order
     # consequence of raising max_tokens 4000 -> 8000 below - a larger
@@ -304,8 +337,10 @@ def run_spin(
     parsed = outcome.parsed
     findings = _parse_spin_findings(parsed.get("findings"), spin_kind=spin_kind)
     games_played = _parse_games_played(parsed.get("games_played")) if world else []
+    helix_assessments = _parse_helix_assessments(parsed.get("helix_assessments"))
     return SpinResult(
         ran=True, findings=findings, games_played=games_played,
+        helix_assessments=helix_assessments,
         provider=outcome.provider, model=outcome.model, requested_at=outcome.requested_at,
     )
 
@@ -384,6 +419,75 @@ def _parse_games_played(raw) -> list[dict]:
     return parsed_games
 
 
+def _parse_helix_assessments(raw) -> list[dict]:
+    """Defensively preserve a bounded, inspectable interface assessment.
+
+    Closed values prevent model-invented QA states from becoming stored
+    doctrine. Free text is evidence description only. An item without an
+    interface, valid axis, expectation, assessment, or evidence-sufficiency
+    state is dropped rather than guessed.
+    """
+    if not isinstance(raw, list):
+        return []
+    parsed: list[dict] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        interface = str(item.get("interface", "")).strip()
+        axis = str(item.get("spin_axis", "")).strip().lower()
+        expectation = str(item.get("expectation_state", "")).strip().lower()
+        assessment = str(item.get("assessment", "")).strip().lower()
+        sufficiency = str(item.get("evidence_sufficiency", "")).strip().lower()
+        if (
+            not interface or axis not in KNOWN_HELIX_AXES
+            or expectation not in KNOWN_HELIX_EXPECTATION_STATES
+            or assessment not in KNOWN_HELIX_ASSESSMENTS
+            or sufficiency not in KNOWN_HELIX_EVIDENCE_SUFFICIENCY
+        ):
+            continue
+        dimension_class = str(item.get("dimension_relationship_class", "")).strip().lower() or None
+        if dimension_class not in KNOWN_DIMENSION_RELATIONSHIP_CLASSES:
+            dimension_class = None
+        evidence = item.get("observed_evidence")
+        if not isinstance(evidence, list):
+            evidence = []
+        observed = []
+        for source in evidence[:12]:
+            if not isinstance(source, dict):
+                continue
+            source_reference = str(source.get("source_reference", "")).strip()
+            if not source_reference:
+                continue
+            observed.append({
+                "source_reference": source_reference,
+                "revision": str(source.get("revision", "")).strip() or None,
+                "region": str(source.get("region", "")).strip() or None,
+                "observed_value": str(source.get("observed_value", "")).strip() or None,
+                "confidence": str(source.get("confidence", "")).strip() or None,
+            })
+        parsed.append({
+            "interface": interface,
+            "spin_axis": axis,
+            "strands": [str(v).strip() for v in item.get("strands", [])[:12] if str(v).strip()]
+                if isinstance(item.get("strands"), list) else [],
+            "claimed_maturity": str(item.get("claimed_maturity", "")).strip() or None,
+            "maturity_source": str(item.get("maturity_source", "")).strip() or None,
+            "expectation_state": expectation,
+            "expectation_rationale": str(item.get("expectation_rationale", "")).strip(),
+            "dimension_relationship_class": dimension_class,
+            "observed_evidence": observed,
+            "assessment": assessment,
+            "consequence": str(item.get("consequence", "")).strip() or None,
+            "uncertainty": str(item.get("uncertainty", "")).strip() or None,
+            "evidence_sufficiency": sufficiency,
+            "follow_on_game": str(item.get("follow_on_game", "")).strip() or None,
+            "governed_question": str(item.get("governed_question", "")).strip() or None,
+        })
+        if len(parsed) >= _MAX_HELIX_ASSESSMENTS:
+            break
+    return parsed
+
+
 def _select_comprehensive_document_evidence(
     additional_document_evidence: list[dict],
     changed_source_keys: Optional[set],
@@ -442,6 +546,8 @@ def _build_prompt(
     changed_source_keys: Optional[set] = None,
     prior_findings: Optional[list[dict]] = None,
     world: Optional[str] = None,
+    maturity_context: Optional[list[dict]] = None,
+    expectation_context: Optional[list[dict]] = None,
 ) -> str:
     is_delta = spin_kind == SPIN_KIND_DELTA
     lines = [
@@ -471,6 +577,35 @@ def _build_prompt(
     ]
     if display_title:
         lines.append(f"Project: {display_title}")
+
+    lines.append(
+        "\nPROGRESSIVE HELIX QA: For each consequential interface you can fairly assess, "
+        "compare the expected degree of relationship resolution at the project-specific "
+        "maturity/purpose evidenced here with the observed fit. Percentage or issue labels "
+        "are clues only, never universal LOD/tolerance rules. Different interfaces may be "
+        "at different legitimate maturities. Keep expectation separate from observation; "
+        "planned deferral is not failure. Horizontal means current cross-strand fit; "
+        "longitudinal means current evidence against governing origin/prior authoritative "
+        "state; both may apply. Consequence changes attention, never technical truth. "
+        "Never impose a universal trade hierarchy, health score, tolerance, or engineering "
+        "solution. If the supplied modality cannot support the audit, record "
+        "evidence_type_insufficient and ask for the richer evidence needed."
+    )
+    if maturity_context:
+        lines.append("\nProject-recorded maturity context (project evidence, not universal rules):")
+        for m in maturity_context[:30]:
+            lines.append(
+                f"- {m.get('scope_type', '')}:{m.get('scope_id', '')} = {m.get('value', '')} "
+                f"(effective {m.get('effective_at', '')}; status {m.get('status', '')})"
+            )
+    if expectation_context:
+        lines.append("\nProject-defined expected-information context:")
+        for e in expectation_context[:40]:
+            lines.append(
+                f"- {e.get('scope_type', '')}:{e.get('scope_id', '')} expects "
+                f"{e.get('description', '')} at {e.get('expected_maturity', '')} "
+                f"(status {e.get('status', '')})"
+            )
 
     by_category: dict[str, list[dict]] = {}
     for item in candidate_requirements:
@@ -571,6 +706,20 @@ def _build_prompt(
             'if none>"}, ...]'
             if world else ""
         )
+        + ', "helix_assessments": [{"interface": "<named consequential interface>", '
+        '"spin_axis": "<horizontal|longitudinal|both>", "strands": ["<strand>"], '
+        '"claimed_maturity": "<only when evidenced; empty otherwise>", '
+        '"maturity_source": "<project evidence establishing the expectation; empty if absent>", '
+        '"expectation_state": "<mandatory_stage_fit|partially_converged|planned_deferred|conditional_interface|project_specific_rule|not_applicable>", '
+        '"expectation_rationale": "<why this fit is expected now, grounded in project evidence>", '
+        '"dimension_relationship_class": "<exact_fit|threshold_limit|envelope_reservation|informational|uncertain_unclassified; empty if not dimensional>", '
+        '"observed_evidence": [{"source_reference": "<source/sheet/page>", "revision": "<or empty>", "region": "<or empty>", "observed_value": "<or empty>", "confidence": "<or empty>"}], '
+        '"assessment": "<converged|dimension_conflict|positional_conflict|semantic_mismatch|handshake_deficit|propagation_lag|stage_maturity_mismatch|residual_ambiguity|evidence_unavailable|legitimate_deferred>", '
+        '"consequence": "<evidence-grounded consequence; empty if none>", '
+        '"uncertainty": "<what remains uncertain; empty if none>", '
+        '"evidence_sufficiency": "<directly_supportable|visual_vector_supportable|evidence_type_insufficient>", '
+        '"follow_on_game": "<game genuinely warranted; empty if none>", '
+        '"governed_question": "<Evidence → Concern → Question endpoint; empty if none>"}, ...]'
         + "}. Never pad the findings list to a fixed count, and never invent "
         "one merely to fill it - an honest, shorter list is always better than a "
         "padded one."
