@@ -4,7 +4,10 @@
 continuation, and the Mission 02 definition bootstrap — are now AUTHORIZED for implementation**
 (`CLAUDE-AIRLOCK-AUTH-01`, `CLAUDE-AIRLOCK-M01A-AUTH`, `CLAUDE-AIRLOCK-M02-AUTH`, 2026-08-19); everything
 else in this document, including the whole of Part 2, remains NOT AUTHORIZED. Mission 03 and beyond are
-not authorized. See "Product Owner authorization — External Intelligence Airlock Mission 01" at the
+not authorized. **Mission 02 is additionally under a non-destructive execution hold**
+(`CLAUDE-AIRLOCK-M02-HOLD`, 2026-08-19) — authorized, but it must not execute until the Mission 01A
+implementation is committed and synchronized and the target project context is resolved; see the
+"Execution hold" subsection at the end of the Mission 02 authorization. See "Product Owner authorization — External Intelligence Airlock Mission 01" at the
 end of this document for the exact bounded scope and the STOP boundary. As at that authorization, zero code
 exists for anything in this document. Originally recorded
 under `CLAUDE-CGP-02` (the cockpit gate preceding the Camel MM1–MM9 build stages) as a
@@ -511,3 +514,84 @@ limit, the quarantine representation, or the no-promotion rule.
 - Route fixed in trusted code, never model-selected.
 - No new persisted schema; no `EXTERNAL_CANDIDATE`.
 - Mission 03 and beyond remain unauthorized.
+
+#### Execution hold — preconditions before Mission 02 may run (`CLAUDE-AIRLOCK-M02-HOLD`)
+
+**Recorded 2026-08-19.** This is a **non-destructive execution hold**, not a revocation. The Mission
+02 authorization above stands exactly as written and is not rewritten, narrowed, or withdrawn by
+it. What changes is *when* Mission 02 may execute, not *what* it is permitted to do.
+
+##### Product Owner acceptance of the two recorded doctrine departures
+
+The two departures surfaced under `CLAUDE-AIRLOCK-M02-AUTH` are **accepted by the Product Owner**.
+They cease to be open conflicts and become ratified decisions scoped to Mission 02:
+
+1. **Evidence-item count.** Mission 02 may produce up to the closed, pre-authorized concept count.
+   **The bound is the fixed concept list, not a model-selected quantity.**
+2. **Definition-structure scope.** Mission 02 need not assume all definitions occupy one provision.
+   The bound is the deterministically located definition structure, with no general search, no
+   recursion, no follow-on provision retrieval, and no model-selected navigation.
+
+Mission 01A's own one-item STOP wording remains unedited above and continues to govern Mission 01A.
+This acceptance extends to Mission 02 only and creates no precedent for a later mission.
+
+The `governance/STATUS.md` correction that moved the exclusion boundary from Mission 02 to **Mission
+03 and beyond** is preserved and remains in force.
+
+##### The hold
+
+> **Mission 02 is AUTHORIZED but MUST NOT EXECUTE until both conditions below are satisfied.**
+
+**Condition A — Mission 01A implementation is committed and synchronized.**
+
+Mission 02 reuses Mission 01A's delivery route. Executing Mission 02 against an implementation that
+exists only in a working tree would mean the route Mission 02 depends on is not in the system of
+record — a pushed commit is the only thing that makes it real (`CLAUDE.md`, system of record).
+Mission 01A's implementation must be committed and pushed **after its required validation**, not
+merely present on disk.
+
+Known untracked implementation files at the time this hold was recorded:
+
+- `services/external_intelligence_airlock.py`
+- `tests/test_external_intelligence_airlock_m01a.py`
+
+Neither was touched, staged, or committed by this hold.
+
+**Condition B — the target project context is resolved.**
+
+Before Mission 02 executes, one of the following must be established:
+
+1. **SRPC exists as an ARCHIOSK project** — its canonical project ID is identified, and the
+   intended evidence destination/context is confirmed; **or**
+2. **SRPC does not yet exist as an ARCHIOSK project** — in which case Mission 02 must remain a
+   **non-project external-authority research exercise**, unless the Product Owner separately
+   authorizes project creation/registration.
+
+**No external evidence may be attached to an assumed or invented project container.** This is not a
+procedural nicety: `constitutional-invariants.md` #8 makes project boundaries strict and #3 makes
+provenance mandatory, and evidence written into a guessed container satisfies neither. An honest
+non-project research exercise is a legitimate outcome; a fabricated destination is not.
+
+##### Verifying the conditions
+
+Both conditions must be **evidenced, not assumed** — Condition A by an actual pushed commit
+containing the implementation and its passing validation, Condition B by an actual project record or
+by the explicit recorded finding that none exists. Satisfying both releases the hold without
+requiring a fresh authorization for Mission 02 itself. Branch B2 is the one exception: converting a
+non-project research exercise into a project-attached one requires separate Product Owner
+authorization for project creation/registration, which this record does not grant.
+
+##### Read-only observation recorded at hold time, not a resolution of Condition B
+
+A read-only inspection of the local development registry (`instance/registry/`, git-ignored, local
+only) found seven project records, **none of which is SRPC**. This is recorded as an observation
+about one environment at one moment. It is **not** a resolution of Condition B: `instance/` is
+deliberately outside version control, this repository's own doctrine treats deployed/environment
+state as evidence rather than truth, and the authoritative check must be made against whichever
+environment Mission 02 would actually run in. Condition B remains open.
+
+##### What this hold does not do
+
+It does not create the SRPC project, execute Mission 02, touch the untracked Mission 01A
+implementation, revoke or rewrite any authorization, or introduce a separate hold/precondition
+mechanism — the hold lives beside the authorization it conditions, in this same record.
