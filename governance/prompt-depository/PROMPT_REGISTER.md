@@ -26,6 +26,7 @@ No broad historical prompt migration has been performed.
 
 | Prompt ID | Title | Agent | Status | Product Owner acceptance | Record |
 |---|---|---|---|---|---|
+| CLAUDE-AIRLOCK-AUTH-01 | Record Product Owner Authorization for Mission 01 | Claude | RUN | Explicit Product Owner authorization, 2026-08-19; bounded External Intelligence Airlock Mission 01 only, recorded and pushed as `7318564` | [Record](CLAUDE-AIRLOCK-AUTH-01.md) |
 | CLAUDE-BAUHAUS-CONSTRUCTIVIST-UI-01 | Scientific-Artistic Surface Recomposition for ARCHIOSK/GO | Claude | RUN | Accepted; bounded first visual slice subsequently implemented | [Record](CLAUDE-BAUHAUS-CONSTRUCTIVIST-UI-01.md) |
 | CLAUDE-BAUHAUS-CONSTRUCTIVIST-UI-01A | Proceed — Bauhaus/Constructivist First Slice | Claude | RUN | Accepted; authorized bounded first implementation slice and retained Product Owner visual-acceptance gate | [Record](CLAUDE-BAUHAUS-CONSTRUCTIVIST-UI-01A.md) |
 | CLAUDE-HOLODECK-WORLDS-SPIN-01 | Reconstitute the Holodeck World Model and Advance Spin Through Worlds | Claude | SUPERSEDED | Accepted historically; only its PM-facing use of “Holodeck” was later corrected | [Record](CLAUDE-HOLODECK-WORLDS-SPIN-01.md) |

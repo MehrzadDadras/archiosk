@@ -25,6 +25,22 @@ governance.py`'s `GovernanceLog` is the existing, real, append-only audit mechan
 below assume as their internal record-keeping anchor — neither concept invents a second audit
 trail.
 
+> **Current-status correction (`CLAUDE-AIRLOCK-AUTH-02`):** the parenthetical "currently
+> `DECISION_DENY` at both floor and baseline" in the paragraph above is **stale and must not be
+> relied on**. Current repository code sets
+> `MANDATORY_FLOOR_DEFAULTS[ACTION_EXTERNAL_AI_REQUEST]` to `DECISION_ALLOW`; `DECISION_DENY`
+> applies only through `CLASSIFICATION_PROFILE_DECISIONS` for `CLASSIFICATION_RESTRICTED` and
+> `CLASSIFICATION_HIGHLY_RESTRICTED`. Per `CLAUDE.md`'s precedence rule, for
+> infrastructure/security behaviour the current tested code on pushed `main` governs and the
+> sentence above is the stale record; it is preserved unedited per
+> `constitutional-invariants.md` #5 (correction is non-destructive) and this annotation is the
+> correction. **The mandatory security floor does not deny Mission 01's outbound request** — the
+> actual Mission 01 controls are the bounded allow-listed mission packet, the deterministic
+> citation/provenance integrity check, the quarantine representation, and the STOP boundary. See
+> "Product Owner authorization — External Intelligence Airlock Mission 01" at the end of this
+> document, whose "Implementation precondition" subsection states the same correction as a design
+> constraint on Mission 01.
+
 **No implementation implied.** Nothing here authorizes writing an outbound connector, a redaction
 pipeline, an inbound-content sanitizer, or a boundary-response UI. This document exists so a
 future MM stage (see the mapping table below) does not have to re-derive this reasoning from
