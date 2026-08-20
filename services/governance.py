@@ -40,7 +40,7 @@ class GovernanceError(Exception):
 @dataclass
 class GovernanceEvent:
     id: str
-    project_id: str
+    project_id: Optional[str]
     event_type: str
     actor: str
     role: str
@@ -78,7 +78,7 @@ class GovernanceLog:
 
     def append(
         self,
-        project_id: str,
+        project_id: str | None,
         event_type: str,
         actor: str,
         role: str,
@@ -132,5 +132,10 @@ class GovernanceLog:
                     events.append(GovernanceEvent(**json.loads(line)))
         return events
 
-    def _path_for(self, project_id: str) -> Path:
+    def _path_for(self, project_id: str | None) -> Path:
+        # Application-level Developer Mode events have no project binding.
+        # Keep them in the same append-only GovernanceLog mechanism without
+        # fabricating a project_id or leaking them into a project ledger.
+        if project_id is None:
+            return self.store_path / "application.governance.jsonl"
         return self.store_path / f"{project_id}.governance.jsonl"

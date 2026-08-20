@@ -2263,6 +2263,19 @@ main:has(.document-viewer-canvas-container) {
    VOICE1-PRE" above) - one visual language, not a second one. */
 .gateway-orientation-form { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem; flex-wrap: wrap; }
 .gateway-orientation-form .text-input { flex: 1; min-width: 220px; max-width: none; }
+
+/* Application-level Developer Mode Composer: the same restrained service
+   counter language as the project Composer, limited to the home page. */
+.developer-home-composer { margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid var(--line, rgba(255,255,255,.14)); }
+.developer-home-composer-heading { display: flex; align-items: center; gap: .65rem; flex-wrap: wrap; }
+.developer-home-composer-heading h2 { margin: 0; font-size: 1rem; }
+.developer-home-composer-form { display: flex; align-items: center; gap: .5rem; margin-top: .65rem; flex-wrap: wrap; }
+.developer-home-composer-form .text-input { flex: 1; min-width: 220px; max-width: none; }
+.developer-home-selection, .developer-home-messages { margin: .5rem 0; }
+.developer-home-message { margin: .25rem 0; }
+.developer-home-message-role { display: inline-block; min-width: 2.25rem; font-weight: 600; }
+.developer-home-context-actions { display: flex; gap: .5rem; flex-wrap: wrap; margin-top: .65rem; }
+.developer-home-context-actions form { margin: 0; }
 .gateway-orientation-reply {
     margin: -0.6rem 0 1.2rem;
     font-family: var(--font-body);

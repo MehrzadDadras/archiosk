@@ -48,6 +48,12 @@ from services.developer_tools import (
     reset_test_project,
 )
 from services.trial_request import submit_trial_request
+from services.developer_ccn import (
+    attach_selected_object as attach_developer_object,
+    context_for_project as developer_context_for_project,
+    handle_command as handle_developer_ccn_command,
+    is_ccn_command,
+)
 
 portal_bp = Blueprint('portal', __name__)
 
@@ -198,6 +204,123 @@ def _require_developer_tools():
     """Server-side second gate for destructive developer tooling."""
     if not is_admin() or not session.get("developer_mode"):
         abort(403)
+
+
+def _require_developer_composer():
+    """Application-level Composer is an admin Developer Mode capability."""
+    if not is_admin() or not session.get("developer_mode"):
+        abort(403)
+
+
+def _developer_home_messages() -> list[dict]:
+    messages = session.get("developer_home_messages", [])
+    return messages if isinstance(messages, list) else []
+
+
+def _record_developer_home_message(role: str, text: str, **extra) -> None:
+    messages = _developer_home_messages()
+    messages.append({"role": role, "text": text[:4000], **extra})
+    session["developer_home_messages"] = messages[-40:]
+
+
+def _attach_pending_application_selection(governance_log, actor: str) -> None:
+    """Attach a home selection after /CCN starts, without project scope."""
+    pending = session.get("developer_application_selection")
+    if not isinstance(pending, dict):
+        return
+    attach_developer_object(
+        session=session,
+        object_type=pending.get("object_type", "application_object"),
+        object_id=pending.get("object_id", "unknown"),
+        label=pending.get("label", "selected application object"),
+        project_id=None,
+        governance_log=governance_log,
+        actor=actor,
+    )
+
+
+def _developer_home_context() -> dict | None:
+    """Return active CCN plus pending application selection, if any."""
+    context = developer_context_for_project(session, None)
+    if context is not None:
+        return context
+    pending = session.get("developer_application_selection")
+    if isinstance(pending, dict):
+        return {
+            "scope": "application",
+            "status": "selection_only",
+            "selected_elements": [pending],
+        }
+    return None
+
+
+@portal_bp.route('/developer-composer', methods=['POST'])
+@login_required
+def developer_home_composer():
+    """Handle the Developer Mode Composer when no project is open.
+
+    This is intentionally application-scoped: it uses the same native CCN
+    service as workspace Composer turns, but never fabricates a project_id or
+    invokes project evidence interpretation.
+    """
+    _require_developer_composer()
+    text = (request.form.get("message") or "").strip()[:4000]
+    if not text:
+        return redirect(url_for("portal.index"))
+    if request.form.get("project_id"):
+        abort(400)
+
+    governance_log = get_governance_log(current_app)
+    actor = session.get("username") or "admin"
+    if is_ccn_command(text):
+        result = handle_developer_ccn_command(
+            text, session=session, actor=actor, governance_log=governance_log, project_id=None,
+        )
+        _attach_pending_application_selection(governance_log, actor)
+        reply = result["reply_text"]
+        _record_developer_home_message("human", text)
+        _record_developer_home_message("system", reply, action_taken=result["action_taken"])
+        return redirect(url_for("portal.index"))
+
+    context = _developer_home_context()
+    selected = (context or {}).get("selected_elements", [])
+    if selected:
+        labels = ", ".join(item.get("label", "selected object") for item in selected[-3:])
+        reply = (
+            f"Application-level Developer Mode context received for {labels}. "
+            "I can inspect or explain this context; selection does not authorize mutation."
+        )
+    else:
+        reply = (
+            "This is the application-level Developer Composer. Select an ARCHIOSK surface "
+            "or use /CCN to create a contemplated-change context; no project is bound."
+        )
+    _record_developer_home_message("human", text, developer_context=context)
+    _record_developer_home_message("system", reply, action_taken="developer_application_context")
+    return redirect(url_for("portal.index"))
+
+
+@portal_bp.route('/developer-composer/context', methods=['POST'])
+@login_required
+def developer_home_context():
+    """Attach one application-level home object as conversational context."""
+    _require_developer_composer()
+    if request.form.get("project_id"):
+        abort(400)
+    object_type = (request.form.get("object_type") or "application_object").strip()[:80]
+    object_id = (request.form.get("object_id") or "").strip()[:200]
+    label = (request.form.get("label") or object_id).strip()[:200]
+    if not object_id:
+        abort(400)
+    selection = {"object_type": object_type, "object_id": object_id, "label": label, "project_id": None}
+    session["developer_application_selection"] = selection
+    if isinstance(session.get("developer_ccn"), dict) and session["developer_ccn"].get("status") == "active":
+        attach_developer_object(
+            session=session, object_type=object_type, object_id=object_id, label=label,
+            project_id=None, governance_log=get_governance_log(current_app),
+            actor=session.get("username") or "admin",
+        )
+    return redirect(url_for("portal.index"))
 
 
 def _developer_tool_projects():
@@ -370,6 +493,11 @@ def index():
         operating_environment_labels=OPERATING_ENVIRONMENT_LABELS,
         operating_environment_subtitles=OPERATING_ENVIRONMENT_SUBTITLES,
         recent_projects=recent_projects,
+        developer_home_messages=_developer_home_messages() if is_admin() and session.get("developer_mode") else [],
+        developer_home_ccn_context=(_developer_home_context()
+                                    if is_admin() and session.get("developer_mode") else None),
+        developer_application_selection=(session.get("developer_application_selection")
+                                         if is_admin() and session.get("developer_mode") else None),
     )
 
 

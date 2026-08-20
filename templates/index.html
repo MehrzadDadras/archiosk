@@ -77,6 +77,19 @@
         </a>
         {% endfor %}
     </div>
+    {% if developer_mode %}
+    <div class="developer-home-context-actions" data-ui-ref="developer.home.environment-context">
+        {% for env in accessible_environments %}
+        <form method="post" action="{{ url_for('portal.developer_home_context') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="object_type" value="application_environment_card">
+            <input type="hidden" name="object_id" value="{{ env }}">
+            <input type="hidden" name="label" value="{{ operating_environment_labels[env] }} card">
+            <button type="submit" class="btn btn-ghost btn-small">Use {{ operating_environment_labels[env] }} card as context</button>
+        </form>
+        {% endfor %}
+    </div>
+    {% endif %}
 
     {% else %}
     {# ---------------- State 3: a resolved environment - show its projects ---------------- #}
@@ -138,6 +151,56 @@
         <span class="voice-input-status" id="index-orientation-voice-status" data-ui-ref="index.orientation.voice.status" aria-live="polite"></span>
     </form>
     <p class="gateway-orientation-reply" id="index-orientation-reply" data-ui-ref="index.orientation.reply" aria-live="polite" hidden></p>
+
+    {% if developer_mode %}
+    {# Application-level Developer Mode Composer. This deliberately reuses
+       the same native /CCN service as the workspace Composer, but carries no
+       project_id while the user is on Home. #}
+    <section class="developer-home-composer" data-ui-ref="developer.home.composer" aria-label="Developer Mode Composer">
+        <div class="developer-home-composer-heading">
+            <h2>Developer Composer</h2>
+            {% if developer_home_ccn_context and developer_home_ccn_context.status == 'active' %}
+            <span class="developer-ccn-indicator" data-ui-ref="developer.ccn.active">CCN: {{ developer_home_ccn_context.title }}</span>
+            {% endif %}
+        </div>
+        {% if developer_application_selection %}
+        <p class="developer-home-selection" data-ui-ref="developer.home.selection">
+            Selected: {{ developer_application_selection.label }}
+        </p>
+        {% endif %}
+        {% if developer_home_messages %}
+        <div class="developer-home-messages" data-ui-ref="developer.home.messages" aria-live="polite">
+            {% for message in developer_home_messages[-8:] %}
+            <p class="developer-home-message developer-home-message-{{ message.role }}">
+                <span class="developer-home-message-role">{{ 'You' if message.role == 'human' else 'GO' }}</span>
+                {{ message.text }}
+            </p>
+            {% endfor %}
+        </div>
+        {% endif %}
+        <form class="developer-home-composer-form" method="post" action="{{ url_for('portal.developer_home_composer') }}" data-ui-ref="developer.home.composer.form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="text" class="text-input" name="message" placeholder="Ask about ARCHIOSK or use /CCN" aria-label="Developer Composer message" autocomplete="off">
+            <button type="submit" class="btn btn-ghost">Send</button>
+        </form>
+        <div class="developer-home-context-actions" data-ui-ref="developer.home.context-actions">
+            <form method="post" action="{{ url_for('portal.developer_home_context') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="object_type" value="application_surface">
+                <input type="hidden" name="object_id" value="project-list">
+                <input type="hidden" name="label" value="Project list">
+                <button type="submit" class="btn btn-ghost btn-small">Use Project list as context</button>
+            </form>
+            <form method="post" action="{{ url_for('portal.developer_home_context') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="object_type" value="application_surface">
+                <input type="hidden" name="object_id" value="project-open-area">
+                <input type="hidden" name="label" value="Open Existing Project area">
+                <button type="submit" class="btn btn-ghost btn-small">Use project/open area as context</button>
+            </form>
+        </div>
+    </section>
+    {% endif %}
 </section>
 {# base.html itself never loads voice_input.js (only case_workspace.html/
    gateway.html do, each for their own composer) - needed here for the
