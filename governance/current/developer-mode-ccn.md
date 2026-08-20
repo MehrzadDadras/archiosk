@@ -26,3 +26,20 @@ No CCN context is project evidence, Owner Program content, a finding, a
 requirement, or a mutation capability. Developer context is project-filtered
 when selected application objects carry project scope, preventing silent
 cross-project leakage.
+
+## Kiosk principle
+
+ARCHIOSK is the kiosk: professional design intelligence is brought out of the
+traditional studio and made accessible through a simple interface. The
+Composer is its service counter, and GO is the intelligence and professional
+machinery behind that counter:
+
+`USER → COMPOSER → GO → appropriate intelligence, evidence, tools and workflows`
+
+This applies at public/client, project-team, and Developer Mode levels. In
+Developer Mode, ARCHIOSK itself is the subject, but the Composer remains the
+primary toolbox. Prefer intent plus selected context plus conversation to a
+catalogue of permanent technical controls. This is the governed,
+composable tools-that-make-tools direction: inspectability and recombination
+without console sprawl, while preserving provenance, reversibility, authority,
+and explicit approval boundaries.
