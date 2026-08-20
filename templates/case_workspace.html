@@ -2751,7 +2751,7 @@
             {% for run in spin_runs_view %}
             <p class="history-entry" data-ui-ref="display.spin.history.leaf"{% if selected_spin_run_view and run.id == selected_spin_run_view.id %} style="font-weight:600;"{% endif %}>
                 <a href="{{ url_for('workspace.show_workspace', project_id=project_id, view='spin', spin_run=run.id) }}">
-                    {{ run.kind_label }}{% if run.world %} &middot; {{ run.world|title }} Mode{% endif %} &mdash; {{ run.created_at[:10] }}
+                    {{ run.kind_label }}{% if run.world %} &middot; {{ run.world|title }} Mode{% endif %} &mdash; <time class="spin-timestamp" data-spin-timestamp="{{ run.created_at }}" datetime="{{ run.created_at }}">{{ run.created_at[:10] }}</time>
                 </a>
                 &middot;
                 {% if not run.ran %}<span class="review-state-badge">failed</span>
@@ -2774,14 +2774,14 @@
             </p>
             {% endif %}
             <p class="history-entry"><strong>Spin Run ID:</strong> {{ selected_spin_run_view.id }}</p>
-            <p class="history-entry"><strong>Completed:</strong> {{ selected_spin_run_view.created_at }}
+            <p class="history-entry"><strong>Completed:</strong> <time class="spin-timestamp" data-spin-timestamp="{{ selected_spin_run_view.created_at }}" datetime="{{ selected_spin_run_view.created_at }}">{{ selected_spin_run_view.created_at[:10] }}</time>
                 <span class="pane-note">(start time and duration are not separately recorded)</span></p>
 
             {% if selected_spin_run_view.baseline_spin_run_id %}
             <p class="history-entry">
                 <strong>Baseline:</strong>
                 <a href="{{ url_for('workspace.show_workspace', project_id=project_id, view='spin', spin_run=selected_spin_run_view.baseline_spin_run_id) }}">
-                    First Spin of {{ selected_spin_run_view.baseline_created_at[:10] if selected_spin_run_view.baseline_created_at else 'unknown date' }}
+                    First Spin of {% if selected_spin_run_view.baseline_created_at %}<time class="spin-timestamp" data-spin-timestamp="{{ selected_spin_run_view.baseline_created_at }}" datetime="{{ selected_spin_run_view.baseline_created_at }}">{{ selected_spin_run_view.baseline_created_at[:10] }}</time>{% else %}unknown date{% endif %}
                 </a>
             </p>
             {% endif %}
@@ -3433,7 +3433,7 @@
             {% if spin_runs_view %}
             {% set latest_spin_run = spin_runs_view[0] %}
             <p class="pane-note" data-ui-ref="toolbox.spin.latest-summary">
-                Latest: {{ latest_spin_run.kind_label }} &mdash; {{ latest_spin_run.created_at[:10] }} &middot;
+                Latest: {{ latest_spin_run.kind_label }} &mdash; <time class="spin-timestamp" data-spin-timestamp="{{ latest_spin_run.created_at }}" datetime="{{ latest_spin_run.created_at }}">{{ latest_spin_run.created_at[:10] }}</time> &middot;
                 {% if not latest_spin_run.ran %}failed{% else %}{{ latest_spin_run.findings|length }} finding(s){% endif %}
             </p>
             <p><a href="{{ url_for('workspace.show_workspace', project_id=project_id, view='spin') }}" data-ui-ref="toolbox.spin.history-link">View Spin History &rarr;</a></p>
@@ -4096,4 +4096,5 @@
 <script src="{{ url_for('static', filename='js/voice_input.js') }}?v={{ static_version }}"></script>
 <script src="{{ url_for('static', filename='js/case_workspace.js') }}?v={{ static_version }}"></script>
 <script src="{{ url_for('static', filename='js/files_folder_menus.js') }}?v={{ static_version }}"></script>
+<script src="{{ url_for('static', filename='js/spin_timestamps.js') }}?v={{ static_version }}"></script>
 {% endblock %}
