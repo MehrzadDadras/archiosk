@@ -220,6 +220,14 @@ class ToolboxEyeDividerTests(unittest.TestCase):
         declaration = re.search(r"background:\s*[^;]+;", body).group(0)
         self.assertNotIn("transparent", declaration)
 
+    def test_divider_line_is_persistent_and_uses_the_border_token(self):
+        body = _rule_body(self.css, ".toolbox-eye-divider::before")
+        self.assertIn("left: 0", body)
+        self.assertIn("right: 0", body)
+        self.assertIn("height: 1px", body)
+        self.assertIn("background: var(--border)", body)
+        self.assertIn("opacity: 1", body)
+
     def test_divider_accent_only_on_hover_focus_or_active_drag(self):
         for selector in (".toolbox-eye-divider:hover::before", ".toolbox-eye-divider:focus-visible::before"):
             body = _rule_body(self.css, selector)

@@ -4486,10 +4486,11 @@ html.toolbox-hidden .workspace-right-column {
     position: relative;
     z-index: 1;
 }
-/* CLAUDE-EYE-TOOLBOX-LAYOUT-01: quiet at rest, revealed on hover/focus/
-   drag - see .panel-divider's own comment above for why this used to be
-   a Deep-Ocean-only exception and is now the shared behavior for every
-   Appearance. */
+/* CODEX-EYE-TOOLBOX-DIVIDER-01: this is the persistent structural
+   boundary between two functional zones, not a hover-only affordance.
+   Keep the established one-pixel border-token line visible at rest;
+   hover/focus/drag still promotes that same line to the interaction
+   accent without introducing a second border. */
 .toolbox-eye-divider::before {
     content: "";
     position: absolute;
@@ -4498,7 +4499,7 @@ html.toolbox-hidden .workspace-right-column {
     top: 4px;
     height: 1px;
     background: var(--border);
-    opacity: 0;
+    opacity: 1;
     transition: opacity 0.15s ease;
 }
 .toolbox-eye-divider:hover::before,
@@ -4647,11 +4648,13 @@ html.toolbox-hidden .workspace-right-column {
    static/js/eye_pane.js's own refreshEyeLayout() toggles .eye-inactive
    on .workspace-right-column whenever Eye holds no image/document and
    Compare is off (and Eye is not detached to a second window) - Eye
-   and its divider disappear entirely rather than sitting empty, and
-   Toolbox (which already has an explicit flex-basis, .workspace-pane-
-   toolbox above) takes the whole column instead. */
-.workspace-right-column.eye-inactive .eye-pane,
-.workspace-right-column.eye-inactive .toolbox-eye-divider {
+   collapses and Toolbox (which already has an explicit flex-basis,
+   .workspace-pane-toolbox above) takes the available column height. */
+/* CODEX-EYE-TOOLBOX-DIVIDER-01: an empty Eye may collapse, but its
+   structural boundary remains in the column. This keeps Eye/Toolbox
+   legible as distinct zones and leaves the existing splitter controls
+   reachable without changing Toolbox's fill behavior. */
+.workspace-right-column.eye-inactive .eye-pane {
     display: none;
 }
 .workspace-right-column.eye-inactive .workspace-pane-toolbox {

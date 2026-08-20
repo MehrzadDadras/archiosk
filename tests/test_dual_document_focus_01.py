@@ -202,9 +202,13 @@ class ConditionalEyeLayoutCssTests(unittest.TestCase):
     def setUp(self):
         self.css = _MAIN_CSS_PATH.read_text(encoding="utf-8")
 
-    def test_eye_inactive_hides_eye_pane_and_divider(self):
-        body = _rule_body(self.css, ".workspace-right-column.eye-inactive .eye-pane,\n.workspace-right-column.eye-inactive .toolbox-eye-divider")
+    def test_eye_inactive_hides_eye_pane_but_preserves_structural_divider(self):
+        body = _rule_body(self.css, ".workspace-right-column.eye-inactive .eye-pane")
         self.assertIn("display: none", body)
+        self.assertNotIn(
+            ".workspace-right-column.eye-inactive .toolbox-eye-divider",
+            self.css,
+        )
 
     def test_eye_inactive_expands_toolbox_to_fill_column(self):
         body = _rule_body(self.css, ".workspace-right-column.eye-inactive .workspace-pane-toolbox")
