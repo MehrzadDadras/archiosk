@@ -4046,6 +4046,34 @@ def source_file(project_id, source_id):
     )
 
 
+@workspace_bp.route("/projects/<project_id>/workspace/sources/<source_id>/replace")
+@login_required
+def replace_source_form(project_id, source_id):
+    """Select a replacement file for the canonical revision route.
+
+    This is a read-only preparation surface, not another replacement
+    implementation.  Its form posts to the existing drawing/document revision
+    endpoint, which remains the sole writer and creates the governed new Source
+    plus Supersession lineage.
+    """
+    _, _, workspace = _load_workspace_or_404(project_id)
+    source = next((item for item in workspace.sources if item["id"] == source_id), None)
+    if source is None:
+        abort(404)
+    if source.get("removed_at"):
+        flash("Restore this Document before replacing it.", "error")
+        return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
+    if source.get("superseded_by_source_id"):
+        flash("This Document already has a later revision. Replace the current revision instead.", "error")
+        return redirect(url_for("workspace.show_workspace", project_id=project_id, source=source_id))
+    return render_template(
+        "replace_document.html",
+        project_id=project_id,
+        source=source,
+        is_drawing=source.get("kind") == SOURCE_KIND_DRAWING,
+    )
+
+
 @workspace_bp.route("/projects/<project_id>/workspace/sources/<source_id>/revise", methods=["POST"])
 @login_required
 def revise_source(project_id, source_id):
@@ -4129,7 +4157,7 @@ def revise_source(project_id, source_id):
         "now show a Reference Update notice - nothing was silently replaced.",
         "success",
     )
-    return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
+    return redirect(url_for("workspace.show_workspace", project_id=project_id, source=new_source["id"]))
 
 
 @workspace_bp.route("/projects/<project_id>/workspace/sources/<source_id>/revise-document", methods=["POST"])
@@ -4220,7 +4248,7 @@ def revise_document_source(project_id, source_id):
         "now show a Reference Update notice - nothing was silently replaced.",
         "success",
     )
-    return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
+    return redirect(url_for("workspace.show_workspace", project_id=project_id, source=new_source["id"]))
 
 
 # CLAUDE-POSTCAMEL-CA1B (Section 4, unified professional-context

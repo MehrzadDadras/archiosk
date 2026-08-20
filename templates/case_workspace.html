@@ -1131,6 +1131,27 @@
             {% if selected_source.superseded_by_source_id %}&middot; superseded by a later revision{% endif %}
             {% if selected_source.removed_at %}&middot; removed{% endif %}
         </p>
+        <div class="document-primary-actions" data-ui-ref="display.document.actions" aria-label="Document actions">
+            {% if selected_source.file_path %}
+            <a class="btn btn-ghost" data-ui-ref="display.document.download"
+               href="{{ url_for('workspace.source_file', project_id=project_id, source_id=selected_source.id, download=1) }}">&#8595; Download</a>
+            {% else %}
+            <span class="btn btn-ghost workspace-menubar-item-disabled" aria-disabled="true">&#8595; Download</span>
+            {% endif %}
+            {% if selected_source.superseded_by_source_id %}
+            <span class="btn btn-ghost workspace-menubar-item-disabled" aria-disabled="true" title="Replace the current revision instead">&#8635; Replace</span>
+            {% else %}
+            <a class="btn btn-ghost" data-ui-ref="display.document.replace"
+               href="{{ url_for('workspace.replace_source_form', project_id=project_id, source_id=selected_source.id) }}">&#8635; Replace</a>
+            {% endif %}
+            {% if is_project_owner or is_admin %}
+            <form method="post" action="{{ url_for('workspace.remove_document_route', project_id=project_id, source_id=selected_source.id) }}">
+                <button type="submit" class="btn btn-ghost document-remove-action" data-ui-ref="display.document.remove">&#8856; Remove</button>
+            </form>
+            {% else %}
+            <span class="btn btn-ghost workspace-menubar-item-disabled" aria-disabled="true" title="Project owner or admin required">&#8856; Remove</span>
+            {% endif %}
+        </div>
         {# CLAUDE-POSTCAMEL-PROJECT-CONTEXT-01: Document Context - human-
            supplied orientation on THIS Source only (what it is, why it's
            present, its status, caveats, or intended use), reusing
@@ -1292,8 +1313,6 @@
                 <a class="btn btn-ghost" data-ui-ref="display.document.open-externally"
                    href="{{ url_for('workspace.source_file', project_id=project_id, source_id=selected_source.id) }}"
                    target="_blank" rel="noopener">Open externally</a>
-                <a class="btn btn-ghost" data-ui-ref="display.document.download"
-                   href="{{ url_for('workspace.source_file', project_id=project_id, source_id=selected_source.id, download=1) }}">Download</a>
             </div>
         </div>
         {% endif %}

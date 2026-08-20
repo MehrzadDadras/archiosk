@@ -48,6 +48,7 @@ _BASE_HTML_PATH = _REPO_ROOT / "templates" / "base.html"
 # they only live here.
 _APP_MENU_HTML_PATH = _REPO_ROOT / "templates" / "_app_menu.html"
 _CASE_WORKSPACE_HTML_PATH = _REPO_ROOT / "templates" / "case_workspace.html"
+_REPLACE_DOCUMENT_HTML_PATH = _REPO_ROOT / "templates" / "replace_document.html"
 _MACROS_HTML_PATH = _REPO_ROOT / "templates" / "_macros.html"
 # CLAUDE-POST-SIGNIN-GATEWAY-SIMPLIFICATION-01, Option C: gateway.html
 # itself is retired (the route it used to render now only redirects) -
@@ -191,7 +192,8 @@ _UPLOAD_CONFIRM_DYNAMIC_REFS = {
 def _all_template_refs() -> set[str]:
     refs: set[str] = set()
     for path in (
-        _BASE_HTML_PATH, _APP_MENU_HTML_PATH, _CASE_WORKSPACE_HTML_PATH, _MACROS_HTML_PATH,
+        _BASE_HTML_PATH, _APP_MENU_HTML_PATH, _CASE_WORKSPACE_HTML_PATH,
+        _REPLACE_DOCUMENT_HTML_PATH, _MACROS_HTML_PATH,
         _INDEX_HTML_PATH, _GATEWAY_SHELL_HTML_PATH, _PROJECT_CHOOSER_HTML_PATH,
         _LOGIN_HTML_PATH, _UPLOAD_HTML_PATH, _UPLOAD_CONFIRM_HTML_PATH, _ERROR_HTML_PATH,
         _SECURITY_DEPARTMENT_HTML_PATH, _PROJECTS_HTML_PATH, _REMOVED_PROJECTS_HTML_PATH, _APP_PY_PATH,

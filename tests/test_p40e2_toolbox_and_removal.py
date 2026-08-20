@@ -182,11 +182,11 @@ class DocumentRemovalTests(_BaseP40E2TestCase):
         source_id = self._first_source_id()
         client.post(f"/projects/{self.project_id}/workspace/sources/{source_id}/remove", data={"confirm": "yes"})
 
-        # SUPERSEDED (CLAUDE-P40-E3A): the retired "Sources (N)" Display
-        # heading is gone - Document names/counts now live only in
-        # Lists' own recursive hierarchy (Section 4).
+        # CODEX-PSD-LEFT-RAIL-01 retired the visible Documents wrapper as
+        # well: active files now project directly beneath the Project root.
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
-        self.assertIn('Documents <span class="launcher-count">0</span>', body)
+        self.assertNotIn('data-ui-ref="lists.project.documents.leaf"', body)
+        self.assertNotIn('>Documents <span class="launcher-count">', body)
 
     def test_restore_reactivates_same_id_no_reingestion(self):
         client = self._client_as("p40e2_owner", 1)

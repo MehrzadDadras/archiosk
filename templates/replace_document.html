@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="simple-page document-replace-page" data-ui-ref="display.document.replace-page">
+    <p class="workspace-pane-label">Document replacement</p>
+    <h1>Replace {{ source.name }}</h1>
+    <p>
+        The replacement will be registered as a new Source in this Project. The
+        current Source, its file, citations, findings, and history remain preserved;
+        a governed supersession link will identify the new revision.
+    </p>
+    <form class="workspace-form" method="post" enctype="multipart/form-data"
+          action="{{ url_for('workspace.revise_source' if is_drawing else 'workspace.revise_document_source', project_id=project_id, source_id=source.id) }}">
+        <label for="replacement-file">Replacement file</label>
+        <input id="replacement-file" type="file" name="{{ 'drawing' if is_drawing else 'document' }}" required{% if is_drawing %} accept="image/*"{% endif %}>
+        <input type="hidden" name="confirm" value="once">
+        <div class="document-replace-actions">
+            <button type="submit" class="btn btn-primary">Replace with selected file</button>
+            <a class="btn btn-ghost" href="{{ url_for('workspace.show_workspace', project_id=project_id, source=source.id) }}">Cancel</a>
+        </div>
+    </form>
+</section>
+{% endblock %}

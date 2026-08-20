@@ -367,6 +367,26 @@
                         <summary class="workspace-topbar-btn">Document</summary>
                         <div class="workspace-menubar-panel" role="group" aria-label="Document">
                             {% if selected_source %}
+                            {% if selected_source.file_path %}
+                            <a class="workspace-menubar-item" data-ui-ref="menu.document.open" href="{{ url_for('workspace.source_file', project_id=project_id, source_id=selected_source.id) }}" target="_blank" rel="noopener">Open externally</a>
+                            <a class="workspace-menubar-item" data-ui-ref="menu.document.download" href="{{ url_for('workspace.source_file', project_id=project_id, source_id=selected_source.id, download=1) }}">Download</a>
+                            {% else %}
+                            <span class="workspace-menubar-item workspace-menubar-item-disabled" aria-disabled="true">Open externally</span>
+                            <span class="workspace-menubar-item workspace-menubar-item-disabled" aria-disabled="true">Download</span>
+                            {% endif %}
+                            {% if selected_source.superseded_by_source_id %}
+                            <span class="workspace-menubar-item workspace-menubar-item-disabled" aria-disabled="true" title="Replace the current revision instead">Replace&hellip;</span>
+                            {% else %}
+                            <a class="workspace-menubar-item" data-ui-ref="menu.document.replace" href="{{ url_for('workspace.replace_source_form', project_id=project_id, source_id=selected_source.id) }}">Replace&hellip;</a>
+                            {% endif %}
+                            {% if is_project_owner or is_admin %}
+                            <form method="post" action="{{ url_for('workspace.remove_document_route', project_id=project_id, source_id=selected_source.id) }}">
+                                <button type="submit" class="workspace-menubar-item workspace-menubar-item-danger" data-ui-ref="menu.document.remove">Remove&hellip;</button>
+                            </form>
+                            {% else %}
+                            <span class="workspace-menubar-item workspace-menubar-item-disabled" aria-disabled="true" title="Project owner or admin required">Remove (Owner/Admin only)</span>
+                            {% endif %}
+                            <hr class="workspace-menubar-separator" aria-hidden="true">
                             <button type="button" class="workspace-menubar-item" data-ui-ref="menu.document.context" data-action="open-document-context">Document Context&hellip;</button>
                             {% if is_admin %}
                             <button type="button" class="workspace-menubar-item" data-ui-ref="menu.document.admin-understanding" data-action="open-admin-document-understanding">Admin: GO Document Understanding&hellip;</button>

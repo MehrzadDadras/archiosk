@@ -848,6 +848,28 @@ html.launcher-hidden .launcher-panel { display: none; }
     font-size: 0.7rem;
     cursor: pointer;
 }
+.document-primary-actions,
+.document-replace-actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin: 0.55rem 0 0.8rem;
+}
+.document-primary-actions form,
+.workspace-menubar-panel form {
+    margin: 0;
+}
+.document-remove-action,
+.workspace-menubar-item-danger {
+    color: var(--failure-red);
+}
+.workspace-menubar-item-danger {
+    width: 100%;
+    text-align: left;
+    border: 0;
+    background: transparent;
+}
 .documents-search-mode-btn:hover, .documents-search-mode-btn:focus-visible {
     background: var(--surface-hover);
     color: var(--text-primary);
