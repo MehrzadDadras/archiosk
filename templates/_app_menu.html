@@ -144,6 +144,9 @@
                                     <form method="post" action="{{ url_for('portal.toggle_developer_mode') }}">
                                         <button type="submit" class="workspace-menubar-item" data-ui-ref="menu.archiosk.admin.developer-mode-toggle">{% if developer_mode %}Exit Developer Mode{% else %}Enter Developer Mode{% endif %}</button>
                                     </form>
+                                    {% if developer_mode %}
+                                    <a class="workspace-menubar-item" data-ui-ref="menu.archiosk.admin.developer-tools" href="{{ url_for('portal.developer_tools', project_id=(project_id if project_id is defined else None)) }}">Developer Tools</a>
+                                    {% endif %}
                                 </div>
                             </details>
                             {% endif %}

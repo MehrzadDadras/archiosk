@@ -42,6 +42,11 @@ from services.verification_access import (
     revoke_verification_access,
 )
 from services.requirements_registry import RequirementsRegistry
+from services.developer_tools import (
+    qualifies_as_synthetic_test_project,
+    reset_analysis_state,
+    reset_test_project,
+)
 from services.trial_request import submit_trial_request
 
 portal_bp = Blueprint('portal', __name__)
@@ -187,6 +192,89 @@ def toggle_developer_mode():
     """
     session['developer_mode'] = not session.get('developer_mode', False)
     return redirect(url_for('portal.index'))
+
+
+def _require_developer_tools():
+    """Server-side second gate for destructive developer tooling."""
+    if not is_admin() or not session.get("developer_mode"):
+        abort(403)
+
+
+def _developer_tool_projects():
+    registry = get_registry(current_app)
+    store = CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"])
+    projects = []
+    for project_id in registry.list_ids():
+        workspace = _safe_workspace(store, project_id)
+        document = registry.get(project_id)
+        if workspace is None or document is None:
+            continue
+        projects.append({
+            "project_id": project_id,
+            "name": workspace.display_title or document.filename,
+            "environment": workspace.operating_environment or "unclassified",
+            "removed": bool(workspace.removed_at),
+            "synthetic": qualifies_as_synthetic_test_project(workspace),
+        })
+    return sorted(projects, key=lambda item: item["name"].lower())
+
+
+@portal_bp.route('/admin/developer-tools', methods=['GET'])
+@admin_required
+def developer_tools():
+    """Admin + explicit Developer Mode surface for repeatable test resets."""
+    _require_developer_tools()
+    projects = _developer_tool_projects()
+    selected_id = request.args.get("project_id", "")
+    selected = next((item for item in projects if item["project_id"] == selected_id), None)
+    return render_template("developer_tools.html", projects=projects, selected=selected)
+
+
+@portal_bp.route('/admin/developer-tools/reset-analysis', methods=['POST'])
+@admin_required
+def developer_reset_analysis():
+    _require_developer_tools()
+    project_id = (request.form.get("project_id") or "").strip()
+    if request.form.get("confirmation") != "RESET ANALYSIS STATE":
+        flash("Type RESET ANALYSIS STATE exactly to confirm - nothing was reset.", "error")
+        return redirect(url_for("portal.developer_tools", project_id=project_id))
+    store = CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"])
+    workspace = store.get(project_id)
+    if workspace is None:
+        abort(404)
+    try:
+        result = reset_analysis_state(store, workspace, get_governance_log(current_app), actor=session.get("username") or "unknown")
+    except Exception:
+        current_app.logger.exception("Developer analysis reset failed for %s", project_id)
+        flash("Analysis reset failed; the project was rolled back.", "error")
+    else:
+        flash(f"Analysis state reset. Removed counts: {result['removed_counts']}.", "success")
+    return redirect(url_for("portal.developer_tools", project_id=project_id))
+
+
+@portal_bp.route('/admin/developer-tools/reset-test-project', methods=['POST'])
+@admin_required
+def developer_reset_test_project():
+    _require_developer_tools()
+    project_id = (request.form.get("project_id") or "").strip()
+    store = CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"])
+    workspace = store.get(project_id)
+    if workspace is None:
+        abort(404)
+    expected = f"RESET TEST PROJECT: {workspace.display_title or project_id}"
+    if request.form.get("confirmation") != expected:
+        flash(f'Type "{expected}" exactly to confirm - nothing was reset.', "error")
+        return redirect(url_for("portal.developer_tools", project_id=project_id))
+    try:
+        result = reset_test_project(store, workspace, get_governance_log(current_app), actor=session.get("username") or "unknown")
+    except ValueError as exc:
+        flash(str(exc), "error")
+    except Exception:
+        current_app.logger.exception("Developer test-project reset failed for %s", project_id)
+        flash("Test-project reset failed; the project was rolled back.", "error")
+    else:
+        flash(f"Synthetic test project reset. Removed counts: {result['removed_counts']}.", "success")
+    return redirect(url_for("portal.developer_tools", project_id=project_id))
 
 
 @portal_bp.route('/')

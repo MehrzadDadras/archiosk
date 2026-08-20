@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% import "_macros.html" as macros %}
+
+{% block title %}Developer Tools &mdash; Archiosk{% endblock %}
+
+{% block content %}
+{% call macros.page_header('Developer Tools') %}
+    <a class="btn btn-ghost" href="{{ url_for('portal.projects_list') }}">&larr; Back to Projects</a>
+{% endcall %}
+
+<section class="workspace-pane" data-ui-ref="developer-tools.project-selection">
+    <p class="eyebrow mono">Admin / Developer Mode</p>
+    <p class="pane-note">These controls are for repeatable synthetic/test experiments. They are not ordinary project-management actions.</p>
+    <form method="get" class="workspace-form">
+        <label for="developer-tools-project">Selected project</label>
+        <select id="developer-tools-project" name="project_id" onchange="this.form.submit()" data-ui-ref="developer-tools.project-select">
+            <option value="">Choose a project&hellip;</option>
+            {% for project in projects %}
+            <option value="{{ project.project_id }}"{% if selected and selected.project_id == project.project_id %} selected{% endif %}>
+                {{ project.name }} &middot; {{ project.environment }}{% if project.synthetic %} &middot; synthetic/test{% endif %}
+            </option>
+            {% endfor %}
+        </select>
+    </form>
+</section>
+
+{% if selected %}
+<section class="workspace-pane" data-ui-ref="developer-tools.reset-analysis">
+    <h2>Reset Analysis State</h2>
+    <p>Removes Spin runs, Spin findings, comparison state, and generated analytical summaries for <strong>{{ selected.name }}</strong>. Sources, files, extracted evidence, authority state, and source history remain.</p>
+    <form method="post" action="{{ url_for('portal.developer_reset_analysis') }}" class="workspace-form">
+        <input type="hidden" name="project_id" value="{{ selected.project_id }}">
+        <input type="text" name="confirmation" placeholder="RESET ANALYSIS STATE" autocomplete="off" required>
+        <button type="submit" class="review-btn reject" data-ui-ref="developer-tools.reset-analysis.submit">Reset Analysis State</button>
+    </form>
+</section>
+
+<section class="workspace-pane" data-ui-ref="developer-tools.reset-test-project">
+    <h2>Reset Test Project</h2>
+    <p>Deep-clears mutable project/test analysis and workflow state while preserving the project identity, registered Sources, source files, extracted evidence, current authority state, and this reset audit trail.</p>
+    {% if selected.synthetic %}
+    <p class="pane-note">This project is explicitly identified as synthetic/test material.</p>
+    <form method="post" action="{{ url_for('portal.developer_reset_test_project') }}" class="workspace-form">
+        <input type="hidden" name="project_id" value="{{ selected.project_id }}">
+        <input type="text" name="confirmation" placeholder="RESET TEST PROJECT: {{ selected.name }}" autocomplete="off" required>
+        <button type="submit" class="review-btn reject" data-ui-ref="developer-tools.reset-test-project.submit">Reset Test Project</button>
+    </form>
+    {% else %}
+    <p class="pane-note">Unavailable: this project has no explicit synthetic/test identity marker.</p>
+    {% endif %}
+</section>
+{% else %}
+<section class="workspace-pane"><p class="pane-note">Choose a project to inspect its bounded reset operations.</p></section>
+{% endif %}
+{% endblock %}
