@@ -223,8 +223,12 @@ class ListsHierarchyContractTests(_BaseTestCase):
 
         panel_start = body.index('<nav class="launcher-panel"')
         active_pos = body.index("Cedar Harbour E3A Workspace", panel_start)
-        active_tail = body[active_pos:active_pos + 400]
-        self.assertIn('<ul class="tree-children" data-tree-open>', active_tail)
+        other_pos = body.index("A Second Project Not Open", active_pos)
+        active_branch = body[active_pos:other_pos]
+        self.assertIn('aria-label="Collapse Cedar Harbour E3A Workspace files"', body)
+        self.assertIn('class="tree-children project-source-tree" data-tree-open', active_branch)
+        self.assertIn('data-ui-ref="lists.project.documents.leaf"', active_branch)
+        self.assertIn('data-ui-ref="lists.projects.leaf"', body[other_pos - 300:other_pos + 300])
 
     def test_unauthorized_project_names_never_render(self):
         # Admins can see every Project by design (P32) - a non-admin

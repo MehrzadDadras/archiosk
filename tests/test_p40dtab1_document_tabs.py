@@ -518,7 +518,9 @@ class ExistingBehaviorPreservedTests(_BaseTestCase):
         client = self._client()
         body = client.get(f"/projects/{doc.project_id}/workspace").get_data(as_text=True)
         self.assertIn('data-ui-ref="lists.project.self"', body)
-        self.assertIn('data-ui-ref="lists.project.documents"', body)
+        self.assertNotIn('data-ui-ref="lists.project.documents"', body)
+        self.assertIn('class="tree-children project-source-tree"', body)
+        self.assertIn('data-ui-ref="lists.project.documents.leaf"', body)
 
     def test_lists_thumbnails_split_still_present(self):
         html = _BASE_HTML_PATH.read_text(encoding="utf-8")

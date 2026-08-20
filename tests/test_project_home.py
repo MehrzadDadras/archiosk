@@ -115,9 +115,9 @@ class ProjectHomeTests(unittest.TestCase):
         # E3A): this content now lives behind the explicit Overview leaf
         # (?view=overview), not the bare workspace URL (Section 5 - blank
         # by default). Sources/Documents moved out of Display entirely -
-        # their names and count now live only in Lists' own recursive
-        # hierarchy (Section 4), checked against that instead of a
-        # retired "Sources (N)" Display heading.
+        # their names now live directly beneath the Project root in Lists
+        # (the later project-root correction retired the visible Documents
+        # wrapper and its count).
         response = self.client.get(f"/projects/{self.project_id}/workspace?view=overview")
         body = response.get_data(as_text=True)
 
@@ -125,7 +125,8 @@ class ProjectHomeTests(unittest.TestCase):
         self.assertIn(">RFI Correspondence<", body)
         self.assertIn("History (", body)
 
-        self.assertIn('Documents <span class="launcher-count">1</span>', body)
+        self.assertEqual(body.count('data-ui-ref="lists.project.documents.leaf"'), 1)
+        self.assertNotIn('data-ui-ref="lists.project.documents"', body)
         self.assertIn("rfp.md", body)
 
     # -- star ----------------------------------------------------------------
@@ -182,7 +183,7 @@ class ProjectHomeTests(unittest.TestCase):
     def test_add_text_record_source_becomes_a_project_source(self):
         # SUPERSEDED (CLAUDE-P40-E3A): the retired "Sources (N)" Display
         # heading is gone - confirmation is now the success flash plus
-        # Lists' own Documents count/name, both present on the redirect
+        # Lists' direct project-file leaves, present on the redirect
         # target (view=overview, Section 5's own required consequence -
         # see routes/workspace.py's own note on this redirect target).
         response = self.client.post(
@@ -193,7 +194,8 @@ class ProjectHomeTests(unittest.TestCase):
         body = response.get_data(as_text=True)
 
         self.assertIn("Text Record added as a Project Source.", body)
-        self.assertIn('Documents <span class="launcher-count">2</span>', body)
+        self.assertEqual(body.count('data-ui-ref="lists.project.documents.leaf"'), 2)
+        self.assertNotIn('data-ui-ref="lists.project.documents"', body)
         self.assertIn("Site visit note", body)
         workspace = self._store().get(self.project_id)
         text_source = next(s for s in workspace.sources if s["kind"] == "text_record")
@@ -216,7 +218,9 @@ class ProjectHomeTests(unittest.TestCase):
         )
         body = response.get_data(as_text=True)
         self.assertIn("Document added as a Project Source.", body)
-        self.assertIn('Documents <span class="launcher-count">2</span>', body)
+        self.assertEqual(body.count('data-ui-ref="lists.project.documents.leaf"'), 2)
+        self.assertNotIn('data-ui-ref="lists.project.documents"', body)
+        self.assertIn("note.txt", body)
 
     def test_external_source_shown_as_disabled_placeholder(self):
         # CLAUDE-P40-E2B1: Sources/Documents moved out of Project Home

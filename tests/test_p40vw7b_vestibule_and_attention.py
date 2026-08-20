@@ -170,8 +170,9 @@ class OpenedProjectPortfolioRemovalTests(_BaseTestCase):
         doc = self._ingest("VW7B Project C")
         client = self._client()
         body = client.get(f"/projects/{doc.project_id}/workspace").get_data(as_text=True)
-        for ref in ("lists.project.self", "lists.project.documents"):
+        for ref in ("lists.project.self", "lists.project.documents.leaf"):
             self.assertIn(f'data-ui-ref="{ref}"', body, ref)
+        self.assertNotIn('data-ui-ref="lists.project.documents"', body)
         for ref in (
             "toolbox.investigations", "toolbox.rfi", "toolbox.conversation",
             "toolbox.tasks", "toolbox.tags",

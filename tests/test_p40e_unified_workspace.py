@@ -129,9 +129,9 @@ class SecondNavigationColumnRemovedTests(_BaseWorkspaceTestCase):
 
     def test_project_navigation_appears_projected_in_display_not_the_left_panel(self):
         # SUPERSEDED (CLAUDE-P40-E3A, Section 2): the pendulum swung back
-        # - Documents/Investigations/Chats are Lists tree children of the
-        # active Project again (the recursive hierarchy explicitly
-        # re-authorized this stage), never projected into Display
+        # - Project files are direct Lists tree children of the active
+        # Project (the redundant visible Documents wrapper is retired),
+        # never projected into Display
         # (Section 4/5's own no-second-navigation-directory rule forbids
         # that direction now).
         client = self._client_as("p40e_owner", 1)
@@ -139,7 +139,10 @@ class SecondNavigationColumnRemovedTests(_BaseWorkspaceTestCase):
         body = resp.get_data(as_text=True)
         self.assertNotIn("display-branch-nav", body)
         self.assertIn(self.project_id, body)
-        self.assertIn(">Documents", body)
+        self.assertIn('data-ui-ref="lists.project.self"', body)
+        self.assertIn('class="tree-children project-source-tree"', body)
+        self.assertIn('data-ui-ref="lists.project.documents.leaf"', body)
+        self.assertNotIn('data-ui-ref="lists.project.documents"', body)
         self.assertIn(">Investigations", body)
         # CLAUDE-P40-VW7A-QA added a <span class="launcher-count"> after
         # "Chats" (matching Documents/Investigations' own already-open-

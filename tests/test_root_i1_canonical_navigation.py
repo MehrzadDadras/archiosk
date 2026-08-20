@@ -77,6 +77,8 @@ class RootI1NavigationTests(unittest.TestCase):
         # itself carries no root-branch marker, never having been part
         # of this rail-only numbering scaffold). Every other branch
         # number is unaffected - nothing was renumbered to fill the gap.
+        # CODEX-PSD-LEFT-RAIL then retired the visible Documents wrapper;
+        # branch 2.1 remains the direct project-files projection.
         response = self.client.get(f"/projects/{self.project_id}/workspace?view=overview")
         self.assertEqual(response.status_code, 200)
         body = response.get_data(as_text=True)
@@ -84,7 +86,7 @@ class RootI1NavigationTests(unittest.TestCase):
             ("1.1", "Identity &amp; Overview"),
             ("1.2", "Project Context"),
             ("1.3", "Access &amp; Operating Environment"),
-            ("2.1", "Documents"),
+            ("2.1", "Project files"),
             ("3", "Requirements"),
             ("4", "Investigations"),
             ("6", "Work Products"),
