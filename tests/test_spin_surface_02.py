@@ -192,10 +192,17 @@ class SpinSurfaceTests(unittest.TestCase):
         self._run_spin(SPIN_KIND_DELTA, delta_json_2)
 
         # The FIRST delta run's own report must still be reachable and
-        # still show ITS OWN content, not the second run's.
+        # still be selected/open when its history row is requested. History
+        # now carries each run's collapsed detail, so the newer run's content
+        # may remain present in the collapsed DOM without being displayed.
         body = self._spin_tab(first_delta_id).get_data(as_text=True)
         self.assertIn("First delta", body)
-        self.assertNotIn("Second delta", body)
+        self.assertIn(f'data-spin-run-id="{first_delta_id}"', body)
+        self.assertIn(
+            f'<details class="spin-history-item" data-ui-ref="display.spin.history.leaf" '
+            f'data-spin-run-id="{first_delta_id}" open>',
+            body,
+        )
 
         # And it must still be listed in history (never hidden/deleted).
         history_body = self._spin_tab().get_data(as_text=True)

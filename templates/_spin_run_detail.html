@@ -1,0 +1,97 @@
+<div class="spin-run-detail" data-ui-ref="display.spin.report">
+    <p class="spin-report-headline">
+        {{ run.kind_label }}{% if run.world %} &middot; {{ run.world|title }} Mode{% endif %}
+        <span class="review-state-badge{% if not run.ran %} review-state-not-verified{% endif %}" style="font-size:var(--text-sm);vertical-align:middle;">{{ 'failed' if not run.ran else 'complete' }}</span>
+    </p>
+    {% if run.world %}
+    <p class="history-entry" data-ui-ref="display.spin.report.world">
+        <strong>World:</strong> {{ run.world|title }} Mode
+        {% if run_report.world_objective %}<br><strong>Objective:</strong> {{ run_report.world_objective }}{% endif %}
+    </p>
+    {% endif %}
+    <p class="history-entry"><strong>Spin Run ID:</strong> {{ run.id }}</p>
+    <p class="history-entry"><strong>Completed:</strong> <time class="spin-timestamp" data-spin-timestamp="{{ run.created_at }}" datetime="{{ run.created_at }}">{{ run.created_at[:10] }}</time>
+        <span class="pane-note">(start time and duration are not separately recorded)</span></p>
+
+    {% if run.baseline_spin_run_id %}
+    <p class="history-entry">
+        <strong>Baseline:</strong>
+        <a href="{{ url_for('workspace.show_workspace', project_id=project_id, view='spin', spin_run=run.baseline_spin_run_id) }}">
+            First Spin of {% if run.baseline_created_at %}<time class="spin-timestamp" data-spin-timestamp="{{ run.baseline_created_at }}" datetime="{{ run.baseline_created_at }}">{{ run.baseline_created_at[:10] }}</time>{% else %}unknown date{% endif %}
+        </a>
+    </p>
+    {% endif %}
+
+    {% if not run.ran %}
+    <p class="history-entry"><strong>Could not run:</strong> {{ run.skipped_reason }}</p>
+    {% else %}
+    <p class="history-entry"><strong>Sources examined:</strong> {{ run_report.sources_examined }}</p>
+    {% if run_report.evidence_delta %}
+    <p class="history-entry">
+        <strong>Evidence delta since baseline:</strong>
+        {{ run_report.evidence_delta.new_count }} new &middot;
+        {{ run_report.evidence_delta.missing_count }} missing
+        <span class="pane-note">(renamed/moved documents are not separately distinguishable from this record)</span>
+    </p>
+    {% endif %}
+    <p class="history-entry"><strong>Total findings:</strong> {{ run.findings|length }}</p>
+
+    {% if run_report.is_delta %}
+    <p class="history-entry"><strong>Prior findings reassessed:</strong> {{ run_report.reassessed_count }}</p>
+    <p class="history-entry"><strong>Classification summary:</strong>
+        {% for classification, count in run_report.classification_counts.items() %}
+        {% if count %}{{ classification|upper }}&nbsp;&times;{{ count }}{% if not loop.last %}, {% endif %}{% endif %}
+        {% endfor %}
+        {% if run_report.unclassified_count %}, unclassified &times;{{ run_report.unclassified_count }}{% endif %}
+    </p>
+    {% else %}
+    <p class="pane-note">First Spin establishes a baseline - no prior state to classify against.</p>
+    {% endif %}
+
+    {% if run.games_played %}
+    <h3>Games Played</h3>
+    <p class="pane-note">An inspectable trace of the investigative moves this run reported making - self-reported by the same Spin call that produced the findings below, never hidden reasoning.</p>
+    <div data-ui-ref="display.spin.report.games-played">
+        {% for g in run.games_played %}
+        <p class="history-entry" data-ui-ref="display.spin.report.games-played.leaf"><strong>{{ g.game }}</strong>{% if g.triggered_by %} &mdash; triggered by: {{ g.triggered_by }}{% endif %}{% if g.finding %} &rarr; {{ g.finding }}{% endif %}</p>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if run.helix_assessments %}
+    <h3>Progressive Helix QA</h3>
+    <p class="pane-note">Interface-specific expected fit compared with observed evidence. Stage labels are contextual evidence, not universal technical standards.</p>
+    <div data-ui-ref="display.spin.report.helix-qa">
+        {% for h in run.helix_assessments %}
+        <details class="spin-finding" data-ui-ref="display.spin.report.helix-qa.interface">
+            <summary class="spin-finding-tag">{{ h.interface }} &middot; {{ h.assessment|replace('_', ' ')|upper }}</summary>
+            <p class="history-entry"><strong>Spin axis:</strong> {{ h.spin_axis|upper }}</p>
+            {% if h.strands %}<p class="history-entry"><strong>Strands:</strong> {{ h.strands|join(' ↔ ') }}</p>{% endif %}
+            <p class="history-entry"><strong>Expected fit now:</strong> {{ h.expectation_state|replace('_', ' ') }}{% if h.claimed_maturity %} at {{ h.claimed_maturity }}{% endif %}</p>
+            {% if h.maturity_source %}<p class="history-entry"><strong>Why expected now:</strong> {{ h.maturity_source }}{% if h.expectation_rationale %} &mdash; {{ h.expectation_rationale }}{% endif %}</p>{% elif h.expectation_rationale %}<p class="history-entry"><strong>Expectation rationale:</strong> {{ h.expectation_rationale }}</p>{% endif %}
+            {% if h.dimension_relationship_class %}<p class="history-entry"><strong>Dimensional relationship:</strong> {{ h.dimension_relationship_class|replace('_', ' ') }}</p>{% endif %}
+            {% for e in h.observed_evidence %}<p class="history-entry" data-ui-ref="display.spin.report.helix-qa.evidence"><strong>Evidence:</strong> {{ e.source_reference }}{% if e.revision %} &middot; {{ e.revision }}{% endif %}{% if e.region %} &middot; {{ e.region }}{% endif %}{% if e.observed_value %}<br>{{ e.observed_value }}{% endif %}{% if e.confidence %} <span class="pane-note">({{ e.confidence }})</span>{% endif %}</p>{% endfor %}
+            <p class="history-entry"><strong>Evidence sufficiency:</strong> {{ h.evidence_sufficiency|replace('_', ' ') }}</p>
+            {% if h.consequence %}<p class="history-entry"><strong>Consequence:</strong> {{ h.consequence }}</p>{% endif %}
+            {% if h.uncertainty %}<p class="history-entry"><strong>Uncertainty:</strong> {{ h.uncertainty }}</p>{% endif %}
+            {% if h.follow_on_game %}<p class="history-entry"><strong>Spin continuation:</strong> {{ h.follow_on_game }}</p>{% endif %}
+            {% if h.governed_question %}<p class="history-entry"><strong>Governed question:</strong> {{ h.governed_question }}</p>{% endif %}
+        </details>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <h3>Findings</h3>
+    {% for f in run_report.presented_findings %}
+    <details class="spin-finding {{ f.weight_class }}" {% if f.weight_class in ('spin-weight-max', 'spin-weight-high') %}open{% endif %} data-ui-ref="display.spin.report.finding" style="border-left:{{ f.bar_px }}px {{ f.border_style }} var(--{{ f.accent }});">
+        <summary class="spin-finding-tag">{{ f.display_id }} — {{ f.tag }}</summary>
+        <p class="finding-confidence"><span class="review-state-badge review-state-unreviewed">Machine Finding &middot; Unreviewed</span>{% if f.delta_classification %} <span class="review-state-badge review-state-unreviewed" data-ui-ref="display.spin.report.finding.classification">{{ f.delta_classification|upper }}</span>{% endif %}</p>
+        {% if f.source_reference %}<p class="history-entry"><strong>Source:</strong> {{ f.source_reference }}</p>{% endif %}
+        <p class="history-entry"><strong>Concern:</strong> {{ f.concern }}</p>
+        <p class="history-entry"><strong>Unresolved question:</strong> {{ f.unresolved_question }}</p>
+        {% if f.related_prior_understanding %}<p class="history-entry"><strong>Reassesses:</strong> {{ f.related_prior_understanding }}</p>{% endif %}
+        {% if active_sources %}<p class="history-entry"><a href="{{ url_for('workspace.show_workspace', project_id=project_id, source=active_sources[0].id) }}">Open supporting source document</a></p>{% endif %}
+    </details>
+    {% else %}<p class="pane-note">No findings from this run.</p>{% endfor %}
+    {% endif %}
+</div>

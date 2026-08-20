@@ -1222,7 +1222,16 @@ def show_workspace(project_id):
         )
     if selected_spin_run_view is None and spin_runs_view:
         selected_spin_run_view = spin_runs_view[0]
-    spin_state_report = _build_spin_state_report(selected_spin_run_view) if selected_spin_run_view else None
+    # Keep a derived report for every run so History can expand any row without
+    # inventing a second persisted representation or changing run ordering.
+    spin_state_reports_view = {
+        run["id"]: _build_spin_state_report(run) for run in spin_runs_view
+    }
+    spin_state_report = (
+        spin_state_reports_view.get(selected_spin_run_view["id"])
+        if selected_spin_run_view
+        else None
+    )
 
     if active_case is not None:
         for finding_id in active_case["finding_ids"]:
@@ -1836,6 +1845,7 @@ def show_workspace(project_id):
         spin_generation_in_progress=store.spin_generation_in_progress_for(workspace),
         selected_spin_run_view=selected_spin_run_view,
         spin_state_report=spin_state_report,
+        spin_state_reports_view=spin_state_reports_view,
         focused_finding_id=focused_finding_id,
         applied_count=applied_count,
         awaiting_apply_count=awaiting_apply_count,

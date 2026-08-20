@@ -5559,6 +5559,30 @@ main:hover,
     border-left: 3px solid var(--border-strong);
     padding-left: var(--space-6);
 }
+.spin-history-item {
+    border-bottom: 1px solid var(--border);
+}
+.spin-history-summary {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-4);
+    cursor: pointer;
+    list-style: none;
+    padding: var(--space-4) 0;
+}
+.spin-history-summary::-webkit-details-marker { display: none; }
+.spin-history-chevron {
+    display: inline-block;
+    min-width: 1rem;
+    font-size: var(--text-lg);
+    line-height: 1;
+}
+.spin-history-item[open] .spin-history-chevron { transform: rotate(90deg); }
+.spin-history-summary:focus-visible {
+    outline: 2px solid var(--machine-blue);
+    outline-offset: 2px;
+}
+.spin-run-detail { padding: 0 0 var(--space-6) var(--space-7); }
 
 /* Visual pressure - see tokens.css's own comment on --pressure-quiet-text
    for the token-level rule. Apply only to neutral text nodes (a
