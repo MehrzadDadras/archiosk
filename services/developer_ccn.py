@@ -16,7 +16,9 @@ CCN_STATUS_ACTIVE = "active"
 CCN_STATUS_FINALIZED = "finalized"
 CCN_STATUS_CANCELLED = "cancelled"
 
-_COMMAND_RE = re.compile(r"^\s*/ccn(?:\s+(.*))?\s*$", re.IGNORECASE | re.DOTALL)
+# Accept both the chat-friendly command forms `/CCN intent` and
+# `/CCN: intent`, while keeping `/CCNfoo` ordinary text.
+_COMMAND_RE = re.compile(r"^\s*/ccn(?:(?::\s*|\s+)(.*))?\s*$", re.IGNORECASE | re.DOTALL)
 _SUBCOMMANDS = {"status", "show", "compare", "finalize", "cancel"}
 
 

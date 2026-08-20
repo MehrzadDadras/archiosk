@@ -49,6 +49,38 @@ class DeveloperHomeComposerTests(unittest.TestCase):
         response = self.client.get("/")
         self.assertNotIn(b'data-ui-ref="developer.ccn.active"', response.data)
 
+    def test_inline_ccn_intent_accepts_space_and_colon_forms(self):
+        self._developer()
+        for command, expected in (
+            ("/CCN Make the Developer Mode badge bold", "Make the Developer Mode badge bold"),
+            ("/CCN: Move project selection into one interface", "Move project selection into one interface"),
+        ):
+            self.client.post("/developer-composer", data={"message": "/CCN cancel"})
+            self.client.post("/developer-composer", data={"message": command})
+            with self.client.session_transaction() as sess:
+                self.assertEqual(sess["developer_ccn"]["intent"], expected)
+
+    def test_ordinary_developer_question_is_answered_without_ccn(self):
+        self._developer()
+        response = self.client.post(
+            "/developer-composer", data={"message": "How can we change the font for this icon: DEVELOPER MODE to make it bold?"}
+        )
+        self.assertEqual(response.status_code, 302)
+        with self.client.session_transaction() as sess:
+            reply = sess["developer_home_messages"][-1]["text"]
+        self.assertIn("templates/_app_menu.html", reply)
+        self.assertIn("font-weight: 700", reply)
+        self.assertNotIn("Select an ARCHIOSK surface or use /CCN", reply)
+
+    def test_ordinary_question_keeps_active_ccn_as_a_lens(self):
+        self._developer()
+        self.client.post("/developer-composer", data={"message": "/CCN: Make the badge bold"})
+        self.client.post("/developer-composer", data={"message": "How is the Developer Mode badge implemented?"})
+        with self.client.session_transaction() as sess:
+            reply = sess["developer_home_messages"][-1]["text"]
+        self.assertIn("templates/_app_menu.html", reply)
+        self.assertIn("active CCN", reply)
+
     def test_home_selection_attaches_application_object_without_authorizing_mutation(self):
         self._developer()
         response = self.client.post(

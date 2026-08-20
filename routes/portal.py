@@ -254,6 +254,55 @@ def _developer_home_context() -> dict | None:
     return None
 
 
+def _developer_application_reply(text: str, context: dict | None) -> str:
+    """Answer bounded, evidence-grounded application-level questions.
+
+    Home has no project evidence, so this responder only states repository
+    facts that are stable and directly inspectable. Unknown implementation
+    lineage remains an explicit request for a more specific selection.
+    """
+    lowered = text.lower()
+    selected = (context or {}).get("selected_elements", [])
+    labels = ", ".join(item.get("label", "selected object") for item in selected[-3:])
+    lens = " The active CCN is treated as a contemplated-change lens; nothing is authorized." if (context and context.get("status") == "active") else ""
+
+    if "developer mode" in lowered and ("badge" in lowered or "icon" in lowered or "font" in lowered or "bold" in lowered):
+        return (
+            "The Developer Mode badge is rendered by `templates/_app_menu.html` and styled by "
+            "`.workspace-developer-mode-badge` in `static/css/main.css`. To make its text bold, "
+            "the bounded CSS change would be `font-weight: 700`; this Composer response is only "
+            "an explanation and does not apply the change."
+            + lens
+        )
+    if "where" in lowered and ("implement" in lowered or "code" in lowered or "control" in lowered):
+        return (
+            (f"The selected context is {labels}. " if labels else "No application object is selected. ")
+            + "Select the specific control or surface for a precise implementation trace; the "
+            "available home-level context alone does not establish a deeper lineage."
+            + lens
+        )
+    if "test" in lowered or "tests" in lowered:
+        return (
+            "The Developer Mode/CCN behavior is covered by `tests/test_developer_mode_ccn_01.py` "
+            "and the home Composer vertical proof by `tests/test_developer_home_composer_01.py`. "
+            "No test execution or mutation is authorized by this question."
+            + lens
+        )
+    if selected:
+        return (
+            f"I can inspect the selected application context ({labels}) and explain established "
+            "behavior. This question does not authorize a change; ask where it is implemented, "
+            "what depends on it, or what tests cover it."
+            + lens
+        )
+    return (
+        "I can answer Developer Mode questions about ARCHIOSK itself. For a precise answer, "
+        "select an application surface or name the visible control; selection remains context "
+        "only and never authorizes mutation."
+        + lens
+    )
+
+
 @portal_bp.route('/developer-composer', methods=['POST'])
 @login_required
 def developer_home_composer():
@@ -283,18 +332,7 @@ def developer_home_composer():
         return redirect(url_for("portal.index"))
 
     context = _developer_home_context()
-    selected = (context or {}).get("selected_elements", [])
-    if selected:
-        labels = ", ".join(item.get("label", "selected object") for item in selected[-3:])
-        reply = (
-            f"Application-level Developer Mode context received for {labels}. "
-            "I can inspect or explain this context; selection does not authorize mutation."
-        )
-    else:
-        reply = (
-            "This is the application-level Developer Composer. Select an ARCHIOSK surface "
-            "or use /CCN to create a contemplated-change context; no project is bound."
-        )
+    reply = _developer_application_reply(text, context)
     _record_developer_home_message("human", text, developer_context=context)
     _record_developer_home_message("system", reply, action_taken="developer_application_context")
     return redirect(url_for("portal.index"))
