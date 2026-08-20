@@ -5812,7 +5812,9 @@ class CaseWorkspaceStore:
         a Source's own file content is immutable once ingested
         (revisions create a NEW Source, see supersedes_source_id), so
         the id set alone is a sufficient, honest signal."""
-        return ",".join(sorted(s["id"] for s in workspace.sources))
+        return ",".join(sorted(
+            s["id"] for s in CaseWorkspaceStore.spin_current_sources(workspace)
+        ))
 
     # CLAUDE-P38-D2: must be >= services.project_briefing's own
     # DEFAULT_TIMEOUT_SECONDS (45s) with margin, so a genuinely in-flight
@@ -6725,6 +6727,21 @@ class CaseWorkspaceStore:
         exactly as they always have, so "Document removed" can be shown
         as an honest state on that reference rather than a broken one."""
         return [s for s in workspace.sources if not s.get("removed_at")]
+
+    @staticmethod
+    def spin_current_sources(workspace: ProjectWorkspace) -> list[dict]:
+        """The active/current Source state eligible to feed Project Spin.
+
+        A removed Source is historical evidence, not current evidence. A
+        Source with a recorded successor remains resolvable for provenance
+        but is likewise not the current design state. This deliberately does
+        not require an EvidenceItem: registration state and actual evidence
+        scope are different facts, persisted separately on SpinRun.
+        """
+        return [
+            source for source in CaseWorkspaceStore.active_sources(workspace)
+            if not source.get("superseded_by_source_id")
+        ]
 
     @staticmethod
     def removed_sources(workspace: ProjectWorkspace) -> list[dict]:

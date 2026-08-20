@@ -22,6 +22,7 @@ implementationally separate (Prompt 4 #10):
 from __future__ import annotations
 
 import base64
+import hashlib
 import io
 import json
 import mimetypes
@@ -90,6 +91,7 @@ from services.case_workspace import (
     SOURCE_KIND_DRAWING,
     SOURCE_KIND_PROJECT_DOCUMENT,
     SOURCE_KIND_TEXT_RECORD,
+    SOURCE_ORIGIN_TYPE_UPLOAD,
     SPIN_KIND_DELTA,
     SPIN_KIND_FIRST,
     SPIN_WORLD_SURVIVAL,
@@ -137,12 +139,14 @@ from services.governance import GovernanceLog
 from services.ingestion import (
     PendingReconcileStore,
     UploadError,
+    _register_source_content,
     document_source_payload,
     get_registry,
     preview_data_room_reconcile,
     reconcile_data_room_upload,
     reject_if_display_name_taken,
 )
+from services.bhive_parser import BHiveParser
 from services.investigation_snapshot import build_archive_snapshot
 from services.project_clock import open_project
 from services.rfi_export import RFIExportError, build_rfi_docx, build_rfi_draft_docx
@@ -2442,8 +2446,9 @@ def run_spin_route(project_id):
         baseline_ids = {
             sid for sid in (baseline_run.get("source_signature") or "").split(",") if sid
         }
-        current_ids = {s["id"] for s in workspace.sources}
-        sources_by_id = {s["id"]: s for s in workspace.sources}
+        current_sources = store.spin_current_sources(workspace)
+        current_ids = {s["id"] for s in current_sources}
+        sources_by_id = {s["id"]: s for s in current_sources}
         changed_source_keys = {
             (sources_by_id[sid].get("origin_reference") or sources_by_id[sid].get("name"))
             for sid in (current_ids - baseline_ids)
@@ -2464,6 +2469,7 @@ def run_spin_route(project_id):
         prior_findings=prior_findings,
         display_title=evidence.display_title,
         world=world,
+        primary_source_id=evidence.primary_source_id,
         maturity_context=[
             m for m in workspace.maturity_records if m.get("status") == "active"
         ],
@@ -2488,6 +2494,7 @@ def run_spin_route(project_id):
         store.record_spin_run(
             workspace, spin_kind=spin_kind, actor=_reviewer(), findings=[],
             source_signature=source_signature, baseline_spin_run_id=baseline_spin_run_id,
+            scoped_source_ids=[],
             ran=False, skipped_reason=result.skipped_reason, world=world, governance_log=_log(),
         )
         flash(f"Spin could not run: {result.skipped_reason}", "error")
@@ -2496,6 +2503,7 @@ def run_spin_route(project_id):
     store.record_spin_run(
         workspace, spin_kind=spin_kind, actor=_reviewer(), findings=result.findings,
         source_signature=source_signature, baseline_spin_run_id=baseline_spin_run_id,
+        scoped_source_ids=result.evidence_source_ids,
         ran=True, provider=result.provider, model=result.model,
         world=world, games_played=result.games_played, governance_log=_log(),
         helix_assessments=result.helix_assessments,
@@ -3363,17 +3371,46 @@ def add_document_source(project_id):
     sources_dir.mkdir(parents=True, exist_ok=True)
     safe_name = secure_filename(file_storage.filename)
     stored_path = sources_dir / f"{uuid.uuid4().hex}_{safe_name}"
-    stored_path.write_bytes(file_storage.read())
+    raw_bytes = file_storage.read()
+    stored_path.write_bytes(raw_bytes)
 
-    store.add_source(
+    source = store.add_source(
         workspace,
         name=safe_name,
         file_path=str(stored_path),
         kind=SOURCE_KIND_PROJECT_DOCUMENT,
+        file_hash=hashlib.sha256(raw_bytes).hexdigest(),
+        origin_type=SOURCE_ORIGIN_TYPE_UPLOAD,
+        origin_reference=file_storage.filename,
         actor=_reviewer(),
         governance_log=_log(),
     )
-    flash("Document added as a Project Source.", "success")
+
+    parser = BHiveParser(
+        anthropic_api_key=current_app.config.get("ANTHROPIC_API_KEY"),
+        model=current_app.config.get("ANTHROPIC_MODEL"),
+    )
+    try:
+        status, reason = _register_source_content(
+            store, workspace, source, raw_bytes, safe_name, parser,
+            actor=_reviewer(), governance_log=_log(),
+        )
+    except Exception:  # Source is already durably registered; report the incomplete state.
+        current_app.logger.exception("Content registration failed for Source %s", source["id"])
+        status, reason = "skipped", "an internal content-processing error occurred"
+
+    if status == "added":
+        flash(
+            "Document added as a Project Source. Content processed as "
+            "Spin-readable project evidence.",
+            "success",
+        )
+    else:
+        flash(
+            "Document registered, but its content could not be processed. "
+            f"Spin cannot read this document yet: {reason}",
+            "warning",
+        )
     return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
 
 

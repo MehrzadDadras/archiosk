@@ -109,6 +109,7 @@ class ProjectEvidence:
     governed_requirements: list[dict] = field(default_factory=list)
     milestones: list[dict] = field(default_factory=list)
     additional_document_evidence: list[dict] = field(default_factory=list)
+    primary_source_id: Optional[str] = None
 
 
 def gather_project_evidence(workspace: ProjectWorkspace, store) -> ProjectEvidence:
@@ -125,14 +126,20 @@ def gather_project_evidence(workspace: ProjectWorkspace, store) -> ProjectEviden
     milestones = list(document.milestones) if document else []
     document_filename = document.filename if document else "(unknown source document)"
 
+    spin_sources = store.spin_current_sources(workspace)
+    sources_by_id = {s["id"]: s for s in spin_sources}
+    primary_source = next(
+        (source for source in spin_sources if document and source.get("name") == document.filename),
+        None,
+    )
+
     additional_document_evidence: list[dict] = []
     if workspace.evidence_items:
-        sources_by_id = {s["id"]: s for s in workspace.sources}
         excerpts_by_source: dict[str, list[str]] = {}
         for item in workspace.evidence_items:
             source_id = item.get("source_id")
             content = item.get("content")
-            if not source_id or not content:
+            if not source_id or source_id not in sources_by_id or not content:
                 continue
             excerpts_by_source.setdefault(source_id, []).append(content)
         for source_id, excerpts in excerpts_by_source.items():
@@ -164,6 +171,7 @@ def gather_project_evidence(workspace: ProjectWorkspace, store) -> ProjectEviden
         governed_requirements=list(workspace.requirements),
         milestones=milestones,
         additional_document_evidence=additional_document_evidence,
+        primary_source_id=primary_source.get("id") if primary_source else None,
     )
 
 

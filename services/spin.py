@@ -253,6 +253,7 @@ class SpinResult:
     # findings: expectation and observation are inspectable context for a
     # finding, not a second finding taxonomy.
     helix_assessments: list[dict] = field(default_factory=list)
+    evidence_source_ids: list[str] = field(default_factory=list)
 
 
 def run_spin(
@@ -268,6 +269,7 @@ def run_spin(
     prior_findings: Optional[list[dict]] = None,
     display_title: Optional[str] = None,
     world: Optional[str] = None,
+    primary_source_id: Optional[str] = None,
     api_key: Optional[str] = None,
     model: Optional[str] = None,
     timeout: Optional[float] = None,
@@ -290,6 +292,17 @@ def run_spin(
     completely unaffected by anything this addition introduced."""
     if world is not None and world not in KNOWN_SPIN_WORLDS:
         raise ValueError(f"Unknown Spin world {world!r}.")
+    selected_document_evidence = _select_comprehensive_document_evidence(
+        additional_document_evidence or [], changed_source_keys,
+    )
+    evidence_source_ids = []
+    if primary_source_id:
+        evidence_source_ids.append(primary_source_id)
+    evidence_source_ids.extend(
+        item["source_id"] for item in selected_document_evidence
+        if item.get("source_id") and item["source_id"] not in evidence_source_ids
+    )
+
     prompt = _build_prompt(
         spin_kind, document_filename, candidate_requirements, governed_requirements, milestones,
         display_title, additional_document_evidence, changed_source_keys, prior_findings, world,
@@ -341,6 +354,7 @@ def run_spin(
     return SpinResult(
         ran=True, findings=findings, games_played=games_played,
         helix_assessments=helix_assessments,
+        evidence_source_ids=evidence_source_ids,
         provider=outcome.provider, model=outcome.model, requested_at=outcome.requested_at,
     )
 
@@ -532,6 +546,7 @@ def _select_comprehensive_document_evidence(
         selected.append({
             "filename": doc.get("filename"),
             "relative_path": doc.get("relative_path"),
+            "source_id": doc.get("source_id"),
             "excerpts": doc.get("excerpts", [])[:cap],
             "is_changed_since_baseline": is_changed[id(doc)],
         })

@@ -419,6 +419,8 @@ def _register_source_content(
         text = parser._extract(raw_bytes, filename)  # noqa: SLF001 - same shared stage ingest_upload's own parse() uses internally
     except ParserError as exc:
         return "skipped", f"Registered as a Source, but its content could not be extracted: {exc}"
+    if not text.strip():
+        return "skipped", "Registered as a Source, but extraction produced no readable text."
 
     store.register_plain_text_structure(
         workspace, source_id=source["id"], text=text,
