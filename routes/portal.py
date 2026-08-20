@@ -266,6 +266,22 @@ def _developer_application_reply(text: str, context: dict | None) -> str:
     labels = ", ".join(item.get("label", "selected object") for item in selected[-3:])
     lens = " The active CCN is treated as a contemplated-change lens; nothing is authorized." if (context and context.get("status") == "active") else ""
 
+    # Resolve ordinary conversational deictics before falling back to
+    # generic Developer Mode guidance.  The user should be able to continue
+    # the original question after identifying the target, not translate it
+    # into an internal anchor/schema request.
+    if not selected and not ("developer mode" in lowered and ("badge" in lowered or "icon" in lowered or "font" in lowered or "bold" in lowered)):
+        ambiguous_match = re.search(r"\b(?:this|that|the)\s+(text|button|panel|icon)\b", lowered)
+        if ambiguous_match:
+            kind = ambiguous_match.group(1)
+            options = {
+                "text": "pick it on the screen, type or paste the text here, or tell me which panel it is on",
+                "button": "select it, name the button, or tell me which panel or menu it is in",
+                "panel": "select it or tell me which panel you mean",
+                "icon": "select it, describe it, or tell me where it appears",
+            }
+            return f"Which {kind} do you mean? You can {options[kind]}." + lens
+
     if "developer mode" in lowered and ("badge" in lowered or "icon" in lowered or "font" in lowered or "bold" in lowered):
         return (
             "The Developer Mode badge is rendered by `templates/_app_menu.html` and styled by "

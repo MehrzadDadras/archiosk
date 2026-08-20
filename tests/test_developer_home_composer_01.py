@@ -81,6 +81,22 @@ class DeveloperHomeComposerTests(unittest.TestCase):
         self.assertIn("templates/_app_menu.html", reply)
         self.assertIn("active CCN", reply)
 
+    def test_ambiguous_application_objects_get_natural_context_options(self):
+        self._developer()
+        examples = {
+            "How can I change this text?": ("Which text do you mean?", "type or paste the text"),
+            "Can I move this button?": ("Which button do you mean?", "name the button"),
+            "Why is this panel so large?": ("Which panel do you mean?", "tell me which panel"),
+            "How do I recolor this icon?": ("Which icon do you mean?", "describe it"),
+        }
+        for question, expected in examples.items():
+            self.client.post("/developer-composer", data={"message": question})
+            with self.client.session_transaction() as sess:
+                reply = sess["developer_home_messages"][-1]["text"]
+            self.assertIn(expected[0], reply)
+            self.assertIn(expected[1], reply)
+            self.assertNotIn("Selection required", reply)
+
     def test_home_selection_attaches_application_object_without_authorizing_mutation(self):
         self._developer()
         response = self.client.post(
