@@ -699,6 +699,8 @@ class DeveloperModeTests(_BaseTestCase):
         # Project-less page.
         body = client.get("/projects").get_data(as_text=True)
         self.assertIn('data-ui-ref="menu.developer-mode-badge"', body)
+        self.assertIn('role="status"', body)
+        self.assertIn(">DEVELOPER MODE<", body)
         self.assertIn("Exit Developer Mode", body)
         self.assertNotIn("Enter Developer Mode", body)
 
@@ -707,6 +709,7 @@ class DeveloperModeTests(_BaseTestCase):
         doc = self._ingest(owner="menu_owner", project_name="Dev Mode Badge Project Test")
         body = client.get(f"/projects/{doc.project_id}/workspace").get_data(as_text=True)
         self.assertIn('data-ui-ref="menu.developer-mode-badge"', body)
+        self.assertIn(">DEVELOPER MODE<", body)
 
     def test_toggle_off_again_removes_the_badge(self):
         client = self._client_as("menu_owner", 1)
