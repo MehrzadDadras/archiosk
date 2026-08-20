@@ -97,6 +97,29 @@ class DeveloperHomeComposerTests(unittest.TestCase):
             self.assertIn(expected[1], reply)
             self.assertNotIn("Selection required", reply)
 
+    def test_normal_developer_question_has_substantive_chat_history_answer(self):
+        self._developer()
+        self.client.post("/developer-composer", data={"message": "How can we delete the chat history?"})
+        with self.client.session_transaction() as sess:
+            reply = sess["developer_home_messages"][-1]["text"]
+        self.assertIn("no ordinary Developer Composer action", reply)
+        self.assertIn("no mutation is authorized", reply)
+
+    def test_shared_composer_keyboard_contract_covers_home_and_workspace(self):
+        from pathlib import Path
+
+        root = Path(__file__).parents[1]
+        script = (root / "static/js/developer_composer_input.js").read_text(encoding="utf-8")
+        macro = (root / "templates/_macros.html").read_text(encoding="utf-8")
+        home = (root / "templates/index.html").read_text(encoding="utf-8")
+        self.assertIn("event.shiftKey", script)
+        self.assertIn("event.isComposing", script)
+        self.assertIn("requestSubmit", script)
+        self.assertIn("data-developer-composer-form", macro)
+        self.assertIn("data-developer-composer-form", home)
+        self.assertIn("<textarea", macro)
+        self.assertIn("<textarea", home)
+
     def test_home_selection_attaches_application_object_without_authorizing_mutation(self):
         self._developer()
         response = self.client.post(

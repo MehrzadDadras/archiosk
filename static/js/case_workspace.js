@@ -1021,28 +1021,6 @@ document.addEventListener('DOMContentLoaded', () => {
             if (sendBtn) sendBtn.disabled = true;
         });
 
-        // CLAUDE-CA1D-COMPOSER-ENTER-FIX-01: live Product Owner report -
-        // "Enter does not trigger Send." Root cause: per the HTML
-        // Standard's implicit-submission rule, pressing Enter in a text
-        // field submits the form via its "default button" - the FIRST
-        // submit button in DOM order - and the composer-context-clear
-        // button (above) is exactly that whenever current_context is set,
-        // silently clearing the work context instead of sending the
-        // message. Explicitly forcing Enter to submit via the real Send
-        // button removes the ambiguity outright, rather than depending on
-        // markup order or browser-specific default-button behavior.
-        // Shift+Enter is left alone (browser default) even though this is
-        // a single-line <input> and cannot show a newline, so a reviewer
-        // holding Shift for some other reason isn't surprised by a send.
-        draftInput.addEventListener('keydown', (e) => {
-            if (e.key !== 'Enter' || e.shiftKey) return;
-            const form = draftInput.closest('form');
-            const sendBtn = form.querySelector('[data-ui-ref="chat.composer.send"]');
-            if (!form || !sendBtn || sendBtn.disabled) return;
-            e.preventDefault();
-            if (typeof form.requestSubmit === 'function') form.requestSubmit(sendBtn);
-            else sendBtn.click();
-        });
     }
 
     // CLAUDE-CA1C-UX-FIX-01: root cause of the live-reported "conversation

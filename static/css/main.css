@@ -6402,7 +6402,8 @@ main:hover,
     padding: 0.25rem 0.5rem;
     width: fit-content;
 }
-.conversation-input-form input[type="text"] {
+.conversation-input-form input[type="text"],
+.conversation-input-form textarea {
     flex: 1;
     font-family: var(--font-body);
     font-size: 0.9rem;

@@ -239,7 +239,7 @@
         {% endif %}
     </div>
     {{ caller() }}
-    <form class="conversation-input-form conversation-dock-composer" method="post" action="{{ post_url }}" data-ui-ref="chat.composer">
+    <form class="conversation-input-form conversation-dock-composer" method="post" action="{{ post_url }}" data-ui-ref="chat.composer" data-developer-composer-form>
         {# CLAUDE-CA1D-COMPOSER-CONTEXT-LABEL-01: a live product-owner
            refinement - the work-context indicator (formerly a separate
            `context_indicator` macro, a standalone div rendered ABOVE this
@@ -291,7 +291,7 @@
            alone (still true), but a visible "Chat (N)"/"Message" label
            here would recreate exactly the "duplicate label beside the
            composer" defect this correction removes. #}
-        <input type="text" name="text" id="dock-composer-input" data-ui-ref="chat.composer.input" data-conversation-draft="{{ scope_key }}" placeholder="{{ placeholder }}" aria-label="Message" autocomplete="off" required>
+        <textarea name="text" id="dock-composer-input" data-ui-ref="chat.composer.input" data-developer-composer-input data-conversation-draft="{{ scope_key }}" placeholder="{{ placeholder }}" aria-label="Message" autocomplete="off" rows="1" required></textarea>
         {# CLAUDE-POSTCAMEL-VOICE1-PRE: "the microphone is merely another
            door into ARCHIOSK Go" - this button never submits anything
            itself (type="button", outside any conversational logic of

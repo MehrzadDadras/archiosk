@@ -2232,5 +2232,6 @@
         })();
     </script>
     {% block extra_scripts %}{% endblock %}
+    <script src="{{ url_for('static', filename='js/developer_composer_input.js') }}?v={{ static_version }}"></script>
 </body>
 </html>

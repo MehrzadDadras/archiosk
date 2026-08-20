@@ -297,6 +297,22 @@ def _developer_application_reply(text: str, context: dict | None) -> str:
             "available home-level context alone does not establish a deeper lineage."
             + lens
         )
+    if ("chat history" in lowered or "conversation history" in lowered) and ("delete" in lowered or "remove" in lowered):
+        return (
+            "There is no ordinary Developer Composer action that deletes chat history. "
+            "Project conversations are persisted with the project workspace; the protected "
+            "Developer Tools reset is a separate administrative operation and is not invoked "
+            "by a question. I can trace the storage or prepare a contemplated change, but no "
+            "mutation is authorized here."
+            + lens
+        )
+    if "project list" in lowered or ("left" in lowered and "project" in lowered):
+        return (
+            "The project list is rendered by the authenticated Home/Projects routes and their "
+            "templates, while workspace navigation is handled separately. Select the project "
+            "list surface for an exact implementation trace; this explanation does not change it."
+            + lens
+        )
     if "test" in lowered or "tests" in lowered:
         return (
             "The Developer Mode/CCN behavior is covered by `tests/test_developer_mode_ccn_01.py` "

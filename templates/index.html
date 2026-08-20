@@ -178,10 +178,10 @@
             {% endfor %}
         </div>
         {% endif %}
-        <form class="developer-home-composer-form" method="post" action="{{ url_for('portal.developer_home_composer') }}" data-ui-ref="developer.home.composer.form">
+        <form class="developer-home-composer-form" method="post" action="{{ url_for('portal.developer_home_composer') }}" data-ui-ref="developer.home.composer.form" data-developer-composer-form>
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <input type="text" class="text-input" name="message" placeholder="Ask about ARCHIOSK or use /CCN" aria-label="Developer Composer message" autocomplete="off">
-            <button type="submit" class="btn btn-ghost">Send</button>
+            <textarea class="text-input" name="message" data-developer-composer-input placeholder="Ask about ARCHIOSK or use /CCN" aria-label="Developer Composer message" autocomplete="off" rows="1"></textarea>
+            <button type="submit" class="btn btn-ghost" data-ui-ref="developer.home.composer.send">Send</button>
         </form>
         <div class="developer-home-context-actions" data-ui-ref="developer.home.context-actions">
             <form method="post" action="{{ url_for('portal.developer_home_context') }}">
