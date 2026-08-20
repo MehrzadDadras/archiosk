@@ -3769,6 +3769,7 @@
         selected_source_id=(selected_source.id if selected_source else None),
         project_id=project_id,
         current_context=current_context,
+        developer_ccn_context=developer_ccn_context,
     ) %}
         <div class="conversation-thread" data-conversation-scope="case-{{ active_case.id }}" data-anchor-scope="case" data-anchor-case-id="{{ active_case.id }}" data-ui-ref="chat.thread">
             {% for message in active_case.conversation %}
@@ -3881,6 +3882,7 @@
         selected_source_id=(selected_source.id if selected_source else None),
         project_id=project_id,
         current_context=current_context,
+        developer_ccn_context=developer_ccn_context,
     ) %}
         {# CLAUDE-P40-VW8-QA: the explanatory sentence that used to live
            here ("Talk to the Project itself...") is deleted outright,

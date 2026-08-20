@@ -191,7 +191,7 @@
    information; those remain genuinely unbuilt (CLAUDE-P40-E3A, Section
    13's own exclusion list), nothing here claims otherwise by staying
    silent about them. #}
-{% macro conversation_dock(heading, message_count, post_url, scope_key, placeholder, include_anchor_fields=False, current_view=None, selected_source_id=None, project_id=None, current_context=None) %}
+{% macro conversation_dock(heading, message_count, post_url, scope_key, placeholder, include_anchor_fields=False, current_view=None, selected_source_id=None, project_id=None, current_context=None, developer_ccn_context=None) %}
 <div class="accordion-section conversation-dock-panel" id="conversation-dock" role="region" aria-label="{{ heading }} conversation">
     {# CLAUDE-EYE-TOOLBOX-LAYOUT-01, Part 4: the same lockable-boundary
        treatment as the Eye/Toolbox splitter (base.html's own
@@ -234,6 +234,9 @@
        that Investigation's own conversation length, not the Project's). #}
     <div class="conversation-dock-header">
         <button type="button" class="conversation-size-toggle" id="conversation-size-toggle" aria-pressed="false" aria-label="Expand the conversation panel">&#10530;</button>
+        {% if developer_ccn_context and developer_ccn_context.status == 'active' %}
+        <span class="developer-ccn-indicator" data-ui-ref="developer.ccn.active" title="Contemplated change context is active">CCN: {{ developer_ccn_context.title }}</span>
+        {% endif %}
     </div>
     {{ caller() }}
     <form class="conversation-input-form conversation-dock-composer" method="post" action="{{ post_url }}" data-ui-ref="chat.composer">

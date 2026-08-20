@@ -1653,6 +1653,9 @@ class ConversationMessage:
     # other message leaves this empty. Optional/defaulted so old saved
     # ConversationMessage JSON (pre-Stage-1) deserializes unchanged.
     candidate_referents: list[dict] = field(default_factory=list)
+    # Developer Mode only: the active CCN/context envelope carried with a
+    # conversational turn. Optional so legacy project records round-trip.
+    developer_context: Optional[dict] = None
 
 
 @dataclass
@@ -7932,6 +7935,7 @@ class CaseWorkspaceStore:
         organize_source_id: Optional[str] = None, operational_actions: Optional[list[dict]] = None,
         river_actions: Optional[list[dict]] = None, content_class: Optional[str] = None,
         candidate_referents: Optional[list[dict]] = None,
+        developer_context: Optional[dict] = None,
     ) -> dict:
         """
         case_id=None posts into ProjectWorkspace.project_conversation
@@ -7958,6 +7962,7 @@ class CaseWorkspaceStore:
                 selected_source_id=selected_source_id, organize_source_id=organize_source_id,
                 operational_actions=operational_actions or [], river_actions=river_actions or [],
                 content_class=content_class, candidate_referents=candidate_referents or [],
+                developer_context=developer_context,
             )
             workspace.project_conversation.append(asdict(message))
             self.save(workspace)
@@ -7981,6 +7986,7 @@ class CaseWorkspaceStore:
             selected_source_id=selected_source_id, organize_source_id=organize_source_id,
             operational_actions=operational_actions or [], river_actions=river_actions or [],
             content_class=content_class, candidate_referents=candidate_referents or [],
+            developer_context=developer_context,
         )
         case["conversation"].append(asdict(message))
         self.save(workspace)

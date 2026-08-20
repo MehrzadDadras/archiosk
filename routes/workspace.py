@@ -151,6 +151,12 @@ from services.investigation_snapshot import build_archive_snapshot
 from services.project_clock import open_project
 from services.rfi_export import RFIExportError, build_rfi_docx, build_rfi_draft_docx
 from services.work_product_export import WorkProductExportError, export_work_product
+from services.developer_ccn import (
+    attach_selected_object as attach_developer_object,
+    context_for_project as developer_context_for_project,
+    handle_command as handle_developer_ccn_command,
+    is_ccn_command,
+)
 from models import User
 
 workspace_bp = Blueprint("workspace", __name__)
@@ -690,6 +696,7 @@ def show_workspace(project_id):
                 current_context = {"type": "Finding", "label": _ctx_object["statement"][:60]}
             elif _ctx_type == "source":
                 current_context = {"type": "Source", "label": _ctx_object["name"]}
+    developer_ccn_context = developer_context_for_project(session, project_id) if _developer_mode_active() else None
 
     # CLAUDE-MM8: ?work_product=<id> opens a governed work product
     # directly inside the Workspace pane, same "?<id> selection, resolved
@@ -1820,6 +1827,7 @@ def show_workspace(project_id):
         active_case=active_case,
         selected_source=selected_source,
         current_context=current_context,
+        developer_ccn_context=developer_ccn_context,
         directory_view=directory_view,
         directory_view_label=directory_view_label,
         open_folder=open_folder,
@@ -4332,6 +4340,11 @@ def _clear_persisted_selection(project_id: str) -> None:
     session.pop(_selected_object_session_key(project_id), None)
 
 
+def _developer_mode_active() -> bool:
+    """Developer Mode is an explicit admin session state, never a client flag."""
+    return bool(is_admin() and session.get("developer_mode"))
+
+
 def _run_conversation_turn(
     project_id: str, store: CaseWorkspaceStore, workspace, case: Optional[dict], text: str,
     anchor: Optional[dict] = None, current_view: Optional[str] = None,
@@ -4374,9 +4387,11 @@ def _run_conversation_turn(
     (a stale persisted selection never overrides a fresh anchor).
     """
     case_id = case["id"] if case is not None else None
+    developer_context = developer_context_for_project(session, project_id) if _developer_mode_active() else None
     human_message = store.add_message(
         workspace, case_id, role="human", text=text, anchor=anchor, actor=_reviewer(),
         selected_source_id=selected_source_id, content_class=CONTENT_CLASS_HUMAN_AUTHORED,
+        developer_context=developer_context,
     )
 
     artifacts_dir = Path(current_app.config["REGISTRY_STORE_PATH"]) / "workspace_artifacts"
@@ -4384,7 +4399,31 @@ def _run_conversation_turn(
 
     if anchor is not None:
         _set_persisted_selection(project_id, anchor.get("anchor_type"), anchor.get("anchor_id"))
+        if _developer_mode_active():
+            attach_developer_object(
+                session=session,
+                object_type=anchor.get("anchor_type") or "application_object",
+                object_id=anchor.get("anchor_id") or "unknown",
+                label=anchor.get("description") or anchor.get("anchor_id") or "selected object",
+                project_id=project_id,
+                governance_log=_log(),
+                actor=_reviewer(),
+            )
     persisted_selection = _get_persisted_selection(project_id)
+
+    if is_ccn_command(text):
+        if not _developer_mode_active():
+            result = {"action_taken": "developer_ccn_denied", "reply_text": "Developer Mode is required for /CCN. No change was performed."}
+        else:
+            result = handle_developer_ccn_command(
+                text, session=session, actor=_reviewer(), governance_log=_log(), project_id=project_id,
+            )
+        store.add_message(
+            workspace, case_id, role="system", text=result["reply_text"],
+            action_taken=result["action_taken"], content_class=CONTENT_CLASS_DETERMINISTIC_CALCULATION,
+            developer_context=developer_context_for_project(session, project_id) if _developer_mode_active() else None,
+        )
+        return
 
     result = interpret_message(
         text=text,
@@ -4414,6 +4453,7 @@ def _run_conversation_turn(
         operational_actions=result.operational_actions,
         river_actions=result.river_actions,
         content_class=result.content_class,
+        developer_context=developer_context_for_project(session, project_id) if _developer_mode_active() else None,
     )
 
     if result.focused_finding_id is not None:
@@ -4694,6 +4734,8 @@ def quick_start(project_id):
     # any text typed into this composer.
     lowered_text = text.lower()
     if (
+        is_ccn_command(text)
+        or
         _looks_like_conversational_utterance(lowered_text)
         # CLAUDE-GO-MULTIMODAL-PERCEPTION-GAMES-01: a literal channel-
         # status question ("can you hear me?") is exactly as
