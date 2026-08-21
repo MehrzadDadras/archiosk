@@ -1,7 +1,7 @@
 # Test lanes — fast feedback without weakening the full suite
 
 **CLAUDE-TEST-ACCEL-01.** The full suite (`./venv/Scripts/python.exe -m pytest -q`,
-currently **3,594 tests**) stays the one authoritative gate before any commit that
+currently **4,254 tests**) stays the one authoritative gate before any commit that
 touches `routes/`, `services/`, `templates/`, `static/`, `models.py`, `config.py`,
 `app.py`, or migrations, and before every deployment — see `CLAUDE.md`'s own
 Testing section, which this document does not change or override.
@@ -20,8 +20,9 @@ registered markers — confirmed by direct inspection, not assumed. Test files a
 named by the *governance stage that introduced them* (`test_p40vw7b_*`,
 `test_ca1d_*`, `test_mm4_*`, `test_spin_00a_*`), not by test *kind* — so a
 filename alone doesn't reliably say "this is a unit test" vs. "this is a
-cross-cutting regression test." 93 of the 204 test files (1,911 of 3,594 tests —
-about 53% of the whole suite) carry a `p40`/`ca1d` stage prefix and are
+cross-cutting regression test." In the historical snapshot used for this lane
+study, 93 of 204 test files (1,911 of 3,594 tests — about 53% of that
+historical collection) carried a `p40`/`ca1d` stage prefix and were
 structural HTML/route assertions against the Flask test client — there is no
 real browser/E2E layer in this suite at all (every file that says so explicitly
 confirms it; no Selenium/Playwright dependency exists in `requirements.txt`).
@@ -63,7 +64,8 @@ invents — plus any other file a real dependency chain points to (e.g. changing
 which in practice is most of the suite — see "Escalation past Lane C" below).
 
 **Lane E — Full Acceptance.** `./venv/Scripts/python.exe -m pytest -q` — all
-3,594 tests, unchanged, still the only gate for commit/deploy/checkpoint.
+4,254 tests in the current collection, still the only gate for
+commit/deploy/checkpoint.
 
 ## Assurance tiers — orthogonal to lanes
 
@@ -82,6 +84,10 @@ execution lanes above.
 **Tier 4 must vary context, not only language.** Existing adversarial lexical
 corpora are Tier-4 regression material, but are not by themselves sufficient
 architectural acceptance tests.
+
+Lane A/B are the normal discovery and subsystem-feedback loop. Lane E remains
+the broad certification gate wherever repository policy requires it; focused
+passes never waive or replace that gate.
 
 ## Decision rule
 
@@ -103,7 +109,7 @@ architectural acceptance tests.
    (full suite, per `CLAUDE.md`'s existing rule — unchanged), and always before
    deployment.
 
-## Measured proof — Worked Example 1: SPIN-00A (commit `f465fcd`)
+## Historical measured proof — Worked Example 1: SPIN-00A (commit `f465fcd`)
 
 SPIN-00A touched: `routes/workspace.py` (`show_workspace`'s own toolbox
 selection `{% if %}` chain gained a new branch), `templates/case_workspace.html`
@@ -118,7 +124,7 @@ spin_prototype.js` (new).
 | A | `test_spin_00a_container_prototype.py` | 20 | 17-18s | Spin's own logic: launcher, all 3 variants render, nonmutation, authorization |
 | A+B | + `test_go_right_panel_01.py`, `test_p40e2_toolbox_and_removal.py`, `test_p40eye1_correction_resize_canvas.py`, `test_p40eye1_scrollbar_theming.py`, `test_p40eye1_toolbox_eye_column.py`, `test_p40vw7a_ui_reference_map.py` | 174 | 60s | Proves the shared toolbox `{% if/elif %}` chain SPIN's new branch was inserted into still renders Investigation/Document/default views identically, and the UI-reference registry stayed consistent |
 | A+B+C | + `test_project_access_control.py`, `test_route_authorization_hardening.py`, `test_security_enforcement.py`, `test_csrf_protection.py`, `test_operating_environment.py`, `test_backup_restore.py`, `test_flask_migrate_baseline.py`, `test_market_critical_golden_path.py`, `test_global_search_and_header.py` | **317** | **140s (2m20s)** | See below — this is what actually caught the real regression |
-| E (full) | everything | 3,594 | 2,615-4,662s (43-78 min, two measured runs) | Authoritative gate |
+| E (full, historical collection) | everything | 3,594 | 2,615-4,662s (43-78 min, two measured runs) | Authoritative gate at that time |
 
 **What Lane C actually caught, for real, during this same session:** implementing
 SPIN-00A's new CSS, I used `--font-mono` (reserved for exactly 3 technical-
@@ -141,10 +147,10 @@ harness, foundation batches, every other stage-tagged UI file, etc.) have no
 plausible dependency on anything SPIN-00A's commit touched — none of them
 render the Toolbox's no-selection branch, call `show_workspace`, or assert
 `--font-mono` counts. Lane D/E were correctly deferred to the pre-commit/
-pre-deploy gate, which is exactly what happened (this session ran the full
+pre-deploy gate, which is exactly what happened (the historical session ran the full
 3,594-test suite once before committing `f465fcd`, and it passed).
 
-## Measured proof — Worked Example 2: Requirements (a substantially different feature)
+## Historical measured proof — Worked Example 2: Requirements (a substantially different feature)
 
 Requirements is a deeper application/data feature than Spin: `routes/
 workspace.py`'s `promote_requirement_item_route`/`register_requirement_route`/
@@ -159,16 +165,31 @@ all.
 | A | `test_requirement_promotion.py`, `test_requirement_investigation.py`, `test_requirement_evidence_workflow.py`, `test_requirement_extraction_metadata_filter.py`, `test_requirement_revision_wiring.py` | 54 | 17-18s |
 | A+B | + `test_workflow_integration.py` (real end-to-end promotion flow), `test_ca1d_composer_spine_stage1_schema.py` (Composer surfaces Requirement-shaped findings), `test_root_i1_canonical_navigation.py` (root nav routes into Requirements), `test_supersession_authority.py` (a Requirement revision is a supersession event) | 105 | 31-32s |
 | A+B+C | + the same 9-file Critical Core set as above | **248** | **110s (1m50s)** |
-| E (full) | everything | 3,594 | 2,615-4,662s |
+| E (full, historical collection) | everything | 3,594 | 2,615-4,662s |
 
 Same shape as Spin, at roughly proportionally larger Lane A/B (Requirements has
 more real, persisted behavior to protect) — confirming the lane *architecture*
 generalizes; only the specific file lists inside Lane A/B change per feature.
 
+## Worked example — P1-A relationship-evidence supply
+
+This current relationship-evidence slice demonstrates the intended economy:
+fast tests discover defects and broad tests certify the affected repository
+surface. These are observed measurements, not timing guarantees.
+
+| Assurance step | Result |
+|---|---|
+| Targeted Lane A | 12 passed in 0.25s |
+| Composed subsystem/Lane B | 167 passed in 40.24s |
+| Lane E certification | 4,254 passed; 214 subtests; 2:44:54 |
+
+The Lane E result remains the certification gate; the shorter passes never
+replace it where repository policy requires the full suite.
+
 ## Estimated routine-feedback reduction
 
-Both worked examples: **Lane A+B+C finished in under 2.5 minutes** against a
-full-suite baseline of **43-78 minutes** measured this same session — roughly a
+Both historical worked examples: **Lane A+B+C finished in under 2.5 minutes**
+against a historical full-suite baseline of **43-78 minutes** — roughly a
 **20-30x** reduction in wall-clock feedback time for the escalation path that
 actually would have caught every regression introduced during real work this
 session (both the UI-reference-registry drift from the Gateway task and the

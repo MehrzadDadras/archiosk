@@ -72,10 +72,12 @@ introducing a parallel router.
 
 ## Testing
 
-Full suite: `./venv/Scripts/python.exe -m pytest -q` (currently 1014
-tests, ~3-4min, though duration has occasionally spiked much higher for
-reasons unrelated to any specific code change — treat pass/fail as the
-signal, not wall-clock time). There is no CI here — this is the only gate, so run it
+Full suite: `./venv/Scripts/python.exe -m pytest -q` (approximately 4,254
+tests in the current collection). Recent observed wall-clock runs include
+approximately 26:49, 43:35, 77:42, and 2:44:54; duration varies substantially
+with the environment and is not a fixed service-level expectation. Treat
+pass/fail as the assurance signal, not wall-clock time. An unusually long run
+is not automatically evidence of a code regression. There is no CI here — this is the only gate, so run it
 before committing anything that touches `routes/`, `services/`, or
 `templates/`. If a CSS-only change breaks
 `test_common_ui_elements_no_longer_reference_font_mono` or
