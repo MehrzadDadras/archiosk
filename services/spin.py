@@ -55,7 +55,7 @@ DEFAULT_TIMEOUT_SECONDS = 45.0
 
 # CLAUDE-DELTA-SPIN-01: bump on meaningful prompt/schema changes, same
 # discipline as services/project_qa.py's PROJECT_QA_PROMPT_VERSION.
-SPIN_PROMPT_VERSION = "helix-qa-01"
+SPIN_PROMPT_VERSION = "helix-qa-02"
 
 _MAX_CANDIDATE_ITEMS_IN_PROMPT = 40
 _MAX_GOVERNED_REQUIREMENTS_IN_PROMPT = 40
