@@ -209,6 +209,10 @@ class DeveloperHomeComposerTests(unittest.TestCase):
         context = {
             "status": "active",
             "intent": "Inspect the badge",
+            "template_identity": {
+                "template_id": "TPL-005",
+                "name": "Project Workspace",
+            },
             "selected_elements": [{"object_type": "application_surface", "object_id": "badge", "label": "Developer Mode badge"}],
         }
         history = [{"role": "human", "text": "How is this implemented?"}, {"role": "system", "text": "It is a session badge."}]
@@ -218,6 +222,7 @@ class DeveloperHomeComposerTests(unittest.TestCase):
         self.assertEqual(result.answer, "Model answer")
         prompt = call.call_args.kwargs["user_prompt"]
         self.assertIn("Developer Mode badge", prompt)
+        self.assertIn("TPL-005 — Project Workspace", prompt)
         self.assertIn("Inspect the badge", prompt)
         self.assertIn("How is this implemented?", prompt)
         self.assertIn("Can it be bold?", prompt)
@@ -225,6 +230,26 @@ class DeveloperHomeComposerTests(unittest.TestCase):
         self.assertIn("Product Owner-facing development collaborator", prompt)
         self.assertIn("DIY CSS/template tutorial", prompt)
         self.assertIn("explicitly want", prompt)
+
+    def test_application_grounding_is_not_persisted_as_project_source_grounding(self):
+        self._developer()
+        fake = ProjectQAResult(
+            ran=True,
+            answer="Application answer",
+            grounded_in=["Developer Mode badge implementation"],
+            provider="fake",
+            model="test",
+        )
+        with patch("routes.portal.answer_application_question", return_value=fake):
+            self.client.post("/developer-composer", data={"message": "How is this implemented?"})
+        with self.client.session_transaction() as sess:
+            system = sess["developer_home_messages"][-1]
+            self.assertEqual(system["text"], "Application answer")
+            self.assertNotIn("grounded_in", system)
+            self.assertEqual(
+                system["developer_context"]["template_identity"]["template_id"],
+                "TPL-001",
+            )
 
     def test_application_context_controls_are_outside_workbench_boundary(self):
         self._developer()

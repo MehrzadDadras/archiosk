@@ -414,8 +414,11 @@ def _developer_model_reply(text: str, context: dict | None) -> tuple[str | None,
         return result.answer, {
             "provider": result.provider,
             "model": result.model,
-            "grounded_in": result.grounded_in,
             "needs_clarification": result.needs_clarification,
+            # Existing application-context envelope only. This is deliberately
+            # not stored under ConversationMessage.grounded_in, which is the
+            # project Source-grounding field rendered by case_workspace.html.
+            "developer_context": context,
         }
     return None, {"model_unavailable": result.skipped_reason}
 

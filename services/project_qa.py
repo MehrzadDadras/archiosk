@@ -332,6 +332,12 @@ def answer_application_question(
     ]
     if developer_context:
         lines.append("\nActive Developer context (application scope):")
+        identity = developer_context.get("template_identity")
+        if isinstance(identity, dict) and identity.get("template_id"):
+            template_label = identity["template_id"]
+            if identity.get("name"):
+                template_label += f" — {identity['name']}"
+            lines.append(f"- Active governed page template: {template_label}")
         if developer_context.get("title"):
             lines.append(f"- Active CCN title: {developer_context['title']}")
         if developer_context.get("intent"):
