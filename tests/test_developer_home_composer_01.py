@@ -32,6 +32,23 @@ class DeveloperHomeComposerTests(unittest.TestCase):
         response = self.client.get("/")
         self.assertEqual(response.status_code, 200)
         self.assertNotIn(b'data-ui-ref="developer.home.composer"', response.data)
+        self.assertIn(b'data-ui-ref="index.orientation.form"', response.data)
+
+    def test_developer_home_has_one_composer_and_no_gateway_ask_form(self):
+        self._developer()
+        response = self.client.get("/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data.count(b'data-ui-ref="developer.home.composer.form"'), 1)
+        self.assertNotIn(b'data-ui-ref="index.orientation.form"', response.data)
+        self.assertNotIn(b'Open a project, or ask what you can do here', response.data)
+        self.assertIn(b'data-ui-ref="developer.home.composer"', response.data)
+
+    def test_developer_home_project_navigation_remains_available_as_links(self):
+        self._developer()
+        response = self.client.get("/")
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn(b'data-ui-ref="index.orientation.form"', response.data)
+        self.assertIn(b'data-ui-ref="developer.home.composer.form"', response.data)
 
     def test_home_ccn_is_application_scoped_and_lifecycle_works(self):
         self._developer()

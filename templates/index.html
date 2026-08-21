@@ -132,7 +132,7 @@
     {% endcall %}
     {% endif %}
 
-    {# ---------------- Composer/orientation - every state above (CLAUDE-
+    {# ---------------- Gateway orientation - normal Home only (CLAUDE-
        POST-SIGNIN-GATEWAY-SIMPLIFICATION-01, Disposition B: "port only
        the Gateway behavior still required in the consolidated
        no-project entry state, including Composer/orientation
@@ -142,6 +142,7 @@
        resolved user's matches stay inside their own governed side
        (routes/portal.py's gateway_orientation() docstring covers the
        isolation reasoning). #}
+    {% if not developer_mode %}
     <form class="gateway-orientation-form" id="index-orientation-form" data-ui-ref="index.orientation.form">
         <input type="text" class="text-input" id="index-orientation-input" name="message" placeholder="Open a project, or ask what you can do here" aria-label="Ask Archiosk">
         {% if resolved_environment %}<input type="hidden" name="environment" value="{{ resolved_environment }}">{% endif %}
@@ -151,6 +152,7 @@
         <span class="voice-input-status" id="index-orientation-voice-status" data-ui-ref="index.orientation.voice.status" aria-live="polite"></span>
     </form>
     <p class="gateway-orientation-reply" id="index-orientation-reply" data-ui-ref="index.orientation.reply" aria-live="polite" hidden></p>
+    {% endif %}
 
     {% if developer_mode %}
     {# Application-level Developer Mode Composer. This deliberately reuses
