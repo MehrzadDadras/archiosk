@@ -56,6 +56,7 @@ from services.developer_ccn import (
     parse_ccn_command,
 )
 from services.project_qa import answer_application_question
+from services.template_identity import identity_for_template_id
 
 portal_bp = Blueprint('portal', __name__)
 
@@ -199,7 +200,19 @@ def toggle_developer_mode():
     Operations), not an unprecedented request.referrer-based redirect.
     """
     session['developer_mode'] = not session.get('developer_mode', False)
+    if not session['developer_mode']:
+        session.pop('developer_ui_reveal', None)
     return redirect(url_for('portal.index'))
+
+
+@portal_bp.route('/developer-mode/ui-reveal', methods=['POST'])
+@admin_required
+def toggle_developer_ui_reveal():
+    """Toggle the server-backed template identity reveal for this admin session."""
+    if not session.get('developer_mode'):
+        abort(403)
+    session['developer_ui_reveal'] = not session.get('developer_ui_reveal', False)
+    return redirect(request.referrer or url_for('portal.index'))
 
 
 def _require_developer_tools():
@@ -214,15 +227,62 @@ def _require_developer_composer():
         abort(403)
 
 
+def _utc_now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _developer_home_chats() -> list[dict]:
+    """Read the existing session envelope, migrating the legacy message list."""
+    chats = session.get("developer_home_chats")
+    if not isinstance(chats, list):
+        legacy = session.get("developer_home_messages", [])
+        legacy = legacy if isinstance(legacy, list) else []
+        now = _utc_now()
+        chats = [{"id": str(uuid.uuid4()), "title": "New Developer chat", "created_at": now,
+                  "updated_at": now, "messages": legacy[-40:]}]
+        session["developer_home_chats"] = chats
+        session["developer_home_current_chat_id"] = chats[0]["id"]
+    return [chat for chat in chats if isinstance(chat, dict) and isinstance(chat.get("messages", []), list)]
+
+
+def _developer_current_chat() -> dict:
+    chats = _developer_home_chats()
+    current_id = session.get("developer_home_current_chat_id")
+    chat = next((item for item in chats if item.get("id") == current_id), None)
+    if chat is None:
+        chat = chats[0]
+        session["developer_home_current_chat_id"] = chat["id"]
+    session["developer_home_messages"] = chat.get("messages", [])[-40:]
+    return chat
+
+
 def _developer_home_messages() -> list[dict]:
-    messages = session.get("developer_home_messages", [])
-    return messages if isinstance(messages, list) else []
+    return list(_developer_current_chat().get("messages", []))
 
 
 def _record_developer_home_message(role: str, text: str, **extra) -> None:
-    messages = _developer_home_messages()
-    messages.append({"role": role, "text": text[:4000], **extra})
-    session["developer_home_messages"] = messages[-40:]
+    chats = _developer_home_chats()
+    chat = _developer_current_chat()
+    message = {"role": role, "text": text[:4000], "created_at": _utc_now(), **extra}
+    chat.setdefault("messages", []).append(message)
+    chat["messages"] = chat["messages"][-40:]
+    if role == "human" and chat.get("title") == "New Developer chat":
+        chat["title"] = text[:80] + ("…" if len(text) > 80 else "")
+    chat["updated_at"] = message["created_at"]
+    session["developer_home_chats"] = chats[-12:]
+    session["developer_home_current_chat_id"] = chat["id"]
+    session["developer_home_messages"] = chat["messages"]
+
+
+def _new_developer_chat() -> dict:
+    now = _utc_now()
+    chat = {"id": str(uuid.uuid4()), "title": "New Developer chat", "created_at": now,
+            "updated_at": now, "messages": []}
+    chats = _developer_home_chats()
+    session["developer_home_chats"] = (chats + [chat])[-12:]
+    session["developer_home_current_chat_id"] = chat["id"]
+    session["developer_home_messages"] = []
+    return chat
 
 
 def _attach_pending_application_selection(governance_log, actor: str) -> None:
@@ -421,6 +481,11 @@ def developer_home_context():
     label = (request.form.get("label") or object_id).strip()[:200]
     if not object_id:
         abort(400)
+    if object_type == "template_surface":
+        identity = identity_for_template_id(object_id)
+        if not identity or label != f"{identity['template_id']} · {identity['name']}":
+            abort(400)
+        label = f"{identity['template_id']} · {identity['name']}"
     selection = {"object_type": object_type, "object_id": object_id, "label": label, "project_id": None}
     session["developer_application_selection"] = selection
     if isinstance(session.get("developer_ccn"), dict) and session["developer_ccn"].get("status") == "active":
@@ -429,6 +494,40 @@ def developer_home_context():
             project_id=None, governance_log=get_governance_log(current_app),
             actor=session.get("username") or "admin",
         )
+    return redirect(url_for("portal.index"))
+
+
+@portal_bp.route('/developer-composer/new-chat', methods=['POST'])
+@login_required
+def developer_home_new_chat():
+    _require_developer_composer()
+    _new_developer_chat()
+    return redirect(url_for("portal.index"))
+
+
+@portal_bp.route('/developer-composer/delete-chat', methods=['POST'])
+@login_required
+def developer_home_delete_chat():
+    _require_developer_composer()
+    if request.form.get("confirmation") != "DELETE CHAT":
+        abort(400)
+    chats = _developer_home_chats()
+    chat_id = request.form.get("chat_id") or session.get("developer_home_current_chat_id")
+    target = next((item for item in chats if item.get("id") == chat_id), None)
+    if target is None:
+        abort(404)
+    remaining = [item for item in chats if item.get("id") != chat_id]
+    if not remaining:
+        now = _utc_now()
+        remaining = [{"id": str(uuid.uuid4()), "title": "New Developer chat", "created_at": now,
+                      "updated_at": now, "messages": []}]
+    session["developer_home_chats"] = remaining
+    session["developer_home_current_chat_id"] = remaining[-1]["id"]
+    session["developer_home_messages"] = remaining[-1].get("messages", [])
+    get_governance_log(current_app).append(
+        project_id=None, event_type="developer_chat_deleted", actor=session.get("username") or "admin",
+        role=session.get("role") or "admin", payload={"conversation_id": chat_id, "outcome": "deleted"},
+    )
     return redirect(url_for("portal.index"))
 
 
@@ -603,6 +702,8 @@ def index():
         operating_environment_subtitles=OPERATING_ENVIRONMENT_SUBTITLES,
         recent_projects=recent_projects,
         developer_home_messages=_developer_home_messages() if is_admin() and session.get("developer_mode") else [],
+        developer_home_chats=_developer_home_chats() if is_admin() and session.get("developer_mode") else [],
+        developer_home_current_chat_id=session.get("developer_home_current_chat_id") if is_admin() and session.get("developer_mode") else None,
         developer_home_ccn_context=(_developer_home_context()
                                     if is_admin() and session.get("developer_mode") else None),
         developer_application_selection=(session.get("developer_application_selection")

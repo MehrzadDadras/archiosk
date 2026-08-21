@@ -2266,9 +2266,13 @@ main:has(.document-viewer-canvas-container) {
 
 /* Application-level Developer Mode Composer: the same restrained service
    counter language as the project Composer, limited to the home page. */
-.developer-home-composer { margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid var(--line, rgba(255,255,255,.14)); }
+.developer-home-composer { margin-top: 1.25rem; padding: 1rem; border: 1px solid var(--line, rgba(255,255,255,.14)); border-radius: .35rem; }
 .developer-home-composer-heading { display: flex; align-items: center; gap: .65rem; flex-wrap: wrap; }
 .developer-home-composer-heading h2 { margin: 0; font-size: 1rem; }
+.developer-template-identity, .developer-template-identity-inline { color: var(--text-metadata); font-size: .76rem; }
+.developer-template-identity-form, .developer-new-chat-form { margin: 0; }
+.developer-template-identity-button { border: 0; background: transparent; color: inherit; font: inherit; padding: 0; cursor: pointer; }
+.developer-template-identity-button:hover, .developer-template-identity-button:focus-visible { text-decoration: underline; }
 .developer-home-composer-form { display: flex; align-items: center; gap: .5rem; margin-top: .65rem; flex-wrap: wrap; }
 .developer-home-composer-form .text-input { flex: 1; min-width: 220px; max-width: none; }
 .developer-home-selection, .developer-home-messages { margin: .5rem 0; }
@@ -2276,6 +2280,12 @@ main:has(.document-viewer-canvas-container) {
 .developer-home-message-role { display: inline-block; min-width: 2.25rem; font-weight: 600; }
 .developer-home-context-actions { display: flex; gap: .5rem; flex-wrap: wrap; margin-top: .65rem; }
 .developer-home-context-actions form { margin: 0; }
+.developer-chat-history { margin: .65rem 0; border-top: 1px solid var(--line, rgba(255,255,255,.1)); }
+.developer-chat-history-row { border-bottom: 1px solid var(--line, rgba(255,255,255,.08)); }
+.developer-chat-history-row summary { cursor: pointer; padding: .35rem 0; color: var(--text-secondary); list-style: none; }
+.developer-chat-history-row summary::-webkit-details-marker { display: none; }
+.developer-delete-chat-form { display: flex; align-items: end; gap: .5rem; flex-wrap: wrap; padding: .35rem 0 .55rem; font-size: .78rem; color: var(--text-secondary); }
+.developer-delete-chat-form label { display: flex; flex-direction: column; gap: .2rem; }
 .gateway-orientation-reply {
     margin: -0.6rem 0 1.2rem;
     font-family: var(--font-body);

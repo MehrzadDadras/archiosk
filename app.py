@@ -557,6 +557,7 @@ def _register_context_processors(app: Flask) -> None:
         from services.auth import is_admin, is_authenticated
         from services.case_workspace import CaseWorkspaceStore
         from services.verification_access import is_verification_session
+        from services.template_identity import template_identity_for_endpoint
 
         # CLAUDE-P40-D1: /login, /forgot-password, /reset-password render
         # templates/auth_shell.html, a standalone shell that never
@@ -612,6 +613,10 @@ def _register_context_processors(app: Flask) -> None:
                 if len(environments) == 1:
                     menu_open_project_environment = next(iter(environments))
 
+        template_identity = template_identity_for_endpoint(request.endpoint)
+        ui_reveal = bool(session.get("developer_ui_reveal")) and bool(
+            is_admin() and session.get("developer_mode") and authenticated
+        )
         return {
             "current_year": datetime.now(timezone.utc).year,
             "static_version": app.config["STATIC_VERSION"],
@@ -638,6 +643,8 @@ def _register_context_processors(app: Flask) -> None:
             # standalone-auth-page guard as is_admin above - no menu bar
             # exists there for a badge to appear in anyway.
             "developer_mode": is_admin() and not on_standalone_auth_page and bool(session.get("developer_mode")),
+            "developer_ui_reveal": ui_reveal,
+            "template_identity": template_identity if ui_reveal else None,
             # CLAUDE-LIVE-VERIFICATION-ACCOUNT-MECHANISM-01: a persistent,
             # unmistakable indicator whenever the CURRENT session is the
             # dedicated ephemeral verification identity (services.

@@ -158,13 +158,37 @@
     {# Application-level Developer Mode Composer. This deliberately reuses
        the same native /CCN service as the workspace Composer, but carries no
        project_id while the user is on Home. #}
-    <section class="developer-home-composer" data-ui-ref="developer.home.composer" aria-label="Developer Mode Composer">
+    <section class="developer-home-composer developer-chat-workbench" data-ui-ref="developer.home.composer" data-developer-workbench aria-label="Developer Mode Composer">
         <div class="developer-home-composer-heading">
             <h2>Developer Composer</h2>
+            {% if developer_ui_reveal and template_identity %}<span class="developer-template-identity-inline">{{ template_identity.template_id }} · {{ template_identity.name }}</span>{% endif %}
+            <form method="post" action="{{ url_for('portal.developer_home_new_chat') }}" class="developer-new-chat-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn btn-ghost btn-small">New Chat</button>
+            </form>
             {% if developer_home_ccn_context and developer_home_ccn_context.status == 'active' %}
             <span class="developer-ccn-indicator" data-ui-ref="developer.ccn.active">CCN: {{ developer_home_ccn_context.title }}</span>
             {% endif %}
         </div>
+        {% if developer_home_chats %}
+        <div class="developer-chat-history" data-ui-ref="developer.chat.history" aria-label="Developer conversation history">
+            {% for chat in developer_home_chats|reverse %}
+            <details class="developer-chat-history-row" data-chat-id="{{ chat.id }}" {% if chat.id == developer_home_current_chat_id %}open{% endif %}>
+                <summary aria-label="{{ chat.title }}">{{ '⌄' if chat.id == developer_home_current_chat_id else '›' }} {{ chat.title }} · {{ chat.updated_at[:16]|replace('T', ' ') }}</summary>
+                {% if chat.id == developer_home_current_chat_id %}
+                <form method="post" action="{{ url_for('portal.developer_home_delete_chat') }}" class="developer-delete-chat-form">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="chat_id" value="{{ chat.id }}">
+                    <label>Type DELETE CHAT to remove this conversation
+                        <input type="text" name="confirmation" autocomplete="off">
+                    </label>
+                    <button type="submit" class="btn btn-ghost btn-small">Delete Chat</button>
+                </form>
+                {% endif %}
+            </details>
+            {% endfor %}
+        </div>
+        {% endif %}
         {% if developer_application_selection %}
         <p class="developer-home-selection" data-ui-ref="developer.home.selection">
             Selected: {{ developer_application_selection.label }}

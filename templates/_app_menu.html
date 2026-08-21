@@ -51,6 +51,17 @@
                    logo") since this sits OUTSIDE that menu item
                    entirely, never inside its summary/trigger. #}
                 <span class="workspace-app-mark" data-ui-ref="menu.archiosk.mark" aria-hidden="true">{{ macros.archiosk_mark(size=16) }}</span>
+                {% if developer_ui_reveal and template_identity %}
+                <span class="developer-template-identity" data-ui-ref="developer.template.identity" aria-label="{{ template_identity.template_id }} {{ template_identity.name }}">
+                    <form method="post" action="{{ url_for('portal.developer_home_context') }}" class="developer-template-identity-form">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <input type="hidden" name="object_type" value="template_surface">
+                        <input type="hidden" name="object_id" value="{{ template_identity.template_id }}">
+                        <input type="hidden" name="label" value="{{ template_identity.template_id }} · {{ template_identity.name }}">
+                        <button type="submit" class="developer-template-identity-button">{{ template_identity.template_id }} · {{ template_identity.name }}</button>
+                    </form>
+                </span>
+                {% endif %}
                 {# Section 2/3/4: the canonical GO/system working indicator -
                    three vertically-arranged dots, downward-progressing
                    opacity pulse (top -> middle -> bottom, repeating) while
@@ -145,6 +156,10 @@
                                         <button type="submit" class="workspace-menubar-item" data-ui-ref="menu.archiosk.admin.developer-mode-toggle">{% if developer_mode %}Exit Developer Mode{% else %}Enter Developer Mode{% endif %}</button>
                                     </form>
                                     {% if developer_mode %}
+                                    <form method="post" action="{{ url_for('portal.toggle_developer_ui_reveal') }}">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <button type="submit" class="workspace-menubar-item" data-ui-ref="menu.archiosk.admin.ui-reveal-toggle">{% if developer_ui_reveal %}Hide Template IDs{% else %}Reveal Template IDs{% endif %}</button>
+                                    </form>
                                     <a class="workspace-menubar-item" data-ui-ref="menu.archiosk.admin.developer-tools" href="{{ url_for('portal.developer_tools', project_id=(project_id if project_id is defined else None)) }}">Developer Tools</a>
                                     {% endif %}
                                 </div>
