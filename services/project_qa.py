@@ -287,6 +287,92 @@ class ProjectQAResult:
     findings: list[dict] = field(default_factory=list)
 
 
+def answer_application_question(
+    question: str,
+    developer_context: Optional[dict] = None,
+    recent_history: Optional[list[dict]] = None,
+    api_key: Optional[str] = None,
+    model: Optional[str] = None,
+    timeout: Optional[float] = None,
+) -> ProjectQAResult:
+    """Model-backed Developer Mode conversation at application scope.
+
+    This reuses the canonical project-Q&A result contract and shared
+    ``call_llm_json`` gateway, but deliberately carries no project evidence or
+    fabricated project_id. Application objects, CCN state, and recent Home
+    conversation are advisory context for ARCHIOSK questions only.
+    """
+    lines = [
+        "You are ARCHIOSK Go in authenticated Developer Mode, helping inspect "
+        "the ARCHIOSK application itself. Answer the user's question directly "
+        "when the supplied application context supports it. Never claim to "
+        "have edited code, deleted data, or executed a change. Selection and "
+        "CCN context are advisory and never authorize mutation.",
+        "- If implementation evidence is not supplied, say what is established "
+        "and what additional application surface or trace would resolve it.",
+        "- Preserve conversational continuity from the recent history below; "
+        "previous replies are context, not proof.",
+        "- Return only the requested JSON object.",
+        "\nEstablished ARCHIOSK implementation context (repository-grounded):",
+        "- Developer Mode is an authenticated admin session state; its toggle is handled by routes/portal.py and its visible badge is rendered in templates/_app_menu.html.",
+        "- The Developer Mode badge uses the .workspace-developer-mode-badge style in static/css/main.css.",
+        "- The application-level Developer Composer posts to portal.developer_home_composer; the workspace Composer posts through routes/workspace.py::_run_conversation_turn.",
+        "- Native CCN state is handled by services/developer_ccn.py and is separate from ordinary conversational reasoning.",
+        "- Project conversation messages are persisted in the CaseWorkspace project workspace; Developer Home messages are session-scoped unless a governed persistence path is explicitly added.",
+        "- The shared model boundary is services/llm_gateway.py::call_llm_json.",
+    ]
+    if developer_context:
+        lines.append("\nActive Developer context (application scope):")
+        if developer_context.get("title"):
+            lines.append(f"- Active CCN title: {developer_context['title']}")
+        if developer_context.get("intent"):
+            lines.append(f"- Active CCN intent: {developer_context['intent']}")
+        if developer_context.get("status"):
+            lines.append(f"- CCN status: {developer_context['status']}")
+        for item in developer_context.get("selected_elements", [])[-8:]:
+            lines.append(
+                f"- Selected application object: {item.get('label', '')} "
+                f"({item.get('object_type', '')}/{item.get('object_id', '')})"
+            )
+    bounded_history = build_bounded_history(recent_history) if recent_history else []
+    if bounded_history:
+        lines.append("\nRecent application-level Developer conversation (continuity only):")
+        for item in bounded_history:
+            speaker = "User" if item.get("role") == "human" else "ARCHIOSK Go"
+            lines.append(f"- {speaker}: {item.get('text', '')}")
+    lines.append(f"\nUser question: {question}")
+    lines.append(
+        '\nRespond ONLY with JSON: {"answer":"<direct answer>", '
+        '"grounded_in":["<context used>"], '
+        '"needs_clarification":<true or false>}'
+    )
+    prompt = "\n".join(lines)
+    base_timeout = resolve_timeout_from_env(timeout, DEFAULT_TIMEOUT_SECONDS)
+    timeout = scale_timeout_for_prompt_size(
+        base_timeout, prompt, base_chars_before_scaling=4000,
+        seconds_per_extra_1000_chars=3.0, max_timeout=90.0,
+    )
+    outcome = call_llm_json(
+        user_prompt=prompt,
+        system_prompt=(
+            "You are a careful, concise ARCHIOSK Developer Mode assistant. "
+            "Do not invent repository facts or imply that a suggestion was executed."
+        ),
+        api_key=api_key, model=model, timeout=timeout, max_tokens=2000,
+        log_label="Developer application Q&A",
+    )
+    if not outcome.ran:
+        return ProjectQAResult(ran=False, skipped_reason=outcome.skipped_reason)
+    parsed = outcome.parsed or {}
+    return ProjectQAResult(
+        ran=True,
+        answer=str(parsed.get("answer", "")).strip(),
+        grounded_in=[str(item) for item in parsed.get("grounded_in", []) if str(item).strip()],
+        needs_clarification=bool(parsed.get("needs_clarification", False)),
+        provider=outcome.provider, model=outcome.model, requested_at=outcome.requested_at,
+    )
+
+
 def answer_project_question(
     question: str,
     document_filename: str,

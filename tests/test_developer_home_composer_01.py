@@ -3,6 +3,11 @@ from pathlib import Path
 import shutil
 import tempfile
 import unittest
+from unittest.mock import patch
+
+from services.llm_gateway import LLMCallOutcome
+from services.project_qa import ProjectQAResult
+from services.project_qa import answer_application_question
 
 
 class DeveloperHomeComposerTests(unittest.TestCase):
@@ -62,9 +67,11 @@ class DeveloperHomeComposerTests(unittest.TestCase):
 
     def test_ordinary_developer_question_is_answered_without_ccn(self):
         self._developer()
-        response = self.client.post(
-            "/developer-composer", data={"message": "How can we change the font for this icon: DEVELOPER MODE to make it bold?"}
-        )
+        unavailable = ProjectQAResult(ran=False, skipped_reason="test")
+        with patch("routes.portal.answer_application_question", return_value=unavailable):
+            response = self.client.post(
+                "/developer-composer", data={"message": "How can we change the font for this icon: DEVELOPER MODE to make it bold?"}
+            )
         self.assertEqual(response.status_code, 302)
         with self.client.session_transaction() as sess:
             reply = sess["developer_home_messages"][-1]["text"]
@@ -74,8 +81,10 @@ class DeveloperHomeComposerTests(unittest.TestCase):
 
     def test_ordinary_question_keeps_active_ccn_as_a_lens(self):
         self._developer()
-        self.client.post("/developer-composer", data={"message": "/CCN: Make the badge bold"})
-        self.client.post("/developer-composer", data={"message": "How is the Developer Mode badge implemented?"})
+        unavailable = ProjectQAResult(ran=False, skipped_reason="test")
+        with patch("routes.portal.answer_application_question", return_value=unavailable):
+            self.client.post("/developer-composer", data={"message": "/CCN: Make the badge bold"})
+            self.client.post("/developer-composer", data={"message": "How is the Developer Mode badge implemented?"})
         with self.client.session_transaction() as sess:
             reply = sess["developer_home_messages"][-1]["text"]
         self.assertIn("templates/_app_menu.html", reply)
@@ -89,17 +98,21 @@ class DeveloperHomeComposerTests(unittest.TestCase):
             "Why is this panel so large?": ("Which panel do you mean?", "tell me which panel"),
             "How do I recolor this icon?": ("Which icon do you mean?", "describe it"),
         }
-        for question, expected in examples.items():
-            self.client.post("/developer-composer", data={"message": question})
-            with self.client.session_transaction() as sess:
-                reply = sess["developer_home_messages"][-1]["text"]
-            self.assertIn(expected[0], reply)
-            self.assertIn(expected[1], reply)
-            self.assertNotIn("Selection required", reply)
+        unavailable = ProjectQAResult(ran=False, skipped_reason="test")
+        with patch("routes.portal.answer_application_question", return_value=unavailable):
+            for question, expected in examples.items():
+                self.client.post("/developer-composer", data={"message": question})
+                with self.client.session_transaction() as sess:
+                    reply = sess["developer_home_messages"][-1]["text"]
+                self.assertIn(expected[0], reply)
+                self.assertIn(expected[1], reply)
+                self.assertNotIn("Selection required", reply)
 
     def test_normal_developer_question_has_substantive_chat_history_answer(self):
         self._developer()
-        self.client.post("/developer-composer", data={"message": "How can we delete the chat history?"})
+        unavailable = ProjectQAResult(ran=False, skipped_reason="test")
+        with patch("routes.portal.answer_application_question", return_value=unavailable):
+            self.client.post("/developer-composer", data={"message": "How can we delete the chat history?"})
         with self.client.session_transaction() as sess:
             reply = sess["developer_home_messages"][-1]["text"]
         self.assertIn("no ordinary Developer Composer action", reply)
@@ -119,6 +132,56 @@ class DeveloperHomeComposerTests(unittest.TestCase):
         self.assertIn("data-developer-composer-form", home)
         self.assertIn("<textarea", macro)
         self.assertIn("<textarea", home)
+
+    def test_ordinary_home_message_reaches_canonical_model_adapter_with_history_and_context(self):
+        self._developer()
+        self.client.post(
+            "/developer-composer/context",
+            data={"object_type": "application_surface", "object_id": "project-list", "label": "Project list"},
+        )
+        fake = ProjectQAResult(ran=True, answer="Model-backed application answer.", provider="fake", model="test")
+        with patch("routes.portal.answer_application_question", return_value=fake) as call:
+            self.client.post("/developer-composer", data={"message": "What does this do?"})
+        self.assertEqual(call.call_count, 1)
+        kwargs = call.call_args.kwargs
+        self.assertEqual(kwargs["question"], "What does this do?")
+        self.assertIsNone(kwargs.get("project_id"))
+        self.assertEqual(kwargs["developer_context"]["selected_elements"][0]["object_id"], "project-list")
+        self.assertEqual(kwargs["recent_history"], [])
+
+    def test_inline_ccn_intent_also_reaches_model_adapter(self):
+        self._developer()
+        fake = ProjectQAResult(ran=True, answer="Substantive CCN analysis.", provider="fake", model="test")
+        with patch("routes.portal.answer_application_question", return_value=fake) as call:
+            self.client.post("/developer-composer", data={"message": "/CCN: change this application surface"})
+        self.assertEqual(call.call_count, 1)
+        self.assertEqual(call.call_args.kwargs["question"], "change this application surface")
+        with self.client.session_transaction() as sess:
+            self.assertIn("Substantive CCN analysis.", sess["developer_home_messages"][-1]["text"])
+
+    def test_application_adapter_supplies_context_and_history_to_shared_model_gateway(self):
+        outcome = LLMCallOutcome(
+            ran=True,
+            parsed={"answer": "Model answer", "grounded_in": ["selected surface"], "needs_clarification": False},
+            provider="fake",
+            model="test",
+        )
+        context = {
+            "status": "active",
+            "intent": "Inspect the badge",
+            "selected_elements": [{"object_type": "application_surface", "object_id": "badge", "label": "Developer Mode badge"}],
+        }
+        history = [{"role": "human", "text": "How is this implemented?"}, {"role": "system", "text": "It is a session badge."}]
+        with patch("services.project_qa.call_llm_json", return_value=outcome) as call:
+            result = answer_application_question("Can it be bold?", context, history, api_key="test-key")
+        self.assertTrue(result.ran)
+        self.assertEqual(result.answer, "Model answer")
+        prompt = call.call_args.kwargs["user_prompt"]
+        self.assertIn("Developer Mode badge", prompt)
+        self.assertIn("Inspect the badge", prompt)
+        self.assertIn("How is this implemented?", prompt)
+        self.assertIn("Can it be bold?", prompt)
+        self.assertNotIn("project_id", prompt)
 
     def test_home_selection_attaches_application_object_without_authorizing_mutation(self):
         self._developer()

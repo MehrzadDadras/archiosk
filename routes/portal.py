@@ -53,7 +53,9 @@ from services.developer_ccn import (
     context_for_project as developer_context_for_project,
     handle_command as handle_developer_ccn_command,
     is_ccn_command,
+    parse_ccn_command,
 )
+from services.project_qa import answer_application_question
 
 portal_bp = Blueprint('portal', __name__)
 
@@ -335,6 +337,25 @@ def _developer_application_reply(text: str, context: dict | None) -> str:
     )
 
 
+def _developer_model_reply(text: str, context: dict | None) -> tuple[str | None, dict]:
+    """Run the canonical model-backed application conversation seam."""
+    result = answer_application_question(
+        question=text,
+        developer_context=context,
+        recent_history=_developer_home_messages(),
+        api_key=current_app.config.get("ANTHROPIC_API_KEY"),
+        model=current_app.config.get("ANTHROPIC_MODEL"),
+    )
+    if result.ran and result.answer:
+        return result.answer, {
+            "provider": result.provider,
+            "model": result.model,
+            "grounded_in": result.grounded_in,
+            "needs_clarification": result.needs_clarification,
+        }
+    return None, {"model_unavailable": result.skipped_reason}
+
+
 @portal_bp.route('/developer-composer', methods=['POST'])
 @login_required
 def developer_home_composer():
@@ -354,19 +375,37 @@ def developer_home_composer():
     governance_log = get_governance_log(current_app)
     actor = session.get("username") or "admin"
     if is_ccn_command(text):
+        parsed_command = parse_ccn_command(text)
         result = handle_developer_ccn_command(
             text, session=session, actor=actor, governance_log=governance_log, project_id=None,
         )
         _attach_pending_application_selection(governance_log, actor)
         reply = result["reply_text"]
+        model_metadata = {}
+        # State-only commands remain deterministic. A start command carrying
+        # an actual intent also receives a substantive model turn; the
+        # acknowledgement is not allowed to swallow the user's proposition.
+        if parsed_command and parsed_command[0] == "start" and parsed_command[1]:
+            model_reply, model_metadata = _developer_model_reply(
+                parsed_command[1], _developer_home_context(),
+            )
+            if model_reply:
+                reply = reply + "\n\n" + model_reply
+                result["action_taken"] = result["action_taken"] + ":model_answered"
+            else:
+                reply = reply + "\n\n" + _developer_application_reply(text, _developer_home_context())
         _record_developer_home_message("human", text)
-        _record_developer_home_message("system", reply, action_taken=result["action_taken"])
+        _record_developer_home_message("system", reply, action_taken=result["action_taken"], **model_metadata)
         return redirect(url_for("portal.index"))
 
     context = _developer_home_context()
-    reply = _developer_application_reply(text, context)
+    reply, model_metadata = _developer_model_reply(text, context)
+    action = "developer_application_model_answered"
+    if not reply:
+        reply = _developer_application_reply(text, context)
+        action = "developer_application_model_unavailable"
     _record_developer_home_message("human", text, developer_context=context)
-    _record_developer_home_message("system", reply, action_taken="developer_application_context")
+    _record_developer_home_message("system", reply, action_taken=action, **model_metadata)
     return redirect(url_for("portal.index"))
 
 
