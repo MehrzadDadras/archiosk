@@ -1,0 +1,34 @@
+"""Structural validation for the Canonical Implementation Order registry."""
+from pathlib import Path
+import re
+import unittest
+
+
+ROOT = Path(__file__).resolve().parents[1]
+CONTRACTS = ROOT / "governance" / "current" / "contracts"
+
+
+class CanonicalImplementationOrderTests(unittest.TestCase):
+    def test_order_has_required_sections_and_inventory_link(self):
+        text = (ROOT / "governance/current/canonical-implementation-order.md").read_text(encoding="utf-8")
+        for section in ("SITUATION", "MISSION", "EXECUTION", "SUPPORT", "COMMAND & CONTROL"):
+            self.assertIn(section, text)
+        self.assertIn("page-surface-template-inventory.md", text)
+        self.assertIn("Contract compliance check", text)
+
+    def test_registry_resolves_all_initial_contract_records(self):
+        registry = (CONTRACTS / "README.md").read_text(encoding="utf-8")
+        ids = re.findall(r"\| (CIC-[A-Z-]+) \| v1\.0 .*?\| \[Record\]\((CIC-[A-Z-]+\.md)\)", registry)
+        self.assertEqual(len(ids), 8)
+        for contract_id, filename in ids:
+            self.assertTrue((CONTRACTS / filename).exists(), contract_id)
+            text = (CONTRACTS / filename).read_text(encoding="utf-8")
+            self.assertIn(f"CONTRACT ID:** {contract_id}", text)
+            self.assertIn("VERSION:** v1.0", text)
+            self.assertIn("SUPERSEDED BY", text)
+
+    def test_no_second_contract_registry_exists(self):
+        records = list((ROOT / "governance").rglob("CIC-*.md"))
+        self.assertEqual(len(records), 8)
+        self.assertEqual((CONTRACTS / "README.md").exists(), True)
+

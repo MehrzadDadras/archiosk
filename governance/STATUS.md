@@ -16,6 +16,10 @@ A particular project's governed environment emerges from: **BEEHIVE Constitution
 
 Everything actually implemented today is a strict, uncontradicted subset of this thesis. Nothing built needs to be reworked as the remaining pieces are designed and built. See `constitutional-invariants.md` for the rules that never change, and `current/kernel-object-model.md` for what exists in code today.
 
+## Canonical implementation orders and standing contracts
+
+ARCHIOSK Codex work now uses the five-part [Canonical Implementation Order](current/canonical-implementation-order.md): **SITUATION, MISSION, EXECUTION, SUPPORT, COMMAND & CONTROL**. Its [standing contract registry](current/contracts/README.md) currently defines CIC-COMPOSER, CIC-GO-CONVERSATION, CIC-DEVELOPER-MODE, CIC-CCN, CIC-PAGE-TEMPLATE, CIC-SPIN-INTELLIGENCE, CIC-DEPLOYMENT, and CIC-REPO-SAFETY at v1.0. Orders must list applicable contract IDs/versions and report a contract-compliance result before completion. This is a documentation/process layer; it does not create a runtime prompt engine or change product UI.
+
 ---
 
 ## What's actually implemented (real, tested, running code)
