@@ -17,6 +17,7 @@ records the delta; prior orders remain interpretable against the version cited.
 | CIC-DEVELOPER-MODE | v1.0 | CURRENT | Developer Mode, application inspection, or Developer context | [Record](CIC-DEVELOPER-MODE.md) |
 | CIC-CCN | v1.0 | CURRENT | CCN parsing, context, lifecycle, or contemplated-change work | [Record](CIC-CCN.md) |
 | CIC-PAGE-TEMPLATE | v1.0 | CURRENT | Material page/surface/template or shared UI work | [Record](CIC-PAGE-TEMPLATE.md) |
+| CIC-PANEL | v1.0 | CURRENT | Page composition, panel state, or nested-template work | [Record](CIC-PANEL.md) |
 | CIC-SPIN-INTELLIGENCE | v1.0 | CURRENT | Spin evidence, prompts, model calls, findings, or provenance | [Record](CIC-SPIN-INTELLIGENCE.md) |
 | CIC-DEPLOYMENT | v1.0 | CURRENT | Any pushed build or live deployment/verification | [Record](CIC-DEPLOYMENT.md) |
 | CIC-REPO-SAFETY | v1.0 | CURRENT | Every repository change | [Record](CIC-REPO-SAFETY.md) |

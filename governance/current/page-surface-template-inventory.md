@@ -84,3 +84,12 @@ CHANGE`.
   conversation.
 - Direct visual selection/highlighting is not yet a common primitive.
 - No full component framework or site-wide page rewrite is authorized.
+
+## Page-by-panel extension
+
+This inventory's page identities are decomposed into governed layouts, panels,
+and nested templates in [`panel-template-system.md`](panel-template-system.md).
+That companion record is the authoritative composition extension and records a
+`LAY-*` plus panel count/configuration for every TPL entry, the `NPT-*` catalogue,
+panel behavior, reuse lineage, and the current 18-page audit. It deliberately
+does not duplicate page prose or authorize a broad UI refactor.
