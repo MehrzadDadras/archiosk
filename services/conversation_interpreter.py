@@ -510,7 +510,6 @@ def interpret_message(
     positive_application_evidence = (
         "archiosk" in scope_result.application_signals
         or "composer" in scope_result.application_signals
-        or valid_template_selection
     )
     if (
         developer_mode_active

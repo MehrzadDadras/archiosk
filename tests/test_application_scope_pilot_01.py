@@ -112,11 +112,27 @@ class ApplicationScopePilotTests(unittest.TestCase):
         app_call.assert_not_called()
         self.assertNotEqual(result.action_taken, "application_scope_answered")
 
-    def test_validated_template_surface_selection_can_supply_positive_evidence(self):
+    def test_template_surface_selection_alone_cannot_divert_construction_text(self):
+        with patch("services.conversation_interpreter.answer_application_question") as app_call:
+            result = self._interpret(
+                "Add a right side panel to the servery pass.",
+                developer_context=self._tpl5_context,
+                developer_mode_active=True,
+                developer_application_selection={
+                    "object_type": "template_surface",
+                    "object_id": "TPL-005",
+                    "label": "TPL-005 · Project Workspace",
+                    "project_id": None,
+                },
+            )
+        app_call.assert_not_called()
+        self.assertNotEqual(result.action_taken, "application_scope_answered")
+
+    def test_template_surface_selection_does_not_replace_explicit_composer_evidence(self):
         fake = ProjectQAResult(ran=True, answer="Application answer")
         with patch("services.conversation_interpreter.answer_application_question", return_value=fake) as app_call:
             result = self._interpret(
-                "How do I hide the left panel on this page?",
+                "Where is the Composer on this page?",
                 developer_context=self._tpl5_context,
                 developer_mode_active=True,
                 developer_application_selection={
