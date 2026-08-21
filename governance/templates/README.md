@@ -191,6 +191,7 @@ exactly the bureaucracy this family is meant to avoid.
 | ID | Title | Type | Version | Status | Record |
 |---|---|---|---|---|---|
 | [GOV-P-001](../records/GOV-P-001.md) | Selection is context, not authorization | Governance Principle | v1.0 | CURRENT | [Record](../records/GOV-P-001.md) |
+| [GOV-P-002](../records/GOV-P-002.md) | Work surfaces carry the work; control surfaces carry the machinery | Governance Principle | v1.0 | CURRENT | [Record](../records/GOV-P-002.md) |
 
 Add one row per record created from a template. The register is an index, never a
 replacement for the record.

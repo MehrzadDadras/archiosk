@@ -112,6 +112,33 @@ found by mechanical comparison of all nine `CIC-*` invariant fields.
   positive half as such** — that is a real verification gap, recorded here rather
   than papered over, and a `GOV-I` candidate.
 
+  > **Correction (2026-08-21, `CLAUDE-GOVERNANCE-CLOSEOUT-01`).** The sentence above
+  > is **too broad and is corrected here** rather than edited away. A test-architecture
+  > investigation found the positive half **is** already proven on the Developer Mode /
+  > application path:
+  > `tests/test_developer_home_composer_01.py::test_application_adapter_supplies_context_and_history_to_shared_model_gateway`
+  > patches the gateway and asserts the selected element's label appears in the actual
+  > `user_prompt` — selection genuinely reaching the model, not merely being stored.
+  > That test is **not named in either citing contract's `REFERENCE TESTS`**, so the
+  > coverage existed but was not discoverable from the contracts; that is a citation
+  > gap, now recorded.
+  >
+  > **The narrowed, still-open gap:** no equivalent assertion exists on the
+  > **project-workspace** selection path. `tests/test_ca1b_persistent_context.py`'s
+  > nineteen tests cover persistence, project scoping, indicator display and
+  > cross-project rejection — none asserts that a selected Requirement or Finding
+  > reaches the model prompt as reasoning context.
+  >
+  > **Deliberately unresolved:** whether workspace selection reaches the prompt at all
+  > today was **not** established by that pass. This matters, and is why no test was
+  > added: if the behaviour exists, a test would prove it (permitted); if it does not,
+  > the same test would prescribe new behaviour (not permitted in a governance pass).
+  > Establishing which is the first step of any future verification work.
+  >
+  > Recommended verification point, when authorized: a single assertion at the
+  > workspace model seam, mirroring the Developer Mode test above, in
+  > `tests/test_ca1b_persistent_context.py`. No new harness required.
+
 ## Dependencies
 
 - **RELATED GOVERNANCE:** `constitutional-invariants.md` #2 (machine inference never

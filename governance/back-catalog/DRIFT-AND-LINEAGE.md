@@ -102,6 +102,17 @@ conversation-lifecycle contract to restate this is its own invariant list.
 **Recommended.** `GOV-P` candidate, P1. Pre-empt the drift rather than record it
 after the fact.
 
+> **Outcome (2026-08-21, `CLAUDE-GOVERNANCE-CLOSEOUT-01`).** Resolved by
+> [`GOV-P-002`](../records/GOV-P-002.md) v1.0 — but the investigation **narrowed this
+> cluster's own finding**. The *lifecycle* half DC-04 flagged (closing ≠ deleting,
+> menus as restoration path) turned out to be well covered and consistent across
+> `CIC-PANEL` v1.0 **and** `current/panel-template-system.md`'s "Panel behavior
+> principles" — single-sourced, but not drifted and not missing. The genuinely
+> unstated half was **allocation**: nothing prevented a menu or configuration surface
+> from accumulating substantive work, and `CIC-PANEL`'s own `APPLIES WHEN` clause
+> would not have reached such a change. GOV-P-002 covers allocation only and amends
+> neither existing record.
+
 ---
 
 ## DC-05 · Machine inference never silently becomes authority — **healthy layering, not drift**

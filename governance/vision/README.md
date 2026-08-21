@@ -53,12 +53,14 @@ An analogy without stated limits is a rule nobody voted for.
 | ID | Title | Type | Status | Record |
 |---|---|---|---|---|
 | VIS-001 | ARCHIOSK is the kiosk | Product Vision | CURRENT | [Record](VIS-001.md) |
+| VIS-002 | Tools that make tools | Product Vision | CURRENT | [Record](VIS-002.md) |
 | ANA-001 | Composer as service counter, GO as the machinery behind it | Analogy | CURRENT | [Record](ANA-001.md) |
 
-Both were filed as **template validation examples only**, drawn entirely from an
-existing current governance record (`current/developer-mode-ccn.md`). No provenance
-was invented for either. Everything else remains a candidate — see
-[`CANDIDATE-REGISTER.md`](CANDIDATE-REGISTER.md).
+VIS-001 and ANA-001 were filed as **template validation examples**, drawn entirely
+from an existing current governance record (`current/developer-mode-ccn.md`).
+VIS-002 was filed on explicit Product Owner decision. No provenance was invented for
+any of them. Everything else remains a candidate, or a recorded decision **not** to
+file — see [`CANDIDATE-REGISTER.md`](CANDIDATE-REGISTER.md).
 
 ---
 

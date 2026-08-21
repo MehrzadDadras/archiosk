@@ -29,7 +29,7 @@ settled, correctly filed, and cost nothing where they sit.
 | ID | Item | Why | Proposed action |
 |---|---|---|---|
 | MQ-P1-01 | **DC-03** — model-backed/canonical-path stated three ways in three contracts | Nothing unguarded today, but a fourth surface needs a fourth restatement | `GOV-P` cited by `CIC-COMPOSER`, `CIC-GO-CONVERSATION`, `CIC-SPIN-INTELLIGENCE` |
-| MQ-P1-02 | **DC-04** — panel visibility ≠ data lifecycle, owned by one UI contract | Cross-cutting guarantee touching CCN, conversation and evidence lifecycles | `GOV-P` — pre-empt rather than record after the fact |
+| MQ-P1-02 | **DC-04** — panel visibility ≠ data lifecycle, owned by one UI contract | Cross-cutting guarantee touching CCN, conversation and evidence lifecycles | **DONE 2026-08-21** — [`GOV-P-002`](../records/GOV-P-002.md) v1.0, filed for the *allocation* gap after investigation found the lifecycle half already well covered. See DC-04's outcome note |
 | MQ-P1-03 | **WG-01** — Mission 02 doctrine departures have no expiry or review condition | Stands indefinitely if Mission 02 is never executed | `GOV-X-001` with a Product Owner-supplied review condition. **Invent no date** |
 | MQ-P1-04 | **LC-03** — Airlock mission chain readable only by reading 617 lines in order | Six partial supersessions recorded in prose, never as lineage | One `GOV-S` recording the chain. Changes nothing |
 | MQ-P1-05 | `canonical-implementation-order.md` has no `APPLICABLE GOVERNANCE` line | `GOV-*` records cannot be cited by orders until it does | One paragraph + one line in the short-form example |
@@ -81,7 +81,7 @@ first candidates now that the full corpus is mapped.
 
 | Proposed | Verdict | Reasoning |
 |---|---|---|
-| **`GOV-P-001` — selection is context, not authorization** | ✅ **Confirmed, still first** | The only *confirmed* drift between two equal-authority current contracts. DC-03 and DC-04 are real but not yet divergent |
+| **`GOV-P-001` — selection is context, not authorization** | ✅ **FILED 2026-08-20** | The only *confirmed* drift between two equal-authority current contracts. See the record's own dated verification correction — the positive half proved better covered than first reported, on the Developer Mode path only |
 | **`GOV-I-001` — Teacher/Oracle blindness** | ✅ **Confirmed, and stronger than assumed** | The audit found the actual oracle record (`CODEX-PSD-TEACHER-ORACLE-02`), which is more substantial than the contract invariant that named it — frozen basis, hash, explicit never-ingest rule — and confirms the missing pass/fail and enforcement |
 | **`GOV-X-001` — Mission 02 departure/waiver** | ⚠️ **Confirmed with a caveat** | Right target, but it **cannot be filed without a Product Owner decision**: the missing element is an expiry/review condition, and this audit may not invent one. File it as a Product-Owner-input item, not an agent-authored record |
 

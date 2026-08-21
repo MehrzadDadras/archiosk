@@ -2,9 +2,11 @@
 
 Status: candidate map, version 1.0 · Index: [`README.md`](README.md)
 
-**Nothing here is filed except the two validation examples.** This register reports
-repository evidence and recommends. **The Product Owner decides which candidates
-become records.**
+This register reports repository evidence and recommends; **the Product Owner decides
+which candidates become records.** All ten candidates below were dispositioned on
+2026-08-21 — see **Product Owner dispositions** at the foot of this file. Two were
+filed, one was already covered, and the rest were deliberately **not** filed. The
+evidence sections are unchanged.
 
 No corpus-wide sweep for colourful phrasing was performed, and none should be. Each
 candidate below was investigated because the mission named it. Where the repository
@@ -79,7 +81,46 @@ fill a template.
 
 ---
 
-## Product Owner decisions required
+## Product Owner dispositions — DECIDED 2026-08-21
+
+Recorded under `CLAUDE-GOVERNANCE-CLOSEOUT-01`. **A decision not to govern something
+does not itself elevate that concept into governance.** These rows are audit history:
+they record what was considered, what evidence existed, what was decided and why.
+They confer no authority on any concept, including the ones marked NOT FILED.
+
+| # | Candidate | Product Owner disposition | Where the outcome lives |
+|---|---|---|---|
+| C-01 | ARCHIOSK as the kiosk | **FILED** — [`VIS-001`](VIS-001.md) | `governance/vision/` |
+| C-02 | Composer as the service counter | **FILED** — [`ANA-001`](ANA-001.md) | `governance/vision/` |
+| C-03 | GO as the professional / intelligence machinery | **NOT FILED — ALREADY COVERED** by ANA-001's mapping. A separate record would duplicate | this register |
+| C-04 | Tools that make tools | **FILED** — [`VIS-002`](VIS-002.md), with the unbuilt generation workflow stated explicitly | `governance/vision/` |
+| C-05 | Minecraft-like composability | **NOT FILED — INSUFFICIENT GOVERNED PROVENANCE.** No corpus evidence; a conversational comparison rather than a durable governed concept. **No provenance manufactured.** If a later search discovers historical references, they are to be preserved, not deleted | this register |
+| C-06 | Military order / canonical order | **NO ANA REQUIRED AT PRESENT — FORMAL STRUCTURE ALREADY GOVERNS.** The useful structure is formalized in `current/canonical-implementation-order.md`. Existing explanatory references preserved; formal governance is not duplicated by wrapping it in analogy | this register |
+| C-07 | Beehive / organize without destroying | **NOT FILED — TERM COLLISION.** `BEEHIVE` is a formal kernel/system name. An explanatory analogy under the same term would blur formal architecture identity, explanatory metaphor and governance authority. Existing beehive language stays where present. Any future analogy must use a **distinct title** and must not redefine the formal BEEHIVE architecture | this register |
+| C-08 | Panels show the work; menus hold the machinery | **PRINCIPLE FILED, ANALOGY NOT FILED** — [`GOV-P-002`](../records/GOV-P-002.md) v1.0 governs the durable principle. **No ANA record filed**; the slogan is not governed merely for being memorable | `governance/records/`, DC-04 outcome note |
+| C-09 | Airlock / Vestibule | **NOT AN ANALOGY — FORMAL TERM.** Not demoted | this register |
+| C-10 | CCN / CN / SI | **DEFER ANA UNTIL CN/SI ARE SUFFICIENTLY DEFINED.** CCN stays formal/implemented where governed; CN and SI stay named-but-unbuilt. Analogy must not imply architectural maturity they do not possess | this register |
+
+**Net effect of six decisions: two records filed, four deliberately not filed.**
+Four of the ten candidates were declined outright, one was declined as already
+covered, and one was split so the principle was filed without the slogan. The
+evidence sections above are unchanged and remain the record of what was found.
+
+### What changed in the corpus as a result
+
+- **Filed:** `VIS-002` (C-04) and `GOV-P-002` (C-08's principle half).
+- **Not filed, recorded here only:** C-03, C-05, C-06, C-07, C-09, C-10.
+- **Nothing deleted or reclassified.** No historical reference to any declined
+  concept was removed, and no prior governance was marked obsolete.
+
+---
+
+## Superseded question list
+
+The questions below were the open items **before** the 2026-08-21 dispositions. They
+are retained for lineage; all six are now answered by the table above.
+
+
 
 | # | Question |
 |---|---|
