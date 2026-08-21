@@ -218,6 +218,9 @@
             <span class="voice-input-status" id="developer-home-composer-voice-status" data-ui-ref="developer.home.composer.voice.status" aria-live="polite"></span>
             <button type="submit" class="btn btn-ghost" data-ui-ref="developer.home.composer.send">Send</button>
         </form>
+    </section>
+    <div class="developer-application-context" data-ui-ref="developer.home.application-context" aria-label="Application context controls">
+        <p class="pane-note">Application context</p>
         <div class="developer-home-context-actions" data-ui-ref="developer.home.context-actions">
             <form method="post" action="{{ url_for('portal.developer_home_context') }}">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -234,7 +237,7 @@
                 <button type="submit" class="btn btn-ghost btn-small">Use project/open area as context</button>
             </form>
         </div>
-    </section>
+    </div>
     {% endif %}
 </section>
 {# base.html itself never loads voice_input.js (only case_workspace.html/

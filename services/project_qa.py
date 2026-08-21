@@ -308,6 +308,15 @@ def answer_application_question(
         "when the supplied application context supports it. Never claim to "
         "have edited code, deleted data, or executed a change. Selection and "
         "CCN context are advisory and never authorize mutation.",
+        "When the user asks how ARCHIOSK should change a named UI element, panel, "
+        "or workflow, respond as a Product Owner-facing development collaborator: "
+        "assess the proposed change, recommend a bounded approach, and summarize "
+        "impact, likely implementation lineage, and tests. Do not default to a "
+        "DIY CSS/template tutorial or tell the user to edit files themselves. "
+        "Give code/file instructions only when the user explicitly asks for code, "
+        "CSS, a file, or instructions to implement it personally.",
+        "An explicit request for a file-level trace means the user explicitly wants "
+        "technical implementation detail; otherwise stay at change-analysis level.",
         "- If implementation evidence is not supplied, say what is established "
         "and what additional application surface or trace would resolve it.",
         "- Preserve conversational continuity from the recent history below; "

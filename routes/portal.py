@@ -344,19 +344,30 @@ def _developer_application_reply(text: str, context: dict | None) -> str:
             }
             return f"Which {kind} do you mean? You can {options[kind]}." + lens
 
-    if "developer mode" in lowered and ("badge" in lowered or "icon" in lowered or "font" in lowered or "bold" in lowered):
-        return (
-            "The Developer Mode badge is rendered by `templates/_app_menu.html` and styled by "
-            "`.workspace-developer-mode-badge` in `static/css/main.css`. To make its text bold, "
-            "the bounded CSS change would be `font-weight: 700`; this Composer response is only "
-            "an explanation and does not apply the change."
-            + lens
-        )
-    if "where" in lowered and ("implement" in lowered or "code" in lowered or "control" in lowered):
+    explicit_technical_request = any(phrase in lowered for phrase in (
+        "show me the css", "show me css", "which file", "what file", "how would i code",
+        "code this myself", "edit the css", "edit the template", "implementation instructions",
+    ))
+    if explicit_technical_request or ("where" in lowered and ("implement" in lowered or "code" in lowered or "control" in lowered)) or ("how" in lowered and "implemented" in lowered):
         return (
             (f"The selected context is {labels}. " if labels else "No application object is selected. ")
-            + "Select the specific control or surface for a precise implementation trace; the "
-            "available home-level context alone does not establish a deeper lineage."
+            + "I can provide a repository-grounded implementation trace when you explicitly want "
+            "the code or file-level path. The current application context does not authorize any "
+            "edit."
+            + lens
+        )
+    change_intent = any(word in lowered for word in (
+        "make", "change", "highlight", "bold", "narrow", "remove", "move", "recolor",
+        "resize", "improve", "add", "emphasize", "restyle",
+    ))
+    if change_intent:
+        target = labels or "the named application element"
+        return (
+            f"Yes. {target.capitalize()} is a reasonable candidate for a bounded change. "
+            "I would preserve the existing component and apply the smallest change that "
+            "achieves the requested outcome, then verify affected surfaces and focused tests. "
+            "This is a recommendation only; conversation and CCN context do not authorize "
+            "implementation."
             + lens
         )
     if ("chat history" in lowered or "conversation history" in lowered) and ("delete" in lowered or "remove" in lowered):

@@ -103,9 +103,10 @@ class DeveloperHomeComposerTests(unittest.TestCase):
         self.assertEqual(response.status_code, 302)
         with self.client.session_transaction() as sess:
             reply = sess["developer_home_messages"][-1]["text"]
-        self.assertIn("templates/_app_menu.html", reply)
-        self.assertIn("font-weight: 700", reply)
-        self.assertNotIn("Select an ARCHIOSK surface or use /CCN", reply)
+        self.assertIn("bounded change", reply)
+        self.assertIn("do not authorize", reply)
+        self.assertNotIn("font-weight: 700", reply)
+        self.assertNotIn("edit the CSS", reply)
 
     def test_ordinary_question_keeps_active_ccn_as_a_lens(self):
         self._developer()
@@ -115,8 +116,19 @@ class DeveloperHomeComposerTests(unittest.TestCase):
             self.client.post("/developer-composer", data={"message": "How is the Developer Mode badge implemented?"})
         with self.client.session_transaction() as sess:
             reply = sess["developer_home_messages"][-1]["text"]
-        self.assertIn("templates/_app_menu.html", reply)
+        self.assertIn("implementation trace", reply)
         self.assertIn("active CCN", reply)
+
+    def test_explicit_code_request_keeps_technical_trace_posture(self):
+        self._developer()
+        unavailable = ProjectQAResult(ran=False, skipped_reason="test")
+        with patch("routes.portal.answer_application_question", return_value=unavailable):
+            self.client.post("/developer-composer", data={"message": "Show me the CSS for this badge"})
+        with self.client.session_transaction() as sess:
+            reply = sess["developer_home_messages"][-1]["text"]
+        self.assertIn("implementation trace", reply)
+        self.assertIn("explicitly want", reply)
+        self.assertIn("does not authorize", reply)
 
     def test_ambiguous_application_objects_get_natural_context_options(self):
         self._developer()
@@ -210,6 +222,20 @@ class DeveloperHomeComposerTests(unittest.TestCase):
         self.assertIn("How is this implemented?", prompt)
         self.assertIn("Can it be bold?", prompt)
         self.assertNotIn("project_id", prompt)
+        self.assertIn("Product Owner-facing development collaborator", prompt)
+        self.assertIn("DIY CSS/template tutorial", prompt)
+        self.assertIn("explicitly want", prompt)
+
+    def test_application_context_controls_are_outside_workbench_boundary(self):
+        self._developer()
+        html = self.client.get("/").data.decode("utf-8")
+        start = html.index('data-developer-workbench')
+        end = html.index('</section>', start)
+        workbench = html[start:end]
+        self.assertIn('developer.home.composer.form', workbench)
+        self.assertIn('developer.home.composer.voice', workbench)
+        self.assertNotIn('developer.home.context-actions', workbench)
+        self.assertNotIn('Use Project list as context', workbench)
 
     def test_home_selection_attaches_application_object_without_authorizing_mutation(self):
         self._developer()
