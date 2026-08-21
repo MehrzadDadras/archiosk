@@ -16,13 +16,23 @@ QUESTION_SCOPE_PROJECT = "PROJECT"
 QUESTION_SCOPE_MIXED = "MIXED"
 QUESTION_SCOPE_UNKNOWN = "UNKNOWN"
 
+APPLICATION_EVIDENCE_NONE = "NONE"
+APPLICATION_EVIDENCE_AMBIGUOUS = "AMBIGUOUS"
+APPLICATION_EVIDENCE_AFFIRMATIVE = "AFFIRMATIVE"
+
 # These are affirmative application terms. Ambiguous construction words such
 # as panel, screen, layout, page, document, and source are intentionally not
 # standalone application signals.
 _APPLICATION_TERMS = (
-    "archiosk", "application", "app", "ui", "user interface",
-    "developer mode", "template", "sidebar", "workspace", "composer",
-    "button", "menu", "icon", "css", "interface",
+    "archiosk", "ui", "user interface", "developer mode", "sidebar",
+    "composer", "css",
+)
+
+# These terms occur in both application and construction language. They only
+# become application evidence when corroborated by an unambiguous UI pattern.
+_CORROBORATION_APPLICATION_TERMS = (
+    "application", "template", "workspace", "interface", "menu", "button",
+    "icon",
 )
 
 # Project vocabulary is represented as audited singular/plural variants. This
@@ -50,7 +60,7 @@ _APPLICATION_PATTERNS = (
     (
         "ui-action",
         re.compile(
-            r"\b(?:create|open|close|delete|hide|show|remove|add|resize|"
+            r"\b(?:create|close|delete|hide|remove|add|resize|"
             r"move|restore|collapse|expand)\b.{0,60}\b(?:panel|sidebar|"
             r"menu|button|composer|workspace|icon)\b"
         ),
@@ -65,6 +75,27 @@ _APPLICATION_PATTERNS = (
             r"\b(?:put|place|move|display|show)\b.{0,60}\b(?:panel|sidebar|workspace)\b"
         ),
     ),
+    (
+        "ui-referent",
+        re.compile(r"\bthis\s+(?:button|menu|icon|sidebar|composer)\b"),
+    ),
+)
+
+_AMBIGUOUS_UI_MARKERS = (
+    "note", "schedule", "detail", "locations", "layout", "general notes",
+)
+
+# Built-work vocabulary is a negative-only safety veto. It is intentionally
+# not included in project signals and can never create PROJECT classification.
+_BUILT_WORK_TERMS = (
+    "electrical", "mechanical", "structural", "architectural", "civil", "hvac",
+    "fire alarm", "damper", "switchgear", "generator", "ductwork", "exhaust",
+    "pressurization", "sprinkler", "guardrail", "column", "slab", "mezzanine",
+    "atrium", "corridor", "stair", "shaft", "door", "wall", "roof", "elevation",
+    "framing", "grid line", "control room", "officer station", "building",
+    "occupancy", "egress", "schedule", "addendum", "obc", "code", "division",
+    "permit", "detention", "commissioning", "sheet", "csi", "contractor", "bidder",
+    "substitution", "alternative solution", "rfi", "shop drawing",
 )
 
 
@@ -75,7 +106,9 @@ class QuestionScope:
     scope: str
     application_signals: tuple[str, ...] = ()
     project_signals: tuple[str, ...] = ()
+    built_work_signals: tuple[str, ...] = ()
     template_id: str | None = None
+    application_evidence: str = APPLICATION_EVIDENCE_NONE
 
 
 SCOPE_DIAGNOSTIC_STATUS = "ADVISORY_NON_AUTHORIZING_NOT_ROUTING"
@@ -104,6 +137,43 @@ def _application_signals(text: str) -> tuple[str, ...]:
     return tuple(dict.fromkeys(signals))
 
 
+def _built_work_signals(text: str) -> tuple[str, ...]:
+    return _signals(text, _BUILT_WORK_TERMS)
+
+
+def _application_evidence(
+    text: str,
+    application_signals: tuple[str, ...],
+    project_signals: tuple[str, ...],
+    built_work_signals: tuple[str, ...],
+) -> str:
+    """Characterize application evidence without granting routing authority."""
+    safe_terms = set(_signals(text, _APPLICATION_TERMS))
+    if safe_terms:
+        return APPLICATION_EVIDENCE_AFFIRMATIVE
+
+    # A create/delete/etc. UI action is affirmative only when construction
+    # vocabulary does not make the target plausibly a built-work object.
+    if (
+        "ui-action" in application_signals
+        and not built_work_signals
+        and not any(_contains_term(text, marker) for marker in _AMBIGUOUS_UI_MARKERS)
+    ):
+        return APPLICATION_EVIDENCE_AFFIRMATIVE
+
+    # Placement language becomes affirmative only when a project signal makes
+    # the cross-scope intent explicit. Without that corroboration it remains
+    # legitimately ambiguous (for example, "move the panel note").
+    if "ui-placement" in application_signals and project_signals and not built_work_signals:
+        return APPLICATION_EVIDENCE_AFFIRMATIVE
+
+    if application_signals or any(
+        _contains_term(text, term) for term in _CORROBORATION_APPLICATION_TERMS
+    ):
+        return APPLICATION_EVIDENCE_AMBIGUOUS
+    return APPLICATION_EVIDENCE_NONE
+
+
 def classify_question_scope(message: str, application_context: dict | None = None) -> QuestionScope:
     """Classify a message without granting routing or authority semantics.
 
@@ -114,9 +184,14 @@ def classify_question_scope(message: str, application_context: dict | None = Non
     text = " ".join((message or "").lower().split())
     application_signals = _application_signals(text)
     project_signals = _project_signals(text)
-    if application_signals and project_signals:
+    built_work_signals = _built_work_signals(text)
+    application_evidence = _application_evidence(
+        text, application_signals, project_signals, built_work_signals
+    )
+    effective_application = application_evidence == APPLICATION_EVIDENCE_AFFIRMATIVE
+    if effective_application and project_signals:
         scope = QUESTION_SCOPE_MIXED
-    elif application_signals:
+    elif effective_application:
         scope = QUESTION_SCOPE_APPLICATION
     elif project_signals:
         scope = QUESTION_SCOPE_PROJECT
@@ -134,7 +209,9 @@ def classify_question_scope(message: str, application_context: dict | None = Non
         scope=scope,
         application_signals=application_signals,
         project_signals=project_signals,
+        built_work_signals=built_work_signals,
         template_id=template_id,
+        application_evidence=application_evidence,
     )
 
 
@@ -147,4 +224,6 @@ def scope_diagnostic(message: str, application_context: dict | None = None) -> d
         "template_id": result.template_id,
         "application_signals": result.application_signals,
         "project_signals": result.project_signals,
+        "built_work_signals": result.built_work_signals,
+        "application_evidence": result.application_evidence,
     }

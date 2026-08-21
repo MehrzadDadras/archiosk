@@ -5,6 +5,9 @@ import tempfile
 from unittest.mock import patch
 
 from services.question_scope import (
+    APPLICATION_EVIDENCE_AFFIRMATIVE,
+    APPLICATION_EVIDENCE_AMBIGUOUS,
+    APPLICATION_EVIDENCE_NONE,
     QUESTION_SCOPE_APPLICATION,
     QUESTION_SCOPE_MIXED,
     QUESTION_SCOPE_PROJECT,
@@ -16,6 +19,79 @@ from services.question_scope import (
 
 
 class QuestionScopeClassifierTests(unittest.TestCase):
+    def test_adversarial_built_work_language_never_affirms_application(self):
+        cases = (
+            "What is the design load on the right column at grid line 3?",
+            "What is the top rail height for the guardrail?",
+            "What is on the left side of the building?",
+            "What is shown on the bottom panel of the door elevation?",
+            "What is the left side panel of the switchgear rated for?",
+            "Is the right column shown on the framing plan?",
+            "Remove the smoke damper note from the panel schedule",
+            "Show me the electrical panel locations",
+            "Where should we place the electrical panel on level 1?",
+            "Add a note to the panel schedule about the generator",
+            "Can you show me the panel schedule?",
+            "Can you open the fire alarm panel detail?",
+            "Are you able to show me the electrical panel layout?",
+            "What is the application of Division B to this building?",
+            "Does the permit application need the Alternative Solution attached?",
+            "What is the Code application for a detention occupancy?",
+            "Does the application of OBC 3.2.6 require a smoke shaft?",
+            "Is there a push button station required at the officer station?",
+            "What template does the owner require for the commissioning report?",
+            "What is the contractor workspace on this page?",
+            "What is the interface panel on the left side of the control room?",
+        )
+        for message in cases:
+            with self.subTest(message=message):
+                result = classify_question_scope(message)
+                self.assertNotEqual(result.scope, QUESTION_SCOPE_APPLICATION)
+                self.assertNotEqual(
+                    result.application_evidence,
+                    APPLICATION_EVIDENCE_AFFIRMATIVE,
+                )
+
+    def test_app_is_not_a_standalone_application_signal(self):
+        for message in (
+            "See App. B for the damper schedule",
+            "Is the exhaust rate in App. C?",
+            "Which app. covers the detention hardware?",
+        ):
+            with self.subTest(message=message):
+                result = classify_question_scope(message)
+                self.assertNotEqual(result.scope, QUESTION_SCOPE_APPLICATION)
+                self.assertNotIn("app", result.application_signals)
+
+    def test_corroboration_terms_are_not_independent_application_evidence(self):
+        for message in (
+            "What is the application of Division B to this building?",
+            "What template does the owner require for the commissioning report?",
+            "What is the contractor workspace on this page?",
+            "What is the interface panel on the left side of the control room?",
+        ):
+            with self.subTest(message=message):
+                result = classify_question_scope(message)
+                self.assertNotEqual(result.application_evidence, APPLICATION_EVIDENCE_AFFIRMATIVE)
+
+    def test_built_work_veto_is_negative_only(self):
+        result = classify_question_scope("What is the design load on the right column?")
+        self.assertNotEqual(result.scope, QUESTION_SCOPE_APPLICATION)
+        self.assertEqual(result.scope, QUESTION_SCOPE_UNKNOWN)
+        self.assertTrue(result.built_work_signals)
+
+    def test_application_evidence_strength_is_descriptive_only(self):
+        affirmative = classify_question_scope("How do I create an empty panel on the left side of this page?")
+        ambiguous = classify_question_scope("Show me the panel on this page")
+        unknown = classify_question_scope("Can you help with this?")
+        self.assertEqual(affirmative.application_evidence, APPLICATION_EVIDENCE_AFFIRMATIVE)
+        self.assertEqual(ambiguous.application_evidence, APPLICATION_EVIDENCE_AMBIGUOUS)
+        self.assertEqual(unknown.application_evidence, APPLICATION_EVIDENCE_NONE)
+        for result in (affirmative, ambiguous, unknown):
+            self.assertFalse(hasattr(result, "route"))
+            self.assertFalse(hasattr(result, "authorize"))
+            self.assertFalse(hasattr(result, "action"))
+
     def test_construction_language_regression_matrix(self):
         cases = (
             ("What does the RFP require for smoke control?", QUESTION_SCOPE_PROJECT),
@@ -93,6 +169,8 @@ class QuestionScopeClassifierTests(unittest.TestCase):
         self.assertEqual(diagnostic["classification"], QUESTION_SCOPE_APPLICATION)
         self.assertEqual(diagnostic["template_id"], "TPL-005")
         self.assertEqual(diagnostic["status"], SCOPE_DIAGNOSTIC_STATUS)
+        self.assertEqual(diagnostic["application_evidence"], APPLICATION_EVIDENCE_AFFIRMATIVE)
+        self.assertIn("built_work_signals", diagnostic)
         self.assertNotIn("authorize", diagnostic)
         self.assertNotIn("mutation", diagnostic)
 
