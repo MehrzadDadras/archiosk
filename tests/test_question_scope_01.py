@@ -19,6 +19,54 @@ from services.question_scope import (
 
 
 class QuestionScopeClassifierTests(unittest.TestCase):
+    def test_built_work_veto_precedes_user_interface_evidence(self):
+        cases = (
+            "What is the user interface for the fire alarm control panel?",
+            "Does the operator user interface show the door status?",
+            "What is the operator user interface for the security management system?",
+            "Does the head end require a graphical user interface at the officer desk?",
+            "Is a user interface required at the control desk?",
+        )
+        for message in cases:
+            with self.subTest(message=message):
+                result = classify_question_scope(message)
+                self.assertNotEqual(result.application_evidence, APPLICATION_EVIDENCE_AFFIRMATIVE)
+                self.assertNotEqual(result.scope, QUESTION_SCOPE_APPLICATION)
+
+    def test_sidebar_is_not_an_unconditional_application_term(self):
+        result = classify_question_scope("What sidebar content is required in the operations manual?")
+        self.assertNotEqual(result.application_evidence, APPLICATION_EVIDENCE_AFFIRMATIVE)
+        self.assertNotEqual(result.scope, QUESTION_SCOPE_APPLICATION)
+
+    def test_ui_action_requires_application_surface_corroboration(self):
+        physical_cases = (
+            "Delete the duress button from the day room",
+            "Add a call button at the nurse station",
+            "Move the annunciator panel to the vestibule",
+            "Can we remove the panic button from the interview room?",
+            "Create a menu for the kitchen rotation",
+            "Add a panel at the sallyport",
+            "Move the intercom button to the officer desk",
+            "Can we add an icon to the wayfinding signage?",
+            "Remove the button from the intercom faceplate",
+            "Delete the menu board from the servery scope",
+        )
+        for message in physical_cases:
+            with self.subTest(message=message):
+                result = classify_question_scope(message)
+                self.assertNotEqual(result.application_evidence, APPLICATION_EVIDENCE_AFFIRMATIVE)
+                self.assertNotEqual(result.scope, QUESTION_SCOPE_APPLICATION)
+
+    def test_ui_action_with_application_surface_is_affirmative(self):
+        for message in (
+            "How do I create an empty panel on the left side of this page?",
+            "How do I hide the left panel on this page?",
+        ):
+            with self.subTest(message=message):
+                result = classify_question_scope(message)
+                self.assertEqual(result.scope, QUESTION_SCOPE_APPLICATION)
+                self.assertEqual(result.application_evidence, APPLICATION_EVIDENCE_AFFIRMATIVE)
+
     def test_adversarial_built_work_language_never_affirms_application(self):
         cases = (
             "What is the design load on the right column at grid line 3?",

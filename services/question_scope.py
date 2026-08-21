@@ -24,15 +24,14 @@ APPLICATION_EVIDENCE_AFFIRMATIVE = "AFFIRMATIVE"
 # as panel, screen, layout, page, document, and source are intentionally not
 # standalone application signals.
 _APPLICATION_TERMS = (
-    "archiosk", "ui", "user interface", "developer mode", "sidebar",
-    "composer", "css",
+    "archiosk", "ui", "developer mode", "composer", "css",
 )
 
 # These terms occur in both application and construction language. They only
 # become application evidence when corroborated by an unambiguous UI pattern.
 _CORROBORATION_APPLICATION_TERMS = (
-    "application", "template", "workspace", "interface", "menu", "button",
-    "icon",
+    "application", "template", "workspace", "interface", "user interface",
+    "sidebar", "menu", "button", "icon",
 )
 
 # Project vocabulary is represented as audited singular/plural variants. This
@@ -148,17 +147,35 @@ def _application_evidence(
     built_work_signals: tuple[str, ...],
 ) -> str:
     """Characterize application evidence without granting routing authority."""
+    # Apply the built-work veto before every affirmative branch, including
+    # otherwise safe ARCHIOSK/UI terms.
+    if built_work_signals:
+        if application_signals or any(
+            _contains_term(text, term) for term in _CORROBORATION_APPLICATION_TERMS
+        ):
+            return APPLICATION_EVIDENCE_AMBIGUOUS
+        return APPLICATION_EVIDENCE_NONE
+
     safe_terms = set(_signals(text, _APPLICATION_TERMS))
     if safe_terms:
         return APPLICATION_EVIDENCE_AFFIRMATIVE
 
     # A create/delete/etc. UI action is affirmative only when construction
     # vocabulary does not make the target plausibly a built-work object.
+    has_surface_deixis = (
+        any(_contains_term(text, marker) for marker in (
+            "this page", "this screen", "this view", "this workspace", "this chat",
+        ))
+        or ("ui-action" in application_signals and "ui-spatial" in application_signals)
+    )
     if (
         "ui-action" in application_signals
-        and not built_work_signals
+        and has_surface_deixis
         and not any(_contains_term(text, marker) for marker in _AMBIGUOUS_UI_MARKERS)
     ):
+        return APPLICATION_EVIDENCE_AFFIRMATIVE
+
+    if "ui-referent" in application_signals:
         return APPLICATION_EVIDENCE_AFFIRMATIVE
 
     # Placement language becomes affirmative only when a project signal makes
