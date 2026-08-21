@@ -13,6 +13,6 @@
 - **REFERENCE TESTS:** Spin, evidence-readability, and source-scope lanes.
 - **KNOWN LIMITATIONS:** External authority remains governed by the Airlock; no hidden Oracle is project evidence.
 - **SUPERSEDES:** None.
-- **SUPERSEDED BY:** None.
+- **SUPERSEDED BY:** [CIC-SPIN-INTELLIGENCE v1.1](CIC-SPIN-INTELLIGENCE-v1.1.md).
 - **LAST REVIEWED:** 2026-08-20.
 - **GOVERNANCE SOURCE:** Spin governance, Airlock governance, and MM evidence contract.

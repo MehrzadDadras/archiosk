@@ -29,5 +29,5 @@ class CanonicalImplementationOrderTests(unittest.TestCase):
 
     def test_no_second_contract_registry_exists(self):
         records = list((ROOT / "governance").rglob("CIC-*.md"))
-        self.assertEqual(len(records), 10)
+        self.assertEqual(len(records), 11)
         self.assertEqual((CONTRACTS / "README.md").exists(), True)
