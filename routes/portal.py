@@ -356,20 +356,6 @@ def _developer_application_reply(text: str, context: dict | None) -> str:
             "edit."
             + lens
         )
-    change_intent = any(word in lowered for word in (
-        "make", "change", "highlight", "bold", "narrow", "remove", "move", "recolor",
-        "resize", "improve", "add", "emphasize", "restyle",
-    ))
-    if change_intent:
-        target = labels or "the named application element"
-        return (
-            f"Yes. {target.capitalize()} is a reasonable candidate for a bounded change. "
-            "I would preserve the existing component and apply the smallest change that "
-            "achieves the requested outcome, then verify affected surfaces and focused tests. "
-            "This is a recommendation only; conversation and CCN context do not authorize "
-            "implementation."
-            + lens
-        )
     if ("chat history" in lowered or "conversation history" in lowered) and ("delete" in lowered or "remove" in lowered):
         return (
             "There is no ordinary Developer Composer action that deletes chat history. "
@@ -395,15 +381,17 @@ def _developer_application_reply(text: str, context: dict | None) -> str:
         )
     if selected:
         return (
-            f"I can inspect the selected application context ({labels}) and explain established "
-            "behavior. This question does not authorize a change; ask where it is implemented, "
-            "what depends on it, or what tests cover it."
+            f"{labels.capitalize()} is a reasonable candidate for a bounded change. I would "
+            "preserve the existing component and assess the smallest change that achieves the "
+            "requested outcome, then verify affected surfaces and focused tests. This is a "
+            "recommendation only; conversation and CCN context do not authorize implementation."
             + lens
         )
     return (
-        "I can answer Developer Mode questions about ARCHIOSK itself. For a precise answer, "
-        "select an application surface or name the visible control; selection remains context "
-        "only and never authorizes mutation."
+        "I can assess that as a proposed bounded change to ARCHIOSK: preserve the existing "
+        "component, identify the affected surface and consequences, and verify focused tests. "
+        "This is a recommendation only; conversation and CCN context do not authorize "
+        "implementation."
         + lens
     )
 
