@@ -184,6 +184,12 @@
                     </label>
                     <button type="submit" class="btn btn-ghost btn-small">Delete Chat</button>
                 </form>
+                {% else %}
+                <form method="post" action="{{ url_for('portal.developer_home_select_chat') }}" class="developer-select-chat-form">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="chat_id" value="{{ chat.id }}">
+                    <button type="submit" class="btn btn-ghost btn-small">Open Chat</button>
+                </form>
                 {% endif %}
             </details>
             {% endfor %}

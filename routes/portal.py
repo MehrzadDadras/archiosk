@@ -505,6 +505,18 @@ def developer_home_new_chat():
     return redirect(url_for("portal.index"))
 
 
+@portal_bp.route('/developer-composer/select-chat', methods=['POST'])
+@login_required
+def developer_home_select_chat():
+    _require_developer_composer()
+    chat_id = request.form.get("chat_id")
+    if not any(item.get("id") == chat_id for item in _developer_home_chats()):
+        abort(404)
+    session["developer_home_current_chat_id"] = chat_id
+    _developer_current_chat()
+    return redirect(url_for("portal.index"))
+
+
 @portal_bp.route('/developer-composer/delete-chat', methods=['POST'])
 @login_required
 def developer_home_delete_chat():
