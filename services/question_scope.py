@@ -16,16 +16,55 @@ QUESTION_SCOPE_PROJECT = "PROJECT"
 QUESTION_SCOPE_MIXED = "MIXED"
 QUESTION_SCOPE_UNKNOWN = "UNKNOWN"
 
+# These are affirmative application terms. Ambiguous construction words such
+# as panel, screen, layout, page, document, and source are intentionally not
+# standalone application signals.
 _APPLICATION_TERMS = (
-    "archiosk", "application", "ui", "user interface", "developer mode",
-    "template", "layout", "panel", "sidebar", "left side", "right side",
-    "left-hand", "page", "screen", "workspace", "composer", "button",
-    "menu", "icon", "css", "interface",
+    "archiosk", "application", "app", "ui", "user interface",
+    "developer mode", "template", "sidebar", "workspace", "composer",
+    "button", "menu", "icon", "css", "interface",
 )
-_PROJECT_TERMS = (
-    "rfp", "project evidence", "document", "source", "requirement",
-    "finding", "smoke control", "smoke management", "specification",
-    "drawing", "contract", "submission", "what does", "what do",
+
+# Project vocabulary is represented as audited singular/plural variants. This
+# avoids a broad stemmer while preserving understandable diagnostic labels.
+_PROJECT_SIGNAL_VARIANTS = {
+    "rfp": ("rfp",),
+    "project evidence": ("project evidence",),
+    "document": ("document", "documents"),
+    "source": ("source", "sources"),
+    "requirement": ("requirement", "requirements"),
+    "finding": ("finding", "findings"),
+    "smoke control": ("smoke control",),
+    "smoke management": ("smoke management",),
+    "specification": ("specification", "specifications"),
+    "drawing": ("drawing", "drawings"),
+    "contract": ("contract", "contracts"),
+    "submission": ("submission", "submissions"),
+    "what does": ("what does",),
+    "what do": ("what do",),
+}
+
+# Ambiguous interface/construction vocabulary becomes an application signal
+# only when paired with an affirmative UI action or spatial UI language.
+_APPLICATION_PATTERNS = (
+    (
+        "ui-action",
+        re.compile(
+            r"\b(?:create|open|close|delete|hide|show|remove|add|resize|"
+            r"move|restore|collapse|expand)\b.{0,60}\b(?:panel|sidebar|"
+            r"menu|button|composer|workspace|icon)\b"
+        ),
+    ),
+    (
+        "ui-spatial",
+        re.compile(r"\b(?:left|right|bottom|top)\s+(?:side|panel|sidebar|rail|column)\b"),
+    ),
+    (
+        "ui-placement",
+        re.compile(
+            r"\b(?:put|place|move|display|show)\b.{0,60}\b(?:panel|sidebar|workspace)\b"
+        ),
+    ),
 )
 
 
@@ -42,8 +81,27 @@ class QuestionScope:
 SCOPE_DIAGNOSTIC_STATUS = "ADVISORY_NON_AUTHORIZING_NOT_ROUTING"
 
 
+def _contains_term(text: str, term: str) -> bool:
+    return re.search(r"\b" + re.escape(term) + r"\b", text) is not None
+
+
 def _signals(text: str, terms: tuple[str, ...]) -> tuple[str, ...]:
-    return tuple(term for term in terms if re.search(r"\b" + re.escape(term) + r"\b", text))
+    """Return exact lexical signals for the small explicit vocabulary."""
+    return tuple(term for term in terms if _contains_term(text, term))
+
+
+def _project_signals(text: str) -> tuple[str, ...]:
+    return tuple(
+        label
+        for label, variants in _PROJECT_SIGNAL_VARIANTS.items()
+        if any(_contains_term(text, variant) for variant in variants)
+    )
+
+
+def _application_signals(text: str) -> tuple[str, ...]:
+    signals = list(_signals(text, _APPLICATION_TERMS))
+    signals.extend(label for label, pattern in _APPLICATION_PATTERNS if pattern.search(text))
+    return tuple(dict.fromkeys(signals))
 
 
 def classify_question_scope(message: str, application_context: dict | None = None) -> QuestionScope:
@@ -54,8 +112,8 @@ def classify_question_scope(message: str, application_context: dict | None = Non
     to classify an application question.
     """
     text = " ".join((message or "").lower().split())
-    application_signals = _signals(text, _APPLICATION_TERMS)
-    project_signals = _signals(text, _PROJECT_TERMS)
+    application_signals = _application_signals(text)
+    project_signals = _project_signals(text)
     if application_signals and project_signals:
         scope = QUESTION_SCOPE_MIXED
     elif application_signals:

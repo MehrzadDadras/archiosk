@@ -16,6 +16,44 @@ from services.question_scope import (
 
 
 class QuestionScopeClassifierTests(unittest.TestCase):
+    def test_construction_language_regression_matrix(self):
+        cases = (
+            ("What does the RFP require for smoke control?", QUESTION_SCOPE_PROJECT),
+            ("What are the panel schedule requirements in the electrical drawings?", QUESTION_SCOPE_PROJECT),
+            ("Does the specification allow a smoke screen at the atrium?", QUESTION_SCOPE_PROJECT),
+            ("What page of the RFP covers the HVAC shutdown sequence?", QUESTION_SCOPE_PROJECT),
+            ("Show me the drawing layout for level 2", QUESTION_SCOPE_PROJECT),
+            ("What does the RFP cover in the source documents?", QUESTION_SCOPE_PROJECT),
+            ("How do I create an empty panel on the left side of this page?", QUESTION_SCOPE_APPLICATION),
+            ("Delete the left panel", QUESTION_SCOPE_APPLICATION),
+            ("Can I put the smoke findings into a panel beside this document?", QUESTION_SCOPE_MIXED),
+            ("Can you help with this?", QUESTION_SCOPE_UNKNOWN),
+            ("What is on this page?", QUESTION_SCOPE_UNKNOWN),
+        )
+        for message, expected in cases:
+            with self.subTest(message=message):
+                self.assertEqual(classify_question_scope(message).scope, expected)
+
+    def test_common_project_singular_and_plural_forms_are_equivalent(self):
+        pairs = (
+            ("show the drawing", "show the drawings"),
+            ("what requirement applies", "what requirements apply"),
+            ("which document controls", "which documents control"),
+            ("review the finding", "review the findings"),
+            ("identify the source", "identify the sources"),
+            ("read the specification", "read the specifications"),
+        )
+        for singular, plural in pairs:
+            with self.subTest(singular=singular, plural=plural):
+                self.assertEqual(
+                    classify_question_scope(singular).scope,
+                    QUESTION_SCOPE_PROJECT,
+                )
+                self.assertEqual(
+                    classify_question_scope(plural).scope,
+                    QUESTION_SCOPE_PROJECT,
+                )
+
     def test_project_evidence_question(self):
         result = classify_question_scope("What does the RFP require for smoke control?")
         self.assertEqual(result.scope, QUESTION_SCOPE_PROJECT)
