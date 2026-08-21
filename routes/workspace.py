@@ -2485,6 +2485,33 @@ def run_spin_route(project_id):
             cf for cf in workspace.composer_findings if cf.get("spin_run_id") == baseline_spin_run_id
         ]
 
+    # Existing relationship/supersession primitives are supplied as bounded
+    # Spin context; services.spin performs the defensive prompt shaping and
+    # cap. Resolving relationship status is read-time derivation only, never
+    # a new graph traversal or persisted mutation.
+    current_source_ids = {source["id"] for source in store.spin_current_sources(workspace)}
+    relationship_evidence = []
+    for relationship in workspace.relationships:
+        relationship_evidence.append({
+            **relationship,
+            "status": store.resolve_relationship_status(workspace, relationship["id"]).get("status"),
+        })
+    relationship_evidence.sort(
+        key=lambda item: (
+            0 if item.get("from_id") in current_source_ids or item.get("to_id") in current_source_ids else 1,
+            item.get("created_at") or "",
+            item.get("id") or "",
+        )
+    )
+    supersession_evidence = sorted(
+        workspace.supersessions,
+        key=lambda item: (
+            0 if item.get("predecessor_id") in current_source_ids or item.get("successor_id") in current_source_ids else 1,
+            item.get("authorized_at") or "",
+            item.get("id") or "",
+        ),
+    )
+
     result = run_spin(
         spin_kind=spin_kind,
         document_filename=evidence.document_filename,
@@ -2512,6 +2539,8 @@ def run_spin_route(project_id):
             if p.get("status") == "active"
             for item in p.get("items", [])
         ],
+        relationship_evidence=relationship_evidence,
+        supersession_evidence=supersession_evidence,
     )
 
     workspace = store.get(project_id)  # re-fetch: version may have advanced since the call

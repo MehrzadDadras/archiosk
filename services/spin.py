@@ -92,6 +92,8 @@ _MAX_SPIN_FINDINGS = 20
 # suggested example sequence.
 _MAX_GAMES_PLAYED = 10
 _MAX_HELIX_ASSESSMENTS = 20
+_MAX_RELATIONSHIP_EVIDENCE_IN_PROMPT = 40
+_MAX_SUPERSESSION_EVIDENCE_IN_PROMPT = 40
 
 # CODEX-HELIX-QA-ABSORPTION-01: deliberately small, Spin-local QA
 # vocabulary. These values describe one interface assessment; they are
@@ -265,6 +267,8 @@ def run_spin(
     additional_document_evidence: Optional[list[dict]] = None,
     maturity_context: Optional[list[dict]] = None,
     expectation_context: Optional[list[dict]] = None,
+    relationship_evidence: Optional[list[dict]] = None,
+    supersession_evidence: Optional[list[dict]] = None,
     changed_source_keys: Optional[set] = None,
     prior_findings: Optional[list[dict]] = None,
     display_title: Optional[str] = None,
@@ -306,7 +310,7 @@ def run_spin(
     prompt = _build_prompt(
         spin_kind, document_filename, candidate_requirements, governed_requirements, milestones,
         display_title, additional_document_evidence, changed_source_keys, prior_findings, world,
-        maturity_context, expectation_context,
+        maturity_context, expectation_context, relationship_evidence, supersession_evidence,
     )
     # CLAUDE-DELTA-SPIN-02: live acceptance testing found a second-order
     # consequence of raising max_tokens 4000 -> 8000 below - a larger
@@ -553,6 +557,46 @@ def _select_comprehensive_document_evidence(
     return selected
 
 
+def _shape_relationship_evidence(items: Optional[list[dict]]) -> list[dict]:
+    """Project existing relationship records into a bounded prompt shape.
+
+    Relationship records remain evidence inputs, not conclusions. In
+    particular, open-world relationship types are preserved verbatim rather
+    than normalized or promoted to the closed Helix vocabularies.
+    """
+    if not isinstance(items, list):
+        return []
+    fields = (
+        "id", "project_id", "from_type", "from_id", "to_type", "to_id",
+        "relationship_type", "created_at", "created_by", "provisional",
+        "confidence", "confirmed_by", "related_analysis_id",
+        "related_finding_id", "reason", "validation_state", "status",
+    )
+    shaped = []
+    for item in items[:_MAX_RELATIONSHIP_EVIDENCE_IN_PROMPT]:
+        if not isinstance(item, dict):
+            continue
+        shaped.append({key: item[key] for key in fields if key in item})
+    return shaped
+
+
+def _shape_supersession_evidence(items: Optional[list[dict]]) -> list[dict]:
+    """Project existing supersession records into a bounded prompt shape."""
+    if not isinstance(items, list):
+        return []
+    fields = (
+        "id", "project_id", "predecessor_type", "predecessor_id",
+        "successor_type", "successor_id", "actor", "authorized_at",
+        "reason", "authority_class",
+    )
+    shaped = []
+    for item in items[:_MAX_SUPERSESSION_EVIDENCE_IN_PROMPT]:
+        if not isinstance(item, dict):
+            continue
+        shaped.append({key: item[key] for key in fields if key in item})
+    return shaped
+
+
 def _build_prompt(
     spin_kind: str, document_filename: str, candidate_requirements: list[dict],
     governed_requirements: list[dict], milestones: list[dict],
@@ -563,6 +607,8 @@ def _build_prompt(
     world: Optional[str] = None,
     maturity_context: Optional[list[dict]] = None,
     expectation_context: Optional[list[dict]] = None,
+    relationship_evidence: Optional[list[dict]] = None,
+    supersession_evidence: Optional[list[dict]] = None,
 ) -> str:
     is_delta = spin_kind == SPIN_KIND_DELTA
     lines = [
@@ -621,6 +667,56 @@ def _build_prompt(
                 f"{e.get('description', '')} at {e.get('expected_maturity', '')} "
                 f"(status {e.get('status', '')})"
             )
+
+    if relationship_evidence is not None:
+        shaped_relationships = _shape_relationship_evidence(relationship_evidence)
+        omitted = max(len(relationship_evidence) - len(shaped_relationships), 0)
+        lines.append(
+            f"\nRelationship evidence (existing project records, not automatic conclusions; "
+            f"{len(relationship_evidence)} supplied, showing up to "
+            f"{_MAX_RELATIONSHIP_EVIDENCE_IN_PROMPT}; {omitted} omitted by the bounded cap):"
+        )
+        for relationship in shaped_relationships:
+            lines.append(
+                "- "
+                f"{relationship.get('id', '')}: "
+                f"{relationship.get('from_type', '')}/{relationship.get('from_id', '')} "
+                f"--{relationship.get('relationship_type', '')}--> "
+                f"{relationship.get('to_type', '')}/{relationship.get('to_id', '')}; "
+                f"status={relationship.get('status', '')}; "
+                f"provisional={relationship.get('provisional', '')}; "
+                f"validation={relationship.get('validation_state', '')}; "
+                f"reason={relationship.get('reason', '')}"
+            )
+        lines.append(
+            "Treat these relationship records as bounded evidence only: "
+            "CONTRADICTS may indicate tension, not automatic noncompliance; "
+            "an edge does not prove convergence; missing edges must not be fabricated."
+        )
+
+    if supersession_evidence is not None:
+        shaped_supersessions = _shape_supersession_evidence(supersession_evidence)
+        omitted = max(len(supersession_evidence) - len(shaped_supersessions), 0)
+        lines.append(
+            f"\nSupersession evidence (existing project lineage records, not automatic conclusions; "
+            f"{len(supersession_evidence)} supplied, showing up to "
+            f"{_MAX_SUPERSESSION_EVIDENCE_IN_PROMPT}; {omitted} omitted by the bounded cap):"
+        )
+        for supersession in shaped_supersessions:
+            lines.append(
+                "- "
+                f"{supersession.get('id', '')}: "
+                f"{supersession.get('predecessor_type', '')}/{supersession.get('predecessor_id', '')} "
+                f"superseded by {supersession.get('successor_type', '')}/"
+                f"{supersession.get('successor_id', '')}; "
+                f"authorized_at={supersession.get('authorized_at', '')}; "
+                f"authority={supersession.get('authority_class', '')}; "
+                f"reason={supersession.get('reason', '')}"
+            )
+        lines.append(
+            "Treat supersession as lineage/change evidence only: a successor does "
+            "not prove downstream propagation or coordination without supporting evidence."
+        )
 
     by_category: dict[str, list[dict]] = {}
     for item in candidate_requirements:
