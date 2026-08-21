@@ -84,6 +84,26 @@ otherwise.
 - **retired** — a control this ID used to name was removed; the ID is
   never reused for something else (see "Retired references" below).
 
+## Developer Mode surfaces
+
+| Reference | Element | Label/summary | Current behavior | Auth notes | Status |
+|---|---|---|---|---|---|
+| `developer.home.composer` | `<section>` | Developer Composer | Application-level Developer Mode Composer workbench | Developer Mode | active |
+| `developer.home.composer.form` | `<form>` | Developer Composer input | Canonical application Composer submission form | Developer Mode | active |
+| `developer.home.composer.voice` | `<button>` | microphone | Browser voice-input control for the Developer Composer | Developer Mode | active |
+| `developer.home.composer.voice.status` | `<span>` | voice status | Accessible voice-input status output | Developer Mode | active |
+| `developer.home.composer.send` | `<button>` | Send | Submits the Developer Composer message | Developer Mode | active |
+| `developer.home.messages` | message list | conversation | Current Developer conversation messages | Developer Mode | active |
+| `developer.chat.history` | history list | Developer conversations | Compact persisted session-scoped Developer chat history | Developer Mode | active |
+| `developer.ccn.active` | `<span>` | CCN | Active contemplated-change indicator | Developer Mode + active CCN | active |
+| `developer.home.selection` | `<p>` | Selected application object | Displays the current application-level context selection | Developer Mode | active |
+| `developer.home.application-context` | `<div>` | Application context | Holds bounded application-context attachment controls | Developer Mode | active |
+| `developer.home.context-actions` | forms | context actions | Attaches an application surface as conversational context | Developer Mode | active |
+| `developer.home.environment-context` | `<div>` | environment context | Displays the current application environment context | Developer Mode | active |
+| `developer.template.identity` | `<span>/<button>` | Template identity | UI Reveal identity for the governed page template | Developer Mode + UI Reveal | active |
+| `menu.archiosk.admin.ui-reveal-toggle` | `<button>` | UI Reveal | Toggles developer template identity visibility | Admin only | active |
+| `menu.archiosk.admin.developer-tools` | `<a>` | Developer Tools | Opens protected Developer Tools | Admin only | active |
+
 ---
 
 ## Menu (top bar — `templates/base.html`, present on every authenticated page)

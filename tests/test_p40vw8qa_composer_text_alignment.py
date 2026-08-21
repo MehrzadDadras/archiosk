@@ -93,7 +93,7 @@ class ComposerTextAlignmentTests(unittest.TestCase):
         # of) - the invariant this test actually protects, "symmetric,
         # not a per-role asymmetric compensation hack," still holds; it
         # is just a smaller symmetric value now.
-        body = self._rule_body('.conversation-input-form input[type="text"] {')
+        body = self._rule_body('.conversation-input-form input[type="text"],\n.conversation-input-form textarea {')
         match = re.search(r"padding:\s*([0-9.]+rem)\s+([0-9.]+rem)\s*;", body)
         self.assertIsNotNone(match, f"expected a plain 2-value padding shorthand, got: {body}")
         top, right = match.groups()
@@ -101,7 +101,7 @@ class ComposerTextAlignmentTests(unittest.TestCase):
         self.assertEqual(right, "0.2rem")
 
     def test_composer_input_keeps_flexible_width_send_button_position_unaffected(self):
-        body = self._rule_body('.conversation-input-form input[type="text"] {')
+        body = self._rule_body('.conversation-input-form input[type="text"],\n.conversation-input-form textarea {')
         self.assertIn("flex: 1", body)
 
     def test_resize_handle_divider_stays_full_width_not_inset(self):
@@ -146,7 +146,7 @@ class ComposerTextAlignmentTests(unittest.TestCase):
         # text color itself remaining theme-aware, and the box being
         # genuinely gone (not a leftover fixed background this stage
         # forgot to update).
-        body = self._rule_body('.conversation-input-form input[type="text"] {')
+        body = self._rule_body('.conversation-input-form input[type="text"],\n.conversation-input-form textarea {')
         self.assertIn("var(--text-primary)", body)
         self.assertIn("background: transparent", body)
 

@@ -280,7 +280,7 @@ class RegistryConsistencyTests(unittest.TestCase):
             self.assertRegex(
                 ref,
                 r"^(menu|lists|display|toolbox|chat|eye|shell|gateway|auth|upload|errors|"
-                r"security|operations|projects-directory|removed-projects|"
+                r"security|operations|projects-directory|removed-projects|developer|"
                 r"landing|explore|start-trial|spin|pdm|index)\.[a-z0-9._\-]+$",
                 ref,
             )

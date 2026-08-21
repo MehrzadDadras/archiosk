@@ -87,7 +87,7 @@ class ComposerChromeTests(unittest.TestCase):
         self.css = _CSS_PATH.read_text(encoding="utf-8")
 
     def test_composer_input_no_longer_has_an_all_around_box(self):
-        start = self.css.index('.conversation-input-form input[type="text"] {')
+        start = self.css.index('.conversation-input-form input[type="text"],\n.conversation-input-form textarea {')
         block = self.css[start:]
         block = block[: block.index("}") + 1]
         self.assertIn("border: none", block)
@@ -104,7 +104,7 @@ class ComposerChromeTests(unittest.TestCase):
         # CLAUDE-CA1D-COMPOSER-CONTEXT-LABEL-01: an <input> can't contain
         # the embedded work-context label's child markup, so the top
         # rule moved onto .composer-context-rule-line instead.
-        start = self.css.index('.conversation-input-form input[type="text"] {')
+        start = self.css.index('.conversation-input-form input[type="text"],\n.conversation-input-form textarea {')
         block = self.css[start:]
         block = block[: block.index("}") + 1]
         self.assertNotIn("border-top", block)
