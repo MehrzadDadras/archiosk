@@ -36,6 +36,12 @@ dependency — with the reasoning attached. Don't re-derive that reasoning
 from scratch in conversation, and don't silently propose something that
 contradicts it.
 
+Before proposing a new durable internal abstraction, first identify what already
+serves the purpose, state why it is insufficient, and determine whether extending
+it is cleaner than adding another abstraction. The `interpret_message()`
+contextual-router work is an example: inspect the existing dispatch path before
+introducing a parallel router.
+
 ## Environment quirks that have cost real debugging time
 
 - **`STATIC_VERSION` (and any env var with a `config.py` default) is

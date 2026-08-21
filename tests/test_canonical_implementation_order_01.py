@@ -18,16 +18,16 @@ class CanonicalImplementationOrderTests(unittest.TestCase):
 
     def test_registry_resolves_all_initial_contract_records(self):
         registry = (CONTRACTS / "README.md").read_text(encoding="utf-8")
-        ids = re.findall(r"\| (CIC-[A-Z-]+) \| v1\.0 .*?\| \[Record\]\((CIC-[A-Z-]+\.md)\)", registry)
+        ids = re.findall(r"\| (CIC-[A-Z-]+) \| v[0-9]+\.[0-9]+ .*?\| \[Record\]\((CIC-[A-Z-]+(?:-v[0-9]+\.[0-9]+)?\.md)\)", registry)
         self.assertEqual(len(ids), 9)
         for contract_id, filename in ids:
             self.assertTrue((CONTRACTS / filename).exists(), contract_id)
             text = (CONTRACTS / filename).read_text(encoding="utf-8")
             self.assertIn(f"CONTRACT ID:** {contract_id}", text)
-            self.assertIn("VERSION:** v1.0", text)
+            self.assertRegex(text, r"VERSION:\*\* v[0-9]+\.[0-9]+")
             self.assertIn("SUPERSEDED BY", text)
 
     def test_no_second_contract_registry_exists(self):
         records = list((ROOT / "governance").rglob("CIC-*.md"))
-        self.assertEqual(len(records), 9)
+        self.assertEqual(len(records), 10)
         self.assertEqual((CONTRACTS / "README.md").exists(), True)

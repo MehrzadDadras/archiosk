@@ -14,7 +14,7 @@ records the delta; prior orders remain interpretable against the version cited.
 |---|---:|---|---|---|
 | CIC-COMPOSER | v1.0 | CURRENT | Any Composer/input or conversational-surface work | [Record](CIC-COMPOSER.md) |
 | CIC-GO-CONVERSATION | v1.0 | CURRENT | Any GO/model-backed conversational behavior | [Record](CIC-GO-CONVERSATION.md) |
-| CIC-DEVELOPER-MODE | v1.0 | CURRENT | Developer Mode, application inspection, or Developer context | [Record](CIC-DEVELOPER-MODE.md) |
+| CIC-DEVELOPER-MODE | v1.1 | CURRENT | Developer Mode, application inspection, or Developer context | [Record](CIC-DEVELOPER-MODE-v1.1.md) |
 | CIC-CCN | v1.0 | CURRENT | CCN parsing, context, lifecycle, or contemplated-change work | [Record](CIC-CCN.md) |
 | CIC-PAGE-TEMPLATE | v1.0 | CURRENT | Material page/surface/template or shared UI work | [Record](CIC-PAGE-TEMPLATE.md) |
 | CIC-PANEL | v1.0 | CURRENT | Page composition, panel state, or nested-template work | [Record](CIC-PANEL.md) |

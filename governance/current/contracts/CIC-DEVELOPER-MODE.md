@@ -14,6 +14,6 @@
 - **REFERENCE TESTS:** `tests/test_developer_mode_ccn_01.py`, `tests/test_developer_ui_reveal_workbench_history_01.py`.
 - **KNOWN LIMITATIONS:** Direct visual selection/highlighting remains future work; application chat is session-scoped.
 - **SUPERSEDES:** None.
-- **SUPERSEDED BY:** None.
+- **SUPERSEDED BY:** [CIC-DEVELOPER-MODE v1.1](CIC-DEVELOPER-MODE-v1.1.md).
 - **LAST REVIEWED:** 2026-08-20 (GOV-P-001 citation added; no invariant wording changed).
 - **GOVERNANCE SOURCE:** `governance/current/developer-mode-ccn.md`; Page/Surface Template Inventory.

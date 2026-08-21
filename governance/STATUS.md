@@ -18,7 +18,7 @@ Everything actually implemented today is a strict, uncontradicted subset of this
 
 ## Canonical implementation orders and standing contracts
 
-ARCHIOSK Codex work now uses the five-part [Canonical Implementation Order](current/canonical-implementation-order.md): **SITUATION, MISSION, EXECUTION, SUPPORT, COMMAND & CONTROL**. Its [standing contract registry](current/contracts/README.md) currently defines CIC-COMPOSER, CIC-GO-CONVERSATION, CIC-DEVELOPER-MODE, CIC-CCN, CIC-PAGE-TEMPLATE, CIC-SPIN-INTELLIGENCE, CIC-DEPLOYMENT, and CIC-REPO-SAFETY at v1.0. Orders must list applicable contract IDs/versions and report a contract-compliance result before completion. This is a documentation/process layer; it does not create a runtime prompt engine or change product UI.
+ARCHIOSK Codex work now uses the five-part [Canonical Implementation Order](current/canonical-implementation-order.md): **SITUATION, MISSION, EXECUTION, SUPPORT, COMMAND & CONTROL**. Its [standing contract registry](current/contracts/README.md) currently defines CIC-COMPOSER, CIC-GO-CONVERSATION, CIC-DEVELOPER-MODE v1.1, CIC-CCN, CIC-PAGE-TEMPLATE, CIC-SPIN-INTELLIGENCE, CIC-DEPLOYMENT, and CIC-REPO-SAFETY at their current versions. Orders must list applicable contract IDs/versions and report a contract-compliance result before completion. This is a documentation/process layer; it does not create a runtime prompt engine or change product UI.
 
 ---
 

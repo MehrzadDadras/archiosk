@@ -65,6 +65,24 @@ which in practice is most of the suite — see "Escalation past Lane C" below).
 **Lane E — Full Acceptance.** `./venv/Scripts/python.exe -m pytest -q` — all
 3,594 tests, unchanged, still the only gate for commit/deploy/checkpoint.
 
+## Assurance tiers — orthogonal to lanes
+
+Assurance tiers describe what a test proves; they do not replace or change the
+execution lanes above.
+
+- **Tier 1 — deterministic wiring:** IDs, capability routing, template
+  propagation, and precedence order.
+- **Tier 2 — structural invariants:** provenance isolation, authority
+  separation, context-is-not-evidence, and project/application separation.
+- **Tier 3 — context-grounded behavior:** real template identity, selected
+  object, referent, active source, and task intent.
+- **Tier 4 — adversarial ambiguity:** ambiguous language plus stale, conflicting,
+  missing, or cross-surface context.
+
+**Tier 4 must vary context, not only language.** Existing adversarial lexical
+corpora are Tier-4 regression material, but are not by themselves sufficient
+architectural acceptance tests.
+
 ## Decision rule
 
 1. Start at Lane A. Always.
