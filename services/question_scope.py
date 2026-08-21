@@ -39,6 +39,9 @@ class QuestionScope:
     template_id: str | None = None
 
 
+SCOPE_DIAGNOSTIC_STATUS = "ADVISORY_NON_AUTHORIZING_NOT_ROUTING"
+
+
 def _signals(text: str, terms: tuple[str, ...]) -> tuple[str, ...]:
     return tuple(term for term in terms if re.search(r"\b" + re.escape(term) + r"\b", text))
 
@@ -75,3 +78,15 @@ def classify_question_scope(message: str, application_context: dict | None = Non
         project_signals=project_signals,
         template_id=template_id,
     )
+
+
+def scope_diagnostic(message: str, application_context: dict | None = None) -> dict:
+    """Return a bounded, inspectable diagnostic envelope for one turn."""
+    result = classify_question_scope(message, application_context)
+    return {
+        "classification": result.scope,
+        "status": SCOPE_DIAGNOSTIC_STATUS,
+        "template_id": result.template_id,
+        "application_signals": result.application_signals,
+        "project_signals": result.project_signals,
+    }

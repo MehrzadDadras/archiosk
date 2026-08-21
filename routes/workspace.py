@@ -158,6 +158,7 @@ from services.developer_ccn import (
     is_ccn_command,
 )
 from services.template_identity import template_identity_for_endpoint
+from services.question_scope import scope_diagnostic
 from models import User
 
 workspace_bp = Blueprint("workspace", __name__)
@@ -4408,6 +4409,13 @@ def _run_conversation_turn(
         selected_source_id=selected_source_id, content_class=CONTENT_CLASS_HUMAN_AUTHORED,
         developer_context=developer_context,
     )
+    if _developer_mode_active():
+        # Ephemeral per-session inspection only. Do not persist advisory scope
+        # metadata in the project conversation record or project evidence.
+        session[f"developer_scope_diagnostic:{project_id}"] = {
+            "message_id": human_message["id"],
+            **scope_diagnostic(text, developer_context),
+        }
 
     artifacts_dir = Path(current_app.config["REGISTRY_STORE_PATH"]) / "workspace_artifacts"
     focused_finding_id = session.get(f"focused_finding:{project_id}")

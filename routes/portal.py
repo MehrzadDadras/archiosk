@@ -56,6 +56,7 @@ from services.developer_ccn import (
     parse_ccn_command,
 )
 from services.project_qa import answer_application_question
+from services.question_scope import scope_diagnostic
 from services.template_identity import identity_for_template_id, template_identity_for_endpoint
 
 portal_bp = Blueprint('portal', __name__)
@@ -435,6 +436,8 @@ def developer_home_composer():
     if request.form.get("project_id"):
         abort(400)
 
+    context = _developer_home_context()
+    diagnostic = scope_diagnostic(text, context)
     governance_log = get_governance_log(current_app)
     actor = session.get("username") or "admin"
     if is_ccn_command(text):
@@ -443,6 +446,7 @@ def developer_home_composer():
             text, session=session, actor=actor, governance_log=governance_log, project_id=None,
         )
         _attach_pending_application_selection(governance_log, actor)
+        context = _developer_home_context()
         reply = result["reply_text"]
         model_metadata = {}
         # State-only commands remain deterministic. A start command carrying
@@ -450,24 +454,23 @@ def developer_home_composer():
         # acknowledgement is not allowed to swallow the user's proposition.
         if parsed_command and parsed_command[0] == "start" and parsed_command[1]:
             model_reply, model_metadata = _developer_model_reply(
-                parsed_command[1], _developer_home_context(),
+                parsed_command[1], context,
             )
             if model_reply:
                 reply = reply + "\n\n" + model_reply
                 result["action_taken"] = result["action_taken"] + ":model_answered"
             else:
-                reply = reply + "\n\n" + _developer_application_reply(text, _developer_home_context())
-        _record_developer_home_message("human", text)
+                reply = reply + "\n\n" + _developer_application_reply(text, context)
+        _record_developer_home_message("human", text, developer_context=context, scope_diagnostic=diagnostic)
         _record_developer_home_message("system", reply, action_taken=result["action_taken"], **model_metadata)
         return redirect(url_for("portal.index"))
 
-    context = _developer_home_context()
     reply, model_metadata = _developer_model_reply(text, context)
     action = "developer_application_model_answered"
     if not reply:
         reply = _developer_application_reply(text, context)
         action = "developer_application_model_unavailable"
-    _record_developer_home_message("human", text, developer_context=context)
+    _record_developer_home_message("human", text, developer_context=context, scope_diagnostic=diagnostic)
     _record_developer_home_message("system", reply, action_taken=action, **model_metadata)
     return redirect(url_for("portal.index"))
 
