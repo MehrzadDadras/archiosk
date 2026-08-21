@@ -183,6 +183,9 @@
         <form class="developer-home-composer-form" method="post" action="{{ url_for('portal.developer_home_composer') }}" data-ui-ref="developer.home.composer.form" data-developer-composer-form>
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <textarea class="text-input" name="message" data-developer-composer-input placeholder="Ask about ARCHIOSK or use /CCN" aria-label="Developer Composer message" autocomplete="off" rows="1"></textarea>
+            <button type="button" id="developer-home-composer-voice" class="voice-input-button" data-ui-ref="developer.home.composer.voice"
+                    aria-label="Press and speak - audio is processed by your browser only and is never saved">&#127908;&#65039;</button>
+            <span class="voice-input-status" id="developer-home-composer-voice-status" data-ui-ref="developer.home.composer.voice.status" aria-live="polite"></span>
             <button type="submit" class="btn btn-ghost" data-ui-ref="developer.home.composer.send">Send</button>
         </form>
         <div class="developer-home-context-actions" data-ui-ref="developer.home.context-actions">
@@ -265,6 +268,19 @@
             onEnd: function () { input.focus(); },
         });
     }
+})();
+
+// The application-level Composer uses the same governed voice engine as the
+// workspace Composer; it only changes the target input and has no project_id.
+(function () {
+    var input = document.querySelector('[data-developer-composer-form] [data-developer-composer-input]');
+    if (!input || !window.ArchioskVoiceInput) return;
+    window.ArchioskVoiceInput({
+        buttonId: 'developer-home-composer-voice',
+        statusId: 'developer-home-composer-voice-status',
+        onTranscript: function (transcript) { input.value = transcript; },
+        onEnd: function () { input.focus(); },
+    });
 })();
 </script>
 {% endblock %}

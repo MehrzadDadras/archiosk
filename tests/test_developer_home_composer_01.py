@@ -43,6 +43,17 @@ class DeveloperHomeComposerTests(unittest.TestCase):
         self.assertNotIn(b'Open a project, or ask what you can do here', response.data)
         self.assertIn(b'data-ui-ref="developer.home.composer"', response.data)
 
+    def test_developer_home_composer_has_canonical_microphone_and_voice_status(self):
+        self._developer()
+        response = self.client.get("/")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b'id="developer-home-composer-voice"', response.data)
+        self.assertIn(b'data-ui-ref="developer.home.composer.voice"', response.data)
+        self.assertIn(b'id="developer-home-composer-voice-status"', response.data)
+        self.assertIn(b"window.ArchioskVoiceInput", response.data)
+        self.assertIn(b"developer-home-composer-voice", response.data)
+        self.assertIn(b"developer-home-composer-voice-status", response.data)
+
     def test_developer_home_project_navigation_remains_available_as_links(self):
         self._developer()
         response = self.client.get("/")
