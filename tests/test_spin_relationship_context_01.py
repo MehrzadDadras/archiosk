@@ -65,6 +65,14 @@ class SpinRelationshipContextTests(unittest.TestCase):
         self.assertIn("does not prove downstream propagation", prompt)
         self.assertNotIn("therefore coordinated", prompt.lower())
 
+    def test_relationship_confidence_is_visible_without_becoming_authority(self):
+        prompt = _build_prompt(
+            SPIN_KIND_FIRST, "rfp.pdf", [], [], [],
+            relationship_evidence=[_relationship(confidence=0.42)],
+        )
+        self.assertIn("confidence=0.42", prompt)
+        self.assertIn("provisional=True", prompt)
+
     def test_run_spin_forwards_both_payloads_to_prompt_without_persisting_them(self):
         captured = {}
 

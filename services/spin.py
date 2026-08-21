@@ -112,6 +112,13 @@ KNOWN_HELIX_ASSESSMENTS = (
     "handshake_deficit", "propagation_lag", "stage_maturity_mismatch",
     "residual_ambiguity", "evidence_unavailable", "legitimate_deferred",
 )
+HELIX_ASSERTING_ASSESSMENTS = frozenset({
+    "converged", "dimension_conflict", "positional_conflict", "semantic_mismatch",
+    "handshake_deficit", "propagation_lag", "stage_maturity_mismatch",
+})
+HELIX_ABSTAINING_ASSESSMENTS = frozenset({
+    "evidence_unavailable", "residual_ambiguity", "legitimate_deferred",
+})
 KNOWN_HELIX_EVIDENCE_SUFFICIENCY = (
     "directly_supportable", "visual_vector_supportable", "evidence_type_insufficient",
 )
@@ -483,6 +490,10 @@ def _parse_helix_assessments(raw) -> list[dict]:
                 "observed_value": str(source.get("observed_value", "")).strip() or None,
                 "confidence": str(source.get("confidence", "")).strip() or None,
             })
+        if assessment in HELIX_ASSERTING_ASSESSMENTS and (
+            not observed or sufficiency == "evidence_type_insufficient"
+        ):
+            continue
         parsed.append({
             "interface": interface,
             "spin_axis": axis,
@@ -686,6 +697,7 @@ def _build_prompt(
                 f"status={relationship.get('status', '')}; "
                 f"provisional={relationship.get('provisional', '')}; "
                 f"validation={relationship.get('validation_state', '')}; "
+                f"confidence={relationship.get('confidence', '')}; "
                 f"reason={relationship.get('reason', '')}"
             )
         lines.append(

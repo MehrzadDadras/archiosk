@@ -39,6 +39,39 @@ def _item(**overrides):
 
 
 class HelixAssessmentParsingTests(unittest.TestCase):
+    def test_asserting_assessment_without_observed_evidence_is_dropped(self):
+        for assessment in (
+            "converged", "dimension_conflict", "positional_conflict",
+            "semantic_mismatch", "handshake_deficit", "propagation_lag",
+            "stage_maturity_mismatch",
+        ):
+            self.assertEqual(
+                _parse_helix_assessments([_item(assessment=assessment, observed_evidence=[])]),
+                [],
+                assessment,
+            )
+
+    def test_asserting_assessment_with_missing_evidence_key_is_dropped(self):
+        item = _item(assessment="converged")
+        item.pop("observed_evidence")
+        self.assertEqual(_parse_helix_assessments([item]), [])
+
+    def test_asserting_assessment_with_insufficient_evidence_type_is_dropped(self):
+        self.assertEqual(_parse_helix_assessments([_item(
+            assessment="converged", evidence_sufficiency="evidence_type_insufficient",
+        )]), [])
+
+    def test_abstaining_assessments_may_remain_evidence_free(self):
+        for assessment in ("evidence_unavailable", "residual_ambiguity", "legitimate_deferred"):
+            parsed = _parse_helix_assessments([_item(assessment=assessment, observed_evidence=[])])
+            self.assertEqual(len(parsed), 1, assessment)
+            self.assertEqual(parsed[0]["assessment"], assessment)
+
+    def test_asserting_assessment_with_real_evidence_is_retained(self):
+        parsed = _parse_helix_assessments([_item(assessment="converged")])
+        self.assertEqual(len(parsed), 1)
+        self.assertEqual(parsed[0]["assessment"], "converged")
+
     def test_mandatory_conflict_retains_dimension_and_revision_provenance(self):
         result = _parse_helix_assessments([_item()])
         self.assertEqual(result[0]["expectation_state"], "mandatory_stage_fit")
