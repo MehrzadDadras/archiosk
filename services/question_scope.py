@@ -49,6 +49,7 @@ _PROJECT_SIGNAL_VARIANTS = {
     "drawing": ("drawing", "drawings"),
     "contract": ("contract", "contracts"),
     "submission": ("submission", "submissions"),
+    "submittal": ("submittal", "submittals"),
     "what does": ("what does",),
     "what do": ("what do",),
 }

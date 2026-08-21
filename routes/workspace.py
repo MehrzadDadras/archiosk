@@ -4469,6 +4469,9 @@ def _run_conversation_turn(
         current_view=current_view,
         selected_source_id=selected_source_id,
         selected_object=persisted_selection,
+        developer_context=developer_context,
+        developer_mode_active=_developer_mode_active(),
+        developer_application_selection=session.get("developer_application_selection"),
     )
 
     store.add_message(

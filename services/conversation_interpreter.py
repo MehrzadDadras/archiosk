@@ -56,7 +56,8 @@ from services.capability_registry import (
 from services.environment_capabilities import working_material_root_label
 from services.drawing_analysis import analyze_drawing, make_comparison_artifact
 from services.conversational_turn import gather_project_evidence
-from services.project_qa import answer_project_question
+from services.project_qa import answer_application_question, answer_project_question
+from services.question_scope import QUESTION_SCOPE_APPLICATION, classify_question_scope
 from services.requirement_investigation import investigate_requirement
 from services.security_policy import DECISION_ALLOW, DECISION_ALLOW_APPROVED_ROUTE
 import services.quantitative_investigation as quant
@@ -214,6 +215,9 @@ def interpret_message(
     current_view: Optional[str] = None,
     selected_source_id: Optional[str] = None,
     selected_object: Optional[dict] = None,
+    developer_context: Optional[dict] = None,
+    developer_mode_active: bool = False,
+    developer_application_selection: Optional[dict] = None,
 ) -> InterpretationResult:
     """
     `case` is now optional (a project-level aperture - no Investigation
@@ -480,6 +484,51 @@ def interpret_message(
     folder_reference = _resolve_mentioned_folder(workspace, text)
     if folder_reference is not None:
         return _handle_folder_reference(workspace, folder_reference)
+
+    # Narrow first contextual Application Knowledge pilot. This is deliberately
+    # immediately before the existing project-question gate: Tier 1 capability
+    # handling and all other deterministic handlers above retain precedence.
+    # Application context is bounded to the existing Developer envelope; no
+    # workspace/store/project evidence is passed to the application model.
+    scope_result = classify_question_scope(text, developer_context)
+    template_identity = (developer_context or {}).get("template_identity")
+    template_id = template_identity.get("template_id") if isinstance(template_identity, dict) else None
+    valid_template_selection = (
+        isinstance(developer_application_selection, dict)
+        and developer_application_selection.get("object_type") == "template_surface"
+        and developer_application_selection.get("object_id") == "TPL-005"
+    )
+    has_project_referent = bool(
+        anchor is not None
+        or selected_object is not None
+        or validated_selected_source is not None
+        or any(
+            isinstance(item, dict) and item.get("project_id")
+            for item in (developer_context or {}).get("selected_elements", [])
+        )
+    )
+    positive_application_evidence = (
+        "archiosk" in scope_result.application_signals
+        or "composer" in scope_result.application_signals
+        or valid_template_selection
+    )
+    if (
+        developer_mode_active
+        and template_id == "TPL-005"
+        and not has_project_referent
+        and scope_result.scope == QUESTION_SCOPE_APPLICATION
+        and positive_application_evidence
+    ):
+        application_result = answer_application_question(
+            question=text,
+            developer_context=developer_context,
+        )
+        if application_result.ran and application_result.answer:
+            return InterpretationResult(
+                action_taken="application_scope_answered",
+                reply_text=application_result.answer,
+                content_class=CONTENT_CLASS_AI_PROPOSED,
+            )
 
     if _looks_like_project_question(lowered):
         return _handle_project_question(
