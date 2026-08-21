@@ -56,7 +56,7 @@ from services.developer_ccn import (
     parse_ccn_command,
 )
 from services.project_qa import answer_application_question
-from services.template_identity import identity_for_template_id
+from services.template_identity import identity_for_template_id, template_identity_for_endpoint
 
 portal_bp = Blueprint('portal', __name__)
 
@@ -303,17 +303,21 @@ def _attach_pending_application_selection(governance_log, actor: str) -> None:
 
 def _developer_home_context() -> dict | None:
     """Return active CCN plus pending application selection, if any."""
-    context = developer_context_for_project(session, None)
-    if context is not None:
-        return context
+    context = developer_context_for_project(
+        session,
+        None,
+        template_identity=template_identity_for_endpoint("portal.index"),
+    )
     pending = session.get("developer_application_selection")
     if isinstance(pending, dict):
-        return {
-            "scope": "application",
-            "status": "selection_only",
-            "selected_elements": [pending],
-        }
-    return None
+        if context is None:
+            context = {
+                "scope": "application",
+                "status": "selection_only",
+                "selected_elements": [],
+            }
+        context["selected_elements"] = [*context.get("selected_elements", []), pending]
+    return context
 
 
 def _developer_application_reply(text: str, context: dict | None) -> str:

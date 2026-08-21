@@ -4,6 +4,7 @@ from services.template_identity import (
     identity_for_template_id,
     template_identity_for_endpoint,
 )
+from services.developer_ccn import context_for_project
 
 
 class RuntimeTemplateIdentityTests(unittest.TestCase):
@@ -43,6 +44,24 @@ class RuntimeTemplateIdentityTests(unittest.TestCase):
         self.assertEqual(identity["template_id"], "TPL-005")
         self.assertNotIn("layout_id", identity)
         self.assertNotIn("nested_template_id", identity)
+
+    def test_application_context_carries_tpl_without_ccn(self):
+        identity = template_identity_for_endpoint("workspace.show_workspace")
+        context = context_for_project({}, "project-1", template_identity=identity)
+        self.assertEqual(context["template_identity"], identity)
+        self.assertEqual(context["selected_elements"], [])
+        self.assertNotIn("layout_id", context)
+        self.assertNotIn("nested_template_id", context)
+
+    def test_tpl_context_is_separate_from_selected_project_evidence(self):
+        identity = template_identity_for_endpoint("workspace.show_workspace")
+        context = context_for_project({}, "project-1", template_identity=identity)
+        self.assertNotIn("template_identity", context["selected_elements"])
+        self.assertNotIn("evidence", context)
+        self.assertNotIn("citations", context)
+
+    def test_unmapped_page_does_not_create_application_tpl_context(self):
+        self.assertIsNone(context_for_project({}, None, template_identity=None))
 
 
 if __name__ == "__main__":

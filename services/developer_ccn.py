@@ -143,9 +143,35 @@ def attach_selected_object(*, session, object_type: str, object_id: str, label: 
     return element
 
 
-def context_for_project(session, project_id: str | None = None) -> dict | None:
+def context_for_project(
+    session,
+    project_id: str | None = None,
+    *,
+    template_identity: dict | None = None,
+) -> dict | None:
+    """Return the existing Developer/application context envelope.
+
+    ``template_identity`` is an explicit server-resolved TPL object supplied
+    by the caller's page route. It is application context only: it is kept
+    alongside CCN/selection state and is never converted into project
+    evidence. When no CCN or selection exists, a supplied TPL still gives a
+    Developer turn a truthful page context rather than returning ``None``.
+    """
     ccn = session.get("developer_ccn")
-    if not isinstance(ccn, dict):
+    if not isinstance(ccn, dict) and template_identity is None:
         return None
-    visible = [e for e in ccn.get("selected_elements", []) if not e.get("project_id") or e.get("project_id") == project_id]
-    return {**ccn, "selected_elements": visible}
+    if isinstance(ccn, dict):
+        visible = [
+            e for e in ccn.get("selected_elements", [])
+            if not e.get("project_id") or e.get("project_id") == project_id
+        ]
+        context = {**ccn, "selected_elements": visible}
+    else:
+        context = {
+            "scope": "application" if project_id is None else "project",
+            "status": "template_context",
+            "selected_elements": [],
+        }
+    if template_identity is not None:
+        context["template_identity"] = dict(template_identity)
+    return context

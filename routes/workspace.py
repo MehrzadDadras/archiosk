@@ -157,6 +157,7 @@ from services.developer_ccn import (
     handle_command as handle_developer_ccn_command,
     is_ccn_command,
 )
+from services.template_identity import template_identity_for_endpoint
 from models import User
 
 workspace_bp = Blueprint("workspace", __name__)
@@ -696,7 +697,14 @@ def show_workspace(project_id):
                 current_context = {"type": "Finding", "label": _ctx_object["statement"][:60]}
             elif _ctx_type == "source":
                 current_context = {"type": "Source", "label": _ctx_object["name"]}
-    developer_ccn_context = developer_context_for_project(session, project_id) if _developer_mode_active() else None
+    developer_ccn_context = (
+        developer_context_for_project(
+            session,
+            project_id,
+            template_identity=template_identity_for_endpoint("workspace.show_workspace"),
+        )
+        if _developer_mode_active() else None
+    )
 
     # CLAUDE-MM8: ?work_product=<id> opens a governed work product
     # directly inside the Workspace pane, same "?<id> selection, resolved
@@ -4387,7 +4395,14 @@ def _run_conversation_turn(
     (a stale persisted selection never overrides a fresh anchor).
     """
     case_id = case["id"] if case is not None else None
-    developer_context = developer_context_for_project(session, project_id) if _developer_mode_active() else None
+    developer_context = (
+        developer_context_for_project(
+            session,
+            project_id,
+            template_identity=template_identity_for_endpoint("workspace.show_workspace"),
+        )
+        if _developer_mode_active() else None
+    )
     human_message = store.add_message(
         workspace, case_id, role="human", text=text, anchor=anchor, actor=_reviewer(),
         selected_source_id=selected_source_id, content_class=CONTENT_CLASS_HUMAN_AUTHORED,
@@ -4421,7 +4436,14 @@ def _run_conversation_turn(
         store.add_message(
             workspace, case_id, role="system", text=result["reply_text"],
             action_taken=result["action_taken"], content_class=CONTENT_CLASS_DETERMINISTIC_CALCULATION,
-            developer_context=developer_context_for_project(session, project_id) if _developer_mode_active() else None,
+            developer_context=(
+                developer_context_for_project(
+                    session,
+                    project_id,
+                    template_identity=template_identity_for_endpoint("workspace.show_workspace"),
+                )
+                if _developer_mode_active() else None
+            ),
         )
         return
 
@@ -4453,7 +4475,14 @@ def _run_conversation_turn(
         operational_actions=result.operational_actions,
         river_actions=result.river_actions,
         content_class=result.content_class,
-        developer_context=developer_context_for_project(session, project_id) if _developer_mode_active() else None,
+        developer_context=(
+            developer_context_for_project(
+                session,
+                project_id,
+                template_identity=template_identity_for_endpoint("workspace.show_workspace"),
+            )
+            if _developer_mode_active() else None
+        ),
     )
 
     if result.focused_finding_id is not None:
