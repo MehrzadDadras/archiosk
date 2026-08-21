@@ -27,6 +27,9 @@ State one clear bounded outcome, its success evidence, and explicit non-goals.
 Record:
 
 - implementation intent and required sequencing;
+- `APPLICABLE GOVERNANCE` with exact ID and version — canonical `GOV-*` records the
+  work must hold true (see [`../records/`](../records/) and
+  [`../templates/README.md`](../templates/README.md)). Omit the heading when none applies;
 - `APPLICABLE STANDING CONTRACTS` with exact ID and version;
 - reference templates/patterns reviewed and selected;
 - authority/context boundaries and preservation requirements;
@@ -49,8 +52,10 @@ verification, reporting format, and required final acceptance evidence.
 
 ## Contract applicability and precedence
 
-Every order must explicitly list applicable contracts. A relevant omitted
-contract is a completion finding, not an implementation convenience.
+Every order must explicitly list applicable contracts, and any canonical `GOV-*`
+record the work must hold true. A relevant omitted contract or governance record is
+a completion finding, not an implementation convenience. A cited `GOV-*` record is
+reported against on completion using the same compliance vocabulary as a contract.
 
 Precedence is:
 
@@ -85,6 +90,9 @@ Developer Home greeting currently over-injects active CCN context.
 
 MISSION
 Make conversational salience natural without changing UI or CCN semantics.
+
+APPLICABLE GOVERNANCE
+GOV-P-001 v1.0
 
 APPLICABLE STANDING CONTRACTS
 CIC-GO-CONVERSATION v1.0

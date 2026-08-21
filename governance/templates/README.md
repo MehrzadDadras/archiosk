@@ -190,7 +190,7 @@ exactly the bureaucracy this family is meant to avoid.
 
 | ID | Title | Type | Version | Status | Record |
 |---|---|---|---|---|---|
-| — | *(no governance records filed from these templates yet)* | — | — | — | — |
+| [GOV-P-001](../records/GOV-P-001.md) | Selection is context, not authorization | Governance Principle | v1.0 | CURRENT | [Record](../records/GOV-P-001.md) |
 
 Add one row per record created from a template. The register is an index, never a
 replacement for the record.
