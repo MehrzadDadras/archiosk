@@ -79,10 +79,8 @@ class DiscussionWorkflowTests(unittest.TestCase):
         return next(c for c in workspace.cases if c["title"] == title)
 
     def _share_case(self, case_id):
-        response = self.owner_client.post(
-            f"/projects/{self.project_id}/workspace/cases/{case_id}/share", follow_redirects=True,
-        )
-        self.assertEqual(response.status_code, 200)
+        workspace = self._store().get(self.project_id)
+        self._store().share_case(workspace, case_id=case_id, actor="owner1")
 
     def _create_thread(self, client, case_id, title="Datum concern", text="Does this line up with A101?"):
         response = client.post(
@@ -321,9 +319,9 @@ class DiscussionWorkflowTests(unittest.TestCase):
         workspace = self._store().get(self.project_id)
         derived_case = next(c for c in workspace.cases if c.get("derived_from_case_id") == case["id"])
 
-        self.owner_client.post(
-            f"/projects/{self.project_id}/workspace/cases/{derived_case['id']}/adopt-message",
-            data={"message_id": source_message_id}, follow_redirects=True,
+        self._store().adopt_review_message_into_case(
+            self._store().get(self.project_id),
+            source_message_id=source_message_id, target_case_id=derived_case["id"], actor="owner1",
         )
 
         response = self.owner_client.get(f"/projects/{self.project_id}/workspace?case={derived_case['id']}")

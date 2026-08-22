@@ -145,7 +145,7 @@ class InvestigationArchiveExposureRouteTests(unittest.TestCase):
 
     def test_confirm_page_hides_archive_button_for_non_owner_non_admin(self):
         case = self._create_case()
-        self.owner_client.post(f"/projects/{self.project_id}/workspace/cases/{case['id']}/share", data={}, follow_redirects=True)
+        self.store.share_case(self._reload_workspace(), case_id=case["id"], actor="owner1")
         response = self.other_client.get(f"/projects/{self.project_id}/workspace/cases/{case['id']}/archive/confirm")
         self.assertEqual(response.status_code, 200)
         self.assertNotIn(b"Yes &mdash; Archive this Investigation", response.data)

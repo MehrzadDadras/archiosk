@@ -73,7 +73,8 @@ class AttentionResponseWorkflowTests(unittest.TestCase):
         return next(c for c in self._store().get(self.project_id).cases if c["title"] == title)
 
     def _share_case(self, case_id):
-        self.owner_client.post(f"/projects/{self.project_id}/workspace/cases/{case_id}/share", follow_redirects=True)
+        workspace = self._store().get(self.project_id)
+        self._store().share_case(workspace, case_id=case_id, actor="owner1")
 
     def _create_thread_with_message(self, client, case_id, title="Datum concern", text="Please check this."):
         response = client.post(

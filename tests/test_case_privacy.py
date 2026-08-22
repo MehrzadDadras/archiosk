@@ -21,6 +21,7 @@ from __future__ import annotations
 import shutil
 import tempfile
 import unittest
+import pytest
 from pathlib import Path
 
 from services.case_workspace import (
@@ -303,6 +304,7 @@ class CasePrivacyRouteTests(unittest.TestCase):
         # Guessing/typing the id directly must not surface it either.
         self.assertNotIn(case["title"].encode(), response.data)
 
+    @pytest.mark.legacy_route_diagnostic
     def test_share_route_rejects_non_owner(self):
         case = self._create_case_as_owner()
         response = self.other_client.post(
@@ -314,6 +316,7 @@ class CasePrivacyRouteTests(unittest.TestCase):
         workspace = store.get(self.project_id)
         self.assertEqual(store._find(workspace.cases, case["id"])["visibility"], CASE_VISIBILITY_PRIVATE)
 
+    @pytest.mark.legacy_route_diagnostic
     def test_share_route_works_for_owner_and_becomes_visible_to_others(self):
         case = self._create_case_as_owner()
         response = self.owner_client.post(

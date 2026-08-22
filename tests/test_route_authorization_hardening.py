@@ -277,7 +277,7 @@ class RouteAuthorizationHardeningTests(unittest.TestCase):
 
     def test_shared_case_participant_can_still_validate_finding(self):
         case = self._create_case(self.owner_client, title="Shared Investigation")
-        self.owner_client.post(f"/projects/{self.project_id}/workspace/cases/{case['id']}/share", follow_redirects=True)
+        self._store().share_case(self._store().get(self.project_id), case_id=case["id"], actor="owner1")
         finding_id = self._create_finding(case["id"])
 
         response = self.other_client.post(
@@ -293,7 +293,7 @@ class RouteAuthorizationHardeningTests(unittest.TestCase):
 
     def test_shared_case_participant_can_still_post_message(self):
         case = self._create_case(self.owner_client, title="Shared Investigation")
-        self.owner_client.post(f"/projects/{self.project_id}/workspace/cases/{case['id']}/share", follow_redirects=True)
+        self._store().share_case(self._store().get(self.project_id), case_id=case["id"], actor="owner1")
 
         response = self.other_client.post(
             f"/projects/{self.project_id}/workspace/cases/{case['id']}/messages",

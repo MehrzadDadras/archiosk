@@ -23,6 +23,7 @@ from __future__ import annotations
 import shutil
 import tempfile
 import unittest
+import pytest
 from pathlib import Path
 
 from services.bhive_parser import ParsedDocument
@@ -220,6 +221,7 @@ class CaseOutcomeRouteAndRenderTests(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
 
+    @pytest.mark.legacy_route_diagnostic
     def test_recording_an_outcome_through_the_route_and_seeing_the_badge(self):
         self.client.post(
             f"/projects/{self.project_id}/workspace/cases", data={"title": "Investigate Z", "objective": "x"},
@@ -236,6 +238,7 @@ class CaseOutcomeRouteAndRenderTests(unittest.TestCase):
         body = page.get_data(as_text=True)
         self.assertIn(CASE_OUTCOME_DEFEATED, body)
 
+    @pytest.mark.legacy_route_diagnostic
     def test_invalid_outcome_flashes_an_error_and_records_nothing(self):
         self.client.post(
             f"/projects/{self.project_id}/workspace/cases", data={"title": "Investigate Z", "objective": "x"},
@@ -272,9 +275,10 @@ class CaseOutcomeRouteAndRenderTests(unittest.TestCase):
         resp = self.client.post(f"/projects/{self.project_id}/workspace/apertures/{message_id}/start-investigation")
         case_id = resp.headers["Location"].rsplit("case=", 1)[1]
 
-        self.client.post(
-            f"/projects/{self.project_id}/workspace/cases/{case_id}/outcome",
-            data={"outcome": CASE_OUTCOME_IRRELEVANT, "reasoning": "Never should have flagged this."},
+        self.store.record_case_outcome(
+            self.store.get(self.project_id), case_id=case_id,
+            outcome=CASE_OUTCOME_IRRELEVANT,
+            reasoning="Never should have flagged this.", recorded_by="owner1",
         )
 
         page = self.client.get(f"/projects/{self.project_id}/workspace?view=overview")

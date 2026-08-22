@@ -3529,47 +3529,6 @@ def create_project_snapshot(project_id):
     return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
 
 
-@workspace_bp.route("/projects/<project_id>/workspace/cases/<case_id>/share", methods=["POST"])
-@login_required
-def share_case(project_id, case_id):
-    """Explicit, human-authorized Private -> Shared transition only -
-    see CaseWorkspaceStore.share_case. The machine never performs this;
-    this route only ever forwards a real, authenticated human's own
-    request to share their own Case."""
-    _, store, workspace = _load_workspace_or_404(project_id)
-
-    try:
-        store.share_case(workspace, case_id=case_id, actor=_reviewer(), governance_log=_log())
-    except CaseWorkspaceError as exc:
-        flash(str(exc), "error")
-        return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
-
-    flash("Case shared.", "success")
-    return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
-
-
-@workspace_bp.route("/projects/<project_id>/workspace/cases/<case_id>/retract", methods=["POST"])
-@login_required
-def retract_case(project_id, case_id):
-    """Explicit, human-authorized Shared -> Private retraction, only
-    before the collaboration threshold - see
-    CaseWorkspaceStore.retract_case_to_private. Rejected outright by the
-    store layer once the Case is Collaborative (Constitutional Invariant
-    12); this route does not attempt its own separate check, so there is
-    exactly one place irreversibility is enforced, not two that could
-    drift apart."""
-    _, store, workspace = _load_workspace_or_404(project_id)
-
-    try:
-        store.retract_case_to_private(workspace, case_id=case_id, actor=_reviewer(), governance_log=_log())
-    except CaseWorkspaceError as exc:
-        flash(str(exc), "error")
-        return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
-
-    flash("Case retracted to private.", "success")
-    return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
-
-
 @workspace_bp.route("/projects/<project_id>/workspace/cases/<case_id>/archive/confirm", methods=["GET"])
 @login_required
 def confirm_archive_case(project_id, case_id):
@@ -3703,86 +3662,6 @@ def snapshot_archived_case(project_id, case_id):
         "not_covered": result.not_covered,
         "skipped_reason": result.skipped_reason,
     })
-
-
-@workspace_bp.route("/projects/<project_id>/workspace/cases/<case_id>/outcome", methods=["POST"])
-@login_required
-def record_case_outcome_route(project_id, case_id):
-    """
-    CLAUDE-P11: a human's verdict on whether this Case's own hypothesis
-    held up - see CaseWorkspaceStore.record_case_outcome and CaseOutcome's
-    own docstring on why this is the one place that verdict is ever
-    recorded, and why it is never machine-populated.
-    """
-    _, store, workspace = _load_workspace_or_404(project_id)
-
-    outcome = (request.form.get("outcome") or "").strip()
-    reasoning = (request.form.get("reasoning") or "").strip()
-    duplicate_of_case_id = (request.form.get("duplicate_of_case_id") or "").strip() or None
-
-    try:
-        store.record_case_outcome(
-            workspace, case_id=case_id, outcome=outcome, reasoning=reasoning,
-            recorded_by=_reviewer(), duplicate_of_case_id=duplicate_of_case_id,
-            governance_log=_log(),
-        )
-    except CaseWorkspaceError as exc:
-        flash(str(exc), "error")
-        return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
-
-    flash("Investigation outcome recorded.", "success")
-    return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
-
-
-@workspace_bp.route("/projects/<project_id>/workspace/cases/<case_id>/adopt-finding", methods=["POST"])
-@login_required
-def adopt_finding(project_id, case_id):
-    """Selectively carry one historical Finding from its archived Case
-    forward into `case_id` (the derived active Case) - see
-    CaseWorkspaceStore.adopt_finding_into_case. Owner or admin-role only
-    on the TARGET Case; the machine never performs this. Nothing is
-    carried forward automatically - this route only ever acts on a
-    specific `finding_id` an authorized human explicitly submitted."""
-    _, store, workspace = _load_workspace_or_404(project_id)
-    finding_id = request.form.get("finding_id", "").strip()
-
-    try:
-        store.adopt_finding_into_case(
-            workspace, source_finding_id=finding_id, target_case_id=case_id,
-            actor=_reviewer(), actor_role=session.get("role"), governance_log=_log(),
-        )
-    except CaseWorkspaceError as exc:
-        flash(str(exc), "error")
-        return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
-
-    flash("Finding carried forward for renewed review.", "success")
-    return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
-
-
-@workspace_bp.route("/projects/<project_id>/workspace/cases/<case_id>/adopt-message", methods=["POST"])
-@login_required
-def adopt_review_message(project_id, case_id):
-    """Selectively carry one historical review comment from its archived
-    Case forward into `case_id` (the derived active Case) - see
-    CaseWorkspaceStore.adopt_review_message_into_case. Owner or
-    admin-role only on the TARGET Case; the machine never performs this.
-    The original commenter is never recorded as the author of the new
-    active item - see the store method's own docstring."""
-    _, store, workspace = _load_workspace_or_404(project_id)
-    message_id = request.form.get("message_id", "").strip()
-    note = request.form.get("note", "").strip() or None
-
-    try:
-        store.adopt_review_message_into_case(
-            workspace, source_message_id=message_id, target_case_id=case_id,
-            actor=_reviewer(), actor_role=session.get("role"), note=note, governance_log=_log(),
-        )
-    except CaseWorkspaceError as exc:
-        flash(str(exc), "error")
-        return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
-
-    flash("Review comment carried forward for renewed consideration.", "success")
-    return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
 
 
 # -- human discussion: ReviewThread / ReviewMessage / Attention --------------------
@@ -6056,23 +5935,6 @@ def remove_work_product_section(project_id, work_product_id, section_id):
         store.remove_work_product_section(
             workspace, work_product_id, section_id, actor=_reviewer(),
             reason=request.form.get("reason") or None, governance_log=_log(),
-        )
-    except CaseWorkspaceError as exc:
-        flash(str(exc), "error")
-
-    return redirect(url_for("workspace.show_workspace", project_id=project_id, work_product=work_product_id))
-
-
-@workspace_bp.route("/projects/<project_id>/workspace/work-products/<work_product_id>/sections/reorder", methods=["POST"])
-@login_required
-def reorder_work_product_sections(project_id, work_product_id):
-    _, store, workspace = _load_workspace_or_404(project_id)
-    case_id = _work_product_case_id(workspace, work_product_id)
-    _require_visible_case(store, workspace, case_id)
-
-    try:
-        store.reorder_work_product_sections(
-            workspace, work_product_id, request.form.getlist("section_id"), actor=_reviewer(), governance_log=_log(),
         )
     except CaseWorkspaceError as exc:
         flash(str(exc), "error")
