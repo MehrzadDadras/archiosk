@@ -100,8 +100,12 @@ They confer no authority on any concept, including the ones marked NOT FILED.
 | C-08 | Panels show the work; menus hold the machinery | **PRINCIPLE FILED, ANALOGY NOT FILED** — [`GOV-P-002`](../records/GOV-P-002.md) v1.0 governs the durable principle. **No ANA record filed**; the slogan is not governed merely for being memorable | `governance/records/`, DC-04 outcome note |
 | C-09 | Airlock / Vestibule | **NOT AN ANALOGY — FORMAL TERM.** Not demoted | this register |
 | C-10 | CCN / CN / SI | **DEFER ANA UNTIL CN/SI ARE SUFFICIENTLY DEFINED.** CCN stays formal/implemented where governed; CN and SI stay named-but-unbuilt. Analogy must not imply architectural maturity they do not possess | this register |
+| C-11 | **Structural Agency** | **FILED** — [`VIS-003`](VIS-003.md). Product Owner decision, 2026-08-21, correcting an earlier reading of the Bauhaus/Constructivist direction. Principle stated in conversation; the one repository precedent (`static/css/tokens.css`'s meaning-named semantic tokens) is cited without claiming it *is* the principle | `governance/vision/` |
+| C-12 | **Generative coherence — one law, many truthful forms** | **FILED** — [`ANA-002`](ANA-002.md). Companion analogy. Filed **because** the design probes discussed alongside it (gravitational mass, spatial constraint, displacement, magnetic tension) needed a mandatory `DOES NOT MEAN` field to stop them hardening into rules. No corpus provenance; the record says so | `governance/vision/` |
 
-**Net effect of six decisions: two records filed, four deliberately not filed.**
+**Net effect of the original six decisions: two records filed, four deliberately not
+filed.** C-11 and C-12 were added later, on the separate Product Owner decision of
+2026-08-21, and are recorded here for continuity rather than as part of that tally.
 Four of the ten candidates were declined outright, one was declined as already
 covered, and one was split so the principle was filed without the slogan. The
 evidence sections above are unchanged and remain the record of what was found.

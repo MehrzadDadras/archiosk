@@ -55,12 +55,17 @@ An analogy without stated limits is a rule nobody voted for.
 | VIS-001 | ARCHIOSK is the kiosk | Product Vision | CURRENT | [Record](VIS-001.md) |
 | VIS-002 | Tools that make tools | Product Vision | CURRENT | [Record](VIS-002.md) |
 | ANA-001 | Composer as service counter, GO as the machinery behind it | Analogy | CURRENT | [Record](ANA-001.md) |
+| VIS-003 | Structural Agency | Product Vision | CURRENT | [Record](VIS-003.md) |
+| ANA-002 | Generative coherence — one law, many truthful forms | Analogy | CURRENT | [Record](ANA-002.md) |
 
 VIS-001 and ANA-001 were filed as **template validation examples**, drawn entirely
 from an existing current governance record (`current/developer-mode-ccn.md`).
-VIS-002 was filed on explicit Product Owner decision. No provenance was invented for
-any of them. Everything else remains a candidate, or a recorded decision **not** to
-file — see [`CANDIDATE-REGISTER.md`](CANDIDATE-REGISTER.md).
+VIS-002 was filed on explicit Product Owner decision. VIS-003 and ANA-002 were filed
+together on explicit Product Owner decision (2026-08-21), preserving a principle first
+stated in conversation; their origin sections say so plainly rather than claiming
+repository provenance they do not have. No provenance was invented for any of them.
+Everything else remains a candidate, or a recorded decision **not** to file — see
+[`CANDIDATE-REGISTER.md`](CANDIDATE-REGISTER.md).
 
 ---
 
