@@ -349,6 +349,16 @@ Each remains its own separate, not-yet-authorized step:
   are implemented (shared LLM call boundary, `content_class`/`candidate_referents` schema, the
   Context Envelope + orchestrator built but not reachable from a live request) — see the Stage 0/1/
   2 commits (`15b037f`/`cbb27d6`/`861d2b3`) for their own detail; this record does not restate it.
+
+  > **Partial lift, 2026-08-22 — `Stage 3A — Residual Admission Classification` is now AUTHORIZED**
+  > by explicit Product Owner authorization, and only that. `run_conversational_turn` is wired into
+  > the live dispatch chain **for admission classification only**: it decides how a residual
+  > expression gains *access* to interpretation, never what may be concluded from it. The closed
+  > `intent_class` dispatch table is **not** activated — the admission path reads only `ran`,
+  > `needs_clarification`, `candidate_referents` and `grounded_in`, and a source-inspection test
+  > asserts `intent_class` and `proposed_action` are never consulted. **The remainder of Stage 3 and
+  > all of Stage 4 remain NOT AUTHORIZED.** See `STATUS.md`'s own Stage 3A row for the full scope,
+  > boundary and test anchors; this record does not restate them.
 - **The full future Spin programme** — comprehensive Machine Spin, historical Spin-set
   preservation, Pass/Build adjudication, Tool Making, custom-focus management — see
   `specified-unbuilt/spin-project-intelligence-preview.md` for the concept-preservation entry.

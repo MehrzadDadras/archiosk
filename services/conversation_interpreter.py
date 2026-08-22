@@ -55,7 +55,11 @@ from services.capability_registry import (
 )
 from services.environment_capabilities import working_material_root_label
 from services.drawing_analysis import analyze_drawing, make_comparison_artifact
-from services.conversational_turn import gather_project_evidence
+from services.conversational_turn import (
+    build_context_envelope,
+    gather_project_evidence,
+    run_conversational_turn,
+)
 from services.project_qa import answer_application_question, answer_project_question
 from services.question_scope import QUESTION_SCOPE_APPLICATION, classify_question_scope
 from services.requirement_investigation import investigate_requirement
@@ -201,6 +205,117 @@ def _evaluate_external_ai_policy(store: CaseWorkspaceStore, workspace: ProjectWo
     )
 
 
+# -- CLAUDE-CA1D-COMPOSER-SPINE-01 Stage 3A: Residual Admission ----------
+# Product Owner authorized 2026-08-22, deliberately narrower than the
+# originally scoped Stage 3. This wires the already-built, already-tested
+# services/conversational_turn.py::run_conversational_turn into the live
+# dispatch chain FOR ADMISSION ONLY - deciding how a residual expression
+# gains ACCESS to interpretation, never what may be concluded from it.
+#
+# The closed intent_class dispatch table is deliberately NOT activated:
+# nothing below reads `result.intent_class`. Only `ran`,
+# `needs_clarification`, `candidate_referents` and `grounded_in` are
+# consulted, so this cannot become a general semantic router. Stage 4's
+# proposed_action envelope is likewise never read or executed.
+#
+# Language-neutral by construction: the seam is model-backed, so no
+# starter table, language detection, or translation is involved, and the
+# user's ORIGINAL expression is what travels onward to cognition.
+RESIDUAL_ADMISSION_INQUIRY = "project_inquiry"
+RESIDUAL_ADMISSION_CLARIFY = "clarification_required"
+RESIDUAL_ADMISSION_ASIDE = "conversational_contribution"
+RESIDUAL_ADMISSION_DECLINED = "declined"
+
+
+@dataclass
+class ResidualAdmission:
+    """How a residual expression should gain access to interpretation.
+
+    `DECLINED` means the seam did not run at all (policy denial, no
+    project context, no API key, malformed output) - the caller then
+    behaves exactly as it did before Stage 3A, so this is degrade-safe
+    by construction and never a new failure mode.
+    """
+
+    outcome: str
+    reply_text: Optional[str] = None
+
+    @property
+    def admitted(self) -> bool:
+        return self.outcome != RESIDUAL_ADMISSION_DECLINED
+
+
+def classify_residual_admission(
+    text: str,
+    workspace: ProjectWorkspace,
+    store: CaseWorkspaceStore,
+    anchor: Optional[dict] = None,
+    selected_source: Optional[dict] = None,
+    current_view: Optional[str] = None,
+    recent_history: Optional[list[dict]] = None,
+) -> ResidualAdmission:
+    """Residual admission classification - Stage 3A's whole surface.
+
+    Called ONLY after every deterministic high-confidence handler has
+    declined the message, and only where real project context exists.
+    Every recognized action, capability question, greeting, orientation,
+    contextual reference, folder reference and project-question match is
+    claimed earlier in interpret_message and never reaches here, so this
+    is not "classify every turn" - it is the remainder that would
+    otherwise hit the brittle fallback (and, from quick_start, a Case
+    created merely to hold the message).
+
+    Gated by the SAME external-AI policy resolver every other real
+    transmission in this module already uses - this is a third governed
+    call site, not a bypass. Requires real registered Sources: an empty
+    project has nothing to admit anyone to, and spending a model call on
+    that would be the exact cost the original deterministic bound
+    existed to prevent.
+
+    Creates no governed object of any kind. It returns an access
+    decision; `_handle_project_question` still performs the actual
+    reasoning through its own unchanged policy gate and its own
+    project_qa contract, so CH evidence semantics are untouched.
+    """
+    policy_decision = _evaluate_external_ai_policy(store, workspace)
+    if policy_decision.decision not in (DECISION_ALLOW, DECISION_ALLOW_APPROVED_ROUTE):
+        return ResidualAdmission(RESIDUAL_ADMISSION_DECLINED)
+
+    if not CaseWorkspaceStore.active_sources(workspace):
+        return ResidualAdmission(RESIDUAL_ADMISSION_DECLINED)
+
+    anchor_type, anchor_object = _resolve_anchor_object(workspace, anchor)
+    envelope = build_context_envelope(
+        workspace, store,
+        anchor_type=anchor_type, anchor_object=anchor_object,
+        current_view=current_view, selected_source=selected_source,
+    )
+    result = run_conversational_turn(text, workspace, envelope, recent_history=recent_history)
+
+    if not result.ran:
+        return ResidualAdmission(RESIDUAL_ADMISSION_DECLINED)
+
+    # Ambiguity first: the seam's own anti-guessing contract already
+    # refuses to invent a referent and asks instead, with every listed
+    # candidate re-resolved against this workspace. Reused, not rebuilt.
+    if result.needs_clarification or len(result.candidate_referents) > 1:
+        return ResidualAdmission(RESIDUAL_ADMISSION_CLARIFY, reply_text=result.reply_text)
+
+    # A turn the seam answered conversationally, grounding nothing and
+    # needing nothing clarified, was an aside rather than an inquiry -
+    # its own reply is the acknowledgment, already in the reviewer's own
+    # language. No project QA call, no Finding, no Case.
+    if not result.grounded_in and result.reply_text:
+        return ResidualAdmission(RESIDUAL_ADMISSION_ASIDE, reply_text=result.reply_text)
+
+    # Everything else is admitted to the existing project cognition path.
+    # The bias is deliberate: wrongly admitting costs one grounded answer
+    # that may honestly say "not covered by this project's evidence",
+    # while wrongly refusing denies access - the failure this whole stage
+    # exists to remove.
+    return ResidualAdmission(RESIDUAL_ADMISSION_INQUIRY)
+
+
 def interpret_message(
     text: str,
     workspace: ProjectWorkspace,
@@ -218,6 +333,7 @@ def interpret_message(
     developer_context: Optional[dict] = None,
     developer_mode_active: bool = False,
     developer_application_selection: Optional[dict] = None,
+    residual_admission: Optional["ResidualAdmission"] = None,
 ) -> InterpretationResult:
     """
     `case` is now optional (a project-level aperture - no Investigation
@@ -564,6 +680,43 @@ def interpret_message(
         else "\"This is not a scope item, it is background context\")."
     )
 
+    # CLAUDE-CA1D-COMPOSER-SPINE-01 Stage 3A: residual admission. Every
+    # deterministic high-confidence handler above has declined, so this
+    # is the remainder - exactly the messages that used to reach the
+    # brittle fallback below regardless of how clearly they expressed a
+    # project concern, and regardless of the language they were in.
+    # `residual_admission` is passed pre-computed by quick_start (which
+    # needs the same decision to avoid creating a Case) so one message
+    # never costs two model calls.
+    residual = residual_admission
+    if residual is None:
+        residual = classify_residual_admission(
+            text, workspace, store,
+            anchor=anchor, selected_source=validated_selected_source,
+            current_view=validated_current_view,
+        )
+    if residual.outcome == RESIDUAL_ADMISSION_INQUIRY:
+        return _handle_project_question(
+            text, workspace, case, store, reviewer, triggering_message_id,
+            ui_context={
+                "current_view": validated_current_view,
+                "selected_source_name": validated_selected_source["name"] if validated_selected_source else None,
+                "selected_source_id": validated_selected_source["id"] if validated_selected_source else None,
+            },
+        )
+    if residual.outcome == RESIDUAL_ADMISSION_CLARIFY:
+        return InterpretationResult(
+            action_taken="residual_clarification_requested",
+            reply_text=residual.reply_text,
+            content_class=CONTENT_CLASS_AI_PROPOSED,
+        )
+    if residual.outcome == RESIDUAL_ADMISSION_ASIDE:
+        return InterpretationResult(
+            action_taken="residual_conversational_contribution",
+            reply_text=residual.reply_text,
+            content_class=CONTENT_CLASS_AI_PROPOSED,
+        )
+
     # CLAUDE-P40-VW8-QA-R6: "when an Investigation is active, ordinary
     # natural language must be treated as Investigation discussion
     # unless it clearly invokes another supported action." Every branch
@@ -849,7 +1002,21 @@ def _normalize_for_conversational_check(lowered: str) -> str:
 
 
 def _looks_like_conversational_utterance(lowered: str) -> bool:
-    return _normalize_for_conversational_check(lowered) in _CONVERSATIONAL_UTTERANCE_PHRASES
+    normalized = _normalize_for_conversational_check(lowered)
+    if normalized in _CONVERSATIONAL_UTTERANCE_PHRASES:
+        return True
+    # CLAUDE-CA1D-COMPOSER-SPINE-01 Stage 3A: a message composed ENTIRELY
+    # of already-listed single-word acknowledgements ("okay thanks", "ok
+    # thanks", "cool thanks") is still an acknowledgement. This adds NO
+    # vocabulary - every part must already be in the list above - and
+    # exists only so a combination of two recognized phrases does not
+    # fall past the deterministic gate into Stage 3A's residual model
+    # call. Bounded to a short run of words: a real project message is
+    # never composed solely of greetings and thanks.
+    parts = normalized.replace(",", " ").split()
+    if 1 < len(parts) <= 4:
+        return all(part in _CONVERSATIONAL_UTTERANCE_PHRASES for part in parts)
+    return False
 
 
 def _handle_conversational_utterance(reviewer: str) -> InterpretationResult:

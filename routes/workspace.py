@@ -130,6 +130,7 @@ from services.conversation_interpreter import (
     _looks_like_conversational_utterance,
     _looks_like_orientation_request,
     _looks_like_project_question,
+    classify_residual_admission as _classify_residual_admission,
     _looks_like_what_next,
     _resolve_anchor_object,
     compute_organize_groups,
@@ -4266,6 +4267,7 @@ def _run_conversation_turn(
     project_id: str, store: CaseWorkspaceStore, workspace, case: Optional[dict], text: str,
     anchor: Optional[dict] = None, current_view: Optional[str] = None,
     selected_source_id: Optional[str] = None,
+    residual_admission=None,
 ) -> None:
     """
     Posts a human message (into `case`'s conversation, or
@@ -4380,6 +4382,7 @@ def _run_conversation_turn(
         developer_context=developer_context,
         developer_mode_active=_developer_mode_active(),
         developer_application_selection=session.get("developer_application_selection"),
+        residual_admission=residual_admission,
     )
 
     store.add_message(
@@ -4681,6 +4684,10 @@ def quick_start(project_id):
     # an Investigation requires actual investigative intent, never merely
     # any text typed into this composer.
     lowered_text = text.lower()
+    # Bound before the chain below: the Stage 3A walrus is the last
+    # disjunct, so an earlier match leaves it unevaluated and this stays
+    # None (no model call made, nothing to hand onward).
+    residual_admission = None
     if (
         is_ccn_command(text)
         or
@@ -4700,10 +4707,28 @@ def quick_start(project_id):
         or _looks_like_orientation_request(lowered_text)
         or _looks_like_contextual_reference(lowered_text)
         or _looks_like_what_next(lowered_text)
+        # CLAUDE-CA1D-COMPOSER-SPINE-01 Stage 3A: the LAST disjunct, so
+        # short-circuit evaluation means the model is consulted only for
+        # the residue every deterministic predicate above has declined.
+        # A residual expression the seam admits belongs in the project-
+        # level conversation, exactly like a plain question - it must not
+        # produce a governed Case merely because it was hard to classify.
+        # The decision is computed once here and handed to
+        # interpret_message below, so one message never costs two calls.
+        or (residual_admission := _classify_residual_admission(
+            text, workspace, store,
+            anchor=anchor,
+            selected_source=next(
+                (s for s in CaseWorkspaceStore.active_sources(workspace)
+                 if s["id"] == selected_source_id), None,
+            ) if selected_source_id else None,
+            current_view=current_view,
+        )).admitted
     ):
         _run_conversation_turn(
             project_id, store, workspace, None, text, anchor=anchor,
             current_view=current_view, selected_source_id=selected_source_id,
+            residual_admission=residual_admission,
         )
         # CLAUDE-CA1C-UX-FIX-01: no "#conversation-dock" fragment - it used
         # to (per this route's sibling below) rely on a browser-native
