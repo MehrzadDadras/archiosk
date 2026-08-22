@@ -24,6 +24,13 @@ based test set gives fast feedback before the full 3,594-test suite,"
 with measured proof for two worked examples (SPIN-00A, Requirements);
 it does not introduce pytest markers or reorganize `tests/` itself, and
 the full suite remains the only real pre-commit/pre-deploy gate.
+Same group once more for `CROSS_LAYER_VERIFICATION.md`
+(CLAUDE-CH-AO-FIREWALL-AUDIT-01, new) — a development convention
+recording how an observation made while exercising one part of the
+system becomes a diagnosis about another part without becoming
+permission to change it, plus the four test purposes mapped onto
+`TEST_LANES.md`'s existing assurance tiers; it carries no product
+authority, adds no lane, and names no runtime component.
 
 **Known gap, not yet fixed:** this manifest predates the multi-user
 `User`/`PasswordResetToken` auth system (`models.py`,
