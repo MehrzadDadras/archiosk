@@ -16,6 +16,7 @@ from __future__ import annotations
 import shutil
 import tempfile
 import unittest
+from copy import deepcopy
 from pathlib import Path
 
 from services.bhive_parser import BHiveParser
@@ -32,8 +33,10 @@ from services.case_workspace import (
     RESOLUTION_STATUS_RESOLVED_EXACT,
     RESOLUTION_STATUS_RESOLVED_MULTIPLE,
     RESOLUTION_STATUS_RESOLVED_RANGE,
+    RESOLUTION_STATUS_PARTIALLY_RESOLVED,
     RESOLUTION_STATUS_TARGET_NOT_FOUND,
     RESOLUTION_STATUS_UNKNOWN,
+    REQUIREMENT_REGISTRATION_MANUAL_TEST_FIXTURE,
     ProjectWorkspace,
     CaseWorkspaceError,
     CaseWorkspaceStore,
@@ -396,6 +399,55 @@ class SourceReferenceTests(unittest.TestCase):
         self.assertEqual(len(refs), 1)
         self.assertEqual(refs[0]["reference_text"], "Section 4.3")
         self.assertEqual(self.workspace.relationships, before_relationships)
+
+    def test_v3_read_time_resolution_tracks_current_requirements_without_mutation(self):
+        refs = self.store.extract_and_register_source_references(
+            self.workspace, self.source["id"], "See Section 4.3.",
+            {"location_type": "source"}, known_targets={"section": set()},
+        )
+        reference_id = refs[0]["id"]
+        stored_before = deepcopy(refs[0])
+        current_before = self.store.resolve_source_reference_status(self.workspace, reference_id)
+        self.assertEqual(current_before["resolution_status"], RESOLUTION_STATUS_TARGET_NOT_FOUND)
+
+        self.store.register_requirement(
+            self.workspace, self.source["id"], "4.3", "Section 4.3 requirement", "tester",
+            REQUIREMENT_REGISTRATION_MANUAL_TEST_FIXTURE,
+        )
+        current_after = self.store.resolve_source_reference_status(self.workspace, reference_id)
+        self.assertEqual(current_after["resolution_status"], RESOLUTION_STATUS_RESOLVED_EXACT)
+        self.assertEqual(current_after["resolved_target_ids"], ["4.3"])
+        self.assertEqual(self.store.get_source_reference(self.workspace, reference_id), stored_before)
+        self.assertEqual(self.workspace.relationships, [])
+
+    def test_v3_read_time_partial_and_superseded_target_changes_are_honest(self):
+        refs = self.store.extract_and_register_source_references(
+            self.workspace, self.source["id"], "See Sections 4.3 and 4.4.",
+            {"location_type": "source"}, known_targets={"section": set()},
+        )
+        reference_id = refs[0]["id"]
+        self.store.register_requirement(
+            self.workspace, self.source["id"], "4.3", "Section 4.3 requirement", "tester",
+            REQUIREMENT_REGISTRATION_MANUAL_TEST_FIXTURE,
+        )
+        partial = self.store.resolve_source_reference_status(self.workspace, reference_id)
+        self.assertEqual(partial["resolution_status"], RESOLUTION_STATUS_PARTIALLY_RESOLVED)
+        self.assertEqual(partial["resolved_target_ids"], ["4.3"])
+
+        requirement = self.store.register_requirement(
+            self.workspace, self.source["id"], "4.4", "Section 4.4 requirement", "tester",
+            REQUIREMENT_REGISTRATION_MANUAL_TEST_FIXTURE,
+        )
+        resolved = self.store.resolve_source_reference_status(self.workspace, reference_id)
+        self.assertEqual(resolved["resolution_status"], RESOLUTION_STATUS_RESOLVED_MULTIPLE)
+        self.store.set_requirement_status(self.workspace, requirement["id"], "superseded", "tester")
+        after_supersession = self.store.resolve_source_reference_status(self.workspace, reference_id)
+        self.assertEqual(after_supersession["resolution_status"], RESOLUTION_STATUS_PARTIALLY_RESOLVED)
+        self.assertEqual(after_supersession["resolved_target_ids"], ["4.3"])
+
+    def test_v3_unknown_source_reference_id_is_unresolved(self):
+        result = self.store.resolve_source_reference_status(self.workspace, "missing-reference")
+        self.assertEqual(result, {"status": "unresolved", "source_reference_id": "missing-reference"})
 
 
 class NREOCRCRegressionTests(unittest.TestCase):

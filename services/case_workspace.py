@@ -13135,6 +13135,53 @@ class CaseWorkspaceStore:
     def source_references_for_source(self, workspace: ProjectWorkspace, source_id: str) -> list[dict]:
         return [r for r in workspace.source_references if r["source_id"] == source_id]
 
+    def resolve_source_reference_status(self, workspace: ProjectWorkspace, reference_id: str) -> dict:
+        """Derive a SourceReference's current resolution without mutation.
+
+        The stored record remains the extraction-time fact.  This read-time
+        view re-parses only that record's verbatim citation, then resolves it
+        against the workspace's current active governed Requirement
+        identifiers, following the same closed resolver used at ingestion.
+        """
+        reference = self._find(workspace.source_references, reference_id)
+        if reference is None:
+            return {"status": "unresolved", "source_reference_id": reference_id}
+
+        active_source_ids = {
+            source["id"] for source in workspace.sources if not source.get("removed_at")
+        }
+        known_section_targets = {
+            requirement.get("original_requirement_identifier")
+            for requirement in workspace.requirements
+            if requirement.get("source_id") in active_source_ids
+            and requirement.get("status") not in (REQUIREMENT_STATUS_SUPERSEDED, REQUIREMENT_STATUS_WITHDRAWN)
+            and requirement.get("original_requirement_identifier")
+        }
+        candidate = next(
+            (
+                item for item in parse_source_reference_text(reference.get("reference_text", ""))
+                if item.get("reference_type") == reference.get("reference_type")
+            ),
+            None,
+        )
+        resolution = (
+            resolve_source_reference_candidate(candidate, {"section": known_section_targets})
+            if candidate is not None
+            else {"resolution_status": RESOLUTION_STATUS_UNKNOWN, "resolved_targets": []}
+        )
+        status = resolution["resolution_status"]
+        return {
+            "status": status,
+            "resolution_status": status,
+            "source_reference_id": reference_id,
+            "reference_text": reference.get("reference_text"),
+            "reference_type": reference.get("reference_type"),
+            "resolved_target_ids": list(resolution["resolved_targets"]),
+            "resolved_target_type": (
+                "requirement" if resolution["resolved_targets"] else None
+            ),
+        }
+
     def get_source_reference(self, workspace: ProjectWorkspace, reference_id: str) -> Optional[dict]:
         return self._find(workspace.source_references, reference_id)
 
