@@ -57,6 +57,8 @@ An analogy without stated limits is a rule nobody voted for.
 | ANA-001 | Composer as service counter, GO as the machinery behind it | Analogy | CURRENT | [Record](ANA-001.md) |
 | VIS-003 | Structural Agency | Product Vision | CURRENT | [Record](VIS-003.md) |
 | ANA-002 | Generative coherence — one law, many truthful forms | Analogy | CURRENT | [Record](ANA-002.md) |
+| VIS-004 | Broad cognition, selective attention, narrow authority | Product Vision | CURRENT | [Record](VIS-004.md) |
+| ANA-003 | Back-of-house cognition, front-of-house voice | Analogy | CURRENT | [Record](ANA-003.md) |
 
 VIS-001 and ANA-001 were filed as **template validation examples**, drawn entirely
 from an existing current governance record (`current/developer-mode-ccn.md`).
@@ -64,6 +66,8 @@ VIS-002 was filed on explicit Product Owner decision. VIS-003 and ANA-002 were f
 together on explicit Product Owner decision (2026-08-21), preserving a principle first
 stated in conversation; their origin sections say so plainly rather than claiming
 repository provenance they do not have. No provenance was invented for any of them.
+VIS-004 and ANA-003 were filed the same way on 2026-08-22. Both cite, and neither
+activates, the **NOT AUTHORIZED** `specified-unbuilt/adaptive-attention-and-context-circulation.md`.
 Everything else remains a candidate, or a recorded decision **not** to file — see
 [`CANDIDATE-REGISTER.md`](CANDIDATE-REGISTER.md).
 
