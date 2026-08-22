@@ -945,9 +945,68 @@ _PROJECT_QUESTION_STARTERS = (
 )
 
 
+# CLAUDE-AO-INTENT-ACCESS-01: professional inquiry verbs that open a
+# request to examine project evidence. Deliberately narrow and
+# deterministic - the same discipline _PROJECT_QUESTION_STARTERS above
+# and _ORIENTATION_PHRASES below already use, NOT an intent ontology and
+# not a second router. Every one of these means "look at the project
+# material," never "change something": the governed action grammar
+# (analyze/compare/draft RFI/correction) is matched earlier in
+# interpret_message and still wins, so an imperative here can only ever
+# reach read-only project cognition.
+_PROJECT_INQUIRY_STARTERS = (
+    "review", "check", "assess", "evaluate", "identify",
+    "look at", "look over", "look through", "go through",
+    "flag", "point out", "help me understand",
+)
+
+# Sentence/clause boundaries only - punctuation, never grammar. An
+# inquiry cue may open ANY clause of a multi-sentence message, not only
+# the message itself.
+_CLAUSE_BOUNDARY = re.compile(r"[.;!?\n]+")
+
+
 def _looks_like_project_question(lowered: str) -> bool:
+    """
+    CLAUDE-AO-INTENT-ACCESS-01 (PSD-SMOKE-01-A/B/C): recognition follows
+    substantive project intent, not sentence shape.
+
+    The original form applied both tests to the WHOLE message - it
+    matched only when the message ENDED with "?" or STARTED with a
+    known starter. Measured live on the deployed build, that made access
+    to cognition turn on a single character: "Which similar conditions
+    ... differently from each other?" reached the evidence path, while
+    the same request followed by one explanatory sentence did not, and a
+    six-sentence professional review instruction opening with "Review"
+    matched neither test and fell through to the unrecognized-message
+    fallback (where quick_start then created a governed Case merely to
+    hold it).
+
+    Both tests are now applied where the cue actually occurs: a question
+    mark ANYWHERE, or a recognized cue opening ANY clause. This is the
+    same deterministic keyword matching as before, evaluated at clause
+    granularity instead of message granularity - deliberately still not
+    language understanding, and deliberately still bounded, so a plain
+    declarative statement ("the consultant called me this morning")
+    remains unmatched and never triggers a real, billed model call for
+    something that was never an inquiry at all.
+
+    Governed by current/irregularity-interpretation-and-legibility.md:
+    interpret generously, conclude conservatively. Widening recognition
+    changes only what reaches read-only cognition - it confers no
+    authority, creates no governed object, and bypasses no action gate.
+    """
     stripped = lowered.strip()
-    return stripped.endswith("?") or stripped.startswith(_PROJECT_QUESTION_STARTERS)
+    if not stripped:
+        return False
+    if "?" in stripped:
+        return True
+    return any(
+        clause.startswith(_PROJECT_QUESTION_STARTERS)
+        or clause.startswith(_PROJECT_INQUIRY_STARTERS)
+        for clause in (part.strip() for part in _CLAUSE_BOUNDARY.split(stripped))
+        if clause
+    )
 
 
 # CLAUDE-POSTCAMEL-CA1 (Section 4, Project orientation): a deliberately
