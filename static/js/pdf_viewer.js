@@ -292,6 +292,8 @@
         var currentCanvasContainer = null;
         var currentUrl = null;
         var currentDownloadFilename = null;
+        var drawingCapabilityPanel = null;
+        var drawingCapabilityEvidenceId = null;
         var viewStateSaveTimer = null;
         var thumbnailsOnlyMode = false;
         var thumbnailRows = [];
@@ -308,6 +310,133 @@
         var highlightDrag = null;
         var activeTextBox = null;
         var regionDrag = null;
+
+        function hasSheetEvidence(units) {
+            return Array.isArray(units) && units.some(function (unit) {
+                return unit && unit.unit_type === 'sheet';
+            });
+        }
+
+        var DRAWING_RELATIONSHIP_TYPES = [
+            'supports', 'contradicts', 'observes', 'deviates_from', 'requires_follow_up',
+            'references', 'same_subject_as', 'compares_with', 'validates', 'invalidates',
+        ];
+        var DRAWING_ENDPOINT_TYPES = [
+            'evidence_item', 'addressable_region', 'structural_unit', 'derived_observation',
+            'source', 'task', 'finding',
+        ];
+
+        function drawingStatusBadge(status) {
+            var badge = document.createElement('span');
+            badge.className = 'relationship-status-badge relationship-status-' + status;
+            badge.textContent = status;
+            return badge;
+        }
+
+        function loadPdfRelationships(evidenceId, listEl) {
+            listEl.textContent = 'Loading relationships…';
+            fetch(apiDocumentsBase() + '/relationships?object_type=evidence_item&object_id=' + encodeURIComponent(evidenceId) + '&direction=both', { credentials: 'same-origin' })
+                .then(function (response) { return response.json(); })
+                .then(function (body) {
+                    listEl.textContent = '';
+                    var relationships = (body && body.relationships) || [];
+                    if (!relationships.length) { listEl.textContent = 'No relationships recorded yet.'; return; }
+                    relationships.forEach(function (rel) {
+                        var row = document.createElement('div');
+                        row.className = 'relationship-river-row';
+                        var from = rel.from_type === 'evidence_item' && rel.from_id === evidenceId;
+                        var otherType = from ? rel.to_type : rel.from_type;
+                        var otherId = from ? rel.to_id : rel.from_id;
+                        var head = document.createElement('div');
+                        head.className = 'relationship-river-row-head';
+                        head.textContent = (from ? '→ ' : '← ') + rel.relationship_type + ' ' + otherType + ' (' + String(otherId).slice(0, 8) + '…) ';
+                        row.appendChild(head);
+                        fetch(apiDocumentsBase() + '/relationships/' + encodeURIComponent(rel.id) + '/status', { credentials: 'same-origin' })
+                            .then(function (response) { return response.json(); })
+                            .then(function (status) { head.appendChild(drawingStatusBadge(status.status)); });
+                        if (rel.reason) { var reason = document.createElement('p'); reason.textContent = rel.reason; row.appendChild(reason); }
+                        var actions = document.createElement('div');
+                        ['confirm', 'dispute', 'reject'].forEach(function (verb) {
+                            var action = document.createElement('button'); action.type = 'button'; action.className = 'doc-control-btn';
+                            action.textContent = verb.charAt(0).toUpperCase() + verb.slice(1);
+                            action.addEventListener('click', function () {
+                                action.disabled = true;
+                                fetch(apiDocumentsBase() + '/relationships/' + encodeURIComponent(rel.id) + '/' + verb, {
+                                    method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}),
+                                }).then(function () { loadPdfRelationships(evidenceId, listEl); });
+                            });
+                            actions.appendChild(action);
+                        });
+                        row.appendChild(actions); listEl.appendChild(row);
+                    });
+                })
+                .catch(function () { listEl.textContent = 'Could not load relationships.'; });
+        }
+
+        function buildPdfRelationshipForm(evidenceId, listEl) {
+            var form = document.createElement('div'); form.className = 'relationship-river-create';
+            var targetType = document.createElement('select'); targetType.setAttribute('aria-label', 'Target object type');
+            DRAWING_ENDPOINT_TYPES.forEach(function (type) { var option = document.createElement('option'); option.value = type; option.textContent = type; targetType.appendChild(option); });
+            var targetId = document.createElement('input'); targetId.type = 'text'; targetId.placeholder = 'Target object id'; targetId.setAttribute('aria-label', 'Target object id');
+            var relationshipType = document.createElement('select'); relationshipType.setAttribute('aria-label', 'Relationship type');
+            DRAWING_RELATIONSHIP_TYPES.forEach(function (type) { var option = document.createElement('option'); option.value = type; option.textContent = type; relationshipType.appendChild(option); });
+            var reason = document.createElement('input'); reason.type = 'text'; reason.placeholder = 'Reason (optional)'; reason.setAttribute('aria-label', 'Relationship reason');
+            var create = document.createElement('button'); create.type = 'button'; create.className = 'doc-control-btn'; create.textContent = 'Create relationship';
+            var status = document.createElement('span'); status.setAttribute('aria-live', 'polite');
+            create.addEventListener('click', function () {
+                if (!targetId.value.trim()) { status.textContent = 'Target object id is required.'; return; }
+                create.disabled = true;
+                fetch(apiDocumentsBase() + '/relationships', {
+                    method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ from_type: 'evidence_item', from_id: evidenceId, to_type: targetType.value, to_id: targetId.value.trim(), relationship_type: relationshipType.value, reason: reason.value.trim() || null }),
+                }).then(function (response) { return response.json().then(function (body) { return { ok: response.ok, body: body }; }); })
+                    .then(function (result) { create.disabled = false; status.textContent = result.ok ? 'Relationship created.' : (result.body.message || 'Could not create that relationship.'); if (result.ok) { targetId.value = ''; reason.value = ''; loadPdfRelationships(evidenceId, listEl); } });
+            });
+            [targetType, targetId, relationshipType, reason, create, status].forEach(function (element) { form.appendChild(element); });
+            return form;
+        }
+
+        function buildPdfInvestigationForm(evidenceId, resultEl) {
+            var form = document.createElement('div'); form.className = 'relationship-river-create';
+            var caseId = document.createElement('input'); caseId.type = 'text'; caseId.placeholder = 'Case id'; caseId.setAttribute('aria-label', 'Case id');
+            var question = document.createElement('input'); question.type = 'text'; question.placeholder = 'Investigation question'; question.setAttribute('aria-label', 'Investigation question');
+            var run = document.createElement('button'); run.type = 'button'; run.className = 'doc-control-btn'; run.textContent = 'Investigate';
+            var status = document.createElement('span'); status.setAttribute('aria-live', 'polite');
+            run.addEventListener('click', function () {
+                if (!caseId.value.trim() || !question.value.trim()) { status.textContent = 'Case id and a question are both required.'; return; }
+                run.disabled = true; status.textContent = 'Investigating…';
+                fetch(apiDocumentsBase() + '/investigations', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question: question.value.trim(), case_id: caseId.value.trim(), anchor_object_type: 'evidence_item', anchor_object_id: evidenceId }) })
+                    .then(function (response) { return response.json().then(function (body) { return { ok: response.ok, body: body }; }); })
+                    .then(function (result) {
+                        run.disabled = false;
+                        if (!result.ok) { status.textContent = result.body.message || 'Could not run that investigation.'; return; }
+                        status.textContent = '';
+                        fetch(apiDocumentsBase() + '/investigations/' + encodeURIComponent(result.body.investigation_step.id) + '/answer', { credentials: 'same-origin' })
+                            .then(function (response) { return response.json(); }).then(function (answer) { resultEl.textContent = answer.status === 'assembled' ? ('Question: ' + answer.question + ((answer.claims || []).length ? ' Claims: ' + answer.claims.length : '')) : 'Investigation not available.'; });
+                    });
+            });
+            [caseId, question, run, status].forEach(function (element) { form.appendChild(element); });
+            return form;
+        }
+
+        function renderDrawingCapability(units) {
+            if (name !== 'main' || !currentCanvasContainer) return;
+            var available = hasSheetEvidence(units);
+            if (!available) {
+                if (drawingCapabilityPanel && drawingCapabilityPanel.parentNode) drawingCapabilityPanel.parentNode.removeChild(drawingCapabilityPanel);
+                drawingCapabilityPanel = null; drawingCapabilityEvidenceId = null; return;
+            }
+            if (!drawingCapabilityPanel) { drawingCapabilityPanel = document.createElement('section'); drawingCapabilityPanel.className = 'pdf-drawing-capabilities'; drawingCapabilityPanel.setAttribute('aria-label', 'Drawing capabilities'); currentCanvasContainer.appendChild(drawingCapabilityPanel); }
+            drawingCapabilityPanel.textContent = '';
+            var heading = document.createElement('h4'); heading.textContent = 'Drawing capabilities'; drawingCapabilityPanel.appendChild(heading);
+            var note = document.createElement('p'); note.textContent = drawingCapabilityEvidenceId ? 'Governed sheet evidence is available for Relationships and Investigation.' : 'Governed sheet structure is registered. Create a region to unlock evidence-linked capabilities.'; drawingCapabilityPanel.appendChild(note);
+            if (!drawingCapabilityEvidenceId) return;
+            var relationships = document.createElement('div'); relationships.className = 'pdf-drawing-relationships';
+            var relHeading = document.createElement('h5'); relHeading.textContent = 'Relationships'; relationships.appendChild(relHeading);
+            var relList = document.createElement('div'); relationships.appendChild(relList); relationships.appendChild(buildPdfRelationshipForm(drawingCapabilityEvidenceId, relList));
+            var refresh = document.createElement('button'); refresh.type = 'button'; refresh.className = 'doc-control-btn'; refresh.textContent = 'Refresh relationships'; refresh.addEventListener('click', function () { loadPdfRelationships(drawingCapabilityEvidenceId, relList); }); relationships.appendChild(refresh); drawingCapabilityPanel.appendChild(relationships); loadPdfRelationships(drawingCapabilityEvidenceId, relList);
+            var investigation = document.createElement('div'); investigation.className = 'pdf-drawing-investigation'; var invHeading = document.createElement('h5'); invHeading.textContent = 'Investigation'; investigation.appendChild(invHeading); var invResult = document.createElement('div'); investigation.appendChild(buildPdfInvestigationForm(drawingCapabilityEvidenceId, invResult)); investigation.appendChild(invResult); drawingCapabilityPanel.appendChild(investigation);
+        }
 
         function isFocused() { return window.__activeDocumentSurface === name; }
 
@@ -910,6 +1039,7 @@
                 credentials: 'same-origin',
             }).then(function (resp) { return resp.json(); }).then(function (body) {
                 var units = (body && body.structural_units) || [];
+                renderDrawingCapability(units);
                 var match = units.filter(function (u) {
                     return u.unit_type === 'sheet' && u.order_index === (currentPage - 1);
                 })[0];
@@ -975,6 +1105,8 @@
                         return;
                     }
                     var label = result.body.citation && result.body.citation.label;
+                    var evidenceId = result.body.evidence_item && result.body.evidence_item.id;
+                    if (evidenceId) drawingCapabilityEvidenceId = evidenceId;
                     regionStatusEl.textContent = '';
                     var span = document.createElement('span');
                     span.textContent = label ? ('Region created: ' + label + ' ') : 'Region created. ';
@@ -986,6 +1118,11 @@
                         copyBtn.textContent = 'Copy citation';
                         copyBtn.addEventListener('click', function () { navigator.clipboard.writeText(label); });
                         regionStatusEl.appendChild(copyBtn);
+                    }
+                    if (drawingCapabilityEvidenceId) {
+                        fetch(apiDocumentsBase() + '/structural-units?source_id=' + encodeURIComponent(currentSourceId), { credentials: 'same-origin' })
+                            .then(function (response) { return response.json(); })
+                            .then(function (body) { renderDrawingCapability((body && body.structural_units) || []); });
                     }
                 });
         }
@@ -1039,6 +1176,8 @@
                 mirrorH = !!(saved && saved.mirrorH);
                 mirrorV = !!(saved && saved.mirrorV);
                 currentSheetUnit = null;
+                drawingCapabilityEvidenceId = null;
+                drawingCapabilityPanel = null;
                 if (isFocused() && regionStatusEl) regionStatusEl.textContent = '';
                 applyMirrorTransform();
                 updateOrientationStatus();
@@ -1053,6 +1192,7 @@
                 }
                 updateSearchUi();
                 showControls();
+                if (name === 'main') ensureSheetUnitForCurrentPage();
                 resetAnnotationState();
                 buildThumbnails();
                 if (saved && saved.zoom) {
@@ -1089,6 +1229,9 @@
             mirrorH = false;
             mirrorV = false;
             currentSheetUnit = null;
+            drawingCapabilityEvidenceId = null;
+            if (drawingCapabilityPanel && drawingCapabilityPanel.parentNode) drawingCapabilityPanel.parentNode.removeChild(drawingCapabilityPanel);
+            drawingCapabilityPanel = null;
             regionDrag = null;
             if (isFocused() && regionStatusEl) regionStatusEl.textContent = '';
             hideControls();
@@ -1139,6 +1282,7 @@
 
         var api = {
             name: name,
+            hasSheetEvidence: hasSheetEvidence,
             mount: mount,
             unmount: unmount,
             takeSnapshot: takeSnapshot,
@@ -1309,6 +1453,7 @@
         mount: mainSurface.mount,
         unmount: mainSurface.unmount,
         createSurface: createPdfSurface,
+        _hasSheetEvidence: mainSurface.hasSheetEvidence,
         setFocus: setFocus,
         getFocusedName: function () { return window.__activeDocumentSurface; },
     };
