@@ -28,6 +28,8 @@ from services.case_workspace import (
     SPREADSHEET_CLASSIFICATION_MALFORMED,
     SPREADSHEET_CLASSIFICATION_SUPPORTED,
     CaseWorkspaceStore,
+    REQUIREMENT_STATUS_SUPERSEDED,
+    REQUIREMENT_STATUS_WITHDRAWN,
 )
 from services.governance import GovernanceLog
 from services.requirements_registry import RequirementsRegistry
@@ -39,6 +41,7 @@ from services.security_policy import ACTION_EXTERNAL_AI_REQUEST, DECISION_ALLOW,
 # was actually verified -- see services/governance.py.
 _DEFAULT_ACTOR = "anonymous"
 _DEFAULT_ROLE = "unspecified"
+_SOURCE_REFERENCE_EXTRACTOR_VERSION = "declared_reference_v1"
 
 
 class UploadError(Exception):
@@ -339,6 +342,24 @@ def ingest_upload(
     workspace = store.get_or_create(
         document.project_id, register_document_source=document_source_payload(document),
     )
+    # The founding Source is created by get_or_create rather than the
+    # add-document path below.  Reuse the parser's existing deterministic
+    # extraction stage to feed the same declared-reference registration seam;
+    # unresolved citations remain records and no Relationship is created.
+    founding_source = next(
+        (source for source in workspace.sources if source.get("name") == document.filename),
+        None,
+    )
+    if founding_source is not None:
+        try:
+            founding_text = parser._extract(raw_bytes, filename)  # noqa: SLF001 - shared parser seam
+        except Exception:  # noqa: BLE001 - a mocked/legacy parser may have accepted bytes the extractor cannot reread
+            founding_text = ""
+        if founding_text.strip():
+            _register_declared_source_references(
+                store, workspace, founding_source["id"], founding_text,
+                actor=actor or _DEFAULT_ACTOR, governance_log=governance_log,
+            )
     store.set_operating_environment(
         workspace, operating_environment, actor=actor or _DEFAULT_ACTOR, governance_log=governance_log,
     )
@@ -426,7 +447,48 @@ def _register_source_content(
         workspace, source_id=source["id"], text=text,
         extractor_version=parser.__class__.__name__, actor=actor, governance_log=governance_log,
     )
+    _register_declared_source_references(
+        store, workspace, source["id"], text, actor=actor, governance_log=governance_log,
+    )
     return "added", None
+
+
+def _register_declared_source_references(
+    store: CaseWorkspaceStore,
+    workspace,
+    source_id: str,
+    text: str,
+    actor: str,
+    governance_log: Optional[GovernanceLog],
+) -> list[dict]:
+    """Register citations using the existing bounded SourceReference path.
+
+    Only current governed Requirement identifiers are supplied as section
+    targets.  No registry ParsedDocument item, filename, or internal id is
+    promoted into a target merely because it is available at ingestion time.
+    """
+    active_source_ids = {
+        source["id"] for source in workspace.sources if not source.get("removed_at")
+    }
+    known_section_targets = {
+        requirement.get("original_requirement_identifier")
+        for requirement in workspace.requirements
+        if requirement.get("source_id") in active_source_ids
+        and requirement.get("status") not in (REQUIREMENT_STATUS_SUPERSEDED, REQUIREMENT_STATUS_WITHDRAWN)
+        and requirement.get("original_requirement_identifier")
+    }
+    return store.extract_and_register_source_references(
+        workspace,
+        source_id=source_id,
+        text=text,
+        origin_context={"location_type": "source"},
+        known_targets={"section": known_section_targets},
+        resolution_method="declared_reference_target_match",
+        resolved_target_type="requirement",
+        extractor_version=_SOURCE_REFERENCE_EXTRACTOR_VERSION,
+        actor=actor,
+        governance_log=governance_log,
+    )
 
 
 def ingest_folder_upload(

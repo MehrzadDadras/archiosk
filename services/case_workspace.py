@@ -3759,6 +3759,11 @@ class SourceReference:
     extractor_version: Optional[str] = None
 
 
+# Bounded ingestion protection: ordinary documents remain well below this
+# ceiling, while pathological input cannot create an unbounded citation river.
+_MAX_SOURCE_REFERENCES_PER_SOURCE = 200
+
+
 # -- CLAUDE-MM1: Multimodal Foundation and Evidence Contract -----------------
 # The shared governed representation every later Camel stage (MM2-MM9) builds
 # on - camel-multimodal-programme.md's own MM1 framing. Extends today's
@@ -13029,6 +13034,8 @@ class CaseWorkspaceStore:
         origin_context: dict,
         known_targets: Optional[dict] = None,
         resolution_method: Optional[str] = None,
+        resolved_target_type: Optional[str] = None,
+        extractor_version: Optional[str] = None,
         actor: str = "system",
         governance_log: Optional[GovernanceLog] = None,
     ) -> list[dict]:
@@ -13047,11 +13054,29 @@ class CaseWorkspaceStore:
             raise CaseWorkspaceError(f"Source {source_id} was not found.")
 
         created: list[dict] = []
-        for candidate in parse_source_reference_text(text):
+        candidates = parse_source_reference_text(text)
+        existing_keys = {
+            (
+                reference.get("source_id"), reference.get("reference_text"),
+                reference.get("reference_type"),
+                json.dumps(reference.get("origin_context", {}), sort_keys=True),
+            )
+            for reference in workspace.source_references
+        }
+        retained_candidates = candidates[:_MAX_SOURCE_REFERENCES_PER_SOURCE]
+        omitted_count = max(0, len(candidates) - len(retained_candidates))
+        for candidate in retained_candidates:
             if known_targets is not None:
                 resolution = resolve_source_reference_candidate(candidate, known_targets)
             else:
                 resolution = {"resolution_status": RESOLUTION_STATUS_UNKNOWN, "resolved_targets": []}
+
+            identity = (
+                source_id, candidate["reference_text"], candidate["reference_type"],
+                json.dumps(origin_context, sort_keys=True),
+            )
+            if identity in existing_keys:
+                continue
 
             reference = SourceReference(
                 id=_new_id(), project_id=workspace.project_id, source_id=source_id,
@@ -13061,9 +13086,14 @@ class CaseWorkspaceStore:
                 origin_context=origin_context, created_at=_now(), created_by=actor,
                 resolved_target_ids=resolution["resolved_targets"],
                 resolution_method=resolution_method,
+                resolved_target_type=(
+                    resolved_target_type if resolution["resolved_targets"] else None
+                ),
+                extractor_version=extractor_version,
             )
             workspace.source_references.append(asdict(reference))
             created.append(asdict(reference))
+            existing_keys.add(identity)
 
             if governance_log is not None:
                 event_type = (
@@ -13081,6 +13111,22 @@ class CaseWorkspaceStore:
                     },
                     correlation_id=reference.id,
                 )
+
+        if omitted_count and governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id,
+                event_type="source_reference_extraction_truncated",
+                actor=actor,
+                role="system",
+                payload={
+                    "source_id": source_id,
+                    "supplied_count": len(candidates),
+                    "retained_count": len(retained_candidates),
+                    "omitted_count": omitted_count,
+                    "cap": _MAX_SOURCE_REFERENCES_PER_SOURCE,
+                },
+                correlation_id=source_id,
+            )
 
         if created:
             self.save(workspace)

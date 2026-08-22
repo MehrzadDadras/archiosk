@@ -37,12 +37,14 @@ from services.case_workspace import (
     ProjectWorkspace,
     CaseWorkspaceError,
     CaseWorkspaceStore,
+    _MAX_SOURCE_REFERENCES_PER_SOURCE,
     check_citation_against_resolved_references,
     parse_source_reference_text,
     parse_table_cell_value,
     resolve_source_reference_candidate,
 )
 from services.governance import GovernanceLog
+from services.ingestion import _register_source_content
 
 NREOCRC_PATH = Path(__file__).parent / "fixtures" / "nreocrc" / "immutable_original" / "NREOCRC-OPR-001.md"
 
@@ -336,6 +338,64 @@ class SourceReferenceTests(unittest.TestCase):
         self.assertEqual(check_citation_against_resolved_references("4.5", refs), "VALID")
         self.assertEqual(check_citation_against_resolved_references("4.3", refs), "MISMATCH")
         self.assertEqual(check_citation_against_resolved_references("4.5", []), "UNVERIFIABLE")
+
+    def test_v2_idempotent_registration_is_scoped_to_source_and_origin(self):
+        origin = {"location_type": "source"}
+        first = self.store.extract_and_register_source_references(
+            self.workspace, self.source["id"], "See Section 4.3.", origin,
+            known_targets=self.known, resolution_method="declared_reference_target_match",
+            resolved_target_type="requirement", extractor_version="declared_reference_v1",
+            governance_log=self.gov,
+        )
+        second = self.store.extract_and_register_source_references(
+            self.workspace, self.source["id"], "See Section 4.3.", origin,
+            known_targets=self.known, resolution_method="declared_reference_target_match",
+            resolved_target_type="requirement", extractor_version="declared_reference_v1",
+            governance_log=self.gov,
+        )
+        other_source = self.store.add_source(
+            self.workspace, name="other.md", file_path="/tmp/other.md", kind="owner_project_requirements",
+        )
+        separate = self.store.extract_and_register_source_references(
+            self.workspace, other_source["id"], "See Section 4.3.", origin,
+            known_targets=self.known,
+        )
+        self.assertEqual(len(first), 1)
+        self.assertEqual(second, [])
+        self.assertEqual(len(separate), 1)
+        self.assertEqual(first[0]["resolution_method"], "declared_reference_target_match")
+        self.assertEqual(first[0]["extractor_version"], "declared_reference_v1")
+        self.assertEqual(first[0]["resolved_target_type"], "requirement")
+
+    def test_v2_per_source_cap_is_logged_without_silent_truncation(self):
+        text = " ".join(f"Section {index}.1." for index in range(1, _MAX_SOURCE_REFERENCES_PER_SOURCE + 6))
+        refs = self.store.extract_and_register_source_references(
+            self.workspace, self.source["id"], text,
+            {"location_type": "source"}, known_targets={"section": set()}, governance_log=self.gov,
+        )
+        self.assertEqual(len(refs), _MAX_SOURCE_REFERENCES_PER_SOURCE)
+        truncation = [event for event in self.gov.read(self.project_id)
+                      if event.event_type == "source_reference_extraction_truncated"]
+        self.assertEqual(len(truncation), 1)
+        self.assertEqual(truncation[0].payload["supplied_count"], _MAX_SOURCE_REFERENCES_PER_SOURCE + 5)
+        self.assertEqual(truncation[0].payload["retained_count"], _MAX_SOURCE_REFERENCES_PER_SOURCE)
+        self.assertEqual(truncation[0].payload["omitted_count"], 5)
+
+    def test_v2_ingestion_seam_registers_references_without_relationships(self):
+        class _Parser:
+            def _extract(self, raw_bytes, filename):
+                return "Refer to Section 4.3."
+
+        before_relationships = list(self.workspace.relationships)
+        status, reason = _register_source_content(
+            self.store, self.workspace, self.source, b"ignored", "doc.md", _Parser(),
+            actor="system", governance_log=self.gov,
+        )
+        self.assertEqual((status, reason), ("added", None))
+        refs = self.store.source_references_for_source(self.workspace, self.source["id"])
+        self.assertEqual(len(refs), 1)
+        self.assertEqual(refs[0]["reference_text"], "Section 4.3")
+        self.assertEqual(self.workspace.relationships, before_relationships)
 
 
 class NREOCRCRegressionTests(unittest.TestCase):
