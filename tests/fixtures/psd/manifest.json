@@ -1,0 +1,20 @@
+{
+  "project_id": "psd",
+  "project_title": "Project Smoke Detector — Emergency Operations and Community Resilience Centre",
+  "corpus_id": "PSD-RFP-ADVERSARIAL-001",
+  "corpus_state": "published_builder_package",
+  "builder_root": "builder_corpus",
+  "oracle_path": "oracle/psd-rfp-adversarial-001.md",
+  "ingest_rule": "Register only files beneath builder_corpus; oracle is private evaluation material.",
+  "documents": [
+    {"file": "PSD-RFP-001.md", "role": "Owner RFP", "revision": "1", "status": "issued"},
+    {"file": "PSD-ADD-001.md", "role": "Addendum", "revision": "0", "status": "issued"},
+    {"file": "PSD-FLS-001.md", "role": "Fire and Life Safety Brief", "revision": "1", "status": "issued"},
+    {"file": "PSD-GEO-001.md", "role": "Geotechnical Design Summary", "revision": "0", "status": "preliminary"},
+    {"file": "PSD-STR-101.md", "role": "Structural Plan", "revision": "0", "status": "issued"},
+    {"file": "PSD-ARC-101.md", "role": "Architectural Plan and Details", "revision": "1", "status": "issued"},
+    {"file": "PSD-M-201.md", "role": "Mechanical Schedule", "revision": "0", "status": "issued"},
+    {"file": "PSD-M-202.md", "role": "Mechanical Plan", "revision": "0", "status": "issued"},
+    {"file": "PSD-SHOP-001.md", "role": "Delegated Design and Shop Drawings", "revision": "0", "status": "issued"}
+  ]
+}
