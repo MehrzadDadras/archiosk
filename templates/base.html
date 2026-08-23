@@ -378,6 +378,24 @@
                     </div>
                     <div class="documents-image-search-tray" id="documents-image-search-tray" data-ui-ref="lists.project.documents.image-tray" tabindex="0" role="group" aria-label="Image search - paste, drop, or capture an image" hidden>
                         <p class="documents-image-search-empty" id="documents-image-search-empty">Paste, drop, or capture an image to search</p>
+                        {# CLAUDE-MOBILE-CAPTURE-01: this tray already invited a
+                           "capture" and its aria-label already promised one, but the
+                           only ways in were paste and drop - neither of which a phone
+                           offers. On mobile the invitation was unfulfillable.
+
+                           A plain file input is the whole fix. `accept="image/*"` makes
+                           the picker show photos; `capture="environment"` hints the rear
+                           camera on iOS/Android, and desktop browsers ignore `capture`
+                           and simply open a file picker - so one control serves both
+                           without a second code path and without any native-app
+                           dependency. It hands the file to the SAME loadImageFile() that
+                           paste and drop already use, so nothing downstream changes: no
+                           new ingestion route, no new evidence path, no separate mobile
+                           behaviour, and no bypass of project authorization. #}
+                        <label class="btn btn-ghost" for="documents-image-search-file">Take or choose a photo</label>
+                        <input type="file" id="documents-image-search-file"
+                               data-ui-ref="lists.project.documents.image-search-capture"
+                               accept="image/*" capture="environment" hidden>
                         <div class="documents-image-search-preview" id="documents-image-search-preview" hidden>
                             <img class="documents-image-search-preview-img" id="documents-image-search-preview-img" alt="Image search query">
                             <div class="documents-image-search-preview-actions">

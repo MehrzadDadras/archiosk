@@ -328,6 +328,20 @@
             reader.readAsDataURL(file);
         }
 
+        // CLAUDE-MOBILE-CAPTURE-01: the camera/gallery path. Feeds the exact
+        // same loadImageFile() as paste and drop, so a photo taken on a phone
+        // is handled identically to one pasted on a desktop - one code path,
+        // no mobile-only behaviour. The input is reset after each pick so
+        // choosing the same file twice still fires `change`.
+        var imageFileInput = document.getElementById('documents-image-search-file');
+        if (imageFileInput) {
+            imageFileInput.addEventListener('change', function () {
+                var files = imageFileInput.files;
+                if (files && files.length) loadImageFile(files[0]);
+                imageFileInput.value = '';
+            });
+        }
+
         imageTray.addEventListener('dragover', function (e) { e.preventDefault(); });
         imageTray.addEventListener('drop', function (e) {
             e.preventDefault();
