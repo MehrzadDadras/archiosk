@@ -133,6 +133,11 @@ def call_llm_json(
     additive, backward-compatible change to the one shared gateway
     rather than a second call path.
     """
+    if os.getenv("AI_CALLS_DISABLED", "false").strip().lower() == "true":
+        return LLMCallOutcome(
+            ran=False,
+            skipped_reason=f"AI_CALLS_DISABLED is set - {log_label} was blocked locally.",
+        )
     api_key = api_key or os.getenv("ANTHROPIC_API_KEY", "")
     if not api_key:
         return LLMCallOutcome(

@@ -18,6 +18,7 @@ Run via:
 """
 from __future__ import annotations
 
+import os
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -138,6 +139,123 @@ class ResolveTimeoutFromEnvTests(unittest.TestCase):
     def test_falls_back_to_provided_default_when_env_unset(self):
         with patch("services.llm_gateway.os.getenv", side_effect=lambda k, d: d):
             self.assertEqual(resolve_timeout_from_env(None, 30.0), 30.0)
+
+
+class AiCallsDisabledIsAHardProviderBoundaryTests(unittest.TestCase):
+    """CLAUDE-CONTROLLED-SMOKE-BOUNDARY-01.
+
+    AI_CALLS_DISABLED is not new: CLAUDE-P27-B introduced it as an
+    emergency kill switch (.env.example), services/bhive_parser.py has
+    honored it since, services/ingestion.py wires a security-policy DENY
+    straight into it, and governance/current/kernel-object-model.md cites
+    it as the enforcement mechanism. The SHARED gateway was the one place
+    that never checked it - so Spin, project Q&A, requirement
+    investigation and briefing all reached the provider through a switch
+    the rest of the system respects.
+
+    The guard is a boundary, never a substitute cognition engine: it
+    refuses honestly and returns the gateway's own existing skipped
+    outcome shape rather than fabricating a model response.
+    """
+
+    PROMPT = "irrelevant"
+
+    def _call(self):
+        return call_llm_json(
+            user_prompt=self.PROMPT, log_label="unit-test", api_key="a-real-looking-key",
+        )
+
+    def test_disabled_blocks_before_the_provider_client_is_constructed(self):
+        with patch.dict(os.environ, {"AI_CALLS_DISABLED": "true"}):
+            with patch("anthropic.Anthropic") as client:
+                outcome = self._call()
+        client.assert_not_called()
+        self.assertFalse(outcome.ran)
+
+    def test_disabled_refuses_honestly_and_never_fabricates_a_response(self):
+        with patch.dict(os.environ, {"AI_CALLS_DISABLED": "true"}):
+            with patch("anthropic.Anthropic"):
+                outcome = self._call()
+        self.assertIn("AI_CALLS_DISABLED", outcome.skipped_reason)
+        # The dataclass contract: ran=False means parsed/raw_text stay None.
+        self.assertIsNone(outcome.parsed)
+        self.assertIsNone(outcome.raw_text)
+
+    def test_an_explicitly_passed_key_does_not_defeat_the_switch(self):
+        """The caller supplies a key here; the switch must still win."""
+        with patch.dict(os.environ, {"AI_CALLS_DISABLED": "true"}):
+            with patch("anthropic.Anthropic") as client:
+                self._call()
+        client.assert_not_called()
+
+    def test_flag_false_preserves_normal_gateway_behaviour(self):
+        with patch.dict(os.environ, {"AI_CALLS_DISABLED": "false"}):
+            with patch("anthropic.Anthropic") as client:
+                client.return_value.messages.create.return_value = _mock_response('{"ok": true}')
+                outcome = self._call()
+        client.assert_called_once()
+        self.assertTrue(outcome.ran)
+
+    def test_flag_unset_preserves_normal_gateway_behaviour(self):
+        env = {k: v for k, v in os.environ.items() if k != "AI_CALLS_DISABLED"}
+        with patch.dict(os.environ, env, clear=True):
+            with patch("anthropic.Anthropic") as client:
+                client.return_value.messages.create.return_value = _mock_response('{"ok": true}')
+                outcome = call_llm_json(user_prompt=self.PROMPT, log_label="unit-test", api_key="k")
+        client.assert_called_once()
+        self.assertTrue(outcome.ran)
+
+    def test_only_the_exact_true_value_disables(self):
+        """A stray value must not silently disable cognition in production."""
+        for value in ("", "0", "no", "TRUE-ish", "disabled"):
+            with self.subTest(value=value):
+                with patch.dict(os.environ, {"AI_CALLS_DISABLED": value}):
+                    with patch("anthropic.Anthropic") as client:
+                        client.return_value.messages.create.return_value = _mock_response("{}")
+                        call_llm_json(user_prompt=self.PROMPT, log_label="unit-test", api_key="k")
+                client.assert_called_once()
+
+
+class TestingAppMustNotInheritLiveModelCredentialsTests(unittest.TestCase):
+    """CLAUDE-CONTROLLED-SMOKE-BOUNDARY-01.
+
+    config.py calls load_dotenv() at MODULE IMPORT and binds
+    ANTHROPIC_API_KEY as a class attribute at that same moment, so
+    app.py's existing testing-mode clearing of the environment variable
+    (which correctly covers every os.getenv call site) cannot undo the
+    value already captured on the config class. app.config.from_object
+    then copied that real key into the testing app.
+
+    A disposable project registry does not by itself create a disposable
+    cognition boundary. CLAUDE.md already warned that create_app("testing")
+    alone does not make a test hermetic against a key present in .env;
+    this is that warning enforced.
+    """
+
+    KEY = "sk-ant-not-a-real-key-for-tests"
+
+    def _app_with_configured_key(self, config_name):
+        import app as app_module
+        from config import get_config
+
+        config_cls = get_config(config_name)
+        with patch.object(config_cls, "ANTHROPIC_API_KEY", self.KEY):
+            return app_module.create_app(config_name)
+
+    def test_testing_app_is_credential_free_even_when_config_carries_a_key(self):
+        app = self._app_with_configured_key("testing")
+        self.assertEqual(app.config["ANTHROPIC_API_KEY"], "")
+
+    def test_testing_app_also_clears_the_environment_variable(self):
+        with patch.dict(os.environ, {"ANTHROPIC_API_KEY": self.KEY}):
+            self._app_with_configured_key("testing")
+            self.assertEqual(os.environ["ANTHROPIC_API_KEY"], "")
+
+    def test_non_testing_configuration_is_deliberately_unchanged(self):
+        """The clearing is scoped to testing app creation only - production
+        and development keep whatever they are configured with."""
+        app = self._app_with_configured_key("development")
+        self.assertEqual(app.config["ANTHROPIC_API_KEY"], self.KEY)
 
 
 if __name__ == "__main__":

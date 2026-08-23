@@ -51,6 +51,14 @@ def create_app(config_name: str | None = None) -> Flask:
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
     config_cls = get_config(config_name)
     app.config.from_object(config_cls)
+    if (config_name or os.getenv("FLASK_ENV", "production")) == "testing":
+        # `config.py` is imported before the factory and may have loaded a
+        # developer `.env`; do not leave that captured provider credential in
+        # the testing app even though the environment variable was cleared
+        # above.  The shared gateway has its own kill-switch guard as a
+        # second boundary, but callers may pass this configured value
+        # explicitly, so the test app must be credential-free too.
+        app.config["ANTHROPIC_API_KEY"] = ""
 
     _configure_logging(app)
     _validate_production_config(app, config_cls)
