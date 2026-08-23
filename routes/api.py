@@ -114,6 +114,34 @@ def _load_authorized_project_or_404(project_id: str):
     )
     if result is None:
         abort(404)
+
+    # CLAUDE-REMOVED-API-01: authorization and lifecycle are different
+    # checks, and this loader only ever made the first one. A project that
+    # has been removed is not ordinary readable project data any more, so
+    # every one of this blueprint's project-scoped reads must stop here --
+    # requirements, evidence, governance history, relationships, structural
+    # units, investigation/claim reads and the rest inherit it centrally,
+    # exactly as routes/workspace.py's own _load_workspace_or_404 has
+    # blocked removed state for the HTML surface since CLAUDE-P40-E2A. The
+    # JSON API simply never grew the equivalent check, which let a formerly
+    # authorized member keep reading retained project state after removal.
+    #
+    # Deliberately the SAME generic 404 this function already returns for
+    # an unknown or unauthorized project: a caller without recovery
+    # authority must not be able to tell "removed" from "never existed"
+    # from "not yours", since the removal timestamp, the remover, the
+    # project name and even bare id confirmation are exactly what removal
+    # is meant to stop disclosing.
+    #
+    # The admin bypass is intentional and preserved -- administration and
+    # recovery need to reach a removed project. Recovery authority for a
+    # non-admin OWNER is deliberately NOT granted here: owning a removed
+    # project authorizes restoring it (enforced in the store layer, see
+    # CaseWorkspaceStore.restore_project), never continuing to read its
+    # evidence through the API.
+    _document, workspace = result
+    if workspace.removed_at and not is_admin():
+        abort(404)
     return result
 
 
@@ -128,10 +156,23 @@ def list_documents():
     store = CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"])
     username = session.get("username")
     admin = is_admin()
-    accessible = [
-        pid for pid in registry.list_ids()
-        if can_access_project(store.get_or_create(pid), username, admin)
-    ]
+    # CLAUDE-REMOVED-API-01: a removed project also leaves this listing
+    # for a non-admin, matching what routes/portal.py's own
+    # _accessible_documents has always done for the HTML listings
+    # (removal must actually remove it from active Projects, not merely
+    # hide a button). Without this, a former member kept seeing the
+    # project id here and could then hand it straight back as a
+    # <project_id> path segment. Admin listing behaviour is unchanged and
+    # still shows every project this deployment holds, which is what
+    # administration and recovery need.
+    accessible = []
+    for pid in registry.list_ids():
+        workspace = store.get_or_create(pid)
+        if not can_access_project(workspace, username, admin):
+            continue
+        if workspace.removed_at and not admin:
+            continue
+        accessible.append(pid)
     return jsonify(project_ids=accessible)
 
 

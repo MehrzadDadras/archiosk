@@ -602,6 +602,24 @@ def show_workspace(project_id):
     # is already blocked one layer down, at _load_workspace_or_404
     # itself (see that function's own docstring).
     if workspace.removed_at:
+        # CLAUDE-REMOVED-API-01: the tombstone is a RECOVERY surface, so it
+        # belongs to whoever can actually recover -- the owner or an admin,
+        # the same authority CaseWorkspaceStore.remove_project/
+        # restore_project have always enforced one layer down. Before this,
+        # any former allow-list member reaching this URL directly was shown
+        # the project's name, when it was removed, who removed it and why,
+        # despite being unable to restore it: exactly the retained metadata
+        # removal exists to stop disclosing. Narrowing only the
+        # /removed-projects listing would have left this as a trivial
+        # bypass of that same fix.
+        #
+        # 404 rather than a redirect or a 403, matching this blueprint's
+        # own established "don't confirm existence to a non-member"
+        # convention -- a former member must not be able to tell a removed
+        # project from one that never existed. Restore authority itself is
+        # unchanged; this only stops disclosure to actors who never had it.
+        if not (session.get("role") == "admin" or workspace.owner == session.get("username")):
+            abort(404)
         return render_template(
             "project_removed.html",
             project_id=project_id,

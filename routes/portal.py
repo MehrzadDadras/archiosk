@@ -1433,6 +1433,25 @@ def removed_projects():
     governance_log = get_governance_log(current_app)
 
     documents = _accessible_documents(registry, store, include_removed=True)
+
+    # CLAUDE-REMOVED-API-01: narrowed to the actors who can actually act
+    # on a tombstone. Restore has ALWAYS been owner-or-admin, enforced in
+    # the store layer (CaseWorkspaceStore.restore_project raises for
+    # anyone else), but this page listed every removed project to every
+    # former member -- so a non-owner who could not restore still saw the
+    # project's name, its removal timestamp and who removed it. That is
+    # precisely the retained metadata removal is meant to stop
+    # disclosing. The predicate below is the store's own existing
+    # authority rule, reused rather than reinvented: no new role model,
+    # and no change to who may restore.
+    username = session.get("username")
+    admin = is_admin()
+
+    def _may_recover(document):
+        workspace = _safe_workspace(store, document.project_id)
+        return admin or (workspace is not None and workspace.owner == username)
+
+    documents = [document for document in documents if _may_recover(document)]
     removed = [
         _project_summary(document, _safe_workspace(store, document.project_id), governance_log.read(document.project_id))
         for document in documents
