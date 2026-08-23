@@ -215,8 +215,11 @@ class UploadEntryPointCopyTests(unittest.TestCase):
         body = client.get("/upload").get_data(as_text=True)
         for ref in (
             "upload.limits", "upload.limits.formats", "upload.file", "upload.project-name",
-            "upload.submit", "upload.operating-environment.client_owner",
-            "upload.operating-environment.design_builder_proponent",
+            # CLAUDE-ENTRY-REDUNDANCY-01: the operating-environment radios are
+            # gone from this form - the environment is derived from the
+            # declared project position now, so the user answers once.
+            "upload.submit", "upload.entry-choice.client_owner",
+            "upload.entry-choice.prime_contractor",
         ):
             self.assertIn(f'data-ui-ref="{ref}"', body)
 

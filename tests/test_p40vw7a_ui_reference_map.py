@@ -182,6 +182,20 @@ _UPLOAD_ENTRY_CHOICE_DYNAMIC_REFS = {
     f"upload.entry-choice.{value}" for value in _ENTRY_CHOICES
 }
 
+# CLAUDE-ENTRY-REDUNDANCY-01: the upstream question is rendered per position,
+# so its refs are a Jinja-loop family too. The operating-environment radios
+# above are gone from the creation form entirely - the environment is derived
+# from the declared position now - so their dynamic set is no longer unioned
+# and their registry rows are retired rather than deleted.
+from services.project_perspective import (  # noqa: E402
+    ENTRY_CHOICE_RETAINED_BY_OPTIONS as _RETAINED_BY_OPTIONS,
+)
+
+_UPLOAD_RETAINED_BY_DYNAMIC_REFS = {
+    f"upload.retained-by.{value}"
+    for value, options in _RETAINED_BY_OPTIONS.items() if options
+}
+
 # CLAUDE-P40-VW8-QA-R2A: templates/upload_confirm.html builds three
 # data-ui-ref families from services/drawing_intake.py's own
 # CANDIDATE_FIELDS loop variable (data-ui-ref="upload.confirm.field.
@@ -218,8 +232,8 @@ def _all_template_refs() -> set[str]:
     refs |= _APPEARANCE_DYNAMIC_REFS
     refs |= _ERROR_PAGE_DYNAMIC_REFS
     refs |= _UPLOAD_CONFIRM_DYNAMIC_REFS
-    refs |= _UPLOAD_ENVIRONMENT_DYNAMIC_REFS
     refs |= _UPLOAD_ENTRY_CHOICE_DYNAMIC_REFS
+    refs |= _UPLOAD_RETAINED_BY_DYNAMIC_REFS
     refs |= _INDEX_CHOICE_DYNAMIC_REFS
     return refs
 

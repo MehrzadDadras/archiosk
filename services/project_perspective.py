@@ -78,7 +78,7 @@ KNOWN_RETAINED_BY = (
 
 RETAINED_BY_LABELS = {
     RETAINED_BY_OWNER: "The Owner",
-    RETAINED_BY_LEAD_CONSULTANT: "The lead design consultant",
+    RETAINED_BY_LEAD_CONSULTANT: "The Owner's lead design consultant",
     RETAINED_BY_DESIGN_BUILDER: "The design-builder or general contractor",
     RETAINED_BY_PRIME_CONTRACTOR: "The prime contractor or construction manager",
     RETAINED_BY_NOT_ESTABLISHED: "Not established yet",
@@ -143,11 +143,18 @@ ENTRY_CHOICE_PERSPECTIVE = {
 # the user may pick from, never what the system assumes.
 ENTRY_CHOICE_RETAINED_BY_OPTIONS = {
     ENTRY_CLIENT_OWNER: (),
+    # CLAUDE-ENTRY-REDUNDANCY-01: the two consultant positions deliberately
+    # do NOT offer "not established". They are the only positions whose
+    # capability side cannot be read from the position alone - the same
+    # profession sits on the Owner's side when the Owner retains them and on
+    # the delivery side when a design-builder does - so this question is what
+    # resolves it. Every option here resolves to a side; asking it is how the
+    # redundant second question was removed without guessing.
     ENTRY_LEAD_DESIGN_CONSULTANT: (
-        RETAINED_BY_OWNER, RETAINED_BY_DESIGN_BUILDER, RETAINED_BY_NOT_ESTABLISHED,
+        RETAINED_BY_OWNER, RETAINED_BY_DESIGN_BUILDER,
     ),
     ENTRY_SUBCONSULTANT: (
-        RETAINED_BY_LEAD_CONSULTANT, RETAINED_BY_DESIGN_BUILDER, RETAINED_BY_NOT_ESTABLISHED,
+        RETAINED_BY_LEAD_CONSULTANT, RETAINED_BY_DESIGN_BUILDER,
     ),
     ENTRY_PRIME_CONTRACTOR: (
         RETAINED_BY_OWNER, RETAINED_BY_NOT_ESTABLISHED,
@@ -209,3 +216,62 @@ def entry_choice_view() -> list[dict]:
         }
         for choice in ENTRY_CHOICES
     ]
+
+
+# --- Deriving the operating environment ------------------------------------
+# CLAUDE-ENTRY-REDUNDANCY-01. Live review found the creation form asking two
+# adjacent questions - "Project Operating Environment" and "Your position" -
+# which put the same words ("Client / Owner") in two boxes meaning different
+# things, and exposed an internal abstraction as a user decision.
+#
+# The redundant USER DECISION is removed; the internal semantic distinction is
+# NOT. operating_environment remains a separate, locked, required field with
+# its own governance and its own meaning ("whose side", which gates
+# capabilities). It is now derived from the position the user actually
+# declared instead of being asked for twice.
+#
+# This supplies application context only. It establishes no contractual
+# authority and selects no Contract/Delivery DNA: perspective is context, not
+# authority, and entry context does not select contract form.
+_ENVIRONMENT_BY_ENTRY_CHOICE = {
+    ENTRY_CLIENT_OWNER: "client_owner",
+    ENTRY_PRIME_CONTRACTOR: "design_builder_proponent",
+    ENTRY_TRADE_BIDDER: "design_builder_proponent",
+}
+
+# The consultant positions resolve through their upstream edge instead. Who
+# retains a consultant is exactly what decides which side of the publication
+# boundary their work sits on.
+_ENVIRONMENT_BY_RETAINED_BY = {
+    RETAINED_BY_OWNER: "client_owner",
+    RETAINED_BY_LEAD_CONSULTANT: "client_owner",
+    RETAINED_BY_DESIGN_BUILDER: "design_builder_proponent",
+}
+
+
+def requires_retained_by(entry_choice: Optional[str]) -> bool:
+    """True where the upstream edge is what resolves the capability side.
+
+    Only the consultant positions. Everywhere else the position alone
+    determines it, so the question stays optional and "not established yet"
+    remains an honest answer.
+    """
+    return entry_choice in (ENTRY_LEAD_DESIGN_CONSULTANT, ENTRY_SUBCONSULTANT)
+
+
+def operating_environment_for(
+    entry_choice: Optional[str], retained_by: Optional[str] = None,
+) -> Optional[str]:
+    """The operating environment a declared position implies, or None.
+
+    None means genuinely unresolved - a consultant position with no upstream
+    edge supplied. Callers must treat that as "ask", never as a default: the
+    field is locked at creation and irreversible, so guessing it wrong costs
+    the user their whole project.
+    """
+    direct = _ENVIRONMENT_BY_ENTRY_CHOICE.get(entry_choice)
+    if direct is not None:
+        return direct
+    if requires_retained_by(entry_choice):
+        return _ENVIRONMENT_BY_RETAINED_BY.get(retained_by)
+    return None

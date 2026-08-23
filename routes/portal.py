@@ -29,7 +29,7 @@ from services.environment_capabilities import (
     OPERATING_ENVIRONMENT_SUBTITLES,
     is_valid_operating_environment,
 )
-from services.project_perspective import entry_choice_view
+from services.project_perspective import entry_choice_view, operating_environment_for
 from services.governance import GovernanceError
 from services.ingestion import UploadError, get_governance_log, get_registry, ingest_folder_upload, ingest_upload
 from services.drawing_intake import (
@@ -2534,6 +2534,51 @@ def global_search():
     return jsonify(results=results)
 
 
+def _posted_retained_by() -> str | None:
+    """The upstream answer belonging to the position actually chosen.
+
+    Each position renders its own select (`retained_by__<choice>`) so a visitor
+    is never offered a relationship that does not apply to them. Only the
+    chosen position's answer is read; a stale value left in another group by a
+    visitor who changed their mind is ignored rather than mistakenly attached.
+    The legacy flat `retained_by` field is still honoured for direct posters.
+    """
+    choice = request.form.get('entry_choice')
+    if choice:
+        scoped = request.form.get(f'retained_by__{choice}')
+        if scoped:
+            return scoped
+    return request.form.get('retained_by') or None
+
+
+def _resolved_operating_environment() -> str:
+    """CLAUDE-ENTRY-REDUNDANCY-01: the environment for this creation request.
+
+    Live review found the form asking two adjacent questions - the operating
+    environment and the project position - which put the same words
+    ("Client / Owner") in two boxes meaning different things and exposed an
+    internal abstraction as a user decision. The redundant USER DECISION is
+    removed here; the internal semantic distinction is not. operating
+    environment remains its own locked, required, governed field - it is simply
+    derived from the position the user actually declared rather than asked for
+    twice.
+
+    Falls back to an explicitly posted value whenever a position was not
+    declared or cannot resolve one. That keeps every existing caller working
+    unchanged - 84 test files and both non-browser creation paths post this
+    field directly - and it means an unresolved consultant position surfaces as
+    the ordinary "required" validation rather than being quietly guessed. The
+    field is locked at creation and irreversible, so guessing it wrong would
+    cost the user their whole project.
+    """
+    derived = operating_environment_for(
+        request.form.get('entry_choice'), _posted_retained_by(),
+    )
+    if derived:
+        return derived
+    return request.form.get('operating_environment', '')
+
+
 def _establish_perspective(project_id: str, entry_choice: str | None, retained_by: str | None) -> None:
     """CLAUDE-PERSPECTIVE-GATE-04: record the declared working position.
 
@@ -2642,7 +2687,7 @@ def upload():
             document = ingest_upload(
                 file_storage,
                 current_app,
-                operating_environment=request.form.get('operating_environment', ''),
+                operating_environment=_resolved_operating_environment(),
                 # CLAUDE-P32: the real, already-authenticated session identity
                 # (this route is @admin_required) -- never request.form.get
                 # ('actor'), which is free text a caller could type anything
@@ -2668,12 +2713,12 @@ def upload():
         # this is always safe to do unconditionally here.
         _establish_perspective(
             document.project_id,
-            request.form.get('entry_choice'), request.form.get('retained_by'),
+            request.form.get('entry_choice'), _posted_retained_by(),
         )
 
         return redirect(url_for('workspace.preparing_project_briefing', project_id=document.project_id))
 
-    operating_environment = request.form.get('operating_environment', '')
+    operating_environment = _resolved_operating_environment()
     staging_id = _pending_upload_store().create(
         raw_bytes=raw_bytes, filename=filename, candidates=intake.candidates,
         text_extraction_status=intake.text_extraction_status,
@@ -2681,7 +2726,7 @@ def upload():
         actor=request.form.get('actor'), role=request.form.get('role'),
         entered_project_name=entered_project_name,
         entry_choice=request.form.get('entry_choice'),
-        retained_by=request.form.get('retained_by'),
+        retained_by=_posted_retained_by(),
     )
     return redirect(url_for('portal.upload_confirm', staging_id=staging_id))
 
@@ -2745,7 +2790,7 @@ def upload_folder():
     try:
         document, results = ingest_folder_upload(
             files, relative_paths, founding_index, current_app,
-            operating_environment=request.form.get('operating_environment', ''),
+            operating_environment=_resolved_operating_environment(),
             owner=session.get('username', ''),
             actor=request.form.get('actor'), role=request.form.get('role'),
             project_name=request.form.get('project_name'),
@@ -2755,7 +2800,7 @@ def upload_folder():
 
     _establish_perspective(
         document.project_id,
-        request.form.get('entry_choice'), request.form.get('retained_by'),
+        request.form.get('entry_choice'), _posted_retained_by(),
     )
 
     added = [r for r in results if r["status"] == "added"]

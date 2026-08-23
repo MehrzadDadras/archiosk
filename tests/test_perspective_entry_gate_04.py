@@ -313,11 +313,15 @@ class EntryGateSurfaceTests(_GateCase):
             with self.subTest(position=choice):
                 self.assertIn(f'upload.entry-choice.{choice}', body)
 
-    def test_the_accepted_environment_question_is_untouched(self):
+    def test_the_redundant_environment_question_is_gone(self):
+        """CLAUDE-ENTRY-REDUNDANCY-01: it asked the same thing twice, in the
+        same words. The environment is derived from the declared position now -
+        removed as a user decision, preserved as an internal distinction."""
         body = self._admin_client().get("/upload").get_data(as_text=True)
         for env in (CLIENT_OWNER, DESIGN_BUILDER_PROPONENT):
             with self.subTest(environment=env):
-                self.assertIn(f'upload.operating-environment.{env}', body)
+                self.assertNotIn(f'upload.operating-environment.{env}', body)
+        self.assertNotIn("Project Operating Environment", body)
 
     def test_no_architecture_vocabulary_reaches_the_user(self):
         """The system carries the sophistication; the user should not have to."""

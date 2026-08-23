@@ -1,7 +1,38 @@
 {% extends "base.html" %}
 {% import "_macros.html" as macros %}
 
-{% block title %}Establish a Project &mdash; Archiosk{% endblock %}
+{% block title %}Establish a Project &mdash; Archiosk
+{# CLAUDE-ENTRY-REDUNDANCY-01: narrows the upstream question to the selected
+   position. Progressive enhancement, deliberately: the groups render VISIBLE
+   by default, so a visitor without JavaScript can still answer rather than
+   being shown nothing - this script only hides the ones that do not apply. #}
+<script nonce="{{ csp_nonce }}">
+(function () {
+    var form = document.getElementById('project-creation-form');
+    if (!form) return;
+    var groups = form.querySelectorAll('.retained-by-group');
+    if (!groups.length) return;
+
+    function sync() {
+        var checked = form.querySelector('[name=entry_choice]:checked');
+        var value = checked ? checked.value : null;
+        for (var i = 0; i < groups.length; i += 1) {
+            var mine = groups[i].getAttribute('data-for-choice') === value;
+            groups[i].hidden = !mine;
+            var select = groups[i].querySelector('select');
+            // Only the visible group may submit a value, so a hidden group's
+            // answer can never be mistaken for the chosen position's.
+            if (select) select.disabled = !mine;
+        }
+    }
+
+    form.addEventListener('change', function (e) {
+        if (e.target && e.target.name === 'entry_choice') sync();
+    });
+    sync();
+})();
+</script>
+{% endblock %}
 
 {% block content %}
 <section class="hero">
@@ -129,48 +160,21 @@
 <p class="mono form-error" id="upload-size-error" data-ui-ref="upload.client-size-error" hidden></p>
 
 <form method="post" enctype="multipart/form-data" class="upload-form" id="project-creation-form" action="{{ url_for('portal.upload') }}">
-    {# CLAUDE-P29: Project Operating Environment -- required, locked
-       permanently once this project is created. Deliberately radio
-       buttons, not a dropdown, and placed first, above project name/
-       file -- this is the first decision in project creation, not an
-       incidental option alongside the others. Shared by both the
-       folder and single-file paths below (one decision, however the
-       project ends up being established). #}
-    <fieldset class="operating-environment-fieldset">
-        <legend>Project Operating Environment <span class="mono">(required)</span></legend>
-        <p class="pane-note">
-            This selection configures the project's available tools and behaviour, applies
-            only to this project, and <strong>cannot be changed after creation</strong>. If you
-            choose the wrong one, you'll need to create a new project in the correct environment.
-        </p>
-        {% for value, label in operating_environments.items() %}
-        <label class="operating-environment-option">
-            <input
-                type="radio" name="operating_environment" value="{{ value }}" required
-                data-ui-ref="upload.operating-environment.{{ value }}"
-                {% if selected_environment == value %}checked{% endif %}>
-            {{ label }}
-        </label>
-        {% endfor %}
-    </fieldset>
-
-    {# CLAUDE-PERSPECTIVE-GATE-04: the project's working position in the
-       procurement chain. A THIRD axis, deliberately asked separately from the
-       operating environment above rather than folded into it - the governing
-       specification is explicit that "whose side" (which gates capabilities)
-       and "where this project is working from" are distinct concepts, and
-       collapsing them would express positions as capability variants, which
-       they are not.
+    {# CLAUDE-ENTRY-REDUNDANCY-01: ONE question, not two. This form used to ask
+       for the Project Operating Environment and then immediately for the
+       project position - the same words ("Client / Owner") in two adjacent
+       boxes meaning different things, and an internal abstraction exposed as a
+       user decision. The environment is now derived server-side from the
+       position declared here (routes/portal.py's
+       _resolved_operating_environment); it remains its own locked, required,
+       governed field, it is simply no longer asked for twice.
 
        Ordinary procurement language only. No contract-form names, and none of
-       the architecture's own vocabulary - the user selects a position, never a
-       contract: entry context does not select Contract/Delivery DNA, and this
-       choice establishes no contractual authority whatever.
-
-       Optional by design. A project created without it is in exactly the same
-       honest state as every project created before this gate existed. #}
+       the architecture's own vocabulary reaches the user: the system carries
+       the sophistication so the user does not have to. Declaring a position
+       establishes no contractual authority and selects no contract form. #}
     <fieldset class="operating-environment-fieldset">
-        <legend>Your position on this project <span class="mono">(optional)</span></legend>
+        <legend>Your position on this project <span class="mono">(required)</span></legend>
         <p class="pane-note">
             How this project sits in the procurement chain. It shapes which questions and
             evidence Archiosk brings forward &mdash; it does not decide anything about your
@@ -178,26 +182,40 @@
             documents themselves.
         </p>
         {% for choice in entry_choices %}
-        <label class="operating-environment-option">
+        <label class="operating-environment-option entry-choice-option">
             <input
-                type="radio" name="entry_choice" value="{{ choice.value }}"
+                type="radio" name="entry_choice" value="{{ choice.value }}" required
                 data-ui-ref="upload.entry-choice.{{ choice.value }}">
-            {{ choice.label }}
-            <small class="pane-note">{{ choice.subtitle }}</small>
+            <span class="entry-choice-text">
+                <span class="entry-choice-label">{{ choice.label }}</span>
+                <small class="pane-note">{{ choice.subtitle }}</small>
+            </span>
         </label>
         {% endfor %}
-        <label class="upload-form-optional">
-            Who engaged you, if that is settled
-            <select name="retained_by" class="text-input" data-ui-ref="upload.retained-by">
-                <option value="">Prefer not to say yet</option>
-                <option value="not_established">Not established yet</option>
-                <option value="owner">The Owner</option>
-                <option value="lead_consultant">The lead design consultant</option>
-                <option value="design_builder">The design-builder or general contractor</option>
-                <option value="prime_contractor">The prime contractor or construction manager</option>
-            </select>
-        </label>
+
+        {# One upstream group per position. Rendered visible by default and
+           narrowed by the script below, so a visitor without JavaScript can
+           still answer rather than being shown nothing. The two consultant
+           positions REQUIRE this answer: they are the only ones whose side
+           cannot be read from the position alone, and it is what replaced the
+           removed second question. #}
+        {% for choice in entry_choices %}
+        {% if choice.retained_by_options %}
+        <div class="retained-by-group" data-for-choice="{{ choice.value }}">
+            <label>
+                Who engaged you{% if choice.value in ('lead_design_consultant', 'subconsultant') %}?{% else %}, if that is settled{% endif %}
+                <select name="retained_by__{{ choice.value }}" class="text-input"
+                        data-ui-ref="upload.retained-by.{{ choice.value }}">
+                    {% for option in choice.retained_by_options %}
+                    <option value="{{ option.value }}">{{ option.label }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+        </div>
+        {% endif %}
+        {% endfor %}
     </fieldset>
+
 
     <input
         type="text" name="project_name" class="text-input text-input-wide"
@@ -211,7 +229,7 @@
 
     <label class="operating-environment-confirm">
         <input type="checkbox" required>
-        I understand this selection configures the project environment and cannot be changed after creation.
+        Confirm project position &mdash; this cannot be changed after the project is created.
         <span class="mono">(required)</span>
     </label>
 
