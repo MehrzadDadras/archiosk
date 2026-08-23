@@ -587,6 +587,21 @@ KNOWN_CONFIDENCE_STATES = (
 # DEFINED, TESTABLE meaning, not just a label - explain_investigation_answer
 # includes this verbatim in every assembled answer so a first-time user
 # never has to guess what "partial_support" is supposed to mean.
+# CLAUDE-REVIEWER-PATTERN-01: a saved reviewer pattern is an investigative
+# METHOD, not a weak Finding. Both values carry a `_method` suffix so they are
+# structurally incapable of colliding with KNOWN_CLAIM_ADOPTION_STATES,
+# KNOWN_CLAIM_CLASSES, KNOWN_CONFIDENCE_STATES, adjudication outcomes or
+# dispositions - a test asserts that intersection stays empty, so the
+# separation survives someone later adding a value to any of them.
+SAVED_PATTERN_STATE_ACTIVE = "active_method"
+SAVED_PATTERN_STATE_RETIRED = "retired_method"
+KNOWN_SAVED_PATTERN_STATES = (SAVED_PATTERN_STATE_ACTIVE, SAVED_PATTERN_STATE_RETIRED)
+
+# Personal is the ONLY authorized scope. The value exists so a stored pattern
+# states its own boundary rather than relying on the absence of a field, and so
+# any future widening has to be a deliberate, reviewable change here.
+SAVED_PATTERN_SCOPE_PERSONAL = "personal"
+
 CONFIDENCE_STATE_MEANINGS = {
     CONFIDENCE_STATE_STRONG_DIRECT_SUPPORT: (
         "At least one directly-verified, current piece of evidence supports this claim, "
@@ -4362,6 +4377,26 @@ class ProjectWorkspace:
     # (object_id = finding_id); nothing here assumes any other entity
     # type participates yet.
     item_reviewed_at: dict = field(default_factory=dict)
+    # CLAUDE-REVIEWER-PATTERN-01: reviewer-authored investigative METHODS,
+    # keyed by reviewer username exactly like the per-reviewer dicts above.
+    # Product Owner authorized Case A only: a reviewer saving a private
+    # pattern for their own later use INSIDE THIS ONE PROJECT. There is no
+    # sharing transition in this slice, and cross-project reuse remains the
+    # Experience Corpus, which STATUS.md marks NOT AUTHORIZED in all forms.
+    #
+    # Keyed BY REVIEWER rather than a flat list with a created_by field, so
+    # "another reviewer cannot retrieve it" is structural: reading someone
+    # else's patterns requires asking for their key, not merely forgetting a
+    # filter. Privacy that depends on every future caller remembering to
+    # filter is not privacy.
+    #
+    # A pattern is an investigation trigger plus steps to consider. It is NOT
+    # a weak Finding, and its state vocabulary is deliberately suffixed
+    # `_method` so it cannot collide with claim/adjudication/disposition/
+    # confidence vocabularies even by accident. The governing chain is
+    # pattern -> investigative context -> review action -> independently
+    # obtained evidence -> finding. Never pattern -> finding.
+    saved_patterns_by: dict = field(default_factory=dict)
     # Conversation messages sent from a project-level context - no Case
     # open, nowhere case-shaped for the message to live (see
     # ConversationMessage's own docstring). A genuine second home for
@@ -6029,6 +6064,89 @@ class CaseWorkspaceStore:
                 },
             )
         return workspace
+
+    def save_reviewer_pattern(
+        self,
+        workspace: ProjectWorkspace,
+        reviewer: str,
+        title: str,
+        investigation_trigger: str,
+        proposed_sequence: list,
+        source_conversation_refs: Optional[list] = None,
+    ) -> dict:
+        """CLAUDE-REVIEWER-PATTERN-01: save one reviewer's private method.
+
+        Deliberate authoring only. Nothing in this codebase calls this
+        automatically, and nothing may: the governing record's own rule is that
+        a dismissed suggestion's CONTENT is never persisted as hidden learning,
+        so a pattern exists because a reviewer chose to write it.
+
+        `source_conversation_refs` holds message IDS for provenance - never
+        copied conversation or evidence text. That is the confidentiality
+        boundary in this slice: a pattern cannot leak restricted material it
+        never contains, and a reference the reader cannot open stays closed to
+        them. Callers should keep wording minimal and investigative.
+
+        Establishes nothing about the project. A pattern cannot satisfy a
+        Finding, become evidence, or carry authority - it is a different object
+        class with a deliberately non-colliding state vocabulary.
+        """
+        if not reviewer:
+            raise CaseWorkspaceError("A saved pattern must belong to a named reviewer.")
+        if not title or not investigation_trigger:
+            raise CaseWorkspaceError(
+                "A saved pattern needs a title and the situation it applies to.",
+            )
+
+        pattern = {
+            "id": _new_id(),
+            # Carried explicitly so a pattern read in isolation still states
+            # which project it belongs to - it is never valid anywhere else.
+            "project_id": workspace.project_id,
+            "created_by": reviewer,
+            "created_at": _now(),
+            "title": title,
+            "investigation_trigger": investigation_trigger,
+            "proposed_sequence": [str(step) for step in (proposed_sequence or [])],
+            "source_conversation_refs": [str(ref) for ref in (source_conversation_refs or [])],
+            "scope": SAVED_PATTERN_SCOPE_PERSONAL,
+            "state": SAVED_PATTERN_STATE_ACTIVE,
+        }
+        workspace.saved_patterns_by.setdefault(reviewer, []).append(pattern)
+        self.save(workspace)
+        return pattern
+
+    def reviewer_patterns_for(self, workspace: ProjectWorkspace, reviewer: str) -> list:
+        """Only this reviewer's own active patterns, in this one project.
+
+        Returns copies, so a caller cannot mutate stored state by editing what
+        it was handed. An unknown or empty reviewer gets an empty list rather
+        than everything - failing closed, not open.
+        """
+        if not reviewer:
+            return []
+        return [
+            dict(pattern)
+            for pattern in workspace.saved_patterns_by.get(reviewer, [])
+            if pattern.get("state") == SAVED_PATTERN_STATE_ACTIVE
+        ]
+
+    def retire_reviewer_pattern(
+        self, workspace: ProjectWorkspace, reviewer: str, pattern_id: str,
+    ) -> bool:
+        """Retire one of the reviewer's OWN patterns.
+
+        Scoped to the caller's own bucket, so this cannot reach another
+        reviewer's patterns even given their id. Retiring preserves the record
+        rather than deleting it: the reviewer stops being shown it, and the
+        provenance of what they once found worth noting survives.
+        """
+        for pattern in workspace.saved_patterns_by.get(reviewer, []):
+            if pattern.get("id") == pattern_id:
+                pattern["state"] = SAVED_PATTERN_STATE_RETIRED
+                self.save(workspace)
+                return True
+        return False
 
     def set_project_perspective(
         self,

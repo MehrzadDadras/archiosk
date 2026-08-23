@@ -7,6 +7,40 @@ governance-authorization question this document surfaces rather than
 resolves unilaterally, and genuine scope/time constraints on top of
 everything else that stage already shipped.
 
+> **Authorization update (CLAUDE-REVIEWER-PATTERN-01, 2026-08-23). The review
+> this document demanded has now happened.** Section 0 below required that the
+> personal/project-scoped version not be built "without that review actually
+> happening"; it was conducted as a bounded authorization review and decided by
+> the Product Owner.
+>
+> **Reviewed and found distinct.** A pattern a reviewer saves for their own
+> later use inside the same project crosses no project, organizational,
+> procurement/adversarial-party or authority boundary, and
+> `prompt-depository/GO-EXPERIENCE-CORPUS-01.md` — a Product-Owner-accepted
+> record — already lists this document under **"Related, not absorbed."** The
+> reasoned position in Section 0 is therefore confirmed rather than assumed.
+>
+> **Authorized, narrowly:** the personal/project-local slice only —
+> `scope = personal`, one reviewer, one project, deliberate authoring, no
+> sharing transition of any kind. Implemented as
+> `ProjectWorkspace.saved_patterns_by` with
+> `CaseWorkspaceStore.save_reviewer_pattern`/`reviewer_patterns_for`/
+> `retire_reviewer_pattern` (`services/case_workspace.py`), guarded by
+> `tests/test_reviewer_pattern_01.py`.
+>
+> **Everything cross-boundary remains unauthorized, unchanged.** The Experience
+> Corpus stays NOT AUTHORIZED in all forms per `STATUS.md` and
+> `GO-EXPERIENCE-CORPUS-01`; the adversarial-party eligibility check,
+> cross-project isolation, the no-person-ranking rule and evidence-authority
+> boundaries are untouched and unweakened by this authorization. Section 1's
+> unconditional exclusion of organization-wide and cross-project reuse still
+> stands in full — there is still no organizational authorization boundary
+> capable of enforcing "who else may see this."
+>
+> **Not built, deliberately:** any UI or route. This authorization covers the
+> storage seam and its guards only; surfacing a pattern back to a reviewer is a
+> separate, later decision.
+
 ## 0. Why this exists, and the governance tension it surfaces
 
 CLAUDE-P40-E asked for machine-identified "recurring investigation
