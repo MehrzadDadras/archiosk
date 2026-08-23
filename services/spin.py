@@ -92,6 +92,16 @@ _MAX_SPIN_FINDINGS = 20
 # suggested example sequence.
 _MAX_GAMES_PLAYED = 10
 _MAX_HELIX_ASSESSMENTS = 20
+
+# PSD-SMOKE-01-D: the floor for a Spin model call, independent of prompt
+# size. Spin always requests max_tokens=8000 of structured JSON, so its
+# generation time barely varies with how small the evidence set is - see
+# the fuller reasoning at the call site. Sits under this call's own 140s
+# ceiling and well under deploy/gunicorn.conf.py's `timeout = 150` and
+# deploy/nginx.conf's `proxy_read_timeout 150s`, both confirmed by direct
+# inspection. Deliberately a floor, not a new default: a genuinely large
+# prompt still scales above it, exactly as CLAUDE-DELTA-SPIN-02 intended.
+SPIN_MIN_TIMEOUT_SECONDS = 120.0
 _MAX_RELATIONSHIP_EVIDENCE_IN_PROMPT = 40
 _MAX_SUPERSESSION_EVIDENCE_IN_PROMPT = 40
 
@@ -330,10 +340,34 @@ def run_spin(
     # under this deployment's own real ceiling (deploy/gunicorn.conf.py's
     # `timeout = 150`, deploy/nginx.conf's `proxy_read_timeout 150s` on
     # location / - confirmed by direct inspection, not assumed).
+    # PSD-SMOKE-01-D: the ceiling above was raised for LARGE corpora, but
+    # the scaling it caps is driven by PROMPT size while Spin's actual
+    # latency is driven by RESPONSE size - max_tokens=8000 of structured
+    # JSON (helix_assessments, findings, games_played), requested
+    # identically no matter how small the evidence set is. A small corpus
+    # therefore gets the SHORTEST timeout while needing nearly the same
+    # generation time, which is backwards for this one call site.
+    #
+    # Measured on the 9-file PSD Builder corpus: the scaled value landed
+    # at 61s, deterministically, three runs out of three - well under this
+    # call's own sanctioned 140s ceiling and under deploy/gunicorn.conf.py's
+    # `timeout = 150` and deploy/nginx.conf's `proxy_read_timeout 150s`.
+    # Roughly 89 seconds of already-authorized budget went unused while
+    # the model was still generating; nginx never terminated anything
+    # (zero 504s in nginx and journald, every /spin/run returned 302).
+    #
+    # The floor is therefore not new tolerance - it is this call site
+    # already-approved 140s ceiling applied consistently to the small-input
+    # case the prompt-size formula under-serves. Ordinary project QA and
+    # the project briefing succeed on the identical corpus precisely
+    # because they request far smaller responses.
     base_timeout = resolve_timeout_from_env(timeout, DEFAULT_TIMEOUT_SECONDS)
-    timeout = scale_timeout_for_prompt_size(
-        base_timeout, prompt,
-        base_chars_before_scaling=4000, seconds_per_extra_1000_chars=3.0, max_timeout=140.0,
+    timeout = max(
+        SPIN_MIN_TIMEOUT_SECONDS,
+        scale_timeout_for_prompt_size(
+            base_timeout, prompt,
+            base_chars_before_scaling=4000, seconds_per_extra_1000_chars=3.0, max_timeout=140.0,
+        ),
     )
 
     # CLAUDE-DELTA-SPIN-02: live acceptance testing against the North
