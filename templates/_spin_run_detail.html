@@ -10,8 +10,32 @@
     </p>
     {% endif %}
     <p class="history-entry"><strong>Spin Run ID:</strong> {{ run.id }}</p>
+    {# CLAUDE-SPIN-TIMING-DISPLAY-01: this line used to append an
+       unconditional "(start time and duration are not separately
+       recorded)" note, which became false the moment CODEX-NORTH-STAR-
+       PCA-01 started persisting started_at/completed_at/duration_ms on
+       SpinRun. The fields already reach here - routes/workspace.py's
+       spin_runs_view spreads the whole persisted run dict - so this is a
+       display correction only: no route, serialization or SpinRun change.
+
+       `is defined` rather than a truthiness test, deliberately, on both
+       counts: workspace.spin_runs is a raw list[dict] with no dataclass
+       rehydration, so a legacy record simply LACKS these keys and yields
+       Undefined; and duration_ms may legitimately be 0 for a sub-
+       millisecond run, which a truthiness test would misreport as
+       "not recorded".
+
+       Timing is observability, not authority. It is presented as
+       supporting provenance beside the existing Completed stamp, never
+       as anything that qualifies a finding - a 30-second and a
+       100-second run do not differ in truth. #}
     <p class="history-entry"><strong>Completed:</strong> <time class="spin-timestamp" data-spin-timestamp="{{ run.created_at }}" datetime="{{ run.created_at }}">{{ run.created_at[:10] }}</time>
-        <span class="pane-note">(start time and duration are not separately recorded)</span></p>
+        {%- if run.started_at is defined and run.started_at and run.duration_ms is defined and run.duration_ms is not none %}
+        &middot; <strong>Started:</strong> <time class="spin-timestamp" data-spin-timestamp="{{ run.started_at }}" datetime="{{ run.started_at }}">{{ run.started_at[:10] }}</time>
+        &middot; <strong>Duration:</strong> {{ "%.1f"|format(run.duration_ms / 1000) }} s
+        {%- else %}
+        <span class="pane-note">(timing not recorded for this earlier run)</span>
+        {%- endif %}</p>
 
     {% if run.baseline_spin_run_id %}
     <p class="history-entry">
