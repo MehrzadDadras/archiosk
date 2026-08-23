@@ -1,6 +1,10 @@
 {% extends "landing_shell.html" %}
+{% from "_macros.html" import archiosk_mark %}
 
-{% block title %}Archiosk &mdash; Data Room Intelligence{% endblock %}
+{# CLAUDE-LANDING-MONITOR-01A: title follows the visible subtitle below.
+   landing_shell.html's own default is deliberately left as-is -- it still
+   serves /explore and /start-trial, which this tranche does not touch. #}
+{% block title %}Archiosk &mdash; Construction Procurement Ecosystem{% endblock %}
 
 {% block landing_body %}
 {# CLAUDE-CA1D-PUBLIC-LANDING-01: every visible string below is a whole,
@@ -28,8 +32,38 @@
 <div class="landing-signal-streak landing-signal-streak-1" aria-hidden="true"></div>
 <div class="landing-knowledge-field" id="landing-knowledge-field" aria-hidden="true"></div>
 <div class="landing-content">
-    <h1 class="landing-wordmark">Archiosk</h1>
-    <p class="landing-tagline">Data Room Intelligence</p>
+    {# CLAUDE-LANDING-MONITOR-01A -- CENTERPIECE ONLY. Everything above this
+       line (the signal-streak prelude, the knowledge field, the canvas
+       particle layer in landing_shell.html) is an accepted live background
+       asset and is deliberately untouched by this tranche: not retimed, not
+       restyled, not reimplemented, not suppressed.
+
+       The metallic ramp for the hero emblem. Kept as a real <defs> in the
+       page rather than as a filter so the mark's own geometry is reused
+       unchanged -- CSS `stroke`/`fill` below simply point at this gradient,
+       overriding the macro's `currentColor` presentation attributes without
+       editing templates/_macros.html, which is the ONE shared source for
+       that geometry and is used elsewhere in the authenticated product. #}
+    <svg class="landing-emblem-defs" width="0" height="0" aria-hidden="true" focusable="false">
+        <defs>
+            <linearGradient id="landing-emblem-metal" x1="0" y1="0" x2="0.34" y2="1">
+                <stop offset="0%"   stop-color="#ffffff"></stop>
+                <stop offset="21%"  stop-color="#dde5ed"></stop>
+                <stop offset="43%"  stop-color="#8d99a6"></stop>
+                <stop offset="57%"  stop-color="#f4f8fb"></stop>
+                <stop offset="78%"  stop-color="#98a4b1"></stop>
+                <stop offset="100%" stop-color="#e6edf4"></stop>
+            </linearGradient>
+        </defs>
+    </svg>
+    {# The one dominant foreground emblem. This is the REAL ARCHIOSK mark
+       (templates/_macros.html::archiosk_mark, the same geometry as
+       static/favicon.svg) at hero scale -- no separate hero-symbol asset
+       exists in this repository, so nothing was invented to stand in for
+       one. The landing surface previously had no emblem at all. #}
+    <div class="landing-emblem" aria-hidden="true">{{ archiosk_mark(size=120, css_class='landing-emblem-mark') }}</div>
+    <h1 class="landing-wordmark landing-wordmark-strong">Archiosk</h1>
+    <p class="landing-tagline">Construction Procurement Ecosystem</p>
     {# CLAUDE-CA1D-PUBLIC-LANDING-05, Sections 1/2/3: the static
        explanatory sentence and the visible rotating philosophical line
        (both present through LANDING-04) are removed outright -- Section

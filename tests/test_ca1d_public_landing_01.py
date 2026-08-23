@@ -31,7 +31,9 @@ class PublicLandingRouteTests(unittest.TestCase):
         body = resp.get_data(as_text=True)
         self.assertIn("landing-page", body)
         self.assertIn("Archiosk", body)
-        self.assertIn("Data Room Intelligence", body)
+        # CLAUDE-LANDING-MONITOR-01A replaced the "Data Room Intelligence"
+        # subtitle with the Product Owner's selected identity line.
+        self.assertIn("Construction Procurement Ecosystem", body)
 
     def test_landing_page_has_all_three_entry_actions(self):
         body = self.client.get("/").get_data(as_text=True)

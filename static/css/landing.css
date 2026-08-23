@@ -603,3 +603,122 @@
        needs no motion at all. */
     .landing-voice-button.voice-input-listening { animation: none; }
 }
+
+/* ---------------------------------------------------------------------
+   CLAUDE-LANDING-MONITOR-01A -- CENTERPIECE ONLY.
+
+   Translates the Product Owner's selected "first monitor" concept into
+   the real application rather than displaying the reference image: the
+   selected image is a VISUAL REFERENCE, never a page background, and no
+   part of it is embedded here.
+
+   PRESERVATION GATE (Product Owner amendment). The landing background is
+   an accepted live asset and is entirely out of this tranche's scope.
+   Nothing above this line is edited, retimed, restyled, reimplemented or
+   suppressed -- this section only APPENDS, and every selector in it
+   belongs to the centre hero composition. Specifically preserved exactly
+   as accepted: the dotted/grid knowledge field and its multilingual
+   floating words (.landing-knowledge-field + landing.js), the canvas
+   particle/orb layer (.landing-field-canvas + ocean_field.js), the
+   one-shot prelude streak (.landing-signal-streak, 0.15s-1.1s), the base
+   gradient field (.landing-page), and every one of their motion paths,
+   timings, speeds, opacities, densities and cursor interactions.
+
+   Three centre-only changes, and nothing else:
+     1. a new metallic hero emblem, which this surface previously lacked;
+     2. a stronger wordmark, layered as an ADDITIONAL class so the
+        accepted .landing-wordmark rule (including its arrival animation)
+        stays byte-for-byte intact and reversible;
+     3. the selected subtitle line.
+
+   NOT implemented, deliberately: the progress bar and the "loading..."
+   caption visible in the concept image. Nothing is loading at this
+   point, so nothing here may claim to be.
+
+   Also deliberately NOT implemented: a comet trail behind the emblem's
+   arrival. It would have been a second light-streak playing across the
+   same beat as the accepted .landing-signal-streak prelude, competing
+   with a background asset this tranche is required to leave alone. The
+   emblem instead arrives in the page's OWN established motion grammar
+   (blur + scale + opacity, the "apparition" resolve that
+   landingTextMaterialize above already defines for the text family),
+   anchored just after the streak has finished and just before the
+   wordmark begins -- adding no new motion vocabulary at all. */
+
+/* Inert gradient carrier. Zero-size and out of flow so it can never
+   affect the centred column's layout. */
+.landing-emblem-defs {
+    position: absolute;
+    width: 0;
+    height: 0;
+    overflow: hidden;
+}
+
+.landing-emblem {
+    position: relative;
+    z-index: 2;
+    line-height: 0;
+    margin: 0 0 clamp(14px, 3vh, 30px);
+    opacity: 0;
+    /* Starts at 1.15s: after .landing-signal-streak has fully finished
+       (~1.1s) and before .landing-wordmark's own 1.3s arrival, so the
+       emblem leads the identity block in without ever overlapping the
+       accepted prelude -- the same "never overlap the streak" rule
+       CLAUDE-CA1D-PUBLIC-LANDING-ANIMATION-CORRECTION-01 established
+       above, and for the same reason. */
+    animation: landingEmblemArrival 1.4s cubic-bezier(0.18, 0.84, 0.22, 1) 1.15s forwards;
+}
+@keyframes landingEmblemArrival {
+    from { opacity: 0; transform: scale(1.28); filter: blur(11px); }
+    to   { opacity: 1; transform: scale(1);    filter: blur(0); }
+}
+
+.landing-emblem-mark {
+    width: clamp(88px, 13vw, 172px);
+    height: auto;
+    stroke-width: 4.2;
+    /* The metal itself: a brushed silver ramp on the stroke, plus a
+       specular lift and a soft halo. Overrides the macro's own
+       `stroke="currentColor"` presentation attribute without touching it. */
+    stroke: url(#landing-emblem-metal);
+    filter:
+        drop-shadow(0 1px 0 rgba(255, 255, 255, .45))
+        drop-shadow(0 0 20px rgba(226, 240, 252, .24))
+        drop-shadow(0 0 54px rgba(214, 226, 238, .12));
+}
+/* The mark's centre dot is a filled circle, not a stroked path, so it
+   needs the ramp applied to `fill` to read as the same piece of metal. */
+.landing-emblem-mark circle {
+    fill: url(#landing-emblem-metal);
+    stroke: none;
+}
+
+/* "Stronger" = more weight and more presence, not a different typeface:
+   the accepted Georgia setting, its uppercase treatment and its existing
+   glow all stay. Layered as a second class on the same element, so
+   deleting this one rule returns the wordmark exactly to what
+   CLAUDE-CA1D-PUBLIC-LANDING-01 accepted. */
+.landing-wordmark-strong {
+    font-weight: 700;
+    font-size: clamp(3rem, 9.2vw, 6.4rem);
+    letter-spacing: .2em;
+    /* Georgia has no true bold-italic-free heavy cut at every size; a
+       hairline stroke thickens it evenly instead of relying on faux-bold
+       synthesis alone. */
+    -webkit-text-stroke: .4px rgba(255, 255, 255, .3);
+    color: rgba(240, 250, 255, .97);
+    text-shadow:
+        0 0 24px rgba(165, 255, 244, .24),
+        0 0 58px rgba(79, 255, 231, .12);
+}
+
+/* Reduced motion: the emblem is simply present and static. The
+   background's own reduced-motion treatment above is untouched. */
+@media (prefers-reduced-motion: reduce) {
+    .landing-emblem {
+        animation: none !important;
+        opacity: 1 !important;
+        transform: none !important;
+        filter: none !important;
+    }
+}
