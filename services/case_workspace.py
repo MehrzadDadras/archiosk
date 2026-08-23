@@ -4476,6 +4476,36 @@ class ProjectWorkspace:
     operating_environment: Optional[str] = None
     operating_environment_set_by: Optional[str] = None
     operating_environment_set_at: Optional[str] = None
+    # CLAUDE-PERSPECTIVE-GATE-04: the project's declared WORKING POSITION in
+    # the procurement chain, and the upstream edge that distinguishes
+    # otherwise-identical positions. A THIRD axis, separate from
+    # operating_environment above ("whose side", which gates capabilities) and
+    # from procurement_stage below ("what stage") - see services/
+    # project_perspective.py for why folding them together is exactly the
+    # conflation the governing specification warns against.
+    #
+    # Deliberately NOT locked, unlike operating_environment: perspective is
+    # working context, not project truth, and a project legitimately
+    # re-establishes it (a pursuit reshaped, a position corrected). Every
+    # change is a governed event, so history is preserved rather than
+    # overwritten.
+    #
+    # `retained_by` is None when never answered, and carries an explicit
+    # "not_established" value when the creator deliberately declared the chain
+    # above them unknown. Those two states are different and both honest -
+    # neither is ever filled in by inference from a document, a detected
+    # contract form, an email domain, a user identity, or a profession.
+    #
+    # Neither field establishes contractual authority, payment entitlement,
+    # liability, document precedence, responsibility allocation, or which
+    # contract form governs. Those require project evidence.
+    perspective: Optional[str] = None
+    perspective_set_by: Optional[str] = None
+    perspective_set_at: Optional[str] = None
+    entry_choice: Optional[str] = None
+    retained_by: Optional[str] = None
+    retained_by_set_by: Optional[str] = None
+    retained_by_set_at: Optional[str] = None
     # CLAUDE-RFP-BOUNDARY-01: Procurement package lifecycle stage - a
     # SEPARATE axis from operating_environment above (see services/
     # environment_capabilities.py's own module comment on why "whose
@@ -5996,6 +6026,79 @@ class CaseWorkspaceStore:
                 payload={
                     "previous_state": previous_state,
                     "operating_environment": operating_environment,
+                },
+            )
+        return workspace
+
+    def set_project_perspective(
+        self,
+        workspace: ProjectWorkspace,
+        entry_choice: str,
+        actor: str,
+        retained_by: Optional[str] = None,
+        governance_log: Optional[GovernanceLog] = None,
+    ) -> ProjectWorkspace:
+        """CLAUDE-PERSPECTIVE-GATE-04: the one gate that writes a project's
+        declared working position and its upstream edge.
+
+        Unlike set_operating_environment above this is deliberately NOT locked.
+        Perspective is working context, not project truth: a pursuit gets
+        reshaped, a position gets corrected, and refusing that would force a
+        user to abandon a project over a declaration that changes nothing about
+        its evidence. Every write is a governed event carrying the previous
+        value, so the history is preserved rather than overwritten.
+
+        `retained_by` is validated against the CHOICE, not the flat vocabulary,
+        so a Trade Bidder project cannot claim it was retained by a lead design
+        consultant and an Owner project cannot claim it was retained at all.
+        None means unanswered; the explicit "not_established" value means the
+        creator declared the chain above them unknown. Both are honest, and
+        neither is ever inferred.
+
+        Establishes no contractual authority, payment entitlement, liability,
+        document precedence, responsibility allocation, or governing contract
+        form. Those require project evidence.
+        """
+        from services.project_perspective import (
+            is_valid_entry_choice,
+            is_valid_retained_by,
+            perspective_for_entry_choice,
+        )
+
+        if not is_valid_entry_choice(entry_choice):
+            raise CaseWorkspaceError(
+                f"{entry_choice!r} is not a recognized project entry choice.",
+            )
+        if not is_valid_retained_by(entry_choice, retained_by):
+            raise CaseWorkspaceError(
+                f"{retained_by!r} is not an offerable upstream relationship for "
+                f"{entry_choice!r}.",
+            )
+
+        previous_perspective = workspace.perspective
+        previous_retained_by = workspace.retained_by
+        now = _now()
+
+        workspace.perspective = perspective_for_entry_choice(entry_choice)
+        workspace.entry_choice = entry_choice
+        workspace.perspective_set_by = actor
+        workspace.perspective_set_at = now
+        if retained_by is not None:
+            workspace.retained_by = retained_by
+            workspace.retained_by_set_by = actor
+            workspace.retained_by_set_at = now
+        self.save(workspace)
+
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id, event_type="project_perspective_established",
+                actor=actor, role="system",
+                payload={
+                    "previous_perspective": previous_perspective,
+                    "previous_retained_by": previous_retained_by,
+                    "entry_choice": entry_choice,
+                    "perspective": workspace.perspective,
+                    "retained_by": workspace.retained_by,
                 },
             )
         return workspace

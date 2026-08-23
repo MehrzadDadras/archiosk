@@ -171,6 +171,17 @@ _UPLOAD_ENVIRONMENT_DYNAMIC_REFS = {
     f"upload.operating-environment.{value}" for value in _OPERATING_ENVIRONMENT_LABELS
 }
 
+# CLAUDE-PERSPECTIVE-GATE-04: the five project-position radios are built the
+# same Jinja-loop way (data-ui-ref="upload.entry-choice.{{ choice.value }}"),
+# so they need the same registration here - without it they would inherit
+# exactly the silent blind spot the environment radios above had before it
+# was closed, and would never actually be verified against the registry.
+from services.project_perspective import ENTRY_CHOICES as _ENTRY_CHOICES  # noqa: E402
+
+_UPLOAD_ENTRY_CHOICE_DYNAMIC_REFS = {
+    f"upload.entry-choice.{value}" for value in _ENTRY_CHOICES
+}
+
 # CLAUDE-P40-VW8-QA-R2A: templates/upload_confirm.html builds three
 # data-ui-ref families from services/drawing_intake.py's own
 # CANDIDATE_FIELDS loop variable (data-ui-ref="upload.confirm.field.
@@ -208,6 +219,7 @@ def _all_template_refs() -> set[str]:
     refs |= _ERROR_PAGE_DYNAMIC_REFS
     refs |= _UPLOAD_CONFIRM_DYNAMIC_REFS
     refs |= _UPLOAD_ENVIRONMENT_DYNAMIC_REFS
+    refs |= _UPLOAD_ENTRY_CHOICE_DYNAMIC_REFS
     refs |= _INDEX_CHOICE_DYNAMIC_REFS
     return refs
 

@@ -154,6 +154,51 @@
         {% endfor %}
     </fieldset>
 
+    {# CLAUDE-PERSPECTIVE-GATE-04: the project's working position in the
+       procurement chain. A THIRD axis, deliberately asked separately from the
+       operating environment above rather than folded into it - the governing
+       specification is explicit that "whose side" (which gates capabilities)
+       and "where this project is working from" are distinct concepts, and
+       collapsing them would express positions as capability variants, which
+       they are not.
+
+       Ordinary procurement language only. No contract-form names, and none of
+       the architecture's own vocabulary - the user selects a position, never a
+       contract: entry context does not select Contract/Delivery DNA, and this
+       choice establishes no contractual authority whatever.
+
+       Optional by design. A project created without it is in exactly the same
+       honest state as every project created before this gate existed. #}
+    <fieldset class="operating-environment-fieldset">
+        <legend>Your position on this project <span class="mono">(optional)</span></legend>
+        <p class="pane-note">
+            How this project sits in the procurement chain. It shapes which questions and
+            evidence Archiosk brings forward &mdash; it does not decide anything about your
+            contract, your authority, or what you are owed. Those come from the project
+            documents themselves.
+        </p>
+        {% for choice in entry_choices %}
+        <label class="operating-environment-option">
+            <input
+                type="radio" name="entry_choice" value="{{ choice.value }}"
+                data-ui-ref="upload.entry-choice.{{ choice.value }}">
+            {{ choice.label }}
+            <small class="pane-note">{{ choice.subtitle }}</small>
+        </label>
+        {% endfor %}
+        <label class="upload-form-optional">
+            Who engaged you, if that is settled
+            <select name="retained_by" class="text-input" data-ui-ref="upload.retained-by">
+                <option value="">Prefer not to say yet</option>
+                <option value="not_established">Not established yet</option>
+                <option value="owner">The Owner</option>
+                <option value="lead_consultant">The lead design consultant</option>
+                <option value="design_builder">The design-builder or general contractor</option>
+                <option value="prime_contractor">The prime contractor or construction manager</option>
+            </select>
+        </label>
+    </fieldset>
+
     <input
         type="text" name="project_name" class="text-input text-input-wide"
         value="{{ request.form.get('project_name', '') }}"

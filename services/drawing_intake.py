@@ -385,6 +385,13 @@ class PendingUploadStore:
         self, raw_bytes: bytes, filename: str, candidates: list[CandidateField],
         text_extraction_status: str, operating_environment: str, owner: str,
         actor: Optional[str], role: Optional[str], entered_project_name: Optional[str],
+        # CLAUDE-PERSPECTIVE-GATE-04: carried through staging so a project
+        # created via the confirm step establishes the same declared working
+        # position as one created directly. Optional and defaulted, so a
+        # manifest staged before this existed still loads and still ingests -
+        # it simply has no declared perspective, which is an honest state.
+        entry_choice: Optional[str] = None,
+        retained_by: Optional[str] = None,
     ) -> str:
         self._sweep_expired()
         staging_id = uuid.uuid4().hex
@@ -404,6 +411,8 @@ class PendingUploadStore:
             "actor": actor,
             "role": role,
             "entered_project_name": entered_project_name,
+            "entry_choice": entry_choice,
+            "retained_by": retained_by,
         }
         self._manifest_path(staging_id).write_text(json.dumps(manifest, indent=2), encoding="utf-8")
         return staging_id

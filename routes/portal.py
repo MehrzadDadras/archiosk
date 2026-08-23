@@ -23,12 +23,13 @@ from services.auth import (
     user_can_upload_to_storage,
 )
 from services.rate_limit import limiter
-from services.case_workspace import CaseWorkspaceStore
+from services.case_workspace import CaseWorkspaceError, CaseWorkspaceStore
 from services.environment_capabilities import (
     OPERATING_ENVIRONMENT_LABELS,
     OPERATING_ENVIRONMENT_SUBTITLES,
     is_valid_operating_environment,
 )
+from services.project_perspective import entry_choice_view
 from services.governance import GovernanceError
 from services.ingestion import UploadError, get_governance_log, get_registry, ingest_folder_upload, ingest_upload
 from services.drawing_intake import (
@@ -2533,6 +2534,62 @@ def global_search():
     return jsonify(results=results)
 
 
+def _establish_perspective(project_id: str, entry_choice: str | None, retained_by: str | None) -> None:
+    """CLAUDE-PERSPECTIVE-GATE-04: record the declared working position.
+
+    Called immediately after a project is created, on every creation path, so
+    a project established through the confirm step or a folder carries the same
+    declaration as one established directly. Deliberately kept out of
+    ingest_upload's own signature: that function has many callers, and the
+    position is a route-layer declaration by the person creating the project,
+    not an ingestion concern.
+
+    Silently does nothing when no choice was made. That is the honest legacy
+    state -- a project with no declared perspective, which is exactly what
+    every project created before this gate existed has. It is never guessed.
+
+    A rejected value must not destroy a successfully-created project: the
+    project and its evidence are already real and intact, so a bad declaration
+    is dropped rather than raised. Nothing downstream depends on it, because
+    perspective is context, never authority.
+    """
+    if not entry_choice:
+        return
+    store = CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"])
+    workspace = store.get(project_id)
+    if workspace is None:
+        return
+    actor = session.get("username", "") or "system"
+    governance_log = get_governance_log(current_app)
+    try:
+        store.set_project_perspective(
+            workspace, entry_choice=entry_choice, actor=actor,
+            retained_by=retained_by or None, governance_log=governance_log,
+        )
+        return
+    except CaseWorkspaceError:
+        pass
+
+    # An upstream relationship that does not belong to this position must not
+    # cost the user their position as well. The two declarations are separable,
+    # so the position is recorded and the mismatched relationship is simply not
+    # -- rather than being coerced into whatever would have been valid, which
+    # would be guessing.
+    try:
+        store.set_project_perspective(
+            workspace, entry_choice=entry_choice, actor=actor,
+            retained_by=None, governance_log=governance_log,
+        )
+        current_app.logger.info(
+            "Dropped mismatched upstream relationship for %s: choice=%r retained_by=%r",
+            project_id, entry_choice, retained_by,
+        )
+    except CaseWorkspaceError:
+        current_app.logger.info(
+            "Rejected project entry declaration for %s: choice=%r", project_id, entry_choice,
+        )
+
+
 def _pending_upload_store() -> PendingUploadStore:
     return PendingUploadStore(current_app.config["REGISTRY_STORE_PATH"])
 
@@ -2552,6 +2609,7 @@ def upload():
             'upload.html', max_upload_mb=max_upload_mb,
             selected_environment=request.args.get('environment'),
             operating_environments=OPERATING_ENVIRONMENT_LABELS,
+            entry_choices=entry_choice_view(),
             upload_entitled=user_can_upload_to_storage(),
         )
 
@@ -2561,6 +2619,7 @@ def upload():
             'upload.html', max_upload_mb=max_upload_mb, error="No file was provided.",
             selected_environment=request.form.get('operating_environment'),
             operating_environments=OPERATING_ENVIRONMENT_LABELS,
+            entry_choices=entry_choice_view(),
         ), 400
 
     # CLAUDE-P40-VW8-QA-R2A: staging-time analysis ONLY (native-text/
@@ -2599,6 +2658,7 @@ def upload():
                 'upload.html', max_upload_mb=max_upload_mb, error=str(exc),
                 selected_environment=request.form.get('operating_environment'),
                 operating_environments=OPERATING_ENVIRONMENT_LABELS,
+                entry_choices=entry_choice_view(),
             ), 400
 
         # CLAUDE-P38-D2: routes through the "Preparing your Project
@@ -2606,6 +2666,11 @@ def upload():
         # that route itself redirects straight through when there's nothing
         # to prepare (AI not allowed/already approval-gated/no Sources), so
         # this is always safe to do unconditionally here.
+        _establish_perspective(
+            document.project_id,
+            request.form.get('entry_choice'), request.form.get('retained_by'),
+        )
+
         return redirect(url_for('workspace.preparing_project_briefing', project_id=document.project_id))
 
     operating_environment = request.form.get('operating_environment', '')
@@ -2615,6 +2680,8 @@ def upload():
         operating_environment=operating_environment, owner=session.get('username', ''),
         actor=request.form.get('actor'), role=request.form.get('role'),
         entered_project_name=entered_project_name,
+        entry_choice=request.form.get('entry_choice'),
+        retained_by=request.form.get('retained_by'),
     )
     return redirect(url_for('portal.upload_confirm', staging_id=staging_id))
 
@@ -2657,6 +2724,7 @@ def upload_folder():
         max_upload_mb=max_upload_mb,
         selected_environment=request.form.get('operating_environment'),
         operating_environments=OPERATING_ENVIRONMENT_LABELS,
+        entry_choices=entry_choice_view(),
     )
 
     files = request.files.getlist('folder_files')
@@ -2684,6 +2752,11 @@ def upload_folder():
         )
     except (UploadError, GovernanceError) as exc:
         return render_template('upload.html', error=str(exc), **common_context), 400
+
+    _establish_perspective(
+        document.project_id,
+        request.form.get('entry_choice'), request.form.get('retained_by'),
+    )
 
     added = [r for r in results if r["status"] == "added"]
     skipped = [r for r in results if r["status"] == "skipped"]
@@ -2793,6 +2866,11 @@ def upload_confirm(staging_id):
     # chosen. A NEW governance_log event, not a mutation of
     # document_ingested's own existing payload - append-only, matching
     # every other governance event in this codebase.
+    _establish_perspective(
+        document.project_id,
+        manifest.get("entry_choice"), manifest.get("retained_by"),
+    )
+
     governance_log = get_governance_log(current_app)
     governance_log.append(
         project_id=document.project_id, event_type="drawing_metadata_candidates_confirmed",
