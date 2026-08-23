@@ -1858,6 +1858,13 @@ class SpinRun:
     project_id: str
     spin_kind: str  # KNOWN_SPIN_KINDS
     created_at: str
+    # CODEX-NORTH-STAR-PCA-01: durable execution timing for this actual
+    # Spin attempt. Optional for legacy records written before timing was
+    # introduced; current callers supply the generation start and this
+    # write path records completion and derives elapsed wall-clock time.
+    started_at: Optional[str] = None
+    completed_at: Optional[str] = None
+    duration_ms: Optional[int] = None
     created_by: Optional[str] = None
     ran: bool = True
     skipped_reason: Optional[str] = None
@@ -8183,6 +8190,7 @@ class CaseWorkspaceStore:
         games_played: Optional[list] = None,
         helix_assessments: Optional[list] = None,
         governance_log: Optional[GovernanceLog] = None,
+        started_at: Optional[str] = None,
     ) -> dict:
         """The one write path for a completed (or honestly-failed) Spin
         attempt - persists the SpinRun record itself, then promotes each
@@ -8205,11 +8213,30 @@ class CaseWorkspaceStore:
         if world is not None and world not in KNOWN_SPIN_WORLDS:
             raise CaseWorkspaceError(f"Unknown Spin world {world!r}.")
 
+        completed_at = _now()
+        effective_started_at = started_at or completed_at
+        duration_ms = None
+        try:
+            duration_ms = max(
+                0,
+                round(
+                    (datetime.fromisoformat(completed_at) - datetime.fromisoformat(effective_started_at))
+                    .total_seconds() * 1000
+                ),
+            )
+        except (TypeError, ValueError):
+            # Legacy/externally supplied malformed timestamps remain
+            # readable; do not fabricate an elapsed value.
+            effective_started_at = started_at
+
         run = SpinRun(
             id=_new_id(),
             project_id=workspace.project_id,
             spin_kind=spin_kind,
-            created_at=_now(),
+            created_at=completed_at,
+            started_at=effective_started_at,
+            completed_at=completed_at,
+            duration_ms=duration_ms,
             created_by=actor,
             ran=ran,
             skipped_reason=skipped_reason,

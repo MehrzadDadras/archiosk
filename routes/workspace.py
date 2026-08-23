@@ -2195,12 +2195,13 @@ def _build_spin_state_report(run_view: dict) -> dict:
     Reconcile's own transient staging concept, never persisted on SpinRun)
     - reported honestly as not available rather than approximated.
 
-    `started_at`/`duration` are deliberately NOT included: SpinRun only
-    persists `created_at` (completion time) - the in-progress marker
-    (`ProjectWorkspace.spin_generation_started_at`) is a transient,
-    workspace-level flag cleared on completion, never copied onto the run
-    record itself. Inventing a start time here would be a fabrication this
-    function's own "never duplicate, never guess" discipline forbids.
+    `started_at`/`duration_ms` are deliberately NOT included in this
+    compact state report: they are now persisted on SpinRun for diagnostic
+    inspection, but this existing summary remains focused on evidence scope
+    and findings. The in-progress marker
+    (`ProjectWorkspace.spin_generation_started_at`) is still transient and
+    is cleared on completion; the durable timing is copied onto the run by
+    `record_spin_run`.
     """
     findings = run_view.get("findings", [])
     is_delta = run_view.get("spin_kind") == SPIN_KIND_DELTA
@@ -2461,6 +2462,7 @@ def run_spin_route(project_id):
         baseline_spin_run_id = baseline_run["id"]
 
     store.start_spin_generation(workspace, actor=_reviewer())
+    spin_started_at = workspace.spin_generation_started_at
 
     from services.conversational_turn import gather_project_evidence
     from services.spin import run_spin
@@ -2552,7 +2554,8 @@ def run_spin_route(project_id):
             workspace, spin_kind=spin_kind, actor=_reviewer(), findings=[],
             source_signature=source_signature, baseline_spin_run_id=baseline_spin_run_id,
             scoped_source_ids=[],
-            ran=False, skipped_reason=result.skipped_reason, world=world, governance_log=_log(),
+            ran=False, skipped_reason=result.skipped_reason, world=world,
+            started_at=spin_started_at, governance_log=_log(),
         )
         flash(f"Spin could not run: {result.skipped_reason}", "error")
         return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
@@ -2563,7 +2566,7 @@ def run_spin_route(project_id):
         scoped_source_ids=result.evidence_source_ids,
         ran=True, provider=result.provider, model=result.model,
         world=world, games_played=result.games_played, governance_log=_log(),
-        helix_assessments=result.helix_assessments,
+        helix_assessments=result.helix_assessments, started_at=spin_started_at,
     )
     flash(
         ("Delta Spin" if spin_kind == SPIN_KIND_DELTA else "First Spin")
