@@ -87,9 +87,19 @@ class DuplicateContentDetectionTests(unittest.TestCase):
             # Not blocked -- both projects exist, this is informational only.
             self.assertNotEqual(first.project_id, second.project_id)
 
+            # AUD-ENTRY-01A-1: identical content across two isolated
+            # projects is a normal procurement shape (the same issued
+            # tender reaching two competing bidders). Neither project's
+            # own readable audit trail may name the other.
             events = get_governance_log(self.flask_app).read(second.project_id)
             ingest_event = next(e for e in events if e.event_type == "document_ingested")
-            self.assertEqual(ingest_event.payload["duplicate_of_project_id"], first.project_id)
+            self.assertNotIn("duplicate_of_project_id", ingest_event.payload)
+            self.assertNotIn(first.project_id, json.dumps(ingest_event.payload))
+
+            # ...and symmetrically, the first project learns nothing either.
+            first_events = get_governance_log(self.flask_app).read(first.project_id)
+            first_ingest = next(e for e in first_events if e.event_type == "document_ingested")
+            self.assertNotIn(second.project_id, json.dumps(first_ingest.payload))
 
     def test_distinct_content_is_not_flagged_as_duplicate(self):
         from services.ingestion import get_governance_log
@@ -100,7 +110,9 @@ class DuplicateContentDetectionTests(unittest.TestCase):
 
             events = get_governance_log(self.flask_app).read(second.project_id)
             ingest_event = next(e for e in events if e.event_type == "document_ingested")
-            self.assertIsNone(ingest_event.payload["duplicate_of_project_id"])
+            # AUD-ENTRY-01A-1: the key is gone entirely, duplicate or not -
+            # its absence must not itself signal "no duplicate existed".
+            self.assertNotIn("duplicate_of_project_id", ingest_event.payload)
 
 
 class ProjectNameUniquenessTests(unittest.TestCase):

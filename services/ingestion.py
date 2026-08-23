@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import time
 import uuid
 from pathlib import Path
@@ -35,6 +36,8 @@ from services.governance import GovernanceLog
 from services.requirements_registry import RequirementsRegistry
 from services.security_governance import SecurityGovernanceStore
 from services.security_policy import ACTION_EXTERNAL_AI_REQUEST, DECISION_ALLOW, DECISION_ALLOW_APPROVED_ROUTE, evaluate_action
+
+logger = logging.getLogger(__name__)
 
 # This app has no authentication system, so there's no real identity to
 # fall back on. These are honest placeholders, not a claim that anyone
@@ -125,8 +128,15 @@ def _find_duplicate_content(app: Flask, file_hash: str) -> Optional[str]:
     _reject_if_name_taken above: uploading the same source document into
     a second, genuinely separate project is a legitimate real workflow
     (e.g. a shared boilerplate/reference document), not necessarily a
-    mistake -- the caller decides what to do with this (see
-    ingest_upload's governance-log entry), it doesn't block the upload.
+    mistake -- the caller decides what to do with this, it doesn't block
+    the upload.
+
+    AUD-ENTRY-01A-1: the returned id is for the DEPLOYMENT's own use
+    only. It must never be written into either project's governed state,
+    returned by a project-scoped route, or otherwise made reachable by a
+    member of either project. Two competing bidders holding the same
+    issued tender is a normal, expected procurement shape; neither may
+    learn of the other from it.
     """
     registry = get_registry(app)
     for pid in registry.list_ids():
@@ -295,7 +305,32 @@ def ingest_upload(
 
     # Checked before this document is saved to the registry (so it can
     # never match itself) -- informational only, see _find_duplicate_content.
+    #
+    # AUD-ENTRY-01A-1: the matching project's id is DELIBERATELY NOT
+    # carried into any project-readable state. It used to be written into
+    # this project's own `document_ingested` governance payload, which
+    # `GET /api/v1/documents/<project_id>/governance` returns verbatim to
+    # any authorized member of THIS project - so a competing bidder who
+    # independently uploaded the same issued tender could learn, from
+    # their own audit trail, both that another ARCHIOSK project holds it
+    # and that project's identifier. Constitutional invariant #8 already
+    # forbids one project's state transferring into another's "regardless
+    # of shared client, company, or physical asset"; identical content is
+    # exactly such a shared asset, and it must not become a channel.
+    #
+    # Nothing read this value - it drove no runtime behavior anywhere in
+    # the repository - so it is simply not recorded. The operational
+    # signal CLAUDE-P28 wanted is preserved as a server-side log line
+    # only, readable by whoever can read the deployment's own logs, never
+    # by a project member through any route.
     duplicate_of_project_id = _find_duplicate_content(app, document.original_file_hash)
+    if duplicate_of_project_id is not None:
+        logger.info(
+            "Identical uploaded content already present in another project "
+            "(new=%s, existing=%s). Both remain fully isolated; this is recorded "
+            "for deployment operators only and is never exposed to either project.",
+            document.project_id, duplicate_of_project_id,
+        )
 
     get_registry(app).save(document)
     governance_log = get_governance_log(app)
@@ -308,7 +343,8 @@ def ingest_upload(
             "filename": document.filename,
             "requirement_count": len(document.requirements),
             "milestone_count": len(document.milestones),
-            "duplicate_of_project_id": duplicate_of_project_id,
+            # AUD-ENTRY-01A-1: no foreign project identifier here. See the
+            # duplicate-detection block above for why.
         },
     )
     # CLAUDE-P31: an audit event for the security decision itself,
