@@ -74,7 +74,13 @@ class SpokenWelcomeTests(unittest.TestCase):
         section = js[js.index("setUpSpokenWelcome"):]
         self.assertIn("SpeechSynthesisUtterance", section)
         self.assertIn("window.speechSynthesis", section)
-        self.assertIn("Welcome to Archiosk", section)
+        # CLAUDE-LANDING-SIMPLIFY-01: the greeting is spelled phonetically for
+        # the speech engine, which otherwise reads the written brand as
+        # something unrelated. ARCHIOSK is Architecture + Kiosk, said
+        # AR-kee-osk. This string is spoken, never displayed - the visible
+        # wordmark and every aria-label keep the real spelling.
+        self.assertIn("Welcome to Ar-kee-osk", section)
+        self.assertNotIn("Welcome to Archiosk", section)
 
     def test_spoken_welcome_gated_off_under_reduced_motion(self):
         js = self.client.get("/static/js/landing.js").get_data(as_text=True)

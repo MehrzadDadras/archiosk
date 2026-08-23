@@ -31,7 +31,10 @@ class PublicLandingRouteTests(unittest.TestCase):
         body = resp.get_data(as_text=True)
         self.assertIn("landing-page", body)
         self.assertIn("Archiosk", body)
-        self.assertIn("Data Room Intelligence", body)
+        # CLAUDE-LANDING-SIMPLIFY-01: the category subtitle is removed and
+        # deliberately not replaced - the landing composition is the wordmark
+        # and the three entry actions, nothing else.
+        self.assertNotIn("Data Room Intelligence", body)
 
     def test_landing_page_has_all_three_entry_actions(self):
         body = self.client.get("/").get_data(as_text=True)

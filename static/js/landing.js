@@ -253,7 +253,12 @@
     if (reduceMotion) return;
 
     var STORAGE_KEY = 'archiosk-welcome-spoken';
-    var GREETING = 'Welcome to Archiosk. We learn together. From many questions, understanding. From many minds, connected knowledge.';
+    // CLAUDE-LANDING-SIMPLIFY-01: spelled phonetically for the speech
+    // engine ONLY - this string is never displayed. ARCHIOSK is
+    // Architecture + Kiosk, said AR-kee-osk; browser TTS otherwise
+    // reads the written form as something unrelated. The visible
+    // wordmark and every aria-label keep the real spelling.
+    var GREETING = 'Welcome to Ar-kee-osk. We learn together. From many questions, understanding. From many minds, connected knowledge.';
     var spoken = false;
 
     function speakGreeting() {

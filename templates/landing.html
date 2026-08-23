@@ -1,6 +1,8 @@
 {% extends "landing_shell.html" %}
 
-{% block title %}Archiosk &mdash; Data Room Intelligence{% endblock %}
+{# CLAUDE-LANDING-SIMPLIFY-01: no category suffix. Archiosk does not need
+   to define its category on its own front door. #}
+{% block title %}Archiosk{% endblock %}
 
 {% block landing_body %}
 {# CLAUDE-CA1D-PUBLIC-LANDING-01: every visible string below is a whole,
@@ -29,7 +31,14 @@
 <div class="landing-knowledge-field" id="landing-knowledge-field" aria-hidden="true"></div>
 <div class="landing-content">
     <h1 class="landing-wordmark">Archiosk</h1>
-    <p class="landing-tagline">Data Room Intelligence</p>
+    {# CLAUDE-LANDING-SIMPLIFY-01: the "Data Room Intelligence" category
+       line is removed and deliberately NOT replaced. The composition is
+       the wordmark and the three entry actions - nothing else. The
+       .landing-tagline RULE is intentionally left in landing.css: the
+       accepted text-family arrival sequence is asserted against it by
+       CLAUDE-CA1D-PUBLIC-LANDING-ANIMATION-CORRECTION-01, and deleting
+       the rule would break that choreography contract for no user-
+       visible gain. #}
     {# CLAUDE-CA1D-PUBLIC-LANDING-05, Sections 1/2/3: the static
        explanatory sentence and the visible rotating philosophical line
        (both present through LANDING-04) are removed outright -- Section
