@@ -30,7 +30,12 @@ class KnowledgeFieldDepthConvectionTests(unittest.TestCase):
         self.client = self.flask_app.test_client()
 
     def test_css_defines_three_depth_tier_custom_properties_on_kf_item(self):
-        css = self.client.get("/static/css/landing.css").get_data(as_text=True)
+        # CRLF-normalized: .gitattributes does not pin this file's line
+        # endings, so a Windows checkout (core.autocrlf=true) serves it CRLF
+        # and the newline-anchored css.index() calls below fail with a bare
+        # ValueError. Passing previously depended on the working copy
+        # happening to hold LF, not on the canonical checkout state.
+        css = self.client.get("/static/css/landing.css").get_data(as_text=True).replace("\r\n", "\n")
         item_rule_start = css.index(".kf-item {")
         item_rule_end = css.index("}", item_rule_start)
         item_rule = css[item_rule_start:item_rule_end]
@@ -38,14 +43,24 @@ class KnowledgeFieldDepthConvectionTests(unittest.TestCase):
             self.assertIn(prop, item_rule)
 
     def test_css_far_depth_tier_is_blurred(self):
-        css = self.client.get("/static/css/landing.css").get_data(as_text=True)
+        # CRLF-normalized: .gitattributes does not pin this file's line
+        # endings, so a Windows checkout (core.autocrlf=true) serves it CRLF
+        # and the newline-anchored css.index() calls below fail with a bare
+        # ValueError. Passing previously depended on the working copy
+        # happening to hold LF, not on the canonical checkout state.
+        css = self.client.get("/static/css/landing.css").get_data(as_text=True).replace("\r\n", "\n")
         self.assertIn(".kf-depth-far", css)
         far_rule_start = css.index(".kf-depth-far {")
         far_rule_end = css.index("}", far_rule_start)
         self.assertIn("blur(", css[far_rule_start:far_rule_end])
 
     def test_keyframe_has_intermediate_meander_stops_not_a_single_linear_drift(self):
-        css = self.client.get("/static/css/landing.css").get_data(as_text=True)
+        # CRLF-normalized: .gitattributes does not pin this file's line
+        # endings, so a Windows checkout (core.autocrlf=true) serves it CRLF
+        # and the newline-anchored css.index() calls below fail with a bare
+        # ValueError. Passing previously depended on the working copy
+        # happening to hold LF, not on the canonical checkout state.
+        css = self.client.get("/static/css/landing.css").get_data(as_text=True).replace("\r\n", "\n")
         keyframe_start = css.index("@keyframes kfRise")
         keyframe_end = css.index("}\n", css.index("100%", keyframe_start)) + 1
         keyframe = css[keyframe_start:keyframe_end]
@@ -88,7 +103,12 @@ class KnowledgeFieldDepthConvectionTests(unittest.TestCase):
         self.assertIn("for (var t = 0; t < 5; t++)", js)
 
     def test_reduced_motion_still_hides_the_whole_field(self):
-        css = self.client.get("/static/css/landing.css").get_data(as_text=True)
+        # CRLF-normalized: .gitattributes does not pin this file's line
+        # endings, so a Windows checkout (core.autocrlf=true) serves it CRLF
+        # and the newline-anchored css.index() calls below fail with a bare
+        # ValueError. Passing previously depended on the working copy
+        # happening to hold LF, not on the canonical checkout state.
+        css = self.client.get("/static/css/landing.css").get_data(as_text=True).replace("\r\n", "\n")
         reduced_motion_block = css[css.index("@media (prefers-reduced-motion: reduce)"):]
         self.assertIn(".landing-knowledge-field { display: none; }", reduced_motion_block)
 

@@ -23,6 +23,23 @@ class _LandingCssHelpers(unittest.TestCase):
         self.flask_app = app_module.create_app("testing")
         self.client = self.flask_app.test_client()
 
+    def _landing_css(self):
+        """The served stylesheet, with CRLF line endings normalized to LF.
+
+        landing.css is served raw, and .gitattributes deliberately does not
+        pin its line endings, so on a Windows checkout with
+        core.autocrlf=true it arrives CRLF. Every newline-anchored parse
+        below then fails with a bare ValueError - notably
+        _keyframe_block's end marker, which looks for a closing brace
+        alone on its own line. This file previously passed only where the
+        working copy happened to hold LF, which is an accident of how the
+        file was last written rather than the canonical checkout state.
+        Normalizing here makes these assertions mean the same thing on
+        every platform.
+        """
+        css = self.client.get("/static/css/landing.css").get_data(as_text=True)
+        return css.replace("\r\n", "\n")
+
     def _rule(self, css, selector):
         start = css.index(selector)
         end = css.index("}", start)
@@ -71,7 +88,7 @@ class StreakThenTextSequenceTests(_LandingCssHelpers):
         return delay + duration
 
     def test_streak_fully_disappears_before_wordmark_begins(self):
-        css = self.client.get("/static/css/landing.css").get_data(as_text=True)
+        css = self._landing_css()
         streak_total = self._streak_total_seconds(css)
         wordmark_rule = self._rule(css, ".landing-wordmark {")
         wordmark_delay = self._second_time_value_seconds(wordmark_rule, "landingWordmarkArrival")
@@ -81,7 +98,7 @@ class StreakThenTextSequenceTests(_LandingCssHelpers):
         )
 
     def test_text_family_members_start_after_the_streak_and_stay_subtly_staggered(self):
-        css = self.client.get("/static/css/landing.css").get_data(as_text=True)
+        css = self._landing_css()
         streak_total = self._streak_total_seconds(css)
 
         delays = []
@@ -107,7 +124,7 @@ class StreakThenTextSequenceTests(_LandingCssHelpers):
     def test_text_materialize_keyframe_has_opacity_blur_and_scale(self):
         """Section: 'start at opacity: 0, with a soft blur/haze,
         slightly scaled/diffused, then transition into fully sharp'."""
-        css = self.client.get("/static/css/landing.css").get_data(as_text=True)
+        css = self._landing_css()
         keyframe = self._keyframe_block(css, "landingTextMaterialize")
         self.assertIn("opacity: 0", keyframe)
         self.assertIn("opacity: 1", keyframe)
@@ -115,7 +132,7 @@ class StreakThenTextSequenceTests(_LandingCssHelpers):
         self.assertIn("scale(", keyframe)
 
     def test_wordmark_arrival_keyframe_unchanged_shape_still_opacity_blur_scale(self):
-        css = self.client.get("/static/css/landing.css").get_data(as_text=True)
+        css = self._landing_css()
         keyframe = self._keyframe_block(css, "landingWordmarkArrival")
         self.assertIn("opacity: 0", keyframe)
         self.assertIn("blur(16px)", keyframe)
@@ -126,14 +143,14 @@ class StreakThenTextSequenceTests(_LandingCssHelpers):
         substrings - a historical comment naming the retired keyframe
         for context is fine (see UI_REFERENCE_MAP.md's own precedent for
         this exact distinction)."""
-        css = self.client.get("/static/css/landing.css").get_data(as_text=True)
+        css = self._landing_css()
         self.assertNotIn("@keyframes landingWordmarkReveal", css)
         self.assertNotIn("animation: landingWordmarkReveal", css)
         js = self.client.get("/static/js/landing.js").get_data(as_text=True)
         self.assertNotIn("landingWordmarkReveal", js)
 
     def test_reduced_motion_still_covers_every_text_family_member(self):
-        css = self.client.get("/static/css/landing.css").get_data(as_text=True)
+        css = self._landing_css()
         reduced_motion_block = css[css.index("@media (prefers-reduced-motion: reduce)"):]
         for selector in (".landing-wordmark", ".landing-tagline", ".landing-actions", ".landing-voice"):
             self.assertIn(selector, reduced_motion_block)
@@ -152,12 +169,12 @@ class SpearIntoDepthMotionTests(_LandingCssHelpers):
     """
 
     def test_streak_converges_on_exact_center_not_a_lateral_crossing(self):
-        css = self.client.get("/static/css/landing.css").get_data(as_text=True)
+        css = self._landing_css()
         keyframe = self._keyframe_block(css, "landingSignalStreak1")
         self.assertIn("100% { transform: translate3d(0, 0, 0)", keyframe)
 
     def test_streak_rotation_angle_is_fixed_not_animated(self):
-        css = self.client.get("/static/css/landing.css").get_data(as_text=True)
+        css = self._landing_css()
         keyframe = self._keyframe_block(css, "landingSignalStreak1")
         angles = re.findall(r"rotate\((-?[\d.]+deg)\)", keyframe)
         self.assertGreaterEqual(len(angles), 2)  # at least the 0% and 100% stops
@@ -169,7 +186,7 @@ class SpearIntoDepthMotionTests(_LandingCssHelpers):
         keyframe (grow through the fast-motion middle, then taper to
         near-nothing at the vanishing point), not stay near-constant
         like the old lateral-slide version."""
-        css = self.client.get("/static/css/landing.css").get_data(as_text=True)
+        css = self._landing_css()
         keyframe = self._keyframe_block(css, "landingSignalStreak1")
         scale_values = [float(v) for v in re.findall(r"scaleX\(([\d.]+)\)", keyframe)]
         self.assertGreaterEqual(len(scale_values), 3)
@@ -177,7 +194,7 @@ class SpearIntoDepthMotionTests(_LandingCssHelpers):
         self.assertLess(scale_values[-1], 0.2, "must taper to near-nothing exactly as it reaches the vanishing point")
 
     def test_streak_still_fades_to_invisible_at_the_end(self):
-        css = self.client.get("/static/css/landing.css").get_data(as_text=True)
+        css = self._landing_css()
         keyframe = self._keyframe_block(css, "landingSignalStreak1")
         self.assertIn("100% { transform: translate3d(0, 0, 0) rotate(", keyframe)
         final_stop = keyframe[keyframe.index("100%"):]
