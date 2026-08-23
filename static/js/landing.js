@@ -258,6 +258,105 @@
     // Architecture + Kiosk, said AR-kee-osk; browser TTS otherwise
     // reads the written form as something unrelated. The visible
     // wordmark and every aria-label keep the real spelling.
+    // CLAUDE-RECEPTION-VOICE-01: the one place Reception's voice character is
+    // configured. Intended character: young, energetic, intelligent, clear,
+    // curious - warm without being bubbly, confident without being corporate.
+    // "Young mission-control intelligence", never an executive assistant or a
+    // theatrical sci-fi character.
+    //
+    // HONEST LIMITATION, stated rather than papered over: this is the
+    // browser's own Web Speech API, not a hosted voice provider. It exposes
+    // exactly four controls - voice, rate, pitch, volume - and NO control over
+    // age, energy or character. The available voices are whatever the
+    // visitor's own device ships, so the same page speaks differently on
+    // Windows, macOS, Android and iOS, and on some devices no female English
+    // voice exists at all. What follows expresses the intended character as
+    // far as the platform allows and degrades to the device default rather
+    // than failing; it cannot guarantee it.
+    //
+    // `name` is deliberately null. The Product Owner has discussed a feminine
+    // sci-fi-style persona name but has accepted none, so the identity is left
+    // structurally ready to receive one without any candidate being hard-coded
+    // as product truth.
+    var RECEPTION_VOICE = {
+        name: null,
+        // Energy and clarity matter more than accent. Preference runs
+        // female-and-clear first; the en-GB/en-CA entries sit high only
+        // because they tend to read younger and crisper in these engines, and
+        // any of them is preferred over a strong regional character. Matched
+        // case-insensitively against the device's own voice list, in order.
+        preferredVoices: [
+            'Google UK English Female', 'Microsoft Libby', 'Microsoft Sonia',
+            'Microsoft Clara', 'Microsoft Aria', 'Microsoft Jenny',
+            'Samantha', 'Google US English', 'Karen', 'Moira',
+        ],
+        preferredLangs: ['en-GB', 'en-CA', 'en-AU', 'en-US', 'en'],
+        // Slightly quicker and brighter than default: the previous 0.95 rate
+        // read as a sleepy narrator. Kept close to natural - overdriving pitch
+        // produces the childish, bubbly delivery this character rules out.
+        rate: 1.06,
+        pitch: 1.12,
+    };
+
+    function pickReceptionVoice() {
+        var voices = [];
+        try {
+            voices = window.speechSynthesis.getVoices() || [];
+        } catch (err) {
+            return null;
+        }
+        if (!voices.length) return null;
+
+        function byName(needle) {
+            for (var i = 0; i < voices.length; i += 1) {
+                if ((voices[i].name || '').toLowerCase().indexOf(needle.toLowerCase()) !== -1) return voices[i];
+            }
+            return null;
+        }
+        for (var i = 0; i < RECEPTION_VOICE.preferredVoices.length; i += 1) {
+            var named = byName(RECEPTION_VOICE.preferredVoices[i]);
+            if (named) return named;
+        }
+        // Nothing on the preference list: fall back to any voice that both
+        // reports an English locale and self-describes as female, then to any
+        // English voice at all. Never guesses gender from a name it does not
+        // recognize - an unrecognized device voice is left to the platform.
+        for (var l = 0; l < RECEPTION_VOICE.preferredLangs.length; l += 1) {
+            var lang = RECEPTION_VOICE.preferredLangs[l].toLowerCase();
+            for (var v = 0; v < voices.length; v += 1) {
+                var voiceLang = (voices[v].lang || '').toLowerCase();
+                if (voiceLang.indexOf(lang) === 0 && /female/i.test(voices[v].name || '')) return voices[v];
+            }
+        }
+        for (var m = 0; m < voices.length; m += 1) {
+            if ((voices[m].lang || '').toLowerCase().indexOf('en') === 0) return voices[m];
+        }
+        return null;
+    }
+
+    function applyReceptionVoice(utterance) {
+        utterance.rate = RECEPTION_VOICE.rate;
+        utterance.pitch = RECEPTION_VOICE.pitch;
+        var voice = pickReceptionVoice();
+        if (voice) {
+            utterance.voice = voice;
+            utterance.lang = voice.lang || utterance.lang;
+        }
+    }
+
+    // getVoices() is asynchronous on most engines and returns an empty list on
+    // first call, which is the usual reason a "chosen" voice silently never
+    // applies. Warming the list here means the greeting below has a populated
+    // list to choose from by the time it speaks.
+    try {
+        window.speechSynthesis.getVoices();
+        if (typeof window.speechSynthesis.addEventListener === 'function') {
+            window.speechSynthesis.addEventListener('voiceschanged', pickReceptionVoice, { once: true });
+        }
+    } catch (err) {
+        // A device that cannot enumerate voices still speaks with its default.
+    }
+
     var GREETING = 'Welcome to Ar-kee-osk. We learn together. From many questions, understanding. From many minds, connected knowledge.';
     var spoken = false;
 
@@ -273,8 +372,7 @@
         }
         spoken = true;
         var utterance = new SpeechSynthesisUtterance(GREETING);
-        utterance.rate = 0.95;
-        utterance.pitch = 1;
+        applyReceptionVoice(utterance);
         window.speechSynthesis.speak(utterance);
     }
 
