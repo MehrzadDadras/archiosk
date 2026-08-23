@@ -302,6 +302,38 @@ speculative external-AI output directly into governance docs or
 commit messages as if it were already verified — verify it here
 first, the same as any other proposal.
 
+**Project North Star advancement cycles start from Spin findings.**
+Approved as `CODEX-PROJECT-NORTH-STAR-ADVANCEMENT-RULE-01` — *"Codex
+can do any advancement, but it must resolve the problems coming up in
+Spins by Claude as a starting point."* The loop the record states is
+`Claude Spin → mandatory issues surfaced → Codex resolves them first →
+Codex advances North Star further → Claude Spins again`. Recorded here
+because the rule was approved in the Prompt Depository and then never
+became visible in day-to-day operating notes, so it stopped being
+followed — a trajectory-continuity repair, not new doctrine; the
+record remains the authority and is not restated beyond the line above.
+
+Two limits are part of the rule, not caveats on it. **Spin findings
+are the starting brief, not the ceiling** — once those are addressed,
+broad repository-grounded advancement continues within whatever the
+mission authorizes. And it **scopes to Project North Star advancement
+cycles only** — a security fix, an authorization repair, a deployment,
+a UI pass or any other bounded mission is governed by its own mission
+and never blocks on a Spin.
+
+`CODEX-NORTH-BAYVIEW-TO-PROJECT-NORTH-STAR-01` (the rename itself)
+remains APPROVED and unexecuted, and that is currently correct: its own
+text conditions it — *"After this Spin, ask Codex to rename the
+project"* — and no such Spin review is on record. Do not treat the
+lingering "North Bayview" references as drift to tidy up. Every one of
+them in this repository is historical evidence of work that genuinely
+happened under that name ("Confirmed live on North Bayview", "the North
+Bayview specimen's own proof case is 80 rows across 5 sheets"), and
+rewriting them would falsify provenance against constitutional
+invariant #3. When the rename does happen it applies to the proving
+project's *current* identity, not to the record of what was already
+proven under the old one.
+
 **No general provenance-tagging system beyond what already exists.** Commit
 messages already carry authorship/reasoning/evidence for every
 substantial change in this repo's history — that's sufficient
