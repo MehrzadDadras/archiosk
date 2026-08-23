@@ -29,6 +29,37 @@ Codex can do any advancement, but it must resolve the problems coming up in Spin
 
 ## Execution references
 
-- Run: None
-- Result: None
-- Commit: None
+**Status stays `APPROVED`, deliberately.** This is a standing rule governing
+*every* Project North Star advancement cycle, not a one-time instruction that is
+now spent. What follows records that its first cycle has been demonstrated — the
+same shape [`GO-RFP-PUBLICATION-BARRIER-01`](GO-RFP-PUBLICATION-BARRIER-01.md)
+already uses for a standing direction with real execution behind it. Contrast
+[`CODEX-NORTH-BAYVIEW-TO-PROJECT-NORTH-STAR-01`](CODEX-NORTH-BAYVIEW-TO-PROJECT-NORTH-STAR-01.md),
+which moved to `RUN` because that transition happens once and has happened.
+
+- Run: First governed cycle, 2026-08-22 → 2026-08-23. Claude produced and froze
+  the relevant Spin (run `630beea5-911f-456e-b91a-fd3ea43ea1ef`, 9 sources, 9
+  findings, 6 Helix assessments, oracle unopened). The Product Owner reviewed it
+  and accepted it as **READY WITH EXCLUSIONS** — most of its content being project
+  conditions in the corpus, which the review explicitly barred from becoming Codex
+  requirements.
+- Result: The review found exactly one genuine GO weakness the Spin itself
+  evidenced — a Spin run persisted no timing, so Spin degradation was invisible
+  from its own history. Codex addressed that Spin-derived item **first**, adding
+  `started_at`, `completed_at` and `duration_ms` with legacy compatibility and no
+  effect on evidence, Helix, findings, authority or cognition. Claude deployed the
+  exact certified commit and live-verified persistence on a real run:
+  `duration_ms = 101106` (101.1s). Only after that starting item was addressed did
+  broader bounded advancement authority apply.
+
+  The loop this record specifies therefore ran end to end as written:
+  `Claude Spin → mandatory issues surfaced → Codex resolves them first → Codex
+  advances North Star further → Claude Spins again`.
+
+  One residual is recorded honestly rather than smoothed over: the timing fields
+  persist, but the Spin history surface still renders the older "start time and
+  duration are not separately recorded" text. Storage delivered; display not yet
+  updated.
+- Commit: `7e80c57992317f3167f5e9761da1d764e917bc1a` (Persist Spin execution
+  timing), deployed to production 2026-08-23. Its prerequisite — the Spin timeout
+  repair that made a completed Spin possible at all — is `cefcf61`.
