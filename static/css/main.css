@@ -8029,7 +8029,6 @@ html[data-tray-focus]:not([data-tray-focus="display"]) .app-main { display: none
    collapse the reviewer set earlier, rather than presenting them with an
    empty frame and no way to read what happened. */
 html[data-tray-focus="lists"] .launcher-panel,
-html[data-tray-focus="eye"] .workspace-right-column,
 html[data-tray-focus="toolbox"] .workspace-right-column {
     display: flex;
     position: static;
@@ -8039,20 +8038,18 @@ html[data-tray-focus="toolbox"] .workspace-right-column {
     min-width: 0;
 }
 html[data-tray-focus="display"] .launcher-panel,
-html[data-tray-focus="eye"] .launcher-panel,
 html[data-tray-focus="toolbox"] .launcher-panel { display: none; }
 html[data-tray-focus="display"] .workspace-right-column,
 html[data-tray-focus="lists"] .workspace-right-column { display: none; }
 
 /* Eye and Toolbox share one column, split by the Eye/Toolbox divider.
-   Focusing one gives it the whole column; the divider has nothing left to
-   divide, so it goes too. The splitter's own persisted proportion is
-   untouched and returns intact when focus is cleared. */
-html[data-tray-focus="eye"] .workspace-pane-toolbox,
-html[data-tray-focus="eye"] .toolbox-eye-divider,
+   Focusing Toolbox gives it the whole column; the divider has nothing left
+   to divide, so it goes too, and the splitter's own persisted proportion is
+   untouched and returns intact when focus is cleared. Eye has no equivalent
+   rule here because Eye is no longer a tray at all - it is the foreground
+   LAYER (CLAUDE-MOBILE-Q-TRIAL-01 Section 4, at the end of this file). */
 html[data-tray-focus="toolbox"] .eye-pane,
 html[data-tray-focus="toolbox"] .toolbox-eye-divider { display: none; }
-html[data-tray-focus="eye"] .eye-pane,
 html[data-tray-focus="toolbox"] .workspace-pane-toolbox {
     height: auto;
     max-height: none;
@@ -8210,3 +8207,164 @@ html[data-tray-focus="toolbox"] .workspace-pane-toolbox {
 @media (min-width: 641px) {
     .mobile-nav-toggle { display: none; }
 }
+
+/* CLAUDE-MOBILE-Q-TRIAL-01, Section 6 — mic discoverability, silently.
+
+   The automatic spoken welcome is retired (it mispronounced the brand, and
+   "wrong pronunciation creates distrust"), but the mic still has to be
+   findable. This is the whole of that affordance: one thin ring that breathes
+   outward twice and extinguishes itself, once per reviewer.
+
+   READY and LISTENING are required to be unmistakably different states, so
+   they share no property:
+
+     READY (this)      transparent button, thin --machine-blue ring, expands
+                       and fades, self-extinguishing, never returns.
+     LISTENING (above) solid --attention-amber fill and border, no motion,
+                       persists exactly as long as the key is held.
+
+   The cancel rule below makes that structural rather than a convention - the
+   ring cannot render while listening even if both classes were somehow set at
+   once. Nothing here requests microphone permission; it is a class and a
+   keyframe. */
+.voice-input-button.voice-input-available-cue {
+    position: relative;
+}
+.voice-input-button.voice-input-available-cue::after {
+    content: "";
+    position: absolute;
+    /* Outside the button's own border so the ring reads as emanating FROM the
+       control rather than as a second border on it. */
+    inset: -3px;
+    border-radius: 6px;
+    border: 1px solid var(--machine-blue);
+    opacity: 0;
+    pointer-events: none;
+    animation: voice-available-breath 2.2s ease-out 2;
+}
+/* Two states must never be on screen together. */
+.voice-input-button.voice-input-listening::after {
+    display: none;
+}
+@keyframes voice-available-breath {
+    0%   { opacity: 0;    transform: scale(0.94); }
+    35%  { opacity: 0.5;  transform: scale(1.02); }
+    100% { opacity: 0;    transform: scale(1.14); }
+}
+/* This codebase's established convention: skip non-essential ambient effects
+   outright rather than slowing them down. The mic is still visible, still
+   labelled, and still works - only the ripple is withheld. */
+@media (prefers-reduced-motion: reduce) {
+    .voice-input-button.voice-input-available-cue::after { animation: none; }
+}
+
+/* ============================================================
+   CLAUDE-MOBILE-Q-TRIAL-01, Section 4 — the foreground layer
+   ============================================================
+   "While working on the main panel, open a drawing/document/photo directly
+   from the current screen, bring it to the foreground, work with it, then
+   shovel it back to reveal the main panel exactly where it was." A drawing
+   sheet laid on a desk and slid off again.
+
+   A TRAY replaces what is in the work area. A LAYER covers it. That is the
+   whole distinction, and it is what makes "exactly where it was" structural
+   rather than a promise: nothing beneath the layer is hidden, resized or
+   re-attributed, so there is no state to restore - no scroll to recapture,
+   no selection to re-apply, no Composer draft to preserve, because none of
+   it was ever taken away.
+
+   Eye is the sheet. It is already the drawing/photo surface (rotate, mirror,
+   markers, crop), so this adds a POSITION for an existing pane rather than a
+   new surface, and adds no new switcher entry.
+
+   Composer stays below the layer, never covered - the reviewer must be able
+   to ask GO about the drawing they are looking at without putting it down.
+   That is the same reason there is no "Open in Composer" handoff.
+   ------------------------------------------------------------ */
+
+/* The sheet is positioned inside .app-shell-body rather than against the
+   viewport, deliberately. .app-shell-body already occupies exactly the space
+   between the header and the bottom of the shell, so "below the header" comes
+   out of the existing layout for free - no measuring of a topbar whose height
+   changes with viewport width, project name length and menu wrapping, and no
+   custom property that would have to be recomputed every time any of those
+   moved. */
+html[data-tray-layer] .app-shell-body {
+    position: relative;
+}
+
+/* Eye lives inside .workspace-right-column, which the frame may have
+   collapsed or hidden - and a positioned child of a display:none ancestor
+   does not render at all. So the column is kept rendered at zero width, the
+   same technique .workspace-main-column already uses to keep the fixed
+   Composer alive when Display is not the active tray. Its own position must
+   be static, or the sheet would resolve against the column instead of
+   .app-shell-body. */
+html[data-tray-layer="eye"] .workspace-right-column {
+    display: flex;
+    position: static;
+    flex: 0 0 0;
+    width: 0;
+    min-width: 0;
+    overflow: visible;
+}
+html[data-tray-layer="eye"] .toolbox-eye-divider,
+html[data-tray-layer="eye"] .workspace-pane-toolbox {
+    display: none;
+}
+html[data-tray-layer="eye"] #eye-pane {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    /* Stops short of the Composer, and tracks it: --chat-height is the live
+       boundary the grabber and the desktop handle both write, so moving that
+       boundary resizes the sheet with it rather than leaving it overlapping. */
+    bottom: calc(var(--chat-height, 220px) + var(--kb-inset, 0px));
+    height: auto;
+    max-height: none;
+    z-index: 27;
+    background: var(--surface-primary);
+    border-top: 1px solid var(--border-strong);
+    /* A real edge, so the sheet reads as lying ON the work rather than as the
+       page having navigated somewhere else. */
+    box-shadow: 0 -6px 18px rgba(0, 0, 0, 0.18);
+}
+/* A project-less page cannot render a Composer, so there is nothing to stop
+   short of and the sheet reaches the bottom. */
+html[data-tray-layer="eye"] .app-shell-body:not(:has(.chat-region)) #eye-pane {
+    bottom: 0;
+}
+
+/* The dismiss control exists only while the sheet is up - hidden rather than
+   disabled the rest of the time, so it is never a control sitting beside
+   Maximize with nothing to do. */
+.eye-layer-dismiss { display: none; }
+html[data-tray-layer="eye"] .eye-layer-dismiss {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    appearance: none;
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    /* Touch-sized: this is the control that puts the drawing down, and it is
+       reached with a thumb while holding the phone. */
+    min-width: 40px;
+    min-height: 36px;
+    margin-right: 0.3rem;
+    font-size: 1rem;
+    line-height: 1;
+    color: var(--text-secondary);
+    cursor: pointer;
+}
+.eye-layer-dismiss:hover { color: var(--text-primary); }
+.eye-layer-dismiss:focus-visible {
+    outline: 2px solid var(--machine-blue);
+    outline-offset: 1px;
+}
+
+/* Maximize divides the right COLUMN between Eye and Toolbox. With the sheet
+   in front of the whole work area that question is not on screen at all, and
+   the control would silently do nothing. */
+html[data-tray-layer="eye"] .eye-maximize-btn { display: none; }

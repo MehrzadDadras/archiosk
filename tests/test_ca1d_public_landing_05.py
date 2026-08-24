@@ -62,56 +62,51 @@ class HeroSimplificationTests(unittest.TestCase):
         self.assertNotIn("landing-rotator", js)
 
 
-class SpokenWelcomeTests(unittest.TestCase):
+class NothingSpeaksWithoutBeingAskedTests(unittest.TestCase):
+    """CLAUDE-MOBILE-Q-TRIAL-01, Section 6 retired the automatic spoken
+    welcome this class used to guard.
+
+    Product Owner, explicit: "Do not play an automatic welcome sound. Do not
+    automatically speak ARCHIOSK. The current brand pronunciation is not
+    accepted and wrong pronunciation creates distrust. Voice must remain
+    opt-in."
+
+    Inverted rather than deleted. The risk worth guarding is no longer "the
+    greeting might break" but "the greeting might come back", and an empty
+    space in the suite guards nothing.
+    """
+
     def setUp(self):
         import app as app_module
         self.flask_app = app_module.create_app("testing")
         self.client = self.flask_app.test_client()
 
-    def test_js_defines_a_short_spoken_greeting_via_speech_synthesis(self):
+    def test_the_landing_page_has_no_speech_synthesis_at_all(self):
         js = self.client.get("/static/js/landing.js").get_data(as_text=True)
-        self.assertIn("setUpSpokenWelcome", js)
-        section = js[js.index("setUpSpokenWelcome"):]
-        self.assertIn("SpeechSynthesisUtterance", section)
-        self.assertIn("window.speechSynthesis", section)
-        # CLAUDE-LANDING-SIMPLIFY-01: the greeting is spelled phonetically for
-        # the speech engine, which otherwise reads the written brand as
-        # something unrelated. ARCHIOSK is Architecture + Kiosk, said
-        # AR-kee-osk. This string is spoken, never displayed - the visible
-        # wordmark and every aria-label keep the real spelling.
-        self.assertIn("Welcome to Ar-kee-osk", section)
-        self.assertNotIn("Welcome to Archiosk", section)
+        for gone in ("setUpSpokenWelcome", "SpeechSynthesisUtterance",
+                     "speechSynthesis", "speakGreeting"):
+            with self.subTest(token=gone):
+                self.assertNotIn(gone, js)
 
-    def test_spoken_welcome_gated_off_under_reduced_motion(self):
+    def test_the_rejected_pronunciation_is_not_kept_on_disk(self):
+        """Retiring the trigger but leaving the phonetic spelling behind would
+        preserve the exact thing that was rejected, ready to be re-armed."""
         js = self.client.get("/static/js/landing.js").get_data(as_text=True)
-        section_start = js.index("setUpSpokenWelcome")
-        section_end = js.index("})();", section_start) + len("})();")
-        section = js[section_start:section_end]
-        self.assertIn("reduceMotion", section)
-        self.assertIn("return", section)
+        self.assertNotIn("Ar-kee-osk", js)
+        self.assertNotIn("RECEPTION_VOICE", js)
 
-    def test_spoken_welcome_has_an_immediate_attempt_and_a_gesture_fallback(self):
-        """Section 3: 'do not assume autoplay with sound will always be
-        allowed... use the first meaningful user interaction' - both the
-        best-effort immediate attempt and the interaction-triggered
-        fallback must be present, sharing one mutually-exclusive guard."""
+    def test_no_page_load_timer_or_first_gesture_can_start_audio(self):
+        """Both old delivery paths - the immediate attempt and the
+        first-interaction fallback - are gone, not merely disconnected."""
         js = self.client.get("/static/js/landing.js").get_data(as_text=True)
-        section_start = js.index("setUpSpokenWelcome")
-        section_end = js.index("})();", section_start) + len("})();")
-        section = js[section_start:section_end]
-        self.assertIn("window.setTimeout(speakGreeting", section)
-        for evt in ("pointerdown", "keydown", "touchstart"):
-            self.assertIn(evt, section)
-        self.assertIn("{ once: true", section)
+        self.assertNotIn("window.setTimeout(speakGreeting", js)
+        self.assertNotIn("archiosk-welcome-spoken", js)
 
-    def test_spoken_welcome_does_not_replay_every_session_via_storage_gate(self):
+    def test_voice_input_survives_because_it_is_opt_in(self):
+        """"Voice must remain opt-in" retires OUTPUT, not INPUT. Push-to-talk
+        recognition is already gated behind a real press and never speaks."""
         js = self.client.get("/static/js/landing.js").get_data(as_text=True)
-        section_start = js.index("setUpSpokenWelcome")
-        section_end = js.index("})();", section_start) + len("})();")
-        section = js[section_start:section_end]
-        self.assertIn("sessionStorage", section)
-        self.assertNotIn("localStorage", section)
-
+        self.assertIn("SpeechRecognitionCtor", js)
 
 class MicIconOnlyTests(unittest.TestCase):
     def setUp(self):

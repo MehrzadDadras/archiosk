@@ -4,11 +4,12 @@
  * common panel-state API" as a KNOWN LIMITATION since 2026-08-20, and
  * `panel-template-system.md`'s own audit summary named the same gap
  * ("a common panel-state API remain[s] future work"). This file is that
- * API. It is deliberately small, and it owns exactly two things that did
+ * API. It is deliberately small, and it owns exactly three things that did
  * not exist before:
  *
  *   1. WHICH tray currently owns the work area  (`data-tray-focus`)
- *   2. WHERE the work/Composer boundary sits on a phone (delegated)
+ *   2. WHETHER a layer is raised over it        (`data-tray-layer`)
+ *   3. WHERE the work/Composer boundary sits on a phone (delegated)
  *
  * The Product Owner's mobile frame is three persistent zones:
  *
@@ -70,15 +71,37 @@
     // everywhere else (the Appearance menu's own Menu/Lists/Display/
     // Toolbox/Chat vocabulary, plus Eye) and the NPT identities from
     // panel-template-system.md: lists=NPT-002, display=NPT-003,
-    // eye=NPT-005, toolbox=NPT-006. No new functions are invented here —
-    // Documents, Spin, Findings, Project Context and the photo tray are
-    // CONTENTS of these surfaces already.
+    // toolbox=NPT-006. (Eye, NPT-005, is a LAYER rather than a tray - see
+    // LAYERS below.) No new functions are invented here — Documents, Spin,
+    // Findings, Project Context and the photo tray are CONTENTS of these
+    // surfaces already.
     var TRAYS = {
         lists: '#launcher-panel',
         display: '.app-main',
-        eye: '#eye-pane',
         toolbox: '#workspace-toolbox-panel'
     };
+
+    // CLAUDE-MOBILE-Q-TRIAL-01, Section 4 - the foreground layer.
+    //
+    // "While working on the main panel, open a drawing/document/photo
+    // directly from the current screen, bring it to the foreground, work with
+    // it, then shovel it back to reveal the main panel exactly where it was."
+    // A drawing sheet laid on a desk and slid off again.
+    //
+    // Eye is that sheet, and is deliberately NOT in TRAYS above. A tray
+    // REPLACES what is in the work area; a layer COVERS it. That distinction
+    // is what makes "exactly where it was" structural rather than a promise:
+    // the base tray is never hidden while Eye is forward, so there is no
+    // state to restore - no scroll to recapture, no selection to re-apply, no
+    // draft to preserve, because nothing was ever taken away. Eye is also
+    // already the drawing/photo surface (rotate, mirror, markers, crop, via
+    // drawing_image_viewer.js), so this adds a POSITION for an existing pane
+    // rather than a new surface, and adds no second control: the Eye entry in
+    // the switcher raises and lowers it.
+    var LAYERS = {
+        eye: '#eye-pane'
+    };
+    var LAYER_ATTR = 'data-tray-layer';
 
     // Resting positions for the work/Composer boundary on a phone,
     // expressed as the share of the shell the COMPOSER takes. The tray
@@ -101,8 +124,27 @@
     }
 
     function element(key) {
-        var selector = TRAYS[key];
+        var selector = TRAYS[key] || LAYERS[key];
         return selector ? document.querySelector(selector) : null;
+    }
+
+    function isLayer(key) {
+        return Object.prototype.hasOwnProperty.call(LAYERS, key);
+    }
+
+    function currentLayer() {
+        return html.getAttribute(LAYER_ATTR) || null;
+    }
+
+    /* Raise or lower the foreground layer. Nothing underneath is touched -
+       no tray is hidden, no scroll captured, no attribute on the base
+       changed - so lowering it reveals the work exactly as it was left. */
+    function setLayer(key) {
+        if (key && !exists(key)) return false;
+        if (key) html.setAttribute(LAYER_ATTR, key);
+        else html.removeAttribute(LAYER_ATTR);
+        syncControls();
+        return true;
     }
 
     function exists(key) {
@@ -177,14 +219,20 @@
         for (var i = 0; i < buttons.length; i++) {
             var btn = buttons[i];
             var key = btn.getAttribute('data-tray-focus-btn');
-            var on = key === active;
+            var on = isLayer(key) ? key === currentLayer() : key === active;
             btn.setAttribute('aria-pressed', String(on));
             var name = btn.getAttribute('data-tray-label') || key;
             // The label names what the next press DOES, the same
             // convention case_workspace.js's own syncSizeToggle() uses.
-            btn.setAttribute('aria-label', on && !isNarrow()
-                ? ('Restore the workspace from ' + name)
-                : ('Show ' + name));
+            if (isLayer(key)) {
+                btn.setAttribute('aria-label', on
+                    ? ('Send ' + name + ' back and return to the work below')
+                    : ('Bring ' + name + ' to the front, over the current work'));
+            } else {
+                btn.setAttribute('aria-label', on && !isNarrow()
+                    ? ('Restore the workspace from ' + name)
+                    : ('Show ' + name));
+            }
         }
         // Section 3: the header states what is being worked on.
         var readout = document.getElementById('tray-active-label');
@@ -205,6 +253,9 @@
     }
 
     function focus(key) {
+        // A layer is raised and lowered, never swapped in as the work area -
+        // see LAYERS above. Pressing it again shovels it back.
+        if (isLayer(key)) return setLayer(key === currentLayer() ? null : key);
         // On a phone SOME tray always owns the work zone - pressing the
         // active one again would empty the middle of the frame, so a
         // repeat press is a no-op there. On desktop the same press is
@@ -408,6 +459,20 @@
         }
     }
 
+    function wireLayerDismiss() {
+        // The switcher entry raises and lowers the layer, but a reviewer whose
+        // attention is on the drawing itself should not have to travel back up
+        // to the header to put it down. Same action, reachable from where the
+        // work is.
+        var dismiss = document.getElementById('eye-layer-dismiss');
+        if (!dismiss) return;
+        dismiss.addEventListener('click', function () {
+            setLayer(null);
+            var btn = document.querySelector('[data-tray-focus-btn="eye"]');
+            if (btn) btn.focus();
+        });
+    }
+
     function wireMobileNav() {
         var toggle = document.getElementById('mobile-nav-toggle');
         if (!toggle) return;
@@ -452,10 +517,16 @@
         // opened a project-less page would otherwise land on a frame whose
         // active tray is not on the page at all.
         var restored = current();
-        if (restored && !exists(restored)) {
+        // Also catches a preference stored while Eye was still a TRAY,
+        // before Section 4 made it the foreground layer - TRAYS no longer
+        // has that key, so exists() reports it through LAYERS and the
+        // isLayer() check below retires it deliberately.
+        if (restored && (!exists(restored) || isLayer(restored))) {
             html.removeAttribute(ATTR);
+            persist(null);
         }
         wireSwitcher();
+        wireLayerDismiss();
         wireMobileNav();
         wireGrabber();
         wireKeyboardInset();
@@ -465,9 +536,15 @@
         // a menu, dialog, or text field the reviewer is actually inside
         // gets first refusal.
         document.addEventListener('keydown', function (event) {
-            if (event.key !== 'Escape' || !current() || isNarrow()) return;
+            if (event.key !== 'Escape') return;
             var el = event.target;
+            // A menu, dialog or text field the reviewer is actually inside
+            // gets first refusal on a real Escape (Section 23).
             if (el && el.closest && el.closest('input, textarea, select, [contenteditable="true"], details[open]')) return;
+            // Lower the foreground layer before touching the work beneath it -
+            // top of the stack goes first, which is what Escape means.
+            if (currentLayer()) { setLayer(null); return; }
+            if (!current() || isNarrow()) return;
             clear();
         });
 
@@ -499,10 +576,13 @@
 
     window.ArchioskTrays = {
         KEYS: Object.keys(TRAYS),
+        LAYER_KEYS: Object.keys(LAYERS),
         SNAP: SNAP,
         focus: focus,
         clear: clear,
         current: current,
+        currentLayer: currentLayer,
+        setLayer: setLayer,
         exists: exists,
         isNarrow: isNarrow,
         snap: snap,

@@ -122,9 +122,16 @@ Three properties make this governable rather than decorative:
   one value. "One active work tray" cannot drift the way four independent
   booleans could.
 - **Eligible trays are existing NPTs, not new functions.** `lists`=NPT-002,
-  `display`=NPT-003, `eye`=NPT-005, `toolbox`=NPT-006. Documents, Spin,
-  Findings, Project Context and the photo tray are *contents* of those
-  surfaces and remain so; nothing was duplicated to make the frame work.
+  `display`=NPT-003, `toolbox`=NPT-006. Documents, Spin, Findings, Project
+  Context and the photo tray are *contents* of those surfaces and remain so;
+  nothing was duplicated to make the frame work.
+- **A tray REPLACES the work area; a LAYER covers it.** Eye (NPT-005) is the
+  one layer (`data-tray-layer`), not a tray — the drawing sheet laid on the
+  desk and slid off again. Because nothing beneath a layer is hidden, resized
+  or re-attributed, "returns to exactly where it was" is structural rather
+  than a restoration routine: there is no state to put back, because none was
+  taken away. Composer stays below the layer, never covered, which is why
+  asking GO about the drawing in front of you needs no handoff step.
 - **NPT-004 (Chat Dock) is deliberately not eligible.** Composer is a zone,
   not a tray. It is the bottom of the frame at all times, which is what makes
   "work above, talk to GO below" true rather than aspirational — and why a

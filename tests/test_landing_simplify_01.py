@@ -132,13 +132,18 @@ class BrandPronunciationTests(unittest.TestCase):
         self.client = app_module.create_app("testing").test_client()
         self.js = self.client.get("/static/js/landing.js").get_data(as_text=True)
 
-    def test_the_spoken_greeting_is_spelled_phonetically(self):
-        self.assertIn("Ar-kee-osk", self.js)
+    def test_no_phonetic_respelling_of_the_brand_survives(self):
+        """Was: the greeting must be spelled phonetically so the speech engine
+        said AR-kee-osk. The Product Owner has since rejected that
+        pronunciation outright, so the guarantee inverts - it is not on disk
+        at all, and cannot be re-armed by restoring a trigger."""
+        self.assertNotIn("Ar-kee-osk", self.js)
 
-    def test_the_written_brand_is_not_handed_to_the_speech_engine(self):
-        section = self.js[self.js.index("setUpSpokenWelcome"):]
-        section = section[: section.index("})();")]
-        self.assertNotIn("Welcome to Archiosk", section)
+    def test_the_brand_is_not_handed_to_a_speech_engine_at_all(self):
+        """Neither spelling reaches one, because there is no longer a speech
+        engine on this page to hand it to."""
+        self.assertNotIn("Welcome to Archiosk", self.js)
+        self.assertNotIn("speechSynthesis", self.js)
 
     def test_the_phonetic_spelling_is_never_shown_to_a_reader(self):
         """Audio-only. The visible wordmark and every accessible name keep the
@@ -148,14 +153,16 @@ class BrandPronunciationTests(unittest.TestCase):
         self.assertNotIn("Ar-kee-osk", body)
         self.assertIn("Speak to Archiosk", body)
 
-    def test_this_is_the_only_speech_synthesis_seam(self):
-        """One authoritative source, so pronunciation is corrected centrally
-        rather than patched per reply."""
+    def test_no_file_anywhere_still_holds_a_synthesis_seam(self):
+        """Was: landing.js is the ONE authoritative synthesis seam, so
+        pronunciation could be corrected centrally. With automatic speech
+        retired the stronger statement holds - there is no seam left in any
+        static script, so a second one cannot quietly appear beside it."""
         hits = [
-            p for p in (ROOT / "static" / "js").glob("*.js")
+            p.name for p in (ROOT / "static" / "js").glob("*.js")
             if "SpeechSynthesisUtterance" in p.read_text(encoding="utf-8")
         ]
-        self.assertEqual([p.name for p in hits], ["landing.js"])
+        self.assertEqual(hits, [])
 
 
 if __name__ == "__main__":

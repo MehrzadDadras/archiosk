@@ -12,6 +12,35 @@
 > The original design history below is preserved. Later ratified decisions
 > govern their bounded scope under the [precedence rule](../governance-of-governance/amendment-and-ratification.md#precedence-among-ratified-records).
 
+> **Voice OUTPUT is opt-in, and automatic speech is retired
+> (`CLAUDE-MOBILE-Q-TRIAL-01`, 2026-08-23).** The public landing page briefly
+> shipped an automatic spoken welcome (`CLAUDE-CA1D-PUBLIC-LANDING-03`, voice
+> character under `CLAUDE-RECEPTION-VOICE-01`). Product Owner physical-device
+> testing withdrew it, in these terms: *"Do not play an automatic welcome
+> sound. Do not automatically speak ARCHIOSK. The current brand pronunciation
+> is not accepted and wrong pronunciation creates distrust. Voice must remain
+> opt-in."*
+>
+> The constraint this leaves on any future work in this document, stated once
+> here so a later stage does not rediscover it by shipping it again:
+>
+> - **Nothing may speak without a real user request.** Not on page load, not
+>   on first interaction, not as an ambient presence cue. The synthesis code
+>   was removed rather than disabled, so re-enabling it is a deliberate act,
+>   not a flag flip.
+> - **Pronunciation is a Product Owner decision, not an engineering one.** The
+>   phonetic respelling that was in use is not on disk any more precisely so
+>   that it cannot be silently reinstated; a future voice starts from an
+>   accepted pronunciation.
+> - **Discoverability is not a reason to make noise.** The replacement for the
+>   spoken welcome is a silent, one-time visual cue on the microphone control
+>   (`static/js/voice_input.js`, guarded by
+>   `tests/test_voice_optin_and_mic_cue_01.py`), deliberately shaped so it
+>   cannot be mistaken for the recording state.
+>
+> Voice INPUT is unaffected. Push-to-talk recognition was already opt-in
+> behind a real press and never speaks; it remains as it was.
+
 **Status:** Specified, not implemented. Zero code exists for anything in this document — no
 speech/audio library, no microphone permission handling, no dependency of any kind. Recorded
 under `CLAUDE-FUTURE-VOICE-A1`/`CLAUDE-FUTURE-VOICE-REC1` (2026-08-07), following a

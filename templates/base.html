@@ -999,6 +999,19 @@
             <div class="eye-pane" id="eye-pane" data-ui-ref="eye.panel" aria-label="Eye">
                 <div class="eye-pane-header">
                     <h2 data-ui-ref="eye.heading">Eye</h2>
+                    {# CLAUDE-MOBILE-Q-TRIAL-01, Section 4: "shovel it back" -
+                       lowers the foreground layer and reveals the work beneath
+                       it exactly as it was left. The Eye entry in the tray
+                       switcher already raises and lowers it; this is the SAME
+                       action reachable from where the reviewer's attention
+                       actually is once a drawing is in front of them, rather
+                       than making them travel back up to the header. Rendered
+                       only while Eye is forward (main.css), so it is never a
+                       control sitting next to Maximize with nothing to do -
+                       and it is deliberately NOT a second maximize: that one
+                       still divides the right column between Eye and Toolbox,
+                       which is a different question entirely. #}
+                    <button type="button" class="eye-layer-dismiss" id="eye-layer-dismiss" data-ui-ref="eye.layer-dismiss" aria-label="Send Eye back and return to the work below">&#8615;</button>
                     <button type="button" class="eye-maximize-btn" id="eye-maximize-btn" data-ui-ref="eye.maximize" aria-pressed="false" aria-label="Maximize Eye">&#10530;</button>
                 </div>
                 <div class="eye-pane-body">

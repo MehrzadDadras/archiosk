@@ -124,23 +124,32 @@ class OneActiveTrayIsStructuralTests(unittest.TestCase):
         self.assertIn("var ATTR = 'data-tray-focus'", TRAYS_JS)
         self.assertIn("html.setAttribute(ATTR, key)", TRAYS_JS)
 
-    def test_the_four_trays_are_existing_surfaces_not_new_functions(self):
-        """Section 5: "Do not invent new functions." These are NPT-002/
-        003/005/006 - the same surfaces the Appearance menu names."""
+    def test_the_trays_are_existing_surfaces_not_new_functions(self):
+        """Section 5: "Do not invent new functions." These are NPT-002/003/006
+        - the same surfaces the Appearance menu names. Eye (NPT-005) is
+        deliberately absent: it is the foreground LAYER, not a tray."""
         block = TRAYS_JS[TRAYS_JS.index("var TRAYS = {"):]
         block = block[: block.index("}")]
         self.assertIn("#launcher-panel", block)
         self.assertIn(".app-main", block)
-        self.assertIn("#eye-pane", block)
         self.assertIn("#workspace-toolbox-panel", block)
-        for selector in ("#launcher-panel", "#eye-pane", "#workspace-toolbox-panel"):
+        self.assertNotIn("#eye-pane", block)
+        for selector in ("#launcher-panel", "#workspace-toolbox-panel", "#eye-pane"):
             self.assertIn(selector.lstrip("#"), BASE_HTML)
 
-    def test_every_switcher_button_names_a_real_tray(self):
+    def test_every_switcher_button_names_a_real_tray_or_layer(self):
+        """One control set drives both - a switcher entry with no surface
+        behind it would be a dead control."""
+        def keys_of(name):
+            start = TRAYS_JS.index("var %s = {" % name)
+            return set(re.findall(r"^\s+([a-z]+): '", TRAYS_JS[start:TRAYS_JS.index("};", start)], re.M))
+
         buttons = set(re.findall(r'data-tray-focus-btn="([a-z]+)"', BASE_HTML))
-        keys = set(re.findall(r"^\s+([a-z]+): '", TRAYS_JS[TRAYS_JS.index("var TRAYS = {"):TRAYS_JS.index("};", TRAYS_JS.index("var TRAYS = {"))], re.M))
+        trays, layers = keys_of("TRAYS"), keys_of("LAYERS")
         self.assertTrue(buttons)
-        self.assertEqual(buttons, keys)
+        self.assertEqual(buttons, trays | layers)
+        # A key cannot be both, or focus() could not tell raise from replace.
+        self.assertEqual(trays & layers, set())
 
     def test_a_dead_control_removes_itself(self):
         """A project-less page has no Eye or Toolbox. A button that cannot
@@ -441,6 +450,67 @@ class ItRendersForAnAuthorizedUserTests(unittest.TestCase):
         self.assertIn('data-tray-focus-btn="display"', body)
         self.assertNotIn('data-tray-focus-btn="eye"', body)
         self.assertNotIn('data-tray-focus-btn="toolbox"', body)
+
+
+class TheForegroundLayerTests(unittest.TestCase):
+    """CLAUDE-MOBILE-Q-TRIAL-01 Section 4 - "bring it to the foreground, work
+    with it, then shovel it back to reveal the main panel exactly where it
+    was." A drawing sheet on a desk."""
+
+    def test_eye_is_a_layer_rather_than_a_tray(self):
+        block = TRAYS_JS[TRAYS_JS.index("var LAYERS = {"):]
+        block = block[: block.index("}")]
+        self.assertIn("#eye-pane", block)
+
+    def test_a_layer_covers_the_work_and_never_replaces_it(self):
+        """This is what makes "exactly where it was" structural: no rule may
+        hide the base trays while the layer is up, so there is no state to
+        restore because none was taken away."""
+        rules = re.findall(r"html\[data-tray-layer[^{]*\{[^}]*\}", CSS_NO_COMMENTS)
+        self.assertTrue(rules)
+        hidden = [r for r in rules if re.search(r"display:\s*none", r)]
+        for rule in hidden:
+            selector = rule[: rule.index("{")]
+            for base in (".app-main", ".launcher-panel"):
+                self.assertNotIn(base, selector, f"layer hides a base tray: {selector}")
+
+    def test_raising_the_layer_touches_no_tray_state(self):
+        block = TRAYS_CODE[TRAYS_CODE.index("function setLayer"):]
+        block = block[: block.index("function exists")]
+        self.assertNotIn("rememberScroll", block)
+        self.assertNotIn("removeAttribute(ATTR)", block)
+        self.assertNotIn("persist(", block)
+
+    def test_the_composer_stays_below_the_layer(self):
+        """The reviewer must be able to ask GO about the drawing they are
+        looking at without putting it down - the reason no "Open in Composer"
+        handoff is needed."""
+        rule = CSS_NO_COMMENTS[CSS_NO_COMMENTS.index('html[data-tray-layer="eye"] #eye-pane {'):]
+        rule = rule[: rule.index("}")]
+        self.assertIn("--chat-height", rule)
+        self.assertIn("bottom:", rule)
+
+    def test_the_same_control_raises_and_lowers_it(self):
+        """No second switcher entry, and no separate close button to hunt
+        for - Section 11's "do not overload the interface"."""
+        self.assertIn("key === currentLayer() ? null : key", TRAYS_CODE)
+
+    def test_a_dismiss_affordance_exists_where_the_work_is(self):
+        self.assertIn('id="eye-layer-dismiss"', BASE_HTML)
+        self.assertIn("eye-layer-dismiss", TRAYS_CODE)
+        # Present only while the sheet is up, never a dead control beside
+        # Maximize.
+        self.assertIn(".eye-layer-dismiss { display: none; }", CSS_NO_COMMENTS)
+
+    def test_escape_lowers_the_layer_before_the_work_beneath_it(self):
+        block = TRAYS_CODE[TRAYS_CODE.index("if (event.key !== 'Escape') return;"):]
+        block = block[: block.index("clear();") + 10]
+        self.assertLess(block.index("currentLayer()"), block.index("clear()"))
+
+    def test_a_preference_stored_while_eye_was_a_tray_is_retired(self):
+        """Eye was a tray in the build immediately before this one, so a real
+        reviewer can have "eye" persisted as a tray focus."""
+        self.assertIn("isLayer(restored)", TRAYS_CODE)
 
 
 if __name__ == "__main__":

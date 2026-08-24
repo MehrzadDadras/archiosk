@@ -29,6 +29,55 @@
 // these pages use ES modules/a bundler (plain <script> includes,
 // consistent with every other file in static/js/).
 (function () {
+    // CLAUDE-MOBILE-Q-TRIAL-01, Section 6: mic discoverability, without a
+    // sound. The automatic spoken welcome that used to introduce ARCHIOSK is
+    // retired (see static/js/landing.js) because it mispronounced the brand
+    // and "wrong pronunciation creates distrust" - but the Product Owner still
+    // could not tell the mic was there. So the mic says so itself, silently,
+    // once.
+    //
+    // Four things this must not become, all of them explicit requirements:
+    //   - it must never look like active listening. LISTENING is a solid
+    //     --attention-amber FILL that persists while the key is held; this is
+    //     a thin --machine-blue ring that expands, fades, and extinguishes
+    //     itself. Different colour, different mechanism, different lifetime -
+    //     and main.css cancels this ring outright while listening, so the two
+    //     can never be on screen together.
+    //   - it must not request microphone permission. Nothing here touches
+    //     getUserMedia or SpeechRecognition; it is a class name and a CSS
+    //     keyframe.
+    //   - it must respect reduced motion, this codebase's established
+    //     convention being to skip non-essential ambient effects outright.
+    //   - it must be ONCE. Reviewer-wide, not per page load.
+    var CUE_SEEN_KEY = 'beehive:voice-cue-seen';
+
+    function announceAvailabilityOnce(button) {
+        if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+        if (button.classList.contains('voice-input-listening')) return;
+
+        var seen = false;
+        try {
+            seen = !!window.localStorage.getItem(CUE_SEEN_KEY);
+        } catch (err) {
+            // Private browsing / storage denied: show it for this load rather
+            // than failing the whole affordance over a storage quirk. The
+            // cost of being wrong here is one extra silent ripple.
+            seen = false;
+        }
+        if (seen) return;
+
+        button.classList.add('voice-input-available-cue');
+
+        function spend() {
+            button.classList.remove('voice-input-available-cue');
+            try { window.localStorage.setItem(CUE_SEEN_KEY, '1'); } catch (err) { /* nothing to remember it with */ }
+        }
+        // Whichever comes first: the ripple finishes, or the reviewer presses
+        // the mic - a cue that has done its job should not keep animating.
+        button.addEventListener('animationend', spend, { once: true });
+        button.addEventListener('pointerdown', spend, { once: true });
+    }
+
     function setUpVoiceInput(options) {
         const micButton = document.getElementById(options.buttonId);
         const statusEl = options.statusId ? document.getElementById(options.statusId) : null;
@@ -43,6 +92,7 @@
         }
 
         micButton.hidden = false;
+        announceAvailabilityOnce(micButton);
 
         function setStatus(message, isError) {
             if (!statusEl) return;
