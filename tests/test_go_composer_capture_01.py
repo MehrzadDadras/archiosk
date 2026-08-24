@@ -246,22 +246,31 @@ class ConversationLifecycleTests(_RouteBase):
         self.assertEqual(len(cases), before + 1)
         self.assertIn(cases[-1]["id"], response.headers["Location"])
 
-    def test_both_controls_render_in_the_dock(self):
+    def test_new_renders_in_the_dock(self):
         self.assertIn('data-ui-ref="chat.dock.new-conversation"', MACROS)
-        self.assertIn('data-ui-ref="chat.dock.archive-conversation"', MACROS)
 
-    def test_ending_a_conversation_reuses_the_existing_governed_path(self):
-        """Not a second, weaker removal beside a Composer button - the same
-        confirm page, authority check and terminal semantics already in force."""
-        self.assertIn("confirm_archive_case", MACROS)
+    def test_archive_is_not_offered_from_the_composer(self):
+        """Product Owner, explicit: "Remove 'Archive this conversation' or
+        anything in that regard." Removed in full - markup, styling, registry
+        row and these assertions - rather than hidden, because a control that
+        renders nowhere but still has CSS and a registry row misleads whoever
+        reads this next."""
+        self.assertNotIn("chat.dock.archive-conversation", MACROS)
+        self.assertNotIn("conversation-lifecycle-archive", MACROS)
+        self.assertNotIn("conversation-lifecycle-archive", CSS)
+
+    def test_the_capability_itself_is_untouched(self):
+        """Removing the Composer control is not withdrawing the ability to
+        archive an Investigation - that still lives in the Toolbox list, with
+        its own confirmation page and authority check."""
+        workspace_template = (
+            Path(__file__).resolve().parents[1] / "templates" / "case_workspace.html"
+        ).read_text(encoding="utf-8")
+        self.assertIn("confirm_archive_case", workspace_template)
+        self.assertIn("toolbox.investigations.leaf.archive", workspace_template)
+
+    def test_no_destructive_alternative_was_introduced_in_its_place(self):
         self.assertNotIn("delete_case", MACROS)
-
-    def test_the_archive_control_is_absent_where_there_is_nothing_to_archive(self):
-        """The project-level conversation has no single Investigation behind
-        it, so the guard must render no control rather than a dead one."""
-        block = MACROS[MACROS.index('data-ui-ref="chat.dock.archive-conversation"') - 400:]
-        block = block[: block.index("</a>")]
-        self.assertIn("{% if case_id", block)
 
 
 if __name__ == "__main__":

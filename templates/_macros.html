@@ -238,20 +238,14 @@
            Toolbox Investigations list, which on a phone is behind a tray switch
            and a scroll - so this is reach, not new machinery.
 
-           "Archive" is the honest word: routes/workspace.py's archive_case is
-           terminal and frozen, owner-or-admin gated, and behind its own
-           confirmation page. Calling it Delete would promise a destruction it
-           does not perform. #}
+           The Archive control that briefly sat beside it is REMOVED (Product
+           Owner, explicit). Archiving an Investigation still exists, through
+           the Toolbox Investigations list and confirm_archive_case - it is
+           simply not something offered from the Composer. #}
         <form method="post" action="{{ url_for('workspace.start_new_conversation', project_id=project_id) }}" class="conversation-lifecycle-form">
             <button type="submit" class="conversation-lifecycle-btn" data-ui-ref="chat.dock.new-conversation"
                     aria-label="Start a new conversation">New</button>
         </form>
-        {% if case_id is defined and case_id %}
-        <a class="conversation-lifecycle-btn conversation-lifecycle-archive"
-           data-ui-ref="chat.dock.archive-conversation"
-           href="{{ url_for('workspace.confirm_archive_case', project_id=project_id, case_id=case_id) }}"
-           aria-label="Archive this conversation">Archive</a>
-        {% endif %}
         <button type="button" class="conversation-size-toggle" id="conversation-size-toggle" aria-pressed="false" aria-label="Expand the conversation panel">&#10530;</button>
         {% if developer_ccn_context and developer_ccn_context.status == 'active' %}
         <span class="developer-ccn-indicator" data-ui-ref="developer.ccn.active" title="Contemplated change context is active">CCN: {{ developer_ccn_context.title }}</span>

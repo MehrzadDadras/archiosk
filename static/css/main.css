@@ -8613,10 +8613,6 @@ html[data-tray-layer="eye"] .eye-maximize-btn { display: none; }
 }
 .conversation-lifecycle-btn:hover { color: var(--text-primary); border-color: var(--border-strong); }
 .conversation-lifecycle-btn:focus-visible { outline: 2px solid var(--machine-blue); outline-offset: 1px; }
-/* Archive is terminal. It is not coloured as a danger action because it is
-   not destructive and is behind its own confirmation page - but it does not
-   read as identical to "New" either. */
-.conversation-lifecycle-archive { color: var(--text-metadata); }
 
 @media (max-width: 640px) {
     /* Real thumb targets on the surface the Product Owner actually works on. */
