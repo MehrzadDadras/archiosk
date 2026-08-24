@@ -7893,3 +7893,320 @@ main:hover,
 .spin-row-disclosure[aria-expanded="true"] { color: var(--text-primary); }
 .spin-row-detail { padding: 0 0 var(--space-3) var(--space-3); }
 .spin-row-detail .pane-note { margin: 0; }
+
+/* ============================================================
+   CLAUDE-MOBILE-FRAME-02 — the mobile-first workspace frame
+   ============================================================
+   The Product Owner's clarified mobile architecture, and now the
+   application's primary one:
+
+        TOP     fixed compact header  - where am I, what am I working on
+        MIDDLE  ONE active work tray  - where the work happens
+        BOTTOM  fixed Composer        - how I talk to GO
+
+   Everything below is PRESENTATION only. Nothing here can change
+   authorization, project context, evidence, or any project fact - the
+   separation of presentation state from project state is structural
+   here, not a convention: a stylesheet cannot post, and
+   static/js/workspace_trays.js deliberately never fetches.
+
+   The frame is expressed as ONE state - `data-tray-focus` on <html> -
+   applied at every width. An attribute holds exactly one value, so
+   "one active work tray" is structurally true rather than four
+   booleans that have to be kept in agreement. On a phone that state is
+   always set (the frame IS the layout). On desktop it is optional: set
+   it and one tray takes the work area for concentrated work, clear it
+   and the ordinary LAY-5A composition returns. Same architecture,
+   progressively more room - not a second application.
+
+   Deliberately NOT rebuilt here: LAY-5A itself, the panel dividers'
+   collapse mechanism (html.launcher-hidden/html.toolbox-hidden), the
+   Eye/Toolbox splitter, and --chat-height's single write point in
+   case_workspace.js. This block composes with all four.
+   ------------------------------------------------------------ */
+
+/* -- the top zone: function switcher -------------------------------------
+   The bottom edge of the fixed header - current work surface named on the
+   left, the switcher on the right. Restrained on purpose: text labels in
+   the metadata tier, one hairline, no icons, and no color except the
+   active state's --machine-blue (see this file's own header comment on
+   when color is allowed to mean something). It reuses the application's
+   OWN surface vocabulary - Lists/Display/Eye/Toolbox, the same names the
+   Appearance menu already uses - so it introduces navigation, not nouns. */
+.tray-switcher {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    flex-shrink: 0;
+    padding: 0.25rem 1.2rem 0.35rem;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface-primary);
+    position: relative;
+    z-index: 29;
+}
+.tray-switcher-context {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-metadata);
+}
+.tray-switcher-options {
+    display: flex;
+    align-items: center;
+    gap: 0.15rem;
+    flex-shrink: 0;
+}
+.tray-switcher-btn {
+    appearance: none;
+    background: none;
+    border: none;
+    border-radius: 4px;
+    padding: 0.3rem 0.6rem;
+    font: inherit;
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+    cursor: pointer;
+}
+.tray-switcher-btn:hover { color: var(--text-primary); background: var(--surface-hover); }
+.tray-switcher-btn:focus-visible { outline: 2px solid var(--machine-blue); outline-offset: 1px; }
+.tray-switcher-btn[aria-pressed="true"] { color: var(--machine-blue); }
+
+/* -- the frame: one tray owns the work area ------------------------------
+   Non-active trays keep their DOM - a Composer draft, a scroll position, a
+   selected Document, an unsaved Eye capture all survive a switch and a
+   rotation. They surrender their box, never their content; display:none is
+   the same mechanism the existing collapse controls already use for
+   exactly that reason.
+
+   The Composer is the one thing focus never hides. It is a ZONE, not a
+   tray: there is no "switch to Composer", which is precisely why the
+   future photo flow needs no "Open in Composer" handoff. It is lifted out
+   of .workspace-main-column's column flow to span the frame - by position,
+   not by moving it in the DOM, so every existing script that reaches into
+   #chat-region by id keeps working untouched. */
+html[data-tray-focus] .chat-region {
+    position: fixed;
+    left: 0;
+    right: 0;
+    /* --kb-inset is published by workspace_trays.js from visualViewport:
+       0 everywhere the software keyboard resizes the layout viewport
+       properly, and the keyboard's real height on iOS, which does not.
+       This is what keeps the Composer usable with the keyboard open. */
+    bottom: var(--kb-inset, 0px);
+    height: var(--chat-height, 220px);
+    border-top: 1px solid var(--border);
+    z-index: 26;
+}
+/* :has(), not a bare selector: the Composer is gated on project_id/workspace,
+   so a project-less page has no .chat-region at all and reserving its height
+   there would leave a dead strip below the work area with nothing in it. The
+   technique is already established in this file (see .conversation-thread:has()
+   and .files-folder-row:has()). */
+html[data-tray-focus] .app-shell-body:has(.chat-region) {
+    padding-bottom: var(--chat-height, 220px);
+}
+/* The dividers are collapse controls for a multi-column composition that
+   is not on screen in this state. */
+html[data-tray-focus] .app-shell-body > .panel-divider { display: none; }
+
+/* The column holding Display+Composer must stay rendered even when Display
+   is not the active tray, or the Composer inside it goes with it - so it
+   collapses to zero width rather than to display:none, and stops clipping,
+   since its fixed child now paints outside it. */
+html[data-tray-focus]:not([data-tray-focus="display"]) .workspace-main-column {
+    flex: 0 0 0;
+    min-width: 0;
+    overflow: visible;
+}
+html[data-tray-focus]:not([data-tray-focus="display"]) .app-main { display: none; }
+
+/* A tray that is active is a tray that is shown - focus overrides a
+   collapse the reviewer set earlier, rather than presenting them with an
+   empty frame and no way to read what happened. */
+html[data-tray-focus="lists"] .launcher-panel,
+html[data-tray-focus="eye"] .workspace-right-column,
+html[data-tray-focus="toolbox"] .workspace-right-column {
+    display: flex;
+    position: static;
+    width: auto;
+    max-width: none;
+    flex: 1 1 auto;
+    min-width: 0;
+}
+html[data-tray-focus="display"] .launcher-panel,
+html[data-tray-focus="eye"] .launcher-panel,
+html[data-tray-focus="toolbox"] .launcher-panel { display: none; }
+html[data-tray-focus="display"] .workspace-right-column,
+html[data-tray-focus="lists"] .workspace-right-column { display: none; }
+
+/* Eye and Toolbox share one column, split by the Eye/Toolbox divider.
+   Focusing one gives it the whole column; the divider has nothing left to
+   divide, so it goes too. The splitter's own persisted proportion is
+   untouched and returns intact when focus is cleared. */
+html[data-tray-focus="eye"] .workspace-pane-toolbox,
+html[data-tray-focus="eye"] .toolbox-eye-divider,
+html[data-tray-focus="toolbox"] .eye-pane,
+html[data-tray-focus="toolbox"] .toolbox-eye-divider { display: none; }
+html[data-tray-focus="eye"] .eye-pane,
+html[data-tray-focus="toolbox"] .workspace-pane-toolbox {
+    height: auto;
+    max-height: none;
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+/* -- the work/Composer boundary, at thumb size ---------------------------
+   The desktop handle for this same boundary
+   (#conversation-dock-resize-handle) is a 9px pointer-precision strip
+   carrying two micro-buttons: correct for a mouse, unusable with a thumb.
+   This is that boundary sized for touch. It is not a second sizing system -
+   every value it produces goes through window.__chatSplitter.setValue(),
+   the one existing write point for --chat-height. */
+.tray-composer-grabber { display: none; }
+.tray-composer-grabber-bar {
+    display: block;
+    width: 42px;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--border-strong);
+}
+
+.mobile-nav-toggle {
+    appearance: none;
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    /* Touch target first, glyph second. */
+    min-width: 40px;
+    min-height: 36px;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+    line-height: 1;
+    color: var(--text-secondary);
+    cursor: pointer;
+    flex-shrink: 0;
+}
+.mobile-nav-toggle:focus-visible { outline: 2px solid var(--machine-blue); outline-offset: 1px; }
+.mobile-nav-toggle[aria-expanded="true"] { color: var(--machine-blue); border-color: var(--machine-blue); }
+
+/* -- phone widths --------------------------------------------------------
+   Portrait is the primary operating posture. Nothing below asks the
+   reviewer to rotate the device to reach anything. */
+@media (max-width: 640px) {
+    /* 100dvh, not 100vh: on iOS Safari 100vh is the height the viewport
+       has with browser chrome RETRACTED, so a 100vh shell is taller than
+       the screen and a bottom-anchored Composer starts life below the
+       fold. dvh tracks the viewport that is actually visible. The vh line
+       stays first as the fallback for anything without dvh. */
+    .app-shell { height: 100vh; height: 100dvh; }
+
+    /* The eight-menu desktop menubar wrapped into two or three full-width
+       rows of competing labels here and ate the workspace - the Product
+       Owner's own iPhone screenshot. All three of the usual escapes are
+       ruled out (compressed row, horizontal scroll, truncated labels), so
+       the same nav becomes a drawer behind one control. No second mobile
+       menu, no duplicate command implementations. */
+    .mobile-nav-toggle { display: inline-flex; }
+    .workspace-menubar { display: none; }
+    html.mobile-nav-open .workspace-menubar {
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0;
+        position: fixed;
+        top: 0;
+        left: 0;
+        bottom: 0;
+        width: min(86vw, 320px);
+        z-index: 40;
+        overflow-y: auto;
+        padding: 0.6rem;
+        background: var(--surface-primary);
+        border-right: 1px solid var(--border-strong);
+    }
+    html.mobile-nav-open .workspace-menubar-menu { position: static; }
+    html.mobile-nav-open .workspace-menubar-panel {
+        position: static;
+        box-shadow: none;
+        border: none;
+        min-width: 0;
+    }
+
+    .workspace-topbar {
+        gap: 0.4rem;
+        padding: 0.35rem 0;
+        margin-bottom: 0;
+        flex-wrap: nowrap;
+    }
+    .workspace-topbar-identity { flex-wrap: nowrap; gap: 0.4rem; min-width: 0; }
+    /* Project identity is the one breadcrumb element that must survive at
+       this width - "which project am I in". It keeps its own ellipsis
+       rather than being dropped. */
+    .workspace-topbar-context { max-width: none; flex: 1 1 auto; min-width: 0; }
+
+    .tray-switcher { padding: 0.2rem 0.6rem 0.3rem; }
+    /* The active-surface readout is already the aria-live announcement and
+       is duplicated by the pressed button beside it; at 320px the four
+       switch targets are worth more than the label. */
+    .tray-switcher-context { display: none; }
+    .tray-switcher-options { flex: 1 1 auto; gap: 0.25rem; }
+    .tray-switcher-btn {
+        flex: 1 1 0;
+        min-width: 0;
+        /* A real touch target rather than a text-sized one. */
+        min-height: 40px;
+        padding: 0.3rem 0.2rem;
+        border: 1px solid var(--border);
+    }
+    .tray-switcher-btn[aria-pressed="true"] {
+        border-color: var(--machine-blue);
+        background: var(--machine-blue-tint);
+    }
+
+    /* The 320px floor below exists to stop Lists and the right column
+       squeezing Display on a DESKTOP. At 320px of actual viewport it is
+       the thing that guarantees horizontal overflow, and in the frame
+       there is no second column left to squeeze Display anyway. */
+    .workspace-main-column { min-width: 0; }
+    .app-shell-body { overflow-x: hidden; }
+
+    .tray-composer-grabber {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 28px;
+        padding: 0.5rem 0;
+        margin: 0;
+        cursor: row-resize;
+        touch-action: none;
+        background: var(--surface-primary);
+    }
+    .tray-composer-grabber:focus-visible {
+        outline: 2px solid var(--machine-blue);
+        outline-offset: -2px;
+    }
+    .tray-composer-grabber.dragging .tray-composer-grabber-bar,
+    .tray-composer-grabber:focus-visible .tray-composer-grabber-bar {
+        background: var(--machine-blue);
+    }
+    /* The desktop splitter strip and its lock/link micro-buttons are
+       pointer-precision controls; the grabber above replaces them here. */
+    .conversation-dock-resize-handle { display: none; }
+
+    /* With the keyboard up the frame is mostly keyboard. Give the tray a
+       floor so it stays a work surface rather than a sliver, and let the
+       Composer have the rest. */
+    html.keyboard-open .app-shell-body { min-height: 96px; }
+}
+
+/* Above the phone breakpoint the drawer control has nothing to do - the
+   real menubar is on screen. */
+@media (min-width: 641px) {
+    .mobile-nav-toggle { display: none; }
+}

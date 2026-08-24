@@ -35,6 +35,24 @@
             if (window.localStorage.getItem('beehive:ui-reference-mode') === 'on') {
                 document.documentElement.classList.add('ui-reference-mode-active');
             }
+            {# CLAUDE-MOBILE-FRAME-02: which tray owns the work zone, restored
+               here for the same reason every other panel preference above is -
+               a phone that painted three competing desktop columns for one
+               frame before JS collapsed them to the real frame would show the
+               exact layout this change exists to remove. static/js/
+               workspace_trays.js owns the state from DOMContentLoaded on; this
+               only pre-seeds it. The narrow-width DEFAULT is applied here too
+               (and, as there, never persisted) so a first visit from a phone
+               lands directly in the frame rather than flashing LAY-5A. #}
+            {% if authenticated %}
+            var trayFocus = window.localStorage.getItem('beehive:tray:focus');
+            if (!trayFocus && window.matchMedia && window.matchMedia('(max-width: 640px)').matches) {
+                trayFocus = 'display';
+            }
+            if (trayFocus) {
+                document.documentElement.setAttribute('data-tray-focus', trayFocus);
+            }
+            {% endif %}
         } catch (e) { /* localStorage unavailable - default to shown */ }
     </script>
     {% block extra_head %}{% endblock %}
@@ -303,6 +321,46 @@
                 </details>
             </div>
         </div>
+        {% endif %}
+
+        {% if authenticated %}
+        {# ---------------- Tray switcher (CLAUDE-MOBILE-FRAME-02) ------------------
+           The Product Owner's mobile frame is three persistent zones: a fixed
+           compact header, ONE active work tray, and a fixed Composer. This row
+           is the bottom edge of the first zone - "which project am I in, what
+           am I working on, and how do I change it" - and it is the ONLY new
+           navigation surface this change adds.
+
+           These four are not new functions (Section 5 is explicit: do not
+           invent any). They are the surfaces this application already names
+           everywhere else - the Appearance menu's own Lists/Display/Toolbox
+           vocabulary plus Eye, and NPT-002/003/005/006 in panel-template-
+           system.md. Documents, Spin, Findings, Project Context and the photo
+           tray are CONTENTS of these surfaces already, which is exactly why
+           "one tray, many functions" needs no second copy of any of them.
+
+           Rendered at every width on purpose (Section 18/19: desktop gets more
+           room, not different semantics) - on desktop pressing one temporarily
+           gives it the whole work area and pressing it again restores the
+           normal LAY-5A composition; on a phone it switches which single tray
+           is up. Same control, same state, one architecture. #}
+        <nav class="tray-switcher" id="tray-switcher" data-ui-ref="shell.tray-switcher" aria-label="Active work tray">
+            <span class="tray-switcher-context" data-ui-ref="shell.tray-switcher.active" aria-live="polite">
+                <span class="tray-switcher-active-label" id="tray-active-label">Workspace</span>
+            </span>
+            <span class="tray-switcher-options">
+                <button type="button" class="tray-switcher-btn" data-ui-ref="shell.tray-switcher.lists"
+                        data-tray-focus-btn="lists" data-tray-label="Lists" aria-pressed="false">Lists</button>
+                <button type="button" class="tray-switcher-btn" data-ui-ref="shell.tray-switcher.display"
+                        data-tray-focus-btn="display" data-tray-label="Display" aria-pressed="false">Display</button>
+                {% if project_id is defined and workspace is defined %}
+                <button type="button" class="tray-switcher-btn" data-ui-ref="shell.tray-switcher.eye"
+                        data-tray-focus-btn="eye" data-tray-label="Eye" aria-pressed="false">Eye</button>
+                <button type="button" class="tray-switcher-btn" data-ui-ref="shell.tray-switcher.toolbox"
+                        data-tray-focus-btn="toolbox" data-tray-label="Toolbox" aria-pressed="false">Toolbox</button>
+                {% endif %}
+            </span>
+        </nav>
         {% endif %}
 
         <div class="app-shell-body">
@@ -875,6 +933,30 @@
            context). Content comes from {% block chat %}, filled in only
            by case_workspace.html. #}
         <div class="chat-region" id="chat-region" data-ui-ref="chat.dock">
+            {# CLAUDE-MOBILE-FRAME-02, Section 6: the work/Composer boundary as
+               a real touch target. The desktop handle for this same boundary
+               (#conversation-dock-resize-handle, inside the dock below) is a
+               9px pointer-precision strip carrying two 🔒/🔗 micro-buttons -
+               correct for a mouse, unusable with a thumb, which is what
+               Section 22 rules out. This is that same boundary at thumb size,
+               shown only at phone widths.
+
+               It is NOT a second sizing system: every value it produces goes
+               through window.__chatSplitter.setValue() in case_workspace.js -
+               the one existing write point for --chat-height on .app-shell -
+               so the drag, the tap-to-cycle, the desktop handle, the Compact/
+               Expand toggle and the linked Eye/Toolbox splitter all stay in
+               agreement and share one persisted value. Drag it up for more
+               Composer, down for more tray; a plain tap cycles the three rest
+               positions so the boundary is reachable with no drag at all. #}
+            <div class="tray-composer-grabber" id="tray-composer-grabber"
+                 data-ui-ref="shell.tray-composer-grabber"
+                 role="separator" tabindex="0" aria-orientation="horizontal"
+                 aria-label="Work area and Composer split"
+                 aria-valuemin="120" aria-valuemax="640"
+                 aria-valuetext="Work area working">
+                <span class="tray-composer-grabber-bar" aria-hidden="true"></span>
+            </div>
             {% block chat %}{% endblock %}
         </div>
         {% endif %}
@@ -1981,6 +2063,16 @@
        return`) exactly like every other script in this cluster, so
        loading it here is a safe no-op on any page without a topbar. #}
     <script src="{{ url_for('static', filename='js/app_menu.js') }}?v={{ static_version }}"></script>
+    {# CLAUDE-MOBILE-FRAME-02: loaded here, alongside app_menu.js and for the
+       same reason - the tray switcher and the mobile nav toggle render on every
+       authenticated page, not only inside an open Workspace. Self-guards
+       throughout (a control for a tray this page does not have removes itself),
+       so it is a safe no-op on a project-less page. It reads
+       window.__chatSplitter (published by case_workspace.js, which loads later,
+       from case_workspace.html) lazily and settles the grabber in a
+       requestAnimationFrame - i.e. after every DOMContentLoaded handler has
+       run - so load order between the two files does not matter. #}
+    <script src="{{ url_for('static', filename='js/workspace_trays.js') }}?v={{ static_version }}"></script>
     <script nonce="{{ csp_nonce }}">
         // CLAUDE-P40-E3A / CLAUDE-LEFTPANEL-CALM-01: the recursive Lists
         // hierarchy - a branch starts open only if the page rendered it

@@ -121,7 +121,27 @@
                    context-sensitive items mirror the real control's own
                    disabled state rather than carrying a second enabled/
                    disabled flag of their own. #}
-                <nav class="workspace-menubar" data-ui-ref="menu.bar" aria-label="Application menu">
+                {# CLAUDE-MOBILE-FRAME-02, Section 4: the eight-menu desktop
+                   menubar below has flex-shrink:0 on a wrapping topbar, so on
+                   a phone it wrapped into two or three full-width rows of
+                   competing labels and ate the workspace before any work
+                   started - the Product Owner's own iPhone screenshot. At
+                   phone widths the SAME nav becomes a drawer behind this one
+                   control instead; the menus themselves are untouched (no
+                   duplicate mobile menu, no second implementation of any
+                   command). Deliberately a plain class toggle on <html>,
+                   exactly like html.launcher-hidden, rather than a <details>
+                   wrapper: a closed <details> would need JS to force it OPEN
+                   for desktop, so a JS failure would cost desktop its entire
+                   menu bar. This way the menubar is visible by default at
+                   every width CSS calls wide, and JS is only ever needed to
+                   REVEAL something on a phone - the safe direction to fail
+                   in. Hidden above the phone breakpoint by main.css. #}
+                <button type="button" class="mobile-nav-toggle" id="mobile-nav-toggle"
+                        data-ui-ref="menu.mobile-nav-toggle"
+                        aria-expanded="false" aria-controls="workspace-menubar"
+                        aria-label="Application menu">&#9776;</button>
+                <nav class="workspace-menubar" id="workspace-menubar" data-ui-ref="menu.bar" aria-label="Application menu">
                     <details class="workspace-menubar-menu" data-ui-ref="menu.archiosk">
                         <summary class="workspace-topbar-btn">Archiosk</summary>
                         <div class="workspace-menubar-panel" role="group" aria-label="Archiosk">

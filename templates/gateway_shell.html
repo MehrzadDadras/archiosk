@@ -168,6 +168,13 @@
        Placed after the topbar markup above (script tags run at parse
        time; app_menu.js queries .workspace-topbar immediately). #}
     <script src="{{ url_for('static', filename='js/app_menu.js') }}?v={{ static_version }}"></script>
+    {# CLAUDE-MOBILE-FRAME-02: _app_menu.html (included above) now carries the
+       phone menu-drawer toggle, so the script that drives it has to be here
+       too - otherwise Gateway would render a real control that does nothing at
+       phone widths. Gateway has no Lists/Display/Eye/Toolbox and no Composer,
+       so the tray half of this module self-guards into a no-op here; only the
+       drawer toggle actually does anything. #}
+    <script src="{{ url_for('static', filename='js/workspace_trays.js') }}?v={{ static_version }}"></script>
     {# CLAUDE-CA1D-GATEWAY-VISUAL-CONTINUITY-01: the shared background
        script -- ocean_field.js only, never landing.js itself (which
        also contains the knowledge field, spoken welcome greeting, and
