@@ -8191,9 +8191,6 @@ html[data-tray-focus="toolbox"] .workspace-pane-toolbox {
         border-top: 1px solid var(--border);
         z-index: 26;
     }
-    .app-shell-body:has(.chat-region) {
-        padding-bottom: var(--chat-height, 220px);
-    }
 
     /* The header stays put because .app-shell is a fixed-height flex column
        with overflow:hidden - so every child that must not move needs a shrink
@@ -8212,6 +8209,63 @@ html[data-tray-focus="toolbox"] .workspace-pane-toolbox {
     body {
         height: 100vh;
         height: 100dvh;
+    }
+
+    /* CLAUDE-MOBILE-FRAME-PIN-02 (Product Owner: "when I move the upper part
+       of the page up and down the full page moves up and down... when I move
+       the composer it moves up and down as well").
+
+       overflow:hidden above is NOT enough on iOS. Safari still rubber-bands
+       the whole document on a touch-drag over any non-scrollable area, and
+       while the document is displaced everything positioned against the
+       viewport travels with it - so the "unpinned" header and the "moving"
+       Composer were one bug wearing two faces, which no amount of pinning
+       could have fixed. Taking the document out of flow is the difference
+       between "this does not scroll" and "there is nothing here to scroll". */
+    body {
+        position: fixed;
+        inset: 0;
+        width: 100%;
+    }
+    html,
+    body {
+        overscroll-behavior: none;
+    }
+
+    /* Scroll chaining is the default: reach the end of an inner region, keep
+       dragging, and the gesture is handed to the document. That is precisely
+       the Composer case - the conversation thread lives inside it, so running
+       out of thread used to drag the page. Every real scroll region in this
+       shell ends the gesture it owns. */
+    main,
+    .lists-pane,
+    .thumbnails-list,
+    .workspace-pane-toolbox,
+    .eye-pane-body,
+    .eye-canvas-viewport,
+    .eye-document-body,
+    .document-viewer-canvas-container,
+    .conversation-thread,
+    html.mobile-nav-open .workspace-menubar {
+        overscroll-behavior: contain;
+    }
+
+    /* "Leave a margin at the bottom and top because there are visual
+       cluster." Content used to butt straight against the fixed header above
+       and the fixed Composer below. The gap goes on the CONTENT, never on the
+       Composer itself - a margin there would open a transparent strip with
+       the scrolling work showing through underneath it. */
+    main {
+        padding-top: 0.75rem;
+        padding-bottom: 0.75rem;
+    }
+    .lists-pane,
+    .workspace-pane-toolbox,
+    .eye-pane-body {
+        padding-top: 0.5rem;
+    }
+    .app-shell-body:has(.chat-region) {
+        padding-bottom: calc(var(--chat-height, 220px) + 0.5rem);
     }
 
     /* The 320px floor below exists to stop Lists and the right column

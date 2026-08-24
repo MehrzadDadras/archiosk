@@ -568,5 +568,77 @@ class TheFrameIsPinnedWithoutJavascriptTests(unittest.TestCase):
         self.assertIn("html[data-tray-focus] .chat-region", CSS_NO_COMMENTS)
 
 
+class TheDocumentItselfCannotBeDraggedTests(unittest.TestCase):
+    """CLAUDE-MOBILE-FRAME-PIN-02. Product Owner: "when I move the upper part
+    of the page up and down the full page moves up and down... when I move the
+    composer it moves up and down as well."
+
+    Both reports were the same bug. `overflow: hidden` does not stop iOS
+    rubber-banding the document on a touch-drag, and while the document is
+    displaced everything positioned against the viewport travels with it - so
+    the header looked unpinned and the fixed Composer looked like it moved.
+    No amount of pinning could have fixed that; the document has to be out of
+    flow.
+    """
+
+    def test_the_document_is_taken_out_of_flow(self):
+        """The difference between "this does not scroll" and "there is nothing
+        here to scroll"."""
+        phone = _phone_block()
+        # Anchored on the declaration rather than on a selector: the phone
+        # block has an earlier html/body height rule whose own opening brace
+        # would otherwise match first.
+        rule = phone[: phone.index("inset: 0")]
+        rule = rule[rule.rindex("{") + 1:]
+        self.assertIn("position: fixed", rule)
+        owner = phone[: phone.rindex("{", 0, phone.index("inset: 0"))]
+        self.assertTrue(owner.rstrip().endswith("body"), owner.rstrip()[-40:])
+
+    def test_the_document_refuses_overscroll(self):
+        """No regex here on purpose: the earlier version needed an escaped
+        newline to span the `html,` / `body {` selector pair, and an escape
+        inside a shell-authored patch is exactly what corrupted this file
+        once already."""
+        phone = _phone_block()
+        rule = phone[phone.index("overscroll-behavior: none"):]
+        # Walk back to the selector that owns this declaration.
+        owner = phone[: phone.index("overscroll-behavior: none")]
+        owner = owner[owner.rindex("}") + 1:]
+        self.assertIn("html", owner)
+        self.assertIn("body", owner)
+
+    def test_every_real_scroll_region_ends_its_own_gesture(self):
+        """Scroll chaining is the default, and it is what handed a drag that
+        ran out of conversation thread to the page underneath."""
+        phone = _phone_block()
+        contain = phone[phone.index("overscroll-behavior: contain") - 900:]
+        contain = contain[: contain.index("overscroll-behavior: contain") + 40]
+        for region in ("main", ".conversation-thread", ".lists-pane",
+                       ".workspace-pane-toolbox", ".eye-pane-body"):
+            with self.subTest(region=region):
+                self.assertIn(region, contain)
+
+    def test_the_breathing_room_is_on_the_content_not_the_composer(self):
+        """A margin on the Composer would open a transparent strip with the
+        scrolling work showing through underneath it."""
+        phone = _phone_block()
+        composer = phone[phone.index(".chat-region {"):]
+        composer = composer[: composer.index("}")]
+        self.assertNotIn("margin", composer)
+
+        main_rule = phone[phone.rindex("    main {"):]
+        main_rule = main_rule[: main_rule.index("}")]
+        self.assertIn("padding-top", main_rule)
+        self.assertIn("padding-bottom", main_rule)
+
+    def test_the_reserved_strip_clears_the_composer_with_room_to_spare(self):
+        phone = _phone_block()
+        # Exactly one such rule in the phone block - two would drift apart.
+        self.assertEqual(phone.count(".app-shell-body:has(.chat-region)"), 1)
+        rule = phone[phone.index(".app-shell-body:has(.chat-region)"):]
+        rule = rule[: rule.index("}")]
+        self.assertIn("calc(var(--chat-height", rule)
+
+
 if __name__ == "__main__":
     unittest.main()
