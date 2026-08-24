@@ -83,11 +83,37 @@ class NoNewEvidenceOrIngestionPathTests(unittest.TestCase):
             with self.subTest(token=forbidden):
                 self.assertNotIn(forbidden, block)
 
-    def test_the_one_vision_path_is_still_the_only_one(self):
-        """routes/workspace.py's open_image_in_composer remains the single
-        vision-capable route; this change adds no second one."""
+    def test_every_vision_path_is_governed(self):
+        """Was: open_image_in_composer is the ONE vision-capable route.
+
+        CLAUDE-GO-COMPOSER-CAPTURE-01 deliberately added a second, at the
+        Product Owner's explicit request - the Composer's own "+" - because a
+        photo reaching GO only through Image Search's no-match state was the
+        handoff the persistent Composer exists to remove.
+
+        A bare count was never the real protection; what matters is that
+        vision cannot arrive through an ungoverned back door. So: every call
+        site lives in this one file, and each is preceded by the same
+        external-AI policy resolver every other transmission uses."""
         workspace = (ROOT / "routes" / "workspace.py").read_text(encoding="utf-8")
-        self.assertEqual(workspace.count("image_base64="), 1)
+        call_sites = workspace.count("image_base64=")
+        self.assertEqual(call_sites, 2)
+
+        # No other route module may transmit an image at all.
+        for other in (ROOT / "routes").glob("*.py"):
+            if other.name == "workspace.py":
+                continue
+            with self.subTest(module=other.name):
+                self.assertNotIn("image_base64=", other.read_text(encoding="utf-8"))
+
+        # Each call site is gated: the policy decision is resolved before it.
+        for index in range(call_sites):
+            position = -1
+            for _ in range(index + 1):
+                position = workspace.index("image_base64=", position + 1)
+            preceding = workspace[:position]
+            with self.subTest(call_site=index):
+                self.assertIn("ACTION_EXTERNAL_AI_REQUEST", preceding)
 
     def test_gps_coordinates_are_still_never_read(self):
         """services/image_intelligence.py detects GPS PRESENCE only. Mobile

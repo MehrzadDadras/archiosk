@@ -3585,6 +3585,32 @@ def confirm_archive_case(project_id, case_id):
     )
 
 
+@workspace_bp.route("/projects/<project_id>/workspace/conversations/new", methods=["POST"])
+@login_required
+def start_new_conversation(project_id):
+    """CLAUDE-GO-COMPOSER-LIFECYCLE-01: a fresh Composer, one tap from the
+    Composer itself.
+
+    A conversation lives on an Investigation here, so this creates one - through
+    the same CaseWorkspaceStore.create_case every other creation path uses, with
+    no new object, status or authority of its own. The title is deliberately
+    plain and deliberately temporary: the reviewer has not said what this is
+    about yet, so naming it anything more specific would be inventing a subject
+    for them. It is renameable, and the photo path (CLAUDE-GO-COMPOSER-CAPTURE-01)
+    names one from real content when there is content to read.
+    """
+    _, store, workspace = _load_workspace_or_404(project_id)
+    case = store.create_case(
+        workspace,
+        title="New conversation",
+        objective="Started from the Composer.",
+        created_by=_reviewer(),
+    )
+    return redirect(url_for(
+        "workspace.show_workspace", project_id=project_id, case=case["id"],
+    ))
+
+
 @workspace_bp.route("/projects/<project_id>/workspace/cases/<case_id>/archive", methods=["POST"])
 @login_required
 def archive_case(project_id, case_id):
@@ -4468,6 +4494,19 @@ def post_message(project_id, case_id):
     if not text:
         return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
 
+    # CLAUDE-GO-COMPOSER-CAPTURE-01: a photo attached to this message is the
+    # whole turn - it carries the reviewer's own text with it, so the ordinary
+    # text path must not also run and post the message twice.
+    handled, new_case_id = _composer_photo_turn(
+        project_id, store, workspace, case_id, text,
+        request.form.get("image_data_url"),
+    )
+    if handled:
+        return redirect(url_for(
+            "workspace.show_workspace", project_id=project_id,
+            case=(new_case_id or case_id),
+        ))
+
     _run_conversation_turn(
         project_id, store, workspace, case, text,
         current_view=request.form.get("current_view"),
@@ -4490,6 +4529,174 @@ def _parse_image_data_url(data_url: str) -> Optional[tuple[str, str]]:
     if not payload or not header.endswith(";base64"):
         return None
     return header[len("data:"):-len(";base64")], payload
+
+
+# CLAUDE-GO-COMPOSER-CAPTURE-01 -----------------------------------------
+# The Composer's "+" attachment. A photo now rides the ordinary composer
+# submit, so text and image arrive together and "make a new Q" is one action
+# rather than three - which is what the persistent-Composer frame was for.
+#
+# Deterministic first, model second, the same discipline as the rest of the
+# dispatch chain: whether the reviewer asked for a new Investigation is read
+# from THEIR OWN WORDS here, and the model is asked only for what a model is
+# actually better at - what the photo shows, and some candidate names.
+_NEW_Q_PHRASES = (
+    "new q", "make a q", "start a q", "open a q", "create a q",
+    "new investigation", "make an investigation", "start an investigation",
+    "open an investigation", "create an investigation", "new inquiry",
+)
+
+
+def _asked_for_a_new_investigation(message_text):
+    lowered = " " + (message_text or "").strip().lower() + " "
+    return any(phrase in lowered for phrase in _NEW_Q_PHRASES)
+
+
+def _composer_photo_turn(project_id, store, workspace, case_id, message_text, image_data_url):
+    """Handle a composer turn carrying a photo.
+
+    Returns (handled, new_case_id). handled=True means the caller must not also
+    run its ordinary text turn; new_case_id is set only when a new Investigation
+    was created, so the caller can land the reviewer inside it.
+
+    Boundaries kept deliberately: the SAME external-AI policy gate every other
+    transmission in this file resolves through, the SAME 5MB ceiling and
+    data-URL parser the existing vision route uses, and persistence ONLY via
+    register_eye_capture - the established EXIF-stripping, GPS-presence-only
+    pathway. This function never writes an image to disk itself.
+    """
+    parsed = _parse_image_data_url(image_data_url or "")
+    if parsed is None:
+        return False, None
+
+    media_type, image_b64 = parsed
+    if len(image_b64) * 3 / 4 > _MAX_IMAGE_BYTES:
+        flash("That photo is too large to send (5MB limit).", "error")
+        return True, None
+
+    wants_new = _asked_for_a_new_investigation(message_text)
+
+    # What the reviewer did is recorded; the bytes themselves never are.
+    store.add_message(
+        workspace, case_id, role="human",
+        text=(message_text or "Sent a photo."),
+        actor=_reviewer(), content_class=CONTENT_CLASS_HUMAN_AUTHORED,
+    )
+
+    from services.security_policy import ACTION_EXTERNAL_AI_REQUEST, DECISION_ALLOW, DECISION_ALLOW_APPROVED_ROUTE
+
+    policy_decision = _evaluate_security_action(workspace, ACTION_EXTERNAL_AI_REQUEST)
+    if policy_decision.decision not in (DECISION_ALLOW, DECISION_ALLOW_APPROVED_ROUTE):
+        store.add_message(
+            workspace, case_id, role="system",
+            text=(
+                "Looking at photos with external AI is not permitted by this project's "
+                "security policy (controlling layer: "
+                + str(policy_decision.controlling_layer) + "). "
+                + str(policy_decision.reason) + " Nothing was transmitted."
+            ),
+            content_class=CONTENT_CLASS_AI_PROPOSED,
+        )
+        return True, None
+
+    from services.llm_gateway import call_llm_json
+
+    system_prompt = (
+        "You are GO, ARCHIOSK's project assistant, helping a construction/design "
+        "professional who has just taken or attached a photo on site and said "
+        "something about it. Look at the photo and answer what they actually asked. "
+        "Ground everything in what is visibly present: never infer a dimension, a "
+        "compliance outcome, a defect, a product, or a code relationship that the "
+        "image alone cannot support, and say plainly when something cannot be "
+        "established from a photograph. Also propose two or three SHORT candidate "
+        "names for this observation, drawn from what is actually visible or from any "
+        "legible text in the image - a name is a label for the reviewer to accept or "
+        "change, never an identification or a finding. Respond ONLY with a JSON "
+        'object of exactly this shape: {"reply": "<your answer, ready to show '
+        'as-is>", "proposed_names": ["<short name>", "..."]}.'
+    )
+    outcome = call_llm_json(
+        user_prompt=(message_text or "What is this?"),
+        system_prompt=system_prompt,
+        image_base64=image_b64, image_media_type=media_type,
+        max_tokens=700, log_label="Composer photo turn",
+    )
+
+    reply_text = None
+    proposed_names = []
+    if outcome.ran and isinstance(outcome.parsed, dict):
+        reply_text = str(outcome.parsed.get("reply") or "").strip() or None
+        raw_names = outcome.parsed.get("proposed_names")
+        if isinstance(raw_names, list):
+            proposed_names = [str(n).strip() for n in raw_names if str(n).strip()][:3]
+
+    if reply_text is None:
+        store.add_message(
+            workspace, case_id, role="system",
+            text=(
+                "I received the photo but could not interpret it just now. "
+                "It has not been saved to the project."
+            ),
+            content_class=CONTENT_CLASS_AI_PROPOSED,
+        )
+        return True, None
+
+    if not wants_new:
+        # An ordinary photo question, answered in the conversation the reviewer
+        # is already in - and deliberately NOT persisted as a Source. Saving is
+        # a governed act and stays something they ask for.
+        store.add_message(
+            workspace, case_id, role="ai", text=reply_text,
+            content_class=CONTENT_CLASS_AI_PROPOSED,
+        )
+        return True, None
+
+    # "Make a new Q": a real Investigation, named from what the photo shows,
+    # with the photo saved into it as a governed Source.
+    import base64
+
+    from services.image_intelligence import register_eye_capture
+
+    title = proposed_names[0] if proposed_names else "Site observation"
+    new_case = store.create_case(
+        workspace, title=title,
+        objective=(message_text or "Started from a site photo."),
+        created_by=_reviewer(),
+    )
+
+    sources_dir = Path(current_app.config["REGISTRY_STORE_PATH"]) / "workspace_sources" / project_id
+    capture = register_eye_capture(
+        store, workspace,
+        raw_bytes=base64.b64decode(image_b64),
+        filename="photo",
+        description=(message_text or None),
+        sources_dir=sources_dir,
+        actor=_reviewer(),
+    )
+    saved = capture.get("source_id")
+    if saved:
+        store.attach_source_to_case(workspace, new_case["id"], saved)
+
+    saved_note = (
+        " The photo is saved into it as a source." if saved
+        else " I could not save the photo itself into it - the format was not one I can store."
+    )
+    alternates = ""
+    if len(proposed_names) > 1:
+        alternates = " Other names it could take: " + ", ".join(proposed_names[1:]) + "."
+    store.add_message(
+        workspace, new_case["id"], role="ai",
+        text=(
+            reply_text
+            + '\n\n'
+            + "I started a new investigation called \u201c" + title + "\u201d for this."
+            + saved_note + alternates
+            + " Rename it whenever you like - the name is just a label I read off the "
+            + "photo, not a conclusion."
+        ),
+        content_class=CONTENT_CLASS_AI_PROPOSED,
+    )
+    return True, new_case["id"]
 
 
 @workspace_bp.route("/projects/<project_id>/workspace/image-search/open-in-composer", methods=["POST"])
@@ -4662,6 +4869,22 @@ def quick_start(project_id):
     _, store, workspace = _load_workspace_or_404(project_id)
 
     text = (request.form.get("text") or "").strip()
+    image_data_url = request.form.get("image_data_url")
+
+    # CLAUDE-GO-COMPOSER-CAPTURE-01: checked BEFORE the empty-text guard below.
+    # Taking a photo and sending it with no words is a complete act on a phone,
+    # and the old guard would have refused it as an empty message.
+    handled, new_case_id = _composer_photo_turn(
+        project_id, store, workspace, None, text, image_data_url,
+    )
+    if handled:
+        return redirect(url_for(
+            "workspace.show_workspace", project_id=project_id,
+            case=new_case_id,
+        ) if new_case_id else url_for(
+            "workspace.show_workspace", project_id=project_id, view="overview",
+        ))
+
     if not text:
         flash("Describe what you want to work on to start.", "error")
         return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))

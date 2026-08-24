@@ -3770,6 +3770,7 @@
         project_id=project_id,
         current_context=current_context,
         developer_ccn_context=developer_ccn_context,
+        case_id=active_case.id,
     ) %}
         <div class="conversation-thread" data-conversation-scope="case-{{ active_case.id }}" data-anchor-scope="case" data-anchor-case-id="{{ active_case.id }}" data-ui-ref="chat.thread">
             {% for message in active_case.conversation %}

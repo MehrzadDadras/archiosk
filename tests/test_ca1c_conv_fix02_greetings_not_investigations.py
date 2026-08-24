@@ -163,7 +163,14 @@ class GreetingsDoNotCreateInvestigationsTests(unittest.TestCase):
         last_reply = workspace.project_conversation[-1]
         self.assertEqual(last_reply["role"], "system")
         self.assertIn("Mehrzad", last_reply["text"])
-        self.assertIn("What are you working on?", last_reply["text"])
+        # CLAUDE-GO-GREETING-CONTINUITY-01: "What are you working on?" asked
+        # the reviewer a question the application can already answer for
+        # itself, and the Product Owner named it directly when comparing this
+        # reply to ChatGPT's. The guarantee this test protects is unchanged -
+        # a greeting gets a friendly reply and never a project-evidence answer
+        # - so it now asserts THAT, not the exact sentence.
+        self.assertNotIn("Source", last_reply["text"])
+        self.assertNotIn("requirement", last_reply["text"].lower())
         self.assertNotIn("Not covered by this project's extracted evidence", last_reply["text"])
 
     def test_channel_status_check_does_not_create_an_investigation_and_is_answered_truthfully(self):

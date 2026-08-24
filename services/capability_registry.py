@@ -45,9 +45,48 @@ class Capability:
     # IMPLEMENTED (Section 5's own "Prepare structure" vs "Create this
     # structure" example) - None when there is no honest alternative.
     alternative: Optional[str] = None
+    # CLAUDE-GO-HOWTO-RECIPE-01: an ordered procedure for capabilities that
+    # are something the reviewer DOES, rather than a yes/no fact about the
+    # application. Rendered as a numbered list. Left empty for genuinely
+    # yes/no capabilities ("can you edit spreadsheets"), where numbering a
+    # single sentence would be ceremony rather than help.
+    steps: tuple = ()
 
 
 CAPABILITIES: dict[str, Capability] = {
+    # CLAUDE-GO-HOWTO-RECIPE-01: the Product Owner asked how to upload a
+    # photo and got a long, hedged non-answer - because nothing here described
+    # it. The "+" that does it was built in the same session as this entry.
+    "add_photo": Capability(
+        "add_photo", CAPABILITY_STATUS_IMPLEMENTED,
+        "You can add a photo straight from the Composer.",
+        steps=(
+            "Tap the + beside the message box at the bottom of the screen.",
+            "Take a photo, or choose one from your library.",
+            "Check the thumbnail that appears - tap the x to swap it if it is the wrong one.",
+            "Type what you want to know about it, or leave it blank, and Send.",
+        ),
+    ),
+    "make_investigation_from_photo": Capability(
+        "make_investigation_from_photo", CAPABILITY_STATUS_IMPLEMENTED,
+        "A photo can start a new investigation, named from what is in it.",
+        steps=(
+            "Tap the + beside the message box and take or choose the photo.",
+            'Type "make a new Q" (or "start an investigation") with it.',
+            "Send. I read the photo, propose a name from what is actually in it, "
+            "and open the investigation with the photo saved inside.",
+            "Rename it whenever you like - the name is a label, not a conclusion.",
+        ),
+    ),
+    "start_new_conversation": Capability(
+        "start_new_conversation", CAPABILITY_STATUS_IMPLEMENTED,
+        "You can start a fresh conversation, or close one you have finished.",
+        steps=(
+            'Tap "New" in the conversation header to start a fresh one.',
+            'Tap "Archive" to close the current one - it asks you to confirm first.',
+            "Archived conversations are preserved, not deleted.",
+        ),
+    ),
     "create_project": Capability(
         "create_project", CAPABILITY_STATUS_IMPLEMENTED,
         "ARCHIOSK can establish a new Project from one founding document "
@@ -146,6 +185,28 @@ CAPABILITIES: dict[str, Capability] = {
 # "create folders" resolves to the real capability rather than a vaguer
 # neighboring one.
 _PHRASE_TO_CAPABILITY_KEY: tuple[tuple[str, str], ...] = (
+    # CLAUDE-GO-HOWTO-RECIPE-01: FIRST, deliberately. Matching is first-hit,
+    # and the generic entries below ("investigation", "folder") would
+    # otherwise swallow "make a new Q from this photo". These are the
+    # questions a reviewer standing on site actually asks, and every one of
+    # them used to fall past this table to a model that could only guess at
+    # an application it has no reliable knowledge of.
+    ("upload a photo", "add_photo"),
+    ("upload photo", "add_photo"),
+    ("uploading a photo", "add_photo"),
+    ("add a photo", "add_photo"),
+    ("add photo", "add_photo"),
+    ("take a photo", "add_photo"),
+    ("attach a photo", "add_photo"),
+    ("attach an image", "add_photo"),
+    ("add an image", "add_photo"),
+    ("upload an image", "add_photo"),
+    ("send a photo", "add_photo"),
+    ("new q", "make_investigation_from_photo"),
+    ("make a q", "make_investigation_from_photo"),
+    ("new conversation", "start_new_conversation"),
+    ("delete a conversation", "start_new_conversation"),
+    ("archive a conversation", "start_new_conversation"),
     ("physical folder", "create_physical_folders"),
     ("real folder", "create_physical_folders"),
     ("actual folder", "create_physical_folders"),

@@ -518,7 +518,7 @@ def interpret_message(
     # win a tiebreak against it once evaluated. Anchor is deliberately
     # ignored here - an anchored "hello" is still just a greeting.
     if _looks_like_conversational_utterance(lowered):
-        return _handle_conversational_utterance(reviewer)
+        return _handle_conversational_utterance(reviewer, workspace, case)
 
     is_requirement_investigation_question = (
         anchor is not None
@@ -1198,6 +1198,19 @@ def _looks_like_conversational_utterance(lowered: str) -> bool:
     normalized = _normalize_for_conversational_check(lowered)
     if normalized in _CONVERSATIONAL_UTTERANCE_PHRASES:
         return True
+    # CLAUDE-GO-GREETING-CONTINUITY-01: "Goodmorning" - a real Product Owner
+    # message - matched nothing, because the list holds "good morning" WITH a
+    # space and the comparison is exact. It fell past this gate, cost a full
+    # model round-trip, and left them watching the in-flight indicator. Adds
+    # NO vocabulary: the spaceless form is compared against the spaceless form
+    # of phrases that are already listed, so only run-together spellings of
+    # existing entries can match.
+    squeezed = normalized.replace(" ", "")
+    if squeezed and any(
+        squeezed == phrase.replace(" ", "")
+        for phrase in _CONVERSATIONAL_UTTERANCE_PHRASES
+    ):
+        return True
     # CLAUDE-CA1D-COMPOSER-SPINE-01 Stage 3A: a message composed ENTIRELY
     # of already-listed single-word acknowledgements ("okay thanks", "ok
     # thanks", "cool thanks") is still an acknowledgement. This adds NO
@@ -1212,7 +1225,39 @@ def _looks_like_conversational_utterance(lowered: str) -> bool:
     return False
 
 
-def _handle_conversational_utterance(reviewer: str) -> InterpretationResult:
+def _describe_where_we_left_off(workspace, case) -> Optional[str]:
+    """CLAUDE-GO-GREETING-CONTINUITY-01: a true one-line continuation cue.
+
+    Every clause is dropped unless the fact behind it is really present, so an
+    empty project produces None and the greeting stays short and honest rather
+    than inventing a history to sound attentive.
+    """
+    if workspace is None:
+        return None
+
+    if case is not None and case.get("title"):
+        return f"We were on \u201c{case['title']}\u201d."
+
+    # No Investigation open: offer the most recent one that is still live.
+    live = [
+        c for c in getattr(workspace, "cases", [])
+        if c.get("title") and c.get("status") != "archived"
+    ]
+    if live:
+        return f"Last time you were on \u201c{live[-1]['title']}\u201d - pick that up?"
+
+    sources = CaseWorkspaceStore.active_sources(workspace)
+    if sources:
+        count = len(sources)
+        noun = "source" if count == 1 else "sources"
+        return f"{count} {noun} registered here, nothing open yet."
+
+    return "Nothing registered here yet - add a document or a photo and we can start."
+
+
+def _handle_conversational_utterance(
+    reviewer: str, workspace=None, case=None,
+) -> InterpretationResult:
     """
     The dedicated destination for a greeting/acknowledgment/social check-
     in - never Project evidence, never an Investigation, never an
@@ -1228,9 +1273,14 @@ def _handle_conversational_utterance(reviewer: str) -> InterpretationResult:
         else None
     )
     greeting = f"Hello {display_name}." if display_name else "Hello."
+    # CLAUDE-GO-GREETING-CONTINUITY-01: "What are you working on?" asked the
+    # reviewer a question this application can already answer for itself. Say
+    # the true thing instead - and fall back to the original question only
+    # when there genuinely is no context to offer.
+    continuation = _describe_where_we_left_off(workspace, case)
     return InterpretationResult(
         action_taken="conversational_utterance",
-        reply_text=f"{greeting} What are you working on?",
+        reply_text=f"{greeting} {continuation}" if continuation else f"{greeting} What are you working on?",
     )
 
 
@@ -1721,6 +1771,15 @@ _CAPABILITY_SELF_REFERENCE_PHRASES = (
     # missed, sending the question to the generic project-QA path instead
     # of this deterministic capability-question handler.
     "are you capable of", "is archiosk capable of",
+    # CLAUDE-GO-HOWTO-RECIPE-01: every phrase above is "can you"-shaped - a
+    # yes/no question about the application. A real Product Owner asked "how
+    # I can upload a photo", which is a HOW question, matched none of them,
+    # and was handed to a model that produced a long hedged non-answer about
+    # an application it has no reliable knowledge of. A procedural question is
+    # still a question about this application's capabilities; it just wants
+    # the procedure rather than the yes.
+    "how do i", "how can i", "how would i", "how to", "how does one",
+    "where do i", "wondering how",
 )
 
 
@@ -1738,10 +1797,24 @@ def _handle_capability_question(capability) -> InterpretationResult:
     never claims an unavailable/future capability is available, never
     hedges an implemented one with unnecessary disclaimers.
     """
+    # CLAUDE-GO-HOWTO-RECIPE-01: a procedural question gets an ordered
+    # procedure, not a paragraph. The reviewer asking it is usually standing
+    # somewhere trying to DO the thing, and an essay is the wrong shape for
+    # that even when it is correct. Capabilities that are genuinely yes/no
+    # facts carry no steps and are unaffected.
+    def _with_steps(lead):
+        steps = getattr(capability, "steps", ())
+        if not steps:
+            return lead
+        numbered = chr(10).join(
+            str(index) + ". " + step for index, step in enumerate(steps, start=1)
+        )
+        return lead + chr(10) + chr(10) + numbered
+
     if capability.status == CAPABILITY_STATUS_IMPLEMENTED:
-        reply = capability.description
+        reply = _with_steps(capability.description)
     elif capability.status == CAPABILITY_STATUS_PARTIAL:
-        reply = capability.description
+        reply = _with_steps(capability.description)
     elif capability.status == CAPABILITY_STATUS_FUTURE:
         reply = f"Not yet. {capability.description}"
     else:

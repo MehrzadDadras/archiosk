@@ -2086,6 +2086,7 @@
        requestAnimationFrame - i.e. after every DOMContentLoaded handler has
        run - so load order between the two files does not matter. #}
     <script src="{{ url_for('static', filename='js/workspace_trays.js') }}?v={{ static_version }}"></script>
+    <script src="{{ url_for('static', filename='js/composer_attach.js') }}?v={{ static_version }}"></script>
     <script nonce="{{ csp_nonce }}">
         // CLAUDE-P40-E3A / CLAUDE-LEFTPANEL-CALM-01: the recursive Lists
         // hierarchy - a branch starts open only if the page rendered it
