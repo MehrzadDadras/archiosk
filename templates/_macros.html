@@ -329,6 +329,25 @@
             <button type="button" class="composer-attach-clear" id="dock-composer-image-clear"
                     data-ui-ref="chat.composer.attach.clear" aria-label="Remove the attached photo">&times;</button>
         </span>
+        {# CLAUDE-GO-COMPOSER-CAPTURE-03: "I took the picture and chose use it
+           then the next step is not clear?"
+
+           "Make a new Q" was a phrase invented in conversation and written
+           nowhere in the product, so the one action this entry point exists
+           for was discoverable only by having been told it. This is the same
+           words, through the same submit, into the same handler - the reviewer
+           can simply see them now.
+
+           It fills the message box and then sends, rather than sending
+           silently, so the phrase lands in the conversation as their OWN
+           message: that is how they learn they could have typed it, and that
+           they may type something else instead. Appears and disappears with
+           the photo, so it is never a control with nothing to act on. #}
+        <span class="composer-attach-next" id="dock-composer-image-next" hidden>
+            <button type="button" class="composer-attach-action" id="dock-composer-make-q"
+                    data-ui-ref="chat.composer.attach.make-q">Make a new Q</button>
+            <span class="composer-attach-or">or just ask about it</span>
+        </span>
         <textarea name="text" id="dock-composer-input" data-ui-ref="chat.composer.input" data-developer-composer-input data-conversation-draft="{{ scope_key }}" placeholder="{{ placeholder }}" aria-label="Message" autocomplete="off" rows="1" required></textarea>
         {# CLAUDE-POSTCAMEL-VOICE1-PRE: "the microphone is merely another
            door into ARCHIOSK Go" - this button never submits anything

@@ -334,5 +334,56 @@ class APhoneSizedPhotoMustNotBeRefusedTests(unittest.TestCase):
         self.assertGreaterEqual(route.count("> _MAX_IMAGE_BYTES"), 2)
 
 
+class TheNextStepIsVisibleTests(unittest.TestCase):
+    """CLAUDE-GO-COMPOSER-CAPTURE-03. Product Owner: "I took the picture and
+    chose use it then the next step is not clear?"
+
+    Fair. "Make a new Q" was a phrase invented in conversation and written
+    nowhere in the product, so the one action this entry point exists for was
+    discoverable only by having been told it.
+    """
+
+    def test_the_action_is_offered_with_the_photo(self):
+        self.assertIn('data-ui-ref="chat.composer.attach.make-q"', MACROS)
+        self.assertIn("Make a new Q", MACROS)
+
+    def test_it_appears_and_disappears_with_the_photo(self):
+        """Never a control with nothing to act on."""
+        self.assertIn('id="dock-composer-image-next" hidden', MACROS)
+        self.assertIn("nextStep.hidden = false", ATTACH_JS)
+        self.assertIn("nextStep.hidden = true", ATTACH_JS)
+
+    def test_a_failed_attachment_withdraws_the_offer(self):
+        code = ATTACH_JS[ATTACH_JS.index("function fail("):]
+        code = code[: code.index("function approximateBytes")]
+        self.assertIn("nextStep.hidden = true", code)
+
+    def test_the_phrase_is_written_into_the_box_not_posted_behind_them(self):
+        """It lands in the conversation as the reviewer's own message, which is
+        how they learn they could have typed it - and that they may type
+        something else instead."""
+        code = ATTACH_JS[ATTACH_JS.index("makeQ.addEventListener"):]
+        self.assertIn("messageBox.value = 'Make a new Q'", code)
+
+    def test_it_is_the_same_submit_and_not_a_second_route(self):
+        code = ATTACH_JS[ATTACH_JS.index("makeQ.addEventListener"):]
+        self.assertIn("form.requestSubmit", code)
+        for forbidden in ("fetch(", "XMLHttpRequest", "action ="):
+            with self.subTest(token=forbidden):
+                self.assertNotIn(forbidden, code)
+
+    def test_the_message_box_says_what_it_is_for_while_a_photo_waits(self):
+        self.assertIn("Ask about this photo", ATTACH_JS)
+
+    def test_the_original_placeholder_returns_when_the_photo_goes(self):
+        """The box must never describe an attachment that is no longer there."""
+        code = ATTACH_JS[ATTACH_JS.index("function clear("):]
+        code = code[: code.index("function show(")]
+        self.assertIn("originalPlaceholder", code)
+
+    def test_the_button_is_not_presented_as_the_only_option(self):
+        self.assertIn("or just ask about it", MACROS)
+
+
 if __name__ == "__main__":
     unittest.main()

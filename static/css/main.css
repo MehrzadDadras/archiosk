@@ -8692,3 +8692,42 @@ html[data-tray-layer="eye"] .eye-maximize-btn { display: none; }
     color: var(--text-metadata);
     font-variant-numeric: tabular-nums;
 }
+
+/* CLAUDE-GO-COMPOSER-CAPTURE-03 — "the next step is not clear."
+   "Make a new Q" was a phrase invented in conversation and written nowhere in
+   the product, so the one action this entry point exists for was discoverable
+   only by having been told it. Shown with the photo, gone with the photo. */
+.composer-attach-next {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-basis: 100%;
+    order: 100;
+    margin-top: 0.35rem;
+}
+.composer-attach-next[hidden] { display: none; }
+.composer-attach-action {
+    appearance: none;
+    /* The one primary-weight control in this row: it IS the next step, and a
+       quiet one would reproduce the problem it exists to solve. */
+    background: var(--machine-blue);
+    color: var(--surface-primary);
+    border: 1px solid var(--machine-blue);
+    border-radius: 6px;
+    padding: 0.45rem 0.9rem;
+    min-height: 40px;
+    font: inherit;
+    font-size: 0.82rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+.composer-attach-action:focus-visible {
+    outline: 2px solid var(--machine-blue);
+    outline-offset: 2px;
+}
+/* Says the button is not the only option, so the reviewer does not read it as
+   the only thing a photo can do. */
+.composer-attach-or {
+    font-size: 0.76rem;
+    color: var(--text-metadata);
+}

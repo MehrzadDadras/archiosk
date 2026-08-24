@@ -39,6 +39,12 @@
     var nameEl = document.getElementById('dock-composer-image-name');
     var clearBtn = document.getElementById('dock-composer-image-clear');
     var form = field.form;
+    // CLAUDE-GO-COMPOSER-CAPTURE-03: the next step, made visible.
+    var nextStep = document.getElementById('dock-composer-image-next');
+    var makeQ = document.getElementById('dock-composer-make-q');
+    var messageBox = document.getElementById('dock-composer-input');
+    var originalPlaceholder = messageBox ? messageBox.getAttribute('placeholder') : null;
+    var ATTACHED_PLACEHOLDER = 'Ask about this photo, or tap Make a new Q';
 
     // The route enforces this independently; this copy exists so a photo is
     // brought UNDER the limit here rather than rejected there.
@@ -56,6 +62,12 @@
         if (thumb) thumb.removeAttribute('src');
         if (nameEl) nameEl.textContent = '';
         if (chip) chip.hidden = true;
+        if (nextStep) nextStep.hidden = true;
+        // Restored the moment the photo goes, so the box never describes an
+        // attachment that is no longer there.
+        if (messageBox && originalPlaceholder !== null) {
+            messageBox.setAttribute('placeholder', originalPlaceholder);
+        }
     }
 
     function show(name, dataUrl) {
@@ -63,10 +75,13 @@
         if (thumb) thumb.src = dataUrl;
         if (nameEl) nameEl.textContent = name;
         if (chip) chip.hidden = false;
+        if (nextStep) nextStep.hidden = false;
+        if (messageBox) messageBox.setAttribute('placeholder', ATTACHED_PLACEHOLDER);
     }
 
     function fail(message) {
         field.value = '';
+        if (nextStep) nextStep.hidden = true;
         if (thumb) thumb.removeAttribute('src');
         if (nameEl) nameEl.textContent = message;
         if (chip) chip.hidden = false;
@@ -153,6 +168,18 @@
     });
 
     if (clearBtn) clearBtn.addEventListener('click', clear);
+
+    if (makeQ && form && messageBox) {
+        makeQ.addEventListener('click', function () {
+            // Written into the box rather than posted behind the reviewer's
+            // back: the phrase then appears in the conversation as their own
+            // message, which is how they find out they could have typed it -
+            // and that they may type something else instead.
+            messageBox.value = 'Make a new Q';
+            if (form.requestSubmit) form.requestSubmit();
+            else form.submit();
+        });
+    }
 
     if (form) {
         // Cleared on submit, not on response: a photo that has already been
