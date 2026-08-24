@@ -196,7 +196,13 @@ class GatewayShellReThemeCssTests(unittest.TestCase):
         """Asserted verbatim by test_p40e3a_qa_reconciliation.py and
         test_p40vw6_theme_correction.py -- this tranche must only rely
         on token cascade, never restructure the selector itself."""
-        css = self.client.get("/static/css/main.css").get_data(as_text=True)
+        # Newlines normalized before matching: core.autocrlf=true checks
+        # main.css out as CRLF on Windows (.gitattributes covers only the
+        # NREOCRC fixtures and vendored PDF.js), so the served bytes carry
+        # a carriage return this assertion is not written with. The claim
+        # being made is about the SELECTOR GROUP's structure, never about
+        # which line terminator a given working copy happens to use.
+        css = self.client.get("/static/css/main.css").get_data(as_text=True).replace("\r\n", "\n")
         self.assertIn(
             ".workspace-layout-options,\n.workspace-appearance-options,\n.workspace-user-options {",
             css,
