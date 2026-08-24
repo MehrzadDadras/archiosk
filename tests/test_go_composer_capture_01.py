@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import base64
 import io
+import re
 import tempfile
 import unittest
 from pathlib import Path
@@ -30,6 +31,7 @@ from services import case_workspace as cw
 from services.requirements_registry import RequirementsRegistry
 
 MACROS = (Path(__file__).resolve().parents[1] / "templates" / "_macros.html").read_text(encoding="utf-8")
+ROOT_DIR = Path(__file__).resolve().parents[1]
 ATTACH_JS = (Path(__file__).resolve().parents[1] / "static" / "js" / "composer_attach.js").read_text(encoding="utf-8")
 CSS = (Path(__file__).resolve().parents[1] / "static" / "css" / "main.css").read_text(encoding="utf-8")
 
@@ -271,6 +273,65 @@ class ConversationLifecycleTests(_RouteBase):
 
     def test_no_destructive_alternative_was_introduced_in_its_place(self):
         self.assertNotIn("delete_case", MACROS)
+
+
+class APhoneSizedPhotoMustNotBeRefusedTests(unittest.TestCase):
+    """CLAUDE-GO-COMPOSER-CAPTURE-02. Product Owner, from an actual site photo:
+    "I took a photo by my phone and the message is: That photo is too large
+    (5MB limit)."
+
+    A current phone camera produces 3-12MB per frame as a matter of course, so
+    the FIRST real photo taken with this feature hit the ceiling - the entry
+    point to the application failing on its own primary input. Refusing was the
+    wrong answer; the ceiling is the vision API's own and not ours to raise, so
+    the photo is brought under it before it is ever sent.
+    """
+
+    def test_the_photo_is_resized_rather_than_refused(self):
+        self.assertIn("canvas", ATTACH_JS)
+        self.assertIn("drawImage", ATTACH_JS)
+        self.assertIn("toDataURL", ATTACH_JS)
+
+    def test_it_targets_the_size_the_vision_model_actually_uses(self):
+        """Anything beyond roughly 1568px on the long edge is bytes spent to be
+        downsampled away - and a slower upload on site signal."""
+        self.assertIn("MAX_EDGE = 1568", ATTACH_JS)
+
+    def test_quality_steps_down_until_it_fits(self):
+        block = ATTACH_JS[ATTACH_JS.index("QUALITY_STEPS"):]
+        block = block[: block.index("]")]
+        self.assertIn("0.85", block)
+        self.assertIn("0.4", block)
+
+    def test_a_photo_that_already_fits_is_left_alone(self):
+        """An image under both limits keeps its original bytes and format -
+        re-encoding it would only lose quality for nothing."""
+        self.assertIn("show(file.name", ATTACH_JS)
+        block = ATTACH_JS[ATTACH_JS.index("Small enough already"):]
+        block = block[: block.index("shrink(image")]
+        self.assertIn("<= MAX_BYTES", block)
+
+    def test_the_old_bare_refusal_is_gone(self):
+        """The exact message the Product Owner was shown must not survive as
+        BEHAVIOUR. Scanned against code rather than prose - this file's own
+        comment quotes that message verbatim to explain why it was removed,
+        and a naive substring check is satisfied by the explanation."""
+        code = re.sub(r"/\*.*?\*/", "", ATTACH_JS, flags=re.S)
+        code = re.sub(r"(?<![:\w])//.*$", "", code, flags=re.M)
+        self.assertNotIn("That photo is too large", code)
+
+    def test_undecodable_formats_are_reported_honestly(self):
+        """HEIC the browser cannot open is the realistic case - iOS usually
+        hands a JPEG to a file input, but not always. Saying so beats a silent
+        failure or a misleading size complaint."""
+        self.assertIn("image.onerror", ATTACH_JS)
+        self.assertIn("cannot open", ATTACH_JS)
+
+    def test_the_server_ceiling_is_still_enforced_independently(self):
+        """Client-side shrinking is a convenience, never the boundary."""
+        route = (ROOT_DIR / "routes" / "workspace.py").read_text(encoding="utf-8")
+        self.assertIn("_MAX_IMAGE_BYTES", route)
+        self.assertGreaterEqual(route.count("> _MAX_IMAGE_BYTES"), 2)
 
 
 if __name__ == "__main__":
