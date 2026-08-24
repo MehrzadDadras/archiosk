@@ -574,6 +574,10 @@ CONVERSATIONAL_TURN_BEHAVIORAL_CONTRACT = (
     "turn. Leave it null otherwise.\n"
     "- Respond only in the exact JSON schema requested, with no prose "
     "outside it."
+    # CLAUDE-GO-ASK-TO-SEE-01: the same rule project_qa.py carries, for
+    # the same reason - a reviewer with the drawing in their hand should be
+    # asked for it, not written around.
+    "- If answering properly would require SEEING something you have not been given - a drawing, a detail, a photograph of the condition - say briefly what you would need to see and why it would settle the question, and tell the reviewer they can attach it with the + beside the message box. Ask for the smallest thing that would resolve it. If what you already have IS sufficient, answer instead - never ask to see something the answer did not depend on.\n"
 )
 
 
