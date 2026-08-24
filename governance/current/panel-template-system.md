@@ -1,8 +1,8 @@
 # Page-by-Panel Template System
 
-Status: current architectural inventory, version 1.0  
+Status: current architectural inventory, version 1.1  
 Parent inventory: [`page-surface-template-inventory.md`](page-surface-template-inventory.md)  
-Panel contract: [`contracts/CIC-PANEL.md`](contracts/CIC-PANEL.md)
+Panel contract: [`contracts/CIC-PANEL-v1.1.md`](contracts/CIC-PANEL-v1.1.md)
 
 ## Core model
 
@@ -32,10 +32,17 @@ compositions are catalogued.
 | LAY-4A | Left navigation + primary work surface + right utility column + bottom chat dock | Workspace shell with chat separated from the right utility region |
 | LAY-5A | Left navigation + primary work surface + Eye + Toolbox + bottom chat dock | Full TPL-005 shell; Eye/Toolbox are independently split within the right column |
 | LAY-2H-R | Right-column Eye over Toolbox | Nested right-column arrangement in TPL-005; not a whole-page layout |
+| LAY-3F | Fixed compact header + ONE active work tray + persistent bottom Composer | The primary mobile frame (CLAUDE-MOBILE-FRAME-02). Not a fourth shell: the same TPL-005 panels, with one of them holding the work area at a time |
 
 `LAY-5A` is the complete current workspace composition. `LAY-2H-R` records the
 actual Eye/Toolbox vertical relationship rather than pretending every three-
 panel arrangement is identical.
+
+`LAY-3F` is the same composition under a different spatial rule rather than a
+different set of panels — which is why it is one layout ID and not a second
+shell. `LAY-5A` and `LAY-3F` are two states of one arrangement: LAY-5A when no
+tray is active, LAY-3F when one is. Below the phone breakpoint a tray is always
+active, so LAY-3F *is* the layout there; above it, either is reachable.
 
 ## Nested Page Template catalogue
 
@@ -96,6 +103,40 @@ behavior is not established rather than silently assumed.
 | TPL-017 | New project / upload | LAY-1 | Main · setup/upload · NPT-017 · O · — | Deterministic setup helper, not project conversation |
 | TPL-018 | Search / operations / about | LAY-1 | Main · utility result/status surface · NPT-018 · O · — | Candidate-specific patterns remain partial |
 
+## Tray state model (CLAUDE-MOBILE-FRAME-02)
+
+The panel states this inventory already recorded — open, collapsible, closable,
+resizable, restorable — described what one panel could do to itself. They could
+not express which panel currently owns the work area, which is the question a
+phone forces. That state is now explicit:
+
+| State | Meaning | Mechanism |
+|---|---|---|
+| NORMAL | The panel participates in the ordinary composition | LAY-5A; no active-tray state set |
+| COLLAPSED | Hidden, identity and restore path preserved | `html.launcher-hidden` / `html.toolbox-hidden`, driven by the panel dividers — unchanged, and deliberately not reimplemented |
+| ACTIVE | This surface owns the work area | `data-tray-focus="<key>"` on `<html>` |
+
+Three properties make this governable rather than decorative:
+
+- **One value, structurally.** The state is an attribute, which holds exactly
+  one value. "One active work tray" cannot drift the way four independent
+  booleans could.
+- **Eligible trays are existing NPTs, not new functions.** `lists`=NPT-002,
+  `display`=NPT-003, `eye`=NPT-005, `toolbox`=NPT-006. Documents, Spin,
+  Findings, Project Context and the photo tray are *contents* of those
+  surfaces and remain so; nothing was duplicated to make the frame work.
+- **NPT-004 (Chat Dock) is deliberately not eligible.** Composer is a zone,
+  not a tray. It is the bottom of the frame at all times, which is what makes
+  "work above, talk to GO below" true rather than aspirational — and why a
+  future photo flow needs no handoff step to reach it.
+
+Activation is presentation only. It persists as a reviewer preference
+(`beehive:tray:focus`, `localStorage`, alongside the existing `beehive:panel:*`
+entries), never as a project record, and the module that owns it has no path to
+a route at all. A surface that becomes the active tray gains screen area and no
+authority whatsoever: selection is still not authorization, and presentation
+state is still not project state.
+
 ## Panel behavior principles
 
 - Closing hides a panel only. It does not delete data, end a conversation,
@@ -106,13 +147,25 @@ behavior is not established rather than silently assumed.
   resizable, and restorable where the current implementation establishes it.
 - User visibility preferences are UI state; governed project/chat/evidence
   state remains separate.
+- Mobile is the primary operating surface, and portrait its normal posture.
+  A larger screen reveals more simultaneous workspace through the same
+  primitives; it never becomes a second interaction architecture, and the
+  phone is never served by compressing a desktop composition into it.
 
 ## Current audit summary
 
 The 18 TPL entries are now classified above. The principal inconsistency is not
 the existence of multiple shells; it is that panel state and nested surface
-identity are not yet represented uniformly outside TPL-005. Direct visual
-selection/highlighting and a common panel-state API remain future work.
+identity are not yet represented uniformly outside TPL-005.
+
+**Updated 2026-08-23 (CLAUDE-MOBILE-FRAME-02):** the common panel-state API
+this summary listed as future work now exists — see the tray state model above
+and `static/js/workspace_trays.js`. Direct visual selection/highlighting
+remains future work, unchanged. The uniformity gap outside TPL-005 also
+remains: LAY-3F is reachable from any authenticated page, but the non-workspace
+pages it can frame are still mostly single-panel surfaces with no restoration
+machinery of their own, so the frame gives them a header and a Composer-less
+work area rather than making them fully governed compositions.
 
 ## Reference selection
 

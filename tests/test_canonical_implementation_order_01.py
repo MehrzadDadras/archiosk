@@ -28,6 +28,13 @@ class CanonicalImplementationOrderTests(unittest.TestCase):
             self.assertIn("SUPERSEDED BY", text)
 
     def test_no_second_contract_registry_exists(self):
+        # A count, not a ceiling. The registry's own version rule requires a
+        # NEW file per version ("Do not edit an approved invariant in place.
+        # Create the next version, state SUPERSEDES and the semantic delta"),
+        # so this number rises by one every time a contract is superseded -
+        # CIC-DEVELOPER-MODE-v1.1, CIC-SPIN-INTELLIGENCE-v1.1, and now
+        # CIC-PANEL-v1.1 (CLAUDE-MOBILE-FRAME-02). What it actually guards is
+        # the line below: one registry, in one place.
         records = list((ROOT / "governance").rglob("CIC-*.md"))
-        self.assertEqual(len(records), 11)
+        self.assertEqual(len(records), 12)
         self.assertEqual((CONTRACTS / "README.md").exists(), True)

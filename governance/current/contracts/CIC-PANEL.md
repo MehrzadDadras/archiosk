@@ -13,6 +13,6 @@
 - **REFERENCE TESTS:** Workspace panel, Eye/Toolbox, Composer, and layout persistence lanes.
 - **KNOWN LIMITATIONS:** There is no common panel-state API or direct visual-selection system yet; non-workspace pages remain mostly single-panel.
 - **SUPERSEDES:** None.
-- **SUPERSEDED BY:** None.
+- **SUPERSEDED BY:** CIC-PANEL v1.1 (`CIC-PANEL-v1.1.md`) — the common panel-state API this record listed as a KNOWN LIMITATION now exists, and mobile-first primary operation became a mandatory invariant.
 - **LAST REVIEWED:** 2026-08-20.
 - **GOVERNANCE SOURCE:** Page/Surface Template Inventory and panel-template-system.md.
