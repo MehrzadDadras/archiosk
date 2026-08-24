@@ -87,7 +87,8 @@ architectural acceptance tests.
 
 Lane A/B are the normal discovery and subsystem-feedback loop. Lane E remains
 the broad certification gate wherever repository policy requires it; focused
-passes never waive or replace that gate.
+passes never waive or replace that gate — they only defer it to a point worth
+certifying (see rule 5).
 
 ## Decision rule
 
@@ -104,10 +105,36 @@ passes never waive or replace that gate.
 4. **Uncertainty widens the set, never narrows it** — if it's unclear whether a
    shared primitive is actually touched, treat it as touched and run Lane B/C
    anyway. This mirrors CLAUDE-TEST-ACCEL-01's own explicit guardrail.
-5. Lane D/E only at a real checkpoint: before commit for anything touching
-   `routes/`, `services/`, `models.py`, `config.py`, `app.py`, or migrations
-   (full suite, per `CLAUDE.md`'s existing rule — unchanged), and always before
-   deployment.
+5. Lane D/E only at a real checkpoint. **A checkpoint is not every commit**
+   (Product Owner, 2026-08-23): *"For active design exploration, use
+   focused/bounded lanes only until Product Owner acceptance. Reserve Lane E
+   for accepted checkpoints, deployment gates, or high-risk
+   security/evidence/authorization changes."*
+
+   So Lane E fires when **any** of these is true:
+
+   - **A deployment gate.** Anything about to reach the live host. Unchanged,
+     and non-negotiable.
+   - **An accepted checkpoint.** Work the Product Owner has accepted, being
+     landed as the new baseline.
+   - **A high-risk change** to security, evidence semantics, authorization,
+     project isolation, or persisted data — regardless of acceptance state.
+     Cognition changes that touch consequential-action boundaries belong here
+     too.
+
+   Everything else — an unaccepted design exploration still being shaped, a
+   layout experiment, a visual pass awaiting physical-device judgement — runs
+   Lane A/B/C and waits. This narrows WHEN the gate fires; it never weakens
+   the gate. `CLAUDE.md`'s rule about `routes/`/`services/`/`models.py`/
+   `config.py`/`app.py`/migrations still describes what Lane E must cover
+   once a checkpoint is reached.
+
+   **Why this changed:** a ~30–58 minute suite on every iteration of unsettled
+   work is not a safety measure, it is a tax on iteration — and a run started
+   mid-exploration certifies a tree that no longer exists the moment the next
+   edit lands. Three Lane E runs in one session were spent this way, two of
+   them discarded unfinished for exactly that reason. Run it on something
+   worth certifying.
 
 ## Historical measured proof — Worked Example 1: SPIN-00A (commit `f465fcd`)
 

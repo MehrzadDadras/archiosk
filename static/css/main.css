@@ -7989,6 +7989,11 @@ main:hover,
    of .workspace-main-column's column flow to span the frame - by position,
    not by moving it in the DOM, so every existing script that reaches into
    #chat-region by id keeps working untouched. */
+/* DESKTOP focus mode only. The phone gets the same anchoring unconditionally,
+   from the media query below - see this file's own CLAUDE-MOBILE-FRAME-PIN-01
+   block. Splitting them is deliberate: on a phone the frame is the layout and
+   must not depend on a script having run, whereas on desktop "focused" is
+   genuinely an application state. */
 html[data-tray-focus] .chat-region {
     position: fixed;
     left: 0;
@@ -8164,6 +8169,49 @@ html[data-tray-focus="toolbox"] .workspace-pane-toolbox {
     .tray-switcher-btn[aria-pressed="true"] {
         border-color: var(--machine-blue);
         background: var(--machine-blue-tint);
+    }
+
+    /* CLAUDE-MOBILE-FRAME-PIN-01 (Product Owner, live phone use: "the
+       chat.composer is not fixed at the bottom... the page menu is not fixed
+       on top").
+
+       Un-gated on purpose. These used to apply only under
+       html[data-tray-focus], a JS-set attribute - so any page or moment
+       without it (a project-less page, an unresolvable stored tray key, a
+       blocked script, a stale cached stylesheet) dropped the Composer back to
+       the desktop `position: sticky` rule, which anchors to a column rather
+       than to the viewport. At this width the frame is the layout, so it is a
+       property of the viewport, not of application state. */
+    .chat-region {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: var(--kb-inset, 0px);
+        height: var(--chat-height, 220px);
+        border-top: 1px solid var(--border);
+        z-index: 26;
+    }
+    .app-shell-body:has(.chat-region) {
+        padding-bottom: var(--chat-height, 220px);
+    }
+
+    /* The header stays put because .app-shell is a fixed-height flex column
+       with overflow:hidden - so every child that must not move needs a shrink
+       guard. .tray-switcher already had one; .workspace-topbar never did, and
+       it is precisely the child a flex container compresses first because it
+       is the one that wraps (eight menus plus a breadcrumb). */
+    .workspace-topbar,
+    .tray-switcher {
+        flex-shrink: 0;
+    }
+
+    /* body resolves height:100% against the LAYOUT viewport, which on iOS is
+       the URL-bar-retracted height - taller than what is actually visible, so
+       the shell and the viewport disagreed about where "the bottom" is. */
+    html,
+    body {
+        height: 100vh;
+        height: 100dvh;
     }
 
     /* The 320px floor below exists to stop Lists and the right column

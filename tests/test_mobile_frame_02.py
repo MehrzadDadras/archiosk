@@ -513,5 +513,60 @@ class TheForegroundLayerTests(unittest.TestCase):
         self.assertIn("isLayer(restored)", TRAYS_CODE)
 
 
+class TheFrameIsPinnedWithoutJavascriptTests(unittest.TestCase):
+    """CLAUDE-MOBILE-FRAME-PIN-01. Product Owner, from live phone use: "the
+    chat.composer is not fixed at the bottom... the page menu is not fixed on
+    top."
+
+    Root cause of both: the frame was made conditional on things it should
+    never have depended on. The Composer's anchoring was gated on
+    `data-tray-focus`, a JS-set attribute, so any page or moment without it
+    fell back to the desktop `position: sticky` rule - anchored to a column,
+    not to the viewport. And the header relied on .app-shell's fixed-height
+    flex column without .workspace-topbar carrying a shrink guard, which is
+    exactly the child a flex container compresses first because it is the one
+    that wraps.
+    """
+
+    def test_the_composer_is_anchored_without_any_application_state(self):
+        """At phone widths the frame IS the layout. If the script never runs,
+        the Composer must still be at the bottom."""
+        phone = _phone_block()
+        rule = phone[phone.index(".chat-region {"):]
+        rule = rule[: rule.index("}")]
+        self.assertIn("position: fixed", rule)
+        self.assertIn("bottom:", rule)
+        # The rule itself must not be gated on the attribute.
+        selector_line = phone[: phone.index(".chat-region {")].splitlines()[-1]
+        self.assertNotIn("data-tray-focus", selector_line)
+
+    def test_the_composer_height_is_still_reserved_only_where_one_exists(self):
+        phone = _phone_block()
+        self.assertIn(".app-shell-body:has(.chat-region)", phone)
+
+    def test_the_header_carries_a_shrink_guard(self):
+        """.app-shell is a fixed-height flex column with overflow:hidden, so
+        anything that must not move needs flex-shrink:0."""
+        phone = _phone_block()
+        rule = phone[phone.index(".workspace-topbar,"):]
+        rule = rule[: rule.index("}")]
+        self.assertIn(".tray-switcher", rule)
+        self.assertIn("flex-shrink: 0", rule)
+
+    def test_the_document_agrees_with_the_shell_about_where_the_bottom_is(self):
+        """body resolves height:100% against the LAYOUT viewport, which on iOS
+        is the URL-bar-retracted height - taller than what is visible."""
+        phone = _phone_block()
+        rule = phone[phone.index("html,"):]
+        rule = rule[: rule.index("}")]
+        self.assertIn("100dvh", rule)
+        self.assertLess(rule.index("100vh"), rule.index("100dvh"))
+
+    def test_desktop_focus_mode_still_anchors_the_composer_too(self):
+        """The un-gating is additive - the desktop focused-tray behaviour is
+        unchanged, not replaced."""
+        self.assertIn("html[data-tray-focus] .chat-region", CSS_NO_COMMENTS)
+
+
 if __name__ == "__main__":
     unittest.main()
