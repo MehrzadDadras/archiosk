@@ -640,5 +640,61 @@ class TheDocumentItselfCannotBeDraggedTests(unittest.TestCase):
         self.assertIn("calc(var(--chat-height", rule)
 
 
+class TheShellCannotDriftSidewaysTests(unittest.TestCase):
+    """CLAUDE-MOBILE-FRAME-PIN-04. Product Owner: "Right now there is a little
+    left and right drift. Lock the main app shell."
+
+    PIN-03 refused the horizontal pan GESTURE, but refusing a gesture does not
+    remove an overflow that genuinely exists - it only closes one way of
+    reaching it. Something was still wider than the viewport.
+    """
+
+    # Built from chr(10) rather than written as an escape: a heredoc rewrote
+    # this needle once already and broke the file.
+    SHELL_RULE = "html," + chr(10) + "body," + chr(10) + ".app-shell {"
+    EDGE_RULE = ".workspace-topbar," + chr(10) + ".tray-switcher,"
+
+    def _shell_block(self):
+        block = CSS_NO_COMMENTS[CSS_NO_COMMENTS.rindex(self.SHELL_RULE):]
+        return block[: block.index("}")]
+
+    def test_the_flex_item_that_could_not_shrink_now_can(self):
+        """A flex item's automatic minimum size is its CONTENT size, not zero,
+        so `flex: 1` without `min-width: 0` refuses to shrink below its
+        intrinsic width and pushes its whole row wider than the container. The
+        composer row gained a 44px "+" and a "Make a new Q" row, and the drift
+        appeared - the button was not the bug, it was the straw."""
+        needle = ".conversation-input-form textarea," + chr(10)
+        rule = CSS_NO_COMMENTS[CSS_NO_COMMENTS.index(needle):]
+        rule = rule[: rule.index("}")]
+        self.assertIn("min-width: 0", rule)
+
+    def test_the_shell_is_locked_at_every_width(self):
+        """"The main app shell" is not a mobile-only statement, and a narrowed
+        desktop window had the same drift available to it - so this rule sits
+        OUTSIDE the phone media query."""
+        block = self._shell_block()
+        self.assertIn("overflow-x", block)
+        self.assertIn("max-width: 100%", block)
+        # Outside the media query: the phone block ends before this rule starts.
+        phone_end = CSS_NO_COMMENTS.index(self.SHELL_RULE)
+        self.assertGreater(phone_end, CSS_NO_COMMENTS.index("@media (max-width: 640px)"))
+
+    def test_clip_is_preferred_over_hidden_with_a_fallback(self):
+        """`hidden` makes the element a scroll CONTAINER, still scrollable
+        programmatically; `clip` refuses outright. `hidden` stays first for
+        anything without clip support."""
+        block = self._shell_block()
+        self.assertLess(block.index("overflow-x: hidden"), block.index("overflow-x: clip"))
+
+    def test_inner_scroll_regions_keep_their_own_horizontal_scroll(self):
+        """A wide table, a drawing or a PDF page must still scroll sideways
+        inside its own box - this stops the SHELL moving, not the content."""
+        block = CSS_NO_COMMENTS[CSS_NO_COMMENTS.rindex(self.EDGE_RULE):]
+        block = block[: block.index("}")]
+        for inner in (".document-viewer-canvas-container", ".table-scroll", ".eye-canvas-viewport"):
+            with self.subTest(region=inner):
+                self.assertNotIn(inner, block)
+
 if __name__ == "__main__":
     unittest.main()

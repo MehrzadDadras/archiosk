@@ -8731,3 +8731,61 @@ html[data-tray-layer="eye"] .eye-maximize-btn { display: none; }
     font-size: 0.76rem;
     color: var(--text-metadata);
 }
+
+/* ============================================================
+   CLAUDE-MOBILE-FRAME-PIN-04 — lock the shell at every width
+   ============================================================
+   "Right now there is a little left and right drift. Lock the main app shell."
+
+   Two halves, because refusing the gesture was never going to be enough on its
+   own: remove the overflow that actually existed, and then hold the frame.
+   ------------------------------------------------------------ */
+
+/* THE CAUSE. A flex item's automatic minimum size is its CONTENT size, not
+   zero - so `flex: 1` without `min-width: 0` refuses to shrink below its
+   intrinsic width and pushes its whole row wider than the container. The
+   composer row already held a voice button and Send; the "+" and the
+   "Make a new Q" row were added to it, and the drift became visible. The
+   button was not the bug, it was the straw. This is the most common cause of
+   unexplained horizontal overflow in a flex layout. */
+.conversation-input-form,
+.conversation-dock-composer {
+    max-width: 100%;
+    min-width: 0;
+}
+.conversation-input-form textarea,
+.conversation-input-form > * {
+    min-width: 0;
+}
+.conversation-input-form textarea {
+    /* Belt and braces: even at its minimum, never wider than the row. */
+    max-width: 100%;
+}
+
+/* THE LOCK, at every width - "the main app shell" is not a mobile-only
+   statement, and a narrowed desktop window had the same drift available to it.
+
+   overflow-x: clip rather than hidden where supported: `hidden` makes the
+   element a scroll CONTAINER, which can still be scrolled programmatically and
+   by some assistive interactions. `clip` refuses outright. `hidden` stays
+   first as the fallback for anything without clip. */
+html,
+body,
+.app-shell {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+    overflow-x: clip;
+}
+
+/* The fixed regions are outside .app-shell's own clipping, so each holds its
+   own edge. Inner scroll regions are deliberately NOT listed - a wide table, a
+   drawing or a PDF page must still scroll sideways inside its own box. This
+   stops the SHELL moving, not the content. */
+.workspace-topbar,
+.tray-switcher,
+.chat-region,
+.app-shell-body {
+    max-width: 100%;
+    min-width: 0;
+}
