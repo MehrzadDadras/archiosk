@@ -191,7 +191,7 @@
    information; those remain genuinely unbuilt (CLAUDE-P40-E3A, Section
    13's own exclusion list), nothing here claims otherwise by staying
    silent about them. #}
-{% macro conversation_dock(heading, message_count, post_url, scope_key, placeholder, include_anchor_fields=False, current_view=None, selected_source_id=None, project_id=None, current_context=None, developer_ccn_context=None, case_id=None) %}
+{% macro conversation_dock(heading, message_count, post_url, scope_key, placeholder, include_anchor_fields=False, current_view=None, selected_source_id=None, project_id=None, current_context=None, developer_ccn_context=None, case_id=None, conversations=None, project_conversation_count=0) %}
 <div class="accordion-section conversation-dock-panel" id="conversation-dock" role="region" aria-label="{{ heading }} conversation">
     {# CLAUDE-EYE-TOOLBOX-LAYOUT-01, Part 4: the same lockable-boundary
        treatment as the Eye/Toolbox splitter (base.html's own
@@ -374,6 +374,44 @@
         <button type="submit" data-ui-ref="chat.composer.send">Send</button>
     </form>
 </div>
+    {# CLAUDE-GO-CONVERSATION-HISTORY-TRAY-01: "since the phone screen is small
+       put the chat histories list under the Composer in a tray."
+
+       The list already existed - it is the Toolbox's Investigations pane - but
+       on a phone that is behind a tray switch and a scroll, which is the
+       compressed-cockpit problem itself. Switching conversations is something
+       you do FROM a conversation, so it belongs where the conversation is.
+
+       A native <details>, closed by default: one line of height when unused,
+       so the work keeps the screen. No JavaScript, no state of its own, and it
+       still works with scripting unavailable. The links are the SAME ones the
+       Toolbox pane uses - no second navigation model - and nothing in here can
+       create, rename or remove anything. #}
+    {% if conversations is not none %}
+    <details class="conversation-history-tray" data-ui-ref="chat.dock.history">
+        <summary class="conversation-history-summary" data-ui-ref="chat.dock.history.toggle">
+            Conversations <span class="conversation-history-count">{{ conversations|length + 1 }}</span>
+        </summary>
+        <div class="conversation-history-list" role="list">
+            <a class="conversation-history-item{% if not case_id %} conversation-history-current{% endif %}"
+               data-ui-ref="chat.dock.history.project" role="listitem"
+               href="{{ url_for('workspace.show_workspace', project_id=project_id) }}">
+                Project conversation
+                <span class="conversation-history-count">{{ project_conversation_count }}</span>
+            </a>
+            {% for c in conversations %}
+            <a class="conversation-history-item{% if case_id and c.id == case_id %} conversation-history-current{% endif %}"
+               data-ui-ref="chat.dock.history.leaf" role="listitem"
+               href="{{ url_for('workspace.show_workspace', project_id=project_id, case=c.id) }}">
+                {{ c.title }}
+                <span class="conversation-history-count">{{ c.conversation|length }}</span>
+            </a>
+            {% else %}
+            <p class="pane-note" data-ui-ref="chat.dock.history.empty">No other conversations yet.</p>
+            {% endfor %}
+        </div>
+    </details>
+    {% endif %}
 {% endmacro %}
 
 {# -- aperture ---------------------------------------------------------

@@ -8626,3 +8626,73 @@ html[data-tray-layer="eye"] .eye-maximize-btn { display: none; }
         font-size: 0.8rem;
     }
 }
+
+/* CLAUDE-GO-CONVERSATION-HISTORY-TRAY-01 — conversations, under the Composer.
+   "Since the phone screen is small put the chat histories list under the
+   Composer in a tray."
+
+   Closed by default and quiet when closed: one line of height, so the work
+   keeps the screen. Native <details>, no script, no state of its own. */
+.conversation-history-tray {
+    flex-basis: 100%;
+    order: 100;
+    border-top: 1px solid var(--border);
+    font-size: 0.78rem;
+}
+.conversation-history-summary {
+    cursor: pointer;
+    list-style: none;
+    padding: 0.5rem 0.2rem;
+    /* A real touch target, not a text-sized one — this is reached with a
+       thumb while holding the phone. */
+    min-height: 40px;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    color: var(--text-secondary);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+.conversation-history-summary::-webkit-details-marker { display: none; }
+.conversation-history-summary::before {
+    content: "\25B8";
+    transition: transform 0.15s ease;
+}
+.conversation-history-tray[open] .conversation-history-summary::before {
+    transform: rotate(90deg);
+}
+.conversation-history-summary:focus-visible {
+    outline: 2px solid var(--machine-blue);
+    outline-offset: -2px;
+}
+.conversation-history-list {
+    display: flex;
+    flex-direction: column;
+    /* The list is the one thing here allowed to grow — capped so it can never
+       push the composer's own input off a small screen, which is the failure
+       this tray exists to avoid rather than cause. */
+    max-height: 40vh;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding-bottom: 0.3rem;
+}
+.conversation-history-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    min-height: 40px;
+    padding: 0.35rem 0.4rem;
+    border-radius: 4px;
+    color: var(--text-secondary);
+    text-decoration: none;
+}
+.conversation-history-item:hover { background: var(--surface-hover); color: var(--text-primary); }
+.conversation-history-item:focus-visible { outline: 2px solid var(--machine-blue); outline-offset: -2px; }
+/* Where you are now — the one place colour means something here. */
+.conversation-history-current { color: var(--machine-blue); }
+.conversation-history-count {
+    flex-shrink: 0;
+    color: var(--text-metadata);
+    font-variant-numeric: tabular-nums;
+}
