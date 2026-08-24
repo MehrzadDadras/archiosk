@@ -28,9 +28,13 @@ class _FakeTurn:
     grounded_in: list = field(default_factory=list)
     needs_clarification: bool = False
     candidate_referents: list = field(default_factory=list)
-    # Deliberately present and deliberately never read by Stage 3A.
-    intent_class: str = "propose_draft_rfi"
-    proposed_action: dict = field(default_factory=lambda: {"description": "would be Stage 4"})
+    # Stage 3A deliberately never read these. Stage 4 does, so the DEFAULT
+    # is now a SAFE intent - a consequential default would quietly turn
+    # every other test in this file into a proposal test. Tests that care
+    # about consequential routing set it explicitly.
+    intent_class: str = "general_answer"
+    reflection: str = ""
+    proposed_action: dict = None
 
 
 class _Base(unittest.TestCase):
@@ -86,29 +90,70 @@ class ResidualOutcomeMappingTests(_Base):
         self.assertFalse(result.admitted)
 
 
-class NoRouterProofTests(_Base):
-    def test_intent_class_and_proposed_action_are_never_consulted(self):
-        """Stage 3A must not become the full intent_class dispatch table.
+class TheRouterExistsButCannotActTests(_Base):
+    """Was NoRouterProofTests, which proved Stage 3A had no intent router at
+    all. The Product Owner authorized Stage 4 on 2026-08-23, so that promise is
+    superseded - and the boundary replacing it is the one worth guarding: the
+    router decides how a message is UNDERSTOOD, never what is DONE.
+    """
 
-        The fake returns a CONSEQUENTIAL intent_class and a populated
-        proposed_action. If Stage 3A read either, this grounded turn
-        would not map to a plain project inquiry.
-        """
+    def test_a_consequential_intent_becomes_a_proposal_not_an_inquiry(self):
         turn = _FakeTurn(
-            reply_text="…", grounded_in=["x"],
+            reply_text="I can draft that.", grounded_in=["x"],
             intent_class="propose_draft_rfi",
-            proposed_action={"description": "draft an RFI"},
+            proposed_action={"intent_class": "propose_draft_rfi", "description": "draft an RFI"},
         )
-        result, _ = self._admit("Diga-me se isso vai aumentar o custo.", turn)
-        self.assertEqual(result.outcome, ci.RESIDUAL_ADMISSION_INQUIRY)
+        result, _ = self._admit("Tell me if this increases cost.", turn)
+        self.assertEqual(result.outcome, ci.RESIDUAL_ADMISSION_PROPOSAL)
+        self.assertEqual(result.intent_class, "propose_draft_rfi")
 
-    def test_module_source_never_reads_intent_class_in_the_admission_path(self):
+    def test_a_consequential_intent_is_recognised_even_when_it_grounds_nothing(self):
+        """The Stage 3A ordering answered these as small talk: an action
+        request often cites no evidence, so the ungrounded-aside branch claimed
+        it first. Proposal is now tested before aside."""
+        turn = _FakeTurn(
+            reply_text="Sure.", grounded_in=[],
+            intent_class="propose_apply_findings",
+            proposed_action={"intent_class": "propose_apply_findings", "description": "apply them"},
+        )
+        result, _ = self._admit("Apply those.", turn)
+        self.assertEqual(result.outcome, ci.RESIDUAL_ADMISSION_PROPOSAL)
+
+    def test_ambiguity_still_outranks_a_consequential_intent(self):
+        """Asking which of two things was meant must win over proposing to act
+        on one of them."""
+        turn = _FakeTurn(
+            reply_text="Which one?", grounded_in=["x"],
+            intent_class="propose_draft_rfi",
+            candidate_referents=[
+                {"anchor_type": "source", "anchor_id": "a", "description": "A"},
+                {"anchor_type": "source", "anchor_id": "b", "description": "B"},
+            ],
+        )
+        result, _ = self._admit("Raise an RFI on this.", turn)
+        self.assertEqual(result.outcome, ci.RESIDUAL_ADMISSION_CLARIFY)
+
+    def test_the_admission_path_still_executes_nothing(self):
+        """The property Stage 3A protected by having no router, now protected
+        by control flow instead: classification returns a decision, and never
+        names a mutating store or route method."""
         import inspect
 
         src = inspect.getsource(ci.classify_residual_admission)
-        for forbidden in ("intent_class", "proposed_action", "INTENT_CLASS_"):
+        for forbidden in ("record_analysis", "apply_findings", "create_rfi", "_require_approval"):
             with self.subTest(forbidden=forbidden):
                 self.assertNotIn(forbidden, src)
+
+    def test_a_proposal_carries_no_executable_payload(self):
+        """run_conversational_turn sanitises proposed_action down to an intent
+        class and a description - no route, no object id, no arguments - so
+        there is nothing here that could be executed even by mistake."""
+        turn = _FakeTurn(
+            reply_text="ok", grounded_in=["x"], intent_class="propose_source_revision",
+            proposed_action={"intent_class": "propose_source_revision", "description": "revise it"},
+        )
+        result, _ = self._admit("Mark that drawing superseded.", turn)
+        self.assertEqual(set(result.proposed_action or {}), {"intent_class", "description"})
 
 
 class CostBoundTests(_Base):

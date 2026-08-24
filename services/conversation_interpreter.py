@@ -56,6 +56,10 @@ from services.capability_registry import (
 from services.environment_capabilities import working_material_root_label
 from services.drawing_analysis import analyze_drawing, make_comparison_artifact
 from services.conversational_turn import (
+    CONSEQUENTIAL_INTENT_CLASSES,
+    INTENT_CLASS_CONTEXTUAL_REFERENCE,
+    INTENT_CLASS_INVESTIGATE_REQUIREMENT,
+    INTENT_CLASS_ORGANIZE_ADVICE,
     build_context_envelope,
     gather_project_evidence,
     run_conversational_turn,
@@ -225,6 +229,12 @@ RESIDUAL_ADMISSION_INQUIRY = "project_inquiry"
 RESIDUAL_ADMISSION_CLARIFY = "clarification_required"
 RESIDUAL_ADMISSION_ASIDE = "conversational_contribution"
 RESIDUAL_ADMISSION_DECLINED = "declined"
+# CLAUDE-CA1D-COMPOSER-SPINE-01 Stage 4: a consequential intent terminates
+# HERE, as a described proposal the reviewer must still carry out through the
+# real Approval-Gated route themselves. It is not an action, not a queued
+# action, and not a confirmation prompt that would execute on "yes" - there is
+# no execution path attached to it at all.
+RESIDUAL_ADMISSION_PROPOSAL = "action_proposed"
 
 
 @dataclass
@@ -239,6 +249,14 @@ class ResidualAdmission:
 
     outcome: str
     reply_text: Optional[str] = None
+    # Stage 4: carried forward so the caller can route. Stage 3A computed
+    # both and threw them away.
+    intent_class: Optional[str] = None
+    reflection: Optional[str] = None
+    # Already sanitized by run_conversational_turn to {"intent_class",
+    # "description"} - deliberately no route, no object id, no payload, so
+    # there is nothing here that could be executed even by mistake.
+    proposed_action: Optional[dict] = None
 
     @property
     def admitted(self) -> bool:
@@ -301,19 +319,130 @@ def classify_residual_admission(
     if result.needs_clarification or len(result.candidate_referents) > 1:
         return ResidualAdmission(RESIDUAL_ADMISSION_CLARIFY, reply_text=result.reply_text)
 
+    # Stage 4. Checked BEFORE the aside test below: a consequential request
+    # ("issue an RFI about this") often grounds nothing, and under Stage 3A it
+    # was therefore answered as small talk. It is the opposite of small talk.
+    if result.intent_class in CONSEQUENTIAL_INTENT_CLASSES:
+        return ResidualAdmission(
+            RESIDUAL_ADMISSION_PROPOSAL,
+            reply_text=result.reply_text,
+            intent_class=result.intent_class,
+            reflection=result.reflection,
+            proposed_action=result.proposed_action,
+        )
+
     # A turn the seam answered conversationally, grounding nothing and
     # needing nothing clarified, was an aside rather than an inquiry -
     # its own reply is the acknowledgment, already in the reviewer's own
     # language. No project QA call, no Finding, no Case.
     if not result.grounded_in and result.reply_text:
-        return ResidualAdmission(RESIDUAL_ADMISSION_ASIDE, reply_text=result.reply_text)
+        return ResidualAdmission(
+            RESIDUAL_ADMISSION_ASIDE, reply_text=result.reply_text,
+            intent_class=result.intent_class,
+        )
 
     # Everything else is admitted to the existing project cognition path.
     # The bias is deliberate: wrongly admitting costs one grounded answer
     # that may honestly say "not covered by this project's evidence",
     # while wrongly refusing denies access - the failure this whole stage
     # exists to remove.
-    return ResidualAdmission(RESIDUAL_ADMISSION_INQUIRY)
+    return ResidualAdmission(
+        RESIDUAL_ADMISSION_INQUIRY,
+        intent_class=result.intent_class,
+        reflection=result.reflection,
+    )
+
+
+# CLAUDE-CA1D-COMPOSER-SPINE-01 Stage 4: how a consequential intent is
+# reported back. Names the real gated route the reviewer must use, because the
+# whole point is that GO does not use it for them.
+_PROPOSAL_ROUTE_LABELS = {
+    "propose_draft_rfi": "Issue RFI",
+    "propose_apply_findings": "Apply findings",
+    "propose_source_revision": "record a Source revision",
+    "propose_work_product_issue": "issue the Work Product",
+}
+
+
+def _compose_proposal_reply(residual: "ResidualAdmission") -> str:
+    """A description plus a pointer, never an offer to act.
+
+    Deliberately not phrased as "shall I?" - a yes/no question implies
+    something is standing by to execute on "yes", and nothing is. The
+    Approval Gate (routes/workspace.py's _require_approval) remains the only
+    way any of these happen, reached by the reviewer, from the real control.
+    """
+    parts = []
+    if residual.reflection:
+        parts.append(residual.reflection)
+    description = (residual.proposed_action or {}).get("description") if residual.proposed_action else None
+    if description:
+        parts.append(description)
+    elif residual.reply_text:
+        parts.append(residual.reply_text)
+    label = _PROPOSAL_ROUTE_LABELS.get(residual.intent_class or "")
+    if label:
+        parts.append(
+            f"I have not done this and cannot do it from here - use {label} in the "
+            f"workspace when you want it to happen, so it goes through the usual approval step."
+        )
+    return " ".join(p for p in parts if p)
+
+
+def _route_safe_intent(
+    intent_class: Optional[str],
+    text: str,
+    workspace: ProjectWorkspace,
+    case: Optional[dict],
+    store: CaseWorkspaceStore,
+    effective_referent: Optional[dict],
+    validated_selected_source: Optional[dict],
+    triggering_message_id: Optional[str],
+    reviewer: str,
+    anchor: Optional[dict],
+    governance_log,
+) -> Optional[InterpretationResult]:
+    """Stage 4: route a SAFE intent to the handler that already serves it.
+
+    Returns None to mean "no better handler than the grounded project-QA path
+    this already had" - general_answer, and any safe intent whose own
+    preconditions are not met. Falling through is always allowed to be the
+    answer; nothing here forces a route it cannot honestly serve.
+
+    Every handler below is called with exactly the arguments its existing
+    deterministic call site uses. No handler is modified, and no new mutating
+    path is introduced by this function.
+    """
+    if intent_class == INTENT_CLASS_CONTEXTUAL_REFERENCE:
+        return _handle_contextual_reference(
+            workspace, effective_referent, validated_selected_source, triggering_message_id, case,
+        )
+
+    if intent_class == INTENT_CLASS_ORGANIZE_ADVICE:
+        referent_type, referent_object = _resolve_anchor_object(workspace, effective_referent)
+        source_for_organize = referent_object if referent_type == "source" else validated_selected_source
+        return _handle_organize_advice(store, workspace, source_for_organize)
+
+    if intent_class == INTENT_CLASS_INVESTIGATE_REQUIREMENT:
+        # The one safe intent that WRITES (record_analysis - governed but
+        # provisional, no Approval Gate). The deterministic path reaches it
+        # only when the message names a Requirement question AND a Requirement
+        # anchor is present; a model classification must clear the same bar,
+        # or a misread turn could record an Analysis against the wrong thing.
+        # No Case means no honest place to put a Finding either - the handler
+        # says so itself, but this declines earlier rather than spending a
+        # model call to be told.
+        if case is None:
+            return None
+        referent_type, referent_object = _resolve_anchor_object(workspace, effective_referent)
+        if referent_type != "requirement" or referent_object is None:
+            return None
+        return _handle_investigate_requirement(
+            text, workspace, case, store, reviewer,
+            effective_referent, triggering_message_id, governance_log,
+        )
+
+    return None
 
 
 def interpret_message(
@@ -566,11 +695,18 @@ def interpret_message(
             workspace, effective_referent, validated_selected_source, triggering_message_id, case,
         )
 
-    if anchor is not None:
-        return InterpretationResult(
-            action_taken="anchor_acknowledged",
-            reply_text=_describe_anchor_acknowledgment(anchor),
-        )
+    # CLAUDE-GO-COGNITION-FIRST-01: `anchor is not None` used to RETURN here,
+    # with a canned acknowledgment. An Anchor is set whenever the reviewer has
+    # clicked something, which is how anyone actually asks about a drawing, a
+    # Source, a Requirement or a Finding - so the most valuable turn in the
+    # product ("I am looking at this, and I want to know X") never reached
+    # cognition at all, and the question itself was read by nothing.
+    #
+    # The acknowledgment is not gone; it moved to the fallbacks at the end of
+    # this function, where it belongs. Determinism guards the answer now
+    # instead of pre-empting it: an anchored message continues to the same
+    # evidence-grounded paths an unanchored one already reaches, carrying the
+    # anchor as context exactly as it always did.
 
     # CLAUDE-P38 (OBS-01): an ordinary, unanchored, read-only question
     # ("What are the objectives of this RFP?", "Summarize this project")
@@ -646,7 +782,7 @@ def interpret_message(
             )
 
     if _looks_like_project_question(lowered):
-        return _handle_project_question(
+        return _acknowledge_if_unanswerable(_handle_project_question(
             text, workspace, case, store, reviewer, triggering_message_id,
             ui_context={
                 "current_view": validated_current_view,
@@ -657,7 +793,7 @@ def interpret_message(
                 # even if two Sources happen to share a name.
                 "selected_source_id": validated_selected_source["id"] if validated_selected_source else None,
             },
-        )
+        ), anchor)
 
     # CLAUDE-P40-B (3.7): "Analyze this drawing for..." was suggested
     # unconditionally, regardless of whether this Case has any drawing
@@ -695,15 +831,33 @@ def interpret_message(
             anchor=anchor, selected_source=validated_selected_source,
             current_view=validated_current_view,
         )
+    # Stage 4: a consequential intent stops here. No handler is called on
+    # this branch at all - the "never execution" property is control flow,
+    # not a flag that could be misread.
+    if residual.outcome == RESIDUAL_ADMISSION_PROPOSAL:
+        return InterpretationResult(
+            action_taken=f"residual_action_proposed:{residual.intent_class}",
+            reply_text=_compose_proposal_reply(residual),
+            content_class=CONTENT_CLASS_AI_PROPOSED,
+        )
     if residual.outcome == RESIDUAL_ADMISSION_INQUIRY:
-        return _handle_project_question(
+        # Stage 4: route a safe intent to the handler that already serves it,
+        # falling through to the grounded project-QA path whenever there is no
+        # better one - which is what Stage 3A always did.
+        routed = _route_safe_intent(
+            residual.intent_class, text, workspace, case, store, effective_referent,
+            validated_selected_source, triggering_message_id, reviewer, anchor, governance_log,
+        )
+        if routed is not None:
+            return routed
+        return _acknowledge_if_unanswerable(_handle_project_question(
             text, workspace, case, store, reviewer, triggering_message_id,
             ui_context={
                 "current_view": validated_current_view,
                 "selected_source_name": validated_selected_source["name"] if validated_selected_source else None,
                 "selected_source_id": validated_selected_source["id"] if validated_selected_source else None,
             },
-        )
+        ), anchor)
     if residual.outcome == RESIDUAL_ADMISSION_CLARIFY:
         return InterpretationResult(
             action_taken="residual_clarification_requested",
@@ -729,6 +883,16 @@ def interpret_message(
     # invents understanding of WHAT was said - the honest acknowledgment
     # is that it was received and will be considered, not a claim of
     # having reasoned about it.
+    # CLAUDE-GO-COGNITION-FIRST-01: cognition was reachable and still produced
+    # nothing usable, so the honest acknowledgment is the right answer after
+    # all - the same reply, from the same helper, now at the end of the road
+    # rather than across the entrance to it.
+    if anchor is not None:
+        return InterpretationResult(
+            action_taken="anchor_acknowledged",
+            reply_text=_describe_anchor_acknowledgment(anchor),
+        )
+
     if case is not None:
         return InterpretationResult(
             action_taken="discussion_contribution",
@@ -755,6 +919,35 @@ def interpret_message(
         # CLAUDE-POSTCAMEL-CA1 (Section 23): a dead end still leaves a
         # real, concrete, one-click way forward rather than only prose.
         next_steps=[{"label": "Open Files", "view": "files"}],
+    )
+
+
+def _acknowledge_if_unanswerable(
+    result: "InterpretationResult", anchor: Optional[dict],
+) -> "InterpretationResult":
+    """CLAUDE-GO-COGNITION-FIRST-01: keep the demotion degrade-safe.
+
+    Routing anchored turns into real cognition is the point. But when that
+    path cannot run at all - no API key, a policy denial, malformed output -
+    its own reply is about the QA path being unavailable, which for someone
+    who clicked a drawing and asked a question is worse than the honest
+    acknowledgment they used to get. So the acknowledgment is restored in
+    exactly that case, and only that case.
+
+    Caught by two pre-existing tests rather than by inspection, which is the
+    argument for having had them.
+    """
+    if anchor is None:
+        return result
+    unanswerable = (
+        result.action_taken == "project_qa_unavailable"
+        or result.action_taken.startswith("project_qa_policy_denied")
+    )
+    if not unanswerable:
+        return result
+    return InterpretationResult(
+        action_taken="anchor_acknowledged",
+        reply_text=_describe_anchor_acknowledgment(anchor),
     )
 
 

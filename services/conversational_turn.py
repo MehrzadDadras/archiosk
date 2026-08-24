@@ -7,10 +7,13 @@ pattern-match it (see services/conversation_interpreter.py's own
 module docstring on why THAT file stays deterministic keyword matching
 for the fast path).
 
-CLAUDE-CA1D-COMPOSER-SPINE-01 (Stage 2): built here, NOT wired into
-interpret_message's dispatch chain yet - that is Stage 3, gated on a
-governance record being written first (per this repo's own
-ratification discipline; see the plan's "Resolved design decisions").
+CLAUDE-CA1D-COMPOSER-SPINE-01 (Stage 2): built here and, at the time,
+NOT wired into interpret_message's dispatch chain. That gate has since
+opened twice, both with the governance record this discipline requires:
+Stage 3A (2026-08-22) wired the seam in for ADMISSION only, and Stage 4
+(2026-08-23, Product Owner: "Authorize Stage 4 activation") activated
+the intent_class dispatch table and the proposed_action envelope. See
+governance/STATUS.md for both rows.
 Every function here is independently unit-testable against a mocked
 services.llm_gateway.call_llm_json without touching
 conversation_interpreter.py at all, and this module deliberately never
@@ -442,10 +445,12 @@ def build_context_envelope(
 # CLAUDE-CA1D-COMPOSER-SPINE-01 (Stage 2): the closed intent_class
 # vocabulary and its own safety classification - the single enforcement
 # point for safe-vs-consequential (the plan's own "hard routing
-# requirement"). Stage 3 wires this into interpret_message's dispatch
-# chain and adds the actual handler/proposal-envelope wiring; until
-# then this table is pure data, exercised only by this module's own
-# tests, never reachable from a live request. An intent_class outside
+# requirement"). Stage 4 (2026-08-23) activated it: conversation_
+# interpreter._route_safe_intent reads this table's safe entries and
+# routes to the handler each one names, while every CONSEQUENTIAL entry
+# terminates in a described proposal that reaches no handler at all.
+# This is therefore no longer pure data - but nothing here executes
+# anything either, and no entry gained an execution path. An intent_class outside
 # this table is never used for dynamic dispatch - run_conversational_turn
 # always normalizes an unrecognized value to INTENT_CLASS_GENERAL_ANSWER.
 INTENT_CLASS_GENERAL_ANSWER = "general_answer"
