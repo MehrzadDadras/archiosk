@@ -32,7 +32,6 @@
 
     var input = document.getElementById('dock-composer-image');
     var field = document.getElementById('dock-composer-image-data');
-    if (!input || !field) return;
 
     var chip = document.getElementById('dock-composer-image-chip');
     var thumb = document.getElementById('dock-composer-image-thumb');
@@ -42,6 +41,8 @@
     // CLAUDE-GO-COMPOSER-CAPTURE-03: the next step, made visible.
     var nextStep = document.getElementById('dock-composer-image-next');
     var makeQ = document.getElementById('dock-composer-make-q');
+    // CLAUDE-MULTI-IMAGE-Q-01. Absent outside an open Q, deliberately.
+    var addToQ = document.getElementById('dock-composer-add-to-q');
     var messageBox = document.getElementById('dock-composer-input');
     var originalPlaceholder = messageBox ? messageBox.getAttribute('placeholder') : null;
     var ATTACHED_PLACEHOLDER = 'Ask about this photo, or tap Make a new Q';
@@ -94,73 +95,67 @@
         return Math.floor((dataUrl.length - comma - 1) * 3 / 4);
     }
 
-    /* Draw the photo into a canvas no larger than MAX_EDGE and re-encode it,
-       stepping quality down until it fits. JPEG deliberately, whatever came
-       in: a phone frame is a photograph, and PNG would re-encode it losslessly
-       into something far larger than the original. */
-    function shrink(image, fallbackName) {
-        var scale = Math.min(1, MAX_EDGE / Math.max(image.width, image.height));
-        var canvas = document.createElement('canvas');
-        canvas.width = Math.max(1, Math.round(image.width * scale));
-        canvas.height = Math.max(1, Math.round(image.height * scale));
-
-        var context = canvas.getContext('2d');
-        if (!context) {
-            fail('This browser could not prepare that photo.');
-            return;
-        }
-        context.drawImage(image, 0, 0, canvas.width, canvas.height);
-
-        for (var i = 0; i < QUALITY_STEPS.length; i++) {
-            var candidate;
-            try {
-                candidate = canvas.toDataURL('image/jpeg', QUALITY_STEPS[i]);
-            } catch (err) {
-                // A tainted canvas cannot be exported. Nothing here loads a
-                // cross-origin image, so this is a browser quirk rather than a
-                // path we can recover from.
-                fail('This browser could not prepare that photo.');
-                return;
-            }
-            if (approximateBytes(candidate) <= MAX_BYTES) {
-                show(fallbackName, candidate);
-                return;
-            }
-        }
-        // Every step was still too large - genuinely extraordinary for a
-        // camera frame, so say what is true rather than silently sending
-        // something that will be refused by the route.
-        fail('That photo could not be reduced enough to send.');
+    function attach(file) {
+        window.ArchioskPrepareImage(file, function (name, dataUrl) {
+            show(name, dataUrl);
+        }, fail);
     }
 
-    function attach(file) {
+    // Shared with Document Search's phone/gallery path.  Both doors into the
+    // same vision capability must apply the same byte/edge boundary before a
+    // request reaches the server; otherwise a camera photo succeeds or fails
+    // solely because of which Composer surface happened to receive it.
+    window.ArchioskPrepareImage = function (file, onReady, onFail) {
         if (!file) return;
         var reader = new FileReader();
         reader.onerror = function () {
-            fail('That photo could not be read.');
+            if (onFail) onFail('That photo could not be read.');
         };
         reader.onload = function () {
             var original = String(reader.result || '');
             var image = new Image();
             image.onerror = function () {
-                // HEIC that the browser cannot decode is the realistic case.
-                // iOS normally hands a JPEG to a file input, but not always.
-                fail('That photo is in a format this browser cannot open.');
+                if (onFail) onFail('That photo is in a format this browser cannot open.');
             };
             image.onload = function () {
-                // Small enough already, and not worth re-encoding: an image
-                // that fits keeps its original bytes and original format.
                 if (approximateBytes(original) <= MAX_BYTES
                     && Math.max(image.width, image.height) <= MAX_EDGE) {
-                    show(file.name || 'Photo', original);
+                    if (onReady) onReady(file.name || 'Photo', original);
                     return;
                 }
-                shrink(image, file.name || 'Photo');
+                var scale = Math.min(1, MAX_EDGE / Math.max(image.width, image.height));
+                var canvas = document.createElement('canvas');
+                canvas.width = Math.max(1, Math.round(image.width * scale));
+                canvas.height = Math.max(1, Math.round(image.height * scale));
+                var context = canvas.getContext('2d');
+                if (!context) {
+                    if (onFail) onFail('This browser could not prepare that photo.');
+                    return;
+                }
+                context.drawImage(image, 0, 0, canvas.width, canvas.height);
+                for (var i = 0; i < QUALITY_STEPS.length; i++) {
+                    try {
+                        var candidate = canvas.toDataURL('image/jpeg', QUALITY_STEPS[i]);
+                        if (approximateBytes(candidate) <= MAX_BYTES) {
+                            if (onReady) onReady(file.name || 'Photo', candidate);
+                            return;
+                        }
+                    } catch (err) {
+                        if (onFail) onFail('This browser could not prepare that photo.');
+                        return;
+                    }
+                }
+                if (onFail) onFail('That photo could not be reduced enough to send.');
             };
             image.src = original;
         };
         reader.readAsDataURL(file);
-    }
+    };
+
+    // The shared preparation helper is useful to other authenticated image
+    // surfaces even when this page does not render the Composer attachment
+    // control.  Only the Composer-specific wiring below requires its markup.
+    if (!input || !field) return;
 
     input.addEventListener('change', function () {
         var files = input.files;
@@ -169,16 +164,26 @@
 
     if (clearBtn) clearBtn.addEventListener('click', clear);
 
+    function sendAs(phrase) {
+        // Written into the box rather than posted behind the reviewer's back:
+        // the phrase then appears in the conversation as their own message,
+        // which is how they find out they could have typed it - and that they
+        // may type something else instead.
+        messageBox.value = phrase;
+        if (form.requestSubmit) form.requestSubmit();
+        else form.submit();
+    }
+
     if (makeQ && form && messageBox) {
-        makeQ.addEventListener('click', function () {
-            // Written into the box rather than posted behind the reviewer's
-            // back: the phrase then appears in the conversation as their own
-            // message, which is how they find out they could have typed it -
-            // and that they may type something else instead.
-            messageBox.value = 'Make a new Q';
-            if (form.requestSubmit) form.requestSubmit();
-            else form.submit();
-        });
+        makeQ.addEventListener('click', function () { sendAs('Make a new Q'); });
+    }
+
+    // CLAUDE-MULTI-IMAGE-Q-01: the second photo into the SAME Q. The phrase
+    // matches routes/workspace.py's own _ADD_TO_Q_PHRASES, so the button and a
+    // reviewer typing it by hand travel the identical path - the button is a
+    // shortcut to words, never a second mechanism.
+    if (addToQ && form && messageBox) {
+        addToQ.addEventListener('click', function () { sendAs('Add this to this Q'); });
     }
 
     if (form) {

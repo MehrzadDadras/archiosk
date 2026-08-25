@@ -4680,6 +4680,40 @@ def _asked_for_a_new_investigation(message_text):
     return any(phrase in lowered for phrase in _NEW_Q_PHRASES)
 
 
+# CLAUDE-MULTI-IMAGE-Q-01. Product Owner: "I authorize Q / Investigation to
+# support multiple images and other investigation materials as one governed
+# container. Preserve provenance for each item and do not automatically turn
+# every attachment into authoritative project evidence."
+#
+# The container needed no invention: case["source_ids"] has always been a list,
+# and attach_source_to_case has always appended to it. A Q could hold many
+# sources on the day it was written - nothing ever ADDED a second one, because
+# the only path that saved a photo was "make a new Q", which by definition made
+# a new one every time.
+#
+# So this is the missing verb, not a new noun: a way to say "keep this one, in
+# the Q I am already in". Deterministic and read from the reviewer's own words,
+# exactly like _NEW_Q_PHRASES above - the model is never asked whether to
+# persist something.
+#
+# THE DEFAULT IS STILL NOT SAVING. A photo sent without asking is answered and
+# discarded, as before. That is the Product Owner's own "do not automatically
+# turn every attachment into authoritative project evidence", and it is why
+# this is a phrase list rather than an inference.
+_ADD_TO_Q_PHRASES = (
+    "add to this q", "add this to this q", "add to the q", "add this to the q",
+    "add to this investigation", "add this to this investigation",
+    "add to the investigation", "add this to the investigation",
+    "keep this", "save this", "save to this q", "add another",
+    "another angle", "another view", "add this photo", "add this document",
+)
+
+
+def _asked_to_add_to_this_investigation(message_text):
+    lowered = " " + (message_text or "").strip().lower() + " "
+    return any(phrase in lowered for phrase in _ADD_TO_Q_PHRASES)
+
+
 def _composer_photo_turn(project_id, store, workspace, case_id, message_text, image_data_url):
     """Handle a composer turn carrying a photo.
 
@@ -4703,6 +4737,9 @@ def _composer_photo_turn(project_id, store, workspace, case_id, message_text, im
         return True, None
 
     wants_new = _asked_for_a_new_investigation(message_text)
+    # Only meaningful inside an open Q - "add this to this Q" from the project
+    # conversation has no "this Q" to mean, and must never silently invent one.
+    wants_add = bool(case_id) and not wants_new and _asked_to_add_to_this_investigation(message_text)
 
     # What the reviewer did is recorded; the bytes themselves never are.
     store.add_message(
@@ -4765,6 +4802,49 @@ def _composer_photo_turn(project_id, store, workspace, case_id, message_text, im
                 "I received the photo but could not interpret it just now. "
                 "It has not been saved to the project."
             ),
+            content_class=CONTENT_CLASS_AI_PROPOSED,
+        )
+        return True, None
+
+    if wants_add:
+        # CLAUDE-MULTI-IMAGE-Q-01: keep this one, in the Q we are already in.
+        #
+        # The same governed persistence path "make a new Q" uses - EXIF
+        # stripped, GPS recorded as presence only, actor and description
+        # carried - so the second photo in a Q has exactly the provenance the
+        # first one does. A Q's materials must not have two classes of
+        # trustworthiness depending on which button made them.
+        import base64
+
+        from services.image_intelligence import register_eye_capture
+
+        sources_dir = Path(current_app.config["REGISTRY_STORE_PATH"]) / "workspace_sources" / project_id
+        capture = register_eye_capture(
+            store, workspace,
+            raw_bytes=base64.b64decode(image_b64),
+            filename="photo",
+            description=(message_text or None),
+            sources_dir=sources_dir,
+            actor=_reviewer(),
+        )
+        saved = capture.get("source_id")
+        if saved:
+            store.attach_source_to_case(workspace, case_id, saved)
+            case = next((c for c in workspace.cases if c["id"] == case_id), None)
+            held = len(case["source_ids"]) if case else 1
+            kept = (
+                "\n\nKept in this investigation"
+                + (" - it now holds " + str(held) + " items." if held > 1 else ".")
+                + " Saved as a source with its own provenance, not as a finding: "
+                + "nothing here concludes anything until you say so."
+            )
+        else:
+            kept = (
+                "\n\nI could not save it into this investigation - the format was "
+                "not one I can store. The answer above still stands."
+            )
+        store.add_message(
+            workspace, case_id, role="ai", text=(reply_text + kept),
             content_class=CONTENT_CLASS_AI_PROPOSED,
         )
         return True, None

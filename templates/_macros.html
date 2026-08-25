@@ -346,6 +346,24 @@
         <span class="composer-attach-next" id="dock-composer-image-next" hidden>
             <button type="button" class="composer-attach-action" id="dock-composer-make-q"
                     data-ui-ref="chat.composer.attach.make-q">Make a new Q</button>
+            {# CLAUDE-MULTI-IMAGE-Q-01: the second photo, and the third.
+
+               A Q has always been able to hold many sources (case["source_ids"]
+               is a list); nothing ever added a second one, because the only
+               path that saved a photo made a NEW Q every time. This is the
+               missing verb.
+
+               Rendered ONLY inside an open Q - from the project conversation
+               there is no "this Q" for it to mean, and a control that has
+               nothing to act on is the clutter this shell keeps removing.
+
+               Same mechanism as Make a new Q: it fills the message box with
+               words the reviewer could have typed and then submits, so the
+               phrase lands as their own message and teaches itself. #}
+            {% if case_id %}
+            <button type="button" class="composer-attach-action" id="dock-composer-add-to-q"
+                    data-ui-ref="chat.composer.attach.add-to-q">Add to this Q</button>
+            {% endif %}
             <span class="composer-attach-or">or just ask about it</span>
         </span>
         <textarea name="text" id="dock-composer-input" data-ui-ref="chat.composer.input" data-developer-composer-input data-conversation-draft="{{ scope_key }}" placeholder="{{ placeholder }}" aria-label="Message" autocomplete="off" rows="1" required></textarea>
