@@ -58,6 +58,7 @@ from services.drawing_analysis import analyze_drawing, make_comparison_artifact
 from services.conversational_turn import (
     CONSEQUENTIAL_INTENT_CLASSES,
     INTENT_CLASS_CONTEXTUAL_REFERENCE,
+    INTENT_CLASS_EXTERNAL_RESEARCH,
     INTENT_CLASS_INVESTIGATE_REQUIREMENT,
     INTENT_CLASS_ORGANIZE_ADVICE,
     build_context_envelope,
@@ -389,6 +390,60 @@ def _compose_proposal_reply(residual: "ResidualAdmission") -> str:
     return " ".join(p for p in parts if p)
 
 
+def _handle_external_research(text: str, workspace, store) -> InterpretationResult:
+    """CLAUDE-AIRLOCK-WEB-RESEARCH-01 (Airlock Slice 1).
+
+    Retrieves allow-listed published reference material and answers with
+    citations. Nothing here persists, promotes, or creates a governed object -
+    the reply is a conversation message like any other, and the retrieved
+    material is EXTERNAL REFERENCE that never becomes project evidence.
+
+    Gated by the SAME _evaluate_external_ai_policy resolver every other real
+    transmission in this module already uses. Outbound retrieval is not exempt
+    from the gate that governs outbound calls.
+    """
+    from services.external_research import research
+
+    policy_decision = _evaluate_external_ai_policy(store, workspace)
+    if policy_decision.decision not in (DECISION_ALLOW, DECISION_ALLOW_APPROVED_ROUTE):
+        return InterpretationResult(
+            action_taken=f"external_research_policy_denied:{policy_decision.controlling_layer}",
+            reply_text=(
+                f"Researching public reference material is not permitted by this project's "
+                f"security policy (controlling layer: {policy_decision.controlling_layer}). "
+                f"{policy_decision.reason} Nothing was transmitted or retrieved."
+            ),
+        )
+
+    result = research(text)
+    if not result.ran:
+        return InterpretationResult(
+            action_taken="external_research_declined",
+            reply_text=(result.refusal or "I could not research that just now."),
+            content_class=CONTENT_CLASS_AI_PROPOSED,
+        )
+
+    # Provenance travels WITH the answer, in the answer, because a reply gets
+    # read, forwarded and quoted long after the screen that framed it is gone.
+    lines = ["External reference - not this project's evidence.", "", result.answer or ""]
+    if result.sources:
+        lines.append("")
+        lines.append("Sources retrieved:")
+        for source in result.sources:
+            lines.append(f"- {source['label']} ({source['publisher']}) - {source['url']} - retrieved {source['retrieved_at']}")
+    if result.screening_notes:
+        lines.append("")
+        lines.append(
+            "Note: instruction-like text was found in the retrieved material and neutralised "
+            "before I read it."
+        )
+    return InterpretationResult(
+        action_taken="external_research_answered",
+        reply_text="\n".join(lines).strip(),
+        content_class=CONTENT_CLASS_AI_PROPOSED,
+    )
+
+
 def _route_safe_intent(
     intent_class: Optional[str],
     text: str,
@@ -417,6 +472,9 @@ def _route_safe_intent(
         return _handle_contextual_reference(
             workspace, effective_referent, validated_selected_source, triggering_message_id, case,
         )
+
+    if intent_class == INTENT_CLASS_EXTERNAL_RESEARCH:
+        return _handle_external_research(text, workspace, store)
 
     if intent_class == INTENT_CLASS_ORGANIZE_ADVICE:
         referent_type, referent_object = _resolve_anchor_object(workspace, effective_referent)

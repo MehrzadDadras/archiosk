@@ -457,6 +457,13 @@ INTENT_CLASS_GENERAL_ANSWER = "general_answer"
 INTENT_CLASS_CONTEXTUAL_REFERENCE = "contextual_reference"
 INTENT_CLASS_INVESTIGATE_REQUIREMENT = "investigate_requirement"
 INTENT_CLASS_ORGANIZE_ADVICE = "organize_advice"
+# CLAUDE-AIRLOCK-WEB-RESEARCH-01: derived from the EXISTING routing
+# architecture rather than a parallel web-search subsystem, per the
+# authorization. services/question_scope.py stays advisory and non-routing;
+# EXTERNAL is a refinement of the UNKNOWN it already produces for these
+# questions, and routing rides this table, which Stage 4 already authorized
+# as a router.
+INTENT_CLASS_EXTERNAL_RESEARCH = "external_research"
 INTENT_CLASS_PROPOSE_DRAFT_RFI = "propose_draft_rfi"
 INTENT_CLASS_PROPOSE_APPLY_FINDINGS = "propose_apply_findings"
 INTENT_CLASS_PROPOSE_SOURCE_REVISION = "propose_source_revision"
@@ -490,6 +497,15 @@ INTENT_DISPATCH_TABLE: dict[str, dict] = {
     INTENT_CLASS_ORGANIZE_ADVICE: {
         "safety": SAFETY_SAFE,
         "reuses": "conversation_interpreter._handle_organize_advice (unchanged)",
+    },
+    INTENT_CLASS_EXTERNAL_RESEARCH: {
+        # SAFE because it is read-only: it retrieves allow-listed published
+        # material, reads it, answers with citations, and persists nothing. It
+        # creates no governed object and cannot promote anything into the
+        # project record - that is Slice 2 and is not authorized.
+        "safety": SAFETY_SAFE,
+        "reuses": "conversation_interpreter._handle_external_research -> "
+                   "services/external_research.py (Airlock Slice 1)",
     },
     INTENT_CLASS_PROPOSE_DRAFT_RFI: {
         "safety": SAFETY_CONSEQUENTIAL,
@@ -577,6 +593,9 @@ CONVERSATIONAL_TURN_BEHAVIORAL_CONTRACT = (
     # CLAUDE-GO-ASK-TO-SEE-01: the same rule project_qa.py carries, for
     # the same reason - a reviewer with the drawing in their hand should be
     # asked for it, not written around.
+    "- If the question is about published codes, standards or public reference "
+    "material rather than about this project, classify it as external_research. "
+    "Do NOT answer it from memory: you have not retrieved anything yet.\n"
     "- If answering properly would require SEEING something you have not been given - a drawing, a detail, a photograph of the condition - say briefly what you would need to see and why it would settle the question, and tell the reviewer they can attach it with the + beside the message box. Ask for the smallest thing that would resolve it. If what you already have IS sufficient, answer instead - never ask to see something the answer did not depend on.\n"
 )
 

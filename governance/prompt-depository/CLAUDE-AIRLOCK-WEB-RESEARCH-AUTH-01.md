@@ -5,9 +5,9 @@
 | Prompt ID | CLAUDE-AIRLOCK-WEB-RESEARCH-AUTH-01 |
 | Title | Record Product Owner Authorization for Composer Trusted Web Research (Airlock Mission 03, Slice 1) |
 | Agent | Claude |
-| Status | DRAFT |
+| Status | RUN |
 | Purpose | Record the Product Owner's explicit, bounded authorization of Composer-initiated public-web research as the next Airlock proving mission — superseding the blanket `NOT AUTHORIZED` status only to the extent this slice requires — and name every clause it supersedes rather than silently overwriting them. |
-| Product Owner acceptance | **Not yet given.** Drafted at the Product Owner's instruction ("make the prompt") following the reconciliation report. Becomes `APPROVED` only on explicit Product Owner approval, and `RUN` only once implemented, tested, committed and pushed. |
+| Product Owner acceptance | **Approved as written, 2026-08-24** — "Approved as written. Proceed. I accept CLAUDE-AIRLOCK-WEB-RESEARCH-AUTH-01 and the framing." The framing was accepted verbatim: *"Trusted" governs provenance and process, never content. A trusted interface to untrusted sources. Nothing becomes trustworthy by having been retrieved.* Slice 1 implemented under `CLAUDE-AIRLOCK-WEB-RESEARCH-01`. |
 | Lineage | Successor to [`CLAUDE-AIRLOCK-AUTH-01`](CLAUDE-AIRLOCK-AUTH-01.md) (Mission 01), [`CLAUDE-AIRLOCK-M01A-AUTH`](CLAUDE-AIRLOCK-M01A-AUTH.md), and [`CLAUDE-AIRLOCK-M02-AUTH`](CLAUDE-AIRLOCK-M02-AUTH.md) / [`CLAUDE-AIRLOCK-M02-HOLD`](CLAUDE-AIRLOCK-M02-HOLD.md). Extends, and does not replace, [External Intelligence Airlock](../specified-unbuilt/external-intelligence-airlock.md). Related, not absorbed: [GO-EXTERNAL-VESTIBULE-01](GO-EXTERNAL-VESTIBULE-01.md), [GO-COMPOSER-01](GO-COMPOSER-01.md), [GO-TRUST-SECURITY-01](GO-TRUST-SECURITY-01.md). |
 | Superseded by | None |
 | Absorbed into | None |
@@ -158,9 +158,8 @@ importantly as what was.
 
 ## Notes
 
-- Filed as `DRAFT`. It is an authorization the Product Owner asked to be
-  drafted, not one they have given; it must not be treated as permission until
-  its status reads `APPROVED`.
+- Filed as `DRAFT` when written; **approved as written by the Product Owner on
+  2026-08-24** and implemented as Slice 1 the same day.
 - The Prompt ID names the mission, not a title, so it stays stable if the
   title changes.
 - `dependency_fit.py` returns PASS for a search-provider API. That PASS is

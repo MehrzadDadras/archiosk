@@ -13,6 +13,6 @@
 - **REFERENCE TESTS:** `tests/test_project_qa.py`, `tests/test_developer_home_composer_01.py`, model-seam conversation lanes.
 - **KNOWN LIMITATIONS:** Deterministic gateway orientation remains intentionally non-model-backed.
 - **SUPERSEDES:** None.
-- **SUPERSEDED BY:** None.
+- **SUPERSEDED BY:** CIC-GO-CONVERSATION v1.1 (`CIC-GO-CONVERSATION-v1.1.md`) — external research became an answering domain, and this record's own KNOWN LIMITATIONS about non-model-backed gateway orientation had already been overtaken by `CLAUDE-GO-GATEWAY-COGNITION-01`/`-02`.
 - **LAST REVIEWED:** 2026-08-20.
 - **GOVERNANCE SOURCE:** `GO-COMPOSER-01`; Developer Mode/CCN governance; project Q&A implementation.

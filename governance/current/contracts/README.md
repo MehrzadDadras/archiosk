@@ -13,7 +13,7 @@ records the delta; prior orders remain interpretable against the version cited.
 | Contract ID | Current version | Status | Applies when | Record |
 |---|---:|---|---|---|
 | CIC-COMPOSER | v1.0 | CURRENT | Any Composer/input or conversational-surface work | [Record](CIC-COMPOSER.md) |
-| CIC-GO-CONVERSATION | v1.0 | CURRENT | Any GO/model-backed conversational behavior | [Record](CIC-GO-CONVERSATION.md) |
+| CIC-GO-CONVERSATION | v1.1 | CURRENT | Any GO/model-backed conversational behavior, including which information domain answers | [Record](CIC-GO-CONVERSATION-v1.1.md) |
 | CIC-DEVELOPER-MODE | v1.1 | CURRENT | Developer Mode, application inspection, or Developer context | [Record](CIC-DEVELOPER-MODE-v1.1.md) |
 | CIC-CCN | v1.0 | CURRENT | CCN parsing, context, lifecycle, or contemplated-change work | [Record](CIC-CCN.md) |
 | CIC-PAGE-TEMPLATE | v1.0 | CURRENT | Material page/surface/template or shared UI work | [Record](CIC-PAGE-TEMPLATE.md) |

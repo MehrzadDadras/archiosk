@@ -33,8 +33,12 @@ class CanonicalImplementationOrderTests(unittest.TestCase):
         # Create the next version, state SUPERSEDES and the semantic delta"),
         # so this number rises by one every time a contract is superseded -
         # CIC-DEVELOPER-MODE-v1.1, CIC-SPIN-INTELLIGENCE-v1.1, and now
-        # CIC-PANEL-v1.1 (CLAUDE-MOBILE-FRAME-02). What it actually guards is
-        # the line below: one registry, in one place.
+        # CIC-PANEL-v1.1 (CLAUDE-MOBILE-FRAME-02), and now
+        # CIC-GO-CONVERSATION-v1.1 (CLAUDE-AIRLOCK-WEB-RESEARCH-01, which both
+        # added external research as an answering domain and corrected a KNOWN
+        # LIMITATION that CLAUDE-GO-GATEWAY-COGNITION-01/02 had already made
+        # untrue). What this test actually guards is the line below: one
+        # registry, in one place.
         records = list((ROOT / "governance").rglob("CIC-*.md"))
-        self.assertEqual(len(records), 12)
+        self.assertEqual(len(records), 13)
         self.assertEqual((CONTRACTS / "README.md").exists(), True)
