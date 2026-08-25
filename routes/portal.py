@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-from flask import Blueprint, abort, current_app, flash, jsonify, redirect, render_template, request, session, url_for
+from flask import Blueprint, abort, current_app, flash, jsonify, make_response, redirect, render_template, request, session, url_for
 from werkzeug.datastructures import FileStorage
 
 from services.auth import (
@@ -633,6 +633,37 @@ def developer_reset_test_project():
     else:
         flash(f"Synthetic test project reset. Removed counts: {result['removed_counts']}.", "success")
     return redirect(url_for("portal.developer_tools", project_id=project_id))
+
+
+# -- CLAUDE-MOBILE-PWA-01: installability ---------------------------------
+# Product Owner: "ARCHIOSK should be addable/installable to the phone home
+# screen; the installed app launches directly into ARCHIOSK; users should not
+# need to reinstall to receive updates."
+#
+# Served from the SITE ROOT rather than /static/, which is a requirement and
+# not a preference: a service worker's scope is its own URL path, so one served
+# from /static/sw.js could only ever control /static/*. And both are rendered
+# through Jinja so STATIC_VERSION reaches them - that version is baked into the
+# worker's cache name, and is the entire mechanism by which an installed phone
+# stops using the previous build.
+@portal_bp.route("/sw.js")
+def service_worker():
+    """The service worker, at root scope so it can control the application."""
+    response = make_response(render_template("sw.js"))
+    response.headers["Content-Type"] = "application/javascript"
+    # The worker itself must never be cached, or a deploy could not replace it
+    # and the "no frozen shell" guarantee would rest on a stale file.
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    response.headers["Service-Worker-Allowed"] = "/"
+    return response
+
+
+@portal_bp.route("/manifest.webmanifest")
+def web_manifest():
+    """What makes ARCHIOSK installable, and what the icon opens into."""
+    response = make_response(render_template("manifest.webmanifest"))
+    response.headers["Content-Type"] = "application/manifest+json"
+    return response
 
 
 @portal_bp.route('/')

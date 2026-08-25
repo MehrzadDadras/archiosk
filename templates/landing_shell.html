@@ -20,6 +20,12 @@
        paints the browser chrome itself so nothing white shows above or
        below the page either. #}
     <meta name="theme-color" content="#0b1f28">
+    <link rel="manifest" href="{{ url_for('portal.web_manifest') }}">
+    <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='icons/app-icon-180.png') }}?v={{ static_version }}">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="ARCHIOSK">
+    <script src="{{ url_for('static', filename='js/pwa.js') }}?v={{ static_version }}" defer></script>
     <title>{% block title %}Archiosk{% endblock %}</title>
     <meta name="description" content="Archiosk brings governed, evidence-grounded intelligence to RFP, RFQ, and project-document review.">
     <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}?v={{ static_version }}">

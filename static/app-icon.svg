@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="ARCHIOSK">
+    <!-- CLAUDE-MOBILE-ICON-01 — the home-screen app icon.
+         EXPERIMENTAL until Product Owner visual acceptance.
+
+         PRODUCT OWNER DIRECTION, carried forward verbatim:
+           - based on an X;
+           - THE BOTTOM PORTION IS CLOSED;
+           - the upper-left portion is SHORTER;
+           - intentional, dynamic, recognizable silhouette;
+           - legible at small home-screen sizes;
+           - architectural/technical character, not decorative or cartoonish.
+
+         INTERPRETATION OF THE GEOMETRY
+
+         An X has four open arms. Closing the bottom turns the lower two into a
+         single closed base - so the form becomes a stable triangular footing
+         with two arms rising out of it, and the whole silhouette reads as
+         standing rather than floating. That is what makes it feel intentional
+         rather than like a cancel glyph, and it is also why it survives being
+         shrunk: a closed area holds its shape at 48px where four thin open
+         arms do not.
+
+         Drawn as ONE continuous polyline, not four strokes:
+
+             short upper-left arm
+               -> waist
+                 -> bottom-left foot
+                   -> CLOSING BASE
+                     -> bottom-right foot
+                       -> back through the waist
+                         -> long upper-right arm
+
+         The asymmetry is the identity. The upper-left arm is deliberately
+         about two-thirds the reach of the upper-right, and the right arm rises
+         higher, so the form leans - a symmetric X is static and generic, and
+         this is meant to be neither.
+
+         RECONCILED WITH EXISTING BRANDING, not invented: the waist point and
+         the two-arms-from-a-centre construction both come from
+         templates/_macros.html's archiosk_mark, which its own header records as
+         the only mark that has ever existed in this repository. What changes is
+         construction - continuous instead of split, closed instead of open -
+         not identity.
+
+         LEGIBILITY AT SMALL SIZE drove three choices: one path rather than
+         several (separate thin strokes merge into a smudge when downscaled),
+         round caps and joins (a mitred join at icon scale renders as a dark
+         blob), and a 36/512 stroke - heavy enough to survive, light enough that
+         the triangle's counter does not fill in. -->
+    <rect width="512" height="512" rx="112" fill="#0b1f28"/>
+    <path d="M178 158
+             L256 268
+             L150 388
+             L362 388
+             L256 268
+             L372 128"
+          fill="none"
+          stroke="#e9f4f7"
+          stroke-width="36"
+          stroke-linecap="round"
+          stroke-linejoin="round"/>
+    <!-- The waist, carried over from the wordmark mark. It is what stops the
+         form reading as a plain arrowhead, and it is the one place the accent
+         appears - colour is used once, and means "this is the centre". -->
+    <circle cx="256" cy="268" r="20" fill="#4db3c9"/>
+</svg>

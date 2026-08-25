@@ -30,7 +30,25 @@
 <div class="landing-signal-streak landing-signal-streak-1" aria-hidden="true"></div>
 <div class="landing-knowledge-field" id="landing-knowledge-field" aria-hidden="true"></div>
 <div class="landing-content">
-    <h1 class="landing-wordmark">Archiosk</h1>
+    {# CLAUDE-MOBILE-ICON-01: "place the square icon centrally above the
+       canonical ARCHIOSK wordmark; icon and wordmark should read as one brand
+       composition; avoid pushing the primary entry action too far down on
+       mobile."
+
+       Wrapped WITH the wordmark rather than placed near it, so the two are one
+       element for layout purposes and cannot drift apart as the page changes
+       around them. The same square icon the home screen gets - one asset, so
+       the installed icon and the landing mark can never diverge.
+
+       Sized in the stylesheet to stay modest on a phone: this is the entrance,
+       and the entry actions matter more than the badge above them.
+
+       EXPERIMENTAL until Product Owner visual acceptance. #}
+    <div class="landing-brand">
+        <img class="landing-app-icon" src="{{ url_for('static', filename='app-icon.svg') }}?v={{ static_version }}"
+             alt="" aria-hidden="true" width="76" height="76">
+        <h1 class="landing-wordmark">Archiosk</h1>
+    </div>
     {# CLAUDE-LANDING-SIMPLIFY-01: the "Data Room Intelligence" category
        line is removed and deliberately NOT replaced. The composition is
        the wordmark and the three entry actions - nothing else. The
