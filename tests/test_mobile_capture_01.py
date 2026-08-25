@@ -113,8 +113,19 @@ class NoNewEvidenceOrIngestionPathTests(unittest.TestCase):
         site lives in this one file, and each is preceded by the same
         external-AI policy resolver every other transmission uses."""
         workspace = (ROOT / "routes" / "workspace.py").read_text(encoding="utf-8")
+        # CLAUDE-COMPOSER-EVIDENCE-JOIN-01 made it three. The photo turn stopped
+        # calling the model itself and now reaches it through the shared
+        # conversational spine, and candidate naming became its own small call in
+        # the one branch that uses it. Both still transmit an image, so both are
+        # real vision call sites and both are counted here.
+        #
+        # The count was never the protection - the gating assertion below is. It
+        # caught this change honestly: the naming helper was initially governed
+        # only by WHERE it was called from, and now resolves the policy gate
+        # itself, which is what this test's own "no ungoverned back door" wording
+        # actually requires.
         call_sites = workspace.count("image_base64=")
-        self.assertEqual(call_sites, 2)
+        self.assertEqual(call_sites, 3)
 
         # No other route module may transmit an image at all.
         for other in (ROOT / "routes").glob("*.py"):

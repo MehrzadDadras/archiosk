@@ -412,6 +412,14 @@ class ContextEnvelope:
     current_view: Optional[str]
     selected_source: Optional[dict]
     project_evidence: ProjectEvidence
+    # CLAUDE-COMPOSER-EVIDENCE-JOIN-01: PROVENANCE of an attached image, never
+    # its bytes. The bytes ride alongside as call parameters; this field exists
+    # so the model knows WHAT it is holding - a photo the reviewer just
+    # supplied, which is temporary conversational evidence and not a governed
+    # Source. Keeping the envelope textual is deliberate: the moment image data
+    # lives in here, every consumer of ContextEnvelope has to reason about
+    # binary payloads it does not want.
+    attached_image: Optional[dict] = None
 
 
 def build_context_envelope(
@@ -555,6 +563,31 @@ CONVERSATIONAL_TURN_BEHAVIORAL_CONTRACT = (
     "- If the evidence is genuinely insufficient, say so plainly rather than "
     "guessing.\n"
     "- Distinguish stated fact from your own interpretation.\n"
+    # CLAUDE-COMPOSER-EVIDENCE-JOIN-01: examine before extending. Written here,
+    # once, so it applies to every turn rather than to a photo mode - the whole
+    # reason the photo path was joined to this spine instead of being taught
+    # separately. Deliberately behavioural rather than schematic: no required
+    # fields, no verdict vocabulary, because the moment it becomes a form to
+    # fill in it becomes a ritual the reader stops reading.
+    "- When the person states or implies a proposition and evidence is "
+    "available that could test it, EXAMINE FIRST: consider what the evidence "
+    "actually shows before extending, explaining or elaborating their claim. "
+    "Then say, in ordinary professional prose, what it does and does not "
+    "demonstrate - and if it cannot settle the question, say what you would "
+    "look at next and why that particular thing would help.\n"
+    "- Say no more weakly and no more strongly than the evidence warrants. If "
+    "it directly demonstrates the point, say so plainly - reflexive hedging is "
+    "as unhelpful as overclaiming. If it demonstrates only part, name the part "
+    "that holds and the part still open. If your conclusion rests on inference, "
+    "say what the inference is.\n"
+    "- No modality is self-interpreting. A photograph can establish that a "
+    "condition exists without establishing its cause; a drawing can show design "
+    "intent without establishing the field condition; a note can describe "
+    "something the supplied view does not contain. Weigh what each piece can "
+    "actually support.\n"
+    "- Never structure this as labelled verdicts or a checklist. It is how a "
+    "professional talks through evidence with another professional, not a form "
+    "to complete, and it should be visible only where it changes the answer.\n"
     # CLAUDE-GO-GROUNDING-EVIDENCE-SELECTION-01 (Section 4): same rule as
     # project_qa.py's own BEHAVIORAL_CONTRACT - evidence selection and
     # evidence authority are different questions.
@@ -694,6 +727,8 @@ def run_conversational_turn(
     api_key: Optional[str] = None,
     model: Optional[str] = None,
     timeout: Optional[float] = None,
+    image_base64: Optional[str] = None,
+    image_media_type: Optional[str] = None,
 ) -> ConversationalTurnResult:
     """The one new LLM call site this stage adds. Never executes
     anything itself - only classifies intent_class (from the closed
@@ -704,10 +739,15 @@ def run_conversational_turn(
     intent_class ("only envelope construction, never execution") holds
     here by construction, not by a runtime check."""
     prompt = _build_conversational_turn_prompt(text, envelope, recent_history)
+    # CLAUDE-COMPOSER-EVIDENCE-JOIN-01: the image is passed straight through to
+    # the gateway, which has accepted these two arguments since MM5. Both
+    # default to None, so the text path's call is byte-for-byte what it was -
+    # this is additive, not a branch.
     outcome = call_llm_json(
         user_prompt=prompt, system_prompt=CONVERSATIONAL_TURN_BEHAVIORAL_CONTRACT,
         api_key=api_key, model=model, timeout=timeout, max_tokens=1500,
-        log_label="Conversational turn",
+        log_label=("Conversational turn (with image)" if image_base64 else "Conversational turn"),
+        image_base64=image_base64, image_media_type=image_media_type,
     )
     if not outcome.ran:
         return ConversationalTurnResult(ran=False, skipped_reason=outcome.skipped_reason)
@@ -768,6 +808,23 @@ def _build_conversational_turn_prompt(
             f"\nCurrently selected/anchored ({envelope.effective_referent_type}): "
             f"{envelope.effective_referent}"
         )
+    # CLAUDE-COMPOSER-EVIDENCE-JOIN-01: tell the model WHAT the attached image
+    # is, not just that pixels arrived. Its provenance decides how much weight
+    # it may carry: a photo the reviewer has just taken is temporary
+    # conversational evidence, not a governed Source, and must not be treated
+    # as established project record merely because it is vivid.
+    if envelope.attached_image is not None:
+        described = envelope.attached_image.get("description") or ""
+        lines.append(
+            "\nAn image is attached to THIS message: "
+            + (envelope.attached_image.get("provenance")
+               or "a photo the reviewer has just supplied in conversation")
+            + ". It is temporary conversational evidence, not a governed project "
+            "Source, and nothing about it is an established project record unless "
+            "the reviewer deliberately saves it."
+            + (f" The reviewer said: {described}" if described else "")
+        )
+
     if envelope.current_view:
         lines.append(f"Current Display view: {envelope.current_view}")
     if envelope.selected_source is not None:

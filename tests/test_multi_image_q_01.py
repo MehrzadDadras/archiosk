@@ -104,18 +104,35 @@ class _QTestCase(unittest.TestCase):
         return CaseWorkspaceStore(self.tmp_dir)
 
     def _send_photo(self, text, case_id=None):
-        """One composer turn carrying a photo, with the vision call spied."""
+        """One composer turn carrying a photo, hermetically.
+
+        CLAUDE-COMPOSER-EVIDENCE-JOIN-01: the photo turn now reasons through the
+        shared conversational spine, so the double patches
+        `services.conversational_turn.call_llm_json` - the BOUND name in the
+        module that calls it. Patching `services.llm_gateway.call_llm_json`
+        would no longer intercept anything, because that module binds the symbol
+        at import time; this test would have gone silently un-hermetic, which is
+        the failure mode that once cost this repository an 8.5-hour run.
+
+        Candidate naming keeps its own patch: `_propose_capture_names` imports
+        inside the function, so it resolves through services.llm_gateway at call
+        time.
+        """
         from services.llm_gateway import LLMCallOutcome
 
-        def fake_call(**kwargs):
-            # A deterministic stand-in for the vision call. Never reaches the
-            # network: an un-mocked call on this path once cost this repository
-            # an 8.5-hour test run.
+        def fake_turn(**kwargs):
+            # The SPINE's schema now, not the retired {reply, proposed_names}.
             return LLMCallOutcome(
                 ran=True,
-                parsed={"reply": "A wall junction.",
-                        "proposed_names": ["Wall Junction Detail"]},
+                parsed={
+                    "reply_text": "A wall junction.",
+                    "intent_class": "general_answer",
+                    "candidate_referents": [],
+                },
             )
+
+        def fake_names(**kwargs):
+            return LLMCallOutcome(ran=True, parsed={"proposed_names": ["Wall Junction Detail"]})
 
         # Two real entry points, deliberately exercised as the product does:
         # quick-start is the project-level Composer (no Q open yet), and
@@ -125,7 +142,8 @@ class _QTestCase(unittest.TestCase):
         else:
             url = f"/projects/{self.project_id}/workspace/quick-start"
         data = {"text": text, "image_data_url": _DATA_URL}
-        with patch("services.llm_gateway.call_llm_json", side_effect=lambda **kw: fake_call(**kw)):
+        with patch("services.conversational_turn.call_llm_json", side_effect=lambda **kw: fake_turn(**kw)), \
+                patch("services.llm_gateway.call_llm_json", side_effect=lambda **kw: fake_names(**kw)):
             return self.client.post(url, data=data, follow_redirects=True)
 
     def _case(self, case_id):

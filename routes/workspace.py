@@ -4852,6 +4852,55 @@ def _asked_to_add_to_this_investigation(message_text):
     return any(phrase in lowered for phrase in _ADD_TO_Q_PHRASES)
 
 
+def _propose_capture_names(workspace, message_text, image_b64, media_type):
+    """Two or three short candidate names for a new Q, read off the photo.
+
+    A name is a label for the reviewer to accept or change - never an
+    identification, never a finding. Deliberately a small separate call rather
+    than a field on the shared conversational contract: only the "make a new Q"
+    branch needs it, and the shared spine must not grow a multimodal schema.
+
+    Returns [] on any failure. A Q with a dull default title is a small problem;
+    a failed capture is a large one, so this never raises into the capture path.
+    """
+    from services.llm_gateway import call_llm_json
+    from services.security_policy import (
+        ACTION_EXTERNAL_AI_REQUEST, DECISION_ALLOW, DECISION_ALLOW_APPROVED_ROUTE,
+    )
+
+    # This transmits the photo to an external model, so it resolves the gate on
+    # its own merits rather than inheriting its caller's. It is only ever reached
+    # from an already-gated branch today - but "governed because of where it
+    # happens to be called from" is exactly the ungoverned back door
+    # tests/test_mobile_capture_01.py's own vision-governance check exists to
+    # prevent, and that check reads POSITION, not call graph. A project that
+    # forbids external AI must not have its photo transmitted for a title.
+    decision = _evaluate_security_action(workspace, ACTION_EXTERNAL_AI_REQUEST)
+    if decision.decision not in (DECISION_ALLOW, DECISION_ALLOW_APPROVED_ROUTE):
+        return []
+
+    outcome = call_llm_json(
+        user_prompt=(message_text or "What is this?"),
+        system_prompt=(
+            "You are naming a new site observation for a construction/design "
+            "professional who has just photographed something. Propose two or three "
+            "SHORT candidate names, drawn only from what is actually visible or from "
+            "legible text in the image. A name is a label the reviewer will accept or "
+            "change, never an identification, a diagnosis or a finding - do not name a "
+            "defect, a cause or a compliance outcome. Respond ONLY with a JSON object "
+            'of exactly this shape: {"proposed_names": ["<short name>", "..."]}.'
+        ),
+        image_base64=image_b64, image_media_type=media_type,
+        max_tokens=200, log_label="Capture candidate names",
+    )
+    if not outcome.ran or not isinstance(outcome.parsed, dict):
+        return []
+    raw = outcome.parsed.get("proposed_names")
+    if not isinstance(raw, list):
+        return []
+    return [str(n).strip() for n in raw if str(n).strip()][:3]
+
+
 def _composer_photo_turn(project_id, store, workspace, case_id, message_text, image_data_url):
     """Handle a composer turn carrying a photo.
 
@@ -4902,36 +4951,47 @@ def _composer_photo_turn(project_id, store, workspace, case_id, message_text, im
         )
         return True, None
 
-    from services.llm_gateway import call_llm_json
+    # CLAUDE-COMPOSER-EVIDENCE-JOIN-01: THE JOIN.
+    #
+    # This block used to be a second, parallel reasoning implementation - its own
+    # system prompt, its own JSON shape, its own model call - which received the
+    # photo and NOTHING ELSE. No requirements, no source excerpts, no evidence
+    # items. So a reviewer photographing a condition and asking about it got an
+    # answer grounded only in the pixels, while the same question typed without a
+    # photo was answered against the whole project.
+    #
+    # It now calls the SAME spine the text turn calls, with the image carried as
+    # one more piece of conversational context. The behavioural principle
+    # ("examine before extending; say what the evidence does and does not
+    # demonstrate; name what you would look at next") lives in that spine's
+    # contract, written once, so it applies here without this path being taught
+    # anything about it - which is precisely why the join was chosen over
+    # teaching the photo path separately. A photo-only rule would have become
+    # "image present -> compare", the brittle shortcut this work exists to avoid.
+    #
+    # Called DIRECTLY, not through _admit_residual: that helper declines when a
+    # project has no active Sources, and a photo question in a project with no
+    # documents yet must keep working exactly as it does today.
+    #
+    # The policy gate above is untouched and still runs BEFORE this - gating is
+    # not what is being joined.
+    from services.conversational_turn import build_context_envelope, run_conversational_turn
 
-    system_prompt = (
-        "You are GO, ARCHIOSK's project assistant, helping a construction/design "
-        "professional who has just taken or attached a photo on site and said "
-        "something about it. Look at the photo and answer what they actually asked. "
-        "Ground everything in what is visibly present: never infer a dimension, a "
-        "compliance outcome, a defect, a product, or a code relationship that the "
-        "image alone cannot support, and say plainly when something cannot be "
-        "established from a photograph. Also propose two or three SHORT candidate "
-        "names for this observation, drawn from what is actually visible or from any "
-        "legible text in the image - a name is a label for the reviewer to accept or "
-        "change, never an identification or a finding. Respond ONLY with a JSON "
-        'object of exactly this shape: {"reply": "<your answer, ready to show '
-        'as-is>", "proposed_names": ["<short name>", "..."]}.'
-    )
-    outcome = call_llm_json(
-        user_prompt=(message_text or "What is this?"),
-        system_prompt=system_prompt,
-        image_base64=image_b64, image_media_type=media_type,
-        max_tokens=700, log_label="Composer photo turn",
+    envelope = build_context_envelope(workspace, store)
+    envelope.attached_image = {
+        "provenance": "a photo the reviewer has just taken or attached on site",
+        "description": (message_text or "").strip() or None,
+    }
+
+    turn = run_conversational_turn(
+        message_text or "What is this?",
+        workspace,
+        envelope,
+        image_base64=image_b64,
+        image_media_type=media_type,
     )
 
-    reply_text = None
-    proposed_names = []
-    if outcome.ran and isinstance(outcome.parsed, dict):
-        reply_text = str(outcome.parsed.get("reply") or "").strip() or None
-        raw_names = outcome.parsed.get("proposed_names")
-        if isinstance(raw_names, list):
-            proposed_names = [str(n).strip() for n in raw_names if str(n).strip()][:3]
+    reply_text = turn.reply_text.strip() if (turn.ran and turn.reply_text) else None
 
     if reply_text is None:
         store.add_message(
@@ -5003,6 +5063,13 @@ def _composer_photo_turn(project_id, store, workspace, case_id, message_text, im
 
     from services.image_intelligence import register_eye_capture
 
+    # CLAUDE-COMPOSER-EVIDENCE-JOIN-01: naming moved HERE, the only branch that
+    # ever used it. It was previously requested on every photo turn and
+    # discarded in two branches out of three. Kept as its own small call rather
+    # than added to the shared spine's schema: a candidate name is a Q-creation
+    # concern, not a reasoning one, and putting it in the shared contract would
+    # rebuild the parallel multimodal schema this stage just removed.
+    proposed_names = _propose_capture_names(workspace, message_text, image_b64, media_type)
     title = proposed_names[0] if proposed_names else "Site observation"
     new_case = store.create_case(
         workspace, title=title,

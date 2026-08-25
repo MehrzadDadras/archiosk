@@ -122,13 +122,48 @@ class _RouteBase(unittest.TestCase):
 
     def _vision(self, reply="A steel sill support, corroded at the bearing.",
                 names=("Corroded sill support", "Sill bearing corrosion")):
-        outcome = type("O", (), {
-            "ran": True,
-            "parsed": {"reply": reply, "proposed_names": list(names)},
-            "provider": "x", "model": "y", "requested_at": "z",
-            "skipped_reason": None,
-        })()
-        return patch("services.llm_gateway.call_llm_json", return_value=outcome)
+        """Hermetic double for both model calls the photo path can make.
+
+        CLAUDE-COMPOSER-EVIDENCE-JOIN-01: the photo turn reasons through the
+        shared conversational spine now, so the reply must be patched at
+        `services.conversational_turn.call_llm_json` - the BOUND name in the
+        module that calls it. That module binds the symbol at import, so the old
+        `services.llm_gateway` patch no longer intercepted it and this test would
+        have gone silently un-hermetic; an un-mocked call on this path once cost
+        this repository an 8.5-hour run.
+
+        Naming keeps the llm_gateway patch: `_propose_capture_names` imports
+        inside the function, so it resolves at call time.
+        """
+        def _outcome(parsed):
+            return type("O", (), {
+                "ran": True, "parsed": parsed,
+                "provider": "x", "model": "y", "requested_at": "z",
+                "skipped_reason": None,
+            })()
+
+        turn = _outcome({
+            "reply_text": reply,
+            "intent_class": "general_answer",
+            "candidate_referents": [],
+        })
+        naming = _outcome({"proposed_names": list(names)})
+
+        from contextlib import ExitStack
+
+        class _Both:
+            def __enter__(self_inner):
+                self_inner.stack = ExitStack()
+                self_inner.stack.enter_context(
+                    patch("services.conversational_turn.call_llm_json", return_value=turn))
+                self_inner.stack.enter_context(
+                    patch("services.llm_gateway.call_llm_json", return_value=naming))
+                return self_inner
+
+            def __exit__(self_inner, *exc):
+                return self_inner.stack.__exit__(*exc)
+
+        return _Both()
 
 
 class MakeANewQTests(_RouteBase):
