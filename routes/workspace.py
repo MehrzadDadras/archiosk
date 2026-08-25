@@ -3600,7 +3600,21 @@ def confirm_archive_case(project_id, case_id):
 EXPORT_CONTENT_KINDS = ("findings", "requirements", "investigations", "project")
 
 
-def _export_document_for(workspace, kind: str):
+def _export_document_for(workspace, kind: str, visible_cases):
+    """Build the export document for `kind`.
+
+    CLAUDE-CASE-PRIVACY-REPAIR-01: `visible_cases` is REQUIRED and positional,
+    not an optional keyword defaulting to workspace.cases. This function used to
+    read workspace.cases directly, which put every reviewer's PRIVATE Case
+    titles into a downloadable .docx/.xlsx/.pdf - a worse disclosure than an
+    on-screen one, because the file then travels. Requiring the caller to hand
+    over the already-filtered list means a future caller cannot quietly forget
+    it: omitting it is a TypeError, not a silent leak.
+
+    See CaseWorkspaceStore.visible_cases_for - the one governed enforcement
+    point, whose own docstring names filtering workspace.cases directly as the
+    exact failure it exists to prevent.
+    """
     from services.document_export import ExportDocument, ExportTable
 
     title = workspace.display_title or workspace.project_id
@@ -3640,7 +3654,7 @@ def _export_document_for(workspace, kind: str):
         rows = [
             [c.get("title", ""), c.get("status", ""),
              str(len(c.get("conversation", []))), c.get("created_at", "")]
-            for c in workspace.cases
+            for c in visible_cases
         ]
         tables = [ExportTable(
             "Investigations", ["Title", "Status", "Messages", "Started"], rows,
@@ -3653,7 +3667,7 @@ def _export_document_for(workspace, kind: str):
                 for s in sources
             ]),
             ExportTable("Investigations", ["Title", "Status"], [
-                [c.get("title", ""), c.get("status", "")] for c in workspace.cases
+                [c.get("title", ""), c.get("status", "")] for c in visible_cases
             ]),
             ExportTable("Findings", ["Statement", "Status"], [
                 [f.get("statement", ""), f.get("claim_status", "")]
@@ -3683,7 +3697,11 @@ def export_document(project_id, kind, export_format):
     if export_gate is not None:
         return export_gate
 
-    document = _export_document_for(workspace, kind)
+    # Case-privacy filtered before anything is written into a file that the
+    # reviewer can then send to anyone. See _export_document_for's own docstring.
+    document = _export_document_for(
+        workspace, kind, store.visible_cases_for(workspace, _reviewer())
+    )
     buffer = build(document, export_format)
     safe_title = "".join(
         ch for ch in (workspace.display_title or project_id) if ch.isalnum() or ch in " -_"

@@ -377,7 +377,29 @@
                     <a class="context-identity-item{% if active_case is not defined or not active_case %} context-identity-current-item{% endif %}"
                        data-ui-ref="shell.context.identity.project" role="listitem"
                        href="{{ url_for('workspace.show_workspace', project_id=project_id) }}">Project conversation</a>
-                    {% for c in workspace.cases if c.status != 'archived' %}
+                    {# CLAUDE-CASE-PRIVACY-REPAIR-01: `open_visible_cases`, NEVER
+                       `workspace.cases`.
+
+                       This loop shipped iterating the raw list, which rendered
+                       every Case title in the Project - including another
+                       reviewer's PRIVATE Case - to anyone who could open the
+                       Project. CaseWorkspaceStore.visible_cases_for's own
+                       docstring names this exact mistake: "filtering
+                       workspace.cases directly ... silently re-opens exactly
+                       the failure this method exists to prevent."
+
+                       `open_visible_cases` is that governed list, already
+                       filtered through visible_cases_for and already narrowed
+                       to non-archived by routes/workspace.py - so archived
+                       Cases stay out of the switcher exactly as before, and no
+                       second status test is needed or wanted here.
+
+                       Defaulting to [] when it is undefined is deliberate and
+                       fail-CLOSED: any future route that renders this shell
+                       with a `workspace` but forgets the visibility-filtered
+                       list shows an empty switcher rather than falling back to
+                       an unfiltered one. #}
+                    {% for c in (open_visible_cases if open_visible_cases is defined else []) %}
                     <a class="context-identity-item{% if active_case is defined and active_case and c.id == active_case.id %} context-identity-current-item{% endif %}"
                        data-ui-ref="shell.context.identity.leaf" role="listitem"
                        href="{{ url_for('workspace.show_workspace', project_id=project_id, case=c.id) }}">{{ c.title }}</a>

@@ -185,11 +185,19 @@ class NoDuplicatedChildHierarchyTests(_BaseTestCase):
         # accessibility tree), the expanded Lists branch heading, and
         # the project disclosure's accessible label, and the menu chooser's
         # own item (this project is itself one of
-        # its own environment's accessible projects) - what must never
-        # happen is a FIFTH occurrence inside Display itself (a
-        # duplicated card/heading, Section 4's own rule) - that check is
-        # unaffected and still the real point of this test.
-        self.assertEqual(own_page.count("A Second Distinct Project"), 5)
+        # its own environment's accessible projects).
+        # CLAUDE-MOBILE-PRIMARY-RESET-01 adds a SIXTH: the context bar's
+        # own "<project> > <conversation>" summary
+        # (shell.context.identity.toggle), which answers "where am I" in
+        # the one band the phone keeps. Verified by enumerating every
+        # occurrence in the rendered page, not assumed - it is a distinct
+        # surface, not a re-render of the breadcrumb, and the other two
+        # counts in this test (the dashboard and a DIFFERENT project's
+        # page) are unchanged, which is what confirms no duplication.
+        # What must never happen is an occurrence inside Display itself
+        # (a duplicated card/heading, Section 4's own rule) - that check
+        # is unaffected and still the real point of this test.
+        self.assertEqual(own_page.count("A Second Distinct Project"), 6)
         display_start = own_page.index('class="workspace-pane-display"')
         display_html = own_page[display_start:]
         self.assertNotIn("A Second Distinct Project", display_html)
