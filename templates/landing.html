@@ -108,5 +108,20 @@
         <div class="landing-voice-result" id="landing-voice-result" data-ui-ref="landing.voice.result" aria-live="polite" hidden></div>
     </div>
 </div>
+{# CLAUDE-LANDING-SONIC-01: the startup cue's off switch. EXPERIMENTAL.
+
+   Rendered hidden and revealed by static/js/sonic_cue.js only where Web Audio
+   exists - the same "hidden until feature-detected" pattern the mic button
+   above already established, so a browser that can never make the sound never
+   offers to silence it.
+
+   A real <button> with aria-pressed, not a styled div: the cue is optional and
+   non-essential by requirement, which makes turning it off a first-class
+   action that has to be reachable by keyboard and announceable by a screen
+   reader. Positioned in the corner by landing.css so it takes no room in the
+   entry composition. #}
+<button type="button" id="landing-sound-toggle" class="landing-sound-toggle"
+        data-ui-ref="landing.sound-toggle" aria-pressed="false"
+        aria-label="Startup sound on - turn it off" hidden></button>
 <p class="landing-footer">&copy; {{ current_year }} Archiosk</p>
 {% endblock %}

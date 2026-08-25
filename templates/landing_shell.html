@@ -38,5 +38,10 @@
 </div>
 <script src="{{ url_for('static', filename='js/ocean_field.js') }}?v={{ static_version }}"></script>
 <script src="{{ url_for('static', filename='js/landing.js') }}?v={{ static_version }}"></script>
+{# CLAUDE-LANDING-SONIC-01, EXPERIMENTAL: loaded ONLY on this shell. The cue
+   belongs to the launch moment, and this is the surface an installed ARCHIOSK
+   cold-launches into - putting it in base.html would make it fire on ordinary
+   authenticated navigation, which the mission explicitly rules out. #}
+<script src="{{ url_for('static', filename='js/sonic_cue.js') }}?v={{ static_version }}" defer></script>
 </body>
 </html>

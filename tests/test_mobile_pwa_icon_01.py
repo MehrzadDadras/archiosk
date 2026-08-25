@@ -44,6 +44,11 @@ _ICON_SVG_PATH = _REPO_ROOT / "static" / "app-icon.svg"
 _ICON_DIR = _REPO_ROOT / "static" / "icons"
 _LANDING_PATH = _REPO_ROOT / "templates" / "landing.html"
 _MAIN_CSS_PATH = _REPO_ROOT / "static" / "css" / "main.css"
+# landing_shell.html loads landing.css ALONE - no tokens.css, no main.css - so
+# anything styling the landing page has to be asserted against THIS file. A
+# .landing-* rule written into main.css is dead on the only page that uses it,
+# which is exactly the defect these assertions exist to catch.
+_LANDING_CSS_PATH = _REPO_ROOT / "static" / "css" / "landing.css"
 
 _SHELL_TEMPLATES = ("landing_shell.html", "auth_shell.html", "gateway_shell.html", "base.html")
 
@@ -355,7 +360,8 @@ class LandingBrandCompositionTests(unittest.TestCase):
 
     def setUp(self):
         self.landing = _LANDING_PATH.read_text(encoding="utf-8")
-        self.css = _MAIN_CSS_PATH.read_text(encoding="utf-8")
+        self.css = _LANDING_CSS_PATH.read_text(encoding="utf-8")
+        self.main_css = _MAIN_CSS_PATH.read_text(encoding="utf-8")
 
     def test_the_icon_and_the_wordmark_are_one_element(self):
         # Wrapped together rather than merely adjacent, so the two cannot drift
@@ -393,11 +399,19 @@ class LandingBrandCompositionTests(unittest.TestCase):
         self.assertLess(min(widths), max(widths))
         self.assertLessEqual(max(widths), 96, "icon large enough to push entry down")
 
-    def test_the_update_notice_clears_the_home_indicator(self):
-        notice = re.search(r"\.update-notice\s*\{[^}]*\}", self.css)
-        self.assertIsNotNone(notice, "no .update-notice rule")
-        self.assertIn("safe-area-inset-bottom", notice.group(0))
-        self.assertIn("position: fixed", notice.group(0))
+    def test_the_update_notice_is_styled_on_every_shell_that_can_show_it(self):
+        # pwa.js runs on the landing shell too, and an installed app cold-
+        # launches there - so the notice must be styled in BOTH stylesheets or
+        # it appears unstyled on the one page that matters most for install.
+        for name, css in (("landing.css", self.css), ("main.css", self.main_css)):
+            notice = re.search(r"\.update-notice\s*\{[^}]*\}", css)
+            self.assertIsNotNone(notice, "no .update-notice rule in %s" % name)
+            self.assertIn("safe-area-inset-bottom", notice.group(0), name)
+            self.assertIn("position: fixed", notice.group(0), name)
+
+    def test_the_brand_rules_live_where_the_landing_page_can_see_them(self):
+        self.assertIn(".landing-brand", self.css)
+        self.assertNotIn(".landing-app-icon", self.main_css)
 
 
 class AuthorizationIsUnchangedTests(unittest.TestCase):

@@ -9078,33 +9078,11 @@ body {
    CLAUDE-MOBILE-ICON-01 / CLAUDE-MOBILE-PWA-01
    ============================================================ */
 
-/* The landing brand: icon above wordmark, read as one composition.
-   Sized modestly on purpose — this is the entrance, and the entry actions
-   below matter more than the badge above them. "Avoid pushing the primary
-   entry action too far down on mobile" is a sizing instruction as much as a
-   layout one. EXPERIMENTAL until Product Owner visual acceptance. */
-.landing-brand {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 0.7rem;
-}
-.landing-app-icon {
-    width: 76px;
-    height: 76px;
-    border-radius: 18px;
-    display: block;
-}
-@media (max-width: 640px) {
-    /* Smaller on a phone, and a tighter gap, so the wordmark and the entry
-       actions stay above the fold together. */
-    .landing-app-icon {
-        width: 60px;
-        height: 60px;
-        border-radius: 14px;
-    }
-    .landing-brand { gap: 0.5rem; }
-}
+/* The landing brand lives in landing.css, not here: landing_shell.html
+   loads landing.css ALONE - no tokens.css, no main.css - so a .landing-*
+   rule written here would be dead on the only page that uses it.
+
+   The update notice below is duplicated there for the same reason. */
 
 /* The update notice. An OFFER, never an automatic reload: a page that reloads
    itself can discard a half-typed Composer message, and on a phone the
