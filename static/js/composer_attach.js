@@ -44,6 +44,17 @@
     // CLAUDE-MULTI-IMAGE-Q-01. Absent outside an open Q, deliberately.
     var addToQ = document.getElementById('dock-composer-add-to-q');
     var messageBox = document.getElementById('dock-composer-input');
+    // CLAUDE-CAPTURE-REVIEW-01: the confirmation step. Absent on surfaces that
+    // render no Composer attachment control, which is why every use below is
+    // guarded rather than assumed.
+    var review = document.getElementById('dock-capture-review');
+    var reviewImage = document.getElementById('dock-capture-review-image');
+    var reviewCropBox = document.getElementById('dock-capture-review-crop');
+    var reviewHint = document.getElementById('dock-capture-review-hint');
+    var reviewUse = document.getElementById('dock-capture-review-use');
+    var reviewCropReset = document.getElementById('dock-capture-review-crop-reset');
+    var reviewRetake = document.getElementById('dock-capture-review-retake');
+    var reviewDiscard = document.getElementById('dock-capture-review-discard');
     var originalPlaceholder = messageBox ? messageBox.getAttribute('placeholder') : null;
     var ATTACHED_PLACEHOLDER = 'Ask about this photo, or tap Make a new Q';
 
@@ -95,7 +106,231 @@
         return Math.floor((dataUrl.length - comma - 1) * 3 / 4);
     }
 
+    /* ── CLAUDE-CAPTURE-REVIEW-01 ────────────────────────────────────────────
+     *
+     * Product Owner, from live phone use: the phone's own camera gives a review
+     * moment - keep, crop, retake - and the Composer went straight from shutter
+     * to attached. Discard and retake already existed here; what was missing was
+     * a moment to LOOK before committing.
+     *
+     * THE ORDERING IS THE POINT, NOT THE UI
+     *
+     * Before this, ArchioskPrepareImage ran the instant a file was picked, so the
+     * only image that ever existed to review was already downscaled to MAX_EDGE
+     * and re-encoded. A crop added after that would have cropped into a
+     * re-encode - and for construction review the detail that matters (a damper
+     * label, a drawing stamp, a serial number) is exactly what that throws away.
+     *
+     * So the original File is held untouched, cropping works from the ORIGINAL
+     * pixels, and normalization runs ONCE, at the end, on whatever the reviewer
+     * actually chose. field.value stays empty until then: nothing is attached
+     * until "Use photo".
+     *
+     * DELIBERATELY NOT INSIDE ArchioskPrepareImage. That helper is shared with
+     * Image Search (document_marks.js); putting review there would give Image
+     * Search a camera confirmation step it never asked for. The review lives in
+     * the Composer's own attach path, and the helper is unchanged.
+     *
+     * A mobile capture confirmation, not an editor: crop only. Rotate is
+     * DEFERRED by explicit Product Owner decision until the existing
+     * EXIF/orientation behaviour is understood - absent rather than stubbed.
+     */
+    var pendingFile = null;     // the original, held unchanged
+    var pendingUrl = null;      // object URL for the working preview
+    var cropRect = null;        // {x, y, w, h} in natural pixels, or null
+
+    function releasePreview() {
+        if (pendingUrl) {
+            window.URL.revokeObjectURL(pendingUrl);
+            pendingUrl = null;
+        }
+    }
+
+    function closeReview() {
+        if (review) review.hidden = true;
+        releasePreview();
+        pendingFile = null;
+        cropRect = null;
+        if (reviewCropBox) reviewCropBox.hidden = true;
+        if (reviewCropReset) reviewCropReset.hidden = true;
+    }
+
+    function openReview(file) {
+        pendingFile = file;
+        cropRect = null;
+        releasePreview();
+        pendingUrl = window.URL.createObjectURL(file);
+        if (reviewImage) reviewImage.src = pendingUrl;
+        if (reviewCropBox) reviewCropBox.hidden = true;
+        if (reviewCropReset) reviewCropReset.hidden = true;
+        if (reviewHint) reviewHint.textContent = 'Drag on the photo to crop.';
+        if (review) review.hidden = false;
+    }
+
+    /* Crop by dragging a rectangle over the preview. Pointer events cover
+     * touch, pen and mouse in one path rather than three. */
+    function wireCrop() {
+        if (!reviewImage || !reviewCropBox) return;
+        var dragging = false;
+        var startX = 0, startY = 0;
+
+        function localPoint(event) {
+            var rect = reviewImage.getBoundingClientRect();
+            return {
+                x: Math.min(Math.max(event.clientX - rect.left, 0), rect.width),
+                y: Math.min(Math.max(event.clientY - rect.top, 0), rect.height),
+                rect: rect,
+            };
+        }
+
+        reviewImage.addEventListener('pointerdown', function (event) {
+            dragging = true;
+            var point = localPoint(event);
+            startX = point.x;
+            startY = point.y;
+            reviewCropBox.hidden = false;
+            reviewCropBox.style.left = startX + 'px';
+            reviewCropBox.style.top = startY + 'px';
+            reviewCropBox.style.width = '0px';
+            reviewCropBox.style.height = '0px';
+            event.preventDefault();
+        });
+
+        reviewImage.addEventListener('pointermove', function (event) {
+            if (!dragging) return;
+            var point = localPoint(event);
+            reviewCropBox.style.left = Math.min(startX, point.x) + 'px';
+            reviewCropBox.style.top = Math.min(startY, point.y) + 'px';
+            reviewCropBox.style.width = Math.abs(point.x - startX) + 'px';
+            reviewCropBox.style.height = Math.abs(point.y - startY) + 'px';
+        });
+
+        reviewImage.addEventListener('pointerup', function (event) {
+            if (!dragging) return;
+            dragging = false;
+            var point = localPoint(event);
+            var displayW = Math.abs(point.x - startX);
+            var displayH = Math.abs(point.y - startY);
+
+            // A tap is not a crop. Below this the reviewer was almost certainly
+            // just touching the photo, and silently cropping to a few pixels
+            // would be the worst possible reading of that.
+            if (displayW < 12 || displayH < 12) {
+                cropRect = null;
+                reviewCropBox.hidden = true;
+                if (reviewCropReset) reviewCropReset.hidden = true;
+                return;
+            }
+
+            // Display coordinates -> natural pixels, so the crop applies to the
+            // ORIGINAL resolution rather than to whatever size it happens to be
+            // shown at on this screen.
+            var scaleX = reviewImage.naturalWidth / point.rect.width;
+            var scaleY = reviewImage.naturalHeight / point.rect.height;
+            cropRect = {
+                x: Math.round(Math.min(startX, point.x) * scaleX),
+                y: Math.round(Math.min(startY, point.y) * scaleY),
+                w: Math.round(displayW * scaleX),
+                h: Math.round(displayH * scaleY),
+            };
+            if (reviewCropReset) reviewCropReset.hidden = false;
+            if (reviewHint) reviewHint.textContent = 'Cropped. Use photo, or undo the crop.';
+        });
+    }
+    wireCrop();
+
+    if (reviewCropReset) {
+        reviewCropReset.addEventListener('click', function () {
+            cropRect = null;
+            if (reviewCropBox) reviewCropBox.hidden = true;
+            reviewCropReset.hidden = true;
+            if (reviewHint) reviewHint.textContent = 'Drag on the photo to crop.';
+        });
+    }
+
+    // Retake reopens the picker; Discard simply stops. Both leave NOTHING
+    // behind - no field value, no chip, no held file, no input value - which is
+    // what makes a second attempt a clean one.
+    if (reviewRetake) {
+        reviewRetake.addEventListener('click', function () {
+            closeReview();
+            clear();
+            if (input) input.click();
+        });
+    }
+    if (reviewDiscard) {
+        reviewDiscard.addEventListener('click', function () {
+            closeReview();
+            clear();
+        });
+    }
+
+    /* Produce the bytes to attach: the cropped region of the ORIGINAL, or the
+     * original file itself when nothing was cropped.
+     *
+     * Uncropped is deliberately a pass-through of the File rather than a canvas
+     * round trip - re-encoding an untouched photo would lose quality for
+     * nothing, and ArchioskPrepareImage already leaves a small-enough image
+     * completely alone. */
+    function resolveChosenImage(callback, onFail) {
+        if (!pendingFile) return;
+        if (!cropRect) {
+            callback(pendingFile);
+            return;
+        }
+        var image = new Image();
+        image.onerror = function () { onFail('That photo could not be cropped.'); };
+        image.onload = function () {
+            var canvas = document.createElement('canvas');
+            canvas.width = Math.max(1, cropRect.w);
+            canvas.height = Math.max(1, cropRect.h);
+            var context = canvas.getContext('2d');
+            context.drawImage(
+                image, cropRect.x, cropRect.y, cropRect.w, cropRect.h,
+                0, 0, canvas.width, canvas.height
+            );
+            canvas.toBlob(function (blob) {
+                if (!blob) {
+                    onFail('That photo could not be cropped.');
+                    return;
+                }
+                // Named from the original so provenance in the conversation
+                // still reads as the reviewer's own photo.
+                var name = (pendingFile.name || 'Photo');
+                callback(new File([blob], name, { type: blob.type || 'image/jpeg' }));
+            }, 'image/jpeg', 0.92);
+        };
+        image.src = pendingUrl;
+    }
+
+    if (reviewUse) {
+        reviewUse.addEventListener('click', function () {
+            resolveChosenImage(function (chosen) {
+                // ONLY NOW does normalization run, and only now is anything
+                // attached. Everything before this point was a preview.
+                window.ArchioskPrepareImage(chosen, function (name, dataUrl) {
+                    closeReview();
+                    show(name, dataUrl);
+                }, function (message) {
+                    closeReview();
+                    fail(message);
+                });
+            }, function (message) {
+                closeReview();
+                fail(message);
+            });
+        });
+    }
+
     function attach(file) {
+        // The review step owns the Composer's capture path now. Where its
+        // markup is absent (a surface with no review element), behaviour falls
+        // back to what it was - prepare immediately - so nothing that reused
+        // this file loses its attachment path.
+        if (review && reviewImage) {
+            openReview(file);
+            return;
+        }
         window.ArchioskPrepareImage(file, function (name, dataUrl) {
             show(name, dataUrl);
         }, fail);

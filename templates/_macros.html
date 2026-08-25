@@ -370,6 +370,46 @@
         </label>
         <input type="file" id="dock-composer-image" accept="image/*" capture="environment" hidden>
         <input type="hidden" name="image_data_url" id="dock-composer-image-data">
+        {# CLAUDE-CAPTURE-REVIEW-01: the confirmation step between taking a photo
+           and attaching it.
+
+           Product Owner, from live use: the phone's own camera gives a review
+           moment - keep, crop, retake - and the Composer went straight from
+           shutter to attached. It did have discard and retake already; what it
+           had no moment for was LOOKING first.
+
+           A mobile capture confirmation, deliberately NOT a desktop editor:
+           crop only. No filters, no markup, no text, no brightness. Rotate is
+           deferred by explicit Product Owner decision until the existing
+           EXIF/orientation behaviour is understood, so it is absent rather than
+           stubbed.
+
+           "Use photo" is one obvious action and is listed first for that
+           reason - cropping is the exception, not the ritual. Nothing here is
+           attached until it is pressed: the hidden field above stays empty, and
+           the original File is untouched in the input. #}
+        <div class="capture-review" id="dock-capture-review" data-ui-ref="chat.composer.capture-review" hidden
+             role="dialog" aria-label="Review this photo" aria-modal="false">
+            <div class="capture-review-stage">
+                {# The working preview. Cropping draws on a canvas over this
+                   image; the original File is never modified. #}
+                <img class="capture-review-image" id="dock-capture-review-image"
+                     data-ui-ref="chat.composer.capture-review.image" alt="The photo you just took">
+                <div class="capture-review-crop" id="dock-capture-review-crop" hidden aria-hidden="true"></div>
+            </div>
+            <p class="capture-review-hint" id="dock-capture-review-hint"
+               data-ui-ref="chat.composer.capture-review.hint">Drag on the photo to crop.</p>
+            <div class="capture-review-actions">
+                <button type="button" class="capture-review-use" id="dock-capture-review-use"
+                        data-ui-ref="chat.composer.capture-review.use">Use photo</button>
+                <button type="button" class="capture-review-action" id="dock-capture-review-crop-reset"
+                        data-ui-ref="chat.composer.capture-review.crop-reset" hidden>Undo crop</button>
+                <button type="button" class="capture-review-action" id="dock-capture-review-retake"
+                        data-ui-ref="chat.composer.capture-review.retake">Retake</button>
+                <button type="button" class="capture-review-action capture-review-discard" id="dock-capture-review-discard"
+                        data-ui-ref="chat.composer.capture-review.discard">Discard</button>
+            </div>
+        </div>
         <span class="composer-attach-chip" id="dock-composer-image-chip" data-ui-ref="chat.composer.attach.preview" hidden>
             <img class="composer-attach-thumb" id="dock-composer-image-thumb" alt="" aria-hidden="true">
             <span class="composer-attach-name" id="dock-composer-image-name"></span>

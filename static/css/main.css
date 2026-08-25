@@ -9275,3 +9275,118 @@ body {
     }
     .composer-pen-compare { grid-template-columns: 1fr; }
 }
+
+/* ============================================================
+   CLAUDE-CAPTURE-REVIEW-01 — the capture confirmation step
+   ============================================================ */
+
+/* A mobile capture confirmation, not a desktop editor. It covers the composer
+   area while a photo is being looked at, because that is the only decision on
+   screen at that moment - and it leaves as soon as one is made. */
+.capture-review {
+    position: absolute;
+    left: 0.5rem;
+    right: 0.5rem;
+    bottom: calc(100% + 0.4rem);
+    z-index: 45;
+    padding: 0.6rem;
+    border: 1px solid var(--border-strong);
+    border-radius: 10px;
+    background: var(--surface-primary);
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.3);
+}
+.capture-review-stage {
+    position: relative;
+    display: flex;
+    justify-content: center;
+    background: var(--surface-secondary);
+    border-radius: 6px;
+    overflow: hidden;
+}
+.capture-review-image {
+    display: block;
+    max-width: 100%;
+    /* Bounded so a portrait phone photo cannot push the actions off screen -
+       "Use photo" must stay reachable without scrolling, or the confirmation
+       becomes a chore. */
+    max-height: 45vh;
+    object-fit: contain;
+    /* The photo is the crop surface: stop the browser treating a drag as a
+       scroll or an image drag. */
+    touch-action: none;
+    -webkit-user-drag: none;
+    user-select: none;
+    cursor: crosshair;
+}
+/* The crop rectangle. Outline plus a dimmed exterior would need a second
+   element; a single bright inset border reads clearly enough at this size and
+   keeps the DOM to one node. */
+.capture-review-crop {
+    position: absolute;
+    border: 2px solid var(--machine-blue);
+    box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.38);
+    pointer-events: none;
+}
+.capture-review-hint {
+    margin: 0.4rem 0 0.5rem;
+    font-size: 0.78rem;
+    color: var(--text-metadata);
+}
+.capture-review-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    align-items: center;
+}
+/* Use photo is the one obvious action after capture - listed first, filled,
+   and given the room. Cropping is the exception, not the ritual. */
+.capture-review-use {
+    flex: 1 1 auto;
+    appearance: none;
+    min-height: 44px;
+    padding: 0.4rem 1.1rem;
+    border: 1px solid var(--machine-blue);
+    border-radius: 8px;
+    background: var(--machine-blue);
+    color: var(--surface-primary);
+    font: inherit;
+    font-weight: 700;
+    cursor: pointer;
+}
+.capture-review-action {
+    appearance: none;
+    min-height: 44px;
+    padding: 0.4rem 0.85rem;
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    background: none;
+    color: var(--text-secondary);
+    font: inherit;
+    font-size: 0.85rem;
+    cursor: pointer;
+}
+.capture-review-discard { color: var(--text-metadata); }
+.capture-review-use:focus-visible,
+.capture-review-action:focus-visible {
+    outline: 2px solid var(--machine-blue);
+    outline-offset: 2px;
+}
+
+@media (max-width: 640px) {
+    /* Full-width on a phone, anchored to the bottom, clearing the home
+       indicator - the same treatment the composer's other sheets use. */
+    .capture-review {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        border-radius: 12px 12px 0 0;
+        padding-bottom: calc(env(safe-area-inset-bottom) + 0.6rem);
+    }
+    /* More room for the photo itself, since the phone is where this step
+       actually earns its place. */
+    .capture-review-image { max-height: 52vh; }
+    /* 44px targets already; this keeps them from wrapping into a cramped
+       second row on a narrow screen. */
+    .capture-review-action { font-size: 0.8rem; padding: 0.4rem 0.7rem; }
+}
