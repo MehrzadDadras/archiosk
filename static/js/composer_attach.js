@@ -37,7 +37,7 @@
     var thumb = document.getElementById('dock-composer-image-thumb');
     var nameEl = document.getElementById('dock-composer-image-name');
     var clearBtn = document.getElementById('dock-composer-image-clear');
-    var form = field.form;
+    var form = field ? field.form : null;
     // CLAUDE-GO-COMPOSER-CAPTURE-03: the next step, made visible.
     var nextStep = document.getElementById('dock-composer-image-next');
     var makeQ = document.getElementById('dock-composer-make-q');

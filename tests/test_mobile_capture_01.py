@@ -17,6 +17,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 BASE_HTML = (ROOT / "templates" / "base.html").read_text(encoding="utf-8")
+CASE_HTML = (ROOT / "templates" / "case_workspace.html").read_text(encoding="utf-8")
 MARKS_JS = (ROOT / "static" / "js" / "document_marks.js").read_text(encoding="utf-8")
 
 
@@ -57,6 +58,22 @@ class OneCodePathTests(unittest.TestCase):
         capture_block = MARKS_JS[MARKS_JS.index("var imageFileInput"):]
         capture_block = capture_block[: capture_block.index("imageTray.addEventListener('dragover'")]
         self.assertIn("loadImageFile(files[0])", capture_block)
+
+    def test_capture_reuses_the_composer_phone_image_normalizer_when_available(self):
+        """Document Search must not bypass the Composer's tested 5MB/edge
+        normalization path for the same phone photo."""
+        self.assertIn("window.ArchioskPrepareImage", MARKS_JS)
+        self.assertNotIn("new FileReader", MARKS_JS[MARKS_JS.index("function loadImageFile"):MARKS_JS.index("function clearImageQuery")])
+        composer = (ROOT / "static" / "js" / "composer_attach.js").read_text(encoding="utf-8")
+        self.assertIn("window.ArchioskPrepareImage = function", composer)
+        self.assertIn("MAX_EDGE", composer)
+        self.assertIn("MAX_BYTES", composer)
+
+    def test_shared_normalizer_loads_before_document_search(self):
+        self.assertLess(
+            BASE_HTML.index('js/composer_attach.js'),
+            CASE_HTML.index('js/document_marks.js'),
+        )
 
     def test_no_separate_mobile_branch_was_introduced(self):
         for forbidden in ("isMobile", "userAgent", "ontouchstart", "field_mode", "fieldMode"):

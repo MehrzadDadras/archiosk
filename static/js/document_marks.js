@@ -318,14 +318,28 @@
 
         function loadImageFile(file) {
             if (!file || file.type.indexOf('image/') !== 0) return;
-            var reader = new FileReader();
-            reader.onload = function () {
-                imageDataUrl = reader.result;
+            if (!window.ArchioskPrepareImage) {
+                imageDataUrl = null;
+                if (imageStatusEl) {
+                    imageStatusEl.textContent = 'This browser could not prepare that photo.';
+                    imageStatusEl.hidden = false;
+                }
+                renderSearchMode();
+                return;
+            }
+            window.ArchioskPrepareImage(file, function (_name, dataUrl) {
+                imageDataUrl = dataUrl;
                 imageIsCollapsed = false;
                 if (imageStatusEl) imageStatusEl.hidden = true;
                 renderSearchMode();
-            };
-            reader.readAsDataURL(file);
+            }, function (message) {
+                imageDataUrl = null;
+                if (imageStatusEl) {
+                    imageStatusEl.textContent = message;
+                    imageStatusEl.hidden = false;
+                }
+                renderSearchMode();
+            });
         }
 
         // CLAUDE-MOBILE-CAPTURE-01: the camera/gallery path. Feeds the exact
