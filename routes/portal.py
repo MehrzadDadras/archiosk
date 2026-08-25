@@ -1012,15 +1012,40 @@ def _accessible_operating_environments(registry, store: CaseWorkspaceStore) -> l
     this only ever reports real, already-established values, never a
     guess.
 
-    Governance note: entry-time environment derivation was previously
-    ruled out by CLAUDE-GO-NEUTRAL-ENTRY-01 ("the user enters ARCHIOSK,
-    not a stakeholder category" - Gateway's own project list stopped
-    being partitioned by environment because of that decision). The
-    Product Owner's own CLAUDE-POST-SIGNIN-GATEWAY-SIMPLIFICATION-01
-    disposition explicitly and NARROWLY supersedes that one decision
-    for this one purpose - establishing/deriving the user's governed
-    operating side before showing their project list at authenticated
-    entry. It is not a return to arbitrary Client/DB categorization
+    Governance note - READ THE TWO IDENTIFIERS CAREFULLY, they differ by
+    one prefix and are NOT the same record:
+
+      - GO-NEUTRAL-ENTRY-01 is the governance PROGRAMME record
+        (governance/prompt-depository/), which holds the accepted
+        PRINCIPLE. It is APPROVED, its own header says "Superseded by:
+        None", and nothing below supersedes it. That principle is
+        intact here: this function grants no authority, persists
+        nothing, and never partitions the product by category.
+      - CLAUDE-GO-NEUTRAL-ENTRY-01 is the IMPLEMENTATION stage that
+        first delivered it.
+
+    What was superseded is a narrow sub-decision of the IMPLEMENTATION
+    stage, not the principle. Entry-time environment derivation was
+    previously ruled out by CLAUDE-GO-NEUTRAL-ENTRY-01 ("the user
+    enters ARCHIOSK, not a stakeholder category" - Gateway's own
+    project list stopped being partitioned by environment because of
+    that decision). The Product Owner's own
+    CLAUDE-POST-SIGNIN-GATEWAY-SIMPLIFICATION-01 disposition
+    (Disposition B, recorded in commit cea176b: "this narrowly
+    supersedes the entry-specific portion of CLAUDE-GO-NEUTRAL-ENTRY-01
+    only ... That decision's broader principle is preserved; only entry
+    sequencing changes") explicitly and NARROWLY supersedes THAT
+    sub-decision, for this one purpose - establishing/deriving the
+    user's governed operating side before showing their project list at
+    authenticated entry. The programme record's own Lineage field
+    already names that later work as "surface evolution", so the two
+    records agree; only their subjects differ.
+
+    This paragraph is this explicit because its earlier, shorter form
+    was read as claiming the PRINCIPLE had been superseded, which it
+    never said and which would not be true.
+
+    It is not a return to arbitrary Client/DB categorization
     throughout the product: choose_project's own unfiltered default
     stays unfiltered, and this function itself never partitions
     anything - it only reports which side(s) a user is already

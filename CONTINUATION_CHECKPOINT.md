@@ -46,6 +46,40 @@ applies CRLF here; `core.autocrlf=true`). That is inference from the artifact,
 not observation of the live system. **A two-account live check remains
 genuinely outstanding.**
 
+### Correction to the entry above — the GO-NEUTRAL-ENTRY-01 "contradiction" was mine, not the record's
+
+I reported that `GO-NEUTRAL-ENTRY-01` ("Superseded by: None") and
+`routes/portal.py` ("explicitly and NARROWLY supersedes that one decision")
+could not both be true. They can, and both are. **The two statements have
+different subjects, and the identifiers differ by one prefix:**
+
+- **`GO-NEUTRAL-ENTRY-01`** is the governance PROGRAMME record holding the
+  accepted principle. Not superseded. Its own Lineage field already names
+  `CLAUDE-POST-SIGNIN-GATEWAY-SIMPLIFICATION-01` as later "surface evolution",
+  and its acceptance line already says that work "changed the physical surface
+  without reversing the neutral-entry principle."
+- **`CLAUDE-GO-NEUTRAL-ENTRY-01`** is the IMPLEMENTATION stage. A narrow
+  sub-decision of it — that entry-time environment derivation was ruled out —
+  is what was superseded.
+
+The superseding decision is real and evidenced, not inferred: commit `cea176b`
+records it verbatim as a Product Owner disposition — *"recorded explicitly per
+Disposition B: this narrowly supersedes the entry-specific portion of
+CLAUDE-GO-NEUTRAL-ENTRY-01 only. That decision's broader principle is
+preserved; only entry sequencing changes."*
+
+So the governance record is accurate, the code is inside the principle, and
+**neither needed to change.** The only defect was that the docstring's "that one
+decision" left its subject implicit while a near-identically-named record said
+the opposite about itself — which is exactly the misreading it produced in me.
+The docstring now names both identifiers and states which one was superseded.
+No governance text, no behaviour, and no test was changed.
+
+Worth keeping as a method note: when two records appear to contradict, check
+that they are talking about the same subject before concluding either is stale.
+Programme records and implementation-stage records in this repository are
+routinely named `X` and `CLAUDE-X`.
+
 ### Shipped alongside, all EXPERIMENTAL pending Product Owner acceptance
 
 - **`CLAUDE-MOBILE-PWA-01`** — ARCHIOSK is installable to a phone home screen.
@@ -87,9 +121,8 @@ genuinely outstanding.**
   Client/Owner vs Design-Builder/Proponent choice is `?environment=` only —
   nothing persisted, no authority granted, a filter over six list items. Admins
   see it solely because `can_access_project` returns True for them, so both
-  sides appear. **Contradiction on record:** `GO-NEUTRAL-ENTRY-01` is APPROVED
-  and says "Superseded by: None", while `routes/portal.py` claims that decision
-  was "explicitly and NARROWLY superseded". Both cannot be true. Also: account
+  sides appear. **A contradiction was reported here and there was none** - see
+  the correction below. Also: account
   creation is CLI-only, access-request review does not exist, and project access
   assignment lives inside an open project rather than the Admin menu.
 - The prior session's uncommitted `2026-08-18` entry below is left as it was
