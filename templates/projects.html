@@ -8,10 +8,37 @@
     <a class="btn btn-ghost" href="{{ url_for('portal.removed_projects') }}" data-ui-ref="projects-directory.removed-link">Removed Projects</a>
 {% endcall %}
 
+{# CLAUDE-ENTRY-SIMPLIFY-01: operating-environment filtering lives here now.
+
+   It used to be a two-card gate in front of the whole application, asking
+   "where would you like to work" - which read as choosing a side, when all it
+   did was narrow a list for one page load. Beside search, on a directory the
+   user chose to open, the same mechanism makes an honest claim: this is a
+   filter.
+
+   Rendered only when the user actually HAS projects in more than one
+   environment. A single-environment user is never shown a control whose only
+   possible effect is to hide half of nothing.
+
+   Submits on change so it behaves like the filter it is, with a real submit
+   button retained for keyboard and no-JS use - never a control that silently
+   does nothing without scripting. #}
 <form class="projects-controls" method="get" action="{{ url_for('portal.projects_list') }}" data-ui-ref="projects-directory.search">
     <input
         type="search" name="q" value="{{ query }}"
         placeholder="Search projects" class="text-input projects-search" aria-label="Search projects">
+    {% if accessible_environments | length > 1 %}
+    <label class="projects-filter-label" for="projects-environment-filter">Environment</label>
+    <select class="text-input projects-environment-filter" id="projects-environment-filter"
+            name="environment" data-ui-ref="projects-directory.environment-filter"
+            onchange="this.form.submit()">
+        <option value="">All environments</option>
+        {% for env in accessible_environments %}
+        <option value="{{ env }}" {% if environment == env %}selected{% endif %}>{{ operating_environment_labels[env] }}</option>
+        {% endfor %}
+    </select>
+    <button type="submit" class="btn btn-ghost btn-small" data-ui-ref="projects-directory.filter-apply">Apply</button>
+    {% endif %}
 </form>
 
 {% if projects %}

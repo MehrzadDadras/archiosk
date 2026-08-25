@@ -11,20 +11,19 @@
    backend - a physical move + environment-first sequencing added on
    top, never a second implementation of any of it).
 
-   Three states, driven entirely by accessible_environments/
-   resolved_environment (both computed server-side, never guessed
-   here):
-     1. accessible_environments is empty - genuine first-time/
-        unclassified entry. No environment choice is possible (there is
-        nothing to choose from yet).
-     2. resolved_environment is unset but accessible_environments has
-        more than one member - an explicit, governed choice is required
-        (Disposition B's own two canonical labels/subtitles, never
-        Develop/Decipher as a competing vocabulary).
-     3. resolved_environment is set (either because exactly one
-        environment was accessible, or the user explicitly chose one
-        via ?environment=) - show that environment's own recent
-        projects.
+   CLAUDE-ENTRY-SIMPLIFY-01: TWO states now, not three. The middle one -
+   "Choose where you'd like to work", the Client / Owner vs
+   Design-Builder / Proponent cards - is retired, along with
+   resolved_environment itself. It presented as a governed choice while
+   doing nothing governed: no persistence, no authority, no account role,
+   forgotten on the next request.
+     1. accessible_environments is empty - genuine first-time entry, with
+        nothing to open yet.
+     2. otherwise - the projects this user can access, across every
+        environment they can reach. No side is chosen, because entry
+        never needed one.
+   Environment FILTERING still exists; it lives on the project directory
+   (portal.projects_list) beside search, where it reads as a filter.
 
    {% if not is_authenticated %} never needs to be considered here -
    routes/portal.py's index() renders landing.html instead before this
@@ -62,46 +61,28 @@
     </div>
     {% endif %}
 
-    {% elif not resolved_environment %}
-    {# ---------------- State 2: multiple accessible environments - explicit choice ----------------
-       CLAUDE-GO-NEUTRAL-ENTRY-01 supersession (narrow - see index()'s
-       own docstring): this is the one place a user is asked to
-       self-identify a side, and only because more than one is
-       genuinely, already authorized to them. #}
-    <p class="gateway-context-description" data-ui-ref="index.choice.copy">Choose where you&rsquo;d like to work.</p>
-    <div class="gateway-actions" data-ui-ref="index.choice">
-        {% for env in accessible_environments %}
-        <a class="gateway-action gateway-action-primary" data-ui-ref="index.choice.{{ env }}" href="{{ url_for('portal.index', environment=env) }}">
-            <span><strong>{{ operating_environment_labels[env] }}</strong>
-            <small>{{ operating_environment_subtitles[env] }}</small></span>
-        </a>
-        {% endfor %}
-    </div>
-    {% if developer_mode %}
-    <div class="developer-home-context-actions" data-ui-ref="developer.home.environment-context">
-        {% for env in accessible_environments %}
-        <form method="post" action="{{ url_for('portal.developer_home_context') }}">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <input type="hidden" name="object_type" value="application_environment_card">
-            <input type="hidden" name="object_id" value="{{ env }}">
-            <input type="hidden" name="label" value="{{ operating_environment_labels[env] }} card">
-            <button type="submit" class="btn btn-ghost btn-small">Use {{ operating_environment_labels[env] }} card as context</button>
-        </form>
-        {% endfor %}
-    </div>
-    {% endif %}
-
     {% else %}
-    {# ---------------- State 3: a resolved environment - show its projects ---------------- #}
-    <p class="gateway-context-description" data-ui-ref="index.resolved.copy">
-        {{ operating_environment_labels[resolved_environment] }}
-        {% if accessible_environments | length > 1 %}
-        <span class="mono">&middot; <a data-ui-ref="index.resolved.switch" href="{{ url_for('portal.index') }}">switch</a></span>
-        {% endif %}
-    </p>
+    {# ---------------- Your projects ----------------
+       CLAUDE-ENTRY-SIMPLIFY-01: what used to be two states is one.
+
+       The "Choose where you'd like to work" gate (Client / Owner vs
+       Design-Builder / Proponent) is RETIRED. It looked like a governed
+       choice and was not one: it filtered these six rows for a single page
+       load, persisted nothing, granted no authority, and set no account
+       role. It also only ever appeared for people whose projects span both
+       environments - in practice admins - so the population that most needs
+       a fast way in got an extra door.
+
+       Environment filtering itself was not thrown away. It moved to the
+       project directory (portal.projects_list), beside search and sort,
+       where it plainly reads as a filter. See routes/portal.py's index()
+       for the full reasoning.
+
+       This restores GO-NEUTRAL-ENTRY-01's accepted principle literally:
+       sign in -> see the projects you can access -> open one. #}
     <div class="gateway-actions">
         {% if is_admin %}
-        <a class="gateway-action gateway-action-primary" data-ui-ref="index.resolved.new-project" href="{{ url_for('portal.upload', environment=resolved_environment) }}">
+        <a class="gateway-action gateway-action-primary" data-ui-ref="index.resolved.new-project" href="{{ url_for('portal.upload', environment=preset_environment) }}">
             <span class="gateway-action-icon">+</span>
             <span><strong>New Project</strong></span>
         </a>
@@ -124,10 +105,10 @@
             {% endfor %}
         </ul>
         {% if recent_projects | length >= 6 %}
-        <p class="pane-note"><a data-ui-ref="index.resolved.see-all" href="{{ url_for('portal.choose_project', environment=resolved_environment) }}">See all projects&hellip;</a></p>
+        <p class="pane-note"><a data-ui-ref="index.resolved.see-all" href="{{ url_for('portal.projects_list') }}">See all projects&hellip;</a></p>
         {% endif %}
         {% else %}
-        <p class="projects-empty" data-ui-ref="index.resolved.project-list.empty">No {{ operating_environment_labels[resolved_environment] }} projects yet.</p>
+        <p class="projects-empty" data-ui-ref="index.resolved.project-list.empty">No projects yet.</p>
         {% endif %}
     {% endcall %}
     {% endif %}
@@ -145,7 +126,6 @@
     {% if not developer_mode %}
     <form class="gateway-orientation-form" id="index-orientation-form" data-ui-ref="index.orientation.form">
         <input type="text" class="text-input" id="index-orientation-input" name="message" placeholder="Open a project, or ask what you can do here" aria-label="Ask Archiosk">
-        {% if resolved_environment %}<input type="hidden" name="environment" value="{{ resolved_environment }}">{% endif %}
         <button type="button" id="index-orientation-voice" class="voice-input-button" data-ui-ref="index.orientation.voice"
                 aria-label="Press and speak - audio is processed by your browser only and is never saved" hidden>&#127908;&#65039;</button>
         <button type="submit" class="btn btn-ghost" data-ui-ref="index.orientation.submit">Ask</button>

@@ -162,50 +162,80 @@ class GatewayNeutralEntryTests(_BaseGatewayLabelsTestCase):
         self.assertNotIn('href="/projects/choose?environment=', body)
         self.assertIn('data-ui-ref="index.resolved.open-existing"', body)
 
-    def test_environments_are_never_mixed_in_one_list(self):
-        """CLAUDE-POST-SIGNIN-GATEWAY-SIMPLIFICATION-01, Option C
-        (narrow supersession - see class docstring): replaces this
-        test's own original premise (one neutral list spanning both
-        operating environments at once). Entry now establishes the
-        operating environment FIRST: a user authorized for both sides
-        lands in the explicit choice state (index.choice.*, no project
-        list at all yet), and each side's own project list only ever
-        shows that side's own projects once resolved - hard Owner/
-        Proponent isolation preserved, never a mixed list."""
+    def test_entry_shows_one_neutral_list_and_the_directory_filters_it(self):
+        """CLAUDE-ENTRY-SIMPLIFY-01 restores this test's ORIGINAL premise.
+
+        This test was written for one neutral list spanning both operating
+        environments. CLAUDE-POST-SIGNIN-GATEWAY-SIMPLIFICATION-01 rewrote it
+        around the two-card entry gate ("environments are never mixed in one
+        list"). The Product Owner has now retired that gate, so the original
+        premise is the live one again and the name goes back with it.
+
+        Why mixing is not an isolation breach, stated plainly because the old
+        name implied it was: GO-NEUTRAL-ENTRY-01's information barrier is about
+        EVIDENCE - "neutral entry does not permit Client/Owner and
+        Proponent/Builder evidence to mix" - not about whether a user who is
+        authorized for two projects may see both names in their own list. This
+        product already agreed with that reading: choose_project's default and
+        the top menu's own File > Open Project chooser have ALWAYS been
+        unfiltered by environment, and the superseded version of this very test
+        carved them out as "a different surface with a different purpose, not a
+        re-leak". Entry is now that same kind of surface.
+
+        The real boundary is untouched and tested elsewhere: can_access_project
+        decides what appears at all, and per-project evidence stays inside its
+        own project. What changed is presentation, never authority.
+
+        What this test still genuinely protects: filtering, where it now lives,
+        actually filters."""
         self._ingest(owner="gl_admin", project_name="Riverside Client Project", environment=CLIENT_OWNER)
         self._ingest(owner="gl_admin", project_name="Riverside Bidder Project", environment=DESIGN_BUILDER_PROPONENT)
         client = self._client_as("gl_admin", 1)
 
-        # Two accessible environments, none resolved yet -> the explicit
-        # choice state, no project names rendered in the page's own main
-        # content. Scoped to <section class="entry"> only - the SEPARATE
-        # top-menu File > Open Project chooser (CLAUDE-POST-SIGNIN-
-        # GATEWAY-SIMPLIFICATION-01, Addendum G) is a global "find/open
-        # any authorized project" utility, deliberately unfiltered by
-        # environment when none is resolved yet (same "choose_project's
-        # own unfiltered default stays unfiltered" carve-out Option C's
-        # own narrow supersession already preserves) - a different
-        # surface with a different purpose, not a re-leak of the same
-        # mixed list this test is actually about.
-        unresolved_body = client.get("/").get_data(as_text=True)
-        entry_section = unresolved_body[unresolved_body.index('<section class="entry">'):]
-        self.assertIn('data-ui-ref="index.choice"', entry_section)
-        self.assertNotIn("Riverside Client Project", entry_section)
-        self.assertNotIn("Riverside Bidder Project", entry_section)
+        # Entry: one list, no side asked for, both projects reachable.
+        body = client.get("/").get_data(as_text=True)
+        entry_section = body[body.index('<section class="entry">'):]
+        self.assertIn("Riverside Client Project", entry_section)
+        self.assertIn("Riverside Bidder Project", entry_section)
 
-        # Resolving one side shows only that side's own project in the
-        # main content (the menu chooser also narrows once resolved -
-        # see OpenProjectMenuFilterJsTests/FileMenuNewOpenProjectTests
-        # in test_app_menu_01.py for that surface's own coverage).
-        client_body = client.get("/?environment=client_owner").get_data(as_text=True)
-        client_entry = client_body[client_body.index('<section class="entry">'):]
-        self.assertIn("Riverside Client Project", client_entry)
-        self.assertNotIn("Riverside Bidder Project", client_entry)
+        # And the retired gate is genuinely gone, not merely bypassed.
+        self.assertNotIn('data-ui-ref="index.choice"', body)
+        self.assertNotIn("Choose where you", body)
+        self.assertNotIn("index.resolved.switch", body)
 
-        proponent_body = client.get("/?environment=design_builder_proponent").get_data(as_text=True)
-        proponent_entry = proponent_body[proponent_body.index('<section class="entry">'):]
-        self.assertIn("Riverside Bidder Project", proponent_entry)
-        self.assertNotIn("Riverside Client Project", proponent_entry)
+        # The directory is where environment filtering lives now, and it works.
+        #
+        # Scoped to the directory's OWN list, exactly the carve-out the
+        # superseded version of this test already made: the top menu's
+        # File > Open Project chooser renders in the shared shell on every
+        # authenticated page and is deliberately unfiltered by environment.
+        # That is a different surface with a different purpose ("find any
+        # project I can open"), and it is unchanged by this stage.
+        def directory_list(url):
+            body = client.get(url).get_data(as_text=True)
+            marker = 'data-ui-ref="projects-directory.list"'
+            if marker not in body:
+                return ""  # empty result set renders no list at all
+            return body[body.index(marker):body.index("</ul>", body.index(marker))]
+
+        listing = directory_list("/projects?environment=client_owner")
+        self.assertIn("Riverside Client Project", listing)
+        self.assertNotIn("Riverside Bidder Project", listing)
+
+        listing = directory_list("/projects?environment=design_builder_proponent")
+        self.assertIn("Riverside Bidder Project", listing)
+        self.assertNotIn("Riverside Client Project", listing)
+
+        # Unfiltered by default - the directory never silently narrows.
+        both = directory_list("/projects")
+        self.assertIn("Riverside Client Project", both)
+        self.assertIn("Riverside Bidder Project", both)
+
+        # An unauthorized or stale value falls back to showing everything
+        # rather than narrowing to nothing or bypassing the access scope.
+        stale = directory_list("/projects?environment=not_a_real_environment")
+        self.assertIn("Riverside Client Project", stale)
+        self.assertIn("Riverside Bidder Project", stale)
 
     def test_open_existing_empty_state_is_one_neutral_message(self):
         client = self._client_as("gl_admin", 1)

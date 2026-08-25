@@ -714,48 +714,52 @@ def index():
     store = CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"])
     governance_log = get_governance_log(current_app)
 
+    # CLAUDE-ENTRY-SIMPLIFY-01: the two-card "Choose where you'd like to
+    # work" gate is RETIRED, and nothing replaces it here.
+    #
+    # It looked like a governed choice and was not one. It filtered these six
+    # rows for one page load, persisted nothing, granted no authority, set no
+    # account role, and was forgotten on the next request - while asking the
+    # user, in the product's own voice, to pick a side. A surface must not
+    # appear to carry authority it does not have.
+    #
+    # It also only ever appeared for people whose projects span BOTH
+    # environments, which in practice means admins - so the one population
+    # that most needs a fast way into their work got an extra door.
+    #
+    # Entry is now literally the accepted principle again: sign in -> see the
+    # projects you can access -> open one. Genuinely useful environment
+    # FILTERING did not disappear; it moved to projects_list, where it sits
+    # beside search and sort and reads as what it is. See GO-NEUTRAL-ENTRY-01,
+    # whose principle this restores rather than reinterprets.
     accessible_environments = _accessible_operating_environments(registry, store)
 
-    requested_environment = request.args.get('environment', '')
-    if (
-        requested_environment
-        and is_valid_operating_environment(requested_environment)
-        and requested_environment in accessible_environments
-    ):
-        resolved_environment = requested_environment
-    elif len(accessible_environments) == 1:
-        # Exactly one authorized side - usher directly there, never ask
-        # a returning single-environment user to choose every time.
-        resolved_environment = accessible_environments[0]
-    else:
-        # Zero (genuine first-time/unclassified entry) or multiple
-        # (a real, governed choice is required) - neither resolves on
-        # its own; index.html renders the appropriate one of those two
-        # states from accessible_environments' own length.
-        resolved_environment = None
+    # Retiring the gate must not cost the one genuinely useful thing it did:
+    # pre-selecting /upload's operating-environment radio so an admin who only
+    # ever works one side is not re-answering a settled question. Presetting
+    # from an UNAMBIGUOUS fact (they have projects in exactly one environment)
+    # rather than from a choice we asked them to make is the same convenience
+    # without the false question - and it stays a pre-selection only: /upload's
+    # own radio and confirmation checkbox remain the real commissioning step,
+    # never bypassed. With more than one environment in play there is nothing
+    # to infer, so nothing is preset.
+    preset_environment = accessible_environments[0] if len(accessible_environments) == 1 else None
 
-    recent_projects = []
-    if resolved_environment:
-        accessible = _accessible_documents(registry, store)
-        workspaces_by_project = {
-            document.project_id: _safe_workspace(store, document.project_id)
-            for document in accessible
-        }
-        documents = [
-            d for d in accessible
-            if workspaces_by_project[d.project_id]
-            and workspaces_by_project[d.project_id].operating_environment == resolved_environment
-        ]
-        documents.sort(key=lambda d: d.ingested_at, reverse=True)
-        recent_projects = [
-            _project_summary(document, workspaces_by_project[document.project_id], governance_log.read(document.project_id))
-            for document in documents[:6]
-        ]
+    accessible = _accessible_documents(registry, store)
+    workspaces_by_project = {
+        document.project_id: _safe_workspace(store, document.project_id)
+        for document in accessible
+    }
+    documents = sorted(accessible, key=lambda d: d.ingested_at, reverse=True)
+    recent_projects = [
+        _project_summary(document, workspaces_by_project[document.project_id], governance_log.read(document.project_id))
+        for document in documents[:6]
+    ]
 
     return render_template(
         'index.html',
         accessible_environments=accessible_environments,
-        resolved_environment=resolved_environment,
+        preset_environment=preset_environment,
         operating_environment_labels=OPERATING_ENVIRONMENT_LABELS,
         operating_environment_subtitles=OPERATING_ENVIRONMENT_SUBTITLES,
         recent_projects=recent_projects,
@@ -1284,14 +1288,20 @@ def gateway_orientation():
     an internal action, not user-facing navigation, so renaming it
     would be pure churn), but its caller is now index.html's
     no-project/orientation state rather than the retired gateway.html.
-    Optional ?environment= scopes project matching to the SAME operating
-    environment the calling page already resolved (index()'s own
-    resolved_environment) - preserves hard Owner/Proponent isolation in
-    what GO can navigate to from here, rather than silently reverting to
-    the unfiltered cross-environment match this endpoint used to make
-    when Gateway itself was neutral-entry. Omitted/invalid values fall
-    back to the prior unfiltered behavior (the zero/multi-environment
-    entry states, where no single environment is resolved yet).
+    Optional ?environment= scopes project matching to one operating
+    environment. CLAUDE-ENTRY-SIMPLIFY-01: index.html NO LONGER SENDS IT -
+    the entry gate that resolved a side was retired, so there is no
+    resolved side to pass. This endpoint is unchanged and still honours
+    the parameter if some future caller supplies it; with it omitted, GO
+    matches across every project the user can already reach, which is
+    this endpoint's own documented fallback and is what neutral entry
+    means here.
+
+    That is NOT a weakening of project isolation: matching has always been
+    against the caller's own access-scoped project list, never a second
+    listing mechanism, so a user can only ever be navigated to a project
+    they were already authorized to open. What the parameter narrowed was
+    presentation, not authority.
 
     Addendum H: optional ?context=establish-project routes to a SECOND,
     genuinely different classifier (_classify_establish_project_help) -
@@ -1398,6 +1408,37 @@ def projects_list():
         sort = 'last_updated'
 
     documents = _accessible_documents(registry, store)
+    workspaces_by_project = {
+        document.project_id: _safe_workspace(store, document.project_id)
+        for document in documents
+    }
+
+    # CLAUDE-ENTRY-SIMPLIFY-01: operating-environment filtering lives HERE now,
+    # not at entry. Same derivation as before (only environments genuinely
+    # present among this user's own accessible projects, never a guess), and
+    # the same "resolve only against what you can already reach" rule - an
+    # unauthorized or stale value falls back to showing everything rather than
+    # silently narrowing or bypassing anything.
+    #
+    # The difference is what it MEANS to the person using it. Beside search and
+    # sort, on a directory the user chose to open, this is plainly a filter. In
+    # front of the door it read as a governed choice of side. The mechanism did
+    # not change; the claim it makes did.
+    accessible_environments = sorted({
+        workspace.operating_environment
+        for workspace in workspaces_by_project.values()
+        if workspace and workspace.operating_environment
+    })
+    environment = request.args.get('environment', '').strip()
+    if environment not in accessible_environments:
+        environment = ''
+    if environment:
+        documents = [
+            d for d in documents
+            if workspaces_by_project[d.project_id]
+            and workspaces_by_project[d.project_id].operating_environment == environment
+        ]
+
     if query:
         needle = query.lower()
         documents = [
@@ -1406,12 +1447,17 @@ def projects_list():
         ]
 
     projects = [
-        _project_summary(document, _safe_workspace(store, document.project_id), governance_log.read(document.project_id))
+        _project_summary(document, workspaces_by_project[document.project_id], governance_log.read(document.project_id))
         for document in documents
     ]
     projects.sort(key=_PROJECT_SORT_KEYS[sort], reverse=(sort != 'name'))
 
-    return render_template('projects.html', projects=projects, query=query, sort=sort)
+    return render_template(
+        'projects.html', projects=projects, query=query, sort=sort,
+        environment=environment,
+        accessible_environments=accessible_environments,
+        operating_environment_labels=OPERATING_ENVIRONMENT_LABELS,
+    )
 
 
 @portal_bp.route('/projects/choose')

@@ -147,15 +147,18 @@ _APPEARANCE_DYNAMIC_REFS = {f"menu.appearance.{mode}" for mode in _APPEARANCE_MO
 # passes a non-None `ui_ref` - hardcoded here from that exact literal.
 _ERROR_PAGE_DYNAMIC_REFS = {"errors.upload-too-large"}
 
-# CLAUDE-POST-SIGNIN-GATEWAY-SIMPLIFICATION-01, Option C: index.html's
-# environment-choice cards render `data-ui-ref="index.choice.{{ env }}"`
-# - a Jinja loop variable, not literal text, same reason the Appearance
-# refs above need their own dynamic set. OPERATING_ENVIRONMENTS is the
-# same closed, exhaustive tuple index.html's own {% for env in
-# accessible_environments %} loop can only ever iterate over.
-from services.environment_capabilities import OPERATING_ENVIRONMENTS as _OPERATING_ENVIRONMENTS  # noqa: E402
-
-_INDEX_CHOICE_DYNAMIC_REFS = {f"index.choice.{env}" for env in _OPERATING_ENVIRONMENTS}
+# CLAUDE-ENTRY-SIMPLIFY-01: index.html's environment-choice cards are GONE, so
+# the dynamic ref set they needed is gone with them. It used to expand
+# `data-ui-ref="index.choice.{{ env }}"` over OPERATING_ENVIRONMENTS, because a
+# Jinja loop variable is not literal text this file can scan for.
+#
+# Deleted rather than emptied: an empty set kept here would read as "these refs
+# exist and there happen to be none", which is a different and untrue claim
+# from "that surface no longer exists". The gate presented as a governed choice
+# while persisting nothing and granting no authority; environment filtering
+# moved to projects-directory.environment-filter, which is a LITERAL ref and
+# needs no dynamic set at all.
+_INDEX_CHOICE_DYNAMIC_REFS: set[str] = set()
 
 # CLAUDE-P40-VW8-QA-R2A: found while adding this stage's own dynamic-ref
 # handling for upload_confirm.html - templates/upload.html's Operating
