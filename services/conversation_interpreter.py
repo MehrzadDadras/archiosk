@@ -648,13 +648,32 @@ def interpret_message(
     if lowered.startswith(("analyze", "analyse")):
         return _handle_analyze(text, workspace, case, store, artifacts_dir, reviewer, triggering_message_id)
 
-    if "evidence" in lowered and "finding" in lowered:
+    # CLAUDE-ROUTING-PRECISION-01: a REQUEST to see evidence, not any sentence
+    # containing both words. "I don't have evidence for this finding yet" is a
+    # statement of doubt, and answering it with an evidence panel leaves the
+    # actual remark unanswered.
+    if (
+        "evidence" in lowered and "finding" in lowered
+        and (
+            _is_instruction_to(lowered, ("show", "display", "list", "give", "open", "pull"))
+            or _strip_polite_opener(lowered).startswith(("what evidence", "which evidence", "where is the evidence"))
+        )
+    ):
         return _handle_show_evidence(lowered, case)
 
-    if lowered.startswith("compare") or " compare " in f" {lowered} ":
+    # CLAUDE-ROUTING-PRECISION-01: the loose ` compare ` clause is gone. It
+    # claimed "It's hard to compare these without the finish schedule" - a
+    # complaint about missing information, which is exactly the kind of remark
+    # that should reach the semantic spine rather than trigger a comparison.
+    # The anchored form is kept, and polite openers now count as imperative.
+    if _is_instruction_to(lowered, ("compare",)):
         return _handle_compare(text, workspace, case, artifacts_dir, focused_finding_id)
 
-    if "draft" in lowered and "rfi" in lowered:
+    # CLAUDE-ROUTING-PRECISION-01: the defect that started this. The handler and
+    # its Finding requirement are correct and unchanged - drafting BY INHERITANCE
+    # from a Finding genuinely needs one. What was wrong was claiming every
+    # sentence containing both words for that path.
+    if "rfi" in lowered and _is_instruction_to(lowered, ("draft", "write", "prepare", "raise", "issue")):
         return _handle_draft_rfi_intent(focused_finding_id)
 
     if focused_finding_id is not None and _looks_like_correction(lowered):
@@ -1358,6 +1377,59 @@ def _handle_channel_status_check() -> InterpretationResult:
             "text and I have them."
         ),
     )
+
+
+# CLAUDE-ROUTING-PRECISION-01: keywords are evidence of intent; they must not
+# become intent on their own.
+#
+# Three shortcuts below used bare substring matching, so a message that merely
+# DISCUSSED an action was indistinguishable from one that REQUESTED it. Found
+# live: "I am trying to draft an RFI for a glazed screen that does not have good
+# support and am wondering if a C channel is appropriate or an HHS member" was
+# routed to the draft-an-RFI-from-a-Finding handler - which correctly requires a
+# focused Finding - and refused. The reviewer had supplied their own matter and
+# asked a professional question; nothing in that sentence asked GO to create
+# anything.
+#
+# The distinction is mechanical, not a judgement call: a request to perform an
+# action is IMPERATIVE and leads with the verb, optionally behind a polite
+# opener. A sentence that merely mentions the action puts it anywhere else. So
+# these rules now test SHAPE, matching what `analyze` and `_looks_like_correction`
+# already did - both of which were built this way from the start and needed no
+# change.
+#
+# Nothing here weakens a gate. A message that no longer matches falls through to
+# run_conversational_turn, the semantic spine built to classify by meaning, which
+# these substring rules were shadowing. Every approval gate, the Finding
+# requirement inside _handle_draft_rfi_intent, and every authority boundary are
+# exactly as they were.
+_POLITE_OPENERS = (
+    "please ", "can you ", "could you ", "would you ", "will you ",
+    "i'd like you to ", "i would like you to ", "go ahead and ", "now ",
+)
+
+
+def _strip_polite_opener(lowered: str) -> str:
+    """"Please draft an RFI" is as imperative as "Draft an RFI"."""
+    text = lowered.strip()
+    changed = True
+    while changed:
+        changed = False
+        for opener in _POLITE_OPENERS:
+            if text.startswith(opener):
+                text = text[len(opener):].lstrip()
+                changed = True
+    return text
+
+
+def _is_instruction_to(lowered: str, verbs: tuple) -> bool:
+    """True when the reviewer is INSTRUCTING GO, not discussing the action.
+
+    Deliberately strict: the verb must lead the sentence. "I am trying to draft
+    an RFI ... and am wondering if" leads with "i am", so it is a question and
+    falls through to the semantic classifier rather than being claimed here.
+    """
+    return _strip_polite_opener(lowered).startswith(verbs)
 
 
 def _looks_like_correction(lowered: str) -> bool:
