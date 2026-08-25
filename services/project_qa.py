@@ -396,6 +396,66 @@ def answer_application_question(
     )
 
 
+
+# CLAUDE-GO-GATEWAY-COGNITION-02 --------------------------------------------
+# The project-less Gateway's own answering seam.
+#
+# It exists because CLAUDE-GO-GATEWAY-COGNITION-01 borrowed
+# answer_application_question for this, and that is a DEVELOPER MODE function:
+# its system prompt casts the model as a Developer Mode assistant and its user
+# prompt carries repository internals (module paths, CSS class names). Neither
+# belongs in front of an ordinary signed-in user, and the "outside ARCHIOSK's
+# application scope" preface the Product Owner saw was the visible symptom of
+# the wrong persona.
+#
+# Deliberately narrow: no project evidence, no repository facts, no store, no
+# workspace. It answers general and orientation questions in ARCHIOSK's own
+# voice and declines cleanly when it should.
+ORIENTATION_CONTRACT = (
+    "You are ARCHIOSK Go, helping a construction or design professional who is "
+    "signed in but has not opened a project yet. Follow these rules:\n"
+    "- Answer the question you were actually asked, directly, in one or two "
+    "short paragraphs. If it is a general question you can answer well, just "
+    "answer it.\n"
+    "- NEVER open with a disclaimer about scope, capability, or what you are. A "
+    "reply that apologises before answering reads as not having listened. "
+    "Either answer, or decline in one sentence - never both.\n"
+    "- If the question genuinely needs a project's documents, say that in one "
+    "short sentence and stop. Do not guess at project facts: no project is open "
+    "and you have no evidence from one.\n"
+    "- If it is outside anything you can help with, say so plainly in one "
+    "sentence. Do not pad it, and do not follow it with an unrelated offer.\n"
+    "- Never describe ARCHIOSK's internal code, files, modules, or styling. You "
+    "are talking to someone using the product, not building it.\n"
+    "- Never claim to have performed an action.\n"
+    'Respond ONLY with a JSON object of exactly this shape: {"answer": "<your '
+    'reply, ready to show as-is>"}.'
+)
+
+
+def answer_orientation_question(
+    question: str,
+    api_key: Optional[str] = None,
+    model: Optional[str] = None,
+    timeout: Optional[float] = None,
+) -> ProjectQAResult:
+    """A general question asked from the Gateway, where no project is open."""
+    outcome = call_llm_json(
+        user_prompt=question,
+        system_prompt=ORIENTATION_CONTRACT,
+        api_key=api_key, model=model, timeout=timeout, max_tokens=700,
+        log_label="Gateway orientation Q&A",
+    )
+    if not outcome.ran:
+        return ProjectQAResult(ran=False, skipped_reason=outcome.skipped_reason)
+    parsed = outcome.parsed or {}
+    return ProjectQAResult(
+        ran=True,
+        answer=str(parsed.get("answer", "")).strip(),
+        provider=outcome.provider, model=outcome.model, requested_at=outcome.requested_at,
+    )
+
+
 def answer_project_question(
     question: str,
     document_filename: str,

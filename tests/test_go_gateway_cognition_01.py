@@ -46,7 +46,7 @@ class _Base(unittest.TestCase):
 
     def ask(self, message, projects=(), can_create=True, model_answer=None):
         with self.app.test_request_context("/"):
-            with patch.object(portal, "answer_application_question",
+            with patch.object(portal, "answer_orientation_question",
                               return_value=_outcome(model_answer)) as spy:
                 result = portal._classify_gateway_orientation(
                     message, list(projects), can_create,
@@ -117,7 +117,7 @@ class ItSaysSoWhenItCannotTests(_Base):
 
     def test_a_failing_model_call_never_500s_this_surface(self):
         with self.app.test_request_context("/"):
-            with patch.object(portal, "answer_application_question", side_effect=RuntimeError("boom")):
+            with patch.object(portal, "answer_orientation_question", side_effect=RuntimeError("boom")):
                 result = portal._classify_gateway_orientation("tell me about something", [], True)
         self.assertEqual(result["kind"], "info")
         self.assertIn("not something I can help with", result["text"])
@@ -137,11 +137,62 @@ class TheProjectBoundaryIsUnchangedTests(unittest.TestCase):
     def test_the_seam_it_uses_takes_no_workspace_or_store(self):
         import inspect as inspect_module
 
-        from services.project_qa import answer_application_question
+        from services.project_qa import answer_orientation_question
 
-        parameters = inspect_module.signature(answer_application_question).parameters
+        parameters = inspect_module.signature(answer_orientation_question).parameters
         self.assertNotIn("workspace", parameters)
         self.assertNotIn("store", parameters)
+
+
+class ItDoesNotBorrowDeveloperModesVoiceTests(unittest.TestCase):
+    """CLAUDE-GO-GATEWAY-COGNITION-02. The first version of this fix pointed
+    the Gateway at `answer_application_question` - a DEVELOPER MODE function.
+    Its system prompt casts the model as a Developer Mode assistant and its
+    user prompt carries repository internals: module paths, service names, CSS
+    class names.
+
+    The Product Owner saw the symptom ("this question is outside ARCHIOSK's
+    application scope" prefixed to a real answer). The leak underneath it was
+    not reported because it had not yet been triggered, which is the more
+    dangerous half.
+    """
+
+    def test_the_gateway_uses_its_own_seam(self):
+        source = inspect_source()
+        self.assertIn("answer_orientation_question", source)
+        self.assertNotIn("answer_application_question", source)
+
+    def test_the_orientation_contract_carries_no_repository_facts(self):
+        from services.project_qa import ORIENTATION_CONTRACT
+
+        # "module" is deliberately NOT in this list: the contract's own
+        # instruction is "never describe ARCHIOSK's internal code, files,
+        # modules, or styling" - the word appears because it is FORBIDDING the
+        # leak, not committing it. Same prose-versus-behaviour trap as ever.
+        for leak in ("routes/", "services/", ".py", "css", "Developer Mode"):
+            with self.subTest(leak=leak):
+                self.assertNotIn(leak, ORIENTATION_CONTRACT)
+
+    def test_it_forbids_the_defensive_opener_explicitly(self):
+        """Leading with a disclaimer and then answering is the same failure
+        CLAUDE-POSTCAMEL-CA1C already ruled on - "opening with 'only you can
+        decide' instead of a recommendation". Either answer or decline."""
+        from services.project_qa import ORIENTATION_CONTRACT
+
+        self.assertIn("NEVER open with a disclaimer", ORIENTATION_CONTRACT)
+        self.assertIn("never both", ORIENTATION_CONTRACT)
+
+    def test_it_is_told_not_to_describe_internals(self):
+        from services.project_qa import ORIENTATION_CONTRACT
+
+        self.assertIn("Never describe ARCHIOSK's internal code", ORIENTATION_CONTRACT)
+
+    def test_the_developer_seam_is_still_intact_for_developer_mode(self):
+        """Repointing the Gateway must not have damaged the surface that
+        legitimately wants that persona."""
+        from services.project_qa import answer_application_question
+
+        self.assertTrue(callable(answer_application_question))
 
 
 def inspect_source() -> str:

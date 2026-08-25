@@ -56,7 +56,7 @@ from services.developer_ccn import (
     is_ccn_command,
     parse_ccn_command,
 )
-from services.project_qa import answer_application_question
+from services.project_qa import answer_application_question, answer_orientation_question
 from services.capability_registry import find_capability_by_phrase
 from services.conversation_interpreter import (
     _handle_capability_question,
@@ -1123,13 +1123,17 @@ def _classify_gateway_orientation(message: str, projects: list[dict], can_create
     if capability is not None and _looks_like_capability_question(lowered):
         return {"kind": "info", "text": _handle_capability_question(capability).reply_text}
 
-    # 2. The existing application-scope seam. It takes no workspace and no
-    #    store, so it cannot reach project state - which is precisely why it
-    #    is usable on a project-less surface. Nothing here opens a project or
-    #    speaks with project evidence.
+    # 2. The Gateway's OWN seam (CLAUDE-GO-GATEWAY-COGNITION-02). The first
+    #    version of this used answer_application_question, which is a DEVELOPER
+    #    MODE function - its system prompt casts the model as a Developer Mode
+    #    assistant and its user prompt carries repository internals. That was
+    #    wrong on a surface any signed-in user reaches, and the "outside
+    #    ARCHIOSK's application scope" preface was its visible symptom.
+    #    answer_orientation_question takes no workspace, no store and no
+    #    repository facts, so it can reach neither project state nor internals.
     if len(lowered.split()) >= 3:
         try:
-            answer = answer_application_question(
+            answer = answer_orientation_question(
                 question=message.strip(),
                 api_key=current_app.config.get("ANTHROPIC_API_KEY"),
                 model=current_app.config.get("ANTHROPIC_MODEL"),
