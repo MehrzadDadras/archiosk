@@ -31,6 +31,7 @@ claimed by anything in this file.
 """
 from __future__ import annotations
 
+import importlib.util
 import json
 import re
 import unittest
@@ -235,26 +236,41 @@ class ShellTemplatesAdvertiseInstallabilityTests(unittest.TestCase):
 
 
 class IconGeometryTests(unittest.TestCase):
-    """The Product Owner's four geometric constraints, asserted as numbers.
+    """The Product Owner's geometric constraints, asserted as numbers.
 
-    'The bottom portion is closed' and 'the upper-left portion is shorter' are
-    checkable facts about the path, not matters of taste - so they are checked
-    here, and the taste question is left where it belongs, with the Product
-    Owner.
+    "The bottom portion is closed", "the upper-left portion is shorter", "cut
+    the ends with a knife - the left one horizontally and the right one
+    vertically", "make the edges of the base angles sharp" are all checkable
+    facts about the geometry, not matters of taste. So they are checked here,
+    and the taste question is left where it belongs, with the Product Owner.
+
+    Asserted against tools/render_app_icon.py, which is the single source the
+    SVG and every PNG are generated from - plus a check that the committed SVG
+    still matches what that source produces, so the two cannot drift.
     """
+
+    @classmethod
+    def setUpClass(cls):
+        spec = importlib.util.spec_from_file_location(
+            "_archiosk_icon_tool", _REPO_ROOT / "tools" / "render_app_icon.py"
+        )
+        cls.tool = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cls.tool)
 
     def setUp(self):
         self.svg = _ICON_SVG_PATH.read_text(encoding="utf-8")
-        body = re.sub(r"<!--.*?-->", "", self.svg, flags=re.S)
-        path = re.search(r'\sd="([^"]+)"', body)
-        self.assertIsNotNone(path, "no path in app-icon.svg")
-        numbers = [float(n) for n in re.findall(r"-?\d+(?:\.\d+)?", path.group(1))]
-        self.assertEqual(len(numbers) % 2, 0)
-        self.points = list(zip(numbers[0::2], numbers[1::2]))
-        self.body = body
+        self.body = re.sub(r"<!--.*?-->", "", self.svg, flags=re.S)
+        self.points = self.tool.CENTRELINE
+        self.polygon = self.tool.outline()
 
-    def test_the_mark_is_one_continuous_path(self):
-        # Separate thin strokes merge into a smudge when downscaled to 48px.
+    def test_the_committed_svg_matches_its_generator(self):
+        # A hand-edited SVG would silently disagree with the PNGs the home
+        # screen actually uses, and nothing else would notice.
+        self.assertIn(self.tool.svg_path_data(), self.body)
+
+    def test_the_mark_is_one_shape(self):
+        # Separate pieces merge into a smudge when downscaled to 48px, and a
+        # seam through the waist would be visible at large sizes.
         self.assertEqual(len(re.findall(r"<path", self.body)), 1)
 
     def test_the_bottom_portion_is_closed(self):
@@ -270,7 +286,7 @@ class IconGeometryTests(unittest.TestCase):
         self.assertEqual(abs(index_left - index_right), 1, "the feet are not joined")
 
     def test_the_upper_left_portion_is_shorter_than_the_upper_right(self):
-        waist = self._waist()
+        waist = self.tool.WAIST
         top = sorted((p for p in self.points if p[1] < waist[1]), key=lambda p: p[0])
         self.assertEqual(len(top), 2, "expected two arms above the waist")
         upper_left, upper_right = top
@@ -283,44 +299,77 @@ class IconGeometryTests(unittest.TestCase):
         self.assertGreater(left_len / right_len, 0.45)
         self.assertLess(left_len / right_len, 0.90)
 
+    def test_the_left_end_is_cut_horizontally(self):
+        # A horizontal cut means two outline vertices sharing one y, and that y
+        # is the cut line. Both ends are diagonal, so this cannot come from a
+        # line cap - it has to be real geometry.
+        cut = self.tool.LEFT_CUT_Y
+        on_cut = [p for p in self.polygon if abs(p[1] - cut) < 0.05]
+        self.assertEqual(len(on_cut), 2, "no horizontal terminating edge")
+        self.assertGreater(abs(on_cut[0][0] - on_cut[1][0]), 20, "cut edge too short to read")
+
+    def test_the_right_end_is_cut_vertically(self):
+        cut = self.tool.RIGHT_CUT_X
+        on_cut = [p for p in self.polygon if abs(p[0] - cut) < 0.05]
+        self.assertEqual(len(on_cut), 2, "no vertical terminating edge")
+        self.assertGreater(abs(on_cut[0][1] - on_cut[1][1]), 20, "cut edge too short to read")
+
+    def test_the_two_cuts_disagree_with_each_other(self):
+        # One horizontal, one vertical. If both ends were cut the same way the
+        # form would read as a symmetrical X again, which is the thing the whole
+        # redesign exists to avoid.
+        horizontal = [p for p in self.polygon if abs(p[1] - self.tool.LEFT_CUT_Y) < 0.05]
+        vertical = [p for p in self.polygon if abs(p[0] - self.tool.RIGHT_CUT_X) < 0.05]
+        self.assertAlmostEqual(horizontal[0][1], horizontal[1][1], places=3)
+        self.assertAlmostEqual(vertical[0][0], vertical[1][0], places=3)
+        self.assertNotAlmostEqual(horizontal[0][0], horizontal[1][0], places=1)
+        self.assertNotAlmostEqual(vertical[0][1], vertical[1][1], places=1)
+
+    def test_the_base_angles_are_sharp_not_rounded(self):
+        # Mitred, so the outer corner runs PAST the centreline vertex and comes
+        # to a point. A rounded or butted foot would sit at or inside it.
+        bottom = max(y for _, y in self.points)
+        deepest = max(p[1] for p in self.polygon)
+        self.assertGreater(deepest, bottom + 8, "feet are not mitred to a point")
+
+    def test_nothing_relies_on_a_renderer_line_style(self):
+        # The mark is a filled outline now. A leftover stroke-linecap or
+        # stroke-linejoin would mean the shape is still partly the renderer's
+        # decision rather than the geometry's.
+        self.assertNotIn("stroke-linecap", self.body)
+        self.assertNotIn("stroke-linejoin", self.body)
+        self.assertNotIn("stroke-width", self.body)
+        self.assertIn('fill-rule="nonzero"', self.body)
+
     def test_the_silhouette_is_asymmetric(self):
         # A symmetric X is static and generic; the lean is the identity.
-        waist = self._waist()
+        waist = self.tool.WAIST
         upper = [p for p in self.points if p[1] < waist[1]]
         self.assertNotAlmostEqual(
             abs(upper[0][0] - waist[0]), abs(upper[1][0] - waist[0]), delta=10.0
         )
 
-    def test_the_stroke_survives_a_small_icon(self):
-        # Below roughly 5% of the canvas a stroke disappears at 48px; above
+    def test_the_mark_weight_survives_a_small_icon(self):
+        # Below roughly 5% of the canvas the mark disappears at 48px; above
         # roughly 9% the triangle's counter fills in.
-        width = float(re.search(r'stroke-width="([\d.]+)"', self.body).group(1))
-        self.assertGreaterEqual(width / 512.0, 0.05)
-        self.assertLessEqual(width / 512.0, 0.09)
+        self.assertGreaterEqual(self.tool.WIDTH / 512.0, 0.05)
+        self.assertLessEqual(self.tool.WIDTH / 512.0, 0.09)
 
-    def test_joins_and_caps_are_round(self):
-        # A mitred join at icon scale renders as a dark blob.
-        self.assertIn('stroke-linejoin="round"', self.body)
-        self.assertIn('stroke-linecap="round"', self.body)
-
-    def test_the_mark_sits_inside_the_square_with_margin(self):
-        stroke = float(re.search(r'stroke-width="([\d.]+)"', self.body).group(1))
-        half = stroke / 2.0
-        for x, y in self.points:
-            self.assertGreater(x - half, 40, "mark touches the left edge")
-            self.assertLess(x + half, 472, "mark touches the right edge")
-            self.assertGreater(y - half, 40, "mark touches the top edge")
-            self.assertLess(y + half, 472, "mark touches the bottom edge")
+    def test_the_whole_mark_sits_inside_the_square_with_margin(self):
+        # The mitred feet extend well past the centreline, so this has to be
+        # checked against the real outline rather than the centreline points.
+        for x, y in self.polygon:
+            self.assertGreater(x, 40, "mark reaches the left edge")
+            self.assertLess(x, 472, "mark reaches the right edge")
+            self.assertGreater(y, 40, "mark reaches the top edge")
+            self.assertLess(y, 472, "mark reaches the bottom edge")
 
     def test_colour_is_used_once(self):
         # main.css's own header: colour is used rarely and must mean something.
+        # Ground and mark are both neutral; the accent is the only colour.
         fills = set(re.findall(r'fill="(#[0-9a-fA-F]{6})"', self.body))
-        self.assertEqual(len(fills), 2, "ground plus exactly one accent")
-
-    def _waist(self):
-        match = re.search(r'<circle cx="([\d.]+)" cy="([\d.]+)"', self.body)
-        self.assertIsNotNone(match, "no waist point")
-        return float(match.group(1)), float(match.group(2))
+        self.assertEqual(len(fills), 3, "ground, mark, and exactly one accent")
+        self.assertIn(self.tool.ACCENT, fills)
 
     @staticmethod
     def _length(a, b):
