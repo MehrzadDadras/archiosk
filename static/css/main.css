@@ -8192,6 +8192,70 @@ html[data-tray-focus="toolbox"] .workspace-pane-toolbox {
         display: none;
     }
 
+    /* CLAUDE-MOBILE-DOCUMENT-CONVERGENCE-01 - when a document is open on a
+       phone, the evidence becomes the job.
+
+       CA1 Section AC: one primary job per phone screen. Opening a drawing and
+       then having to scroll past three restatements of its filename to reach it
+       is the opposite of that.
+
+       VERIFIED, NOT ASSUMED: .workspace-pane-document is nested INSIDE the same
+       .display-division-primary that carries .display-division-header, so on a
+       phone the filename renders in the division header and again as this
+       pane's own <h2>, one above the other, on the same screen. The document tab
+       strip carries it a third time.
+
+       Nothing is removed and no capability is hidden. Every control below is
+       still present, still visible and still tappable - they stop occupying
+       three stacked rows above the evidence. Desktop is untouched: all of this
+       is inside the phone breakpoint. */
+
+    /* 1. ONE IDENTITY, NOT THREE. The division header immediately above this
+          pane already states the filename, so this heading repeats it with no
+          new information. The pane's own kind/status label below it is KEPT -
+          "PDF, superseded by a later revision" is information the header does
+          not carry. */
+    .workspace-pane-document > h2 {
+        display: none;
+    }
+
+    /* 2. DOCUMENT MANAGEMENT STOPS STACKING. Download / Replace / Remove wrapped
+          onto two or three full-width rows at phone width. They remain fully
+          visible and reachable - a governed action must never be hidden merely
+          to tidy a screen - but they now sit on ONE horizontally scrollable
+          row, which is the difference between secondary and buried.
+
+          scrollbar-width: none because a visible scrollbar on a three-button
+          strip reads as breakage; the row is short enough to reach by dragging,
+          and nothing is off-screen at typical phone widths. */
+    .workspace-pane-document .document-primary-actions {
+        display: flex;
+        flex-wrap: nowrap;
+        gap: 0.4rem;
+        overflow-x: auto;
+        scrollbar-width: none;
+        -webkit-overflow-scrolling: touch;
+        padding-bottom: 0.15rem;
+    }
+    .workspace-pane-document .document-primary-actions > * {
+        flex: 0 0 auto;
+    }
+    .workspace-pane-document .document-primary-actions::-webkit-scrollbar {
+        display: none;
+    }
+
+    /* 3. THE EVIDENCE TAKES THE RECLAIMED SPACE. Without a floor the viewer is
+          only as tall as its content wants to be, so a page rendered small stays
+          small while chrome keeps its full height above it. 55vh is a floor, not
+          a fixed height - the viewer still grows, and its own internal scroll
+          region (main:has(.document-viewer-canvas-container) removes the outer
+          one) still owns the gesture. */
+    .workspace-pane-document .document-viewer-canvas-container,
+    .workspace-pane-document .document-viewer-image,
+    .workspace-pane-document iframe {
+        min-height: 55vh;
+    }
+
     .workspace-topbar {
         gap: 0.4rem;
         padding: 0.35rem 0;
