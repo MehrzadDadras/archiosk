@@ -115,7 +115,16 @@ class NoNewCapabilityWasClaimedTests(unittest.TestCase):
         # call sites - answer_application_question and answer_project_question -
         # and asserting one was wrong about the baseline rather than about this
         # change. What matters is that a prompt-only change added neither.
-        expected = {"project_qa.py": 2, "conversational_turn.py": 1}
+        # project_qa.py went 2 -> 3 when CLAUDE-GO-GATEWAY-COGNITION-02 added
+        # answer_orientation_question, a real and deliberate third seam - the
+        # Gateway's own, replacing its wrong borrowing of the Developer Mode
+        # one. Bumped with the reason rather than silently, because the point
+        # of this count is that every seam here is named and intended:
+        #   answer_application_question   - Developer Mode
+        #   answer_orientation_question   - the project-less Gateway
+        #   answer_project_question       - grounded project Q&A
+        # What THIS stage (ask-to-see) added was a prompt rule and nothing else.
+        expected = {"project_qa.py": 3, "conversational_turn.py": 1}
         for filename, count in expected.items():
             source = (ROOT / "services" / filename).read_text(encoding="utf-8")
             code = re.sub(r"(?m)#.*$", "", source)
