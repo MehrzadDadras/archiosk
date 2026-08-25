@@ -124,8 +124,16 @@
        (routes/portal.py's gateway_orientation() docstring covers the
        isolation reasoning). #}
     {% if not developer_mode %}
-    <form class="gateway-orientation-form" id="index-orientation-form" data-ui-ref="index.orientation.form">
-        <input type="text" class="text-input" id="index-orientation-input" name="message" placeholder="Open a project, or ask what you can do here" aria-label="Ask Archiosk">
+    {# CLAUDE-COMPOSER-CONVERGENCE-01: the same keyboard contract as every other
+       Composer-like surface. This field had neither half of it - no explicit
+       Enter binding and no autocomplete="off" - which is the exact pair of
+       omissions behind the Establish-a-Project helper's live "Enter does
+       nothing" report (CLAUDE-ESTABLISH-COMPOSER-ENTER-01). Same shape, same
+       omissions, one page over; converged rather than waiting for it to be
+       reported here too. #}
+    <form class="gateway-orientation-form" id="index-orientation-form" data-ui-ref="index.orientation.form"
+          data-developer-composer-form data-composer-send='[data-ui-ref="index.orientation.submit"]'>
+        <input type="text" class="text-input" id="index-orientation-input" name="message" data-developer-composer-input autocomplete="off" placeholder="Open a project, or ask what you can do here" aria-label="Ask Archiosk">
         <button type="button" id="index-orientation-voice" class="voice-input-button" data-ui-ref="index.orientation.voice"
                 aria-label="Press and speak - audio is processed by your browser only and is never saved" hidden>&#127908;&#65039;</button>
         <button type="submit" class="btn btn-ghost" data-ui-ref="index.orientation.submit">Ask</button>
@@ -286,7 +294,12 @@
 // The application-level Composer uses the same governed voice engine as the
 // workspace Composer; it only changes the target input and has no project_id.
 (function () {
-    var input = document.querySelector('[data-developer-composer-form] [data-developer-composer-input]');
+    // Scoped to THIS form by its own ui-ref, not to the first composer in the
+    // document. Both composers on this page now carry the shared composer
+    // attributes, and the orientation form is rendered above this one - an
+    // unscoped selector would point this microphone at the wrong field.
+    var input = document.querySelector(
+        '.developer-home-composer-form [data-developer-composer-input]');
     if (!input || !window.ArchioskVoiceInput) return;
     window.ArchioskVoiceInput({
         buttonId: 'developer-home-composer-voice',
