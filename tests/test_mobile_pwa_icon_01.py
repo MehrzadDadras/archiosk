@@ -392,12 +392,40 @@ class LandingBrandCompositionTests(unittest.TestCase):
 
     def test_the_icon_shrinks_on_a_phone(self):
         # "Avoid pushing the primary entry action too far down on mobile" is a
-        # sizing instruction as much as a layout one.
+        # sizing instruction as much as a layout one, and the Product Owner's
+        # follow-on correction - "make the landing page icon tighter as they go
+        # beyond the screen frame" - is the same instruction again, sharper.
         rules = re.findall(r"\.landing-app-icon\s*\{[^}]*\}", self.css)
         self.assertGreaterEqual(len(rules), 2, "no phone-specific icon size")
-        widths = [int(re.search(r"width:\s*(\d+)px", r).group(1)) for r in rules]
-        self.assertLess(min(widths), max(widths))
-        self.assertLessEqual(max(widths), 96, "icon large enough to push entry down")
+        widths = []
+        for rule in rules:
+            clamped = re.search(r"width:\s*clamp\([^,]+,[^,]+,\s*(\d+)px\s*\)", rule)
+            fixed = re.search(r"width:\s*(\d+)px", rule)
+            self.assertTrue(clamped or fixed, rule)
+            widths.append(int((clamped or fixed).group(1)))
+        self.assertLess(min(widths), max(widths), "no phone-specific reduction")
+        # The cap, not a mid-range value: an icon that can reach 96px sits
+        # above a wordmark that is already the tallest thing on the page.
+        self.assertLessEqual(max(widths), 72, "icon large enough to push entry down")
+
+    def test_the_icon_scales_with_the_wordmark_rather_than_fighting_it(self):
+        # A fixed-px icon beside a fluid clamp() wordmark is what let the pair
+        # grow past the frame on a small phone.
+        base = re.search(r"\.landing-app-icon\s*\{[^}]*\}", self.css).group(0)
+        self.assertIn("clamp(", base)
+
+    def test_the_landing_page_measures_the_viewport_the_way_a_phone_sees_it(self):
+        # On iOS Safari 100vh is the height the viewport WOULD have with the
+        # browser chrome hidden, so a 100vh block is taller than what is
+        # actually visible and its lower content sits below the frame. main.css
+        # already made this correction for the authenticated shell; this
+        # asserts the landing page keeps it too.
+        for selector in (".landing-page", ".landing-content"):
+            rule = re.search(re.escape(selector) + r"\s*\{[^}]*\}", self.css)
+            self.assertIsNotNone(rule, selector)
+            self.assertIn("100dvh", rule.group(0), selector)
+            # The plain unit stays as the fallback for browsers without dvh.
+            self.assertIn("100vh", rule.group(0), selector)
 
     def test_the_update_notice_is_styled_on_every_shell_that_can_show_it(self):
         # pwa.js runs on the landing shell too, and an installed app cold-

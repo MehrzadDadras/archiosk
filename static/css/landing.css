@@ -35,7 +35,17 @@
 
 .landing-page {
     position: relative;
+    /* CLAUDE-MOBILE-ICON-01 correction: 100dvh, not 100vh. On iOS Safari
+       100vh is the height the viewport WOULD have with the browser chrome
+       hidden, so a 100vh block is taller than what the reviewer can actually
+       see and its lower content sits below the frame. main.css already made
+       this correction for the authenticated shell
+       (CLAUDE-MOBILE-SHELL-STABILITY-01); the landing page never got it, and
+       adding the brand icon above the wordmark is what finally made the
+       overflow visible. The plain 100vh stays first as the fallback for
+       browsers without dvh. */
     min-height: 100vh;
+    min-height: 100dvh;
     width: 100%;
     overflow-x: hidden;
     background:
@@ -235,6 +245,7 @@
     align-items: center;
     justify-content: center;
     min-height: 100vh;
+    min-height: 100dvh; /* see .landing-page above */
     padding: 8vh 24px 10vh;
     text-align: center;
 }
@@ -630,20 +641,30 @@
     gap: 0.7rem;
 }
 .landing-app-icon {
-    width: 76px;
-    height: 76px;
-    border-radius: 18px;
+    /* CLAUDE-MOBILE-ICON-01 correction, Product Owner: "make the landing page
+       icon tighter as they go beyond the screen frame."
+
+       Sized against the WORDMARK rather than in fixed pixels, so the two
+       always scale together and the composition can never grow past what the
+       wordmark itself already fits into: the wordmark is
+       clamp(2.8rem, 8.4vw, 6rem), and the icon is deliberately a little under
+       its cap height. A fixed px icon beside a fluid wordmark is what let the
+       pair get taller than the frame on a small phone in the first place. */
+    width: clamp(38px, 7vw, 64px);
+    height: clamp(38px, 7vw, 64px);
+    border-radius: clamp(9px, 1.7vw, 15px);
     display: block;
+    flex-shrink: 0;
 }
 @media (max-width: 640px) {
-    /* Smaller on a phone, and a tighter gap, so the wordmark and the entry
-       actions stay above the fold together. */
+    /* Tighter still on a phone: the icon is a badge above the name, not a
+       second headline, and the entry actions matter more than either. */
     .landing-app-icon {
-        width: 60px;
-        height: 60px;
-        border-radius: 14px;
+        width: 44px;
+        height: 44px;
+        border-radius: 10px;
     }
-    .landing-brand { gap: 0.5rem; }
+    .landing-brand { gap: 0.35rem; }
 }
 
 /* The update notice, duplicated from main.css ON PURPOSE. landing_shell.html
