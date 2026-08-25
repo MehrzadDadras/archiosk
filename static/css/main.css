@@ -8823,3 +8823,125 @@ body,
     outline: 2px solid var(--machine-blue);
     outline-offset: 1px;
 }
+
+/* ============================================================
+   CLAUDE-MOBILE-PRIMARY-RESET-01 — fix the composition
+   ============================================================
+   "The live phone experience is now judged chaotic. Do not add features to
+   solve this. Reduce and reorganize."
+
+   Six persistent bands stacked before any work was visible: topbar, tray
+   switcher, grabber, dock header, composer, history tray. Only the topbar and
+   the composer earn permanent space on a phone. What follows removes or
+   demotes the other four and leaves one context bar, one scrolling page, one
+   Composer.
+
+   Nothing governed is deleted. Lists, Toolbox, Eye, Archive and the size
+   toggle all still exist and still work — they are simply no longer standing
+   in front of the work. ------------------------------------------------- */
+
+/* The context bar: project, current conversation, and the way to every other
+   conversation — one band answering "where am I", "what else is there",
+   "start fresh". */
+.context-identity { min-width: 0; flex: 1 1 auto; position: relative; }
+.context-identity-summary {
+    display: flex;
+    align-items: baseline;
+    gap: 0.3rem;
+    min-width: 0;
+    min-height: 36px;
+    padding: 0.2rem 0;
+    cursor: pointer;
+    list-style: none;
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+}
+.context-identity-summary::-webkit-details-marker { display: none; }
+.context-identity-summary::after {
+    content: "\25BE";
+    margin-left: 0.15rem;
+    color: var(--text-metadata);
+}
+.context-identity-summary:focus-visible { outline: 2px solid var(--machine-blue); outline-offset: 2px; }
+.context-identity-project {
+    font-weight: 600;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 45%;
+}
+.context-identity-sep { color: var(--text-metadata); flex-shrink: 0; }
+.context-identity-current {
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+/* Opens over the page rather than pushing it down: a disclosure that reflows
+   the whole frame is the reason the old history tray felt like another band. */
+.context-identity-list {
+    position: absolute;
+    top: calc(100% + 0.3rem);
+    left: 0;
+    z-index: 32;
+    min-width: min(88vw, 340px);
+    max-height: 55vh;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 0.3rem;
+    background: var(--surface-primary);
+    border: 1px solid var(--border-strong);
+    border-radius: 6px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+}
+.context-identity-item {
+    display: block;
+    min-height: 40px;
+    padding: 0.55rem 0.5rem;
+    border-radius: 4px;
+    color: var(--text-secondary);
+    text-decoration: none;
+    font-size: 0.84rem;
+}
+.context-identity-item:hover { background: var(--surface-hover); color: var(--text-primary); }
+.context-identity-item:focus-visible { outline: 2px solid var(--machine-blue); outline-offset: -2px; }
+.context-identity-current-item { color: var(--machine-blue); }
+
+.context-new-form { display: inline; margin: 0; flex-shrink: 0; }
+.context-new-btn {
+    appearance: none;
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    min-height: 36px;
+    padding: 0.3rem 0.7rem;
+    font: inherit;
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+    cursor: pointer;
+}
+.context-new-btn:hover { color: var(--text-primary); border-color: var(--border-strong); }
+.context-new-btn:focus-visible { outline: 2px solid var(--machine-blue); outline-offset: 1px; }
+
+@media (max-width: 640px) {
+    /* REMOVED — four competing permanent panes is the compressed-desktop
+       pattern that was rejected. The same controls now live in View > Panels,
+       deliberately requested instead of permanently occupying the frame. */
+    .tray-switcher-options { display: none; }
+
+    /* REMOVED — "New" moved up into the context bar; the size toggle is
+       redundant with the grabber sitting two pixels above it. */
+    .conversation-dock-header { display: none; }
+
+    /* Everything the top bar carries that is not identity is secondary on a
+       phone: Display Layout, Appearance and Account all live in the ☰ drawer
+       already, and the working indicator is not worth a band of its own. */
+    .workspace-topbar-controls,
+    .workspace-app-activity,
+    .workspace-topbar-document-controls { display: none; }
+
+    /* The grabber keeps its touch target and loses its padding — it was
+       costing more vertical space than the control needed. */
+    .tray-composer-grabber { min-height: 22px; padding: 0.3rem 0; }
+}

@@ -345,9 +345,39 @@
            normal LAY-5A composition; on a phone it switches which single tray
            is up. Same control, same state, one architecture. #}
         <nav class="tray-switcher" id="tray-switcher" data-ui-ref="shell.tray-switcher" aria-label="Active work tray">
+            {# CLAUDE-MOBILE-PRIMARY-RESET-01: one context band instead of three.
+               It answers the Product Owner's own three questions - "where am I",
+               "what else is there", "start fresh" - in the space that previously
+               held only a tray label. The history list moved up here from
+               underneath the Composer, where it was spending a band of the
+               smallest screen on a question that belongs to context rather than
+               to composing. #}
+            {% if project_id is defined and workspace is defined %}
+            <details class="context-identity" data-ui-ref="shell.context.identity">
+                <summary class="context-identity-summary" data-ui-ref="shell.context.identity.toggle">
+                    <span class="context-identity-project">{{ workspace.display_title or project_id }}</span>
+                    <span class="context-identity-sep" aria-hidden="true">›</span>
+                    <span class="context-identity-current">{{ active_case.title if active_case is defined and active_case else 'Project conversation' }}</span>
+                </summary>
+                <div class="context-identity-list" role="list">
+                    <a class="context-identity-item{% if active_case is not defined or not active_case %} context-identity-current-item{% endif %}"
+                       data-ui-ref="shell.context.identity.project" role="listitem"
+                       href="{{ url_for('workspace.show_workspace', project_id=project_id) }}">Project conversation</a>
+                    {% for c in workspace.cases if c.status != 'archived' %}
+                    <a class="context-identity-item{% if active_case is defined and active_case and c.id == active_case.id %} context-identity-current-item{% endif %}"
+                       data-ui-ref="shell.context.identity.leaf" role="listitem"
+                       href="{{ url_for('workspace.show_workspace', project_id=project_id, case=c.id) }}">{{ c.title }}</a>
+                    {% endfor %}
+                </div>
+            </details>
+            <form method="post" action="{{ url_for('workspace.start_new_conversation', project_id=project_id) }}" class="context-new-form">
+                <button type="submit" class="context-new-btn" data-ui-ref="shell.context.new-chat">New</button>
+            </form>
+            {% else %}
             <span class="tray-switcher-context" data-ui-ref="shell.tray-switcher.active" aria-live="polite">
                 <span class="tray-switcher-active-label" id="tray-active-label">Workspace</span>
             </span>
+            {% endif %}
             <span class="tray-switcher-options">
                 <button type="button" class="tray-switcher-btn" data-ui-ref="shell.tray-switcher.lists"
                         data-tray-focus-btn="lists" data-tray-label="Lists" aria-pressed="false">Lists</button>
