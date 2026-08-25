@@ -120,6 +120,14 @@
     <button type="submit" class="btn btn-ghost" data-ui-ref="upload.help.submit">Ask</button>
     <span class="voice-input-status" id="upload-orientation-voice-status" data-ui-ref="upload.help.voice.status" aria-live="polite"></span>
 </form>
+<label class="composer-candidate-doc" id="upload-help-candidate" data-ui-ref="upload.help.candidate" hidden>
+    <input type="checkbox" id="upload-help-candidate-toggle" checked>
+    <span>Show GO the document I selected below: <strong id="upload-help-candidate-name"></strong></span>
+</label>
+<p class="pane-note" id="upload-help-candidate-note" data-ui-ref="upload.help.candidate.note" hidden>
+    Shown for this question only. It is not filed, not registered, and becomes
+    part of the project record only when you create the project below.
+</p>
 <p class="gateway-orientation-reply" id="upload-orientation-reply" data-ui-ref="upload.help.reply" aria-live="polite" hidden></p>
 {% endcall %}
 <script src="{{ url_for('static', filename='js/voice_input.js') }}?v={{ static_version }}"></script>
@@ -146,9 +154,42 @@
         replyEl.hidden = !text;
     }
 
+    // CLAUDE-ESTABLISH-HELPDESK-01 (GOV-D-001): the candidate founding document.
+    // Read from the Establish form's OWN file input - there is deliberately no
+    // second picker here. Nothing is uploaded by asking: the file rides along
+    // with this one question, is read in memory server-side, and is discarded.
+    // It becomes a real Source only if the user creates the project below.
+    var candidateWrap = document.getElementById('upload-help-candidate');
+    var candidateToggle = document.getElementById('upload-help-candidate-toggle');
+    var candidateName = document.getElementById('upload-help-candidate-name');
+    var candidateNote = document.getElementById('upload-help-candidate-note');
+    var foundingInput = document.getElementById('upload-file-input');
+
+    function selectedCandidate() {
+        if (!foundingInput || !foundingInput.files || !foundingInput.files.length) return null;
+        return foundingInput.files[0];
+    }
+
+    function syncCandidate() {
+        var file = selectedCandidate();
+        var show = !!file;
+        if (candidateWrap) candidateWrap.hidden = !show;
+        if (candidateNote) candidateNote.hidden = !show;
+        if (show && candidateName) candidateName.textContent = file.name;
+    }
+
+    if (foundingInput) {
+        foundingInput.addEventListener('change', syncCandidate);
+        syncCandidate();
+    }
+
     function ask(message) {
         var formData = new FormData(form);
         formData.set('message', message);
+        var file = selectedCandidate();
+        if (file && candidateToggle && candidateToggle.checked) {
+            formData.set('candidate_document', file, file.name);
+        }
         fetch('{{ url_for("portal.gateway_orientation") }}', {
             method: 'POST',
             body: formData,

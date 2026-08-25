@@ -2264,6 +2264,16 @@ main:has(.document-viewer-canvas-container) {
 .gateway-orientation-form { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem; flex-wrap: wrap; }
 .gateway-orientation-form .text-input { flex: 1; min-width: 220px; max-width: none; }
 
+/* CLAUDE-ESTABLISH-HELPDESK-01 (GOV-D-001): the candidate founding document the
+   registry help desk may read. Deliberately quiet and deliberately NOT styled
+   like the Composer's + attachment chip - that chip means "this is going into
+   the record", and this means the opposite: shown for one question, filed by
+   nothing but the create-project button below. Same-looking controls that mean
+   different things is the drift this app is converging away from. */
+.composer-candidate-doc { display: flex; align-items: center; gap: .5rem; margin: 0 0 .35rem; font-size: .85rem; color: var(--text-secondary); }
+.composer-candidate-doc strong { font-weight: 500; color: var(--text-primary); }
+#upload-help-candidate-note { margin: 0 0 .9rem; }
+
 /* Application-level Developer Mode Composer: the same restrained service
    counter language as the project Composer, limited to the home page. */
 .developer-home-composer { margin-top: 1.25rem; padding: 1rem; border: 1px solid var(--line, rgba(255,255,255,.14)); border-radius: .35rem; }

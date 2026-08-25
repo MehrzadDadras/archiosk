@@ -1327,8 +1327,101 @@ def _classify_establish_project_help(message: str) -> dict:
     }
 
 
+def _project_less_external_ai_allowed() -> bool:
+    """CLAUDE-ESTABLISH-HELPDESK-01: the external-AI gate, resolved for a
+    surface that has no project.
+
+    routes/workspace.py's _evaluate_security_action resolves this against the
+    organization baseline AND the project's own security_profile. There is no
+    project here, so there is no profile to look up - and the honest resolution
+    is the baseline alone with profile_decision=None, which the most-restrictive
+    -wins resolver can only treat as equal to or STRICTER than a project-scoped
+    call. A missing project profile must never read as permission.
+
+    GOV-D-001 records that this path reaches the model, and that the gate must
+    cover it explicitly rather than by inheritance. This function is that
+    explicit coverage.
+    """
+    from services.security_governance import SecurityGovernanceStore
+    from services.security_policy import (
+        ACTION_EXTERNAL_AI_REQUEST, DECISION_ALLOW, DECISION_ALLOW_APPROVED_ROUTE,
+        evaluate_action,
+    )
+
+    try:
+        security_store = SecurityGovernanceStore(current_app.config["REGISTRY_STORE_PATH"])
+        security_record = security_store.get()
+        active_baseline = security_store.active_baseline(security_record)
+        decision = evaluate_action(
+            ACTION_EXTERNAL_AI_REQUEST,
+            baseline_decision=(
+                active_baseline["control_decisions"].get(
+                    ACTION_EXTERNAL_AI_REQUEST, {}).get("decision")
+                if active_baseline else None
+            ),
+            baseline_version_id=active_baseline["id"] if active_baseline else None,
+            # No project, so no security_profile and no project-scoped
+            # exception to look up. Both omitted rather than guessed - the
+            # most-restrictive-wins resolver then treats this as equal to or
+            # stricter than a project-scoped call, never looser.
+            profile_decision=None,
+        )
+    except Exception:
+        # Fail closed. An unreadable security record is not permission.
+        return False
+    return decision.decision in (DECISION_ALLOW, DECISION_ALLOW_APPROVED_ROUTE)
+
+
+def _establish_project_reply(message: str) -> dict:
+    """CLAUDE-ESTABLISH-HELPDESK-01: the registry help desk (GOV-D-001).
+
+    Was _classify_establish_project_help alone - a keyword lookup table that
+    answered a fixed FAQ and returned the same deflection for everything else,
+    including every real question anyone actually asks. The Product Owner's own
+    two questions both landed on that deflection, which is what "a false
+    Composer" meant.
+
+    The table is NOT deleted. It is the fallback whenever the model cannot or
+    may not run - unconfigured key, external-AI denied by policy, an API
+    failure. A surface that degrades to a real FAQ answer is better than one
+    that degrades to an error, and this keeps the pre-existing behaviour
+    reachable rather than replacing it with a dependency.
+
+    Commits nothing either way: no project, no Source, no governance-log entry,
+    no persisted conversation, no persisted document.
+    """
+    from services.establish_help_desk import advise, extract_candidate_text
+
+    document_text = ""
+    document_name = ""
+    candidate = request.files.get("candidate_document")
+    if candidate is not None and candidate.filename:
+        # Read in memory only. Never saved, never handed to ingestion, never
+        # given provenance - it is not evidence, it is something being shown to
+        # GO across a desk before anything is filed.
+        document_name = candidate.filename
+        max_bytes = current_app.config.get("MAX_UPLOAD_MB", 25) * 1024 * 1024
+        raw = candidate.read(max_bytes + 1)
+        if len(raw) <= max_bytes:
+            document_text = extract_candidate_text(raw, document_name)
+        del raw
+
+    if not _project_less_external_ai_allowed():
+        return _classify_establish_project_help(message)
+
+    result = advise(message, document_text=document_text, document_name=document_name)
+    if not result.ran:
+        return _classify_establish_project_help(message)
+    return {"kind": "info", "text": result.text, "read_document": result.read_document}
+
+
 @portal_bp.route('/gateway/orientation', methods=['POST'])
 @login_required
+# GOV-D-001 recorded, as an accepted cost, that a project-less surface reaching
+# the model widens cost and attack surface and "must be covered by rate limiting
+# and the external-AI policy gate explicitly, not by inheritance". This is the
+# rate-limiting half; _project_less_external_ai_allowed is the other half.
+@limiter.limit("30 per hour", methods=["POST"])
 def gateway_orientation():
     """CLAUDE-VOICE-CONSISTENCY-01: backend for the project-less
     Composer/orientation surface - see _classify_gateway_orientation's
@@ -1368,7 +1461,7 @@ def gateway_orientation():
     message = (request.form.get('message') or '')[:500]
     context = request.form.get('context', '')
     if context == 'establish-project':
-        return jsonify(_classify_establish_project_help(message))
+        return jsonify(_establish_project_reply(message))
 
     environment = request.form.get('environment', '')
     registry = get_registry(current_app)
