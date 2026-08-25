@@ -438,3 +438,82 @@ architecture; independent final commissioning; ambient current-view/
 selection awareness beyond the pre-existing explicit anchor mechanism; a
 general approved-action dispatcher beyond real navigation links;
 declaring OPR-7.2 satisfied or beginning representative-user testing.
+
+## AC. The interaction rule (durable principle, not a stage report)
+
+**Added 2026-08-25, after a Workspace interaction audit.** Everything else in
+this document is a record of what CLAUDE-POSTCAMEL-CA1 implemented. This section
+is not: it states the principle that record was always evidence for, in the one
+form it had never been written down — as a rule the *interface* must obey, not
+only the agent.
+
+The principle itself is unchanged and predates this section. CA1 already states
+it three separate times (Sections D, O and U): **the agent may suggest but never
+itself create a governed record**, and `CONVERSATIONAL_TURN_BEHAVIORAL_CONTRACT`
+enforces it in code. Nothing here amends that. What is new is the corollary for
+the UI:
+
+> **Composer proposes. Controls commit. Results are read. Admin is elsewhere.**
+
+Or, in the form a project manager can hold without consulting anything:
+
+> **Say anything to Composer. Press a button when you mean it.**
+
+### What each half means
+
+**Composer proposes.** Anything may be said to it — a question, a doubt, a
+half-formed concern, a claim about a document, an intention. It reasons, cites,
+examines evidence, and may offer to commit something. It never commits.
+
+**Controls commit.** Where an act creates durable, attributed, auditable state —
+a Reviewer Validation, a Disposition, an issued RFI, a Source note, Operating
+Instructions, access, publication, revision — a real control performs it, with a
+real actor and a governance-log entry. A control that changes governed state is
+never hidden to tidy a screen: a consequential action that becomes hard to find
+does not stop being consequential, it stops being deliberate.
+
+**Results are read.** Findings, Evidence, Relationships and Spin output are
+surfaces for reading and reviewing, not for talking into. If the reviewer wants
+to argue with a result, that is a conversation (Composer) or a validation
+(control) — not a third kind of interaction invented for the results pane.
+
+**Admin is elsewhere.** GO Document Understanding, project data management,
+developer diagnostics and observability are not part of ordinary work, and
+should not sit among the controls that are.
+
+### Why this had to be written down
+
+The audit that produced it counted **sixty distinct stage references** in
+`templates/case_workspace.html`. Sixty separately-justified additions, each
+defensible on its own, none authored against a stated interaction plan — because
+the plan lived here, in prose about the agent, and was never expressed as a rule
+about the interface. The Workspace did not accumulate because anyone ignored the
+principle. It accumulated because the principle was never given to the people
+adding controls in a form that constrained a control.
+
+A PM should be able to answer six questions without being taught: where do I
+talk to GO; where do I see what GO found; where do I tell GO to investigate
+differently; where do I confirm or reject something consequential; where does
+durable project context live; and what here is merely admin. At the time of
+writing, three of those six could not be answered from the interface.
+
+### The corollary that is easy to get backwards
+
+The tidying instinct reads "Composer can talk about it" as "the control is
+redundant". It is not. Document Context and Operating Instructions look like
+chat — free-text boxes asking what something means — and both write attributed,
+governance-logged, durable state. Folding either INTO Composer would convert
+project truth into conversation, which this document's own Section O forbids in
+the opposite direction.
+
+The correct move is the inverse: **let Composer offer the commit**, calling the
+same governed route with the same actor and the same log entry. Fewer boxes to
+hunt for; identical durability. Additive, not subtractive.
+
+### Scope
+
+This is an interface rule, and it constrains new surfaces rather than
+retroactively condemning existing ones. It authorizes nothing, removes nothing,
+and changes no code by existing. Its purpose is that the next control added to
+the Workspace has something to be measured against — which, for sixty stages,
+nothing did.
