@@ -3143,6 +3143,51 @@
        issue as {% block chat %}'s own note below - drawing_sources must
        be recomputed here too, not inherited from {% block content %}. #}
     {% set drawing_sources = active_sources|selectattr("kind", "equalto", "drawing")|selectattr("id", "in", active_case.source_ids)|list %}
+    {# CLAUDE-Q-MATERIALS-01: everything this Q draws on, not only drawings.
+
+       Before this, the Q rendered `kind == "drawing"` sources only, so a PDF or
+       a spreadsheet attached to an investigation went in and disappeared - the
+       attachment was real, the Q just never showed it. A container nobody can
+       see the contents of is not a container.
+
+       Filed, not concluded from: this list deliberately says nothing about
+       whether any item supports anything. Attaching material is not
+       adjudicating it, and this surface must never start implying otherwise. #}
+    {% set q_materials = active_sources|selectattr("id", "in", active_case.source_ids)|list %}
+    <section class="workspace-pane" data-ui-ref="toolbox.q-materials">
+        {% call macros.accordion('Materials in this Q (' ~ q_materials|length ~ ')', group='right', id='q-materials', open=False) %}
+        {% if q_materials %}
+        <ul class="q-materials-list" data-ui-ref="toolbox.q-materials.list">
+            {% for s in q_materials %}
+            <li class="q-materials-item" data-ui-ref="toolbox.q-materials.item">
+                <span class="q-materials-name">{{ s.name or s.id }}</span>
+                <span class="q-materials-kind mono">{{ s.kind or 'source' }}</span>
+            </li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <p class="pane-note" data-ui-ref="toolbox.q-materials.empty">Nothing filed in this investigation yet.</p>
+        {% endif %}
+
+        {# Attach something already in the project. Upload paths stay where they
+           are - this is only the verb that was missing. #}
+        {% set attachable = active_sources|rejectattr("id", "in", active_case.source_ids)|list %}
+        {% if attachable %}
+        <form method="post" action="{{ url_for('workspace.attach_source_to_case_route', project_id=project_id, case_id=active_case.id) }}" class="q-materials-attach">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <label class="sr-only" for="q-materials-source">Add existing project material to this investigation</label>
+            <select name="source_id" id="q-materials-source" class="text-input" data-ui-ref="toolbox.q-materials.attach-select" required>
+                <option value="" disabled selected>Add existing material&hellip;</option>
+                {% for s in attachable %}
+                <option value="{{ s.id }}">{{ s.name or s.id }}</option>
+                {% endfor %}
+            </select>
+            <button type="submit" class="btn btn-ghost btn-small" data-ui-ref="toolbox.q-materials.attach">Add to this Q</button>
+        </form>
+        {% endif %}
+        {% endcall %}
+    </section>
+
     <section class="workspace-pane" data-ui-ref="toolbox.investigation-findings">
         <h3>Investigation &middot; Findings</h3>
         {% call macros.accordion('Findings (' ~ findings_view|length ~ ')', status=(applied_count ~ ' applied' if applied_count else None), group='right', id='findings', open=True) %}

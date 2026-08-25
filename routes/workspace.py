@@ -3477,18 +3477,38 @@ def add_document_source(project_id):
         current_app.logger.exception("Content registration failed for Source %s", source["id"])
         status, reason = "skipped", "an internal content-processing error occurred"
 
+    # CLAUDE-Q-MATERIALS-01: an OPTIONAL case, so a reviewer inside a Q who
+    # uploads a specification or a report does not then have to go and find it
+    # to attach it. This does not make the route Case-scoped and does not change
+    # the model this docstring already states - the Source still belongs to the
+    # project; the Q merely draws on it. Absent or unreachable, the route
+    # behaves exactly as it always has.
+    attach_case_id = (request.form.get("case") or "").strip()
+    attached_to_case = False
+    if attach_case_id and source:
+        try:
+            _require_visible_case(store, workspace, attach_case_id)
+            store.attach_source_to_case(workspace, attach_case_id, source["id"])
+            attached_to_case = True
+        except CaseWorkspaceError:
+            attached_to_case = False
+
     if status == "added":
         flash(
             "Document added as a Project Source. Content processed as "
-            "Spin-readable project evidence.",
+            "Spin-readable project evidence."
+            + (" Also filed in this investigation." if attached_to_case else ""),
             "success",
         )
     else:
         flash(
             "Document registered, but its content could not be processed. "
-            f"Spin cannot read this document yet: {reason}",
+            f"Spin cannot read this document yet: {reason}"
+            + (" It is still filed in this investigation." if attached_to_case else ""),
             "warning",
         )
+    if attached_to_case:
+        return redirect(url_for("workspace.show_workspace", project_id=project_id, case=attach_case_id))
     return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
 
 
@@ -4137,6 +4157,64 @@ def add_drawing_source(project_id, case_id):
         flash(str(exc), "error")
         return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
 
+    return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
+
+
+@workspace_bp.route("/projects/<project_id>/workspace/cases/<case_id>/attach-source", methods=["POST"])
+@login_required
+def attach_source_to_case_route(project_id, case_id):
+    """CLAUDE-Q-MATERIALS-01: keep an existing project Source in this Q.
+
+    THE MISSING VERB, AGAIN. Every material type a Q might need already has a
+    governed ingestion path, and every one of them produces an ordinary Source:
+
+      .pdf/.docx/.txt/.csv/.md/.xlsx  -> add_document_source
+      .png/.jpg/.jpeg as a drawing    -> add_drawing_source (already attaches)
+      a photo from the Composer       -> register_eye_capture (already attaches)
+      a note                          -> add_text_record_source
+
+    What was missing is that the document and text-record paths are
+    PROJECT-scoped and never attach to anything - deliberately, and
+    add_document_source's own docstring says why: "a Case draws on Sources, it
+    does not own them." That is the right model and this does not change it.
+    Attaching records that this Q draws on that Source; it does not move it,
+    copy it, or give the Q ownership of it.
+
+    So no new ingestion mechanism, no Q-specific upload path, no second
+    attachment collection - one route that says "this Q draws on that Source",
+    reusing attach_source_to_case, which has always appended to a list.
+
+    Authorization is the Case's own: _require_visible_case, the same gate every
+    other Case-scoped route in this file uses. A Source the reviewer cannot
+    reach cannot be attached, because it is resolved out of this project's own
+    active sources, never from an id supplied blind.
+
+    ATTACHING IS NOT CONCLUDING. No Finding is created, no evidence is promoted,
+    no claim is made about the material. It is filed, not adjudicated.
+    """
+    _, store, workspace = _load_workspace_or_404(project_id)
+    _require_visible_case(store, workspace, case_id)
+
+    source_id = (request.form.get("source_id") or "").strip()
+    active = {s["id"]: s for s in CaseWorkspaceStore.active_sources(workspace)}
+    source = active.get(source_id)
+    if source is None:
+        # A removed, foreign or invented id is reported as unavailable rather
+        # than disclosed - the same shape as every other id lookup here.
+        flash("That material is not available in this project.", "error")
+        return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
+
+    try:
+        store.attach_source_to_case(workspace, case_id, source_id)
+    except CaseWorkspaceError as exc:
+        flash(str(exc), "error")
+        return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
+
+    flash(
+        "\u201c" + str(source.get("name") or "Material")
+        + "\u201d is now part of this investigation. It is filed here, not concluded from.",
+        "success",
+    )
     return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
 
 
