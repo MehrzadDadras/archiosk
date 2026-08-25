@@ -160,6 +160,16 @@
                                     <a class="workspace-menubar-item" data-ui-ref="menu.archiosk.admin.new-project" href="{{ url_for('portal.upload') }}">+ New Project</a>
                                     <a class="workspace-menubar-item" data-ui-ref="menu.archiosk.admin.security" href="{{ url_for('security.department_home') }}">Security</a>
                                     <a class="workspace-menubar-item" data-ui-ref="menu.archiosk.admin.operations" href="{{ url_for('operations.department_home') }}">Operations</a>
+                                    {# CLAUDE-DIAGNOSTIC-BRIDGE-01: Developer Mode is a session
+                                       flag toggled below, not a page, so it had no visible
+                                       destination - which is why it was hard to find at all.
+                                       This is that destination: the problems captured from the
+                                       live product, read-only. Same is_admin gate as every
+                                       other item in this group; deliberately NOT a separate
+                                       /developer URL, because a memorable address invites
+                                       probing and lands in browser history, while this is only
+                                       visible to someone who already passed the gate. #}
+                                    <a class="workspace-menubar-item" data-ui-ref="menu.archiosk.admin.diagnostics" href="{{ url_for('portal.list_diagnostics') }}">Diagnostics</a>
                                     <a class="workspace-menubar-item" id="project-data-management" data-ui-ref="menu.archiosk.admin.project-data-management" href="{{ url_for('portal.reset_project_data', project_id=(project_id if project_id is defined else None)) }}">Project Data Management</a>
                                     <hr class="workspace-menubar-separator" aria-hidden="true">
                                     {# CLAUDE-DEVELOPER-MODE-COCKPIT-01, Addendum E: orientation-only

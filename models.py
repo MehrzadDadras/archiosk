@@ -163,3 +163,78 @@ class VerificationAccessToken(db.Model):
 
     def __repr__(self) -> str:
         return f"<VerificationAccessToken user_id={self.user_id} used={self.used_at is not None}>"
+
+
+class DiagnosticReport(db.Model):
+    """CLAUDE-DIAGNOSTIC-BRIDGE-01: one live product problem, captured in the
+    application that produced it, for a development agent to investigate.
+
+    WHY THIS IS A DATABASE ROW AND NOT A WORKSPACE RECORD
+
+    The same reasoning that governs access requests: routes/portal.py's
+    Reset/Restore RENAMES the whole registry store directory away and installs a
+    staged replacement, so anything living in the flat-JSON store is wholesale
+    replaced by a project reset. A diagnostic about the APPLICATION must not die
+    because somebody reset a PROJECT. It is also not project data - it is about
+    the product, and its natural neighbours are the other operator-scoped rows
+    already here.
+
+    WHAT THIS DELIBERATELY IS NOT
+
+    Not a message queue, and not a channel. Nothing here is transmitted to a
+    development agent: ARCHIOSK cannot call one, because it runs on an operator's
+    own machine when a human starts it. This row is INERT DATA that a Claude Code
+    session reads when asked to. That is the boundary the Product Owner required,
+    and it holds structurally rather than by policy - a record with no mechanism
+    cannot grant permission to change code or deploy anything.
+
+    IDENTIFIERS, NOT CONTENT. `project_id`/`case_id` are recorded so an
+    investigator can go and read the real thing from the repository and the
+    store; the project's documents and conversation text are NOT copied here.
+    `detail` carries what the Product Owner chose to type, never anything
+    harvested from a project behind them.
+
+    STATUS makes the Product Owner's required separation structural: capture
+    (`open`) -> investigation (`investigated`, findings written by the agent) ->
+    notification (`emailed_at`). Code modification and deployment are
+    deliberately NOT states here, because they are not this record's business and
+    must never look like a step it can advance itself to.
+    """
+    __tablename__ = "diagnostic_reports"
+
+    STATUS_OPEN = "open"
+    STATUS_INVESTIGATED = "investigated"
+    STATUS_CLOSED = "closed"
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    # --- what the Product Owner reported ------------------------------------
+    reported_by = db.Column(db.String(120), nullable=False)
+    reported_at = db.Column(db.DateTime, nullable=False,
+                            default=lambda: datetime.now(timezone.utc))
+    summary = db.Column(db.String(300), nullable=False)
+    detail = db.Column(db.Text, nullable=True)
+
+    # --- what the application already knew, so nobody retypes it ------------
+    surface = db.Column(db.String(300), nullable=True)
+    project_id = db.Column(db.String(64), nullable=True, index=True)
+    case_id = db.Column(db.String(64), nullable=True)
+    build_sha = db.Column(db.String(64), nullable=True)
+    static_version = db.Column(db.String(32), nullable=True)
+    trace = db.Column(db.Text, nullable=True)
+
+    # --- what the investigation concluded -----------------------------------
+    status = db.Column(db.String(24), nullable=False, default=STATUS_OPEN, index=True)
+    findings = db.Column(db.Text, nullable=True)
+    root_cause = db.Column(db.Text, nullable=True)
+    affected = db.Column(db.Text, nullable=True)
+    recommendation = db.Column(db.Text, nullable=True)
+    commit_status = db.Column(db.Text, nullable=True)
+    uncertainty = db.Column(db.Text, nullable=True)
+    investigated_at = db.Column(db.DateTime, nullable=True)
+
+    # --- notification, a separate act again ---------------------------------
+    emailed_at = db.Column(db.DateTime, nullable=True)
+
+    def __repr__(self) -> str:
+        return f"<DiagnosticReport {self.id} {self.status}>"

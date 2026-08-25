@@ -91,6 +91,14 @@ class BaseConfig:
     # zero-configuration trace.
     TRIAL_REQUEST_NOTIFY_EMAIL = os.getenv("TRIAL_REQUEST_NOTIFY_EMAIL", "")
 
+    # CLAUDE-DIAGNOSTIC-BRIDGE-01: where a finished diagnostic investigation is
+    # sent. Same "blank means skip, never error" contract as SMTP_HOST and
+    # TRIAL_REQUEST_NOTIFY_EMAIL above - an unconfigured address makes the send
+    # a truthful refusal, never a failed request. Deliberately its own variable
+    # rather than reusing the trial address: these are different audiences and
+    # one of them should not silently start receiving the other's mail.
+    DIAGNOSTIC_NOTIFY_EMAIL = os.getenv("DIAGNOSTIC_NOTIFY_EMAIL", "")
+
     # HTTPOnly/SameSite are safe in every environment; Secure requires HTTPS,
     # which only nginx terminates in production — off in dev so the login
     # cookie still works over plain http://127.0.0.1.
@@ -132,6 +140,7 @@ class TestingConfig(BaseConfig):
     # Same hermeticity reasoning as SMTP_HOST directly above -- a test
     # must never attempt a real send based on a developer's local .env.
     TRIAL_REQUEST_NOTIFY_EMAIL = ""
+    DIAGNOSTIC_NOTIFY_EMAIL = ""
     # CLAUDE-P27-B: Flask-Limiter's default in-memory storage is a single
     # process-wide singleton (services/rate_limit.py) -- without this,
     # every test method's real HTTP requests against /login,

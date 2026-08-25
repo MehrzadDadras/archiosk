@@ -635,6 +635,60 @@ def developer_reset_test_project():
     return redirect(url_for("portal.developer_tools", project_id=project_id))
 
 
+# -- CLAUDE-DIAGNOSTIC-BRIDGE-01: capture a live problem where it happened -----
+# Product Owner: "there is no Product Owner/Admin mechanism inside ARCHIOSK to
+# send a live product issue directly to the development agent with the relevant
+# application context."
+#
+# @admin_required, not merely @login_required, and that IS the critical boundary
+# the Product Owner named: "this must not become a general user -> coding-agent
+# channel." An ordinary project user cannot reach these routes at all.
+#
+# Nothing here transmits anything. ARCHIOSK cannot call a development agent -
+# one runs on an operator's own machine when a human starts it - so capture
+# writes an inert row that a Claude Code session reads when asked. The receipt
+# says "recorded as", never "sent to Claude", because the second would be false.
+@portal_bp.route("/developer/diagnostics", methods=["POST"])
+@admin_required
+def capture_diagnostic():
+    """Record one live product problem, with the context the app already knows."""
+    from services.diagnostic_report import record
+
+    summary = (request.form.get("summary") or "").strip()
+    if not summary:
+        flash("Describe the problem before sending it for investigation.", "error")
+        return redirect(request.referrer or url_for("portal.index"))
+
+    report = record(
+        reported_by=session.get("username") or "unknown",
+        summary=summary,
+        detail=request.form.get("detail"),
+        # The surface the reviewer was ACTUALLY on, taken from the referrer
+        # rather than asked for - "do not require the Product Owner to manually
+        # reconstruct information the application already knows."
+        surface=(request.form.get("surface") or request.referrer or None),
+        project_id=(request.form.get("project_id") or None),
+        case_id=(request.form.get("case_id") or None),
+        trace=request.form.get("trace"),
+    )
+    flash(
+        f"Recorded as diagnostic {report.id}. It is waiting to be investigated - "
+        "nothing has been transmitted anywhere.",
+        "success",
+    )
+    return redirect(request.referrer or url_for("portal.index"))
+
+
+@portal_bp.route("/developer/diagnostics")
+@admin_required
+def list_diagnostics():
+    """Read-only. Investigating, changing code and deploying are separate acts,
+    and none of them can be started from this page."""
+    from services.diagnostic_report import list_reports
+
+    return render_template("diagnostics.html", reports=list_reports())
+
+
 # -- CLAUDE-MOBILE-PWA-01: installability ---------------------------------
 # Product Owner: "ARCHIOSK should be addable/installable to the phone home
 # screen; the installed app launches directly into ARCHIOSK; users should not

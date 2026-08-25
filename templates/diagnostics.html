@@ -1,0 +1,57 @@
+{# CLAUDE-DIAGNOSTIC-BRIDGE-01: the admin read-only view of captured problems.
+
+   READ-ONLY, deliberately and completely. There is no button here that
+   investigates, changes code, or deploys anything, because the Product Owner
+   required those to be distinct acts and the cleanest way to keep them distinct
+   is for this surface to have no mechanism for any of them.
+
+   It also does not claim anything was sent. ARCHIOSK cannot call a development
+   agent; a captured report waits until a Claude Code session is asked to read
+   it. Saying "sent to Claude" would be false, so the status column says what is
+   actually true of each row. #}
+{% extends "base.html" %}
+{% block title %}Diagnostics &mdash; Archiosk{% endblock %}
+
+{% block content %}
+<section class="entry">
+    <h1 data-ui-ref="developer.diagnostics.heading">Diagnostics</h1>
+    <p class="pane-note" data-ui-ref="developer.diagnostics.copy">
+        Problems captured from the live product, with the context the application
+        already knew. Nothing here has been transmitted anywhere &mdash; a report
+        waits until a development session is asked to read it.
+    </p>
+
+    {% if reports %}
+    <ul class="project-card-list" data-ui-ref="developer.diagnostics.list">
+        {% for r in reports %}
+        <li class="project-card" data-ui-ref="developer.diagnostics.item">
+            <div class="project-card-main">
+                <span class="project-card-name">#{{ r.id }} &middot; {{ r.summary }}</span>
+                <span class="project-card-id mono">
+                    {{ r.status }}{% if r.emailed_at %} &middot; emailed{% endif %}
+                </span>
+            </div>
+            <div class="project-card-meta">
+                <span>{{ r.reported_by }}</span>
+                <span class="project-card-dot" aria-hidden="true">&middot;</span>
+                <span>{{ r.reported_at.strftime('%Y-%m-%d %H:%M') if r.reported_at else 'unknown' }}</span>
+                {% if r.static_version %}
+                <span class="project-card-dot" aria-hidden="true">&middot;</span>
+                <span class="mono">v{{ r.static_version }}</span>
+                {% endif %}
+                {% if r.surface %}
+                <span class="project-card-dot" aria-hidden="true">&middot;</span>
+                <span class="mono">{{ r.surface }}</span>
+                {% endif %}
+            </div>
+            {% if r.findings %}
+            <p class="pane-note" data-ui-ref="developer.diagnostics.item.findings">{{ r.findings }}</p>
+            {% endif %}
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p class="projects-empty" data-ui-ref="developer.diagnostics.empty">No diagnostics captured yet.</p>
+    {% endif %}
+</section>
+{% endblock %}

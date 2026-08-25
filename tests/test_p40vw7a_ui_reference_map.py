@@ -87,6 +87,8 @@ _OPERATIONS_HTML_PATH = _REPO_ROOT / "templates" / "operations.html"
 # Data Management" identity) - added to the scanned list from the start,
 # same discipline as _OPERATIONS_HTML_PATH's own comment above.
 _RESET_PROJECT_DATA_HTML_PATH = _REPO_ROOT / "templates" / "reset_project_data.html"
+# CLAUDE-DIAGNOSTIC-BRIDGE-01: the admin diagnostics view.
+_DIAGNOSTICS_HTML_PATH = _REPO_ROOT / "templates" / "diagnostics.html"
 # CLAUDE-SPIN-00A: _spin_prototype.html is included (not extended) by
 # case_workspace.html's own {% block toolbox %} - its own refs are real
 # rendered markup (when ?spin=1), same as any other template here, just
@@ -228,6 +230,7 @@ def _all_template_refs() -> set[str]:
         _CONFIRM_DELETE_FOLDER_HTML_PATH, _OPERATIONS_HTML_PATH,
         _LANDING_HTML_PATH, _EXPLORE_HTML_PATH, _START_TRIAL_HTML_PATH,
         _SPIN_PROTOTYPE_HTML_PATH, _RESET_PROJECT_DATA_HTML_PATH,
+        _DIAGNOSTICS_HTML_PATH,
     ):
         text = path.read_text(encoding="utf-8")
         refs |= set(_DATA_REF_RE.findall(text))
