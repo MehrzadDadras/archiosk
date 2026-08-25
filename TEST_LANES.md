@@ -8,15 +8,19 @@ Testing section, which this document does not change or override.
 
 What this document adds: a **hand-maintained mapping** from "what changed" to
 "which smaller test set gives fast, trustworthy feedback before the full run."
-No pytest markers, no directory reorganization, no new dependency — every lane
-below is just an explicit list of existing file paths, runnable today with the
-ordinary `pytest -q <paths>` command. Nothing here deletes a test, weakens an
-assertion, or makes any test's outcome conditional on which lane ran it.
+No general pytest marker taxonomy, directory reorganization, or new dependency
+is introduced here — every lane below is still an explicit list of existing
+file paths, runnable today with the ordinary `pytest -q <paths>` command.
+`pytest.ini` does contain one narrow `legacy_route_diagnostic` marker for
+preserved diagnostics of removed Case-collaboration route entry points; it is
+not a refactor-impact, ownership, or behavioural lane taxonomy. Nothing here
+deletes a test, weakens an assertion, or makes any test's outcome conditional
+on which lane ran it.
 
 ## Why file-list lanes, not markers or directories (yet)
 
-The suite has **no existing `pytest.ini`/`pyproject.toml`/`conftest.py`** and no
-registered markers — confirmed by direct inspection, not assumed. Test files are
+The suite has no general ownership/dependency registry or registered marker
+taxonomy. Test files are
 named by the *governance stage that introduced them* (`test_p40vw7b_*`,
 `test_ca1d_*`, `test_mm4_*`, `test_spin_00a_*`), not by test *kind* — so a
 filename alone doesn't reliably say "this is a unit test" vs. "this is a
@@ -40,11 +44,29 @@ answer below: yes, by roughly 25-50x for the two worked examples tried.
 **Lane A — Immediate Local.** The test file(s) written for the exact surface
 being changed. Always the fastest, always run first.
 
-**Lane B — Feature/Domain.** Other test files that exercise the same shared
-mechanism the change actually touches (a shared template block, a shared route
-function, a shared service) — found by grepping for the specific `data-ui-ref`
-prefix, shared macro, or shared function the change modified, not just by
-"feels related."
+**Lane B — Feature/Domain and reverse impact.** Other test files that exercise
+the same shared mechanism the change actually touches (a shared template block,
+a shared route function, a shared service, script, or helper). For every
+bounded change, begin with mechanical reverse-reference discovery: identify the
+changed production/template/static files; search tests for those file paths;
+search for changed exported/helper/function/macro names; and, when code was
+extracted, moved, renamed, or consolidated, search for distinctive old and new
+structural anchors. Add every relevant hit to the Lane B candidate set. For a
+shared helper, script, or macro, include known consumers even when their tests
+belong to another historical feature or implementation stage. Apply Lane C's
+standing rules independently where the changed surface qualifies. If impact is
+uncertain, widen the bounded set rather than assuming non-impact. This is a
+discovery rule, not an automatic selector or a second test taxonomy.
+
+**Worked reverse-impact example — Composer/image refactor.** A change to
+`static/js/composer_attach.js` that moved behavior into
+`ArchioskPrepareImage`, `sendAs`, or `loadImageFile` requires searching for the
+file, those symbols, and the old structural anchors. The resulting Lane B set
+includes the source-structure and consumer tests
+`test_go_composer_capture_01.py`, `test_document_rail_search_01.py`,
+`test_multi_image_q_01.py`, and `test_mobile_capture_01.py` where their direct
+references or shared image-path assertions apply. Those tests run before Lane E;
+Lane E remains the certification gate and is not replaced by this expansion.
 
 **Lane C — Critical Core.** A fixed, small set that protects cross-cutting
 invariants regardless of which feature changed: project isolation/
