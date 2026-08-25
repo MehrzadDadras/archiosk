@@ -585,14 +585,28 @@ class TheDocumentItselfCannotBeDraggedTests(unittest.TestCase):
         """The difference between "this does not scroll" and "there is nothing
         here to scroll"."""
         phone = _phone_block()
-        # Anchored on the declaration rather than on a selector: the phone
-        # block has an earlier html/body height rule whose own opening brace
-        # would otherwise match first.
-        rule = phone[: phone.index("inset: 0")]
-        rule = rule[rule.rindex("{") + 1:]
-        self.assertIn("position: fixed", rule)
-        owner = phone[: phone.rindex("{", 0, phone.index("inset: 0"))]
-        self.assertTrue(owner.rstrip().endswith("body"), owner.rstrip()[-40:])
+        # Anchored on the OWNING SELECTOR, not on the first `inset: 0`.
+        #
+        # The previous anchor took the first `inset: 0` in the phone block and
+        # walked back to its opening brace. That held only while exactly one
+        # rule in the block used the shorthand. CLAUDE-MOBILE-MENU-REPAIR-01's
+        # drawer scrim (html.mobile-nav-open body::after) legitimately uses it
+        # too and happens to sit earlier in the file, so the assertion started
+        # describing the scrim instead of the document.
+        #
+        # This finds the rule whose selector is exactly `body` and asserts
+        # against that, which is what the test was always about. It is now
+        # indifferent to how many other rules use inset, and to their order.
+        import re as _re
+
+        body_rules = [
+            match for match in _re.finditer(r"(^|[;}])\s*body\s*\{([^}]*)\}", phone)
+            if "inset: 0" in match.group(2)
+        ]
+        self.assertTrue(body_rules, "no phone-block `body` rule using inset")
+        declarations = body_rules[0].group(2)
+        self.assertIn("position: fixed", declarations)
+        self.assertIn("inset: 0", declarations)
 
     def test_the_document_refuses_overscroll(self):
         """No regex here on purpose: the earlier version needed an escaped

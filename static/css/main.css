@@ -8140,6 +8140,58 @@ html[data-tray-focus="toolbox"] .workspace-pane-toolbox {
         min-width: 0;
     }
 
+    /* CLAUDE-MOBILE-MENU-REPAIR-01 - live iPhone report. The drawer above
+       already worked (toggle, Escape, close-on-choose, outside-tap dismiss);
+       what it contained was the desktop menu transplanted. Three bounded
+       corrections, all mobile-only. Desktop is untouched.
+
+       1. TOUCH SIZE. The items kept their desktop height, so a menu built for a
+          cursor was being driven with a thumb. 44px is this shell's own
+          established target - composer attach, capture review and the landing
+          sound toggle all use it - not a new number invented here. */
+    html.mobile-nav-open .workspace-menubar-item {
+        min-height: 44px;
+        display: flex;
+        align-items: center;
+    }
+
+    /* 2. THE LEFTOVER STRIP READ AS BROKEN. The drawer is min(86vw, 320px), so
+          on a 390px phone roughly 70px of Composer stayed visible beside it.
+          That strip was ALREADY a dismiss target - workspace_trays.js closes on
+          any outside tap - but nothing said so, and an inert-looking sliver of
+          the work you were mid-way through reads as a rendering fault rather
+          than an invitation. The scrim makes existing behaviour visible; it adds
+          no behaviour.
+
+          A pseudo-element, so there is no new DOM node to keep in sync: it is
+          not an event target, so the tap still lands on <body> and the existing
+          outside-click handler still closes the drawer. z-index sits below the
+          drawer's own 40. */
+    html.mobile-nav-open body::after {
+        content: "";
+        position: fixed;
+        inset: 0;
+        z-index: 39;
+        background: rgba(0, 0, 0, 0.45);
+    }
+
+    /* 3. DISABLED ITEMS ARE NOISE HERE, NOT INFORMATION. Thirteen of the
+          drawer's sixty-one items are disabled in a given context, and each
+          explains itself through a title attribute ("Admin only", "Open a
+          Project first") that a touch device cannot surface - there is no
+          hover. On a phone they occupy scarce space while being both unusable
+          AND unexplainable.
+
+          This hides a control that already cannot act. It removes no
+          capability, changes no authority, and is not a decision about which
+          menus belong on a phone - that question is left open deliberately. On
+          desktop they stay, where the tooltip works and a greyed row genuinely
+          teaches what exists. */
+    html.mobile-nav-open .workspace-menubar-item-disabled,
+    html.mobile-nav-open .workspace-menubar-item[aria-disabled="true"] {
+        display: none;
+    }
+
     .workspace-topbar {
         gap: 0.4rem;
         padding: 0.35rem 0;
