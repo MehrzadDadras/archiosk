@@ -9390,3 +9390,21 @@ body {
        second row on a narrow screen. */
     .capture-review-action { font-size: 0.8rem; padding: 0.4rem 0.7rem; }
 }
+
+/* CLAUDE-CAPTURE-REVIEW-02: crop handles.
+   Visual affordances only - hit-testing lives in JS against the photo with a
+   22px grab radius, because a thumb cannot reliably land on a 10px dot and a
+   handle you must hit exactly is a handle that does not work on a phone. */
+.capture-review-handle {
+    position: absolute;
+    width: 12px;
+    height: 12px;
+    border: 2px solid var(--machine-blue);
+    background: var(--surface-primary);
+    border-radius: 2px;
+    pointer-events: none;
+}
+.capture-review-handle-nw { left: -7px; top: -7px; }
+.capture-review-handle-ne { right: -7px; top: -7px; }
+.capture-review-handle-sw { left: -7px; bottom: -7px; }
+.capture-review-handle-se { right: -7px; bottom: -7px; }

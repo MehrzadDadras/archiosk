@@ -121,14 +121,23 @@ class CropWorksOnTheOriginalPixelsTests(unittest.TestCase):
     """The whole reason the review had to come BEFORE normalization."""
 
     def test_the_crop_is_scaled_to_natural_dimensions(self):
-        self.assertIn("reviewImage.naturalWidth / point.rect.width", CODE)
-        self.assertIn("reviewImage.naturalHeight / point.rect.height", CODE)
+        # CLAUDE-CAPTURE-REVIEW-02 moved the scaling: the rect is now stored as
+        # FRACTIONS and converted to source pixels once, at use time, rather
+        # than converted to pixels on every pointerup. The property asserted is
+        # unchanged - the crop resolves against the decoded natural size, not
+        # against whatever the photo happens to be displayed at.
+        resolve = CODE[CODE.index("function resolveChosenImage"):]
+        resolve = resolve[:resolve.index("\n    if (reviewUse)")]
+        self.assertIn("cropRect.x * image.naturalWidth", resolve)
+        self.assertIn("cropRect.y * image.naturalHeight", resolve)
+        self.assertIn("cropRect.w * image.naturalWidth", resolve)
+        self.assertIn("cropRect.h * image.naturalHeight", resolve)
 
     def test_the_crop_draws_from_the_original_preview(self):
         resolve = CODE[CODE.index("function resolveChosenImage"):]
         resolve = resolve[:resolve.index("\n    if (reviewUse)")]
         self.assertIn("image.src = pendingUrl", resolve)
-        self.assertIn("cropRect.x, cropRect.y, cropRect.w, cropRect.h", resolve)
+        self.assertIn("sourceX, sourceY, sourceW, sourceH", resolve)
 
     def test_normalization_happens_after_the_crop_not_before(self):
         # The ordering defect this whole stage exists to fix.
@@ -136,12 +145,15 @@ class CropWorksOnTheOriginalPixelsTests(unittest.TestCase):
                         CODE.index("window.ArchioskPrepareImage(chosen"))
 
     def test_a_tap_is_not_treated_as_a_crop(self):
-        # Silently cropping to a few pixels is the worst possible reading of
-        # someone simply touching the photo.
-        self.assertIn("displayW < 12 || displayH < 12", CODE)
-        tiny = CODE[CODE.index("displayW < 12"):]
-        tiny = tiny[:tiny.index("return;")]
-        self.assertIn("cropRect = null", tiny)
+        # Silently cropping to a sliver is the worst possible reading of someone
+        # simply touching the photo. The threshold moved from display pixels to
+        # a fraction of the image when the rect became resolution-independent -
+        # which also makes it behave the same on every screen size, where a
+        # 12px floor did not.
+        self.assertIn("MIN_FRACTION", CODE)
+        guard = CODE[CODE.index("cropRect.w < MIN_FRACTION"):]
+        guard = guard[:guard.index("}")]
+        self.assertIn("cropRect = null", guard)
 
     def test_a_crop_can_be_undone_without_retaking(self):
         self.assertIn("reviewCropReset.addEventListener", CODE)
@@ -286,6 +298,122 @@ class MobileTreatmentTests(unittest.TestCase):
             height = re.search(r"min-height:\s*(\d+)px", rule.group(0))
             self.assertIsNotNone(height, selector)
             self.assertGreaterEqual(int(height.group(1)), 44, selector)
+
+
+class CropCanBeRepositionedAndResizedTests(unittest.TestCase):
+    """CLAUDE-CAPTURE-REVIEW-02. Draw-only was not enough on a phone.
+
+    A first drag is rarely the right rectangle with a thumb, and without move
+    or resize the only recovery was to redraw the whole thing.
+    """
+
+    def test_the_three_gestures_are_distinguished(self):
+        down = CODE[CODE.index("reviewImage.addEventListener('pointerdown'"):]
+        down = down[:down.index("});")]
+        self.assertIn("handleUnder(point)", down)
+        self.assertIn("insideCrop(point)", down)
+        self.assertIn("'draw'", down)
+
+    def test_moving_preserves_the_crop_size(self):
+        move = CODE[CODE.index("} else if (mode === 'move'"):]
+        move = move[:move.index("} else if (startRect)")]
+        self.assertIn("w: startRect.w", move)
+        self.assertIn("h: startRect.h", move)
+
+    def test_moving_cannot_push_the_crop_off_the_photo(self):
+        move = CODE[CODE.index("} else if (mode === 'move'"):]
+        move = move[:move.index("} else if (startRect)")]
+        self.assertIn("1 - startRect.w", move)
+        self.assertIn("1 - startRect.h", move)
+        self.assertIn("clamp01(", move)
+
+    def test_resizing_holds_the_opposite_corner_fixed(self):
+        resize = CODE[CODE.index("var left = (mode === 'nw'"):]
+        resize = resize[:resize.index("renderCropBox();")]
+        for edge in ("left", "right", "top", "bottom"):
+            self.assertIn("var " + edge + " =", resize)
+        self.assertIn("startRect.x + startRect.w", resize)
+        self.assertIn("startRect.y + startRect.h", resize)
+
+    def test_all_four_corners_are_grabbable(self):
+        self.assertIn("HANDLE_KEYS = ['nw', 'ne', 'sw', 'se']", CODE)
+        for corner in ("nw", "ne", "sw", "se"):
+            self.assertIn("capture-review-handle-" + corner, CSS, corner)
+
+    def test_the_grab_radius_is_thumb_sized_not_handle_sized(self):
+        # The handles are 12px visual affordances; hit-testing uses a much
+        # larger radius, because a handle you must hit exactly does not work.
+        grab = CODE[CODE.index("function handleUnder(point)"):]
+        grab = grab[:grab.index("\n        }")]
+        self.assertIn("22 /", grab)
+        # And the affordances must not steal the gesture.
+        handle_rule = re.search(r"\.capture-review-handle\s*\{[^}]*\}", CSS)
+        self.assertIsNotNone(handle_rule)
+        self.assertIn("pointer-events: none", handle_rule.group(0))
+
+    def test_a_gesture_survives_the_finger_leaving_the_image(self):
+        self.assertIn("setPointerCapture", CODE)
+        self.assertIn("pointercancel", CODE)
+
+
+class CropCoordinatesAreResolutionIndependentTests(unittest.TestCase):
+    """Fractions, not display pixels - and converted exactly once."""
+
+    def test_the_rect_is_stored_as_fractions(self):
+        # Display pixels go stale on any reflow (rotation, keyboard, resize),
+        # and a stale crop maps to the wrong part of the photo at the moment it
+        # is finally used.
+        self.assertIn("clamp01(", CODE)
+        fraction = CODE[CODE.index("function fractionOf(event)"):]
+        fraction = fraction[:fraction.index("\n        }")]
+        self.assertIn("/ rect.width", fraction)
+        self.assertIn("/ rect.height", fraction)
+
+    def test_conversion_to_source_pixels_happens_exactly_once(self):
+        self.assertEqual(CODE.count("cropRect.x * image.naturalWidth"), 1)
+        self.assertEqual(CODE.count("cropRect.y * image.naturalHeight"), 1)
+
+    def test_the_conversion_uses_the_decoded_natural_dimensions(self):
+        resolve = CODE[CODE.index("function resolveChosenImage"):]
+        resolve = resolve[:resolve.index("\n    if (reviewUse)")]
+        self.assertIn("image.naturalWidth", resolve)
+        self.assertIn("image.naturalHeight", resolve)
+
+    def test_the_box_is_remapped_on_reflow(self):
+        self.assertIn("window.addEventListener('resize', renderCropBox)", CODE)
+
+    def test_nothing_is_re_encoded_while_the_crop_moves(self):
+        move_path = CODE[CODE.index("reviewImage.addEventListener('pointermove'"):]
+        move_path = move_path[:move_path.index("function endGesture()")]
+        for token in ("toBlob", "canvas", "ArchioskPrepareImage", "drawImage"):
+            self.assertNotIn(token, move_path, token)
+
+
+class OrientationIsConsistentAcrossTheWholePathTests(unittest.TestCase):
+    """§4 finding: NOT NEEDED. Asserted structurally so it stays true.
+
+    Every stage decodes through an HTMLImageElement, which applies EXIF
+    orientation and reports oriented naturalWidth/naturalHeight. Preview, crop
+    and normalization therefore agree, and cropping before normalization cannot
+    introduce a coordinate mismatch.
+    """
+
+    def test_no_unoriented_decode_path_exists(self):
+        # createImageBitmap does NOT apply EXIF orientation by default; using it
+        # anywhere in this path would break the agreement above.
+        self.assertNotIn("createImageBitmap", CODE)
+
+    def test_every_decode_goes_through_an_image_element(self):
+        self.assertEqual(CODE.count("new Image()"), 2)  # crop + the shared helper
+
+    def test_no_stylesheet_overrides_image_orientation(self):
+        # The CSS default is from-image; overriding it to `none` would desync
+        # the displayed photo from the cropped pixels.
+        self.assertNotIn("image-orientation", CSS)
+
+    def test_no_rotation_machinery_was_added(self):
+        # The investigation found nothing to correct, so nothing was built.
+        self.assertNotIn("rotate", CODE.lower())
 
 
 if __name__ == "__main__":

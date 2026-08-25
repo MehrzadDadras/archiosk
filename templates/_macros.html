@@ -395,7 +395,16 @@
                    image; the original File is never modified. #}
                 <img class="capture-review-image" id="dock-capture-review-image"
                      data-ui-ref="chat.composer.capture-review.image" alt="The photo you just took">
-                <div class="capture-review-crop" id="dock-capture-review-crop" hidden aria-hidden="true"></div>
+                {# The crop rectangle. Corner handles are visual affordances only -
+                   the hit-testing happens on the photo itself in JS with a 22px
+                   grab radius, so a thumb does not have to land on a 10px dot.
+                   pointer-events stay off them for exactly that reason. #}
+                <div class="capture-review-crop" id="dock-capture-review-crop" hidden aria-hidden="true">
+                    <span class="capture-review-handle capture-review-handle-nw"></span>
+                    <span class="capture-review-handle capture-review-handle-ne"></span>
+                    <span class="capture-review-handle capture-review-handle-sw"></span>
+                    <span class="capture-review-handle capture-review-handle-se"></span>
+                </div>
             </div>
             <p class="capture-review-hint" id="dock-capture-review-hint"
                data-ui-ref="chat.composer.capture-review.hint">Drag on the photo to crop.</p>

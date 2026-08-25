@@ -161,89 +161,179 @@
         releasePreview();
         pendingUrl = window.URL.createObjectURL(file);
         if (reviewImage) reviewImage.src = pendingUrl;
-        if (reviewCropBox) reviewCropBox.hidden = true;
-        if (reviewCropReset) reviewCropReset.hidden = true;
+        renderCropBox();
         if (reviewHint) reviewHint.textContent = 'Drag on the photo to crop.';
         if (review) review.hidden = false;
     }
 
-    /* Crop by dragging a rectangle over the preview. Pointer events cover
-     * touch, pen and mouse in one path rather than three. */
+    /* ── Crop: draw, then reposition or resize ───────────────────────────────
+     *
+     * Stored as FRACTIONS of the displayed image (0..1), never as pixels.
+     *
+     * That choice matters more than it looks. Display pixels go stale the
+     * moment anything reflows - a phone rotating, the keyboard opening, the
+     * sheet resizing - and a crop stored in them would then map to the wrong
+     * part of the photo at the moment it is finally used. Fractions survive all
+     * of that, and are converted to source pixels exactly once, at "Use photo".
+     *
+     * Nothing is re-encoded while the crop is being moved. The rectangle is a
+     * div; the canvas is touched once, at the end.
+     */
+    var HANDLE_KEYS = ['nw', 'ne', 'sw', 'se'];
+    var MIN_FRACTION = 0.04;   // a crop smaller than this is almost certainly a mis-drag
+
+    function clamp01(value) {
+        return Math.min(Math.max(value, 0), 1);
+    }
+
+    function renderCropBox() {
+        if (!reviewCropBox || !reviewImage) return;
+        if (!cropRect) {
+            reviewCropBox.hidden = true;
+            if (reviewCropReset) reviewCropReset.hidden = true;
+            return;
+        }
+        var rect = reviewImage.getBoundingClientRect();
+        reviewCropBox.style.left = (cropRect.x * rect.width) + 'px';
+        reviewCropBox.style.top = (cropRect.y * rect.height) + 'px';
+        reviewCropBox.style.width = (cropRect.w * rect.width) + 'px';
+        reviewCropBox.style.height = (cropRect.h * rect.height) + 'px';
+        reviewCropBox.hidden = false;
+        if (reviewCropReset) reviewCropReset.hidden = false;
+    }
+
+    // Re-map on reflow rather than leaving the box behind the photo.
+    window.addEventListener('resize', renderCropBox);
+
     function wireCrop() {
         if (!reviewImage || !reviewCropBox) return;
-        var dragging = false;
-        var startX = 0, startY = 0;
 
-        function localPoint(event) {
+        var mode = null;          // 'draw' | 'move' | one of HANDLE_KEYS
+        var anchor = null;        // fractional point the gesture started from
+        var startRect = null;     // rect at gesture start, for move/resize
+
+        function fractionOf(event) {
             var rect = reviewImage.getBoundingClientRect();
             return {
-                x: Math.min(Math.max(event.clientX - rect.left, 0), rect.width),
-                y: Math.min(Math.max(event.clientY - rect.top, 0), rect.height),
-                rect: rect,
+                x: clamp01((event.clientX - rect.left) / rect.width),
+                y: clamp01((event.clientY - rect.top) / rect.height),
             };
         }
 
+        function handleUnder(point) {
+            if (!cropRect) return null;
+            var rect = reviewImage.getBoundingClientRect();
+            // A generous grab radius in DISPLAY terms - 22px is a fingertip,
+            // and corner handles are the whole reason resize is usable at all
+            // on a phone.
+            var radiusX = 22 / rect.width;
+            var radiusY = 22 / rect.height;
+            var corners = {
+                nw: { x: cropRect.x, y: cropRect.y },
+                ne: { x: cropRect.x + cropRect.w, y: cropRect.y },
+                sw: { x: cropRect.x, y: cropRect.y + cropRect.h },
+                se: { x: cropRect.x + cropRect.w, y: cropRect.y + cropRect.h },
+            };
+            for (var i = 0; i < HANDLE_KEYS.length; i++) {
+                var key = HANDLE_KEYS[i];
+                if (Math.abs(point.x - corners[key].x) <= radiusX
+                    && Math.abs(point.y - corners[key].y) <= radiusY) {
+                    return key;
+                }
+            }
+            return null;
+        }
+
+        function insideCrop(point) {
+            return !!cropRect
+                && point.x >= cropRect.x && point.x <= cropRect.x + cropRect.w
+                && point.y >= cropRect.y && point.y <= cropRect.y + cropRect.h;
+        }
+
         reviewImage.addEventListener('pointerdown', function (event) {
-            dragging = true;
-            var point = localPoint(event);
-            startX = point.x;
-            startY = point.y;
-            reviewCropBox.hidden = false;
-            reviewCropBox.style.left = startX + 'px';
-            reviewCropBox.style.top = startY + 'px';
-            reviewCropBox.style.width = '0px';
-            reviewCropBox.style.height = '0px';
+            var point = fractionOf(event);
+            var handle = handleUnder(point);
+            if (handle) {
+                mode = handle;
+            } else if (insideCrop(point)) {
+                mode = 'move';
+            } else {
+                mode = 'draw';
+            }
+            anchor = point;
+            startRect = cropRect ? {
+                x: cropRect.x, y: cropRect.y, w: cropRect.w, h: cropRect.h,
+            } : null;
+            if (reviewImage.setPointerCapture) {
+                reviewImage.setPointerCapture(event.pointerId);
+            }
             event.preventDefault();
         });
 
         reviewImage.addEventListener('pointermove', function (event) {
-            if (!dragging) return;
-            var point = localPoint(event);
-            reviewCropBox.style.left = Math.min(startX, point.x) + 'px';
-            reviewCropBox.style.top = Math.min(startY, point.y) + 'px';
-            reviewCropBox.style.width = Math.abs(point.x - startX) + 'px';
-            reviewCropBox.style.height = Math.abs(point.y - startY) + 'px';
-        });
+            if (!mode) return;
+            var point = fractionOf(event);
 
-        reviewImage.addEventListener('pointerup', function (event) {
-            if (!dragging) return;
-            dragging = false;
-            var point = localPoint(event);
-            var displayW = Math.abs(point.x - startX);
-            var displayH = Math.abs(point.y - startY);
-
-            // A tap is not a crop. Below this the reviewer was almost certainly
-            // just touching the photo, and silently cropping to a few pixels
-            // would be the worst possible reading of that.
-            if (displayW < 12 || displayH < 12) {
-                cropRect = null;
-                reviewCropBox.hidden = true;
-                if (reviewCropReset) reviewCropReset.hidden = true;
-                return;
+            if (mode === 'draw') {
+                cropRect = {
+                    x: Math.min(anchor.x, point.x),
+                    y: Math.min(anchor.y, point.y),
+                    w: Math.abs(point.x - anchor.x),
+                    h: Math.abs(point.y - anchor.y),
+                };
+            } else if (mode === 'move' && startRect) {
+                // Repositioning keeps the SIZE and slides it, clamped so the
+                // rectangle can never leave the photo.
+                var dx = point.x - anchor.x;
+                var dy = point.y - anchor.y;
+                cropRect = {
+                    x: clamp01(Math.min(startRect.x + dx, 1 - startRect.w)),
+                    y: clamp01(Math.min(startRect.y + dy, 1 - startRect.h)),
+                    w: startRect.w,
+                    h: startRect.h,
+                };
+            } else if (startRect) {
+                // Resize from the grabbed corner; the opposite corner is fixed.
+                var left = (mode === 'nw' || mode === 'sw') ? point.x : startRect.x;
+                var right = (mode === 'ne' || mode === 'se') ? point.x : startRect.x + startRect.w;
+                var top = (mode === 'nw' || mode === 'ne') ? point.y : startRect.y;
+                var bottom = (mode === 'sw' || mode === 'se') ? point.y : startRect.y + startRect.h;
+                cropRect = {
+                    x: Math.min(left, right),
+                    y: Math.min(top, bottom),
+                    w: Math.abs(right - left),
+                    h: Math.abs(bottom - top),
+                };
             }
-
-            // Display coordinates -> natural pixels, so the crop applies to the
-            // ORIGINAL resolution rather than to whatever size it happens to be
-            // shown at on this screen.
-            var scaleX = reviewImage.naturalWidth / point.rect.width;
-            var scaleY = reviewImage.naturalHeight / point.rect.height;
-            cropRect = {
-                x: Math.round(Math.min(startX, point.x) * scaleX),
-                y: Math.round(Math.min(startY, point.y) * scaleY),
-                w: Math.round(displayW * scaleX),
-                h: Math.round(displayH * scaleY),
-            };
-            if (reviewCropReset) reviewCropReset.hidden = false;
-            if (reviewHint) reviewHint.textContent = 'Cropped. Use photo, or undo the crop.';
+            renderCropBox();
         });
+
+        function endGesture() {
+            if (!mode) return;
+            mode = null;
+            // A tap is not a crop. Below this the reviewer was almost certainly
+            // just touching the photo, and silently cropping to a sliver would
+            // be the worst possible reading of that.
+            if (cropRect && (cropRect.w < MIN_FRACTION || cropRect.h < MIN_FRACTION)) {
+                cropRect = null;
+            }
+            renderCropBox();
+            if (reviewHint) {
+                reviewHint.textContent = cropRect
+                    ? 'Drag inside to move, corners to resize.'
+                    : 'Drag on the photo to crop.';
+            }
+        }
+
+        reviewImage.addEventListener('pointerup', endGesture);
+        reviewImage.addEventListener('pointercancel', endGesture);
     }
     wireCrop();
 
     if (reviewCropReset) {
         reviewCropReset.addEventListener('click', function () {
             cropRect = null;
-            if (reviewCropBox) reviewCropBox.hidden = true;
-            reviewCropReset.hidden = true;
+            renderCropBox();
             if (reviewHint) reviewHint.textContent = 'Drag on the photo to crop.';
         });
     }
@@ -281,12 +371,23 @@
         var image = new Image();
         image.onerror = function () { onFail('That photo could not be cropped.'); };
         image.onload = function () {
+            // THE ONE CONVERSION from fractions to source pixels. naturalWidth/
+            // naturalHeight are the browser's ORIENTED decode of this exact
+            // image element - the same decode the preview <img> performed and
+            // the same one ArchioskPrepareImage performs downstream - so the
+            // three agree and no orientation-coordinate mismatch is possible.
+            // See the orientation investigation recorded in the commit message.
+            var sourceX = Math.round(cropRect.x * image.naturalWidth);
+            var sourceY = Math.round(cropRect.y * image.naturalHeight);
+            var sourceW = Math.max(1, Math.round(cropRect.w * image.naturalWidth));
+            var sourceH = Math.max(1, Math.round(cropRect.h * image.naturalHeight));
+
             var canvas = document.createElement('canvas');
-            canvas.width = Math.max(1, cropRect.w);
-            canvas.height = Math.max(1, cropRect.h);
+            canvas.width = sourceW;
+            canvas.height = sourceH;
             var context = canvas.getContext('2d');
             context.drawImage(
-                image, cropRect.x, cropRect.y, cropRect.w, cropRect.h,
+                image, sourceX, sourceY, sourceW, sourceH,
                 0, 0, canvas.width, canvas.height
             );
             canvas.toBlob(function (blob) {
