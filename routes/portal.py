@@ -57,6 +57,11 @@ from services.developer_ccn import (
     parse_ccn_command,
 )
 from services.project_qa import answer_application_question
+from services.capability_registry import find_capability_by_phrase
+from services.conversation_interpreter import (
+    _handle_capability_question,
+    _looks_like_capability_question,
+)
 from services.question_scope import scope_diagnostic
 from services.template_identity import identity_for_template_id, template_identity_for_endpoint
 
@@ -1106,9 +1111,43 @@ def _classify_gateway_orientation(message: str, projects: list[dict], can_create
     if can_create_project and _GATEWAY_NEW_PROJECT_PATTERN.search(lowered):
         return {"kind": "navigate", "url": url_for('portal.upload'), "text": "Opening New Project…"}
 
+    # CLAUDE-GO-GATEWAY-COGNITION-01: what used to be here was a single canned
+    # sentence offering to open a project, returned for every message that was
+    # not navigation - so a real question got a non-sequitur, which reads as
+    # not having listened. The navigation rules above keep first refusal;
+    # only this fallback changed.
+
+    # 1. Deterministic and instant: a capability question needs no project and
+    #    no model, and already answers with numbered steps.
+    capability = find_capability_by_phrase(lowered)
+    if capability is not None and _looks_like_capability_question(lowered):
+        return {"kind": "info", "text": _handle_capability_question(capability).reply_text}
+
+    # 2. The existing application-scope seam. It takes no workspace and no
+    #    store, so it cannot reach project state - which is precisely why it
+    #    is usable on a project-less surface. Nothing here opens a project or
+    #    speaks with project evidence.
+    if len(lowered.split()) >= 3:
+        try:
+            answer = answer_application_question(
+                question=message.strip(),
+                api_key=current_app.config.get("ANTHROPIC_API_KEY"),
+                model=current_app.config.get("ANTHROPIC_MODEL"),
+            )
+        except Exception:  # noqa: BLE001 - a stub surface must never 500
+            answer = None
+        if answer is not None and answer.ran and answer.answer:
+            return {"kind": "info", "text": answer.answer}
+
+    # 3. Honest about scope, rather than redirecting. Saying what this surface
+    #    can do is fine; implying it answered is not.
     return {
         "kind": "info",
-        "text": "I can help you open an existing project or start a new one here. Open a project to ask about its documents.",
+        "text": (
+            "That is not something I can help with - I work on construction and "
+            "design project material, and from here I can open one of your projects "
+            "or start a new one. Open a project and I can work with its documents."
+        ),
     }
 
 
