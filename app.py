@@ -625,7 +625,13 @@ def _register_context_processors(app: Flask) -> None:
         ui_reveal = bool(session.get("developer_ui_reveal")) and bool(
             is_admin() and session.get("developer_mode") and authenticated
         )
+        # CLAUDE-COMPOSER-DRAFT-ASSIST-01: the closed draft-action vocabulary,
+        # injected here rather than threaded through conversation_dock's two call
+        # sites - it is a constant, and the Composer macro is the only consumer.
+        from services.draft_assist import available_actions
+
         return {
+            "draft_actions": available_actions(),
             "current_year": datetime.now(timezone.utc).year,
             "static_version": app.config["STATIC_VERSION"],
             # CLAUDE-CA1D-CSP-INLINE-SCRIPT-FIX-01: every inline <script>

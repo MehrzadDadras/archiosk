@@ -4160,6 +4160,66 @@ def add_drawing_source(project_id, case_id):
     return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
 
 
+@workspace_bp.route("/projects/<project_id>/workspace/composer/draft-assist", methods=["POST"])
+@login_required
+def composer_draft_assist(project_id):
+    """CLAUDE-COMPOSER-DRAFT-ASSIST-01: propose a sharpened draft. Change nothing.
+
+    Returns JSON. This route CANNOT alter a draft, a conversation, a Case or any
+    project record - it reads a string from the form and returns a string. "Do
+    not silently overwrite the user's draft" holds structurally rather than by
+    discipline: there is no write path here to misuse.
+
+    POLICY-GATED like every other external-AI call site in this file, through the
+    same _external_ai_status / ACTION_EXTERNAL_AI_REQUEST resolver. That is not
+    ceremony: a draft written inside a project routinely quotes project material,
+    so a project whose security policy forbids external AI must forbid this too.
+    A REQUIRE_APPROVAL project is refused here rather than silently approved -
+    this is a convenience, and a convenience must never be the thing that
+    quietly widens a security boundary.
+
+    Deliberately NOT wired to the project-less Composer. There is no workspace
+    there to evaluate policy against, and creating an ungoverned transmission
+    path for text that might contain project content is exactly the shortcut
+    worth refusing. Recorded as a boundary, not an oversight.
+    """
+    from services.draft_assist import assist
+
+    _, store, workspace = _load_workspace_or_404(project_id)
+
+    status, decision = _external_ai_status(workspace)
+    if status != "allow":
+        return jsonify({
+            "ok": False,
+            "reason": (
+                "This project's security policy does not permit sending text to "
+                "external AI (controlling layer: "
+                + str(getattr(decision, "controlling_layer", "unknown"))
+                + "). Your draft is untouched and nothing was transmitted."
+            ),
+        }), 200
+
+    result = assist(
+        request.form.get("draft") or "",
+        request.form.get("action") or "",
+        api_key=current_app.config.get("ANTHROPIC_API_KEY"),
+        model=current_app.config.get("ANTHROPIC_MODEL"),
+    )
+    if not result.ran:
+        return jsonify({"ok": False, "reason": result.reason}), 200
+
+    return jsonify({
+        "ok": True,
+        "action": result.action,
+        "label": result.label,
+        # The client uses this to decide whether Replace is offered at all, so an
+        # observation can never be pasted back over the draft as a revision.
+        "rewrites": result.rewrites,
+        "proposal": result.proposal,
+        "note": result.note,
+    }), 200
+
+
 @workspace_bp.route("/projects/<project_id>/workspace/cases/<case_id>/attach-source", methods=["POST"])
 @login_required
 def attach_source_to_case_route(project_id, case_id):

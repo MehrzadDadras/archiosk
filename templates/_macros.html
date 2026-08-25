@@ -192,6 +192,53 @@
    13's own exclusion list), nothing here claims otherwise by staying
    silent about them. #}
 {% macro conversation_dock(heading, message_count, post_url, scope_key, placeholder, include_anchor_fields=False, current_view=None, selected_source_id=None, project_id=None, current_context=None, developer_ccn_context=None, case_id=None, conversations=None, project_conversation_count=0) %}
+{# CLAUDE-COMPOSER-DRAFT-ASSIST-01: the action sheet and the comparison.
+
+   ONE component for both form factors. On a phone it is a bottom sheet; on a
+   desktop the same markup sits as a small popover above the Composer - CSS
+   decides, so there is no second implementation to drift.
+
+   The comparison is the point of the whole feature: the reviewer's original and
+   the proposal side by side, and three deliberate choices. Replace is absent
+   entirely for actions that report rather than revise (Check ambiguity), because
+   pasting observations over a draft would be nonsense. #}
+{% if project_id %}
+<div class="composer-pen-sheet" id="dock-composer-pen-sheet" data-ui-ref="chat.composer.pen.sheet" hidden
+     role="dialog" aria-label="Improve this draft" aria-modal="false">
+    <div class="composer-pen-actions" id="dock-composer-pen-actions" data-ui-ref="chat.composer.pen.actions">
+        {% for a in draft_actions %}
+        <button type="button" class="composer-pen-action" data-assist-action="{{ a.key }}"
+                data-ui-ref="chat.composer.pen.action">{{ a.label }}</button>
+        {% endfor %}
+    </div>
+    <p class="composer-pen-status" id="dock-composer-pen-status"
+       data-ui-ref="chat.composer.pen.status" aria-live="polite"></p>
+    <div class="composer-pen-compare" id="dock-composer-pen-compare"
+         data-ui-ref="chat.composer.pen.compare" hidden>
+        <div class="composer-pen-side">
+            <h4 class="composer-pen-side-title">Your draft</h4>
+            <p class="composer-pen-original" id="dock-composer-pen-original"
+               data-ui-ref="chat.composer.pen.original"></p>
+        </div>
+        <div class="composer-pen-side">
+            <h4 class="composer-pen-side-title" id="dock-composer-pen-proposal-title">Proposed</h4>
+            <p class="composer-pen-proposal" id="dock-composer-pen-proposal"
+               data-ui-ref="chat.composer.pen.proposal"></p>
+            <p class="composer-pen-note" id="dock-composer-pen-note"
+               data-ui-ref="chat.composer.pen.note" hidden></p>
+        </div>
+        <div class="composer-pen-decide">
+            <button type="button" class="composer-pen-decide-btn" id="dock-composer-pen-replace"
+                    data-ui-ref="chat.composer.pen.replace">Replace</button>
+            <button type="button" class="composer-pen-decide-btn" id="dock-composer-pen-insert"
+                    data-ui-ref="chat.composer.pen.insert">Insert below</button>
+            <button type="button" class="composer-pen-decide-btn composer-pen-discard" id="dock-composer-pen-discard"
+                    data-ui-ref="chat.composer.pen.discard">Discard</button>
+        </div>
+    </div>
+</div>
+{% endif %}
+
 <div class="accordion-section conversation-dock-panel" id="conversation-dock" role="region" aria-label="{{ heading }} conversation">
     {# CLAUDE-EYE-TOOLBOX-LAYOUT-01, Part 4: the same lockable-boundary
        treatment as the Eye/Toolbox splitter (base.html's own
@@ -367,6 +414,31 @@
             <span class="composer-attach-or">or just ask about it</span>
         </span>
         <textarea name="text" id="dock-composer-input" data-ui-ref="chat.composer.input" data-developer-composer-input data-conversation-draft="{{ scope_key }}" placeholder="{{ placeholder }}" aria-label="Message" autocomplete="off" rows="1" required></textarea>
+        {# CLAUDE-COMPOSER-DRAFT-ASSIST-01: the pen.
+
+           Product Owner: "I want to write naturally first, then let GO help
+           sharpen the language without changing my meaning or taking control
+           away from me."
+
+           Hidden until the draft actually has text, and hidden again when it is
+           emptied - the same discipline as the photo actions above. A pen beside
+           an empty box is a control with nothing to act on.
+
+           Only inside a project: the route it calls is policy-gated per project
+           through the same ACTION_EXTERNAL_AI_REQUEST resolver every other
+           external call uses, and there is no workspace to evaluate that against
+           on the project-less Composer. Deliberate, not an oversight.
+
+           NOTHING HERE WRITES TO THE DRAFT. The proposal renders in its own
+           element beside the original, and only an explicit Replace/Insert
+           click moves text into the box. #}
+        {% if project_id %}
+        <button type="button" class="composer-pen" id="dock-composer-pen" hidden
+                data-ui-ref="chat.composer.pen" aria-expanded="false"
+                aria-controls="dock-composer-pen-sheet"
+                data-assist-url="{{ url_for('workspace.composer_draft_assist', project_id=project_id) }}"
+                title="Improve this draft" aria-label="Improve this draft">&#9998;</button>
+        {% endif %}
         {# CLAUDE-POSTCAMEL-VOICE1-PRE: "the microphone is merely another
            door into ARCHIOSK Go" - this button never submits anything
            itself (type="button", outside any conversational logic of

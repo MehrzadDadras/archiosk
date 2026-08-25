@@ -2153,6 +2153,10 @@
        run - so load order between the two files does not matter. #}
     <script src="{{ url_for('static', filename='js/workspace_trays.js') }}?v={{ static_version }}"></script>
     <script src="{{ url_for('static', filename='js/composer_attach.js') }}?v={{ static_version }}"></script>
+    {# CLAUDE-COMPOSER-DRAFT-ASSIST-01: the pen. Loaded beside the attachment
+       script it sits next to in the composer row; both no-op immediately when
+       their own elements are absent, so this costs a project-less page nothing. #}
+    <script src="{{ url_for('static', filename='js/draft_assist.js') }}?v={{ static_version }}"></script>
     <script nonce="{{ csp_nonce }}">
         // CLAUDE-P40-E3A / CLAUDE-LEFTPANEL-CALM-01: the recursive Lists
         // hierarchy - a branch starts open only if the page rendered it
