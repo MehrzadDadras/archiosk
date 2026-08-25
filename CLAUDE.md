@@ -72,9 +72,10 @@ introducing a parallel router.
 
 ## Testing
 
-Full suite: `./venv/Scripts/python.exe -m pytest -q` (approximately 4,254
+Full suite: `./venv/Scripts/python.exe -m pytest -q` (approximately 4,964
 tests in the current collection). Recent observed wall-clock runs include
-approximately 26:49, 43:35, 77:42, and 2:44:54; duration varies substantially
+approximately 26:49, 27:57, 43:35, 59:47, 77:42, and 2:44:54 - note 27:57 and
+59:47 are the SAME suite on the same machine hours apart; duration varies substantially
 with the environment and is not a fixed service-level expectation. Treat
 pass/fail as the assurance signal, not wall-clock time. An unusually long run
 is not automatically evidence of a code regression. There is no CI here — this is the only gate, so run it

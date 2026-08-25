@@ -1,7 +1,7 @@
 # Test lanes — fast feedback without weakening the full suite
 
 **CLAUDE-TEST-ACCEL-01.** The full suite (`./venv/Scripts/python.exe -m pytest -q`,
-currently **4,254 tests**) stays the one authoritative gate before any commit that
+currently **approximately 4,964 tests**) stays the one authoritative gate before any commit that
 touches `routes/`, `services/`, `templates/`, `static/`, `models.py`, `config.py`,
 `app.py`, or migrations, and before every deployment — see `CLAUDE.md`'s own
 Testing section, which this document does not change or override.
@@ -86,7 +86,7 @@ invents — plus any other file a real dependency chain points to (e.g. changing
 which in practice is most of the suite — see "Escalation past Lane C" below).
 
 **Lane E — Full Acceptance.** `./venv/Scripts/python.exe -m pytest -q` — all
-4,254 tests in the current collection, still the only gate for
+approximately 4,964 tests in the current collection, still the only gate for
 commit/deploy/checkpoint.
 
 ## Assurance tiers — orthogonal to lanes
@@ -230,7 +230,7 @@ surface. These are observed measurements, not timing guarantees.
 |---|---|
 | Targeted Lane A | 12 passed in 0.25s |
 | Composed subsystem/Lane B | 167 passed in 40.24s |
-| Lane E certification | 4,254 passed; 214 subtests; 2:44:54 |
+| Lane E certification | 4,254 passed; 214 subtests; 2:44:54 (a HISTORICAL run at that stage, not the current collection size) |
 
 The Lane E result remains the certification gate; the shorter passes never
 replace it where repository policy requires the full suite.

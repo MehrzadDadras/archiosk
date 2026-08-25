@@ -1,5 +1,106 @@
 # Continuation checkpoint
 
+## 2026-08-25 (later) — Entry simplified, Q made a real container, a development bridge, a Composer pen, and a capture preflight
+
+Continues the entry above, which stopped at `dae1045`. Six further stages
+landed the same day; this records them so the durable record is not six commits
+behind the code. Deployed baseline is now `1cfb711` at `STATIC_VERSION=125`.
+
+### What landed
+
+- **`CLAUDE-ENTRY-SIMPLIFY-01`** (`ae4ff02`) — the two-card "Choose where you'd
+  like to work" gate is RETIRED. It presented as a governed choice while
+  persisting nothing, granting no authority and setting no account role, and it
+  only ever appeared for people whose projects span both environments — in
+  practice admins. Environment filtering moved to `/projects`, beside search,
+  where it reads as a filter. This RESTORES `GO-NEUTRAL-ENTRY-01`'s principle
+  literally rather than reinterpreting it.
+
+- **`CLAUDE-MULTI-IMAGE-Q-01`** (`8af7bf7`) and **`CLAUDE-Q-MATERIALS-01`**
+  (`4ffa119`) — a Q accumulates photos, then any material type. **Neither
+  needed a new container**: `case["source_ids"]` has always been a list and
+  `attach_source_to_case` has always appended to it. Both stages added a missing
+  VERB. Every material type already had a governed ingestion path; the document
+  and text-record paths simply never attached to anything, deliberately, because
+  "a Case draws on Sources, it does not own them" — a model this work preserved.
+  Authorization rows are in `governance/STATUS.md`.
+
+- **`CLAUDE-DIAGNOSTIC-BRIDGE-01`** (`79d335d`) — capture a live product problem
+  where it happened. **The bridge is a PULL, and that is the architecture, not a
+  limitation**: ARCHIOSK cannot call a development agent, which runs on an
+  operator's machine when a human starts it. Capture writes an inert row a
+  session reads later, and the receipt says "Recorded as", never "sent to
+  Claude". Admin-only, and code modification/deployment are deliberately
+  UNREPRESENTABLE as states. First new database table since verification tokens;
+  the reasoning (Reset/Restore renames the flat-JSON store away, so an
+  application diagnostic must not die with a project reset) is recorded in the
+  migration itself.
+
+- **`CLAUDE-COMPOSER-DRAFT-ASSIST-01`** (`fb5ee25`) — a pen beside the Composer.
+  The risk it is shaped around is not clumsy rewriting but a model quietly
+  ADDING a dimension, a drawing number or a commitment into text then issued as
+  an RFI, so the no-invention rule is absolute and stated FIRST in the prompt.
+  The draft is never overwritten: exactly two lines write to the textarea, both
+  inside click handlers.
+
+- **`CLAUDE-CAPTURE-REVIEW-01`/`-02`** (`8eb3fd9`, `5e4df8d`, `1cfb711`) — look
+  at the photo before attaching it. **The ordering was the real defect**:
+  normalization ran the instant a file was picked, so any crop would have cut
+  into an already-downscaled re-encode and lost exactly the detail construction
+  review needs. Crop now works on the original, stored as fractions and
+  converted to source pixels once. Orientation was INVESTIGATED and found
+  `NOT NEEDED` — no `createImageBitmap` anywhere, no `image-orientation`
+  override, every decode through an `HTMLImageElement`, and the server reads
+  EXIF orientation as metadata only — so no rotation machinery was built.
+
+### Two findings about our own process, worth more than the features
+
+**Lane E earned its place twice in one day.** It caught four stale tests I had
+already shipped past, and a contract I had broken (a fourth "Undo" in the
+workspace body). Bounded lanes missed both.
+
+**Reverse-reference discovery cannot find body-scanning contract tests.** At
+`5e4df8d` a deliberately wide 20-file discovery set still missed
+`test_p40e3a_layout_reconciliation.py`, because that file references none of the
+changed files or symbols — it renders the page and scans tokens. Widening the
+grep can never fix this; only rendering the page or running Lane E can. Recorded
+here rather than in `TEST_LANES.md`, which is another agent's recent work.
+
+### Certification and deployment
+
+`cffe532` certified 4917/0 and deployed at v=124. `5e4df8d` certified 4963/1 —
+the one failure was the Undo contract, repaired in `1cfb711`, which certified
+**4964 passed / 0 failed** and is deployed at **v=125**, verified by checksumming
+deployed files against the certified commit.
+
+Full-suite duration is now observed between 27:57 and 59:47 for the SAME suite
+on the same machine hours apart. Treat pass/fail as the signal; the clock is not
+a regression indicator.
+
+### Carried forward — nothing here has an unknown status
+
+- **NOT VALIDATED BY THE PRODUCT OWNER**: the Pen, capture preflight and crop,
+  multi-image Q, Q materials, the diagnostic bridge, entry simplification, the
+  `/projects` environment filter. All live; none confirmed in a browser. **A
+  green suite does not prove the human interaction is good.**
+- **EXPERIMENTAL pending acceptance**: app icon, landing brand, startup sonic
+  cue — by explicit Product Owner instruction, not promoted to brand governance.
+- **OPEN GATE**: the Pen's RFI factual-restraint trials were requested and never
+  returned; that acceptance remains `VALIDATION INCOMPLETE`.
+- **NO BROWSER TEST HARNESS.** Every test on the Pen and the capture preflight
+  is a source-structure or service-level assertion. This is the single largest
+  assurance gap in the repository.
+- **Investigated, deliberately not built**: construction-native reasoning
+  vocabulary (`INTERESTING BUT NOT YET WARRANTED` — `games_played` has no oracle
+  yet); the self-test laboratory (`VALUABLE PRINCIPLE — IMPLEMENTATION NEEDS
+  REASSESSMENT` — it targets `BHiveParser._check_consistency`, and the
+  intelligence surface has since moved to Spin and the Composer, which it knows
+  nothing about); cross-device conversation recovery (designed, unbuilt).
+- **The largest unexploited lever found by investigation**: extracted document
+  text is discarded after ingest and there is no retrieval layer of any kind, so
+  GO reasons over a corpus it has largely never read back. That, not any new
+  runtime technology, is the constraint worth attacking next.
+
 ## 2026-08-25 — Mobile distribution, a redesigned icon, a startup cue, and a cross-user privacy defect found and repaired
 
 **The important item is the defect, not the features.** A cross-user privacy
