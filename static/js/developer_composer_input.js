@@ -1,6 +1,20 @@
-/* Shared Developer Composer keyboard behavior for Home and Workspace.
+/* Shared Composer keyboard behavior.
    Enter submits the real form; Shift+Enter remains a newline; composition
-   events (IME) never trigger an accidental submission. */
+   events (IME) never trigger an accidental submission.
+
+   Named for the Developer Composer it was first extracted from, but it has
+   never been developer-only - the Workspace chat dock has always used it too.
+   CLAUDE-ESTABLISH-COMPOSER-ENTER-01 adds the project-creation help composer,
+   which is why the send-button selector below is now declared by the form
+   instead of hardcoded here.
+
+   Why a form opts in at all, rather than relying on the browser: implicit
+   submission clicks the form's DEFAULT button - the FIRST submit button in
+   tree order - which is silent, positional, and has already produced one live
+   Product Owner defect in this codebase (CLAUDE-CA1D-COMPOSER-ENTER-FIX-01,
+   18cac57: Enter reached a "clear context" button that had been added ahead of
+   Send). Binding an explicit target makes Enter mean the one thing it should
+   mean, and keeps meaning it when a button is added later. */
 (function () {
     function bindComposer(form) {
         if (!form || form.dataset.developerKeyboardBound === 'true') return;
@@ -17,7 +31,11 @@
                 event.preventDefault();
                 return;
             }
-            var send = form.querySelector('[data-ui-ref="chat.composer.send"], [data-ui-ref="developer.home.composer.send"]');
+            // A form may name its own send control; the two original refs stay
+            // the default so existing callers are untouched.
+            var sendSelector = form.getAttribute('data-composer-send')
+                || '[data-ui-ref="chat.composer.send"], [data-ui-ref="developer.home.composer.send"]';
+            var send = form.querySelector(sendSelector);
             if (!send || send.disabled) return;
             event.preventDefault();
             submitting = true;

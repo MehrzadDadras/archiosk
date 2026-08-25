@@ -85,8 +85,35 @@
    own native-disclosure grammar (macros.subdisclosure), collapsed by
    default, so it never obscures the form fields beneath it. #}
 {% call macros.subdisclosure("Ask Archiosk about this form", html_id="upload-help", ui_ref="upload.help") %}
-<form class="gateway-orientation-form" id="upload-orientation-form" data-ui-ref="upload.help.form">
-    <input type="text" class="text-input" id="upload-orientation-input" name="message" placeholder="e.g. what does Client / Owner mean?" aria-label="Ask Archiosk about this form">
+{# CLAUDE-ESTABLISH-COMPOSER-ENTER-01: Enter submits this question.
+
+   Live Product Owner report, twice, on archiosk.com: typing a question here
+   and pressing Enter did nothing. This form is structurally eligible for the
+   browser's own implicit submission - one text field, one submit button, no
+   competing earlier submit button, correct form association in the parsed DOM
+   (all four verified) - so the markup alone gives no reason for Enter to fail,
+   and no root cause could be confirmed from the repository.
+
+   Two things are certain, and together they are the whole basis for this
+   repair. First, this form was relying on implicit submission, which is
+   positional and silent, while the Composer this field is meant to behave like
+   stopped relying on it after implicit submission produced a live defect here
+   once before (CLAUDE-CA1D-COMPOSER-ENTER-FIX-01). Second, the two composers
+   that work - the Workspace chat dock and the Developer Composer - both carry
+   autocomplete="off"; both orientation composers, the two reported broken, did
+   not. This field is name="message" in a GET form with no action, so a native
+   submission writes ?message=... into the URL and the browser begins offering
+   saved values for it; while that dropdown is open the first Enter dismisses
+   or accepts the suggestion instead of submitting. That is per-browser and
+   per-history, which is why it does not reproduce in a clean automated browser
+   and why it can persist across deployments for one person and not another.
+
+   Unproven, but it is the only account that fits every observation. Both
+   halves of the Composer convention are adopted here rather than picking one.
+   Clicking Ask is unchanged. #}
+<form class="gateway-orientation-form" id="upload-orientation-form" data-ui-ref="upload.help.form"
+      data-developer-composer-form data-composer-send='[data-ui-ref="upload.help.submit"]'>
+    <input type="text" class="text-input" id="upload-orientation-input" name="message" data-developer-composer-input autocomplete="off" placeholder="e.g. what does Client / Owner mean?" aria-label="Ask Archiosk about this form">
     <input type="hidden" name="context" value="establish-project">
     <button type="button" id="upload-orientation-voice" class="voice-input-button" data-ui-ref="upload.help.voice"
             aria-label="Press and speak - audio is processed by your browser only and is never saved" hidden>&#127908;&#65039;</button>
