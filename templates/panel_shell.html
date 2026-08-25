@@ -2,7 +2,15 @@
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    {# CLAUDE-MOBILE-SHELL-STABILITY-02: viewport-fit=cover lets the page paint
+       edge to edge on a notched phone, which is what removes the white bands
+       the browser otherwise leaves in the safe areas. It only works paired
+       with the env(safe-area-inset-*) padding in main.css - without that,
+       text would sit under the notch and the home indicator. theme-color
+       paints the browser chrome itself so nothing white shows above or
+       below the page either. #}
+    <meta name="theme-color" content="#0b1f28">
     <title>{% block title %}Archiosk{% endblock %}</title>
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/tokens.css') }}?v={{ static_version }}">

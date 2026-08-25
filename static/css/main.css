@@ -8945,3 +8945,131 @@ body,
        costing more vertical space than the control needed. */
     .tray-composer-grabber { min-height: 22px; padding: 0.3rem 0; }
 }
+
+/* ============================================================
+   CLAUDE-MOBILE-SHELL-STABILITY-01 — every shell, not just one
+   ============================================================
+   Product Owner standing rule: "no whole-page horizontal drift; no accidental
+   lateral movement of the application shell… the outer application shell
+   itself remains anchored."
+
+   CLAUDE-MOBILE-FRAME-PIN-04 locked `html, body, .app-shell`. But `.app-shell`
+   exists in exactly ONE of five shells. The landing page renders through
+   landing_shell.html (`.landing-page`), and Gateway, Sign-In and the embedded
+   panel each have their own root. Four of five were never locked — including
+   the landing page, which is the first thing anyone sees.
+
+   Listed explicitly rather than applied to a universal selector: a shell root
+   is a specific, small, knowable set, and `*` would also catch the drawing and
+   table viewers that legitimately pan. ------------------------------------ */
+.landing-page,
+.gateway-shell,
+.auth-shell-page,
+.app-main {
+    max-width: 100%;
+    overflow-x: hidden;
+    overflow-x: clip;
+}
+
+@media (max-width: 640px) {
+    /* The same gesture refusal .app-shell already carries. Horizontal panning
+       remains available INSIDE the bounded viewers that need it — the drawing
+       canvas, wide tables, large images — because those set their own
+       touch-action and are not shell roots. */
+    /* .auth-shell-page also carries .landing-page, so Sign-In is covered
+       twice over - listed anyway so the set reads as the complete list of
+       shell roots rather than relying on a coincidence of class stacking. */
+    .landing-page,
+    .gateway-shell,
+    .auth-shell-page {
+        touch-action: pan-y;
+        overscroll-behavior-x: none;
+    }
+
+    /* 100vh on iOS is the URL-bar-retracted height, so a 100vh landing page is
+       taller than the screen and invites the rubber-band this rule exists to
+       stop. Same fallback ordering as .app-shell. */
+    .landing-page {
+        min-height: 100vh;
+        min-height: 100dvh;
+    }
+}
+
+/* The background canvas is positioned against the viewport and is therefore
+   outside every shell root's own clipping. It holds its own edge. Its pixel
+   size is no longer written from window.innerWidth at all — see
+   static/js/ocean_field.js — so this is a floor, not the fix. */
+.landing-field-canvas {
+    max-width: 100vw;
+    max-height: 100dvh;
+}
+
+/* ============================================================
+   CLAUDE-MOBILE-SHELL-STABILITY-02 — nothing outside the screen,
+   nothing white behind it
+   ============================================================
+   Product Owner: "Make sure no text ever extends outside phone screen keeping
+   a minimum margins on all sides and there is no white area showing behind the
+   phone screen."
+
+   Three separate causes, and they are easy to mistake for one.
+   ------------------------------------------------------------ */
+
+/* 1. NOTHING WHITE BEHIND. viewport-fit=cover (added to every shell's viewport
+      meta) lets the page paint into the notch and home-indicator areas; without
+      an explicit background on the document itself, what shows there is the
+      browser's own white. Painted on html AND body because the overscroll area
+      takes its colour from the root element, not from any app container. */
+html {
+    background-color: var(--canvas);
+}
+body {
+    background-color: var(--canvas);
+}
+
+/* 2. MINIMUM MARGIN ON ALL SIDES. env() resolves to 0 where there is no inset,
+      so max() gives a real gutter on every phone and a larger one only where
+      the hardware needs it. Applied to the shell roots rather than to text
+      elements: a margin owned by the container cannot be forgotten by the next
+      component someone adds inside it. */
+@media (max-width: 640px) {
+    .landing-page,
+    .gateway-shell,
+    .auth-shell-page,
+    .app-shell {
+        padding-left: max(0.85rem, env(safe-area-inset-left));
+        padding-right: max(0.85rem, env(safe-area-inset-right));
+    }
+    /* The fixed regions sit outside the shell's padding box, so each needs its
+       own inset or it would run under the rounded corners. */
+    .workspace-topbar,
+    .tray-switcher {
+        padding-left: max(0.6rem, env(safe-area-inset-left));
+        padding-right: max(0.6rem, env(safe-area-inset-right));
+    }
+    .chat-region {
+        padding-left: max(0.5rem, env(safe-area-inset-left));
+        padding-right: max(0.5rem, env(safe-area-inset-right));
+        padding-bottom: env(safe-area-inset-bottom);
+    }
+
+    /* 3. NO TEXT OUTSIDE THE SCREEN. A long unbroken token - a URL, a file
+          name, a drawing number - has no break opportunity, so it pushes its
+          container wider than the viewport and takes the whole shell with it.
+          This is a genuine width source, not a cosmetic one, and it is the
+          same class of fault as the canvas: something inside is really wider
+          than the screen.
+
+          Newly relevant: CLAUDE-AIRLOCK-WEB-RESEARCH-01 prints full source
+          URLs in its citations, which are exactly this shape. */
+    .conv-message-text,
+    .conversation-message,
+    .conversation-thread,
+    .context-identity-item,
+    .conversation-history-item,
+    main,
+    .pane-note {
+        overflow-wrap: anywhere;
+        word-break: break-word;
+    }
+}

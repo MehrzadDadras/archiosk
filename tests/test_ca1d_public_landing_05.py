@@ -238,5 +238,57 @@ class KnowledgeFieldQuietCenterTests(unittest.TestCase):
         self.assertIn("93", vents_line)
 
 
+class SpokenNavigationSurvivesTranscriptionTests(unittest.TestCase):
+    """CLAUDE-LANDING-VOICE-VARIANTS-01. A Product Owner SPOKE "sign in" to the
+    landing page and got the fallback card: "I'm not sure yet - here's a quick
+    look at what Archiosk does."
+
+    The recogniser returned "sing in", which is what every recogniser does with
+    that phrase, and the pattern required the exact spelling. The same failure
+    as "Goodmorning" earlier the same week: an exact-phrase list meeting real
+    human input.
+
+    These assert the PATTERN text rather than running JS, which this suite
+    cannot do - but the pattern is the thing that was wrong.
+    """
+
+    def setUp(self):
+        import app as app_module
+        self.client = app_module.create_app("testing").test_client()
+        self.js = self.client.get("/static/js/landing.js").get_data(as_text=True)
+        block = self.js[self.js.index("var DIRECT_NAV = ["):]
+        self.direct_nav = block[: block.index("];")]
+
+    def _signin_pattern(self):
+        import re
+
+        line = next(l for l in self.direct_nav.splitlines() if "SIGNIN_HREF" in l)
+        return re.compile(line[line.index("/") + 1: line.rindex("/i")], re.I)
+
+    def test_the_homophone_that_was_reported_now_matches(self):
+        self.assertTrue(self._signin_pattern().search("sing in"))
+
+    def test_the_original_spelling_still_matches(self):
+        """The first attempt at this fix wrote s[iy]ng? - which matches "sing"
+        and NOT "sign", fixing the reported case by breaking the one that
+        already worked. sign is s-i-g-n; sing is s-i-n-g."""
+        self.assertTrue(self._signin_pattern().search("sign in"))
+
+    def test_separator_variants_match(self):
+        for spoken in ("signin", "sign-in", "Sign in.", "log in", "log me in", "my account"):
+            with self.subTest(transcript=spoken):
+                self.assertTrue(self._signin_pattern().search(spoken))
+
+    def test_sign_up_is_not_claimed_by_sign_in(self):
+        """A one-letter difference that means the opposite thing - and the
+        widened pattern must not swallow it."""
+        self.assertFalse(self._signin_pattern().search("sign up"))
+
+    def test_no_new_destination_was_added(self):
+        """The boundary of three safe, local, reversible destinations is
+        unchanged - only the spellings that reach them."""
+        self.assertEqual(self.direct_nav.count("href:"), 3)
+
+
 if __name__ == "__main__":
     unittest.main()

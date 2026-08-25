@@ -34,13 +34,28 @@
     var mouse = { x: -9999, y: -9999 };
 
     function resize() {
-        width = Math.max(1, window.innerWidth);
-        height = Math.max(1, window.innerHeight);
+        // CLAUDE-MOBILE-SHELL-STABILITY-01: measured from the ELEMENT, never
+        // from window.innerWidth.
+        //
+        // The previous form read window.innerWidth and wrote it back as an
+        // explicit pixel style.width. That overrides the CSS `width: 100%`
+        // with a fixed number - and on iOS window.innerWidth is the VISUAL
+        // viewport, which inflates while the page is rubber-banding or
+        // pinch-zoomed. The canvas could therefore become genuinely wider than
+        // its container, which is the "starts moving sideways then springs
+        // back" the Product Owner reported. .landing-page's own overflow-x
+        // was hiding that rather than preventing it.
+        //
+        // Now: CSS owns the layout size (width/height 100%, already set), and
+        // only the BACKING STORE is scaled for device pixel ratio. No pixel
+        // width is written at all, so the canvas cannot exceed its container
+        // by construction rather than by clamping.
+        var rect = canvas.getBoundingClientRect();
+        width = Math.max(1, Math.round(rect.width) || canvas.clientWidth || 1);
+        height = Math.max(1, Math.round(rect.height) || canvas.clientHeight || 1);
         dpr = Math.min(window.devicePixelRatio || 1, 2);
         canvas.width = Math.floor(width * dpr);
         canvas.height = Math.floor(height * dpr);
-        canvas.style.width = width + 'px';
-        canvas.style.height = height + 'px';
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
         buildPoints();
     }

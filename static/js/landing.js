@@ -314,10 +314,23 @@
     // Deliberately NOT generalized beyond these three safe, local,
     // reversible destinations (Section 9's own explicit boundary) --
     // nothing here ever creates, changes, or sends anything.
+    //
+    // CLAUDE-LANDING-VOICE-VARIANTS-01: a Product Owner SPOKE "sign in" to the
+    // landing page and got the fallback card. The transcript came back as
+    // "sing in" - which every recogniser does with that phrase - and the old
+    // pattern required the exact spelling "sign in".
+    //
+    // The same failure as CLAUDE-GO-GREETING-CONTINUITY-01's "Goodmorning": an
+    // exact-phrase list meeting real human input. Widened for how these words
+    // are actually TRANSCRIBED and TYPED - homophones, missing or hyphenated
+    // separators, and the pronoun forms people use out loud - and NOT with new
+    // vocabulary. Every variant below is a spelling of one of the three
+    // destinations already recognised; the boundary of three safe, local,
+    // reversible destinations is unchanged.
     var DIRECT_NAV = [
-        { pattern: /sign in|log ?in|my account|sign me in/i, href: SIGNIN_HREF, confirmText: 'Opening Sign In…' },
-        { pattern: /trial|try it|get access|get started/i, href: TRIAL_HREF, confirmText: 'Opening Request Trial Access…' },
-        { pattern: /explore|what can archiosk|what does archiosk|how do i start/i, href: EXPLORE_HREF, confirmText: 'Opening Explore…' },
+        { pattern: /s[iy](?:gn|ng)[ -]?in|log[ -]?in|log ?me ?in|my account|logon/i, href: SIGNIN_HREF, confirmText: 'Opening Sign In…' },
+        { pattern: /trial|try it|get access|get started|sign ?up|request access/i, href: TRIAL_HREF, confirmText: 'Opening Request Trial Access…' },
+        { pattern: /explore|what can archiosk|what does archiosk|what is archiosk|how do i start|show me/i, href: EXPLORE_HREF, confirmText: 'Opening Explore…' },
     ];
 
     // Section 6/10: genuinely informational asks (not a "go there"
