@@ -305,11 +305,21 @@ class APhoneSizedPhotoMustNotBeRefusedTests(unittest.TestCase):
 
     def test_a_photo_that_already_fits_is_left_alone(self):
         """An image under both limits keeps its original bytes and format -
-        re-encoding it would only lose quality for nothing."""
-        self.assertIn("show(file.name", ATTACH_JS)
-        block = ATTACH_JS[ATTACH_JS.index("Small enough already"):]
-        block = block[: block.index("shrink(image")]
+        re-encoding it would only lose quality for nothing.
+
+        The preparation logic moved into window.ArchioskPrepareImage when image
+        normalization was unified across the Composer and Image Search, so this
+        follows it there. The property is unchanged and is what is asserted: on
+        the fits-already path the ORIGINAL data URL is handed back untouched and
+        the function returns before any canvas work.
+        """
+        block = ATTACH_JS[ATTACH_JS.index("window.ArchioskPrepareImage = function"):]
+        block = block[: block.index("var scale = Math.min")]
         self.assertIn("<= MAX_BYTES", block)
+        self.assertIn("<= MAX_EDGE", block)
+        # The original, not a re-encoded copy.
+        self.assertIn("onReady(file.name || 'Photo', original)", block)
+        self.assertNotIn("canvas", block)
 
     def test_the_old_bare_refusal_is_gone(self):
         """The exact message the Product Owner was shown must not survive as
@@ -362,15 +372,32 @@ class TheNextStepIsVisibleTests(unittest.TestCase):
         """It lands in the conversation as the reviewer's own message, which is
         how they learn they could have typed it - and that they may type
         something else instead."""
+        # CLAUDE-MULTI-IMAGE-Q-01 factored the two phrase buttons ("Make a new Q"
+        # and "Add to this Q") onto one sendAs helper, so the write to the box
+        # lives there now. The property is unchanged and is asserted in both
+        # halves: the button carries the exact phrase, and the helper puts it in
+        # the box rather than posting it.
         code = ATTACH_JS[ATTACH_JS.index("makeQ.addEventListener"):]
-        self.assertIn("messageBox.value = 'Make a new Q'", code)
+        self.assertIn("sendAs('Make a new Q')", code)
+        helper = ATTACH_JS[ATTACH_JS.index("function sendAs("):]
+        helper = helper[: helper.index("\n    }")]
+        self.assertIn("messageBox.value = phrase", helper)
 
     def test_it_is_the_same_submit_and_not_a_second_route(self):
-        code = ATTACH_JS[ATTACH_JS.index("makeQ.addEventListener"):]
-        self.assertIn("form.requestSubmit", code)
+        helper = ATTACH_JS[ATTACH_JS.index("function sendAs("):]
+        helper = helper[: helper.index("\n    }")]
+        self.assertIn("form.requestSubmit", helper)
+        # Checked across the whole file, not just the send path: a second route
+        # introduced anywhere in this file would defeat the point.
         for forbidden in ("fetch(", "XMLHttpRequest", "action ="):
             with self.subTest(token=forbidden):
-                self.assertNotIn(forbidden, code)
+                self.assertNotIn(forbidden, ATTACH_JS)
+
+    def test_both_phrase_buttons_share_one_submit_path(self):
+        """Two buttons, one mechanism - so neither can drift into its own."""
+        self.assertEqual(ATTACH_JS.count("function sendAs("), 1)
+        self.assertIn("sendAs('Make a new Q')", ATTACH_JS)
+        self.assertIn("sendAs('Add this to this Q')", ATTACH_JS)
 
     def test_the_message_box_says_what_it_is_for_while_a_photo_waits(self):
         self.assertIn("Ask about this photo", ATTACH_JS)

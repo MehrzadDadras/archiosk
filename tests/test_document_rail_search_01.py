@@ -160,7 +160,19 @@ class ImageModeLogicTests(unittest.TestCase):
         self.assertIn("function loadImageFile(file)", self.js)
         self.assertIn("imageTray.addEventListener('paste'", self.js)
         self.assertIn("imageTray.addEventListener('drop'", self.js)
-        self.assertIn("new FileReader()", self.js)
+        # This asserted `new FileReader()` here until image normalization was
+        # unified: Image Search now hands the file to window.ArchioskPrepareImage
+        # (composer_attach.js), which owns the FileReader plus the downscale and
+        # re-encode steps. The point of the assertion is unchanged - a real File
+        # is genuinely read rather than a name being displayed - so it follows
+        # the behaviour to where the behaviour now lives instead of pinning this
+        # surface to a private implementation detail it no longer owns.
+        #
+        # Asserting the delegation is also the stronger check: it is what stops
+        # this surface growing a SECOND, differently-behaved image path, which
+        # is the defect unification existed to remove.
+        self.assertIn("window.ArchioskPrepareImage(file", self.js)
+        self.assertNotIn("new FileReader()", self.js)
 
     def test_search_run_never_calls_a_backend(self):
         idx = self.js.index("if (imageRunBtn) {")
