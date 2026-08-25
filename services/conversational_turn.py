@@ -486,24 +486,52 @@ SAFETY_SAFE = "safe"
 # the existing one, read back.
 SAFETY_CONSEQUENTIAL = "consequential"
 
+# CLAUDE-MOBILE-CONTINUATION-01: device suitability, deliberately a SEPARATE
+# axis from `safety` above and not derivable from it.
+#
+# The Product Owner's own instruction: "Do not accidentally classify all
+# consequential actions as desktop-only merely because they are consequential.
+# Device suitability and authority are separate questions." The table below
+# proves that in both directions rather than asserting it - one SAFE intent is
+# full-workspace (investigate_requirement: safe to run, but its output is an
+# evidence review nobody can read on a phone), and one CONSEQUENTIAL intent is
+# fine on any surface (propose_draft_rfi: it produces a proposal envelope, and
+# the Approval Gate governs the commit wherever it happens).
+#
+# The question this axis answers is "can the person do this work WELL here",
+# never "is this allowed". Authority is unchanged and lives where it always did.
+SURFACE_ANY = "any"
+SURFACE_FULL_WORKSPACE = "full_workspace"
+
 # Each entry documents which EXISTING handler/route a future Stage 3/4
 # would reuse - never a new mutating code path of this module's own.
 INTENT_DISPATCH_TABLE: dict[str, dict] = {
     INTENT_CLASS_GENERAL_ANSWER: {
         "safety": SAFETY_SAFE,
+        # Answering a question reads well anywhere.
+        "surface": SURFACE_ANY,
         "reuses": "run_conversational_turn's own reply_text (this module) - no other handler",
     },
     INTENT_CLASS_CONTEXTUAL_REFERENCE: {
         "safety": SAFETY_SAFE,
+        # Resolving "this" against what is open is a phone-sized act.
+        "surface": SURFACE_ANY,
         "reuses": "conversation_interpreter._handle_contextual_reference (unchanged)",
     },
     INTENT_CLASS_INVESTIGATE_REQUIREMENT: {
         "safety": SAFETY_SAFE,
+        # SAFE, and still full-workspace: record_analysis produces an
+        # evidence review across sources. Running it is harmless; READING
+        # the result on a phone is the problem. This entry is the proof
+        # that surface and safety are genuinely separate axes.
+        "surface": SURFACE_FULL_WORKSPACE,
         "reuses": "conversation_interpreter._handle_investigate_requirement (unchanged) - "
                    "record_analysis is governed-but-provisional, no Approval Gate today",
     },
     INTENT_CLASS_ORGANIZE_ADVICE: {
         "safety": SAFETY_SAFE,
+        # Advice, not a large surface.
+        "surface": SURFACE_ANY,
         "reuses": "conversation_interpreter._handle_organize_advice (unchanged)",
     },
     INTENT_CLASS_EXTERNAL_RESEARCH: {
@@ -512,26 +540,39 @@ INTENT_DISPATCH_TABLE: dict[str, dict] = {
         # creates no governed object and cannot promote anything into the
         # project record - that is Slice 2 and is not authorized.
         "safety": SAFETY_SAFE,
+        # Read-only, returns a cited answer. Reads fine on a phone.
+        "surface": SURFACE_ANY,
         "reuses": "conversation_interpreter._handle_external_research -> "
                    "services/external_research.py (Airlock Slice 1)",
     },
     INTENT_CLASS_PROPOSE_DRAFT_RFI: {
         "safety": SAFETY_CONSEQUENTIAL,
+        # CONSEQUENTIAL, and still fine on a phone: what comes back is a
+        # proposal envelope to read, and the Approval Gate governs the
+        # commit on whatever surface it happens. The converse proof.
+        "surface": SURFACE_ANY,
         "reuses": "routes.workspace.create_rfi_draft's own _require_approval gate - "
                    "proposal envelope only, never called directly from here",
     },
     INTENT_CLASS_PROPOSE_APPLY_FINDINGS: {
         "safety": SAFETY_CONSEQUENTIAL,
+        # Applying findings means reviewing them against their sources
+        # first - large evidence review, multi-panel.
+        "surface": SURFACE_FULL_WORKSPACE,
         "reuses": "routes.workspace's Apply route's own _require_approval gate - "
                    "proposal envelope only, never called directly from here",
     },
     INTENT_CLASS_PROPOSE_SOURCE_REVISION: {
         "safety": SAFETY_CONSEQUENTIAL,
+        # Supersession requires comparing two documents side by side.
+        "surface": SURFACE_FULL_WORKSPACE,
         "reuses": "routes.workspace's Source-revision route's own _require_approval gate - "
                    "proposal envelope only, never called directly from here",
     },
     INTENT_CLASS_PROPOSE_WORK_PRODUCT_ISSUE: {
         "safety": SAFETY_CONSEQUENTIAL,
+        # Issuing assembles sections across panels.
+        "surface": SURFACE_FULL_WORKSPACE,
         "reuses": "routes.workspace's Work Product issue route's own _require_approval gate - "
                    "proposal envelope only, never called directly from here",
     },
@@ -540,6 +581,22 @@ KNOWN_INTENT_CLASSES = tuple(INTENT_DISPATCH_TABLE.keys())
 CONSEQUENTIAL_INTENT_CLASSES = tuple(
     intent for intent, meta in INTENT_DISPATCH_TABLE.items() if meta["safety"] == SAFETY_CONSEQUENTIAL
 )
+FULL_WORKSPACE_INTENT_CLASSES = tuple(
+    intent for intent, meta in INTENT_DISPATCH_TABLE.items()
+    if meta["surface"] == SURFACE_FULL_WORKSPACE
+)
+
+
+def requires_full_workspace(intent_class: Optional[str]) -> bool:
+    """Is this intent one a phone should hand off rather than half-do?
+
+    Unknown intents answer False. An intent this table does not recognize is
+    already normalized to INTENT_CLASS_GENERAL_ANSWER before it reaches any
+    caller, and guessing "full workspace" for something unrecognized would
+    manufacture a dead end out of ignorance - the exact outcome this whole
+    mechanism exists to prevent.
+    """
+    return intent_class in FULL_WORKSPACE_INTENT_CLASSES
 _MAX_CANDIDATE_REFERENTS = 5
 
 CONVERSATIONAL_TURN_PROMPT_VERSION = "spine-01"

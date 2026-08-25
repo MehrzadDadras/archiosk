@@ -503,6 +503,71 @@ def _route_safe_intent(
     return None
 
 
+SURFACE_MOBILE = "mobile"
+
+# What the person is told when the boundary is reached. Deliberately says
+# nothing about intent classes, dispatch tables or Tasks: the Product Owner's
+# instruction is that "the UI should not expose the underlying intent classifier
+# or Task machinery". It explains the situation in the terms they experience it.
+_CONTINUATION_REPLY = (
+    "That one needs the full workspace - it works across documents and evidence "
+    "that will not read properly on a phone. Nothing has been run or changed. "
+    "I can keep it, with what you have said and what you were looking at, so you "
+    "can pick it up on your laptop."
+)
+
+
+def _should_offer_continuation(surface: Optional[str], intent_class: Optional[str]) -> bool:
+    """Only on a phone, and only for work a phone should hand off.
+
+    Fails toward answering: an unknown surface is treated as capable, so a
+    misreported or missing surface can never manufacture a dead end. The cost of
+    being wrong in that direction is a cramped answer; the cost in the other
+    direction is refusing work the person could have had.
+    """
+    if surface != SURFACE_MOBILE:
+        return False
+    from services.conversational_turn import requires_full_workspace
+
+    return requires_full_workspace(intent_class)
+
+
+def _continuation_title(text: str) -> str:
+    """The person's own words, so the Task reads like what they asked for."""
+    condensed = re.sub(r"\s+", " ", (text or "")).strip()
+    if len(condensed) > 120:
+        condensed = condensed[:117].rstrip() + "..."
+    return condensed or "Continue on the full workspace"
+
+
+def _continuation_offer(text: str, intent_class: Optional[str]) -> InterpretationResult:
+    """One offer, through the EXISTING operational-actions seam.
+
+    Reuses the mechanism CLAUDE-CA1D-RIVER-01 already built: an
+    operational_actions entry of kind "task" renders as one real POST button to
+    the unchanged create_task_route. No new control, no new surface, no ticket
+    dashboard - which is what "new capability must not default to a new
+    permanent control" requires in practice.
+
+    There is deliberately NO server route for "No". Not pressing the button is
+    the No, and it cannot create anything because no code path exists to. That
+    is a stronger guarantee than a decline endpoint that must be trusted to
+    write nothing.
+    """
+    return InterpretationResult(
+        action_taken=f"continuation_offered:{intent_class}",
+        reply_text=_CONTINUATION_REPLY,
+        content_class=CONTENT_CLASS_AI_PROPOSED,
+        operational_actions=[{
+            "kind": "task",
+            "label": "Keep this for the full workspace",
+            "default_title": _continuation_title(text),
+            "deferred_reason": "Needs the full workspace",
+            "originating_surface": SURFACE_MOBILE,
+        }],
+    )
+
+
 def interpret_message(
     text: str,
     workspace: ProjectWorkspace,
@@ -521,6 +586,7 @@ def interpret_message(
     developer_mode_active: bool = False,
     developer_application_selection: Optional[dict] = None,
     residual_admission: Optional["ResidualAdmission"] = None,
+    surface: Optional[str] = None,
 ) -> InterpretationResult:
     """
     `case` is now optional (a project-level aperture - no Investigation
@@ -908,6 +974,23 @@ def interpret_message(
             anchor=anchor, selected_source=validated_selected_source,
             current_view=validated_current_view,
         )
+    # CLAUDE-MOBILE-CONTINUATION-01: the device boundary, checked before any
+    # handler runs.
+    #
+    # Mobile limitation is an intentional product boundary, not capability
+    # loss - but reaching it must never be a dead end. So a phone asking for
+    # work the phone cannot show properly gets an explanation and one offer to
+    # keep it, rather than a refusal or a degraded half-answer.
+    #
+    # Placed HERE, before dispatch, for the same reason the consequential check
+    # below is: nothing runs on this branch at all. "Deferred means not
+    # executed" is control flow, not a flag someone could later misread.
+    #
+    # No handler runs, so no analysis is performed, nothing is written, and the
+    # offer itself creates nothing - it renders a button the person may press.
+    if _should_offer_continuation(surface, residual.intent_class):
+        return _continuation_offer(text, residual.intent_class)
+
     # Stage 4: a consequential intent stops here. No handler is called on
     # this branch at all - the "never execution" property is control flow,
     # not a flag that could be misread.

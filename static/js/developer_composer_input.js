@@ -59,3 +59,26 @@
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bindAll);
     else bindAll();
 })();
+
+/* CLAUDE-MOBILE-CONTINUATION-01: declare the surface the composer is being used
+   on, so the server can offer a continuation instead of half-answering.
+
+   Set at submit time rather than on load, because a laptop window narrowed to a
+   phone width mid-session is genuinely a phone-sized surface, and a value
+   captured at page load would be stale. The 640px query is the SAME breakpoint
+   main.css already uses - one definition of "phone", not a second one drifting
+   alongside it.
+
+   Empty means "capable": if this script never runs, the server sees no surface
+   and answers normally. The boundary can only ever be reached deliberately,
+   never by a failure to report. */
+(function () {
+    var field = document.getElementById('dock-composer-surface');
+    if (!field) return;
+    var form = field.closest('form');
+    if (!form) return;
+    form.addEventListener('submit', function () {
+        var narrow = window.matchMedia && window.matchMedia('(max-width: 640px)').matches;
+        field.value = narrow ? 'mobile' : '';
+    });
+})();

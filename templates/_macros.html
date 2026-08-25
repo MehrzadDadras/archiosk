@@ -470,6 +470,7 @@
             {% endif %}
             <span class="composer-attach-or">or just ask about it</span>
         </span>
+        <input type="hidden" name="surface" id="dock-composer-surface" value="">
         <textarea name="text" id="dock-composer-input" data-ui-ref="chat.composer.input" data-developer-composer-input data-conversation-draft="{{ scope_key }}" placeholder="{{ placeholder }}" aria-label="Message" autocomplete="off" rows="1" required></textarea>
         {# CLAUDE-COMPOSER-DRAFT-ASSIST-01: the pen.
 
@@ -628,6 +629,11 @@
         <input type="hidden" name="anchor_end_offset" value="{{ quote|length }}">
         <input type="hidden" name="anchor_quote" value="{{ quote }}">
         <input type="hidden" name="title" value="{{ action.default_title }}">
+        {# CLAUDE-MOBILE-CONTINUATION-01: present only on a deferred continuation
+           offer; every other task offer omits both and the route treats them as
+           absent. No new form, no new route - the same Make-Task POST. #}
+        {% if action.deferred_reason %}<input type="hidden" name="deferred_reason" value="{{ action.deferred_reason }}">{% endif %}
+        {% if action.originating_surface %}<input type="hidden" name="originating_surface" value="{{ action.originating_surface }}">{% endif %}
         <button type="submit" class="review-btn needs_evidence">{{ action.label }}</button>
     </form>
     {% elif action.kind == "tag" %}

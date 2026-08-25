@@ -4696,6 +4696,13 @@ def _run_conversation_turn(
         developer_mode_active=_developer_mode_active(),
         developer_application_selection=session.get("developer_application_selection"),
         residual_admission=residual_admission,
+        # CLAUDE-MOBILE-CONTINUATION-01: the client declares its own surface.
+        # Server-side user-agent sniffing was rejected - it is a guess about a
+        # string, while the client already knows its own viewport, and a wrong
+        # guess here either strands a laptop user or half-answers on a phone.
+        # An absent or unrecognized value means "capable", so the boundary can
+        # only ever be reached deliberately.
+        surface=(request.form.get("surface") or "").strip()[:20] or None,
     )
 
     store.add_message(
@@ -5626,8 +5633,17 @@ def tag_occurrences_for_selection_route(project_id):
 def create_task_route(project_id):
     _, store, workspace = _load_workspace_or_404(project_id)
     title = request.form.get("title") or ""
+    # CLAUDE-MOBILE-CONTINUATION-01: both optional and both absent from every
+    # pre-existing caller, so the ordinary Make-Task button is unchanged. The
+    # route stays one route - a deferred continuation is a Task with two more
+    # facts on it, not a second creation path with its own authority.
+    deferred_reason = (request.form.get("deferred_reason") or "").strip()[:200]
+    originating_surface = (request.form.get("originating_surface") or "").strip()[:60]
     try:
-        task = store.create_task(workspace, _source_anchor_from_form(), title=title, actor=_reviewer())
+        task = store.create_task(
+            workspace, _source_anchor_from_form(), title=title, actor=_reviewer(),
+            deferred_reason=deferred_reason, originating_surface=originating_surface,
+        )
     except CaseWorkspaceError as exc:
         return jsonify({"ok": False, "error": str(exc)}), 400
 

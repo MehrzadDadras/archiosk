@@ -1525,9 +1525,28 @@ class TagOccurrence:
 class Task:
     """A real persisted project Task created from a selected Project
     Conversation passage - Section 6's own explicit "not a decorative
-    checkbox or temporary browser state" requirement. Deliberately no
-    assignee/due-date/notification fields - those remain unauthorized
-    by this same stage's own scope boundary."""
+    checkbox or temporary browser state" requirement.
+
+    Still deliberately no assignee and no due-date fields.
+
+    CLAUDE-MOBILE-CONTINUATION-01 (GOV-D-002): the original wording said
+    "assignee/due-date/notification" were all "unauthorized by this same
+    stage's own scope boundary". The Product Owner has lifted that boundary
+    for NOTIFICATION specifically - the architecture may accommodate a
+    notification association in a later bounded stage. No notification field is
+    added here, because none is needed yet and the same instruction forbids
+    speculative ones. Assignment and due dates remain out of scope and are NOT
+    covered by that lifting.
+
+    The two fields below carry the only thing a deferred Task needs beyond what
+    an ordinary one already has: why it stopped, and where it stopped. Everything
+    else a continuation needs - project, case, message, quote, actor, timestamp -
+    `source_anchor` already carries, which is why this is an extension of Task
+    rather than a second object.
+
+    Neither field is authority. A deferred Task records unfinished intent; it
+    never licenses the deferred action, and resuming it re-enters the same
+    Approval Gate as any other route (GOV-P-001)."""
 
     id: str
     source_anchor: dict  # asdict(ConversationSourceAnchor)
@@ -1540,6 +1559,13 @@ class Task:
     completed_at: Optional[str] = None
     reopened_by: Optional[str] = None
     reopened_at: Optional[str] = None
+    # Why the work stopped, in the user's terms - "needs the full workspace",
+    # never an intent-class identifier. The classifier is machinery and does not
+    # belong in a record a person reads months later.
+    deferred_reason: Optional[str] = None
+    # Where it stopped. Free text, same reasoning as Attention.intended_actor:
+    # surfaces are not a closed set worth validating against.
+    originating_surface: Optional[str] = None
 
 
 TASK_STATUS_OPEN = "open"
@@ -8628,7 +8654,12 @@ class CaseWorkspaceStore:
         matches.sort(key=lambda occ: occ["source_anchor"]["start_offset"])
         return matches
 
-    def create_task(self, workspace: ProjectWorkspace, source_anchor: dict, title: str, actor: str) -> dict:
+    def create_task(
+        self, workspace: ProjectWorkspace, source_anchor: dict, title: str, actor: str,
+        deferred_reason: Optional[str] = None, originating_surface: Optional[str] = None,
+    ) -> dict:
+        """Both new arguments default to None, so every existing caller is
+        byte-for-byte unchanged - this is an extension, not a branch."""
         stripped_title = re.sub(r"\s+", " ", (title or "")).strip()
         if not stripped_title:
             raise CaseWorkspaceError("Task title cannot be empty.")
@@ -8637,9 +8668,25 @@ class CaseWorkspaceStore:
 
         validated_anchor = self._validate_source_anchor(workspace, source_anchor)
 
+        # CLAUDE-MOBILE-CONTINUATION-01: repeated submission must not leave two
+        # identical continuations behind - a real failure mode when a phone
+        # loses signal mid-POST and the person presses again. Deduped on the
+        # anchored message plus the title, among OPEN tasks only: a completed
+        # task is finished work, and asking for the same thing again after
+        # finishing it is a genuine new request, not a duplicate.
+        anchored_message = validated_anchor.get("message_id")
+        if anchored_message:
+            for existing in workspace.tasks:
+                if (existing.get("status") == TASK_STATUS_OPEN
+                        and existing.get("title") == stripped_title
+                        and (existing.get("source_anchor") or {}).get("message_id") == anchored_message):
+                    return dict(existing)
+
         task = Task(
             id=_new_id(), source_anchor=validated_anchor, quote=validated_anchor["quote"],
             title=stripped_title, status=TASK_STATUS_OPEN, created_by=actor, created_at=_now(),
+            deferred_reason=(deferred_reason or None),
+            originating_surface=(originating_surface or None),
         )
         workspace.tasks.append(asdict(task))
         self.save(workspace)
