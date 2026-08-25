@@ -3585,6 +3585,116 @@ def confirm_archive_case(project_id, case_id):
     )
 
 
+# -- CLAUDE-GO-DOCUMENT-EXPORT-01: Word / Excel / PDF downloads -----------
+# Product Owner: "My Copilot 365 can create PDF and Excel and Word to
+# download. Make our app to have equal capabilities."
+#
+# One route, three formats, four content kinds, gated on ACTION_EXPORT through
+# the SAME _require_export_allowed the RFI export already uses. A second,
+# weaker export door beside the governed one would undo the point of the gate.
+#
+# Nothing is summarised, ranked or reworded here: an export is a VIEW of
+# governed state, never a new assertion about it, and every recorded status
+# travels into the file with its row - a document outlives the screen that
+# explained it.
+EXPORT_CONTENT_KINDS = ("findings", "requirements", "investigations", "project")
+
+
+def _export_document_for(workspace, kind: str):
+    from services.document_export import ExportDocument, ExportTable
+
+    title = workspace.display_title or workspace.project_id
+    preamble = [
+        "Exported from ARCHIOSK. This is a view of governed project state at the "
+        "time of export - it does not create, change or conclude anything.",
+        "Each row carries its own recorded status. A provisional item is not a "
+        "conclusion, and remains provisional in this file.",
+    ]
+
+    if kind == "findings":
+        rows = [
+            [f.get("id", "")[:8], f.get("statement", ""), f.get("claim_status", ""),
+             f.get("created_at", "")]
+            for f in workspace.findings
+        ]
+        tables = [ExportTable(
+            "Findings", ["ID", "Statement", "Status", "Recorded"], rows,
+            note="Status is as recorded in the project. Machine confidence is "
+                 "deliberately not exported as a number - it is not a score a "
+                 "reader should weigh against a human judgement.",
+        )]
+    elif kind == "requirements":
+        rows = [
+            [r.get("original_requirement_identifier", "") or r.get("id", "")[:8],
+             r.get("text_reference", ""), r.get("status", ""),
+             r.get("classification", ""), r.get("authority_source", "")]
+            for r in workspace.requirements
+        ]
+        tables = [ExportTable(
+            "Governed requirements",
+            ["Identifier", "Reference", "Status", "Classification", "Authority"], rows,
+            note="Authority is the source's own stated authority, carried forward "
+                 "unchanged.",
+        )]
+    elif kind == "investigations":
+        rows = [
+            [c.get("title", ""), c.get("status", ""),
+             str(len(c.get("conversation", []))), c.get("created_at", "")]
+            for c in workspace.cases
+        ]
+        tables = [ExportTable(
+            "Investigations", ["Title", "Status", "Messages", "Started"], rows,
+        )]
+    else:
+        sources = CaseWorkspaceStore.active_sources(workspace)
+        tables = [
+            ExportTable("Sources", ["Name", "Kind", "Revision"], [
+                [s.get("name", ""), s.get("kind", ""), s.get("revision", "") or ""]
+                for s in sources
+            ]),
+            ExportTable("Investigations", ["Title", "Status"], [
+                [c.get("title", ""), c.get("status", "")] for c in workspace.cases
+            ]),
+            ExportTable("Findings", ["Statement", "Status"], [
+                [f.get("statement", ""), f.get("claim_status", "")]
+                for f in workspace.findings
+            ]),
+        ]
+
+    return ExportDocument(
+        title=f"{title} - {kind.replace('_', ' ').title()}",
+        subtitle=f"Project {workspace.project_id}",
+        preamble=preamble,
+        tables=tables,
+    )
+
+
+@workspace_bp.route("/projects/<project_id>/workspace/export/<kind>.<export_format>")
+@login_required
+def export_document(project_id, kind, export_format):
+    """A real .docx / .xlsx / .pdf of governed project content."""
+    from services.document_export import MIMETYPES, SUPPORTED_FORMATS, build
+
+    if kind not in EXPORT_CONTENT_KINDS or export_format not in SUPPORTED_FORMATS:
+        abort(404)
+
+    _, store, workspace = _load_workspace_or_404(project_id)
+    export_gate = _require_export_allowed(workspace, project_id)
+    if export_gate is not None:
+        return export_gate
+
+    document = _export_document_for(workspace, kind)
+    buffer = build(document, export_format)
+    safe_title = "".join(
+        ch for ch in (workspace.display_title or project_id) if ch.isalnum() or ch in " -_"
+    ).strip() or project_id
+    return send_file(
+        buffer,
+        mimetype=MIMETYPES[export_format],
+        as_attachment=True,
+        download_name=f"{safe_title} - {kind}.{export_format}",
+    )
+
 @workspace_bp.route("/projects/<project_id>/workspace/conversations/new", methods=["POST"])
 @login_required
 def start_new_conversation(project_id):

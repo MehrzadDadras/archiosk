@@ -87,6 +87,22 @@ CAPABILITIES: dict[str, Capability] = {
             "Archived conversations are preserved, not deleted.",
         ),
     ),
+    # CLAUDE-GO-DOCUMENT-EXPORT-01: Product Owner: "My Copilot 365 can create
+    # PDF and Excel and Word to download. Make our app to have equal
+    # capabilities." It can now - and unlike the photo capability before it,
+    # this one is described here from the start rather than after someone
+    # asked and got an essay.
+    "export_document": Capability(
+        "export_document", CAPABILITY_STATUS_IMPLEMENTED,
+        "ARCHIOSK can produce a real Word, Excel or PDF file of this project's "
+        "governed content, for you to download.",
+        steps=(
+            "Open the project you want to export.",
+            "Choose what to export: findings, requirements, investigations, or the whole project.",
+            "Pick a format - Word (.docx), Excel (.xlsx) or PDF.",
+            "The file downloads directly; nothing is sent anywhere else.",
+        ),
+    ),
     "create_project": Capability(
         "create_project", CAPABILITY_STATUS_IMPLEMENTED,
         "ARCHIOSK can establish a new Project from one founding document "
@@ -191,6 +207,12 @@ _PHRASE_TO_CAPABILITY_KEY: tuple[tuple[str, str], ...] = (
     # questions a reviewer standing on site actually asks, and every one of
     # them used to fall past this table to a model that could only guess at
     # an application it has no reliable knowledge of.
+    ("export", "export_document"),
+    ("download", "export_document"),
+    ("pdf", "export_document"),
+    ("excel", "export_document"),
+    ("spreadsheet", "export_document"),
+    ("word document", "export_document"),
     ("upload a photo", "add_photo"),
     ("upload photo", "add_photo"),
     ("uploading a photo", "add_photo"),

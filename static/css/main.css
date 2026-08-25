@@ -8789,3 +8789,37 @@ body,
     max-width: 100%;
     min-width: 0;
 }
+
+/* CLAUDE-GO-DOCUMENT-EXPORT-01 — File > Export rows.
+   One row per content kind, three formats on it. A flat list of twelve
+   entries would be the same information arranged to be unusable. */
+.workspace-menubar-export-row {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.3rem 0.6rem;
+    white-space: nowrap;
+}
+.workspace-menubar-export-label {
+    flex: 1 1 auto;
+    min-width: 0;
+    color: var(--text-secondary);
+    font-size: 0.82rem;
+}
+.workspace-menubar-export-format {
+    flex-shrink: 0;
+    padding: 0.2rem 0.45rem;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text-secondary);
+    text-decoration: none;
+    font-size: 0.74rem;
+}
+.workspace-menubar-export-format:hover {
+    color: var(--machine-blue);
+    border-color: var(--machine-blue);
+}
+.workspace-menubar-export-format:focus-visible {
+    outline: 2px solid var(--machine-blue);
+    outline-offset: 1px;
+}

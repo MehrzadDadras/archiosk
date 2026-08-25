@@ -357,9 +357,26 @@
                                 <summary class="workspace-menubar-item">Export</summary>
                                 <div class="workspace-menubar-subpanel" role="group" aria-label="Export">
                                     {% if project_id is defined and workspace is defined %}
+                                    {% for kind, label in [
+                                        ('project', 'Whole project'),
+                                        ('findings', 'Findings'),
+                                        ('requirements', 'Requirements'),
+                                        ('investigations', 'Investigations'),
+                                    ] %}
+                                    <span class="workspace-menubar-export-row" data-ui-ref="menu.file.export.row">
+                                        <span class="workspace-menubar-export-label">{{ label }}</span>
+                                        <a class="workspace-menubar-export-format" data-ui-ref="menu.file.export.docx"
+                                           href="{{ url_for('workspace.export_document', project_id=project_id, kind=kind, export_format='docx') }}">Word</a>
+                                        <a class="workspace-menubar-export-format" data-ui-ref="menu.file.export.xlsx"
+                                           href="{{ url_for('workspace.export_document', project_id=project_id, kind=kind, export_format='xlsx') }}">Excel</a>
+                                        <a class="workspace-menubar-export-format" data-ui-ref="menu.file.export.pdf"
+                                           href="{{ url_for('workspace.export_document', project_id=project_id, kind=kind, export_format='pdf') }}">PDF</a>
+                                    </span>
+                                    {% endfor %}
+                                    <hr class="workspace-menubar-separator" aria-hidden="true">
                                     <a class="workspace-menubar-item" data-ui-ref="menu.file.export.rfi" href="{{ url_for('workspace.export_rfi', project_id=project_id) }}">Export RFI</a>
                                     {% else %}
-                                    <span class="workspace-menubar-item workspace-menubar-item-disabled" data-ui-ref="menu.file.export.none" aria-disabled="true" title="Open a Project to export its RFI">No exports available here</span>
+                                    <span class="workspace-menubar-item workspace-menubar-item-disabled" data-ui-ref="menu.file.export.none" aria-disabled="true" title="Open a Project to export its content">No exports available here</span>
                                     {% endif %}
                                 </div>
                             </details>

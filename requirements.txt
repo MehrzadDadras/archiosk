@@ -13,3 +13,7 @@ Pillow==12.3.0
 Flask-Limiter==4.1.1
 Flask-WTF==1.3.0
 Flask-Migrate==4.1.0
+# CLAUDE-GO-DOCUMENT-EXPORT-01: composes NEW PDFs. pypdf (above) reads and
+# manipulates existing ones and cannot author a laid-out report. Checked with
+# tools/dependency_fit.py before proposal - PASS on all six constraints.
+reportlab==4.2.5
