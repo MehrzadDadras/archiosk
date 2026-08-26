@@ -171,26 +171,43 @@
                                        visible to someone who already passed the gate. #}
                                     <a class="workspace-menubar-item" data-ui-ref="menu.archiosk.admin.diagnostics" href="{{ url_for('portal.list_diagnostics') }}">Diagnostics</a>
                                     <a class="workspace-menubar-item" id="project-data-management" data-ui-ref="menu.archiosk.admin.project-data-management" href="{{ url_for('portal.reset_project_data', project_id=(project_id if project_id is defined else None)) }}">Project Data Management</a>
-                                    <hr class="workspace-menubar-separator" aria-hidden="true">
-                                    {# CLAUDE-DEVELOPER-MODE-COCKPIT-01, Addendum E: orientation-only
-                                       first pass - a real form-POST toggle (routes/portal.py's
-                                       toggle_developer_mode, admin_required), not a second,
-                                       client-only mechanism like UI Reference Mode below. Inside the
-                                       SAME is_admin-gated Admin group as every other item here, not
-                                       a separately-authorized surface - "authorized" for this stage
-                                       means exactly what it already means everywhere else in this
-                                       menu. The label itself states current state, matching Publish
-                                       RFP/Remove Project's own "the button says what happens next"
-                                       idiom. #}
+                                </div>
+                            </details>
+                            {# CLAUDE-DEVELOPER-MENU-01: Developer Mode is its own submenu
+                               under Archiosk, no longer buried at the bottom of Admin.
+
+                               Product Owner, live: "there is no visible Developer Mode
+                               control." It was there and authorized - the toggle rendered
+                               for their admin session - but behind TWO closed disclosures
+                               (Archiosk -> Admin -> below a separator), where the only
+                               visible word was "Admin", which does not say Developer Mode
+                               is inside. A control nobody can find is not a control.
+
+                               Still inside the SAME {% if is_admin %} gate, still the same
+                               admin_required form-POST route, unchanged. This moves where
+                               it is named, never who may use it. Not duplicated into two
+                               places either - a governed toggle that appears twice is two
+                               things to keep in agreement.
+
+                               The refs move with it (menu.archiosk.developer.*): a ref
+                               encodes the menu path, and leaving "admin." on a control
+                               that no longer lives under Admin would make the reference
+                               map describe a layout that does not exist. #}
+                            <details class="workspace-menubar-submenu" data-ui-ref="menu.archiosk.developer">
+                                <summary class="workspace-menubar-item">Developer Mode</summary>
+                                <div class="workspace-menubar-subpanel" role="group" aria-label="Developer Mode">
+                                    {# The label states current state, matching Publish RFP/
+                                       Remove Project's own "the button says what happens
+                                       next" idiom. #}
                                     <form method="post" action="{{ url_for('portal.toggle_developer_mode') }}">
-                                        <button type="submit" class="workspace-menubar-item" data-ui-ref="menu.archiosk.admin.developer-mode-toggle">{% if developer_mode %}Exit Developer Mode{% else %}Enter Developer Mode{% endif %}</button>
+                                        <button type="submit" class="workspace-menubar-item" data-ui-ref="menu.archiosk.developer.mode-toggle">{% if developer_mode %}Exit Developer Mode{% else %}Enter Developer Mode{% endif %}</button>
                                     </form>
                                     {% if developer_mode %}
                                     <form method="post" action="{{ url_for('portal.toggle_developer_ui_reveal') }}">
                                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                        <button type="submit" class="workspace-menubar-item" data-ui-ref="menu.archiosk.admin.ui-reveal-toggle">{% if developer_ui_reveal %}Hide Template IDs{% else %}Reveal Template IDs{% endif %}</button>
+                                        <button type="submit" class="workspace-menubar-item" data-ui-ref="menu.archiosk.developer.ui-reveal-toggle">{% if developer_ui_reveal %}Hide Template IDs{% else %}Reveal Template IDs{% endif %}</button>
                                     </form>
-                                    <a class="workspace-menubar-item" data-ui-ref="menu.archiosk.admin.developer-tools" href="{{ url_for('portal.developer_tools', project_id=(project_id if project_id is defined else None)) }}">Developer Tools</a>
+                                    <a class="workspace-menubar-item" data-ui-ref="menu.archiosk.developer.tools" href="{{ url_for('portal.developer_tools', project_id=(project_id if project_id is defined else None)) }}">Developer Tools</a>
                                     {% endif %}
                                 </div>
                             </details>
@@ -553,7 +570,33 @@
                    established for the side-indicator (the actual
                    mode-switch is the Archiosk > Admin menu item above,
                    same discipline as that indicator's own precedent). #}
-                <span class="workspace-developer-mode-badge" data-ui-ref="menu.developer-mode-badge" role="status" title="Developer Mode is active - toggle from Archiosk > Admin" aria-label="Developer Mode is active">DEVELOPER MODE</span>
+                {# CLAUDE-DEVELOPER-MENU-01: the badge now carries its own exit.
+
+                   This REVERSES the "plain <span>, no click handler" decision
+                   recorded immediately above, on the Product Owner's explicit
+                   instruction. The prior reasoning is preserved rather than
+                   deleted because it was not wrong: an operational boundary
+                   indicator should not read as decoration or invite a casual
+                   mode-switch.
+
+                   What changed is the evidence. The Product Owner could not
+                   find the way IN (it was two disclosures deep under "Admin"),
+                   and a mode you can see you are in but cannot leave from where
+                   you see it has the same defect pointing the other way. The
+                   indicator stays an indicator - the badge text is still a
+                   role="status" span with no handler - and the exit is a
+                   separate, explicitly labelled control beside it.
+
+                   Still a form POST, never a link: a GET would put a session
+                   state change into browser history and make it reachable by
+                   typing a URL, which is the discipline the toggle route
+                   already enforces by being POST-only. #}
+                <span class="workspace-developer-mode-badge" data-ui-ref="menu.developer-mode-badge" role="status" title="Developer Mode is active - toggle from Archiosk &gt; Developer Mode" aria-label="Developer Mode is active">
+                    <span class="workspace-developer-mode-badge-text">DEVELOPER MODE</span>
+                    <form method="post" action="{{ url_for('portal.toggle_developer_mode') }}" class="workspace-developer-mode-exit-form">
+                        <button type="submit" class="workspace-developer-mode-exit" data-ui-ref="menu.developer-mode-badge.exit" title="Exit Developer Mode" aria-label="Exit Developer Mode">&times;</button>
+                    </form>
+                </span>
                 {% endif %}
                 {% if verification_session %}
                 {# CLAUDE-LIVE-VERIFICATION-ACCOUNT-MECHANISM-01: same

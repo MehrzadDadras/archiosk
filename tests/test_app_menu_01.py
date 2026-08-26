@@ -671,7 +671,13 @@ class DeveloperModeTests(_BaseTestCase):
         doc = self._ingest(owner="menu_owner", project_name="Dev Mode Non-Admin Menu Test")
         client = self._client_as("menu_reviewer", 2, role="read_only")
         body = client.get(f"/projects/{doc.project_id}/workspace").get_data(as_text=True)
-        self.assertNotIn('data-ui-ref="menu.archiosk.admin.developer-mode-toggle"', body)
+        # CLAUDE-DEVELOPER-MENU-01: the toggle moved from the Admin submenu to
+        # its own "Developer Mode" submenu, and the ref moved with it. Updated
+        # rather than left pointing at the old value - an absence assertion
+        # against a ref that no longer exists anywhere passes for the wrong
+        # reason and would stop protecting non-admins entirely.
+        self.assertNotIn('data-ui-ref="menu.archiosk.developer.mode-toggle"', body)
+        self.assertNotIn('data-ui-ref="menu.archiosk.developer"', body)
 
     def test_toggle_route_rejects_non_admin(self):
         client = self._client_as("menu_reviewer", 2, role="read_only")

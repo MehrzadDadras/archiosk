@@ -2881,6 +2881,28 @@ main:has(.document-viewer-canvas-container) {
     white-space: nowrap;
     cursor: default;
 }
+
+/* CLAUDE-DEVELOPER-MENU-01: the badge's own exit.
+
+   Inherits the badge's colour rather than declaring its own, so the exit can
+   never drift out of contrast with the surface it sits on - the badge already
+   pairs --surface-primary on --machine-blue and that pairing was chosen
+   deliberately. A second colour here would be a second thing to verify. */
+.workspace-developer-mode-badge-text { pointer-events: none; }
+.workspace-developer-mode-exit-form { display: inline-flex; margin: 0 0 0 0.35rem; }
+.workspace-developer-mode-exit {
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    line-height: 1;
+    padding: 0 0.15rem;
+    cursor: pointer;
+    opacity: 0.75;
+    border-radius: 2px;
+}
+.workspace-developer-mode-exit:hover,
+.workspace-developer-mode-exit:focus-visible { opacity: 1; }
 /* CLAUDE-LIVE-VERIFICATION-ACCOUNT-MECHANISM-01: same filled-badge shape
    as .workspace-developer-mode-badge immediately above, deliberately a
    DIFFERENT semantic color so the two are never mistakable for one
@@ -8211,6 +8233,11 @@ html[data-tray-focus="toolbox"] .workspace-pane-toolbox {
     html.mobile-nav-open .workspace-menubar-item[aria-disabled="true"] {
         display: none;
     }
+
+    /* CLAUDE-DEVELOPER-MENU-01: the only way out of Developer Mode must be
+       hittable with a thumb - same 44px floor as the menu repair. A miss on a
+       small target leaves the person stuck in the mode. */
+    .workspace-developer-mode-exit { min-width: 44px; min-height: 44px; }
 
     /* CLAUDE-MOBILE-DOCUMENT-CONVERGENCE-01 - when a document is open on a
        phone, the evidence becomes the job.
