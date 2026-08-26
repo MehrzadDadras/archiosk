@@ -407,7 +407,58 @@ def _developer_application_reply(text: str, context: dict | None) -> str:
     )
 
 
-def _developer_model_reply(text: str, context: dict | None) -> tuple[str | None, dict]:
+def _developer_composer_image() -> tuple[str | None, str | None]:
+    """Read a pasted or picked screenshot off the Developer Composer form.
+
+    The client sends a data: URL, exactly as the workspace Composer's own
+    attachment path already does, so the two doors into the same vision
+    capability agree on the wire format.
+
+    Nothing is persisted. The image rides this one turn to the model and is
+    never written to disk, never registered as a Source, and never given
+    provenance - Developer Mode is orientation-only and creates no project
+    record, which this must not quietly change.
+
+    Returns (None, None) for anything malformed rather than raising: a
+    screenshot that will not parse is a reason to answer the text without it,
+    not to fail the whole turn.
+    """
+    raw = (request.form.get("image_data_url") or "").strip()
+    if not raw.startswith("data:image/"):
+        return None, None
+
+    # CLAUDE-DEVELOPER-COMPOSER-IMAGE-01: the external-AI gate, resolved BEFORE
+    # the image can reach the model - the same ACTION_EXTERNAL_AI_REQUEST
+    # resolver every other transmission in this application uses, and the same
+    # project-less resolution GOV-D-001 established for the registry help desk.
+    #
+    # tests/test_mobile_capture_01.py states the rule this satisfies: vision
+    # must never arrive through an ungoverned back door. A screenshot is a
+    # transmission like any other, and Developer Mode being admin-only is not a
+    # substitute for the policy decision.
+    #
+    # Denied means the turn still happens, without the picture - dropping the
+    # image is honest degradation; failing the whole question would punish the
+    # user for a policy they cannot see.
+    if not _project_less_external_ai_allowed():
+        return None, None
+    try:
+        header, encoded = raw.split(",", 1)
+    except ValueError:
+        return None, None
+    media_type = header[5:].split(";", 1)[0].strip().lower()
+    if media_type not in ("image/png", "image/jpeg", "image/gif", "image/webp"):
+        return None, None
+    encoded = encoded.strip()
+    if not encoded:
+        return None, None
+    return encoded, media_type
+
+
+def _developer_model_reply(
+    text: str, context: dict | None,
+    image_base64: str | None = None, image_media_type: str | None = None,
+) -> tuple[str | None, dict]:
     """Run the canonical model-backed application conversation seam."""
     result = answer_application_question(
         question=text,
@@ -415,6 +466,8 @@ def _developer_model_reply(text: str, context: dict | None) -> tuple[str | None,
         recent_history=_developer_home_messages(),
         api_key=current_app.config.get("ANTHROPIC_API_KEY"),
         model=current_app.config.get("ANTHROPIC_MODEL"),
+        image_base64=image_base64,
+        image_media_type=image_media_type,
     )
     if result.ran and result.answer:
         return result.answer, {
@@ -440,6 +493,13 @@ def developer_home_composer():
     """
     _require_developer_composer()
     text = (request.form.get("message") or "").strip()[:4000]
+    # CLAUDE-DEVELOPER-COMPOSER-IMAGE-01: a screenshot on its own is a complete
+    # turn. Requiring text alongside it would mean typing "look at this" to say
+    # nothing - so an image with no message gets a neutral standing question
+    # rather than being silently dropped at the guard below.
+    image_base64, image_media_type = _developer_composer_image()
+    if not text and image_base64:
+        text = "What do you see in this screenshot?"
     if not text:
         return redirect(url_for("portal.index"))
     if request.form.get("project_id"):
@@ -463,7 +523,7 @@ def developer_home_composer():
         # acknowledgement is not allowed to swallow the user's proposition.
         if parsed_command and parsed_command[0] == "start" and parsed_command[1]:
             model_reply, model_metadata = _developer_model_reply(
-                parsed_command[1], context,
+                parsed_command[1], context, image_base64, image_media_type,
             )
             if model_reply:
                 reply = reply + "\n\n" + model_reply
@@ -474,7 +534,8 @@ def developer_home_composer():
         _record_developer_home_message("system", reply, action_taken=result["action_taken"], **model_metadata)
         return redirect(url_for("portal.index"))
 
-    reply, model_metadata = _developer_model_reply(text, context)
+    reply, model_metadata = _developer_model_reply(
+        text, context, image_base64, image_media_type)
     action = "developer_application_model_answered"
     if not reply:
         reply = _developer_application_reply(text, context)

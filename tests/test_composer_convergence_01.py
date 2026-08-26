@@ -60,7 +60,11 @@ _TEMPLATES = _REPO_ROOT / "templates"
 #   key -> (template, anchor identifying its <form>, multiline?, expects_attach?)
 SURFACES = {
     "workspace-dock": ("_macros.html", 'data-ui-ref="chat.composer"', True, True),
-    "developer-home": ("index.html", 'data-ui-ref="developer.home.composer.form"', True, False),
+    # CLAUDE-DEVELOPER-COMPOSER-IMAGE-01: was False. The Product Owner reached
+    # for paste-a-screenshot here and found nothing - a surface that looked like
+    # Composer and accepted less, which is exactly the drift this file exists to
+    # catch. It now attaches.
+    "developer-home": ("index.html", 'data-ui-ref="developer.home.composer.form"', True, True),
     "home-orientation": ("index.html", 'id="index-orientation-form"', False, False),
     "establish-project": ("upload.html", 'id="upload-orientation-form"', False, False),
 }

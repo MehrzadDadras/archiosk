@@ -127,9 +127,21 @@ class NoNewEvidenceOrIngestionPathTests(unittest.TestCase):
         call_sites = workspace.count("image_base64=")
         self.assertEqual(call_sites, 3)
 
-        # No other route module may transmit an image at all.
+        # CLAUDE-DEVELOPER-COMPOSER-IMAGE-01: routes/portal.py is now a second
+        # vision-bearing module - the Developer Composer accepts a pasted
+        # screenshot, at the Product Owner's explicit request.
+        #
+        # The "only workspace.py" clause was an artifact of workspace.py being
+        # the only place vision existed; this test's own wording has always
+        # said the count "was never the real protection" and that what matters
+        # is that vision cannot arrive through an UNGOVERNED back door. So the
+        # rule is enforced where it actually lives: any route module that
+        # transmits an image must resolve the policy gate first. That is
+        # strictly stronger than the previous check, which said nothing at all
+        # about a module it did not expect to exist.
+        vision_modules = {"workspace.py", "portal.py"}
         for other in (ROOT / "routes").glob("*.py"):
-            if other.name == "workspace.py":
+            if other.name in vision_modules:
                 continue
             with self.subTest(module=other.name):
                 self.assertNotIn("image_base64=", other.read_text(encoding="utf-8"))
@@ -142,6 +154,24 @@ class NoNewEvidenceOrIngestionPathTests(unittest.TestCase):
             preceding = workspace[:position]
             with self.subTest(call_site=index):
                 self.assertIn("ACTION_EXTERNAL_AI_REQUEST", preceding)
+
+        # portal.py's own gate, asserted against CODE rather than text. A
+        # comment naming ACTION_EXTERNAL_AI_REQUEST would satisfy a substring
+        # check while gating nothing - the prose standing in for the guarantee
+        # it describes. So this requires the real resolver to (a) exist, (b)
+        # actually resolve the action, and (c) be CALLED on the path that
+        # transmits.
+        portal_src = (ROOT / "routes" / "portal.py").read_text(encoding="utf-8")
+        portal_code = "\n".join(
+            line for line in portal_src.splitlines() if not line.strip().startswith("#"))
+        with self.subTest(module="portal.py"):
+            self.assertIn("def _project_less_external_ai_allowed", portal_code)
+            self.assertIn("ACTION_EXTERNAL_AI_REQUEST", portal_code)
+            # Called, not merely defined, and before the image is returned to
+            # the caller that transmits it.
+            gate_call = portal_code.index("if not _project_less_external_ai_allowed():")
+            transmit = portal_code.index("image_base64=image_base64")
+            self.assertLess(gate_call, transmit)
 
     def test_gps_coordinates_are_still_never_read(self):
         """services/image_intelligence.py detects GPS PRESENCE only. Mobile

@@ -2427,5 +2427,10 @@
     </script>
     {% block extra_scripts %}{% endblock %}
     <script src="{{ url_for('static', filename='js/developer_composer_input.js') }}?v={{ static_version }}"></script>
+    {# CLAUDE-DEVELOPER-COMPOSER-IMAGE-01: loaded here rather than from
+       index.html's own content block so it runs AFTER composer_attach.js has
+       defined window.ArchioskPrepareImage. Early-returns on every page that has
+       no Developer Composer, exactly like the script above it. #}
+    <script src="{{ url_for('static', filename='js/developer_composer_image.js') }}?v={{ static_version }}"></script>
 </body>
 </html>

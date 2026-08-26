@@ -302,6 +302,11 @@ def answer_application_question(
     api_key: Optional[str] = None,
     model: Optional[str] = None,
     timeout: Optional[float] = None,
+    # CLAUDE-DEVELOPER-COMPOSER-IMAGE-01: passed straight through to the shared
+    # gateway, which has accepted these two since MM5. Both default to None, so
+    # the text path's call is byte-for-byte what it was - additive, not a branch.
+    image_base64: Optional[str] = None,
+    image_media_type: Optional[str] = None,
 ) -> ProjectQAResult:
     """Model-backed Developer Mode conversation at application scope.
 
@@ -338,6 +343,13 @@ def answer_application_question(
         "- Project conversation messages are persisted in the CaseWorkspace project workspace; Developer Home messages are session-scoped unless a governed persistence path is explicitly added.",
         "- The shared model boundary is services/llm_gateway.py::call_llm_json.",
     ]
+    if image_base64:
+        lines.append(
+            "An image is attached to this turn - usually a screenshot of ARCHIOSK "
+            "itself. Read it and describe what you actually see. Say plainly when "
+            "the image does not show what is being asked about, rather than "
+            "guessing from the application context."
+        )
     if developer_context:
         lines.append("\nActive Developer context (application scope):")
         identity = developer_context.get("template_identity")
@@ -382,7 +394,9 @@ def answer_application_question(
             "Do not invent repository facts or imply that a suggestion was executed."
         ),
         api_key=api_key, model=model, timeout=timeout, max_tokens=2000,
-        log_label="Developer application Q&A",
+        log_label=("Developer application Q&A (with image)" if image_base64
+                   else "Developer application Q&A"),
+        image_base64=image_base64, image_media_type=image_media_type,
     )
     if not outcome.ran:
         return ProjectQAResult(ran=False, skipped_reason=outcome.skipped_reason)

@@ -200,7 +200,28 @@
         {% endif %}
         <form class="developer-home-composer-form" method="post" action="{{ url_for('portal.developer_home_composer') }}" data-ui-ref="developer.home.composer.form" data-developer-composer-form>
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <textarea class="text-input" name="message" data-developer-composer-input placeholder="Ask about ARCHIOSK or use /CCN" aria-label="Developer Composer message" autocomplete="off" rows="1"></textarea>
+            <textarea class="text-input" name="message" data-developer-composer-input placeholder="Ask about ARCHIOSK, paste a screenshot, or use /CCN" aria-label="Developer Composer message" autocomplete="off" rows="1"></textarea>
+            {# CLAUDE-DEVELOPER-COMPOSER-IMAGE-01: the same two doors the
+               workspace Composer already offers - a picker and a real paste -
+               but deliberately NOT its full attachment apparatus. Make-Q,
+               Add-to-Q and the capture crop/review flow are project-evidence
+               concerns, and Developer Mode has no project and creates no
+               governed record. This screenshot rides one turn to the model and
+               is never filed. #}
+            <label class="composer-attach" for="developer-home-composer-image"
+                   data-ui-ref="developer.home.composer.attach" title="Attach a screenshot">
+                <span aria-hidden="true">+</span>
+                <span class="visually-hidden">Attach a screenshot</span>
+            </label>
+            <input type="file" id="developer-home-composer-image" accept="image/*" hidden>
+            <input type="hidden" name="image_data_url" id="developer-home-composer-image-data">
+            <span class="composer-attach-chip" id="developer-home-composer-image-chip"
+                  data-ui-ref="developer.home.composer.attach.preview" hidden>
+                <img class="composer-attach-thumb" id="developer-home-composer-image-thumb" alt="" aria-hidden="true">
+                <span class="composer-attach-name" id="developer-home-composer-image-name"></span>
+                <button type="button" class="composer-attach-clear" id="developer-home-composer-image-clear"
+                        data-ui-ref="developer.home.composer.attach.clear" aria-label="Remove the attached screenshot">&times;</button>
+            </span>
             <button type="button" id="developer-home-composer-voice" class="voice-input-button" data-ui-ref="developer.home.composer.voice"
                     aria-label="Press and speak - audio is processed by your browser only and is never saved">&#127908;&#65039;</button>
             <span class="voice-input-status" id="developer-home-composer-voice-status" data-ui-ref="developer.home.composer.voice.status" aria-live="polite"></span>
