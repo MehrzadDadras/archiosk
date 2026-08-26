@@ -8182,6 +8182,48 @@ html[data-tray-focus="toolbox"] .workspace-pane-toolbox {
         min-width: 0;
     }
 
+    /* CLAUDE-MOBILE-SUBMENU-REPAIR-01 - live iPhone report: "the menu on phone
+       is not stable."
+
+       The drawer flattened the TOP-LEVEL menus (position: static, above) but
+       never the NESTED ones. .workspace-menubar-subpanel keeps its desktop
+       flyout geometry - position: absolute, left: calc(100% + 0.2rem),
+       min-width: 200px - inside a drawer that is min(86vw, 320px) wide. On a
+       390px phone that opens a 200px panel starting ~320px from the left edge:
+       entirely off-screen.
+
+       So tapping Admin appeared to do nothing at all. The menu was not
+       unstable, it was opening something the phone could never show - which is
+       indistinguishable from broken, and worse, because the tap registered.
+
+       Same treatment the parents already get, for the same reason: a drawer is
+       a vertical list, and a flyout has nothing to fly out over. Indented so
+       the nesting is still legible once flattened. Desktop is untouched. */
+    html.mobile-nav-open .workspace-menubar-submenu { position: static; }
+    /* All THREE nested panel classes, not just the shared one.
+       View > Appearance and Display Layout are also
+       .workspace-menubar-submenu, but their panels carry their own classes
+       (.workspace-appearance-options / .workspace-layout-options) and are
+       absolutely positioned too - top: calc(100% + 0.3rem).
+       
+       Flattening only the shared class would have been worse than doing
+       nothing for those two: removing position:relative from the submenu above
+       takes away the positioning context they were anchored to, so they would
+       have detached and resolved against the fixed drawer instead. A test
+       counts submenus against panels so a fourth variant cannot be missed
+       silently. */
+    html.mobile-nav-open .workspace-menubar-subpanel,
+    html.mobile-nav-open .workspace-appearance-options,
+    html.mobile-nav-open .workspace-layout-options {
+        position: static;
+        top: auto;
+        left: auto;
+        min-width: 0;
+        box-shadow: none;
+        border: none;
+        padding-left: 0.8rem;
+    }
+
     /* CLAUDE-MOBILE-MENU-REPAIR-01 - live iPhone report. The drawer above
        already worked (toggle, Escape, close-on-choose, outside-tap dismiss);
        what it contained was the desktop menu transplanted. Three bounded
