@@ -289,7 +289,32 @@
         type="text" name="project_name" class="text-input text-input-wide"
         value="{{ request.form.get('project_name', '') }}"
         data-ui-ref="upload.project-name"
+        id="upload-project-name"
         placeholder="Project name (optional &mdash; defaults to the file/folder name; must be unique)">
+
+    {# CLAUDE-PROJECT-CODE-01: the governed acronym. Filled in for the user as
+       they type the name, and editable - "the user must not be required to
+       invent one manually", but must be able to overrule the guess. Left blank
+       it is derived server-side from the same name, so the field can never
+       block project creation by being empty.
+
+       It sits directly under the name because it IS project identity, and
+       because seeing "South Regional Police Centre / SRPC" together is what
+       makes the derivation obviously correct or obviously wrong at a glance. #}
+    <label class="project-code-field" for="upload-project-code">
+        <span class="project-code-label">Acronym</span>
+        <input
+            type="text" name="project_code" class="text-input project-code-input"
+            value="{{ request.form.get('project_code', '') }}"
+            id="upload-project-code" data-ui-ref="upload.project-code"
+            maxlength="4" size="4" autocomplete="off" spellcheck="false"
+            aria-describedby="upload-project-code-note"
+            placeholder="SRPC">
+        <span class="pane-note" id="upload-project-code-note" data-ui-ref="upload.project-code.note">
+            3&ndash;4 letters. Used in references like <span class="mono">SRPC-T-014</span>.
+            Change it now if you like &mdash; after work is filed under it, it stays.
+        </span>
+    </label>
     <div class="upload-form-optional">
         <input type="text" name="actor" class="text-input" data-ui-ref="upload.actor" placeholder="Your name (optional, for the audit trail)">
         <input type="text" name="role" class="text-input" data-ui-ref="upload.role" placeholder="Your role (optional)">
@@ -386,6 +411,39 @@
         </button>
     </fieldset>
 </form>
+<script nonce="{{ csp_nonce }}">
+// CLAUDE-PROJECT-CODE-01: show the acronym being derived while the name is
+// typed. This mirrors ONLY the initials strategy from services/project_code.py -
+// it is a preview, not a second implementation. The server derives and
+// validates authoritatively, and an empty field is filled in there, so a
+// disagreement between the two can never create a wrong project code; the worst
+// case is the preview showing something the server then improves.
+(function () {
+    var name = document.getElementById('upload-project-name');
+    var code = document.getElementById('upload-project-code');
+    if (!name || !code) return;
+    var NOISE = ['the', 'a', 'an', 'of', 'for', 'and', 'at', 'in', 'on', 'to'];
+    var edited = false;
+    code.addEventListener('input', function () { edited = true; });
+    name.addEventListener('input', function () {
+        // Never overwrite a value the person chose themselves.
+        if (edited && code.value) return;
+        var words = (name.value || '').split(/[^A-Za-z0-9]+/).filter(Boolean);
+        var significant = words.filter(function (w) {
+            return NOISE.indexOf(w.toLowerCase()) === -1;
+        });
+        if (!significant.length) significant = words;
+        var lettered = significant.filter(function (w) { return /^[A-Za-z]/.test(w); });
+        if (lettered.length) significant = lettered;
+        var initials = significant.map(function (w) { return w.charAt(0); }).join('').toUpperCase();
+        if (initials.length > 4) initials = initials.slice(0, 4);
+        if (initials.length < 3 && significant.length) {
+            initials = significant[0].slice(0, 4).toUpperCase();
+        }
+        code.value = /^[A-Za-z]/.test(initials) ? initials : '';
+    });
+})();
+</script>
 
 <script nonce="{{ csp_nonce }}">
     // CLAUDE-P40-VW8-QA (Project-Creation Upload-Capacity Correction):

@@ -164,6 +164,68 @@ def document_source_payload(document: ParsedDocument) -> dict:
     }
 
 
+def existing_project_codes(app: Flask, exclude_project_id: str | None = None) -> set:
+    """Every acronym currently in use, for uniqueness checking.
+
+    Scope is deployment-wide, matching how project NAMES are already scoped by
+    _reject_if_name_taken - one rule for project identity rather than two
+    different ones for its two halves.
+    """
+    registry = get_registry(app)
+    store = CaseWorkspaceStore(app.config["REGISTRY_STORE_PATH"])
+    codes = set()
+    for pid in registry.list_ids():
+        if exclude_project_id and pid == exclude_project_id:
+            continue
+        workspace = store.get(pid)
+        if workspace is not None and workspace.project_code:
+            codes.add(workspace.project_code.upper())
+    return codes
+
+
+def _resolve_project_code(app: Flask, project_name: str, supplied: str | None) -> str:
+    """Validate what the user typed, or derive one they never had to think about."""
+    from services.project_code import ProjectCodeError, derive_code, validate_code
+
+    taken = existing_project_codes(app)
+    supplied = (supplied or "").strip()
+    if supplied:
+        try:
+            return validate_code(supplied, taken=taken)
+        except ProjectCodeError as exc:
+            raise UploadError(str(exc)) from exc
+    return derive_code(project_name, taken=taken)
+
+
+def backfill_project_code(app: Flask, store, workspace) -> str | None:
+    """Give an existing project an acronym the first time one is needed.
+
+    Same shape as project_access.ensure_owner_backfilled: lazy, idempotent, and
+    it writes only when something was genuinely missing. Product Owner
+    authorization is explicit that individual generated values need no approval,
+    so this does not stop to ask.
+
+    Returns the code, or None if it could not be derived - a project without one
+    simply issues no human-readable references yet, which is honest.
+    """
+    if workspace is None:
+        return None
+    if workspace.project_code:
+        return workspace.project_code
+    from services.project_code import ProjectCodeError, derive_code
+
+    name = _display_name_of(get_registry(app).get(workspace.project_id), store) \
+        if get_registry(app).get(workspace.project_id) else workspace.display_title
+    try:
+        code = derive_code(name or workspace.project_id,
+                           taken=existing_project_codes(app, exclude_project_id=workspace.project_id))
+    except ProjectCodeError:
+        return None
+    workspace.project_code = code
+    store.save(workspace)
+    return code
+
+
 def ingest_upload(
     file_storage: Optional[FileStorage],
     app: Flask,
@@ -172,6 +234,7 @@ def ingest_upload(
     actor: str | None = None,
     role: str | None = None,
     project_name: str | None = None,
+    project_code: str | None = None,
 ) -> ParsedDocument:
     """
     Validate, parse, and persist an uploaded RFP/RFQ. Raises UploadError
@@ -249,6 +312,13 @@ def ingest_upload(
 
     project_name = (project_name or "").strip() or None
     _reject_if_name_taken(app, project_name or filename)
+
+    # CLAUDE-PROJECT-CODE-01: every new project gets a governed acronym, and
+    # nobody is made to invent one. A supplied value is validated; an absent one
+    # is derived from the project name. Resolved HERE, beside the name-uniqueness
+    # check and before any parsing or persistence, so a project is never half
+    # created and then rejected for its acronym.
+    resolved_project_code = _resolve_project_code(app, project_name or filename, project_code)
 
     raw_bytes = file_storage.read()
     parser = BHiveParser(
@@ -378,6 +448,8 @@ def ingest_upload(
     workspace = store.get_or_create(
         document.project_id, register_document_source=document_source_payload(document),
     )
+    workspace.project_code = resolved_project_code
+    store.save(workspace)
     # The founding Source is created by get_or_create rather than the
     # add-document path below.  Reuse the parser's existing deterministic
     # extraction stage to feed the same declared-reference registration seam;
@@ -537,6 +609,11 @@ def ingest_folder_upload(
     actor: str | None = None,
     role: str | None = None,
     project_name: str | None = None,
+    # CLAUDE-PROJECT-CODE-01: threaded straight through to ingest_upload, which
+    # is the one project-creation path either route ends up in - a folder
+    # establishes a project exactly like a single file does, so it needs an
+    # acronym for exactly the same reason and by the same rules.
+    project_code: str | None = None,
 ) -> tuple[ParsedDocument, list[dict]]:
     """
     CLAUDE-CA1D-RECEPTION-FIX-01 (folder establishment): establishes a
@@ -597,6 +674,7 @@ def ingest_folder_upload(
     founding_document = ingest_upload(
         files[founding_index], app, operating_environment, owner,
         actor=actor, role=role, project_name=project_name,
+        project_code=project_code,
     )
 
     store = CaseWorkspaceStore(app.config["REGISTRY_STORE_PATH"])

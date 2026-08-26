@@ -1168,6 +1168,11 @@ RESOLUTION_STATUS_PARTIALLY_RESOLVED = "partially_resolved"
 RESOLUTION_STATUS_UNKNOWN = "unknown"
 
 
+from services.project_code import (
+    REFERENCE_TYPE_CASE, REFERENCE_TYPE_TASK, issue_reference,
+)
+
+
 class CaseWorkspaceError(Exception):
     """Raised for invalid workspace operations (unknown ids, bad states, etc)."""
 
@@ -1566,6 +1571,11 @@ class Task:
     # Where it stopped. Free text, same reasoning as Attention.intended_actor:
     # surfaces are not a closed set worth validating against.
     originating_surface: Optional[str] = None
+    # CLAUDE-PROJECT-CODE-01: the human-readable reference, e.g. "SRPC-T-014".
+    # STORED, never re-derived at render time - that is what makes a later
+    # acronym change safe, because this Task keeps the string it was issued and
+    # every report or email that already quoted it stays true.
+    reference: Optional[str] = None
 
 
 TASK_STATUS_OPEN = "open"
@@ -3603,6 +3613,10 @@ class CaseRecord:
     collaboration_established_by: Optional[str] = None
     collaboration_established_at: Optional[str] = None
     collaboration_contribution_type: Optional[str] = None
+    # CLAUDE-PROJECT-CODE-01: "SRPC-C-006". Same stored-not-derived rule as
+    # Task.reference, and an INDEPENDENT sequence - SRPC-T-014 and SRPC-C-014
+    # may both exist, because the type letter distinguishes them.
+    reference: Optional[str] = None
     collaboration_contribution_id: Optional[str] = None
     # Retraction fields (SHARED -> PRIVATE, pre-threshold only). Deliberately
     # does NOT clear shared_by/shared_at on retraction - "do not delete
@@ -4436,6 +4450,17 @@ class ProjectWorkspace:
     # `document_id`, which remain that Source's actual forensic identity.
     display_title: Optional[str] = None
     display_description: Optional[str] = None
+    # CLAUDE-PROJECT-CODE-01: the governed 3-or-4-letter acronym human-readable
+    # Task and Case references are built from (SRPC-T-014). Placed beside
+    # display_title because it is the same kind of thing - project identity a
+    # person uses - but it is NOT interchangeable with it: renaming a project is
+    # ordinary, while changing this becomes consequential once references have
+    # been issued. See services/project_code.py.
+    #
+    # Optional because projects created before this field existed have none
+    # until backfilled, and a record created in that window honestly carries no
+    # reference rather than a fabricated one.
+    project_code: Optional[str] = None
     # Project / Case Operating Instructions (Prompt 3 #7): human-authored
     # guidance (terminology, delivery-method context, reviewer conventions,
     # known assumptions) that is explicitly SUBORDINATE to governance -
@@ -7459,6 +7484,10 @@ class CaseWorkspaceStore:
         case = CaseRecord(
             id=_new_id(),
             project_id=workspace.project_id,
+            reference=issue_reference(
+                workspace.project_code, REFERENCE_TYPE_CASE,
+                [existing.get("reference") for existing in workspace.cases],
+            ),
             title=title,
             objective=objective,
             created_at=_now(),
@@ -8687,6 +8716,10 @@ class CaseWorkspaceStore:
             title=stripped_title, status=TASK_STATUS_OPEN, created_by=actor, created_at=_now(),
             deferred_reason=(deferred_reason or None),
             originating_surface=(originating_surface or None),
+            reference=issue_reference(
+                workspace.project_code, REFERENCE_TYPE_TASK,
+                [existing.get("reference") for existing in workspace.tasks],
+            ),
         )
         workspace.tasks.append(asdict(task))
         self.save(workspace)

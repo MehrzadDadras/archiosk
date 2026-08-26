@@ -3086,6 +3086,10 @@ def upload_folder():
             owner=session.get('username', ''),
             actor=request.form.get('actor'), role=request.form.get('role'),
             project_name=request.form.get('project_name'),
+            # CLAUDE-PROJECT-CODE-01: blank is normal and safe - ingest_upload
+            # derives one from the project name. The field exists so the user
+            # CAN choose, never so they must.
+            project_code=request.form.get('project_code'),
         )
     except (UploadError, GovernanceError) as exc:
         return render_template('upload.html', error=str(exc), **common_context), 400
