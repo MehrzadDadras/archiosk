@@ -8259,6 +8259,33 @@ html[data-tray-focus="toolbox"] .workspace-pane-toolbox {
         background: rgba(0, 0, 0, 0.45);
     }
 
+    /* CLAUDE-MOBILE-DRAWER-STACKING-01 - live report: "the desktop top menu
+       works but not on the phone."
+
+       The drawer sets z-index: 40 and the scrim above sets 39, which reads as
+       correct and is not, because z-index only orders siblings WITHIN a
+       stacking context. .workspace-menubar lives inside .workspace-topbar,
+       which is position: relative with z-index: 31 and therefore creates its
+       own context. The drawer's 40 is scoped inside it, so the whole topbar
+       subtree stacks at 31 - and the scrim, a child of body at 39, paints over
+       all of it.
+
+       The result was not a menu that looked wrong. It was a menu that LOOKED
+       CORRECT and did not respond: every drawer item hit-tested to BODY, and a
+       synthetic tap on any of them timed out because the element could never
+       receive the event. The first tap worked only because the scrim does not
+       exist until the drawer opens. Desktop was never affected - there is no
+       scrim there, which is exactly why it worked and the phone did not.
+
+       Raising the TOPBAR is the fix, not raising the drawer: the drawer cannot
+       escape a context it is nested in, so its own z-index can never win.
+       Lifting the topbar above the scrim keeps the intended order - content
+       dimmed, drawer above it - and leaves the hamburger reachable to close
+       what it opened. Mobile-only; desktop stacking is untouched. */
+    html.mobile-nav-open .workspace-topbar {
+        z-index: 41;
+    }
+
     /* 3. DISABLED ITEMS ARE NOISE HERE, NOT INFORMATION. Thirteen of the
           drawer's sixty-one items are disabled in a given context, and each
           explains itself through a title attribute ("Admin only", "Open a
