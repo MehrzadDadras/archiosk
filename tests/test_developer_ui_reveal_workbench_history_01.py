@@ -33,14 +33,27 @@ class DeveloperUiRevealWorkbenchHistoryTests(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
 
     def test_workbench_has_one_composer_and_history_controls(self):
+        """CLAUDE-ONE-COMPOSER-01: asserted by ROUTE, not by button wording.
+
+        This previously required the literal strings "New Chat" and "Delete
+        Chat". Those words were the accidental history, not the intent - the
+        product names the same act "New" on the project side
+        (chat.dock.new-conversation), and inventing a second vocabulary for it
+        was part of what made this read as a separate chat system.
+
+        The intent - exactly one composer, and the history controls genuinely
+        present - is unchanged and now checked against the endpoints they post
+        to, which is stronger: a renamed button still passes, a removed
+        capability does not.
+        """
         response = self.client.get("/")
         self.assertEqual(response.data.count(b'data-ui-ref="developer.home.composer.form"'), 1)
         self.assertIn(b'data-developer-workbench', response.data)
-        self.assertIn(b"New Chat", response.data)
+        self.assertIn(b"/developer-composer/new-chat", response.data)
         self.client.post("/developer-composer", data={"message": "Inspect the home page"})
         response = self.client.get("/")
         self.assertIn(b"Inspect the home page", response.data)
-        self.assertIn(b"Delete Chat", response.data)
+        self.assertIn(b"/developer-composer/delete-chat", response.data)
 
     def test_new_chat_preserves_old_chat_and_delete_requires_confirmation(self):
         self.client.post("/developer-composer", data={"message": "First chat"})

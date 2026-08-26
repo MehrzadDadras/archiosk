@@ -42,6 +42,94 @@ it is cleaner than adding another abstraction. The `interpret_message()`
 contextual-router work is an example: inspect the existing dispatch path before
 introducing a parallel router.
 
+That rule exists to prevent uncontrolled duplication — **not** to make the
+existing shape automatically correct. Finding an existing equivalent does not
+decide the architecture; it starts the question. See "History is evidence, not a
+cage" below, which governs when the answer is to converge, supersede or delete
+rather than extend.
+
+## History is evidence, not a cage
+
+**Product Owner correction, 2026-08-26.** This section governs where earlier
+operating notes caused preservation of an implementation structure merely
+because it already existed. It changes nothing about authority, evidence
+integrity, security, project isolation, data preservation, consequential-action
+gates, production safety, or any explicit Product Owner decision — those are
+unaffected and still bind.
+
+The repository, governance corpus, Prompt Depository, tests and prior
+Claude/Codex/Gemini work are the accumulated history of the product. Read them
+to learn why something exists, what it solved, what failed, and what was
+decided. Then ask the question that actually matters:
+
+> **If we were solving the Product Owner's real problem today, knowing what we
+> now know, would we deliberately design it this way?**
+
+If yes, keep it because it is good. If no, challenge it. Never reason "it exists,
+therefore preserve it."
+
+**Three categories, and only one of them is protected.** *Durable principle* —
+provenance, project isolation, owner-controlled access, selection-is-not-
+authorization, governed consequential actions, security boundaries, honest
+uncertainty — defend these. *Current implementation* — routes, panels, menus,
+service boundaries, class structure, CSS architecture, internal naming — open to
+challenge. *Historical artifact* — structures that exist only because
+development arrived there incrementally. Accumulated code, docs and tests do not
+promote an accident into a principle.
+
+**Product first, repository second.** Start from what the human experience
+should be, then what architecture produces it safely, then how the repository
+should evolve. Do not derive the experience from the classes that happen to
+exist. A simple Product Owner expectation that the repository makes awkward is
+evidence about the repository, not about the expectation.
+
+**Internal complexity must earn user visibility.** ARCHIOSK may hold enormous
+sophistication underneath. That is not a reason for another panel, mode,
+Composer, indicator or vocabulary term. For each internal distinction ask
+whether the user genuinely needs to understand it to do their work; if not, keep
+it underneath. Sophistication below should usually produce *more* simplicity
+above. Watch for the proliferation cycle — implementation distinction →
+explanation → terminology → abstraction → UI concept → governance record → more
+implementation — and stop it. **Deletion and convergence are advancement**;
+progress is not measured in components created.
+
+**Tests protect intent, not accidental history.** When a deliberate improvement
+breaks a test, decide which it is: a real regression, or a test defending
+behaviour we intend to supersede. Never weaken a genuine safety test casually,
+and never preserve obsolete behaviour just to keep an old assertion green.
+Surface the distinction rather than resolving it silently.
+
+**Governance makes change deliberate, not unthinkable.** If existing governance
+appears to block a materially better product, neither violate it silently nor
+abandon the better idea silently. State what the authority says, what the
+evidence suggests, and what would be affected — then let the Product Owner
+decide. Ambiguous conflicts get surfaced, not resolved by defaulting to either
+preservation or revolution.
+
+**Constraints bind implementation, never imagination.** When something better is
+visible but currently blocked, do not quietly shrink the idea until it fits.
+Report the better possibility, the exact constraint, the strongest safe step
+available now, and what would unlock the rest.
+
+**But do not manufacture blockers.** Ordinary engineering difficulty is not a
+Product Owner decision. Do not ask again for authority already held, and do not
+use governance as cover for conservatism. If the better solution is clear, the
+authority exists, the risk is understood and the work is bounded — do it. This
+cuts both ways and has already cost real time here: the Developer Composer
+convergence was escalated as an A/B/C decision when the non-evidence-touching
+option was plainly within authority all along.
+
+**Four honest outcomes** for meaningful architectural work: do it; run the
+smallest experiment that could disprove it; surface the constraint you can see
+past; or reject it with reasons. Not every problem resolves into preserving what
+is already there.
+
+**Think AI-native.** Ask whether a workflow would still look like this if
+capable AI had existed when it was invented. Where it is safe, GO should absorb
+navigation, classification, form-filling and tool-selection rather than
+reproducing conventional software mechanics — while explicit human authority is
+preserved wherever consequences require it.
+
 ## Environment quirks that have cost real debugging time
 
 - **`STATIC_VERSION` (and any env var with a `config.py` default) is
