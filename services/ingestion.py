@@ -23,6 +23,7 @@ from services.bhive_parser import BHiveParser, ParsedDocument, ParserError
 from services.case_workspace import (
     FOLDER_ROOT_DATA_ROOM,
     SOURCE_KIND_PROJECT_DOCUMENT,
+    SOURCE_ORIGIN_TYPE_EXTERNAL_CONNECTOR,
     SOURCE_ORIGIN_TYPE_UPLOAD,
     SPREADSHEET_CLASSIFICATION_ENCRYPTED_OR_UNSUPPORTED,
     SPREADSHEET_CLASSIFICATION_EXCESSIVE_SIZE,
@@ -964,9 +965,22 @@ def preview_data_room_reconcile(
     # decision, not respect it.
     active_sources = [s for s in workspace.sources if not s.get("removed_at")]
     by_hash = {s["file_hash"]: s for s in active_sources if s.get("file_hash")}
+    # CLAUDE-EXTERNAL-CUSTODY-01: the origin types whose origin_reference means
+    # A PATH. That is what this filter was always selecting for - it is not an
+    # upload-only rule. origin_reference is meaning-depends-on-origin-type by
+    # design: for derivative_crop/eye_capture/document_snapshot it holds a
+    # PARENT SOURCE ID, and matching those against relative paths would be
+    # nonsense. external_connector's reference is a project-relative path, so it
+    # belongs here for the same reason upload does.
+    #
+    # Without it a modified external file matches nothing by path and is
+    # reported NEW, which would re-register it as a duplicate Source instead of
+    # recognizing a known identity whose content changed - the opposite of
+    # preserving Reconcile semantics.
+    path_bearing_origins = (SOURCE_ORIGIN_TYPE_UPLOAD, SOURCE_ORIGIN_TYPE_EXTERNAL_CONNECTOR)
     by_origin_ref = {
         s["origin_reference"]: s for s in active_sources
-        if s.get("origin_type") == SOURCE_ORIGIN_TYPE_UPLOAD and s.get("origin_reference")
+        if s.get("origin_type") in path_bearing_origins and s.get("origin_reference")
     }
 
     items: dict[str, list[dict]] = {status: [] for status in KNOWN_RECONCILE_STATUSES}

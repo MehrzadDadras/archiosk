@@ -4461,6 +4461,15 @@ class ProjectWorkspace:
     # until backfilled, and a record created in that window honestly carries no
     # reference rather than a fabricated one.
     project_code: Optional[str] = None
+    # CLAUDE-EXTERNAL-CUSTODY-01: where this project's authoritative files live
+    # when ARCHIOSK does not hold them. One governed root per project, so a
+    # Source's own origin_reference can stay project-relative ("Drawings/
+    # A101.pdf") instead of carrying a machine-specific absolute path that
+    # breaks on a different machine, a remapped drive, or a changed address.
+    #
+    # None means the existing behaviour, unchanged: ARCHIOSK holds every byte.
+    # This is opt-in and changes nothing for a project that never sets it.
+    external_storage_root: Optional[str] = None
     # Project / Case Operating Instructions (Prompt 3 #7): human-authored
     # guidance (terminology, delivery-method context, reviewer conventions,
     # known assumptions) that is explicitly SUBORDINATE to governance -
