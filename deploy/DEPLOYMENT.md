@@ -31,6 +31,8 @@ be excluded from every sync:
 
 - `.env` — real secrets (API keys, Flask secret key, `STATIC_VERSION`, etc.).
 - `instance/` — the real, live project registry and all real project data.
+  Also the SQLite database, which the code rollback in step 4 does NOT cover:
+  a schema change needs its own backup, see step 8.
 - `.venv/` — the server's own Python virtual environment. Never overwritten by the
   sync, but see step 7: a commit that changes `requirements.txt` requires a
   deliberate, pinned install into it.
@@ -223,7 +225,85 @@ Removals and version CHANGES (as opposed to additions) are not routine: they can
 break code still running from the previous release during the window between sync
 and restart. Treat those as outside this document and get explicit authorization.
 
-## 8. Restart and verify the service
+## 8. Schema changes: `flask db stamp`, NOT `flask db upgrade`
+
+**CLAUDE-STORAGE-BRIDGE-05.** Written after the first deploy that carried a
+migration, from what actually happened rather than from what the tooling implies.
+
+First, does this deploy change the schema at all?
+
+```bash
+git diff <currently-live-hash>..<new-hash> -- migrations/ models.py
+```
+
+Empty? Skip this section — most deploys do.
+
+### Back the database up before anything else
+
+The code rollback in step 4 excludes `instance/`, so it does NOT protect the
+database. A schema change needs its own backup:
+
+```bash
+ssh ubuntu@<server> "
+  sudo mkdir -p /var/www/archiosk-db-backups &&
+  sudo -u archiosk sqlite3 /var/www/archiosk/instance/bhive.db     \".backup '/tmp/bhive-pre-<hash>.db'\" &&
+  sudo cp -p /tmp/bhive-pre-<hash>.db     /var/www/archiosk-db-backups/bhive-pre-<hash>-$(date -u +%Y%m%dT%H%M%SZ).db
+"
+```
+
+`sqlite3 .backup` rather than `cp`, because it is safe against a live database
+with writers attached; a plain copy of a file mid-write is a corrupt file.
+
+### Why `flask db upgrade` cannot be used here
+
+`app.py`'s `_register_database()` calls `db.create_all()` inside `create_app`, on
+**every boot and every CLI invocation**. So any `flask db ...` command loads the
+app, creates every missing table from the models, and only then hands control to
+Alembic — which immediately tries to `CREATE TABLE` something that now exists.
+
+This was verified against a COPY of the production database before touching the
+real one, and it fails in both directions:
+
+- `flask db upgrade` straight away → `table diagnostic_reports already exists`
+  (production was stamped at `d67fbff1ba5e` while that table already existed —
+  `a3f1c07d92b4` had never actually run; `create_all()` made it).
+- Correcting the stamp first and retrying → `table storage_agent_enrolments
+  already exists`, because merely running `flask db stamp` had already created
+  it via `create_all()`.
+
+There is no ordering that avoids this. `create_all()` always wins the race.
+
+### What actually works
+
+`create_all()` builds the new table correctly during the restart in the next
+section, and Alembic is then told the truth:
+
+```bash
+ssh ubuntu@<server> "cd /var/www/archiosk &&
+  sudo -u archiosk .venv/bin/python -m flask db stamp head &&
+  sudo -u archiosk .venv/bin/python -m flask db current"
+```
+
+Run this AFTER the restart, because that is what creates the table. Confirm
+`flask db current` reports the new head, and that a following `flask db upgrade`
+now does nothing at all.
+
+This is sound only because `tests/test_flask_migrate_baseline.py` asserts that a
+migrated database and a `create_all()` database have identical schemas. That test
+is what makes `create_all()` an acceptable substitute for running the migration,
+and it is why a migration whose shape drifts from its model is a genuine failure
+rather than a cosmetic one — it caught exactly that in this very change.
+
+### The limits of this
+
+Fine for CREATE TABLE, which `create_all()` handles. It does NOT handle an ALTER:
+a new column on an existing table, a type change, a rename, or any data migration
+is invisible to `create_all()` and will silently not happen. Note that `app.py`
+already carries three hand-written `_migrate_users_*` column-adders for exactly
+this reason. Anything of that kind is outside this document — stop, and get
+explicit Product Owner authorization.
+
+## 9. Restart and verify the service
 
 ```bash
 ssh ubuntu@<server> "
@@ -242,7 +322,7 @@ curl -s -o /dev/null -w 'HTTP %{http_code}\n' https://archiosk.com/health
 
 Both must return `HTTP 200`.
 
-## 9. Bump `STATIC_VERSION` when static assets changed
+## 10. Bump `STATIC_VERSION` when static assets changed
 
 **If this deploy touched `static/css/*.css` or `static/js/*.js`**, the server's own
 `STATIC_VERSION` (inside its protected `.env`, untouched by the steps above) must be
@@ -266,18 +346,18 @@ ssh ubuntu@<server> "
 "
 ```
 
-Then repeat the restart/health verification in step 8.
+Then repeat the restart/health verification in step 9.
 
-## 10. Verify online, in a real browser — not localhost
+## 11. Verify online, in a real browser — not localhost
 
 Open the actual `https://archiosk.com` routes and confirm the specific surfaces the
 deploy changed. At minimum: sign-in, authentication, Gateway, opening a project, and
 whatever else was in scope for that deploy. Confirm the deployed `STATIC_VERSION`
 value actually appears in a served asset URL (e.g. inspect
 `<link href="/static/css/main.css?v=...">` in the rendered page) to prove the bump
-in step 9 took effect, not just that the command ran.
+in step 10 took effect, not just that the command ran.
 
-## 11. Confirm which commit is actually live
+## 12. Confirm which commit is actually live
 
 The systemd unit's own `Description=` field is the existing, already-established
 convention for this — e.g. `Gunicorn - ArchiOSK GO (accepted build <short-hash>)`.
@@ -287,12 +367,12 @@ unnecessary systemd configuration risk merely to display a hash. Whatever the
 mechanism, the durable requirement is: **it must always be possible to determine
 exactly which git commit is live**, checkable without guessing.
 
-## 12. Clean up this deploy's own scratch (do this every time, not just when it piles up)
+## 13. Clean up this deploy's own scratch (do this every time, not just when it piles up)
 
 `CLAUDE-DEV-CLEANUP-01` found eight superseded deploy tarballs (~21.5MB) sitting in
 `/tmp` from prior sessions, none ever cleaned up after its own deploy succeeded —
 routine hygiene that was never made an explicit step, so it silently never happened.
-Once step 10's online verification passes:
+Once step 11's online verification passes:
 
 ```bash
 ssh ubuntu@<server> "rm -rf /tmp/archiosk-<short-hash>.tar /tmp/archiosk-deploy-staging"
@@ -332,7 +412,7 @@ Then repeat the step-7 health verification.
   `deploy/gunicorn.conf.py` already exist and are deployed separately, far less
   often than application code).
 - Database/schema migrations.
-- Any change to `.env`'s contents beyond the single `STATIC_VERSION` line in step 9.
+- Any change to `.env`'s contents beyond the single `STATIC_VERSION` line in step 10.
 - A multi-generation, automatic-rollback release scheme — the current flat
   single-backup approach is a deliberately minimal first safeguard, not a
   redesign of the whole deployment system.
