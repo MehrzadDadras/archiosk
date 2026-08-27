@@ -1145,8 +1145,23 @@ REFERENCE_TYPE_FIGURE = "figure"
 REFERENCE_TYPE_TABLE = "table"
 REFERENCE_TYPE_TABLE_ROW = "table_row"
 REFERENCE_TYPE_APPENDIX = "appendix"
+# CLAUDE-DRAWING-REFS-01: a drawing set cites itself the way a specification
+# does - a mark on a plan pointing at a row in a schedule is the same act as a
+# clause citing a Section. These are new PATTERNS and new TARGETS for the
+# existing SourceReference machinery, not a second resolver: KNOWN_REFERENCE_
+# TYPES is open-world by design, and RESOLUTION_STATUS_* already carries every
+# outcome a drawing linker needs (target_not_found is an orphan tag,
+# resolved_multiple is a duplicate mark).
+REFERENCE_TYPE_SHEET = "sheet"
+REFERENCE_TYPE_DETAIL_CALLOUT = "detail_callout"
+REFERENCE_TYPE_SCHEDULE_MARK = "schedule_mark"
+REFERENCE_TYPE_GRID_INTERSECTION = "grid_intersection"
 
 KNOWN_REFERENCE_TYPES = (
+    REFERENCE_TYPE_SHEET,
+    REFERENCE_TYPE_DETAIL_CALLOUT,
+    REFERENCE_TYPE_SCHEDULE_MARK,
+    REFERENCE_TYPE_GRID_INTERSECTION,
     REFERENCE_TYPE_SECTION,
     REFERENCE_TYPE_CLAUSE,
     REFERENCE_TYPE_FIGURE,
@@ -4963,6 +4978,46 @@ _TABLE_ROW_COMPOUND_RE = re.compile(
 )
 _ROW_ONLY_RE = re.compile(r"\bRows?\s+" + _reference_tail_group(_REF_NUMERIC_TOKEN), re.IGNORECASE)
 
+# CLAUDE-DRAWING-REFS-01 -------------------------------------------------------
+# A sheet id and a schedule mark are the same SHAPE - letters, dash, digits.
+# "A-501" is a sheet; "D-101" is a door. Nothing syntactic separates them, and
+# guessing from the prefix letter would be a convention masquerading as a rule
+# (offices differ, and "P-01" is a partition here and a plumbing sheet there).
+#
+# So the parser does not guess. It emits what the surrounding text actually
+# licenses, and lets resolve_source_reference_candidate decide against real
+# known_targets - which is what candidate_targets has always meant: syntactic
+# expansion, NOT existence-checked. A mark that matches no schedule row becomes
+# target_not_found, which is the finding, not a failure.
+#
+# Ordered most-specific-first and guarded by consumed_spans, exactly like the
+# Table/Row compound above: "3/A-501" must be read as one callout, never as a
+# bare sheet reference with a stray digit.
+
+# "3/A-501", "Detail 3 / A-501", "Det. 12/S-201A"
+_DETAIL_CALLOUT_RE = re.compile(
+    r"\b(?:Det(?:ail)?\.?\s+)?(\d{1,2})\s*/\s*([A-Z]{1,3}-?\d{1,3}[A-Z]?)\b"
+)
+# "Sheet A-501", "Drawing M-101", "Dwg. E-2"
+_SHEET_RE = re.compile(
+    r"\b(?:Sheet|Drawing|Dwg)\.?\s+([A-Z]{1,3}-?\d{1,3}[A-Z]?)\b", re.IGNORECASE
+)
+# "Grid A-1", "Grid A/1", "Gridline B-12", "Grids C/4"
+_GRID_INTERSECTION_RE = re.compile(
+    r"\bGrid(?:line)?s?\.?\s+([A-Z]{1,2})\s*[-/]\s*(\d{1,2})\b", re.IGNORECASE
+)
+# A keyword-led mark: "Door D-101", "Window W-05", "Mark P-01", "Type F-3"
+_SCHEDULE_MARK_KEYWORD_RE = re.compile(
+    r"\b(?:Door|Window|Partition|Mark|Type|Louvre|Louver)\s+([A-Z]{1,3}-\d{1,3}[A-Z]?)\b",
+    re.IGNORECASE,
+)
+# A BARE mark - "D-101" alone in a tag bubble, which is how a real drawing
+# actually annotates. Opt-in only: a specification sentence saying "clause D-101"
+# is not a door, and turning every letter-dash-number token in prose into a
+# schedule mark would flood the register with noise. Drawing ingestion passes
+# include_drawing_tokens=True because it knows the token came off a sheet.
+_SCHEDULE_MARK_BARE_RE = re.compile(r"\b([A-Z]{1,3}-\d{1,3}[A-Z]?)\b")
+
 _NUMERIC_RANGE_RE = re.compile(r"^(\d+(?:\.\d+)?)\s*(?:through|to|[-–—])\s*(\d+(?:\.\d+)?)$", re.IGNORECASE)
 # Deliberately excludes a bare hyphen (unlike the numeric range above) - a
 # word-shaped identifier like "OPR-2.1" contains a hyphen that is part of
@@ -5092,7 +5147,9 @@ def resolve_conversation_hotlinks(text: str, workspace: "ProjectWorkspace") -> l
     return segments or [{"text": text, "source_id": None}]
 
 
-def parse_source_reference_text(text: str) -> list[dict]:
+def parse_source_reference_text(
+    text: str, include_drawing_tokens: bool = False
+) -> list[dict]:
     """
     Prompt 18 #14/#16/#17: finds every explicit reference mention in
     `text` (a clause's own sentence, a table-row Note, etc) and returns
@@ -5107,6 +5164,19 @@ def parse_source_reference_text(text: str) -> list[dict]:
     reasonably-generic set of common document-part keywords
     (Section/Figure/Table/Appendix/Row), not a claim that every possible
     citation phrasing is covered.
+
+    CLAUDE-DRAWING-REFS-01 extends the same open-world set to how a
+    drawing set cites itself - Sheet, detail callout, schedule mark and
+    grid intersection. Keyword-led forms ("Sheet A-501", "Door D-101")
+    and the distinctive "3/A-501" callout are always read, because those
+    are unambiguous wherever they appear.
+
+    `include_drawing_tokens` additionally reads a BARE mark - "D-101"
+    standing alone, which is how a plan actually annotates a door. It is
+    opt-in because a specification saying "clause D-101" is not a door:
+    only a caller that knows the text came off a sheet can license that
+    reading, and turning every letter-dash-number token in prose into a
+    schedule mark would bury the real references in noise.
     """
     candidates: list[dict] = []
     consumed_spans: list[tuple[int, int]] = []
@@ -5123,6 +5193,43 @@ def parse_source_reference_text(text: str) -> list[dict]:
 
     def _overlaps(span):
         return any(a <= span[0] < b or a < span[1] <= b for a, b in consumed_spans)
+
+    # CLAUDE-DRAWING-REFS-01. Most-specific-first, same discipline as the
+    # Table/Row compound above: "3/A-501" is ONE callout, and reading the
+    # "A-501" half of it as a bare sheet reference would register a citation
+    # that nobody wrote.
+    for m in _DETAIL_CALLOUT_RE.finditer(text):
+        detail, sheet = m.group(1), m.group(2)
+        candidates.append({
+            "reference_text": m.group(0), "reference_type": REFERENCE_TYPE_DETAIL_CALLOUT,
+            "candidate_targets": ["%s Detail %s" % (sheet, detail)],
+            "syntactic_form": "compound", "container": sheet,
+        })
+        consumed_spans.append(m.span())
+
+    for m in _GRID_INTERSECTION_RE.finditer(text):
+        if _overlaps(m.span()):
+            continue
+        letter, number = m.group(1).upper(), m.group(2)
+        candidates.append({
+            "reference_text": m.group(0), "reference_type": REFERENCE_TYPE_GRID_INTERSECTION,
+            "candidate_targets": ["%s-%s" % (letter, number)],
+            "syntactic_form": "compound",
+        })
+        consumed_spans.append(m.span())
+
+    for ref_type, pattern in (
+        (REFERENCE_TYPE_SHEET, _SHEET_RE),
+        (REFERENCE_TYPE_SCHEDULE_MARK, _SCHEDULE_MARK_KEYWORD_RE),
+    ):
+        for m in pattern.finditer(text):
+            if _overlaps(m.span()):
+                continue
+            candidates.append({
+                "reference_text": m.group(0), "reference_type": ref_type,
+                "candidate_targets": [m.group(1).upper()], "syntactic_form": "single",
+            })
+            consumed_spans.append(m.span())
 
     for m in _ROW_ONLY_RE.finditer(text):
         if _overlaps(m.span()):
@@ -5142,6 +5249,19 @@ def parse_source_reference_text(text: str) -> list[dict]:
             candidates.append({
                 "reference_text": m.group(0), "reference_type": ref_type,
                 "candidate_targets": targets, "syntactic_form": form,
+            })
+            consumed_spans.append(m.span())
+
+    # Bare marks last, and only when the caller vouches for the context. Every
+    # keyword-led form above has already claimed its span, so "Door D-101" is
+    # never re-read here as a second, contextless D-101.
+    if include_drawing_tokens:
+        for m in _SCHEDULE_MARK_BARE_RE.finditer(text):
+            if _overlaps(m.span()):
+                continue
+            candidates.append({
+                "reference_text": m.group(0), "reference_type": REFERENCE_TYPE_SCHEDULE_MARK,
+                "candidate_targets": [m.group(1).upper()], "syntactic_form": "single",
             })
             consumed_spans.append(m.span())
 
@@ -13397,6 +13517,7 @@ class CaseWorkspaceStore:
         resolution_method: Optional[str] = None,
         resolved_target_type: Optional[str] = None,
         extractor_version: Optional[str] = None,
+        include_drawing_tokens: bool = False,
         actor: str = "system",
         governance_log: Optional[GovernanceLog] = None,
     ) -> list[dict]:
@@ -13409,13 +13530,20 @@ class CaseWorkspaceStore:
         than silently discarded (Prompt 18 #18) - the original citation
         text and syntactic type are never lost even when nothing is known
         yet about what it might resolve to.
+
+        CLAUDE-DRAWING-REFS-01: `include_drawing_tokens` is passed
+        straight through to the parser, and should be set only by a
+        caller that knows `text` came off a drawing sheet - see that
+        function for why a bare "D-101" is not readable from prose
+        alone.
         """
         source = self._find(workspace.sources, source_id)
         if source is None:
             raise CaseWorkspaceError(f"Source {source_id} was not found.")
 
         created: list[dict] = []
-        candidates = parse_source_reference_text(text)
+        candidates = parse_source_reference_text(
+            text, include_drawing_tokens=include_drawing_tokens)
         existing_keys = {
             (
                 reference.get("source_id"), reference.get("reference_text"),

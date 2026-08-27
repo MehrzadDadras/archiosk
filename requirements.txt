@@ -17,3 +17,10 @@ Flask-Migrate==4.1.0
 # manipulates existing ones and cannot author a laid-out report. Checked with
 # tools/dependency_fit.py before proposal - PASS on all six constraints.
 reportlab==4.2.5
+# CLAUDE-DRAWING-REFS-01: reads a PDF drawing as vector geometry plus
+# positioned text spans, which is what binding a tag on a plan to a row in a
+# schedule needs. pypdf (above) extracts text but not the coordinates, and the
+# coordinates are the whole point. Imported as `pymupdf`, not the deprecated
+# `fitz` alias. Checked with tools/dependency_fit.py - PASS on all six
+# constraints.
+pymupdf==1.28.2
