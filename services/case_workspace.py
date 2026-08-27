@@ -5148,7 +5148,8 @@ def resolve_conversation_hotlinks(text: str, workspace: "ProjectWorkspace") -> l
 
 
 def parse_source_reference_text(
-    text: str, include_drawing_tokens: bool = False
+    text: str, include_drawing_tokens: bool = False,
+    known_sheets: Optional[set] = None,
 ) -> list[dict]:
     """
     Prompt 18 #14/#16/#17: finds every explicit reference mention in
@@ -5177,6 +5178,24 @@ def parse_source_reference_text(
     only a caller that knows the text came off a sheet can license that
     reading, and turning every letter-dash-number token in prose into a
     schedule mark would bury the real references in noise.
+
+    `known_sheets` is the precedence rule that opt-in reading needs
+    (CLAUDE-DRAWING-REFS-02). A blind audit of a real three-sheet set
+    showed the flaw: every sheet's own number in its title block -
+    "A-101", "S-101", "A-501" - was read as a door tag and then
+    correctly reported as absent from the door schedule, producing six
+    false orphans against one real one. The status was right and the
+    meaning was wrong.
+
+    Letting the resolver settle it after the fact cannot work: by then
+    the reference is already typed as a schedule_mark, and
+    target_not_found is indistinguishable from a genuine orphan tag -
+    the single most important finding a drawing linker produces. So the
+    caller passes the sheet ids it knows, and a bare token matching one
+    is consumed WITHOUT being emitted: it is the sheet naming itself,
+    not a citation of anything. Keyword-led forms are unaffected, and
+    a sheet id is still read normally when actually cited ("Sheet
+    A-101", "3/A-501").
     """
     candidates: list[dict] = []
     consumed_spans: list[tuple[int, int]] = []
@@ -5256,8 +5275,15 @@ def parse_source_reference_text(
     # keyword-led form above has already claimed its span, so "Door D-101" is
     # never re-read here as a second, contextless D-101.
     if include_drawing_tokens:
+        sheet_ids = {str(s).strip().upper() for s in (known_sheets or ())}
         for m in _SCHEDULE_MARK_BARE_RE.finditer(text):
             if _overlaps(m.span()):
+                continue
+            if m.group(1).upper() in sheet_ids:
+                # A sheet naming itself is not a citation of anything. The span
+                # is still consumed so no later pass can re-read it - the same
+                # discipline that stops "3/A-501" being split.
+                consumed_spans.append(m.span())
                 continue
             candidates.append({
                 "reference_text": m.group(0), "reference_type": REFERENCE_TYPE_SCHEDULE_MARK,
@@ -13542,8 +13568,13 @@ class CaseWorkspaceStore:
             raise CaseWorkspaceError(f"Source {source_id} was not found.")
 
         created: list[dict] = []
+        # Derived, not asked for: a caller that already told us which sheets
+        # exist should not also have to remember to repeat them here. Same
+        # reasoning visible_cases_for records - a rule every future caller must
+        # remember is not a rule.
         candidates = parse_source_reference_text(
-            text, include_drawing_tokens=include_drawing_tokens)
+            text, include_drawing_tokens=include_drawing_tokens,
+            known_sheets=(known_targets or {}).get(REFERENCE_TYPE_SHEET))
         existing_keys = {
             (
                 reference.get("source_id"), reference.get("reference_text"),

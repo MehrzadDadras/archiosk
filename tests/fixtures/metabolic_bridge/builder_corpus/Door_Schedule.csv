@@ -1,0 +1,6 @@
+Mark,Location,Size,Fire_Rating,Hardware_Group,Notes
+D-101,Entry vestibule,1010 x 2135,45 MIN,H-01,Public entry door
+D-102,Interior corridor,915 x 2135,NON-RATED,H-02,Pair at corridor intersection
+D-103,Electrical room,915 x 2135,45 MIN,H-03,Self-closing; rated frame
+D-104,Mechanical room,915 x 2135,45 MIN,H-03,Self-closing; rated frame
+D-105,Janitor closet,815 x 2135,45 MIN,H-04,Rated frame
