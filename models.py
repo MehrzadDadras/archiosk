@@ -165,6 +165,54 @@ class VerificationAccessToken(db.Model):
         return f"<VerificationAccessToken user_id={self.user_id} used={self.used_at is not None}>"
 
 
+class StorageAgentEnrolment(db.Model):
+    """CLAUDE-STORAGE-BRIDGE-03: which agent may speak for which project.
+
+    A private-network agent (on or beside a WD My Cloud EX4100, a file server, a
+    NAS in a cupboard) authenticates ITSELF to ARCHIOSK with this token, then
+    polls outbound over HTTPS. ARCHIOSK never dials in, and never learns a NAS
+    credential - how the agent reaches its own storage stays on its own side of
+    the boundary, and there is deliberately no column here that could hold such
+    a secret even if someone tried.
+
+    SAME "NEVER STORE THE REAL SECRET" SHAPE as PasswordResetToken and
+    VerificationAccessToken: only `token_hash` is persisted. The raw token
+    exists once, in what the enrolling maintainer is shown, and nowhere after.
+
+    WHY THE DATABASE AND NOT THE FLAT-JSON STORE. The same reason
+    DiagnosticReport records: routes/portal.py's Reset/Restore RENAMES the whole
+    registry store directory away and installs a staged replacement. An
+    enrolment living there would be destroyed by a project-data reset, which
+    would silently disconnect a working agent and look, from the outside, like
+    the NAS had failed. It also sits naturally beside the operator-scoped rows
+    that are already here.
+
+    `project_id` is a plain string, not a foreign key - deliberately, because
+    projects live in the flat-JSON store and have no table to point at. That
+    matches how ProjectWorkspace.owner already works.
+
+    REVOKING IS NOT DELETING. `revoked_at` is set; the row stays. A withdrawn
+    credential means bytes stop arriving, and must never mean the project forgets
+    what it knew or that the audit trail of who could read it disappears.
+    """
+    __tablename__ = "storage_agent_enrolments"
+
+    id = db.Column(db.Integer, primary_key=True)
+    project_id = db.Column(db.String(255), nullable=False, index=True)
+    agent_label = db.Column(db.String(255), nullable=False)
+    token_hash = db.Column(db.String(64), unique=True, nullable=False, index=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    created_by = db.Column(db.String(255), nullable=True)
+    expires_at = db.Column(db.DateTime, nullable=False)
+    revoked_at = db.Column(db.DateTime, nullable=True)
+    revoked_by = db.Column(db.String(255), nullable=True)
+    last_seen_at = db.Column(db.DateTime, nullable=True)
+
+    def __repr__(self) -> str:
+        return (f"<StorageAgentEnrolment project={self.project_id} "
+                f"agent={self.agent_label} revoked={self.revoked_at is not None}>")
+
+
 class DiagnosticReport(db.Model):
     """CLAUDE-DIAGNOSTIC-BRIDGE-01: one live product problem, captured in the
     application that produced it, for a development agent to investigate.

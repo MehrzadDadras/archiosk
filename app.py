@@ -378,12 +378,27 @@ def _register_csrf(app: Flask) -> None:
     this exemption; requiring API callers to also juggle a CSRF token
     would regress the plain curl -b cookies.txt usage Step 1 documented,
     for a client population this protection doesn't meaningfully target.
+
+    CLAUDE-STORAGE-BRIDGE-03 exempts routes/storage_bridge.py on stronger
+    grounds than the API's. Those endpoints authenticate with a Bearer token and
+    carry no session cookie at all, so the CSRF attack shape - a forged
+    cross-site POST silently riding the victim's cookie - cannot be constructed
+    against them: there is no ambient credential for a browser to attach. A
+    CSRF token would also be meaningless to the client, which is a headless
+    agent on a private network that has never rendered a page.
+
+    This exemption is asserted by a test at the SOURCE level rather than by
+    behaviour, because config.py sets WTF_CSRF_ENABLED = False under testing -
+    so a missing exemption would pass every local test and fail only in
+    production, on the first real POST an agent ever made.
     """
     from routes.api import api_bp
+    from routes.storage_bridge import storage_bridge_bp
 
     csrf = CSRFProtect()
     csrf.init_app(app)
     csrf.exempt(api_bp)
+    csrf.exempt(storage_bridge_bp)
 
 
 def get_csp_nonce() -> str:
@@ -460,12 +475,18 @@ def _register_blueprints(app: Flask) -> None:
     from routes.workspace import workspace_bp
     from routes.security import security_bp
     from routes.operations import operations_bp
+    from routes.storage_bridge import storage_bridge_bp
 
     app.register_blueprint(portal_bp)
     app.register_blueprint(api_bp, url_prefix="/api/v1")
     app.register_blueprint(workspace_bp)
     app.register_blueprint(security_bp)
     app.register_blueprint(operations_bp)
+    # CLAUDE-STORAGE-BRIDGE-03: machine endpoints for a private-storage
+    # agent. No url_prefix - the routes carry their own /api/bridge/ paths,
+    # which also puts them inside _wants_json()'s "/api/" test so a refusal
+    # reaches an agent as JSON rather than as an HTML error page.
+    app.register_blueprint(storage_bridge_bp)
 
 
 def _register_error_handlers(app: Flask) -> None:
