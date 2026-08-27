@@ -8251,6 +8251,30 @@ class CaseWorkspaceStore:
             raise CaseWorkspaceError(
                 f"'{content_class}' is not a recognized content class. Use one of: {', '.join(KNOWN_CONTENT_CLASSES)}."
             )
+        # CLAUDE-ATTRIBUTION-01: a human turn must say who said it.
+        #
+        # `actor` was optional for every role, so an unattributable human
+        # message was constructible - and got constructed. Every production
+        # caller already passes _reviewer(), so this closes a contract hole
+        # rather than changing behaviour: nothing in routes/ has to change.
+        #
+        # Constitutional invariant #3 is the reason - "every claim traces to
+        # its source and originator". A human turn with no originator cannot,
+        # and it silently degrades the things built on attribution:
+        # recent_anchors_for's per-reviewer "where did I leave off" trail, and
+        # any per-reviewer read of the conversation.
+        #
+        # role="system" is deliberately still allowed to omit it: there is
+        # exactly one reply-generator, and naming it would be noise (see
+        # ConversationMessage's own docstring). Enforced at the ONE write
+        # choke point rather than per-caller, the same reasoning
+        # visible_cases_for records for privacy: a rule every future caller
+        # must remember is not a rule.
+        if role == "human" and not (actor or "").strip():
+            raise CaseWorkspaceError(
+                "A human conversation message must record its actor - an "
+                "unattributed human turn cannot satisfy provenance."
+            )
         if case_id is None:
             message = ConversationMessage(
                 id=_new_id(), role=role, text=text, created_at=_now(),

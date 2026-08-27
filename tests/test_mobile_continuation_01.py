@@ -184,7 +184,7 @@ class _WorkspaceCase(unittest.TestCase):
         self.case = self.store.create_case(
             self.workspace, title="Field question", objective="o")
         self.message = self.store.add_message(
-            self.workspace, self.case["id"], role="human",
+            self.workspace, self.case["id"], role="human", actor="tester",
             text="compare the mechanical drawings against the specification")
         self.store.save(self.workspace)
 

@@ -132,7 +132,7 @@ class CaseDerivationTests(unittest.TestCase):
         self._archive()
         self.store.derive_case_from_archive(self.workspace, archived_case_id=self.case["id"], actor="owner1")
         with self.assertRaises(CaseWorkspaceError):
-            self.store.add_message(self.workspace, case_id=self.case["id"], role="human", text="too late")
+            self.store.add_message(self.workspace, case_id=self.case["id"], role="human", actor="tester", text="too late")
 
     # -- working context ---------------------------------------------------
 

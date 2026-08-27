@@ -170,10 +170,18 @@ class ItIsAReadAndNothingElse(_Project):
         for message in stored.project_conversation:
             self.assertNotIn("scope", message)
 
-    def test_developer_conversation_is_not_merged_in(self):
-        # Application-scope turns live in the session and must never enter a
-        # project record. Keeping them physically apart is precisely why a scope
-        # TAG was judged insufficient, so this read does not reach for them.
+    def test_session_state_is_not_reached_into(self):
+        # CORRECTED 2026-08-26. This test previously asserted that developer
+        # turns "must never enter a project record" and that keeping them
+        # physically apart was why a scope tag was insufficient. That rationale
+        # was factually wrong: routes/workspace.py already persists Developer
+        # Mode turns into the project record with a `developer_context` field
+        # when the mode is active inside a project.
+        #
+        # The assertion is kept because it still protects something real, but
+        # for the honest reason: a read over PROJECT containers has no business
+        # reaching into Flask session state. That is a layering rule, not an
+        # evidence boundary.
         import inspect
 
         from services import unified_conversation

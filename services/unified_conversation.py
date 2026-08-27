@@ -31,11 +31,36 @@ read.
 WHAT IT DELIBERATELY DOES NOT DO
 
 - It writes nothing. No new field, no new file, no migration.
-- It never merges the Developer Mode conversation. Those turns live in the
-  session and must never enter a project record; keeping them physically apart
-  is the whole reason a scope TAG was judged insufficient. A unified READ over
-  project containers does not require them, so this experiment does not touch
-  them.
+- It never merges the project-less Developer Home conversation, which lives in
+  the Flask session. Not because a container is protecting anything - see the
+  correction below - but because a unified read over PROJECT containers simply
+  has no reason to reach into session state.
+
+CORRECTION (2026-08-26). An earlier version of this docstring claimed that
+developer turns "must never enter a project record" and that "keeping them
+physically apart is the whole reason a scope TAG was judged insufficient."
+
+That was wrong, and it was wrong as a matter of fact rather than judgement.
+routes/workspace.py's own message path already persists Developer Mode turns
+INTO the project record: when _developer_mode_active(), it attaches
+`developer_context` and calls add_message, which writes and saves. The field is
+part of the on-disk message schema (ConversationMessage.developer_context). So
+developer conversation inside a project is already field-tagged and already in
+the project file, and no container prevented it.
+
+What actually keeps conversation out of evidence is not where it is stored:
+  - conversation is not an EvidenceItem/Finding/Claim and is not a member of
+    _MM6_ENDPOINT_LISTS, so it cannot be cited as an endpoint at all;
+  - promotion into a durable record is a deliberate act (add_composer_finding,
+    register_evidence_item), which stamps content_class and source provenance;
+  - the model boundary explicitly demotes it - project_qa's contract says recent
+    conversation "is not additional project evidence".
+
+The real lesson from this codebase is narrower and better: a field is not weak
+enforcement; a field WITHOUT a single mandatory chokepoint is. That is exactly
+what visible_cases_for exists to be, after a real cross-user disclosure caused
+by filtering the raw list directly. Any future scope field on a message needs a
+chokepoint of the same shape - not a separate container.
 - It never bypasses Case privacy. Visibility comes from
   CaseWorkspaceStore.visible_cases_for - the single ratified enforcement point -
   and never from filtering workspace.cases directly. That exact shortcut caused

@@ -293,7 +293,7 @@ class CaseArchiveTests(unittest.TestCase):
             self.store.attach_source_to_case(self.workspace, case_id=self.case["id"], source_id=self.source["id"])
 
         with self.assertRaises(CaseWorkspaceError):
-            self.store.add_message(self.workspace, case_id=self.case["id"], role="human", text="too late")
+            self.store.add_message(self.workspace, case_id=self.case["id"], role="human", actor="tester", text="too late")
 
     def test_share_and_retract_rejected_after_archive(self):
         """Visibility transitions are also frozen - archiving a Case must

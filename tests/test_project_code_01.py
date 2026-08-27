@@ -159,7 +159,7 @@ class TheStoreIssuesAndKeepsReferences(unittest.TestCase):
         self.store.save(self.workspace)
         self.case = self.store.create_case(self.workspace, title="Matter", objective="o")
         self.message = self.store.add_message(
-            self.workspace, self.case["id"], role="human", text="do the thing")
+            self.workspace, self.case["id"], role="human", actor="tester", text="do the thing")
         self.store.save(self.workspace)
 
     def _anchor(self):
@@ -212,7 +212,7 @@ class TheStoreIssuesAndKeepsReferences(unittest.TestCase):
     def test_a_project_without_a_code_still_creates_tasks(self):
         workspace = self.store.get_or_create("proj-code-02")
         case = self.store.create_case(workspace, title="c", objective="o")
-        message = self.store.add_message(workspace, case["id"], role="human", text="hello")
+        message = self.store.add_message(workspace, case["id"], role="human", actor="tester", text="hello")
         self.store.save(workspace)
         task = self.store.create_task(
             workspace,

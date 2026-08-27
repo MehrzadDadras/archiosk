@@ -132,6 +132,22 @@ class TestingConfig(BaseConfig):
     TESTING = True
     DATABASE_URL = "sqlite:///:memory:"
     SQLALCHEMY_DATABASE_URI = "sqlite:///:memory:"
+    # CLAUDE-ATTRIBUTION-01: tests get their own registry.
+    #
+    # This was inherited from BaseConfig, so every test that built a real
+    # workspace wrote it into instance/registry - the DEV data. It is not a
+    # tidiness point: it silently contaminated a real measurement. 99 of 100
+    # "unattributed human conversation turns" in the dev registry turned out to
+    # be one fixture string from tests/test_mobile_continuation_01.py, which
+    # produced a reported 46% attribution-decay rate where the true figure was
+    # 0.8%.
+    #
+    # Set unconditionally rather than via os.getenv, for the same hermeticity
+    # reasoning as SMTP_HOST and TRIAL_REQUEST_NOTIFY_EMAIL below: a test must
+    # never touch real state because of whatever a developer's .env happens to
+    # say. A fixed path rather than a per-process temp dir so the artifacts stay
+    # inspectable after a failure.
+    REGISTRY_STORE_PATH = str(BASE_DIR / "instance" / "test_registry")
     SESSION_COOKIE_SECURE = False
     # Hermetic tests must never attempt a real SMTP connection based on
     # whatever the developer's local .env happens to have configured -

@@ -59,7 +59,7 @@ class FoundationBatchATests(unittest.TestCase):
         self.assertEqual(workspace.version, 1)
         case = self.store.create_case(workspace, title="Case A", objective="")
         self.assertEqual(workspace.version, 2)
-        self.store.add_message(workspace, case["id"], role="human", text="hello")
+        self.store.add_message(workspace, case["id"], role="human", actor="tester", text="hello")
         self.assertEqual(workspace.version, 3)
 
     def test_stale_writer_is_rejected_not_silently_overwritten(self):
@@ -85,8 +85,8 @@ class FoundationBatchATests(unittest.TestCase):
     def test_sequential_saves_on_same_object_do_not_conflict_with_each_other(self):
         workspace = self.store.get_or_create(self.project_id)
         case = self.store.create_case(workspace, title="Case A", objective="")
-        self.store.add_message(workspace, case["id"], role="human", text="one")
-        self.store.add_message(workspace, case["id"], role="human", text="two")
+        self.store.add_message(workspace, case["id"], role="human", actor="tester", text="one")
+        self.store.add_message(workspace, case["id"], role="human", actor="tester", text="two")
         reloaded = self.store.get(self.project_id)
         self.assertEqual(len(reloaded.cases[0]["conversation"]), 2)
 

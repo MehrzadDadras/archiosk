@@ -81,7 +81,7 @@ class AddMessageValidationTests(unittest.TestCase):
     def test_valid_content_class_persists_on_project_level_message(self):
         workspace = self.store.get(self.project_id)
         self.store.add_message(
-            workspace, None, role="human", text="hi", content_class=CONTENT_CLASS_HUMAN_AUTHORED,
+            workspace, None, role="human", actor="tester", text="hi", content_class=CONTENT_CLASS_HUMAN_AUTHORED,
         )
         workspace = self.store.get(self.project_id)
         self.assertEqual(workspace.project_conversation[-1]["content_class"], CONTENT_CLASS_HUMAN_AUTHORED)
