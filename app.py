@@ -481,7 +481,9 @@ def _register_error_handlers(app: Flask) -> None:
         )
 
     from services.case_workspace import ConcurrentModificationError
-    from services.external_source import ExternalSourceUnavailable
+    from services.external_source import (
+        ExternalSourceForbidden, ExternalSourceUnavailable,
+    )
 
     @app.errorhandler(404)
     def not_found(_err):
@@ -593,6 +595,44 @@ def _register_error_handlers(app: Flask) -> None:
             url_for("portal.index"), "Back to home",
         )
         return app.make_response((page, 503, {"Retry-After": "60"}))
+
+    @app.errorhandler(ExternalSourceForbidden)
+    def external_source_forbidden(err):
+        """CLAUDE-EXTERNAL-CUSTODY-03: the storage answered, and said no.
+
+        Split from the 503 above because the two need different advice. An
+        unreachable NAS heals when it comes back; a withdrawn permission does
+        not heal at all, and "try again shortly" is the one thing that will
+        never work.
+
+        Still 503 and NOT 403. HTTP 403 means THIS user is not authorised, and
+        that is false - the person asking may be the project owner. What has no
+        access is ARCHIOSK's own service account, against someone else's
+        storage. Answering 403 would send an entire investigation into the
+        wrong system.
+
+        Retry-After is deliberately OMITTED, where the unavailable handler
+        sends one. That header is a promise that waiting is the fix; here it
+        is not, and a machine client honouring it would poll forever against a
+        door that stays shut until a human opens it.
+        """
+        app.logger.warning("External storage refused access: %s", err)
+        if _wants_json():
+            return jsonify(
+                error="external_source_forbidden",
+                message="The storage holding this file refused access to "
+                        "ARCHIOSK. Nothing has been lost or removed.",
+            ), 503
+        return _render_error(
+            503, "Storage refused access",
+            "This document's authoritative file lives on storage ARCHIOSK does "
+            "not hold, and that storage is reachable but declined to release "
+            "the file. Nothing has been lost - the document, its history and "
+            "everything already analysed from it are unaffected. Someone with "
+            "rights to that storage will need to restore access; waiting will "
+            "not resolve it on its own.",
+            url_for("portal.index"), "Back to home",
+        ), 503
 
     @app.errorhandler(403)
     def forbidden(_err):

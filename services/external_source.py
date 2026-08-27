@@ -78,6 +78,24 @@ class ExternalSourceUnavailable(ExternalSourceError):
     """
 
 
+class ExternalSourceForbidden(ExternalSourceError):
+    """The storage is reachable and the file is there - and it refused us.
+
+    CLAUDE-EXTERNAL-CUSTODY-03. A third fact, and the reason it gets its own
+    type rather than folding into ExternalSourceUnavailable: the advice differs.
+    "Reconnect the storage and try again" is actively wrong when the NAS is
+    plugged in and answering, and a permission was withdrawn. One will heal by
+    itself; the other needs a person to restore access, and telling someone to
+    wait for that is telling them to wait forever.
+
+    Same reasoning that already separates "currently unavailable" from
+    "deliberately removed" - collapsing two different facts about a project is
+    how a governed record starts lying. This is a SIBLING under
+    ExternalSourceError, deliberately not a parallel hierarchy: one vocabulary
+    for one subject.
+    """
+
+
 def normalize_relative_reference(relative_path: str) -> str:
     """Store a POSIX-style, root-relative reference - never a machine path.
 
@@ -124,11 +142,23 @@ def read_external_bytes(root: str, relative_path: str) -> bytes:
     source as current.
     """
     path = resolve_within_root(root, relative_path)
-    if not path.is_file():
+    try:
+        present = path.is_file()
+    except PermissionError as exc:
+        # A revoked DIRECTORY denies the stat, so the file's own existence
+        # cannot even be asked. That is refusal, not absence.
+        raise ExternalSourceForbidden(
+            "Access to %s was refused by the storage." % relative_path) from exc
+    if not present:
         raise ExternalSourceUnavailable(
             "The authoritative file is not reachable at %s right now." % relative_path)
     try:
         return path.read_bytes()
+    except PermissionError as exc:
+        # Checked before OSError, which PermissionError subclasses - the order
+        # is load-bearing, not stylistic.
+        raise ExternalSourceForbidden(
+            "Access to %s was refused by the storage." % relative_path) from exc
     except OSError as exc:
         raise ExternalSourceUnavailable(str(exc)) from exc
 
@@ -136,9 +166,19 @@ def read_external_bytes(root: str, relative_path: str) -> bytes:
 def iter_external_files(root: str) -> Iterator[str]:
     """Every file under the governed root, as normalized relative references."""
     root_path = Path(root).expanduser().resolve()
-    if not root_path.is_dir():
+    try:
+        reachable = root_path.is_dir()
+    except PermissionError as exc:
+        raise ExternalSourceForbidden(
+            "Access to the storage root was refused: %s" % root) from exc
+    if not reachable:
         raise ExternalSourceUnavailable("The storage root is not reachable: %s" % root)
-    for path in sorted(root_path.rglob("*")):
+    try:
+        entries = sorted(root_path.rglob("*"))
+    except PermissionError as exc:
+        raise ExternalSourceForbidden(
+            "Access to the storage root was refused: %s" % root) from exc
+    for path in entries:
         if path.is_file():
             yield normalize_relative_reference(str(path.relative_to(root_path)))
 

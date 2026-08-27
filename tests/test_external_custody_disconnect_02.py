@@ -49,6 +49,7 @@ from pathlib import Path
 from services.case_workspace import CaseWorkspaceStore
 from services.external_source import (
     ExternalSourceError,
+    ExternalSourceForbidden,
     ExternalSourceUnavailable,
     external_source_for_reference,
     iter_external_files,
@@ -233,6 +234,98 @@ class ReconnectionNeedsNoReRegistration(_ExternalProject):
         self.assertEqual(len(self.reload().sources), len(_FILES))
 
 
+class RefusalIsNotAbsence(_ExternalProject):
+    """CLAUDE-EXTERNAL-CUSTODY-03, converged from a parallel simulator.
+
+    A storage that answers and refuses is a third fact, distinct from one that
+    cannot be reached. Permissions are simulated by making the read itself raise
+    PermissionError rather than by chmod, because POSIX mode bits do not govern
+    readability the same way on Windows - a chmod-based test would pass here by
+    doing nothing. What is under test is OUR translation of the OS's answer,
+    which is exactly what this exercises.
+    """
+
+    def _denied(self, target):
+        from unittest import mock
+
+        return mock.patch.object(Path, target, side_effect=PermissionError(13, "denied"))
+
+    def test_a_refused_read_is_forbidden_not_unavailable(self):
+        with self._denied("read_bytes"):
+            with self.assertRaises(ExternalSourceForbidden):
+                read_external_bytes(str(self.root), "Project_Requirements.md")
+
+    def test_a_refused_stat_is_forbidden_not_missing(self):
+        # A revoked DIRECTORY denies the stat, so the file's own existence
+        # cannot even be asked. Reporting that as "not reachable" would send
+        # someone to check a cable that is fine.
+        with self._denied("is_file"):
+            with self.assertRaises(ExternalSourceForbidden):
+                read_external_bytes(str(self.root), "Project_Requirements.md")
+
+    def test_a_refused_root_listing_is_forbidden(self):
+        with self._denied("is_dir"):
+            with self.assertRaises(ExternalSourceForbidden):
+                list(iter_external_files(str(self.root)))
+
+    def test_forbidden_and_unavailable_are_siblings_not_the_same_type(self):
+        self.assertTrue(issubclass(ExternalSourceForbidden, ExternalSourceError))
+        self.assertFalse(issubclass(ExternalSourceForbidden, ExternalSourceUnavailable))
+        self.assertFalse(issubclass(ExternalSourceUnavailable, ExternalSourceForbidden))
+
+    def test_refusal_wipes_no_history(self):
+        before = {s["id"]: (s["file_hash"], s["origin_reference"]) for s in self.reload().sources}
+        with self._denied("read_bytes"):
+            with self.assertRaises(ExternalSourceForbidden):
+                read_external_bytes(str(self.root), "Project_Requirements.md")
+        after = {s["id"]: (s["file_hash"], s["origin_reference"]) for s in self.reload().sources}
+        self.assertEqual(after, before)
+        self.assertEqual([s for s in self.reload().sources if s.get("removed_at")], [])
+
+
+class RelocationIsAlreadyOwnedByReconcile(_ExternalProject):
+    """The simulator called this RELOCATED. The codebase already calls it
+    `renamed`, and has since the Data Room shipped.
+
+    reconcile_external_root deliberately delegates to preview_data_room_reconcile
+    so that unchanged/modified/renamed/missing/ambiguous/ineligible stay decided
+    by the code that owns those semantics. Adding a fifth word for a move would
+    have been a second vocabulary for one subject.
+    """
+
+    def test_the_reconcile_vocabulary_already_covers_a_move(self):
+        from services.ingestion import (
+            RECONCILE_STATUS_MISSING, RECONCILE_STATUS_RENAMED,
+            RECONCILE_STATUS_UNCHANGED,
+        )
+
+        self.assertEqual(RECONCILE_STATUS_RENAMED, "renamed")
+        self.assertEqual(RECONCILE_STATUS_UNCHANGED, "unchanged")
+        self.assertEqual(RECONCILE_STATUS_MISSING, "missing")
+
+    def test_a_moved_file_keeps_its_identity_by_hash(self):
+        # The property a move must preserve: same bytes, same hash, therefore
+        # the same governed Source - found at a new path rather than replaced.
+        import hashlib
+
+        payload = _FILES["details/Roof_Penetration_Detail.md"]
+        original = hashlib.sha256(payload).hexdigest()
+        (self.root / "details" / "Roof_Penetration_Detail.md").rename(
+            self.root / "Roof_Penetration_Detail_Rev1.md")
+        self.assertEqual(
+            hashlib.sha256(read_external_bytes(
+                str(self.root), "Roof_Penetration_Detail_Rev1.md")).hexdigest(),
+            original)
+        registered = {s["file_hash"] for s in self.reload().sources}
+        self.assertIn(original, registered)
+
+    def test_a_move_creates_no_second_source(self):
+        before = len(self.reload().sources)
+        (self.root / "details" / "Roof_Penetration_Detail.md").rename(
+            self.root / "Roof_Penetration_Detail_Rev1.md")
+        self.assertEqual(len(self.reload().sources), before)
+
+
 class TheRootBoundaryHolds(_ExternalProject):
     """No network here, so path containment is the whole security surface."""
 
@@ -310,6 +403,73 @@ class TheUnavailableStateHasAnHonestHttpAnswer(unittest.TestCase):
         self.assertNotIn("doesn't exist", body)
         self.assertNotIn("Something went wrong", body)
         self.assertIn("unaffected", body)
+
+
+class RefusalHasItsOwnHonestHttpAnswer(unittest.TestCase):
+    """503 for both, but never the same 503."""
+
+    @staticmethod
+    def _app_raising(exc, path="/__probe"):
+        import app as app_module
+
+        application = app_module.create_app("testing")
+
+        @application.route(path)
+        def _probe():
+            raise exc
+
+        return application.test_client().get(path)
+
+    def test_forbidden_answers_503(self):
+        response = self._app_raising(ExternalSourceForbidden("refused"), "/__forbidden")
+        self.assertEqual(response.status_code, 503)
+
+    def test_forbidden_sends_no_retry_after(self):
+        # The header is a promise that waiting is the fix. A withdrawn
+        # permission does not heal on its own, and a machine client honouring a
+        # Retry-After here would poll forever against a door a human must open.
+        response = self._app_raising(ExternalSourceForbidden("refused"), "/__forbidden_ra")
+        self.assertIsNone(response.headers.get("Retry-After"))
+
+    def test_unavailable_still_does_send_one(self):
+        response = self._app_raising(ExternalSourceUnavailable("offline"), "/__unavail_ra")
+        self.assertEqual(response.headers.get("Retry-After"), "60")
+
+    def test_it_is_never_403(self):
+        # 403 means THIS user is not authorised, which is false - the person
+        # asking may be the project owner. What lacks access is ARCHIOSK's own
+        # service account against someone else's storage, and answering 403
+        # would send an entire investigation into the wrong system.
+        response = self._app_raising(ExternalSourceForbidden("refused"), "/__not403")
+        self.assertNotEqual(response.status_code, 403)
+
+    def test_the_two_bodies_give_different_advice(self):
+        refused = self._app_raising(
+            ExternalSourceForbidden("x"), "/__body_forbidden").get_data(as_text=True)
+        offline = self._app_raising(
+            ExternalSourceUnavailable("x"), "/__body_unavail").get_data(as_text=True)
+        self.assertIn("restore access", refused)
+        self.assertIn("will not resolve it on its own", refused)
+        self.assertIn("Reconnect the storage", offline)
+        self.assertNotIn("Reconnect the storage", refused)
+
+    def test_a_json_client_gets_the_distinct_code(self):
+        import app as app_module
+
+        application = app_module.create_app("testing")
+
+        @application.route("/api/__forbidden_json")
+        def _probe():
+            raise ExternalSourceForbidden("refused")
+
+        payload = application.test_client().get("/api/__forbidden_json").get_json()
+        self.assertEqual(payload["error"], "external_source_forbidden")
+
+    def test_both_handlers_are_registered_and_neither_catches_the_parent(self):
+        source = (Path(__file__).resolve().parent.parent / "app.py").read_text(encoding="utf-8")
+        self.assertIn("@app.errorhandler(ExternalSourceForbidden)", source)
+        self.assertIn("@app.errorhandler(ExternalSourceUnavailable)", source)
+        self.assertNotIn("@app.errorhandler(ExternalSourceError)", source)
 
 
 if __name__ == "__main__":
