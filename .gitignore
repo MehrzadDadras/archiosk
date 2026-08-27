@@ -36,3 +36,9 @@ tools/static_preview/build/
 # config (.claude/skills/, a future .claude/settings.json belong in git;
 # this doesn't)
 .claude/settings.local.json
+
+# tests/fixtures/nreocrc/ingest_nreocrc_lab.py and its _002 sibling both label
+# their output "regenerable, not committed" - but nothing enforced it, so 45
+# generated workspace/governance files sat untracked where a `git add -A` would
+# have swept them into a commit as if they were fixtures.
+tests/fixtures/nreocrc/_lab_instance_scratch*/
