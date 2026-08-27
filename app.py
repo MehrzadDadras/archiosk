@@ -480,6 +480,8 @@ def _register_error_handlers(app: Flask) -> None:
             action_url=action_url, action_label=action_label, ui_ref=ui_ref,
         )
 
+    from services.case_workspace import ConcurrentModificationError
+
     @app.errorhandler(404)
     def not_found(_err):
         if _wants_json():
@@ -498,6 +500,45 @@ def _register_error_handlers(app: Flask) -> None:
             500, "Something went wrong", "The error has been logged. Please try again shortly.",
             url_for("portal.index"), "Back to home",
         ), 500
+
+    @app.errorhandler(ConcurrentModificationError)
+    def write_collision(err):
+        """CLAUDE-WRITE-COLLISION-01: two people saved at once - not a crash.
+
+        The store refuses to overwrite a newer state with a stale one, which is
+        correct, and raises ConcurrentModificationError to say so. Ten route
+        handlers perform a governed write with no handler for it (found by AST
+        audit, not by grep - a regex pass missed all of them), so a normal
+        collision between two reviewers surfaced as HTTP 500: "something went
+        wrong", logged as an unhandled exception, with the user's work lost and
+        no indication that retrying is the answer.
+
+        It is the opposite of a server fault. The store did exactly its job.
+
+        Registered as ONE handler rather than a try/except in each of the ten
+        routes, and deliberately narrow - only this subclass, not its
+        CaseWorkspaceError parent. A blanket handler would swallow genuine
+        validation faults that should stay visible as bugs. New write routes are
+        covered automatically, which is the point: the same reasoning
+        visible_cases_for records for privacy - a rule every future caller must
+        remember is not a rule.
+
+        409 Conflict is the honest status. The message says what happened and
+        what to do, and never claims the write succeeded.
+        """
+        app.logger.info("Write collision (recoverable): %s", err)
+        if _wants_json():
+            return jsonify(
+                error="write_collision",
+                message="Someone else saved a change first. Reload and try again.",
+            ), 409
+        return _render_error(
+            409, "Someone else saved first",
+            "Another change was saved while you were working, so yours was not "
+            "applied - nothing has been overwritten. Reload the page and try "
+            "again.",
+            url_for("portal.index"), "Back to home",
+        ), 409
 
     @app.errorhandler(403)
     def forbidden(_err):
