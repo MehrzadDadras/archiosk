@@ -31,7 +31,9 @@ be excluded from every sync:
 
 - `.env` — real secrets (API keys, Flask secret key, `STATIC_VERSION`, etc.).
 - `instance/` — the real, live project registry and all real project data.
-- `.venv/` — the server's own Python virtual environment.
+- `.venv/` — the server's own Python virtual environment. Never overwritten by the
+  sync, but see step 7: a commit that changes `requirements.txt` requires a
+  deliberate, pinned install into it.
 - `__pycache__/` — build artifacts, regenerated on next run regardless.
 - `.claude/` — local tooling state on the server, unrelated to the deployed app.
 
@@ -131,7 +133,97 @@ ssh ubuntu@<server> "
 "
 ```
 
-## 7. Restart and verify the service
+## 7. Reconcile pinned dependencies when `requirements.txt` changed
+
+**CLAUDE-DRAWING-REFS-02.** The sync above deliberately excludes `.venv/` as a
+persistent path, and nothing else in this procedure installs anything — so a
+commit that ADDS a dependency ships a `requirements.txt` naming it and leaves the
+server venv without it. This was found before it caused an outage, but only
+because the deploy was being checked against the diff rather than run by rote.
+
+First, ask whether anything changed at all:
+
+```bash
+git diff <currently-live-hash>..<new-hash> -- requirements.txt
+```
+
+If that is empty, skip this section entirely — most deploys do.
+
+If it is not empty, note what the failure would actually look like before
+deciding urgency. A dependency imported at application start makes the service
+fail to boot; one imported lazily (as `engine/pdf_extractor.py` is — nothing in
+`app.py`/`routes/`/`services/` imports it) leaves the app healthy and the
+capability silently inert, which `/health` will NOT catch.
+
+Install the specific pinned packages that changed — **never**
+`pip install -r requirements.txt`:
+
+```bash
+ssh ubuntu@<server> "
+  /var/www/archiosk/.venv/bin/pip install --dry-run <package>==<version> 2>&1 | tail -5
+"
+```
+
+The dry run first, always. Read it for two things: that a real wheel is being
+resolved for the server's own interpreter and architecture (`cp310`,
+`manylinux…x86_64` — a source build here means a compiler dependency this
+document does not cover), and that the `Would install` line names ONLY the
+package you intended.
+
+`pip install -r requirements.txt` is the tempting shortcut and is wrong: it
+re-resolves every pin in the file, so an unrelated transitive upgrade can land in
+the same breath as a deploy and there is nothing in the diff that would show it.
+Install what changed, pinned, and nothing else.
+
+The install itself must run **as the venv's owner**, not as the SSH login:
+
+```bash
+ssh ubuntu@<server> "
+  sudo -u archiosk /var/www/archiosk/.venv/bin/pip install <package>==<version> &&
+  sudo -u archiosk /var/www/archiosk/.venv/bin/python -c 'import <module>; print(<module>.__version__)'
+"
+```
+
+`sudo -u archiosk`, and specifically NOT bare `sudo`. `/var/www/archiosk/.venv` is owned
+by `archiosk:archiosk` (the same account `archiosk-go.service` runs as), so the `ubuntu`
+login cannot write to it — the first real attempt at this step failed with
+`[Errno 13] Permission denied: .../site-packages/pymupdf`. Note the dry run does NOT
+fail that way: it only reads, so it will happily report `Would install` for a package
+the next command cannot actually place.
+
+Reaching for plain `sudo` fixes the error message and leaves root-owned files inside a
+venv every other package in which belongs to `archiosk` — which then fails later, at
+uninstall or upgrade, far from the change that caused it. Confirm ownership matches its
+neighbours afterwards:
+
+```bash
+ssh ubuntu@<server> "stat -c '%U:%G %n' /var/www/archiosk/.venv/lib/python3.10/site-packages/<module>"
+```
+
+The import check is the point — `pip` reporting success only proves files were
+written, not that the module loads on this machine. Do this BEFORE the restart in
+the next section, so the workers come up against the finished environment rather
+than being restarted twice.
+
+Then prove the CAPABILITY, not just the import — run the real entry point against real
+data, as the service account, from the deployed tree:
+
+```bash
+ssh ubuntu@<server> "cd /var/www/archiosk && sudo -u archiosk .venv/bin/python -c \"
+from engine.pdf_extractor import PDFVectorExtractor
+d = PDFVectorExtractor().extract_document('tests/fixtures/metabolic_bridge/builder_corpus/Drawings_Set.pdf')
+print('pages', len(d['pages']))
+\""
+```
+
+This is the check `/health` structurally cannot perform, and the reason this whole
+section exists.
+
+Removals and version CHANGES (as opposed to additions) are not routine: they can
+break code still running from the previous release during the window between sync
+and restart. Treat those as outside this document and get explicit authorization.
+
+## 8. Restart and verify the service
 
 ```bash
 ssh ubuntu@<server> "
@@ -150,7 +242,7 @@ curl -s -o /dev/null -w 'HTTP %{http_code}\n' https://archiosk.com/health
 
 Both must return `HTTP 200`.
 
-## 8. Bump `STATIC_VERSION` when static assets changed
+## 9. Bump `STATIC_VERSION` when static assets changed
 
 **If this deploy touched `static/css/*.css` or `static/js/*.js`**, the server's own
 `STATIC_VERSION` (inside its protected `.env`, untouched by the steps above) must be
@@ -174,18 +266,18 @@ ssh ubuntu@<server> "
 "
 ```
 
-Then repeat the restart/health verification in step 7.
+Then repeat the restart/health verification in step 8.
 
-## 9. Verify online, in a real browser — not localhost
+## 10. Verify online, in a real browser — not localhost
 
 Open the actual `https://archiosk.com` routes and confirm the specific surfaces the
 deploy changed. At minimum: sign-in, authentication, Gateway, opening a project, and
 whatever else was in scope for that deploy. Confirm the deployed `STATIC_VERSION`
 value actually appears in a served asset URL (e.g. inspect
 `<link href="/static/css/main.css?v=...">` in the rendered page) to prove the bump
-in step 8 took effect, not just that the command ran.
+in step 9 took effect, not just that the command ran.
 
-## 10. Confirm which commit is actually live
+## 11. Confirm which commit is actually live
 
 The systemd unit's own `Description=` field is the existing, already-established
 convention for this — e.g. `Gunicorn - ArchiOSK GO (accepted build <short-hash>)`.
@@ -195,12 +287,12 @@ unnecessary systemd configuration risk merely to display a hash. Whatever the
 mechanism, the durable requirement is: **it must always be possible to determine
 exactly which git commit is live**, checkable without guessing.
 
-## 11. Clean up this deploy's own scratch (do this every time, not just when it piles up)
+## 12. Clean up this deploy's own scratch (do this every time, not just when it piles up)
 
 `CLAUDE-DEV-CLEANUP-01` found eight superseded deploy tarballs (~21.5MB) sitting in
 `/tmp` from prior sessions, none ever cleaned up after its own deploy succeeded —
 routine hygiene that was never made an explicit step, so it silently never happened.
-Once step 9's online verification passes:
+Once step 10's online verification passes:
 
 ```bash
 ssh ubuntu@<server> "rm -rf /tmp/archiosk-<short-hash>.tar /tmp/archiosk-deploy-staging"
@@ -240,7 +332,7 @@ Then repeat the step-7 health verification.
   `deploy/gunicorn.conf.py` already exist and are deployed separately, far less
   often than application code).
 - Database/schema migrations.
-- Any change to `.env`'s contents beyond the single `STATIC_VERSION` line in step 8.
+- Any change to `.env`'s contents beyond the single `STATIC_VERSION` line in step 9.
 - A multi-generation, automatic-rollback release scheme — the current flat
   single-backup approach is a deliberately minimal first safeguard, not a
   redesign of the whole deployment system.
