@@ -481,6 +481,7 @@ def _register_error_handlers(app: Flask) -> None:
         )
 
     from services.case_workspace import ConcurrentModificationError
+    from services.external_source import ExternalSourceUnavailable
 
     @app.errorhandler(404)
     def not_found(_err):
@@ -539,6 +540,59 @@ def _register_error_handlers(app: Flask) -> None:
             "again.",
             url_for("portal.index"), "Back to home",
         ), 409
+
+    @app.errorhandler(ExternalSourceUnavailable)
+    def external_source_unavailable(err):
+        """CLAUDE-EXTERNAL-CUSTODY-02: the storage is offline - the record is not.
+
+        A Source registered under external custody keeps its identity, hash,
+        provenance, relationships and every derived finding inside ARCHIOSK;
+        only the authoritative BYTES live elsewhere. When that storage is
+        unplugged, moved, or simply asleep, services/external_source.py raises
+        ExternalSourceUnavailable rather than returning empty bytes - "fail
+        honestly if external bytes are needed later and unavailable", never
+        fabricate analysis from nothing while presenting the source as current.
+
+        Nothing caught it. Unlike ConcurrentModificationError above, this class
+        does not descend from CaseWorkspaceError (MRO: ExternalSourceUnavailable
+        -> ExternalSourceError -> Exception), so none of the route handlers that
+        catch that parent would ever see it, and a NAS going offline would have
+        surfaced as HTTP 500 "Something went wrong" - blaming ARCHIOSK for a
+        cable somewhere else.
+
+        503, not 500 and not 404. The request was valid and the server is
+        working; a dependency is temporarily out of reach, which is exactly what
+        503 means. 404 would be a lie of a specific and damaging kind - it says
+        the thing does not exist, and the entire point of external custody is
+        that the governed record still does. Retry-After says the honest thing:
+        try again, this is expected to come back.
+
+        Deliberately NOT promoted into the CaseWorkspaceError hierarchy to get
+        it caught. That would collapse "temporarily unreachable" into "invalid
+        operation" at 61 existing catch sites - the same collapse
+        ExternalSourceUnavailable exists to prevent, since "currently
+        unavailable" and "deliberately removed" are different facts about a
+        project and merging them is how a governed record starts lying.
+        """
+        app.logger.info("External source unavailable (recoverable): %s", err)
+        if _wants_json():
+            response = jsonify(
+                error="external_source_unavailable",
+                message="The authoritative file is on storage that is not "
+                        "reachable right now. Nothing has been lost or removed.",
+            )
+            response.headers["Retry-After"] = "60"
+            return response, 503
+        page = _render_error(
+            503, "Storage temporarily unreachable",
+            "This document's authoritative file lives on storage ARCHIOSK does "
+            "not hold, and that storage cannot be reached at the moment. The "
+            "document, its history and everything already analysed from it are "
+            "unaffected - only the original file is out of reach. Reconnect the "
+            "storage and try again.",
+            url_for("portal.index"), "Back to home",
+        )
+        return app.make_response((page, 503, {"Retry-After": "60"}))
 
     @app.errorhandler(403)
     def forbidden(_err):
