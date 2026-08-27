@@ -41,9 +41,16 @@ depends_on = None
 
 
 def upgrade():
+    # Shaped to match db.create_all()'s output EXACTLY, following
+    # d67fbff1ba5e's precedent: primary_key on the column rather than a
+    # PrimaryKeyConstraint, and NO sa.UniqueConstraint - `unique=True` on a
+    # model Column renders as a unique INDEX, not a table-level constraint.
+    # Emitting both made the two schemas differ and was caught by
+    # tests/test_flask_migrate_baseline.py, which compares a migrated database
+    # against a created_all one precisely so this cannot drift.
     op.create_table(
         "storage_agent_enrolments",
-        sa.Column("id", sa.Integer(), nullable=False),
+        sa.Column("id", sa.Integer(), primary_key=True),
         sa.Column("project_id", sa.String(length=255), nullable=False),
         sa.Column("agent_label", sa.String(length=255), nullable=False),
         sa.Column("token_hash", sa.String(length=64), nullable=False),
@@ -53,20 +60,16 @@ def upgrade():
         sa.Column("revoked_at", sa.DateTime(), nullable=True),
         sa.Column("revoked_by", sa.String(length=255), nullable=True),
         sa.Column("last_seen_at", sa.DateTime(), nullable=True),
-        sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint("token_hash"),
     )
-    with op.batch_alter_table("storage_agent_enrolments", schema=None) as batch_op:
-        batch_op.create_index(
-            batch_op.f("ix_storage_agent_enrolments_project_id"),
-            ["project_id"], unique=False)
-        batch_op.create_index(
-            batch_op.f("ix_storage_agent_enrolments_token_hash"),
-            ["token_hash"], unique=True)
+    op.create_index("ix_storage_agent_enrolments_project_id",
+                    "storage_agent_enrolments", ["project_id"])
+    op.create_index("ix_storage_agent_enrolments_token_hash",
+                    "storage_agent_enrolments", ["token_hash"], unique=True)
 
 
 def downgrade():
-    with op.batch_alter_table("storage_agent_enrolments", schema=None) as batch_op:
-        batch_op.drop_index(batch_op.f("ix_storage_agent_enrolments_token_hash"))
-        batch_op.drop_index(batch_op.f("ix_storage_agent_enrolments_project_id"))
+    op.drop_index("ix_storage_agent_enrolments_token_hash",
+                  table_name="storage_agent_enrolments")
+    op.drop_index("ix_storage_agent_enrolments_project_id",
+                  table_name="storage_agent_enrolments")
     op.drop_table("storage_agent_enrolments")
