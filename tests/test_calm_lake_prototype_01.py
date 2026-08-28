@@ -336,6 +336,41 @@ class SingleGrammarTests(unittest.TestCase):
         self.assertEqual(self.template.count("{% for verb in verbs %}"), 1)
         self.assertEqual(self.template.count('data-verb="{{ verb.id }}"'), 1)
 
+    def test_the_desktop_side_sheet_stops_above_the_verb_bar(self):
+        # Found by looking at the rendered page: a full-height side sheet
+        # covered Ask and Commit. The verb bar is the grammar, so two of its
+        # four verbs being unreachable whenever a sheet is open would break
+        # the one permanent thing this surface promises. Verified in-browser
+        # at 1600x800 by rectangle intersection against all four verbs.
+        desktop = self.css[self.css.index("@media (min-width: 1024px)"):]
+        sheet = desktop[desktop.index(".cl-sheet {"):]
+        sheet = sheet[:sheet.index("}")]
+        self.assertIn("bottom: 84px", sheet)
+        self.assertNotIn("bottom: 0", sheet)
+
+    def test_the_claim_escapes_the_sheet_heading_uppercase_treatment(self):
+        # `.cl-claim` alone is (0,1,0) and loses to `.cl-sheet-head h2` at
+        # (0,1,1), so the plain class silently did nothing and the claim
+        # rendered as a shout - on a finding badged UNVERIFIED.
+        self.assertIn(".cl-sheet-head h2.cl-claim", self.css)
+        rule = self.css[self.css.index(".cl-sheet-head h2.cl-claim"):]
+        rule = rule[:rule.index("}")]
+        self.assertIn("text-transform: none", rule)
+
+    def test_marks_counter_scale_so_provenance_stays_reachable_at_any_zoom(self):
+        # LOD invariance: annotation density may thin as a drawing zooms
+        # out, but the route to a finding's basis must not. Without this the
+        # tags render at ~36% at 390px and are unreadable on arrival.
+        self.assertIn("--w-inv", self.css)
+        self.assertIn('setProperty("--w-inv", 1 / view.scale)', self.js)
+
+    def test_the_surface_opens_fitted_rather_than_at_one_to_one(self):
+        # The sheet is 1000 CSS px wide; at 390px an unfitted surface opens
+        # showing a fragment of one room, which falsifies "the drawing
+        # occupies the screen" on arrival.
+        self.assertIn("box.width / PLAN_W", self.js)
+        self.assertNotIn("view.scale = 1;", self.js)
+
     def test_no_inline_style_attributes_anywhere(self):
         # app.py's CSP sets default-src 'self' with no style-src directive,
         # so a parsed inline style attribute is refused by the browser.

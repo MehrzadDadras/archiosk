@@ -70,21 +70,67 @@
         plan.style.setProperty("--w-tx", view.x + "px");
         plan.style.setProperty("--w-ty", view.y + "px");
         plan.style.setProperty("--w-scale", view.scale);
+        /* LOD INVARIANCE. Marks are annotations ABOUT the drawing, not
+           content of it, so they counter-scale and stay legible at every
+           zoom. The grammar's 6.3 requires exactly this: annotation
+           density may thin as a drawing zooms out, but the route to a
+           finding's basis must not - a finding that becomes uncitable at
+           overview zoom is uncitable precisely when a reader is forming a
+           summary judgement. */
+        plan.style.setProperty("--w-inv", 1 / view.scale);
     }
 
     function zoomBy(factor) {
         view.scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, view.scale * factor));
+        readerAdjustedView = true;
         applyView();
         wakeLook();
     }
 
+    /* PLAN_W/PLAN_H are the .cl-plan box in CSS pixels, which is also the
+       SVG's own viewBox. Kept as constants rather than measured, because
+       measuring the element we are about to scale reads back the previous
+       scale and fit() would drift on every call. */
+    var PLAN_W = 1000;
+    var PLAN_H = 700;
+    var FIT_MARGIN = 0.92;
+
+    /* A real fit, not scale = 1.
+
+       Getting this wrong is not cosmetic at 390px: the sheet is 1000 CSS
+       pixels wide, so an unfitted surface opens showing roughly a third of
+       one room and no title block, and a reader cannot tell whether they are
+       looking at the whole drawing or a corner of it. On a surface whose
+       entire claim is "the drawing occupies the screen", opening zoomed into
+       an unlabelled fragment falsifies the claim on arrival. */
     function fit() {
+        var box = lake.getBoundingClientRect();
+        var scale = 1;
+        if (box.width && box.height) {
+            scale = Math.min(box.width / PLAN_W, box.height / PLAN_H) * FIT_MARGIN;
+            scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, scale));
+        }
         view.x = 0;
         view.y = 0;
-        view.scale = 1;
+        view.scale = scale;
+        readerAdjustedView = false;
         applyView();
         wakeLook();
     }
+
+    /* Re-fit when the surface changes size, unless the reader has taken
+       control of the view themselves - refitting under someone who has
+       deliberately zoomed in would throw away their position. This is
+       element geometry, not a viewport branch: the grammar does not change,
+       only how much of the sheet is in frame. */
+    var readerAdjustedView = false;
+
+    var refitTimer = null;
+    window.addEventListener("resize", function () {
+        if (readerAdjustedView) { return; }
+        window.clearTimeout(refitTimer);
+        refitTimer = window.setTimeout(fit, 120);
+    });
 
     var dragging = false;
     var moved = false;
@@ -105,6 +151,7 @@
         wakeLook();
         if (!dragging || !dragStart) { return; }
         moved = true;
+        readerAdjustedView = true;
         view.x = event.clientX - dragStart.x;
         view.y = event.clientY - dragStart.y;
         applyView();
@@ -141,7 +188,7 @@
         });
     });
 
-    applyView();
+    fit();
 
     /* The Look affordances recede when idle - the games-HUD pattern, not
        a permanent readout. This is the mechanism that lets the surface be

@@ -311,7 +311,9 @@ body.cl {
     position: absolute;
     left: var(--w-mark-x, 50%);
     top: var(--w-mark-y, 50%);
-    transform: translate(-50%, -50%);
+    /* --w-inv is 1/scale, written by calm_lake.js: the mark keeps its own
+       size while the sheet under it zooms. See the LOD note in that file. */
+    transform: translate(-50%, -50%) scale(var(--w-inv, 1));
     display: flex;
     align-items: center;
     gap: 6px;
@@ -613,7 +615,24 @@ body.cl {
     color: var(--w-ink-2);
 }
 
-.cl-claim { margin: 0; font-size: 16px; font-weight: 400; line-height: 1.35; }
+/* The claim is a sentence, not a section label, so it must escape the
+   uppercase/letter-spaced treatment .cl-sheet-head h2 gives the sheet
+   titles it shares a container with. Beyond legibility: an all-caps
+   sentence shouts, and this one is a machine finding marked UNVERIFIED -
+   rendering it as a shout would lend it exactly the confidence the badge
+   above it is there to withhold. */
+/* Selector deliberately carries the parent: `.cl-claim` alone is (0,1,0)
+   and loses to `.cl-sheet-head h2` at (0,1,1), so the plain class silently
+   does nothing here. Verified by computed style, not by reading the file. */
+.cl-sheet-head h2.cl-claim {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 400;
+    line-height: 1.35;
+    letter-spacing: normal;
+    text-transform: none;
+    color: var(--w-ink);
+}
 
 .cl-depth-label {
     margin: 20px 0 8px;
@@ -932,15 +951,32 @@ body.cl {
    and there are none.
    ============================================================ */
 
-@media (min-width: 1024px) {
+/* ============================================================
+   DESKTOP EXPANSION - the 390px grammar with more bandwidth
 
-    body.cl {
-        /* The verb bar moves to the top-right of the header row rather
-           than spanning the bottom: at 1600px a full-width bottom bar is
-           a 1600px-wide thumb target for a mouse that is already at the
-           top of the screen. Same four verbs, same order, same list. */
-        grid-template-rows: auto auto 1fr auto;
-    }
+   Nothing is added and nothing is removed. Same DOM, same source order,
+   same four verbs from the same list, same triggers, same dismissal.
+   Two things change, and only two:
+
+     1. The disturbance banner becomes one horizontal row instead of a
+        stack, because 1600px has the width for it and a phone does not.
+     2. A summoned sheet arrives from the RIGHT EDGE as a side sheet
+        rather than from the bottom as a full-width one - which is the
+        real prize of the extra bandwidth, because a side sheet leaves
+        the drawing the question is about still visible while you read
+        the answer.
+
+   THE SOURCE ORDER IS NOT TOUCHED, deliberately. An earlier attempt
+   moved the verb bar above the disturbance with grid-row, which put two
+   children in one cell, collapsed the drawing viewport to nothing and
+   overlapped the banner with the bar. It was caught by looking at the
+   rendered page rather than by reading the file. Reordering also bought
+   nothing: the directive asks for the same grammar with wider spatial
+   bandwidth, and moving a verb somewhere else at one width is the one
+   thing that would falsify "same grammar". Leave the order alone.
+   ============================================================ */
+
+@media (min-width: 1024px) {
 
     .cl-header {
         min-height: 64px;
@@ -949,58 +985,43 @@ body.cl {
     }
 
     .cl-project { font-size: 20px; }
-    .cl-active-doc { flex-direction: row; align-items: baseline; gap: 10px; margin-left: auto; }
+    .cl-active-doc { flex-direction: row; align-items: baseline; gap: 10px; }
     .cl-active-doc-name { font-size: 14px; max-width: 420px; }
 
+    /* One row: what/when, the claim, the half-life, then the way in. */
     .cl-disturbance {
-        display: grid;
-        grid-template-columns: 1fr auto;
-        grid-template-areas:
-            "line   why"
-            "claim  why"
-            "bar    why"
-            "foot   why";
+        display: flex;
         align-items: center;
-        column-gap: 24px;
+        gap: 24px;
         padding: 12px 24px;
         border-left-width: 6px;
     }
 
-    .cl-disturbance-line { grid-area: line; justify-content: flex-start; gap: 14px; }
-    .cl-disturbance-claim { grid-area: claim; margin: 4px 0 8px; font-size: 15px; }
-    .cl-halflife { grid-area: bar; max-width: 620px; }
-    .cl-disturbance-foot { grid-area: foot; justify-content: flex-start; gap: 14px; }
-    .cl-why { grid-area: why; align-self: center; padding: 10px 28px; font-size: 15px; }
+    .cl-disturbance-line { flex: none; flex-direction: column; align-items: flex-start; gap: 3px; }
+    .cl-disturbance-claim { flex: 1 1 auto; margin: 0; font-size: 15px; }
+    .cl-halflife { flex: 0 0 200px; }
+    .cl-disturbance-foot { flex: none; margin-top: 0; gap: 16px; }
+    .cl-why { padding: 9px 24px; font-size: 15px; }
 
-    .cl-verbs {
-        grid-template-columns: repeat(4, minmax(0, 150px));
-        justify-content: flex-end;
-        min-height: 52px;
-        padding: 0 24px;
-        border-top: 0;
-        border-bottom: 1px solid var(--w-line);
-        background: var(--w-surface);
-    }
+    .cl-verbs { min-height: 56px; }
+    .cl-verb { padding: 12px 4px; font-size: 16px; }
+    .cl-verb-reason { text-align: center; }
 
-    .cl-verb { padding: 10px 4px; border: 0; border-right: 1px solid var(--w-line-faint); }
-    .cl-verb:first-child { border-left: 1px solid var(--w-line-faint); }
-    .cl-verb-reason { text-align: right; padding: 5px 24px; }
-
-    /* Verb bar sits directly under the header, above the disturbance,
-       so the reading order stays: where am I, what can I do, what wants
-       me, and then the drawing. */
-    .cl-header      { grid-row: 1; }
-    .cl-verbs       { grid-row: 2; }
-    .cl-verb-reason { grid-row: 2; align-self: end; grid-column: 1; }
-    .cl-disturbance { grid-row: 3; }
-    .cl-lake        { grid-row: 4; }
+    .cl-look { right: 20px; bottom: 20px; }
+    .cl-selection { left: 20px; bottom: 20px; }
+    .cl-instrument-toggle { left: 20px; bottom: 76px; }
 
     /* SIDE SHEETS. Same DOM, same triggers - more bandwidth. */
     .cl-sheet {
         top: 0;
         left: auto;
         right: 0;
-        bottom: 0;
+        /* Stops ABOVE the verb bar rather than running to the floor.
+           A full-height side sheet covers Ask and Commit, and the verb bar
+           is not decoration - it is the grammar, and two of its four verbs
+           being unreachable whenever a sheet is open would break the single
+           permanent thing this surface promises. 56px bar + 28px reason. */
+        bottom: 84px;
         width: min(560px, 42vw);
         max-height: none;
         padding: 0 28px 28px;
@@ -1011,23 +1032,23 @@ body.cl {
 
     .cl-sheet-head { padding-top: 22px; }
 
-    /* The scrim is dropped at desktop: a side sheet does not occlude the
-       drawing, so blocking interaction with it would be gratuitous. */
+    /* No scrim at desktop: a side sheet does not occlude the drawing, so
+       blocking interaction with it would be gratuitous. The sheet is
+       still dismissed the same three ways - Close, Escape, or a press on
+       the drawing - so no route is lost by dropping it. */
     .cl-scrim { display: none; }
 
-    .cl-instrument-toggle { bottom: 16px; left: 16px; }
-
-    .cl-look { right: 20px; bottom: 20px; }
-    .cl-selection { left: 20px; bottom: 20px; }
-
     .cl-side { padding-left: 14px; }
-    .cl-claim { font-size: 18px; }
+    .cl-sheet-head h2.cl-claim { font-size: 18px; }
 }
 
-/* Above 1600px the sheet stops growing and the drawing takes the rest:
-   a 42vw inspector on a 2560px monitor is 1075px of reading measure,
+/* Above 1600px the sheet stops growing and the drawing takes the rest: a
+   42vw inspector on a 2560px monitor is over 1000px of reading measure,
    which is worse, not better. */
 @media (min-width: 1600px) {
     .cl-sheet { width: 620px; }
-    .cl-header, .cl-disturbance, .cl-verbs, .cl-verb-reason { padding-left: 40px; padding-right: 40px; }
+    .cl-header,
+    .cl-disturbance,
+    .cl-verbs,
+    .cl-verb-reason { padding-left: 40px; padding-right: 40px; }
 }
