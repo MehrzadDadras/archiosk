@@ -1,0 +1,496 @@
+{# ============================================================
+   CLAUDE-CALM-LAKE-SURFACE-PROTOTYPE-01
+
+   A 390x844 mobile-first STRUCTURAL WIREFRAME of the Calm Lake
+   surface, in grayscale, expanding to 1600px desktop.
+
+   THE GOVERNING CONSTRAINT, and it decides most of what follows:
+   do not beautify an unproven information architecture. Everything
+   here is neutral gray on purpose (see calm_lake.css's ramp, which
+   names the tokens.css token each gray is standing in for). If this
+   layout only reads as calm once it is coloured, it is not calm - it
+   is decorated, and the colour pass would be hiding that rather than
+   revealing it.
+
+   THE TEST THIS PAGE HAS TO PASS: a Product Owner opening it cold,
+   with no explanation, can point at the project, the active object,
+   the disturbance, the evidence path, and the available action.
+   Everything in this file is subordinate to that.
+
+   Four states, one document. Nothing is a separate page, because the
+   claim being tested is that they are one surface:
+     1. BASE       header + viewport + verb bar. Nothing else.
+     2. DISTURBED  a closing-window banner, and only for a closing window.
+     3. DEPTH      the "Why?" sheet - basis, what changed, horizon, show.
+     4. COMPOSER   Ask, with the current selection already bound.
+
+   WHY THIS IS A STANDALONE DOCUMENT and does not extend base.html:
+   base.html IS the chrome - 2,436 lines of it, carrying the menu bar
+   that 30 of pdf_viewer.js's getElementById calls resolve against. A
+   prototype of a chrome-less surface cannot be built by extending the
+   chrome and hiding it; that would prove nothing about whether the
+   surface stands on its own. It cannot extend panel_shell.html either,
+   whose own comment scopes it to iframe-embedded Display divisions.
+   The cost - a duplicated head block - is accepted, and is exactly
+   what makes this prototype unable to regress any existing page.
+
+   NO INLINE style ATTRIBUTES ANYWHERE. app.py's CSP sets
+   `default-src 'self'` with no style-src directive, so a parsed inline
+   style attribute is refused. Anything positional or proportional is
+   emitted as a data-* attribute and applied by calm_lake.js.
+   ============================================================ #}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#f2f2f2">
+    <title>Calm Lake wireframe - {{ project.short }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/calm_lake.css') }}?v={{ static_version }}">
+</head>
+<body class="cl" data-state="base">
+
+{# ---------------------------------------------------------------
+   1. PROJECT HEADER - permanently visible.
+
+   Two facts and nothing else: which project, which drawing. This is
+   the "where am I" that persistent chrome is legitimately for. It is
+   not a toolbar and it carries no actions except changing the drawing,
+   which is Look.
+   --------------------------------------------------------------- #}
+<header class="cl-header" data-ui-ref="calm-lake-header">
+    <div class="cl-header-id">
+        <span class="cl-project">{{ project.name }}</span>
+        <span class="cl-discipline">{{ project.discipline }}</span>
+    </div>
+    <button type="button" class="cl-active-doc" id="cl-doc-switch"
+            aria-expanded="false" aria-controls="cl-index">
+        <span class="cl-active-doc-name" id="cl-active-doc-name">{{ project.sheet }}</span>
+        <span class="cl-active-doc-index" id="cl-active-doc-index">{{ project.sheet_index }}</span>
+    </button>
+</header>
+
+{# ---------------------------------------------------------------
+   2. THE DISTURBANCE - conditional, and this is the whole argument.
+
+   The surface is disturbed ONLY when a window of intervention is
+   closing. Not when something is severe; not when something is new;
+   not when a count is nonzero. Two of the three fixture findings are
+   "high" severity and neither of them appears here, because their
+   windows are open. That is the demonstration.
+
+   The half-life bar renders the fraction of the ORIGINAL window
+   already spent, so the banner intensifies on its own as the date
+   approaches, with nobody re-triaging it.
+   --------------------------------------------------------------- #}
+{% if surfaced %}
+{% set lead = surfaced[0] %}
+<section class="cl-disturbance" data-ui-ref="calm-lake-disturbance" role="status">
+    <div class="cl-disturbance-line">
+        <span class="cl-disturbance-label">Closing window</span>
+        <span class="cl-disturbance-when">
+            Before {{ lead.window.closes_on }} &middot; ~{{ lead.window.days_remaining }} days
+        </span>
+    </div>
+    <p class="cl-disturbance-claim">{{ lead.tag }} &mdash; {{ lead.claim }}</p>
+    <div class="cl-halflife" data-spent="{{ lead.window.spent_percent }}"
+         role="img"
+         aria-label="{{ lead.window.spent_percent }} percent of the original {{ lead.window.total_days }} day window has elapsed">
+        <span class="cl-halflife-fill"></span>
+    </div>
+    <div class="cl-disturbance-foot">
+        <span class="cl-halflife-text">
+            {{ lead.window.spent_percent }}% of a {{ lead.window.total_days }}-day window elapsed
+        </span>
+        <button type="button" class="cl-why" data-open-finding="{{ lead.id }}"
+                data-ui-ref="calm-lake-why">Why?</button>
+    </div>
+</section>
+{% endif %}
+
+{# ---------------------------------------------------------------
+   3. THE ACTIVE DRAWING VIEWPORT - the dominant surface.
+
+   Everything above and below it is a fixed strip; this takes all the
+   remaining height at every width. There is no document tree, no chat
+   pane, no model selector, no Spin control and no Reconcile machinery
+   anywhere on this page, at any viewport, in any state.
+   --------------------------------------------------------------- #}
+<main class="cl-lake" id="cl-lake" data-ui-ref="calm-lake-surface">
+    <div class="cl-plan" id="cl-plan">
+        <svg class="cl-plan-svg" viewBox="0 0 1000 700" role="img"
+             aria-label="Schematic Level 2 mechanical plan, prototype fixture">
+            <defs>
+                <pattern id="cl-grid" width="50" height="50" patternUnits="userSpaceOnUse">
+                    <path d="M 50 0 L 0 0 0 50" fill="none" class="cl-grid-line"/>
+                </pattern>
+            </defs>
+            <rect width="1000" height="700" fill="url(#cl-grid)"/>
+
+            <rect x="90" y="70" width="820" height="560" class="cl-wall-outer"/>
+
+            <rect x="150" y="330" width="700" height="90" class="cl-corridor"/>
+            <line x1="150" y1="330" x2="850" y2="330" class="cl-wall-rated"/>
+            <line x1="150" y1="420" x2="850" y2="420" class="cl-wall-rated"/>
+
+            <rect x="150" y="110" width="200" height="220" class="cl-room"/>
+            <rect x="350" y="110" width="200" height="220" class="cl-room"/>
+            <rect x="550" y="110" width="300" height="220" class="cl-room"/>
+            <rect x="150" y="420" width="260" height="170" class="cl-room"/>
+            <rect x="410" y="420" width="240" height="170" class="cl-room"/>
+            <rect x="650" y="420" width="200" height="170" class="cl-room"/>
+
+            <rect x="150" y="420" width="120" height="170" class="cl-stair"/>
+            <line x1="150" y1="450" x2="270" y2="450" class="cl-stair-tread"/>
+            <line x1="150" y1="480" x2="270" y2="480" class="cl-stair-tread"/>
+            <line x1="150" y1="510" x2="270" y2="510" class="cl-stair-tread"/>
+            <line x1="150" y1="540" x2="270" y2="540" class="cl-stair-tread"/>
+
+            <path d="M 300 375 L 620 375 L 620 200" class="cl-duct"/>
+            <path d="M 300 375 L 300 200" class="cl-duct"/>
+            <path d="M 500 375 L 500 500" class="cl-duct"/>
+
+            <text x="300" y="96" class="cl-grid-ref">C</text>
+            <text x="500" y="96" class="cl-grid-ref">D</text>
+            <text x="700" y="96" class="cl-grid-ref">E</text>
+            <text x="104" y="200" class="cl-grid-ref">2</text>
+            <text x="104" y="375" class="cl-grid-ref">3</text>
+            <text x="104" y="520" class="cl-grid-ref">4</text>
+        </svg>
+
+        {# THE ACTIVE OBJECTS. Marks carry no severity colour - a coloured
+           mark is a static severity badge painted onto the drawing, which
+           is the thing the actionability horizon replaces. In grayscale
+           the point is unavoidable: they differ by SELECTION state only,
+           which is the only distinction the surface is entitled to make
+           before a reader has pointed at anything. #}
+        {% for finding in horizon %}
+        <button type="button"
+                class="cl-mark{% if finding in surfaced %} cl-mark--surfaced{% endif %}"
+                id="mark-{{ finding.id }}"
+                data-finding="{{ finding.id }}"
+                data-tag="{{ finding.tag }}"
+                data-x="{{ finding.canvas.x }}"
+                data-y="{{ finding.canvas.y }}"
+                data-ui-ref="calm-lake-mark"
+                aria-label="Point at {{ finding.tag }}">
+            <span class="cl-mark-dot"></span>
+            <span class="cl-mark-tag">{{ finding.tag }}</span>
+        </button>
+        {% endfor %}
+    </div>
+
+    {# Look's own affordances. They recede when idle - the games-HUD
+       pattern the grammar's 5.3 names, not a permanent readout - and
+       they wake when the Look verb is chosen or the surface is touched.
+       There is no persistent prev/next control anywhere. #}
+    <div class="cl-look" id="cl-look">
+        <button type="button" class="cl-look-btn" data-look="out" aria-label="Zoom out">&minus;</button>
+        <button type="button" class="cl-look-btn" data-look="fit" aria-label="Fit sheet">Fit</button>
+        <button type="button" class="cl-look-btn" data-look="in" aria-label="Zoom in">+</button>
+    </div>
+
+    {# The selection readout. Present ONLY while something is selected,
+       because it is the visible half of "selection supplies context":
+       the reader can see what Ask and Commit are currently about. #}
+    <div class="cl-selection" id="cl-selection" hidden>
+        <span class="cl-selection-label">Selected</span>
+        <span class="cl-selection-tag" id="cl-selection-tag"></span>
+        <button type="button" class="cl-selection-clear" id="cl-selection-clear"
+                aria-label="Clear selection">Clear</button>
+    </div>
+</main>
+
+{# ---------------------------------------------------------------
+   4. THE VERB BAR - permanently visible, and it is the grammar.
+
+   ONE list renders this at 390px and at 1600px. That is what makes
+   "a single interaction grammar" checkable rather than asserted: if a
+   verb appears at one width and not the other, this loop is not what
+   rendered it.
+
+   Commit is present and DISABLED until something is selected, and it
+   says why. That is "selection supplies context, never authorization"
+   made visible - pointing gives Ask and Commit their subject, and it
+   emphatically does not grant permission to act.
+   --------------------------------------------------------------- #}
+<nav class="cl-verbs" data-ui-ref="calm-lake-verb-bar" aria-label="Actions">
+    {% for verb in verbs %}
+    <button type="button"
+            class="cl-verb cl-verb--{{ verb.id }}"
+            id="cl-verb-{{ verb.id }}"
+            data-verb="{{ verb.id }}"
+            title="{{ verb.hint }}"
+            {% if verb.id == 'commit' %}disabled aria-disabled="true"{% endif %}>
+        <span class="cl-verb-label">{{ verb.label }}</span>
+    </button>
+    {% endfor %}
+</nav>
+
+{# Why Commit is unavailable, stated rather than left to be inferred from
+   a dimmed control. A disabled button with no reason is the surface
+   declining to explain itself, which is opacity, not calm. #}
+<p class="cl-verb-reason" id="cl-verb-reason">Commit needs a selection. Point at something first.</p>
+
+{# ---------------------------------------------------------------
+   SHEET A - the document index (Look). Closed by default.
+
+   This is what replaces a persistent document tree. The grammar's 5.3
+   requires document switching to exist WITHOUT a rail, because the
+   spike showed that omitting document switching altogether makes the
+   surface unable to express the task at all.
+   --------------------------------------------------------------- #}
+<section class="cl-sheet" id="cl-index" hidden data-ui-ref="calm-lake-index"
+         aria-label="Documents">
+    <header class="cl-sheet-head">
+        <h2>{{ documents|length }} documents</h2>
+        <button type="button" class="cl-sheet-close" data-dismiss aria-label="Dismiss">Close</button>
+    </header>
+    <ul class="cl-index-list">
+        {% for doc in documents %}
+        <li>
+            <button type="button" class="cl-index-item{% if doc.name == project.sheet %} is-current{% endif %}">
+                <span class="cl-index-name">{{ doc.name }}</span>
+                <span class="cl-index-sheets">{{ doc.sheets }} sheet{{ '' if doc.sheets == 1 else 's' }}</span>
+            </button>
+        </li>
+        {% endfor %}
+    </ul>
+</section>
+
+{# ---------------------------------------------------------------
+   SHEET B - PROGRESSIVE DEPTH. The "Why?" view.
+
+   Four sections in a fixed order, and the order is the argument:
+
+     BASIS          what this rests on, per document, READ vs LOCATED.
+                    Contrastive and role-labelled, because a
+                    coordination defect is a RELATIONSHIP between
+                    documents and a flat "read from M-201, M-601"
+                    discards which side contributed what - which is the
+                    entire content of the finding.
+     WHAT CHANGED   why this is disturbing the surface today.
+     HORIZON        consequence and remaining window, with the window's
+                    own basis, because a date is an assertion too.
+     SHOW ON DRAWING  the route back to the object. Depth that
+                    terminates at understanding is incomplete.
+
+   Every basis item is drawn from the derivation record. None is parsed
+   from the claim's own sentence - and where the record has only the
+   sentence, the surface says exactly that and offers no route (see the
+   PRESSURE-STAIR-2 card's second side).
+   --------------------------------------------------------------- #}
+<section class="cl-sheet cl-depth" id="cl-depth" hidden
+         aria-label="Why" data-ui-ref="calm-lake-depth">
+    {% for finding in horizon %}
+    <article class="cl-finding" id="finding-{{ finding.id }}" hidden>
+        <header class="cl-sheet-head">
+            <div>
+                <p class="cl-verification">{{ finding.verification }}</p>
+                <h2 class="cl-claim">{{ finding.claim }}</h2>
+            </div>
+            <button type="button" class="cl-sheet-close" data-dismiss aria-label="Dismiss">Close</button>
+        </header>
+
+        <h3 class="cl-depth-label">Basis</h3>
+        <ul class="cl-sides">
+            {% for side in finding.sides %}
+            <li class="cl-side cl-side--{{ side.basis }}">
+                <div class="cl-side-top">
+                    <span class="cl-side-role">{{ side.role }}</span>
+                    <span class="cl-basis cl-basis--{{ side.basis }}"
+                          title="{{ basis_meanings[side.basis] }}">
+                        {{ basis_labels[side.basis]|upper }}{% if side.at %} &middot; {{ side.at }}{% endif %}
+                    </span>
+                </div>
+                <p class="cl-side-doc">{{ side.document }}</p>
+                <p class="cl-side-detail">{{ side.detail }}</p>
+                {% if side.basis == basis_asserted %}
+                {# The route to the document is deliberately WITHHELD. Offering
+                   "show" on a basis that is only the claim's own sentence is
+                   the Arm B failure exactly: a fluent, confident jump derived
+                   from prose. There is nothing on record to open, so the
+                   surface says so instead of pretending. #}
+                <p class="cl-side-nolink">No record to show. This side is the finding's own sentence.</p>
+                {% else %}
+                {# The label a side is allowed to carry is decided by its BASIS,
+                   not by convenience. Only a LOCATED basis may promise to show
+                   a place, because only a located basis has one. Offering
+                   "show on drawing" for a `read` document would assert a
+                   region the record does not hold - the same corollary that
+                   forbids "D-106 in A-601" for a finding whose whole content
+                   is that D-106 is absent from A-601. #}
+                <button type="button" class="cl-side-show" data-show="{{ finding.id }}">
+                    {%- if side.role == 'absent' -%}
+                    Show the gap in {{ side.document.split(' ')[0] }}
+                    {%- elif side.basis == basis_located -%}
+                    Show on drawing
+                    {%- else -%}
+                    Open {{ side.document.split(' ')[0] }}
+                    {%- endif -%}
+                </button>
+                {% endif %}
+            </li>
+            {% endfor %}
+        </ul>
+
+        {# THE DENOMINATOR. Absence is only meaningful against a checked set:
+           without it a reader cannot tell "checked and absent" from "not
+           checked", and a prose-derived citation list has no denominator at
+           all. This is where that gap becomes visible. #}
+        <p class="cl-scope">
+            <span class="cl-scope-label">Extent of the check</span>
+            {% if finding.scope.matched is none %}
+            Not established. This finding does not know how much it looked at,
+            which is the most important thing on this card.
+            {% else %}
+            {{ finding.scope.checked }}, {{ finding.scope.matched }} matched,
+            {{ finding.scope.unmatched }} unmatched. {{ finding.scope.documents_examined }} documents examined.
+            {% endif %}
+        </p>
+
+        <h3 class="cl-depth-label">What changed</h3>
+        <p class="cl-changed">
+            {% if finding.what_changed.when %}
+            <span class="cl-changed-when">{{ finding.what_changed.when }}</span>
+            {% endif %}
+            {{ finding.what_changed.detail }}
+        </p>
+
+        <h3 class="cl-depth-label">Actionability horizon</h3>
+        <p class="cl-consequence">{{ finding.consequence }}</p>
+        <div class="cl-window cl-window--{{ finding.window.basis }}">
+            {% if finding.window.basis == basis_none %}
+            <p class="cl-window-none">
+                No basis on record. Nothing establishes when acting on this
+                stops being possible, so it is not allowed to disturb the surface.
+            </p>
+            {% else %}
+            <p class="cl-window-line">
+                <span class="cl-window-days">~{{ finding.window.days_remaining }} days</span>
+                <span class="cl-window-closes">before {{ finding.window.closes_on }}</span>
+            </p>
+            <div class="cl-halflife" data-spent="{{ finding.window.spent_percent }}" role="img"
+                 aria-label="{{ finding.window.spent_percent }} percent of the original window elapsed">
+                <span class="cl-halflife-fill"></span>
+            </div>
+            <p class="cl-window-basis">
+                {{ finding.window.spent_percent }}% of {{ finding.window.total_days }} days elapsed
+                &middot; window basis {{ basis_labels[finding.window.basis]|upper }}
+                &middot; {{ finding.window.source }}
+            </p>
+            {% endif %}
+        </div>
+
+        <footer class="cl-depth-foot">
+            {# The footer route is offered only where a LOCATED side exists.
+               A finding whose strongest basis is `read` knows which document
+               it came from and not where in it - promising to "show" it would
+               be the surface manufacturing a location, which is the same
+               error as a prose-derived citation and harder to notice. #}
+            {% set located_sides = finding.sides | selectattr('basis', 'equalto', basis_located) | list %}
+            {% if located_sides %}
+            <button type="button" class="cl-show-drawing" data-show="{{ finding.id }}">
+                Show on drawing
+            </button>
+            {% else %}
+            <p class="cl-side-nolink">
+                Nothing on record locates this on a drawing. Its basis names
+                documents, not places within them.
+            </p>
+            {% endif %}
+            {% if finding.action %}
+            {# Commit stays deliberately effortful and attributed. Calm applies
+               to UNDERSTANDING; friction at the approval gate is a feature,
+               not a defect to smooth away. #}
+            <button type="button" class="cl-commit-btn" data-commit="{{ finding.id }}">
+                {{ finding.action.label }}
+            </button>
+            <p class="cl-commit-note">Approval-gated &middot; attributed &middot; does not complete from this click</p>
+            {% else %}
+            <p class="cl-commit-withheld">
+                No governed action is offered. This finding's second side is the
+                claim's own sentence, and a Commit built on that would manufacture
+                confidence the record does not support.
+            </p>
+            {% endif %}
+        </footer>
+    </article>
+    {% endfor %}
+</section>
+
+{# ---------------------------------------------------------------
+   SHEET C - the Composer (Ask). Contextual, never permanent.
+
+   The current selection is pre-bound and rendered as a chip the reader
+   can see and remove. Binding context invisibly would be the same
+   error as a prose-derived citation one level up: the reader would not
+   know what the answer was about.
+   --------------------------------------------------------------- #}
+<section class="cl-sheet cl-composer" id="cl-composer" hidden
+         aria-label="Ask" data-ui-ref="calm-lake-composer">
+    <header class="cl-sheet-head">
+        <h2>Ask</h2>
+        <button type="button" class="cl-sheet-close" data-dismiss aria-label="Dismiss">Close</button>
+    </header>
+    <div class="cl-bound" id="cl-bound">
+        <span class="cl-bound-label">Context</span>
+        <span class="cl-bound-chip" id="cl-bound-doc">{{ project.sheet }}</span>
+        <span class="cl-bound-chip cl-bound-chip--selection" id="cl-bound-selection" hidden></span>
+    </div>
+    <p class="cl-bound-note">
+        Context is supplied by what is on screen and what is selected. It does
+        not authorize anything - a Commit is still a separate, gated act.
+    </p>
+    <div class="cl-composer-input">
+        <label class="cl-visually-hidden" for="cl-ask-field">Ask about this drawing</label>
+        <input type="text" id="cl-ask-field" class="cl-ask-field" autocomplete="off"
+               placeholder="Ask about this drawing">
+        <button type="button" class="cl-ask-send">Ask</button>
+    </div>
+    <p class="cl-composer-foot">Answers cite what they read. An answer that cannot cite says so.</p>
+</section>
+
+{# ---------------------------------------------------------------
+   PROTOTYPE INSTRUMENTATION - not product.
+
+   Behind a control marked as instrumentation, and stating on its face
+   that everything here is fixture. A prototype that quietly presents
+   itself as a live record commits, at the scale of a whole surface,
+   the same error the basis vocabulary exists to prevent at the scale
+   of one citation.
+   --------------------------------------------------------------- #}
+<button type="button" class="cl-instrument-toggle" id="cl-instrument-toggle"
+        aria-expanded="false" aria-controls="cl-instrument"
+        title="Prototype instrumentation">i</button>
+<section class="cl-sheet cl-instrument" id="cl-instrument" hidden aria-label="Prototype instrumentation">
+    <header class="cl-sheet-head">
+        <h2>Prototype instrumentation</h2>
+        <button type="button" class="cl-sheet-close" data-dismiss aria-label="Dismiss">Close</button>
+    </header>
+    <p class="cl-instrument-notice">{{ prototype_notice }}</p>
+    <dl class="cl-ledger">
+        <dt>Permanently visible</dt>
+        <dd>Project header (project, discipline, active drawing). The drawing
+            viewport. The verb bar. Nothing else, at either width.</dd>
+        <dt>Conditionally visible</dt>
+        <dd>The disturbance banner - only while a window is inside
+            {{ threshold_days }} days. The selection readout - only while
+            something is selected.</dd>
+        <dt>Recedes when idle</dt>
+        <dd>The Look controls, after roughly two seconds without input.</dd>
+        <dt>Emerges on demand</dt>
+        <dd>Documents (Look), the Why sheet (Point, or the banner's Why?),
+            the Composer (Ask). One at a time.</dd>
+        <dt>Never emerges unbidden</dt>
+        <dd>Any finding whose window is wider than {{ threshold_days }} days,
+            or whose window has no basis on record - including two findings
+            in this fixture that are severity "high".</dd>
+    </dl>
+</section>
+
+<div class="cl-scrim" id="cl-scrim" hidden></div>
+
+<script nonce="{{ csp_nonce }}" src="{{ url_for('static', filename='js/calm_lake.js') }}?v={{ static_version }}"></script>
+</body>
+</html>

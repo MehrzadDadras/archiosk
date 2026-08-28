@@ -1,0 +1,1033 @@
+/* ============================================================
+   CLAUDE-CALM-LAKE-SURFACE-PROTOTYPE-01 - calm_lake.css
+
+   STRUCTURAL GRAYSCALE WIREFRAME. 390x844 mobile-first, expanding to
+   1600px desktop. Loaded by exactly one template and by nothing else;
+   main.css is untouched by this work and cannot be affected by it.
+
+   ------------------------------------------------------------
+   WHY THIS FILE DOES NOT CONSUME tokens.css - read before "fixing" it
+   ------------------------------------------------------------
+   tokens.css is the one controlled place for this product's visual
+   character, and every shipping stylesheet should reference it. This
+   file deliberately does not, and the exception is narrow and
+   temporary: the governing constraint on this prototype is DO NOT
+   BEAUTIFY AN UNPROVEN INFORMATION ARCHITECTURE. Semantic colour is
+   how a weak layout gets rescued without anyone noticing - amber makes
+   a banner urgent whether or not its position earned the attention,
+   and blue makes a citation credible whether or not its basis did.
+   Withholding colour is the measurement.
+
+   So the ramp below is neutral gray, and every step NAMES the tokens.css
+   token it stands in for. Adopting the real palette later is then a
+   mechanical substitution against this list, not a redesign:
+
+     --w-ink        -> --text-primary          #191B1C
+     --w-ink-2      -> --text-secondary        #26282B
+     --w-ink-3      -> --text-metadata         #323436
+     --w-page       -> --canvas                #EFF0F0
+     --w-surface    -> --surface-primary       #F8F9F9
+     --w-surface-2  -> --surface-secondary     #D8DADB
+     --w-line       -> --border                #8A8D8F
+     --w-line-2     -> --border-strong         #737679
+     --w-accent     -> --attention-amber       #7A4A08   (the disturbance)
+     --w-authority  -> --seal-red              #7A1911   (Commit only)
+     --w-machine    -> --machine-blue          #235066   (machine finding)
+
+   The four accent-role grays are DELIBERATELY the same value. If the
+   wireframe reads correctly with disturbance, authority and machine
+   inference all rendering identically, then position, form and wording
+   are doing the work - which is the thing being tested. Any place that
+   only becomes legible once those three diverge is a place that was
+   depending on colour, and it is marked in the notes rather than
+   quietly fixed here.
+
+   CONTRAST, computed rather than eyeballed (WCAG relative luminance):
+     --w-ink   #1A1A1A on --w-surface #FAFAFA -> 16.1:1   PASS
+     --w-ink-2 #333333 on --w-surface #FAFAFA -> 11.4:1   PASS
+     --w-ink-3 #4A4A4A on --w-surface #FAFAFA ->  8.2:1   PASS
+     --w-ink-3 #4A4A4A on --w-surface-2 #E4E4E4 -> 7.0:1  PASS
+     --w-ink-3 #4A4A4A on --w-page #F0F0F0    ->  7.5:1   PASS
+   Every text tier clears 4.5:1 against every surface it is used on,
+   which is the same bar tests/test_p40vw8qa_theme_foreground_contrast.py
+   holds the real theme to.
+   ============================================================ */
+
+:root {
+    --w-ink: #1A1A1A;
+    --w-ink-2: #333333;
+    --w-ink-3: #4A4A4A;
+
+    --w-page: #F0F0F0;
+    --w-surface: #FAFAFA;
+    --w-surface-2: #E4E4E4;
+    --w-surface-3: #D6D6D6;
+
+    --w-line: #8A8A8A;
+    --w-line-2: #6E6E6E;
+    --w-line-faint: #C8C8C8;
+
+    /* Same value on purpose - see the note above. */
+    --w-accent: #333333;
+    --w-authority: #333333;
+    --w-machine: #333333;
+
+    --w-radius: 4px;
+    --w-ease: cubic-bezier(.22, .61, .36, 1);
+
+    /* Named because the wireframe's whole claim is about what occupies
+       height. Header and verb bar are fixed; the viewport is everything
+       left over, and that ratio is the thing to judge at 390x844. */
+    --w-header-h: 56px;
+    --w-verbs-h: 60px;
+
+    --w-font: "Arial Nova Cond", "Arial Narrow", Arial, sans-serif;
+    --w-mono: "IBM Plex Mono", ui-monospace, "Courier New", monospace;
+}
+
+* { box-sizing: border-box; }
+
+html, body { height: 100%; margin: 0; padding: 0; }
+
+body.cl {
+    /* 100dvh, not 100vh: on a 390x844 phone the dynamic viewport unit is
+       what stops the drawing sitting under a collapsing URL bar. */
+    height: 100dvh;
+    display: grid;
+    grid-template-rows: auto auto 1fr auto auto;
+    overflow: hidden;
+    background: var(--w-page);
+    color: var(--w-ink);
+    font-family: var(--w-font);
+    font-size: 15px;
+    line-height: 1.4;
+    -webkit-font-smoothing: antialiased;
+}
+
+/* ------------------------------------------------------------
+   1. PROJECT HEADER - permanent
+   ------------------------------------------------------------ */
+
+.cl-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-height: var(--w-header-h);
+    padding: 8px 14px;
+    padding-top: calc(8px + env(safe-area-inset-top, 0px));
+    background: var(--w-surface);
+    border-bottom: 1px solid var(--w-line);
+}
+
+.cl-header-id { display: flex; flex-direction: column; min-width: 0; }
+
+.cl-project {
+    font-size: 16px;
+    font-weight: 400;
+    color: var(--w-ink);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.cl-discipline {
+    font-size: 11px;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: var(--w-ink-3);
+}
+
+.cl-active-doc {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 1px;
+    flex: 0 1 auto;
+    min-width: 0;
+    padding: 6px 10px;
+    border: 1px solid var(--w-line);
+    border-radius: var(--w-radius);
+    background: var(--w-surface-2);
+    color: var(--w-ink-2);
+    font-family: var(--w-font);
+    cursor: pointer;
+    text-align: right;
+}
+
+.cl-active-doc:hover { background: var(--w-surface-3); }
+.cl-active-doc:focus-visible { outline: 2px solid var(--w-ink); outline-offset: 1px; }
+
+.cl-active-doc-name {
+    font-size: 12px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 46vw;
+}
+
+.cl-active-doc-index { font-family: var(--w-mono); font-size: 10px; color: var(--w-ink-3); }
+
+/* ------------------------------------------------------------
+   2. THE DISTURBANCE - conditional
+
+   A left rule and a filled ground, no colour. If this does not read as
+   "something wants me" against the calm header above and the drawing
+   below, then it is position and weight that need work, not hue.
+   ------------------------------------------------------------ */
+
+.cl-disturbance {
+    padding: 10px 14px 12px;
+    background: var(--w-surface-2);
+    border-bottom: 1px solid var(--w-line);
+    border-left: 4px solid var(--w-accent);
+}
+
+.cl-disturbance-line {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.cl-disturbance-label {
+    font-size: 10px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--w-ink);
+    border: 1px solid var(--w-accent);
+    border-radius: 2px;
+    padding: 1px 5px;
+}
+
+.cl-disturbance-when { font-family: var(--w-mono); font-size: 12px; color: var(--w-ink-2); }
+
+.cl-disturbance-claim {
+    margin: 7px 0 9px;
+    font-size: 14px;
+    line-height: 1.35;
+    color: var(--w-ink);
+}
+
+/* THE TEMPORAL HALF-LIFE. Elapsed fraction of the ORIGINAL window, not
+   days left. Two findings both reading "4 days" are not the same
+   situation if one began with 21 days and the other with 5, and a
+   static severity badge cannot express that difference at all. */
+.cl-halflife {
+    height: 5px;
+    background: var(--w-surface);
+    border: 1px solid var(--w-line);
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.cl-halflife-fill {
+    display: block;
+    height: 100%;
+    /* calm_lake.js writes --w-spent from data-spent. Not an inline style
+       attribute: app.py's CSP has no style-src directive, so it falls
+       back to default-src 'self' and a parsed style attribute is refused;
+       setting element.style from a nonce-approved script is unaffected. */
+    width: var(--w-spent, 0%);
+    background: repeating-linear-gradient(
+        135deg,
+        var(--w-ink-3) 0 3px,
+        var(--w-surface-3) 3px 6px
+    );
+}
+
+.cl-disturbance-foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-top: 7px;
+}
+
+.cl-halflife-text { font-size: 11px; color: var(--w-ink-3); }
+
+.cl-why {
+    flex: none;
+    padding: 5px 16px;
+    border: 1px solid var(--w-ink);
+    border-radius: var(--w-radius);
+    background: var(--w-surface);
+    color: var(--w-ink);
+    font-family: var(--w-font);
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.cl-why:hover { background: var(--w-surface-3); }
+.cl-why:focus-visible { outline: 2px solid var(--w-ink); outline-offset: 2px; }
+
+/* ------------------------------------------------------------
+   3. THE ACTIVE DRAWING VIEWPORT - takes all remaining height
+   ------------------------------------------------------------ */
+
+.cl-lake {
+    position: relative;
+    overflow: hidden;
+    background: var(--w-page);
+    touch-action: none;
+    cursor: grab;
+    min-height: 0;   /* lets the 1fr grid row actually shrink */
+}
+
+.cl-lake.is-panning { cursor: grabbing; }
+
+.cl-plan {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 1000px;
+    height: 700px;
+    transform:
+        translate(-50%, -50%)
+        translate(var(--w-tx, 0px), var(--w-ty, 0px))
+        scale(var(--w-scale, 1));
+    transform-origin: center center;
+    transition: transform 220ms var(--w-ease);
+}
+
+.cl-plan.is-dragging { transition: none; }
+.cl-plan-svg { display: block; width: 100%; height: 100%; }
+
+.cl-grid-line   { stroke: var(--w-line); stroke-width: .5; opacity: .35; }
+.cl-wall-outer  { fill: none; stroke: var(--w-ink); stroke-width: 3; opacity: .6; }
+.cl-room        { fill: var(--w-surface); stroke: var(--w-line); stroke-width: 1; opacity: .8; }
+.cl-corridor    { fill: var(--w-surface-3); opacity: .55; }
+.cl-wall-rated  { stroke: var(--w-ink); stroke-width: 2.5; opacity: .5; }
+.cl-stair       { fill: none; stroke: var(--w-line-2); stroke-width: 1.5; }
+.cl-stair-tread { stroke: var(--w-line); stroke-width: 1; }
+.cl-duct        { fill: none; stroke: var(--w-line-2); stroke-width: 2.5; stroke-dasharray: 9 5; opacity: .7; }
+.cl-grid-ref    { fill: var(--w-ink-3); font-family: var(--w-mono); font-size: 13px; }
+
+/* THE ACTIVE OBJECTS. No severity colour, by design - see the template.
+   They differ by SELECTION state, which is the only distinction the
+   surface is entitled to make before a reader has pointed at anything. */
+.cl-mark {
+    position: absolute;
+    left: var(--w-mark-x, 50%);
+    top: var(--w-mark-y, 50%);
+    transform: translate(-50%, -50%);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    /* 30px min target on the drawing; the label is what grows it. */
+    min-height: 30px;
+    padding: 4px 10px 4px 7px;
+    border: 1px solid var(--w-line-2);
+    border-radius: 999px;
+    background: var(--w-surface);
+    color: var(--w-ink-2);
+    font-family: var(--w-mono);
+    font-size: 11px;
+    cursor: pointer;
+    transition: border-color 140ms var(--w-ease), background 140ms var(--w-ease);
+}
+
+.cl-mark:hover { background: var(--w-surface-2); }
+.cl-mark:focus-visible { outline: 2px solid var(--w-ink); outline-offset: 2px; }
+
+.cl-mark-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--w-line-2);
+    flex: none;
+}
+
+/* The one object whose window is closing. Rendered by WEIGHT, not hue -
+   a filled dot and a heavier rule, so it survives grayscale, which is
+   the whole point of building the wireframe this way. */
+.cl-mark--surfaced { border-color: var(--w-ink); border-width: 2px; }
+.cl-mark--surfaced .cl-mark-dot { background: var(--w-ink); }
+
+/* Selection. The single strongest visual state on the drawing, because
+   it is the one the reader created. */
+.cl-mark.is-selected {
+    background: var(--w-ink);
+    border-color: var(--w-ink);
+    color: var(--w-surface);
+}
+
+.cl-mark.is-selected .cl-mark-dot { background: var(--w-surface); }
+
+/* Show-on-drawing lands here. One pulse, then done: an alert that keeps
+   moving is not calm, and a permanently animated element is permanent
+   chrome by another name. */
+.cl-mark.is-shown::after {
+    content: "";
+    position: absolute;
+    inset: -7px;
+    border-radius: 999px;
+    border: 2px solid var(--w-ink);
+    animation: w-show-once 1500ms var(--w-ease) 1;
+}
+
+@keyframes w-show-once {
+    0%   { opacity: 1; transform: scale(1); }
+    100% { opacity: 0; transform: scale(1.7); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .cl-mark.is-shown::after { animation: none; opacity: 1; }
+    .cl-plan { transition: none; }
+}
+
+/* Look's affordances - recede when idle. */
+.cl-look {
+    position: absolute;
+    right: 10px;
+    bottom: 10px;
+    display: flex;
+    gap: 1px;
+    padding: 2px;
+    border: 1px solid var(--w-line);
+    border-radius: 999px;
+    background: var(--w-surface);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 420ms var(--w-ease);
+}
+
+.cl-look.is-awake { opacity: 1; pointer-events: auto; }
+
+.cl-look-btn {
+    min-width: 40px;
+    height: 32px;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--w-ink-2);
+    font-family: var(--w-font);
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.cl-look-btn:hover { background: var(--w-surface-2); }
+.cl-look-btn:focus-visible { outline: 2px solid var(--w-ink); outline-offset: 1px; }
+
+/* The visible half of "selection supplies context". */
+.cl-selection {
+    position: absolute;
+    left: 10px;
+    bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 6px 5px 10px;
+    border: 1px solid var(--w-ink);
+    border-radius: var(--w-radius);
+    background: var(--w-surface);
+    font-size: 12px;
+}
+
+.cl-selection[hidden] { display: none; }
+.cl-selection-label { font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--w-ink-3); }
+.cl-selection-tag { font-family: var(--w-mono); color: var(--w-ink); }
+
+.cl-selection-clear {
+    padding: 2px 8px;
+    border: 1px solid var(--w-line);
+    border-radius: 2px;
+    background: transparent;
+    color: var(--w-ink-3);
+    font-family: var(--w-font);
+    font-size: 11px;
+    cursor: pointer;
+}
+
+.cl-selection-clear:hover { background: var(--w-surface-2); color: var(--w-ink); }
+
+/* ------------------------------------------------------------
+   4. THE VERB BAR - permanent, identical at both widths
+   ------------------------------------------------------------ */
+
+.cl-verbs {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    min-height: var(--w-verbs-h);
+    background: var(--w-surface);
+    border-top: 1px solid var(--w-line);
+}
+
+.cl-verb {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 12px 4px;
+    padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+    border: 0;
+    border-right: 1px solid var(--w-line-faint);
+    background: transparent;
+    color: var(--w-ink-2);
+    font-family: var(--w-font);
+    font-size: 15px;
+    cursor: pointer;
+}
+
+.cl-verb:last-child { border-right: 0; }
+.cl-verb:hover:not(:disabled) { background: var(--w-surface-2); }
+.cl-verb:focus-visible { outline: 2px solid var(--w-ink); outline-offset: -2px; }
+
+.cl-verb[aria-pressed="true"] {
+    background: var(--w-ink);
+    color: var(--w-surface);
+}
+
+.cl-verb:disabled {
+    color: var(--w-line);
+    cursor: not-allowed;
+}
+
+/* The disabled reason, stated rather than left to be inferred from a
+   dimmed control. A disabled button with no reason is the surface
+   declining to explain itself, which is opacity, not calm. */
+.cl-verb-reason {
+    margin: 0;
+    padding: 6px 14px;
+    padding-bottom: calc(6px + env(safe-area-inset-bottom, 0px));
+    background: var(--w-surface-2);
+    border-top: 1px solid var(--w-line-faint);
+    font-size: 11px;
+    color: var(--w-ink-3);
+    text-align: center;
+}
+
+.cl-verb-reason[hidden] { display: none; }
+
+/* ------------------------------------------------------------
+   SHEETS - the summoned surfaces
+
+   At 390px they are full-width bottom sheets. At >=1024px they become
+   side sheets. Same DOM, same trigger, same dismissal - only the
+   spatial bandwidth changes, which is the single-grammar claim.
+   ------------------------------------------------------------ */
+
+.cl-scrim {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    background: rgba(0, 0, 0, .32);
+}
+
+.cl-scrim[hidden] { display: none; }
+
+.cl-sheet {
+    position: fixed;
+    z-index: 50;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    max-height: 82dvh;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 0 14px 14px;
+    padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+    background: var(--w-surface);
+    border-top: 2px solid var(--w-ink);
+    border-radius: 10px 10px 0 0;
+}
+
+.cl-sheet[hidden] { display: none; }
+
+.cl-sheet-head {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px 0 10px;
+    background: var(--w-surface);
+    border-bottom: 1px solid var(--w-line-faint);
+    margin-bottom: 12px;
+}
+
+.cl-sheet-head h2 {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 400;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    color: var(--w-ink-3);
+}
+
+.cl-sheet-close {
+    flex: none;
+    padding: 5px 12px;
+    border: 1px solid var(--w-line);
+    border-radius: var(--w-radius);
+    background: var(--w-surface);
+    color: var(--w-ink-2);
+    font-family: var(--w-font);
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.cl-sheet-close:hover { background: var(--w-surface-2); }
+
+/* --- documents --- */
+
+.cl-index-list { list-style: none; margin: 0; padding: 0; }
+
+.cl-index-item {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    width: 100%;
+    min-height: 44px;
+    padding: 10px 8px;
+    border: 0;
+    border-bottom: 1px solid var(--w-line-faint);
+    border-radius: 0;
+    background: transparent;
+    color: var(--w-ink);
+    font-family: var(--w-font);
+    font-size: 14px;
+    text-align: left;
+    cursor: pointer;
+}
+
+.cl-index-item:hover { background: var(--w-surface-2); }
+.cl-index-item:focus-visible { outline: 2px solid var(--w-ink); outline-offset: -2px; }
+.cl-index-item.is-current { background: var(--w-surface-3); font-weight: 700; }
+.cl-index-sheets { flex: none; font-family: var(--w-mono); font-size: 11px; color: var(--w-ink-3); }
+
+/* --- progressive depth ("Why?") --- */
+
+.cl-verification {
+    display: inline-block;
+    margin: 0 0 7px;
+    padding: 2px 7px;
+    border: 1px solid var(--w-machine);
+    border-radius: 2px;
+    font-family: var(--w-mono);
+    font-size: 10px;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: var(--w-ink-2);
+}
+
+.cl-claim { margin: 0; font-size: 16px; font-weight: 400; line-height: 1.35; }
+
+.cl-depth-label {
+    margin: 20px 0 8px;
+    font-size: 10px;
+    font-weight: 400;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--w-ink-3);
+    border-bottom: 1px solid var(--w-line-faint);
+    padding-bottom: 4px;
+}
+
+.cl-sides { list-style: none; margin: 0; padding: 0; }
+
+/* CONTRASTIVE, role-labelled. A coordination defect is a RELATIONSHIP
+   between documents; a flat "read from M-201, M-601" discards which side
+   contributed what, which is the entire content of the finding. */
+.cl-side {
+    padding: 10px 0 12px 11px;
+    border-left: 3px solid var(--w-line);
+}
+
+.cl-side + .cl-side { border-top: 1px solid var(--w-line-faint); }
+
+.cl-side-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 4px; }
+
+.cl-side-role {
+    font-family: var(--w-mono);
+    font-size: 10px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--w-ink);
+    background: var(--w-surface-3);
+    padding: 2px 7px;
+    border-radius: 2px;
+}
+
+.cl-side-doc { margin: 0 0 4px; font-size: 14px; color: var(--w-ink); }
+.cl-side-detail { margin: 0 0 9px; font-size: 13px; line-height: 1.45; color: var(--w-ink-3); }
+
+/* ------------------------------------------------------------
+   THE BASIS VOCABULARY, RENDERED.
+
+   The rule: bases that differ in strength MUST NOT be rendered
+   identically. In a grayscale wireframe that rule cannot be satisfied
+   by hue at all, which is a feature - the distinction here is carried
+   by FORM (filled / outlined / dashed-underline-no-box), so it also
+   survives greyscale printing, colour-blindness, and a screenshot
+   pasted into a report. Colour alone would satisfy the letter of the
+   rule and fail its purpose.
+   ------------------------------------------------------------ */
+
+.cl-basis {
+    display: inline-block;
+    padding: 2px 7px;
+    border-radius: 2px;
+    font-family: var(--w-mono);
+    font-size: 10px;
+    letter-spacing: .06em;
+}
+
+/* LOCATED - strongest. Filled and solid: a real region of a real page. */
+.cl-basis--located { background: var(--w-ink); color: var(--w-surface); border: 1px solid var(--w-ink); }
+
+/* READ - strong. Outline only: a document, not a location within one. */
+.cl-basis--read { background: transparent; color: var(--w-ink); border: 1px solid var(--w-ink); }
+
+/* ASSERTED - WEAK, and the reason this vocabulary is written down at
+   all. Not a chip: no box, no fill, a dashed underline and italic
+   prose, so it reads as a remark ABOUT the sentence rather than as a
+   credential. The blind trial's Arm B rendered exactly this case as a
+   confident deep link and its subject trusted it completely. */
+.cl-basis--asserted {
+    padding: 0 0 1px;
+    background: transparent;
+    border: 0;
+    border-bottom: 1px dashed var(--w-ink-3);
+    border-radius: 0;
+    color: var(--w-ink-3);
+    font-family: var(--w-font);
+    font-style: italic;
+    letter-spacing: 0;
+    font-size: 12px;
+    text-transform: none;
+}
+
+/* NONE - a real answer, not a blank. */
+.cl-basis--none {
+    background: transparent;
+    border: 1px dashed var(--w-line);
+    color: var(--w-ink-3);
+    font-style: italic;
+}
+
+/* The whole side is marked, not only its badge, so a reader scanning
+   the card can see the weak side without reading it. */
+.cl-side--located { border-left-color: var(--w-ink); border-left-width: 4px; }
+.cl-side--read    { border-left-color: var(--w-line-2); }
+.cl-side--asserted { border-left-style: dashed; border-left-color: var(--w-line); }
+
+.cl-side-show,
+.cl-show-drawing {
+    padding: 7px 14px;
+    border: 1px solid var(--w-ink);
+    border-radius: var(--w-radius);
+    background: var(--w-surface);
+    color: var(--w-ink);
+    font-family: var(--w-font);
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.cl-side-show:hover,
+.cl-show-drawing:hover { background: var(--w-surface-2); }
+.cl-side-show:focus-visible,
+.cl-show-drawing:focus-visible { outline: 2px solid var(--w-ink); outline-offset: 2px; }
+
+/* No route on an asserted basis. Offering "show" here is the Arm B
+   failure exactly: a fluent jump derived from the claim's own prose. */
+.cl-side-nolink {
+    margin: 0;
+    font-size: 12px;
+    font-style: italic;
+    color: var(--w-ink-3);
+    border-left: 2px dashed var(--w-line);
+    padding-left: 8px;
+}
+
+/* THE DENOMINATOR. Absence is only meaningful against a checked set. */
+.cl-scope {
+    margin: 12px 0 0;
+    padding: 10px;
+    background: var(--w-surface-2);
+    border-radius: var(--w-radius);
+    font-size: 13px;
+    line-height: 1.45;
+    color: var(--w-ink-2);
+}
+
+.cl-scope-label,
+.cl-window-label {
+    display: block;
+    margin-bottom: 3px;
+    font-size: 10px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--w-ink-3);
+}
+
+.cl-changed { margin: 0; font-size: 13px; line-height: 1.5; color: var(--w-ink-2); }
+.cl-changed-when { font-family: var(--w-mono); font-size: 12px; color: var(--w-ink); margin-right: 6px; }
+
+.cl-consequence { margin: 0 0 10px; font-size: 13px; line-height: 1.5; color: var(--w-ink-2); }
+
+.cl-window { padding: 10px; background: var(--w-surface-2); border-radius: var(--w-radius); }
+.cl-window--none { background: transparent; border: 1px dashed var(--w-line); }
+
+.cl-window-line { display: flex; align-items: baseline; gap: 8px; margin: 0 0 7px; flex-wrap: wrap; }
+.cl-window-days { font-family: var(--w-mono); font-size: 16px; color: var(--w-ink); }
+.cl-window-closes { font-size: 13px; color: var(--w-ink-2); }
+.cl-window-basis { margin: 7px 0 0; font-family: var(--w-mono); font-size: 10px; line-height: 1.5; color: var(--w-ink-3); }
+.cl-window-none { margin: 0; font-size: 13px; line-height: 1.5; font-style: italic; color: var(--w-ink-3); }
+
+.cl-depth-foot {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    margin-top: 18px;
+    padding-top: 14px;
+    border-top: 1px solid var(--w-line);
+}
+
+/* Commit stays deliberately effortful. Calm applies to UNDERSTANDING;
+   friction at the approval gate is a feature, not a defect to smooth. */
+.cl-commit-btn {
+    padding: 9px 20px;
+    border: 2px solid var(--w-authority);
+    border-radius: var(--w-radius);
+    background: var(--w-surface);
+    color: var(--w-ink);
+    font-family: var(--w-font);
+    font-size: 14px;
+    cursor: pointer;
+}
+
+.cl-commit-btn:hover { background: var(--w-surface-2); }
+.cl-commit-btn:focus-visible { outline: 2px solid var(--w-ink); outline-offset: 2px; }
+
+.cl-commit-note { flex: 1 1 100%; margin: 0; font-size: 11px; color: var(--w-ink-3); }
+
+.cl-commit-withheld {
+    flex: 1 1 100%;
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.5;
+    font-style: italic;
+    color: var(--w-ink-3);
+    border-left: 2px dashed var(--w-line);
+    padding-left: 10px;
+}
+
+/* --- composer --- */
+
+.cl-bound { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+
+.cl-bound-label { font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--w-ink-3); }
+
+.cl-bound-chip {
+    padding: 3px 9px;
+    border: 1px solid var(--w-line-2);
+    border-radius: 999px;
+    background: var(--w-surface-2);
+    font-family: var(--w-mono);
+    font-size: 11px;
+    color: var(--w-ink-2);
+}
+
+.cl-bound-chip[hidden] { display: none; }
+.cl-bound-chip--selection { background: var(--w-ink); color: var(--w-surface); border-color: var(--w-ink); }
+
+.cl-bound-note { margin: 8px 0 14px; font-size: 11px; line-height: 1.5; color: var(--w-ink-3); }
+
+.cl-composer-input { display: flex; gap: 8px; }
+
+.cl-ask-field {
+    flex: 1 1 auto;
+    min-width: 0;
+    /* 16px prevents iOS Safari zooming the whole surface on focus, which
+       at 390x844 would break the layout being judged. */
+    font-size: 16px;
+    padding: 10px 12px;
+    border: 1px solid var(--w-line-2);
+    border-radius: var(--w-radius);
+    background: var(--w-surface);
+    color: var(--w-ink);
+    font-family: var(--w-font);
+}
+
+.cl-ask-field:focus { outline: 2px solid var(--w-ink); outline-offset: 1px; }
+
+.cl-ask-send {
+    flex: none;
+    padding: 10px 18px;
+    border: 1px solid var(--w-ink);
+    border-radius: var(--w-radius);
+    background: var(--w-surface);
+    color: var(--w-ink);
+    font-family: var(--w-font);
+    font-size: 15px;
+    cursor: pointer;
+}
+
+.cl-ask-send:hover { background: var(--w-surface-2); }
+.cl-composer-foot { margin: 10px 0 0; font-size: 11px; color: var(--w-ink-3); }
+
+/* --- instrumentation (not product) --- */
+
+.cl-instrument-toggle {
+    position: fixed;
+    left: 8px;
+    bottom: calc(var(--w-verbs-h) + 34px);
+    z-index: 45;
+    width: 26px;
+    height: 26px;
+    border: 1px dashed var(--w-line-2);
+    border-radius: 50%;
+    background: var(--w-surface);
+    color: var(--w-ink-3);
+    font-family: var(--w-mono);
+    font-size: 12px;
+    cursor: pointer;
+    opacity: .55;
+}
+
+.cl-instrument-toggle:hover { opacity: 1; }
+.cl-instrument { border-top-style: dashed; }
+
+.cl-instrument-notice {
+    margin: 0 0 14px;
+    padding: 8px 10px;
+    border: 1px dashed var(--w-line-2);
+    border-radius: var(--w-radius);
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--w-ink-2);
+}
+
+.cl-ledger { margin: 0; font-size: 13px; }
+.cl-ledger dt { font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--w-ink-3); }
+.cl-ledger dd { margin: 3px 0 12px; line-height: 1.45; color: var(--w-ink-2); }
+
+.cl-visually-hidden {
+    position: absolute;
+    width: 1px; height: 1px;
+    margin: -1px; padding: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+/* ============================================================
+   DESKTOP EXPANSION - the 390px grammar with more bandwidth
+
+   Nothing is added and nothing is removed. The verb bar is the same
+   four buttons from the same list; the sheets are the same DOM
+   summoned by the same triggers and dismissed the same way. The only
+   change is WHERE a summoned surface arrives: from the right edge as a
+   side sheet, rather than from the bottom as a full-width one, because
+   a wide screen has spatial bandwidth a phone does not - and because a
+   side sheet leaves the drawing the question is about still visible.
+
+   This is the single-interaction-grammar constraint made testable: any
+   control that exists at one width and not the other is a violation,
+   and there are none.
+   ============================================================ */
+
+@media (min-width: 1024px) {
+
+    body.cl {
+        /* The verb bar moves to the top-right of the header row rather
+           than spanning the bottom: at 1600px a full-width bottom bar is
+           a 1600px-wide thumb target for a mouse that is already at the
+           top of the screen. Same four verbs, same order, same list. */
+        grid-template-rows: auto auto 1fr auto;
+    }
+
+    .cl-header {
+        min-height: 64px;
+        padding: 10px 24px;
+        gap: 24px;
+    }
+
+    .cl-project { font-size: 20px; }
+    .cl-active-doc { flex-direction: row; align-items: baseline; gap: 10px; margin-left: auto; }
+    .cl-active-doc-name { font-size: 14px; max-width: 420px; }
+
+    .cl-disturbance {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        grid-template-areas:
+            "line   why"
+            "claim  why"
+            "bar    why"
+            "foot   why";
+        align-items: center;
+        column-gap: 24px;
+        padding: 12px 24px;
+        border-left-width: 6px;
+    }
+
+    .cl-disturbance-line { grid-area: line; justify-content: flex-start; gap: 14px; }
+    .cl-disturbance-claim { grid-area: claim; margin: 4px 0 8px; font-size: 15px; }
+    .cl-halflife { grid-area: bar; max-width: 620px; }
+    .cl-disturbance-foot { grid-area: foot; justify-content: flex-start; gap: 14px; }
+    .cl-why { grid-area: why; align-self: center; padding: 10px 28px; font-size: 15px; }
+
+    .cl-verbs {
+        grid-template-columns: repeat(4, minmax(0, 150px));
+        justify-content: flex-end;
+        min-height: 52px;
+        padding: 0 24px;
+        border-top: 0;
+        border-bottom: 1px solid var(--w-line);
+        background: var(--w-surface);
+    }
+
+    .cl-verb { padding: 10px 4px; border: 0; border-right: 1px solid var(--w-line-faint); }
+    .cl-verb:first-child { border-left: 1px solid var(--w-line-faint); }
+    .cl-verb-reason { text-align: right; padding: 5px 24px; }
+
+    /* Verb bar sits directly under the header, above the disturbance,
+       so the reading order stays: where am I, what can I do, what wants
+       me, and then the drawing. */
+    .cl-header      { grid-row: 1; }
+    .cl-verbs       { grid-row: 2; }
+    .cl-verb-reason { grid-row: 2; align-self: end; grid-column: 1; }
+    .cl-disturbance { grid-row: 3; }
+    .cl-lake        { grid-row: 4; }
+
+    /* SIDE SHEETS. Same DOM, same triggers - more bandwidth. */
+    .cl-sheet {
+        top: 0;
+        left: auto;
+        right: 0;
+        bottom: 0;
+        width: min(560px, 42vw);
+        max-height: none;
+        padding: 0 28px 28px;
+        border-top: 0;
+        border-left: 2px solid var(--w-ink);
+        border-radius: 0;
+    }
+
+    .cl-sheet-head { padding-top: 22px; }
+
+    /* The scrim is dropped at desktop: a side sheet does not occlude the
+       drawing, so blocking interaction with it would be gratuitous. */
+    .cl-scrim { display: none; }
+
+    .cl-instrument-toggle { bottom: 16px; left: 16px; }
+
+    .cl-look { right: 20px; bottom: 20px; }
+    .cl-selection { left: 20px; bottom: 20px; }
+
+    .cl-side { padding-left: 14px; }
+    .cl-claim { font-size: 18px; }
+}
+
+/* Above 1600px the sheet stops growing and the drawing takes the rest:
+   a 42vw inspector on a 2560px monitor is 1075px of reading measure,
+   which is worse, not better. */
+@media (min-width: 1600px) {
+    .cl-sheet { width: 620px; }
+    .cl-header, .cl-disturbance, .cl-verbs, .cl-verb-reason { padding-left: 40px; padding-right: 40px; }
+}
