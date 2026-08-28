@@ -23,6 +23,11 @@ from pathlib import Path
 from werkzeug.security import generate_password_hash
 
 from routes.calm_lake_prototype import (
+    PROMINENCE_FOREGROUND,
+    PROMINENCE_TRACKED,
+    assess,
+    evidence_is_grounded,
+    window_is_closing,
     BASIS_ASSERTED,
     BASIS_LOCATED,
     BASIS_NONE,
@@ -114,20 +119,35 @@ class BasisRenderingTests(unittest.TestCase):
         # Not a chip at all - no filled box.
         self.assertIn("border: 0", asserted)
 
-    def test_the_wireframe_ramp_is_neutral_grayscale(self):
-        # Every --w-* colour token must have equal R, G and B. This is the
-        # governing "do not beautify an unproven IA" constraint, enforced
-        # rather than left to discipline.
-        for name, value in re.findall(r"(--w-[a-z0-9-]+):\s*(#[0-9A-Fa-f]{6});", self.css):
-            r, g, b = value[1:3], value[3:5], value[5:7]
-            self.assertEqual({r.lower()}, {g.lower(), b.lower()}, f"{name} is not gray: {value}")
+    def test_the_ramp_is_a_cool_near_neutral_and_never_warm(self):
+        # SUPERSEDED, deliberately: the wireframe phase required a strictly
+        # neutral R==G==B ramp. The polish directive asks for dark slate
+        # text over cool grey metadata, so exact neutrality is no longer
+        # the rule. What replaces it is the constraint that actually
+        # mattered - the ramp must stay a near-neutral, and must never warm
+        # up into anything that could read as a semantic accent.
+        tokens = re.findall(r"(--w-[a-z0-9-]+):\s*(#[0-9A-Fa-f]{6});", self.css)
+        self.assertGreaterEqual(len(tokens), 8)
+        for name, value in tokens:
+            r, g, b = (int(value[i:i + 2], 16) for i in (1, 3, 5))
+            # Cool or neutral: blue is never the weakest channel, red never
+            # the strongest. This is what excludes every warm accent.
+            self.assertLessEqual(r, g, f"{name} is warm: {value}")
+            self.assertLessEqual(g, b, f"{name} is warm: {value}")
+            # And still near-neutral rather than a blue. For scale: amber
+            # #7A4A08 spreads 122 and machine-blue #235066 spreads 67, so
+            # this bound admits a slate and excludes any real accent.
+            self.assertLessEqual(max(r, g, b) - min(r, g, b), 32,
+                                 f"{name} is too saturated to be a neutral: {value}")
 
-    def test_disturbance_authority_and_machine_greys_are_identical(self):
-        # Deliberately the same value: if the layout only reads correctly
-        # once these diverge, it was depending on colour.
-        found = dict(re.findall(r"(--w-(?:accent|authority|machine)):\s*(#[0-9A-Fa-f]{6});", self.css))
-        self.assertEqual(len(found), 3)
-        self.assertEqual(len(set(v.lower() for v in found.values())), 1)
+    def test_no_semantic_accent_token_exists_at_all(self):
+        # Stronger than the rule it replaces. The wireframe defined
+        # --w-accent/--w-authority/--w-machine as deliberately identical
+        # greys; the polish pass removes them entirely, so there is no
+        # token that could later be quietly given a hue. Prominence,
+        # grounding and authority are carried by weight, fill and form.
+        for banned in ("--w-accent", "--w-authority", "--w-machine"):
+            self.assertNotIn(banned, self.css, banned)
 
 
 class SurfaceStructureTests(unittest.TestCase):
@@ -320,42 +340,78 @@ class SingleGrammarTests(unittest.TestCase):
         self.js = _JS_PATH.read_text(encoding="utf-8")
         self.template = _TEMPLATE_PATH.read_text(encoding="utf-8")
 
-    def test_the_desktop_breakpoint_adds_no_control_and_removes_none(self):
+    def test_the_desktop_breakpoint_hides_only_touch_affordances(self):
+        # display:none in the desktop block means something exists at one
+        # width and not the other, which is what would falsify the single
+        # grammar. Exactly two are allowed, and neither is a control:
+        #
+        #   .cl-scrim - a docked sheet occludes nothing, so dimming the
+        #               surface behind it would be gratuitous. Dismissal is
+        #               unchanged (Close, Escape, press the drawing).
+        #   .cl-grab  - a grab handle affords a swipe. There is no swipe
+        #               with a mouse, and the swipe handler itself is gated
+        #               on this element's visibility rather than on width.
+        #
+        # Any third one is a real violation.
         desktop = self.css[self.css.index("@media (min-width: 1024px)"):]
-        # display:none anywhere in the desktop block would mean a control
-        # exists at one width and not the other.
-        self.assertNotIn("display: none", desktop.replace(".cl-scrim { display: none; }", ""))
+        hidden = [
+            line.strip() for line in desktop.splitlines()
+            if "display: none" in line
+        ]
+        self.assertEqual(len(hidden), 2, hidden)
+        self.assertTrue(any(h.startswith(".cl-scrim") for h in hidden), hidden)
+        self.assertTrue(any(h.startswith(".cl-grab") for h in hidden), hidden)
 
     def test_verb_dispatch_has_no_viewport_branch(self):
         # If a verb behaved differently at 390px than at 1600px, the single
         # grammar claim would be false in the place hardest to notice.
-        for banned in ("matchMedia", "innerWidth", "clientWidth >", "outerWidth"):
-            self.assertNotIn(banned, self.js, banned)
+        #
+        # Comments are stripped before searching. The earlier version of
+        # this test matched raw source and so failed on the file's own
+        # header note explaining that there is no matchMedia in it - a test
+        # that punished documenting the very property it checks.
+        code = re.sub(r"/\*.*?\*/", "", self.js, flags=re.S)
+        code = re.sub(r"^\s*//.*$", "", code, flags=re.M)
+        for banned in ("matchMedia", "innerWidth", "outerWidth", "clientWidth >"):
+            self.assertNotIn(banned, code, banned)
 
     def test_the_template_renders_the_verb_bar_from_a_single_loop(self):
         self.assertEqual(self.template.count("{% for verb in verbs %}"), 1)
         self.assertEqual(self.template.count('data-verb="{{ verb.id }}"'), 1)
 
-    def test_the_desktop_side_sheet_stops_above_the_verb_bar(self):
-        # Found by looking at the rendered page: a full-height side sheet
-        # covered Ask and Commit. The verb bar is the grammar, so two of its
-        # four verbs being unreachable whenever a sheet is open would break
-        # the one permanent thing this surface promises. Verified in-browser
-        # at 1600x800 by rectangle intersection against all four verbs.
+    def test_the_desktop_sheet_docks_by_insetting_rather_than_overlaying(self):
+        # SUPERSEDED by a better fix for the same defect. The wireframe
+        # stopped the side sheet 84px above the floor so it would not cover
+        # Ask and Commit. Docking removes the problem at its root: the body
+        # is inset by exactly the dock width while a sheet is open, so the
+        # sheet sits BESIDE the surface and can safely run full height.
+        # Nothing is occluded and the drawing is never clipped - it simply
+        # has less room and refits.
         desktop = self.css[self.css.index("@media (min-width: 1024px)"):]
-        sheet = desktop[desktop.index(".cl-sheet {"):]
-        sheet = sheet[:sheet.index("}")]
-        self.assertIn("bottom: 84px", sheet)
-        self.assertNotIn("bottom: 0", sheet)
+        self.assertIn("body.cl.is-docked", desktop)
+        self.assertIn("padding-right: var(--w-dock)", desktop)
+        self.assertIn("--w-dock: 380px", self.css)
+        # And the JS must state the fact, without deciding what it means.
+        self.assertIn('classList.toggle("is-docked"', self.js)
 
-    def test_the_claim_escapes_the_sheet_heading_uppercase_treatment(self):
-        # `.cl-claim` alone is (0,1,0) and loses to `.cl-sheet-head h2` at
-        # (0,1,1), so the plain class silently did nothing and the claim
-        # rendered as a shout - on a finding badged UNVERIFIED.
+    def test_the_drawing_refits_when_the_dock_changes_the_space(self):
+        # Otherwise docking would crop the drawing rather than make room
+        # for the sheet, which is the thing docking exists to avoid.
+        self.assertIn("refitSoon(SLIDE_MS", self.js)
+
+    def test_no_uppercase_typography_anywhere(self):
+        # The earlier version of this test asserted the claim OVERRODE a
+        # uppercase heading rule. The polish directive removes harsh caps
+        # from the surface altogether, so the override is no longer needed
+        # and the stronger property is asserted instead: no rule in the
+        # file transforms text to uppercase at all. Hierarchy is weight
+        # and colour.
+        self.assertNotIn("text-transform", self.css)
+        # The specificity fix is still required - `.cl-claim` alone is
+        # (0,1,0) and loses to `.cl-sheet-head h2` at (0,1,1) - because the
+        # claim still needs its own weight and size against the sheet
+        # headings it shares a container with.
         self.assertIn(".cl-sheet-head h2.cl-claim", self.css)
-        rule = self.css[self.css.index(".cl-sheet-head h2.cl-claim"):]
-        rule = rule[:rule.index("}")]
-        self.assertIn("text-transform: none", rule)
 
     def test_marks_counter_scale_so_provenance_stays_reachable_at_any_zoom(self):
         # LOD invariance: annotation density may thin as a drawing zooms
@@ -379,3 +435,188 @@ class SingleGrammarTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ProminenceTests(unittest.TestCase):
+    """Multi-variable, no binary silence, and deliberately not a number."""
+
+    def setUp(self):
+        for finding in FINDINGS:
+            finding["window"]["spent_percent"] = window_spent_percent(finding["window"])
+            finding["prominence"] = assess(finding)
+
+    def test_no_finding_is_ever_silenced(self):
+        # The correction this model exists for. Every finding is in exactly
+        # one band and both bands are visible; a long runway buys quiet, not
+        # absence.
+        tiers = [f["prominence"]["tier"] for f in FINDINGS]
+        self.assertEqual(set(tiers), {PROMINENCE_FOREGROUND, PROMINENCE_TRACKED})
+        self.assertEqual(len(tiers), len(FINDINGS))
+
+    def test_prominence_is_not_a_score(self):
+        # An earlier revision returned a weighted product and rendered
+        # "0.771" on the surface. The weights were invented, so the
+        # precision was manufactured - a number that looks like evidence
+        # and is not, which is the fluency failure one level up from
+        # citations. And a scalar cannot be argued with.
+        for finding in FINDINGS:
+            state = finding["prominence"]
+            self.assertNotIn("score", state)
+            for value in state.values():
+                self.assertNotIsInstance(value, float)
+
+    def test_every_band_placement_states_its_reasons_in_words(self):
+        for finding in FINDINGS:
+            reasons = finding["prominence"]["reasons"]
+            self.assertTrue(reasons, finding["id"])
+            for reason in reasons:
+                # A sentence, not a label or a number.
+                self.assertGreater(len(reason.split()), 4, reason)
+                self.assertTrue(reason.endswith("."), reason)
+
+    def test_a_long_runway_is_tracked_and_says_so(self):
+        door = next(f for f in FINDINGS if f["id"] == "DOOR-D-106")
+        self.assertEqual(door["prominence"]["tier"], PROMINENCE_TRACKED)
+        self.assertTrue(door["prominence"]["closing"] is False)
+        # Same consequence and the same grounded evidence as the finding
+        # that DID escalate - only the window differs.
+        self.assertTrue(door["prominence"]["grounded"])
+        self.assertTrue(door["prominence"]["severe"])
+        self.assertIn("not yet closing", " ".join(door["prominence"]["reasons"]))
+
+    def test_a_partly_asserted_finding_cannot_escalate(self):
+        # Weak evidence must LOWER prominence, never raise it. A claim
+        # resting partly on its own sentence must not be able to shout.
+        stair = next(f for f in FINDINGS if f["id"] == "PRESSURE-STAIR-2")
+        self.assertEqual(stair["prominence"]["tier"], PROMINENCE_TRACKED)
+        self.assertFalse(stair["prominence"]["grounded"])
+        self.assertFalse(stair["prominence"]["actionable"])
+
+    def test_grounded_requires_every_side_not_merely_one(self):
+        # "any" would let one located citation launder a second leg that is
+        # only a sentence, which is what the basis vocabulary exists to stop.
+        self.assertTrue(evidence_is_grounded({
+            "sides": [{"basis": BASIS_LOCATED}, {"basis": BASIS_READ}]}))
+        self.assertFalse(evidence_is_grounded({
+            "sides": [{"basis": BASIS_LOCATED}, {"basis": BASIS_ASSERTED}]}))
+        self.assertFalse(evidence_is_grounded({"sides": []}))
+
+    def test_an_unestablished_window_is_never_treated_as_closing(self):
+        # "We do not know when" becoming "act now" is truth-promotion
+        # wearing scheduling clothes.
+        self.assertFalse(window_is_closing({
+            "basis": BASIS_NONE, "days_remaining": None, "total_days": None}))
+
+    def test_a_window_can_close_by_proportion_as_well_as_by_days(self):
+        # A long window nearly exhausted and a short window barely begun are
+        # the cases the two readings disagree on, and both must be caught.
+        self.assertTrue(window_is_closing({
+            "basis": BASIS_READ, "days_remaining": 20, "total_days": 100}))
+        self.assertTrue(window_is_closing({
+            "basis": BASIS_READ, "days_remaining": 3, "total_days": 400}))
+        self.assertFalse(window_is_closing({
+            "basis": BASIS_READ, "days_remaining": 60, "total_days": 100}))
+
+
+class LivenessTests(unittest.TestCase):
+    """Restrained motion: emergence and feedback, never decoration."""
+
+    def setUp(self):
+        self.css = _CSS_PATH.read_text(encoding="utf-8")
+        self.js = _JS_PATH.read_text(encoding="utf-8")
+
+    def test_no_animation_loops(self):
+        # A permanently animated element is permanent chrome by another
+        # name, and an alert that keeps moving is not calm.
+        self.assertNotIn("infinite", self.css)
+        self.assertNotIn("alternate", self.css)
+
+    def test_every_animation_runs_exactly_once(self):
+        for decl in re.findall(r"animation:\s*([^;]+);", self.css):
+            self.assertTrue(decl.rstrip().endswith("1"), decl)
+
+    def test_reduced_motion_is_respected(self):
+        self.assertIn("@media (prefers-reduced-motion: reduce)", self.css)
+        block = self.css[self.css.index("@media (prefers-reduced-motion: reduce)"):]
+        self.assertIn("animation-duration", block)
+        self.assertIn("transition-duration", block)
+
+    def test_pins_do_not_transition_the_property_that_carries_zoom(self):
+        # `transition: all` would animate the counter-scale transform on
+        # every zoom tick and make the pins swim behind the drawing.
+        rule = self.css[self.css.index(".cl-mark {"):]
+        rule = rule[:rule.index("}")]
+        self.assertIn("transition:", rule)
+        self.assertNotIn("transition: all", rule)
+        self.assertNotIn("transform", rule.split("transition:")[1].split(";")[0])
+
+    def test_show_on_drawing_pans_to_the_coordinate(self):
+        # Not merely a fit-and-pulse: the surface travels to the evidence,
+        # which is what keeps it one continuous space rather than a jump.
+        self.assertIn("function focusOnMark", self.js)
+        self.assertIn("view.x = -dx * scale", self.js)
+        self.assertIn("view.y = -dy * scale", self.js)
+
+    def test_sheets_transition_rather_than_appear(self):
+        # `hidden` cannot be transitioned, so the open path must clear
+        # hidden first and add the class on a later frame.
+        self.assertIn("requestAnimationFrame", self.js)
+        self.assertIn('classList.add("is-open")', self.js)
+        self.assertIn(".cl-sheet.is-open", self.css)
+        self.assertIn("transform: translateY(100%)", self.css)
+
+    def test_swipe_dismissal_is_gated_on_the_handle_not_on_width(self):
+        self.assertIn("grab.offsetHeight", self.js)
+
+
+class SpatialContinuityTests(unittest.TestCase):
+    """Travelling to evidence, not jumping to a different page."""
+
+    def setUp(self):
+        self.css = _CSS_PATH.read_text(encoding="utf-8")
+        self.js = _JS_PATH.read_text(encoding="utf-8")
+        self.template = _TEMPLATE_PATH.read_text(encoding="utf-8")
+
+    def test_the_refit_guard_is_checked_when_the_timer_fires(self):
+        # Show-on-drawing dismisses the sheet, which SCHEDULES a refit, and
+        # then focuses the coordinate a few milliseconds later. With the
+        # guard evaluated at schedule time the refit still ran afterwards
+        # and reset the view to fit, so the surface travelled nowhere.
+        # Confirmed in-browser: before and after were identical.
+        body = self.js[self.js.index("function refitSoon"):]
+        body = body[:body.index("\n    }")]
+        guard = body.index("readerAdjustedView")
+        timer = body.index("setTimeout")
+        self.assertLess(timer, guard,
+                        "the guard must sit inside the timer callback, not before it")
+
+    def test_focus_centres_the_mark_rather_than_merely_fitting(self):
+        # Verified in-browser at 1600x800: the pin's centre lands on the
+        # lake's centre exactly, and the scale rises from fit to a reading
+        # zoom rather than staying put.
+        self.assertIn("function focusOnMark", self.js)
+        self.assertIn("view.x = -dx * scale", self.js)
+        self.assertIn("view.y = -dy * scale", self.js)
+
+    def test_overlay_affordances_share_one_anchor_box(self):
+        # The instrumentation toggle was fixed to the viewport while the
+        # selection readout and the Look controls are absolute within the
+        # drawing area, so the two were measured from different boxes and
+        # overlapped by 19px at 1600x800.
+        for selector in (".cl-instrument-toggle", ".cl-selection", ".cl-look"):
+            rule = self.css[self.css.index(selector + " {"):]
+            rule = rule[:rule.index("}")]
+            self.assertIn("position: absolute", rule, selector)
+        # And it must live inside the lake for that anchor to be the lake.
+        lake = self.template[self.template.index('id="cl-lake"'):]
+        lake = lake[:lake.index("</main>")]
+        self.assertIn('id="cl-instrument-toggle"', lake)
+
+    def test_mobile_sheets_sit_above_the_anchored_verb_bar(self):
+        # Verified in-browser at 390x844 by rectangle intersection: a
+        # full-height bottom sheet covered all four verbs. Keeping the bar
+        # reachable is what lets a reader go from Why straight to Ask.
+        rule = self.css[self.css.index(".cl-sheet {"):]
+        rule = rule[:rule.index("}")]
+        self.assertIn("var(--w-anchor-h)", rule)
+        self.assertIn("--w-anchor-h", self.css)

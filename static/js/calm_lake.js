@@ -1,35 +1,41 @@
 /* ============================================================
    CLAUDE-CALM-LAKE-SURFACE-PROTOTYPE-01 - calm_lake.js
 
-   Behaviour for the Calm Lake structural wireframe ONLY. Loaded by
-   exactly one template. It shares no state, no globals and no selectors
-   with pdf_viewer.js, case_workspace.js or anything else in static/js/,
-   deliberately: this is an experiment about surface behaviour, and
-   coupling it to a shipping viewer would make it expensive to delete.
+   Behaviour for the Calm Lake surface. Loaded by exactly one template.
+   Shares no state, no globals and no selectors with pdf_viewer.js,
+   case_workspace.js or anything else in static/js/, deliberately: this
+   is an experiment about surface behaviour, and coupling it to a
+   shipping viewer would make it expensive to delete.
 
    IT IMPLEMENTS THE LOOK VERB, WHICH IS THE POINT.
 
-   The grammar's 5.3 is a hard sequencing constraint, not a preference:
-   pdf_viewer.js resolves 30 document controls by getElementById against
-   base.html's menu bar, so a meaningful share of the "51% permanent
-   chrome" is the IMPLEMENTATION of Look, not accretion. Reducing chrome
-   before a canvas-native Look vocabulary exists deletes navigation and
-   leaves a drawing nobody can move. This file builds one - pan, zoom,
-   fit, and document switching without a rail - to show the vocabulary
-   is constructible. It does not license deleting chrome anywhere else.
+   The grammar's 5.3 is a hard sequencing constraint: pdf_viewer.js
+   resolves 30 document controls by getElementById against base.html's
+   menu bar, so a meaningful share of the "51% permanent chrome" is the
+   IMPLEMENTATION of Look, not accretion. Reducing chrome before a
+   canvas-native Look vocabulary exists deletes navigation and leaves a
+   drawing nobody can move. This file builds one to look at; it does not
+   license deleting chrome anywhere else.
 
-   FOUR VERBS, ONE HANDLER TABLE. Look / Point / Ask / Commit are
-   dispatched from VERBS below at every viewport. There is no branch on
-   width anywhere in this file, and there must not be one: if a verb
-   behaved differently at 390px than at 1600px, the single-grammar claim
-   would be false in the one place hardest to notice.
+   NO VIEWPORT BRANCH ANYWHERE IN THIS FILE. There is no matchMedia, no
+   innerWidth test, and no width comparison. Where behaviour must differ
+   between a phone and a desktop, this file states a FACT and lets CSS
+   decide the spatial consequence:
+
+     - "a sheet is open"  -> body.is-docked. At 390px that class has no
+       rule attached; at >=1024px it insets the body by the dock width.
+     - "can this be swiped" -> the grab handle's own visibility, read
+       from the element, because the handle is display:none where there
+       is no touch gesture to afford.
+
+   That is what keeps a single interaction grammar honest. A verb that
+   behaved differently at 390px than at 1600px would falsify the claim in
+   the place hardest to notice, so the claim is enforced by construction
+   rather than by care.
 
    ONE SUMMONED SHEET AT A TIME, enforced in showOnly(). Two overlapping
    sheets is how a calm surface becomes competing permanent panes again,
    which main.css's own phone breakpoint already rejected in writing.
-   The cost is real and accepted: you cannot read the Why sheet and the
-   Composer side by side. If that is the wrong call, showOnly() is the
-   one function to change.
    ============================================================ */
 (function () {
     "use strict";
@@ -38,6 +44,10 @@
     var lake = document.getElementById("cl-lake");
     var plan = document.getElementById("cl-plan");
     if (!lake || !plan) { return; }
+
+    /* Duration of the sheet slide and the dock inset. Kept in step with
+       --w-slide in calm_lake.css; if that changes, change this. */
+    var SLIDE_MS = 280;
 
     /* --------------------------------------------------------
        Proportions and positions arrive as data-* attributes and are
@@ -59,85 +69,93 @@
     });
 
     /* ========================================================
-       LOOK - pan, zoom, fit
+       LOOK - pan, zoom, fit, focus
        ======================================================== */
 
-    var view = { x: 0, y: 0, scale: 1 };
-    var MIN_SCALE = 0.4;
+    var PLAN_W = 1000;
+    var PLAN_H = 700;
+    var FIT_MARGIN = 0.96;
+    var MIN_SCALE = 0.3;
     var MAX_SCALE = 4;
+
+    var view = { x: 0, y: 0, scale: 1 };
+    var readerAdjustedView = false;
 
     function applyView() {
         plan.style.setProperty("--w-tx", view.x + "px");
         plan.style.setProperty("--w-ty", view.y + "px");
         plan.style.setProperty("--w-scale", view.scale);
-        /* LOD INVARIANCE. Marks are annotations ABOUT the drawing, not
-           content of it, so they counter-scale and stay legible at every
-           zoom. The grammar's 6.3 requires exactly this: annotation
-           density may thin as a drawing zooms out, but the route to a
-           finding's basis must not - a finding that becomes uncitable at
-           overview zoom is uncitable precisely when a reader is forming a
-           summary judgement. */
+        /* LOD INVARIANCE. Pins are annotations ABOUT the drawing, not
+           content of it, so they counter-scale and hold their size at
+           every zoom. The grammar's 6.3 requires it: a finding that
+           becomes uncitable at overview zoom is uncitable precisely when
+           a reader is forming a summary judgement. */
         plan.style.setProperty("--w-inv", 1 / view.scale);
     }
 
-    function zoomBy(factor) {
-        view.scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, view.scale * factor));
-        readerAdjustedView = true;
-        applyView();
-        wakeLook();
+    function clamp(v, lo, hi) { return Math.min(hi, Math.max(lo, v)); }
+
+    function fitScale() {
+        var box = lake.getBoundingClientRect();
+        if (!box.width || !box.height) { return 1; }
+        return clamp(
+            Math.min(box.width / PLAN_W, box.height / PLAN_H) * FIT_MARGIN,
+            MIN_SCALE, MAX_SCALE
+        );
     }
 
-    /* PLAN_W/PLAN_H are the .cl-plan box in CSS pixels, which is also the
-       SVG's own viewBox. Kept as constants rather than measured, because
-       measuring the element we are about to scale reads back the previous
-       scale and fit() would drift on every call. */
-    var PLAN_W = 1000;
-    var PLAN_H = 700;
-    var FIT_MARGIN = 0.92;
-
-    /* A real fit, not scale = 1.
-
-       Getting this wrong is not cosmetic at 390px: the sheet is 1000 CSS
-       pixels wide, so an unfitted surface opens showing roughly a third of
-       one room and no title block, and a reader cannot tell whether they are
-       looking at the whole drawing or a corner of it. On a surface whose
-       entire claim is "the drawing occupies the screen", opening zoomed into
-       an unlabelled fragment falsifies the claim on arrival. */
+    /* A real fit, not scale = 1. The sheet is 1000 CSS px wide, so at
+       390px an unfitted surface opens showing a fragment of one room
+       with no way to tell it is a fragment - which falsifies "the
+       drawing occupies the screen" on arrival. */
     function fit() {
-        var box = lake.getBoundingClientRect();
-        var scale = 1;
-        if (box.width && box.height) {
-            scale = Math.min(box.width / PLAN_W, box.height / PLAN_H) * FIT_MARGIN;
-            scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, scale));
-        }
         view.x = 0;
         view.y = 0;
-        view.scale = scale;
+        view.scale = fitScale();
         readerAdjustedView = false;
         applyView();
         wakeLook();
     }
 
-    /* Re-fit when the surface changes size, unless the reader has taken
-       control of the view themselves - refitting under someone who has
-       deliberately zoomed in would throw away their position. This is
-       element geometry, not a viewport branch: the grammar does not change,
-       only how much of the sheet is in frame. */
-    var readerAdjustedView = false;
+    function zoomBy(factor) {
+        view.scale = clamp(view.scale * factor, MIN_SCALE, MAX_SCALE);
+        readerAdjustedView = true;
+        applyView();
+        wakeLook();
+    }
 
-    var refitTimer = null;
-    window.addEventListener("resize", function () {
-        if (readerAdjustedView) { return; }
-        window.clearTimeout(refitTimer);
-        refitTimer = window.setTimeout(fit, 120);
-    });
+    /* SHOW ON DRAWING - a real pan to the coordinate, not just a fit.
+
+       The plan is centred in the lake, so a pin at (px%, py%) sits
+       (dx, dy) from the plan's own centre. Centring it is therefore just
+       tx = -dx * scale. Done as one transition rather than a jump, so
+       the movement reads as travelling to the evidence within the same
+       space - which is the whole point of not leaving the workspace. */
+    function focusOnMark(mark) {
+        var px = parseFloat(mark.getAttribute("data-x"));
+        var py = parseFloat(mark.getAttribute("data-y"));
+        if (isNaN(px) || isNaN(py)) { return; }
+
+        /* Close enough to read the surrounding drawing, not so close that
+           the reader loses where they are on the sheet. */
+        var scale = clamp(Math.max(fitScale() * 2.1, 0.85), MIN_SCALE, MAX_SCALE);
+        var dx = (px / 100) * PLAN_W - PLAN_W / 2;
+        var dy = (py / 100) * PLAN_H - PLAN_H / 2;
+
+        view.scale = scale;
+        view.x = -dx * scale;
+        view.y = -dy * scale;
+        readerAdjustedView = true;
+        applyView();
+        wakeLook();
+    }
 
     var dragging = false;
     var moved = false;
     var dragStart = null;
 
     lake.addEventListener("pointerdown", function (event) {
-        /* A press on a mark is Point, not Look. */
+        /* A press on a pin is Point, not Look. */
         if (event.target.closest(".cl-mark, .cl-look, .cl-selection")) { return; }
         dragging = true;
         moved = false;
@@ -173,7 +191,7 @@
     }, { passive: false });
 
     /* Double-tap to fit - the gesture 5.3 names, and the reason there is
-       no persistent fit control in a menu bar anywhere on this surface. */
+       no persistent fit control in a menu bar on this surface. */
     lake.addEventListener("dblclick", function (event) {
         if (event.target.closest(".cl-mark")) { return; }
         fit();
@@ -188,13 +206,32 @@
         });
     });
 
-    fit();
+    /* Re-fit when the surface changes size - a rotation, a window
+       resize, or the dock opening - unless the reader has taken control
+       of the view themselves, because refitting under someone who
+       deliberately zoomed in throws away their position. */
+    var refitTimer = null;
+    function refitSoon(delay) {
+        window.clearTimeout(refitTimer);
+        refitTimer = window.setTimeout(function () {
+            /* The guard is re-checked HERE, when the timer fires, not when
+               it was scheduled. Show-on-drawing dismisses the sheet - which
+               schedules a refit - and then focuses the coordinate a few
+               milliseconds later. With the check at schedule time the refit
+               still ran afterwards and reset the view to fit, so the
+               surface travelled nowhere and the defect was invisible in
+               every structural test. */
+            if (readerAdjustedView) { return; }
+            fit();
+        }, delay || 120);
+    }
+
+    window.addEventListener("resize", function () { refitSoon(120); });
 
     /* The Look affordances recede when idle - the games-HUD pattern, not
-       a permanent readout. This is the mechanism that lets the surface be
-       navigable without being chromed, and it is the single behaviour
-       most worth judging visually: "how long is calm" is not a question
-       prose can answer. */
+       a permanent readout. This is what lets the surface be navigable
+       without being chromed, and it is the behaviour most worth judging
+       visually: "how long is calm" is not a question prose can answer. */
     var look = document.getElementById("cl-look");
     var RECEDE_AFTER = 2200;
     var recedeTimer = null;
@@ -208,26 +245,84 @@
         }, RECEDE_AFTER);
     }
 
-    wakeLook();   /* announce the vocabulary once, then recede */
+    fit();
 
     /* ========================================================
-       SHEETS - one at a time
+       SHEETS - one at a time, and they move rather than appear
+
+       `hidden` cannot be transitioned, so opening clears hidden and adds
+       .is-open on the next frame; closing reverses and sets hidden once
+       the slide has finished. The guard on the close timer matters: a
+       reader who reopens the same sheet inside 280ms would otherwise
+       have it hidden out from under them by the earlier timeout.
        ======================================================== */
 
     var index = document.getElementById("cl-index");
+    var horizon = document.getElementById("cl-horizon");
     var depth = document.getElementById("cl-depth");
     var composer = document.getElementById("cl-composer");
     var instrument = document.getElementById("cl-instrument");
     var scrim = document.getElementById("cl-scrim");
 
-    var sheets = [index, depth, composer, instrument];
+    var sheets = [index, horizon, depth, composer, instrument].filter(Boolean);
+    var openSheet = null;
+
+    function closeSheetEl(sheet) {
+        if (!sheet || sheet.hidden) { return; }
+        sheet.classList.remove("is-open");
+        window.setTimeout(function () {
+            if (!sheet.classList.contains("is-open")) { sheet.hidden = true; }
+        }, SLIDE_MS);
+    }
+
+    function openSheetEl(sheet) {
+        sheet.hidden = false;
+        sheet.scrollTop = 0;
+        /* Force a style/layout flush so the browser commits the closed
+           transform before the open class lands - that is what makes the
+           slide run instead of jumping.
+
+           Deliberately NOT requestAnimationFrame. An earlier version used
+           a double rAF and the sheet never opened at all wherever the
+           frame clock is throttled: `hidden` was cleared but `is-open`
+           never arrived, leaving the sheet parked off-screen at
+           translateY(100%) while assistive technology was told it was
+           present. Reading offsetWidth is synchronous and cannot stall,
+           so the worst case degrades to appearing without the slide -
+           which is the correct behaviour, not a broken one. */
+        void sheet.offsetWidth;
+        sheet.classList.add("is-open");
+    }
 
     function showOnly(target) {
         sheets.forEach(function (sheet) {
-            if (sheet) { sheet.hidden = (sheet !== target); }
+            if (sheet !== target) { closeSheetEl(sheet); }
         });
-        if (scrim) { scrim.hidden = !target; }
-        body.setAttribute("data-state", target ? (target.id || "sheet") : (disturbed ? "disturbed" : "base"));
+        if (target) { openSheetEl(target); }
+        openSheet = target || null;
+
+        if (scrim) {
+            if (target) {
+                scrim.hidden = false;
+                void scrim.offsetWidth;
+                scrim.classList.add("is-open");
+            } else {
+                scrim.classList.remove("is-open");
+                window.setTimeout(function () {
+                    if (!scrim.classList.contains("is-open")) { scrim.hidden = true; }
+                }, SLIDE_MS);
+            }
+        }
+
+        /* A FACT, not a width decision. CSS attaches a meaning to this
+           class only where there is room to dock; at 390px it does
+           nothing. See the header note. */
+        body.classList.toggle("is-docked", !!target);
+        body.setAttribute("data-state", target ? target.id : (disturbed ? "disturbed" : "base"));
+
+        /* The drawing makes room rather than being hidden - refit once
+           the inset has finished animating. */
+        refitSoon(SLIDE_MS + 40);
         syncVerbs();
     }
 
@@ -242,9 +337,58 @@
 
     if (scrim) { scrim.addEventListener("click", dismiss); }
 
-    /* One key, one meaning, at every viewport. */
     document.addEventListener("keydown", function (event) {
         if (event.key === "Escape") { dismiss(); }
+    });
+
+    /* --------------------------------------------------------
+       SWIPE TO DISMISS.
+
+       Gated on the grab handle being VISIBLE, which is element state
+       rather than a viewport test: the handle is display:none wherever
+       there is no touch gesture to afford, so this reads "is this a
+       surface that can be pulled" instead of "how wide is the screen".
+       -------------------------------------------------------- */
+    sheets.forEach(function (sheet) {
+        var grab = sheet.querySelector(".cl-grab");
+        var head = sheet.querySelector(".cl-sheet-head");
+        var startY = null;
+        var offset = 0;
+
+        function canSwipe(event) {
+            if (!grab || !grab.offsetHeight) { return false; }
+            if (event.target.closest("button, input, a")) { return false; }
+            /* Only from the top of the sheet, so a swipe never fights
+               the sheet's own scrolling. */
+            return sheet.scrollTop <= 0 &&
+                   (event.target === grab || (head && head.contains(event.target)) || event.target === sheet);
+        }
+
+        sheet.addEventListener("pointerdown", function (event) {
+            if (!canSwipe(event)) { return; }
+            startY = event.clientY;
+            offset = 0;
+            sheet.style.transition = "none";
+        });
+
+        sheet.addEventListener("pointermove", function (event) {
+            if (startY === null) { return; }
+            offset = Math.max(0, event.clientY - startY);
+            sheet.style.transform = "translateY(" + offset + "px)";
+        });
+
+        function endSwipe() {
+            if (startY === null) { return; }
+            startY = null;
+            sheet.style.transition = "";
+            sheet.style.transform = "";
+            if (offset > 90) { dismiss(); }
+            offset = 0;
+        }
+
+        sheet.addEventListener("pointerup", endSwipe);
+        sheet.addEventListener("pointercancel", endSwipe);
+        sheet.addEventListener("pointerleave", endSwipe);
     });
 
     /* ========================================================
@@ -270,15 +414,16 @@
 
         if (selectionBar) { selectionBar.hidden = !id; }
         if (selectionTag && id) { selectionTag.textContent = tag; }
-
         if (boundSelection) {
             boundSelection.hidden = !id;
             if (id) { boundSelection.textContent = tag; }
         }
-
         syncVerbs();
     }
 
+    /* Every route into depth goes through here, so there is exactly one
+       way a claim can be shown and it always carries its verification
+       badge and its basis with it. */
     function openDepth(id) {
         if (!depth) { return; }
         var found = false;
@@ -289,12 +434,8 @@
         });
         if (!found) { return; }
         showOnly(depth);
-        depth.scrollTop = 0;
     }
 
-    /* Every route into depth goes through openDepth(), so there is
-       exactly one way a claim can be shown and it always carries its
-       verification badge and its basis with it. */
     Array.prototype.forEach.call(document.querySelectorAll(".cl-mark"), function (mark) {
         mark.addEventListener("click", function (event) {
             event.stopPropagation();
@@ -319,19 +460,33 @@
     }
 
     /* SHOW ON DRAWING - depth returning to the object. Dismisses the
-       sheet, because the answer to "where is it" is the drawing, not a
-       panel sitting on top of the drawing. */
+       sheet and travels to the coordinate, because the answer to "where
+       is it" is the drawing, not a panel sitting on top of the drawing. */
     Array.prototype.forEach.call(document.querySelectorAll("[data-show]"), function (btn) {
         btn.addEventListener("click", function () {
             var id = btn.getAttribute("data-show");
             var mark = document.getElementById("mark-" + id);
             dismiss();
-            fit();
             if (!mark) { return; }
             setSelection(id, mark.getAttribute("data-tag"));
-            mark.classList.remove("is-shown");
-            void mark.offsetWidth;          /* restart the one-shot pulse */
-            mark.classList.add("is-shown");
+            /* After the dock has released, so the focus is computed
+               against the width the drawing actually ends up with. */
+            window.setTimeout(function () {
+                focusOnMark(mark);
+                mark.classList.remove("is-shown");
+                void mark.offsetWidth;      /* restart the one-shot ring */
+                mark.classList.add("is-shown");
+                /* The ring is removed on a timer rather than left to the
+                   animation to finish. A stalled timeline - a background
+                   tab, a throttled frame - would otherwise leave a focus
+                   ring on the drawing permanently, which is exactly the
+                   "always moving, always there" chrome this surface is
+                   built to avoid. The class is the state; the animation
+                   only decorates it. */
+                window.setTimeout(function () {
+                    mark.classList.remove("is-shown");
+                }, 1200);
+            }, SLIDE_MS + 30);
         });
     });
 
@@ -342,7 +497,7 @@
     var docSwitch = document.getElementById("cl-doc-switch");
     if (docSwitch) {
         docSwitch.addEventListener("click", function () {
-            showOnly(index && index.hidden ? index : null);
+            showOnly(openSheet === index ? null : index);
         });
     }
 
@@ -366,7 +521,8 @@
             if (boundDoc && name) { boundDoc.textContent = name.textContent; }
 
             dismiss();
-            fit();
+            readerAdjustedView = false;
+            refitSoon(SLIDE_MS + 40);
         });
     });
 
@@ -376,32 +532,29 @@
 
     var VERBS = {
         look: function () {
-            /* Look is not a mode. It wakes the affordances and offers the
-               only Look action a phone cannot express by gesture alone -
-               changing document. */
             wakeLook();
-            showOnly(index && index.hidden ? index : null);
+            showOnly(openSheet === index ? null : index);
         },
         point: function () {
-            /* Point with something already selected reopens its depth.
-               Point with nothing selected says what to do, rather than
-               silently doing nothing. */
+            /* Point with something selected reopens its depth. Point with
+               nothing selected says what to do, rather than silently
+               doing nothing. */
             if (selected) { openDepth(selected.id); return; }
             dismiss();
-            flashReason("Point at an object on the drawing.");
+            flashReason("Point at something on the drawing.");
         },
         ask: function () {
-            showOnly(composer && composer.hidden ? composer : null);
-            if (composer && !composer.hidden) {
+            showOnly(openSheet === composer ? null : composer);
+            if (openSheet === composer) {
                 var field = document.getElementById("cl-ask-field");
-                if (field) { field.focus(); }
+                if (field) { window.setTimeout(function () { field.focus(); }, SLIDE_MS); }
             }
         },
         commit: function () {
             if (!selected) { return; }
             openDepth(selected.id);
             var btn = document.querySelector('[data-commit="' + selected.id + '"]');
-            if (btn) { btn.focus(); }
+            if (btn) { window.setTimeout(function () { btn.focus(); }, SLIDE_MS); }
         }
     };
 
@@ -414,9 +567,10 @@
         });
     });
 
-    function syncVerbs() {
-        var openSheet = sheets.filter(function (s) { return s && !s.hidden; })[0] || null;
+    var reasonHeld = false;
+    var reasonTimer = null;
 
+    function syncVerbs() {
         verbButtons.forEach(function (btn) {
             var verb = btn.getAttribute("data-verb");
             var active =
@@ -433,18 +587,12 @@
         }
 
         if (verbReason && !reasonHeld) {
-            if (selected) {
-                verbReason.textContent =
-                    "Ask and Commit are about " + selected.tag +
-                    ". Selection supplies context, not authorization.";
-            } else {
-                verbReason.textContent = "Commit needs a selection. Point at something first.";
-            }
+            verbReason.textContent = selected
+                ? "Ask and Commit are about " + selected.tag +
+                  ". Selection supplies context, not authorization."
+                : "Commit needs a selection. Point at something first.";
         }
     }
-
-    var reasonHeld = false;
-    var reasonTimer = null;
 
     function flashReason(text) {
         if (!verbReason) { return; }
@@ -455,6 +603,22 @@
             reasonHeld = false;
             syncVerbs();
         }, 2600);
+    }
+
+    /* The tracked band and the instrumentation toggle are just two more
+       ways into the same one-at-a-time sheet model. */
+    var horizonToggle = document.getElementById("cl-horizon-toggle");
+    if (horizonToggle) {
+        horizonToggle.addEventListener("click", function () {
+            showOnly(openSheet === horizon ? null : horizon);
+        });
+    }
+
+    var instrumentToggle = document.getElementById("cl-instrument-toggle");
+    if (instrumentToggle) {
+        instrumentToggle.addEventListener("click", function () {
+            showOnly(openSheet === instrument ? null : instrument);
+        });
     }
 
     /* ========================================================
@@ -476,16 +640,9 @@
         });
     });
 
-    var instrumentToggle = document.getElementById("cl-instrument-toggle");
-    if (instrumentToggle) {
-        instrumentToggle.addEventListener("click", function () {
-            showOnly(instrument && instrument.hidden ? instrument : null);
-        });
-    }
-
-    /* A press on the drawing itself dismisses. The surface is what you
-       return to, so returning to it should not require finding a
-       control. A press that was actually a pan does not count. */
+    /* A press on the drawing returns to it. The surface is what you come
+       back to, so coming back should not require finding a control. A
+       press that was actually a pan does not count. */
     lake.addEventListener("click", function (event) {
         if (moved) { moved = false; return; }
         if (event.target.closest(".cl-mark, .cl-look, .cl-selection")) { return; }

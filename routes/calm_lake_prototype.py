@@ -101,58 +101,177 @@ PROTOTYPE_NOTICE = (
 
 
 # ---------------------------------------------------------------------------
-# The Actionability Horizon.
+# PROMINENCE - jointly informed by consequence, evidence, authority and
+# remaining actionability, and DELIBERATELY NOT A NUMBER.
 #
-# The directive's constraint: order by CONSEQUENCE and REMAINING WINDOW OF
-# INTERVENTION, not by a static severity badge. Two things follow, and both
-# are deliberate departures from how `main` renders findings today.
+# An earlier revision of this file scored prominence as a weighted product
+# and rendered values like 0.771 on the surface. That was wrong twice over,
+# and the reasons are worth keeping because both are easy to re-commit:
 #
-# 1. A window is a fact with a basis, exactly like a citation. "4 days" is
-#    an assertion about the world, and an interface that renders it in the
-#    same weight whether it came from a read schedule or from a sentence is
-#    committing the SS4.2 fluency error one level up from citations. So each
-#    item's window carries its own basis, and BASIS_NONE renders as a real
-#    answer ("no basis on record") rather than as a blank or an omission.
+# 1. The precision was manufactured. None of the four weights was measured;
+#    they were chosen to make the fixture come out right. A number computed
+#    from invented constants LOOKS like evidence and is not - the same
+#    fluency failure as a citation parsed from prose, one level up. This
+#    repository already carries the concern under its own name: two model
+#    self-reported confidence floats still render as precise percentages on
+#    `main`, and that is a known open reservation, not a pattern to copy.
 #
-# 2. Ordering must be inspectable. A ranked list whose ranking cannot be
-#    interrogated is a severity badge with extra steps. horizon_order()
-#    below is eleven lines and its output is rendered as prose next to the
-#    list, so a reader can disagree with the ordering rather than absorb it.
+# 2. A single scalar destroys the reason. "0.319" cannot be argued with.
+#    "Its window is established and not yet closing - 31 days remain, 35% of
+#    the original 48 elapsed" can be, by anyone, including someone who thinks
+#    31 days IS closing for this trade.
 #
-# `severity` is retained on each item ON PURPOSE, and it is NOT what the
-# ordering uses. Keeping it visible is what makes the departure legible:
-# DAMPER-SD-14 outranks DOOR-D-106 while both are "high", because one has
-# four days left and the other thirty-one.
+# So the model below is a small set of stated RULES, and each finding carries
+# the reasons it landed where it did, in words. The rules are readable in one
+# sitting, disagreeable in specific parts, and carry no false precision.
+#
+# The four dimensions still all participate. What changed is that they
+# combine as conditions rather than as factors:
+#
+#   Consequence  - how bad if unresolved
+#   Evidence     - is every side record-grounded, or does one rest on the
+#                  claim's own sentence?
+#   Authority    - is there a governed action to take at all?
+#   Horizon      - is the window established, and is it closing?
+#
+# NO BINARY SILENCE. There are two bands and every finding is in one of
+# them. `tracked` is not "hidden" - it is a pin on the drawing and a line in
+# the tracked band, one tap from its own evidence. A long runway buys quiet,
+# never absence.
 # ---------------------------------------------------------------------------
 
 THRESHOLD_DAYS = 7
-"""Below this many days remaining, an item stops waiting to be found.
+"""Days remaining at or below which a window counts as closing.
 
-This is the actionability threshold the directive names -- the line the
-machinery crosses to surface unbidden. It is a fixture constant here, not a
-tuned parameter; the prototype's claim is that a threshold BELONGS in the
-model, not that seven is the right number."""
+An inflection point, not an on/off switch for visibility. The earlier binary
+use of this constant is exactly what the two-band model replaces: it removed
+a high-consequence, well-evidenced finding from every surface except an
+unlabelled dot because its runway was long, which is not calm, it is quiet."""
+
+SPENT_FRACTION_CLOSING = 0.75
+"""A window can also close by proportion, not only by absolute days.
+
+Both readings are kept because they disagree in the cases worth catching: a
+long window nearly exhausted, and a short window barely begun. Either one
+alone would miss half of them."""
+
+PROMINENCE_FOREGROUND = "foreground"
+PROMINENCE_TRACKED = "tracked"
+
+
+def window_is_established(window):
+    """A window with no basis on record is not a window, it is a blank.
+
+    It must never read as urgent by default: "we do not know when" becoming
+    "act now" is truth-promotion wearing scheduling clothes.
+    """
+    return window["basis"] != BASIS_NONE and window["days_remaining"] is not None
+
+
+def window_is_closing(window):
+    if not window_is_established(window):
+        return False
+    if window["days_remaining"] <= THRESHOLD_DAYS:
+        return True
+    total = window.get("total_days")
+    if not total:
+        return False
+    return ((total - window["days_remaining"]) / float(total)) >= SPENT_FRACTION_CLOSING
+
+
+def evidence_is_grounded(finding):
+    """Every side traces to the record - none rests on the claim's own text.
+
+    Deliberately ALL, not any. Taking "any" would let one located citation
+    launder a second leg that is only a sentence, which is precisely the
+    failure the basis vocabulary exists to prevent.
+    """
+    sides = finding.get("sides") or []
+    return bool(sides) and all(
+        side["basis"] in (BASIS_LOCATED, BASIS_READ) for side in sides
+    )
+
+
+def has_governed_action(finding):
+    return bool(finding.get("action"))
+
+
+def assess(finding):
+    """Which band a finding is in, and the reasons, in words.
+
+    Returns reasons for BOTH bands. A foreground finding says what earned it
+    the interruption; a tracked finding says what is keeping it quiet - which
+    is the more important of the two, because that is the sentence a reader
+    needs in order to disagree with the surface.
+    """
+    window = finding["window"]
+    closing = window_is_closing(window)
+    grounded = evidence_is_grounded(finding)
+    actionable = has_governed_action(finding)
+    severe = finding["severity"] == "high"
+
+    # A finding interrupts only when all four line up. Any one of them
+    # missing is a real reason not to take over someone's attention.
+    tier = (
+        PROMINENCE_FOREGROUND
+        if (closing and grounded and actionable and severe)
+        else PROMINENCE_TRACKED
+    )
+
+    reasons = []
+    if tier == PROMINENCE_FOREGROUND:
+        reasons.append(
+            "The window is closing - %d days remain of %d."
+            % (window["days_remaining"], window["total_days"])
+        )
+        reasons.append("Every side of the finding traces to a document on record.")
+        reasons.append("A governed action is available.")
+    else:
+        if not window_is_established(window):
+            reasons.append(
+                "No basis on record establishes when acting on this stops "
+                "being possible, so it is not allowed to interrupt."
+            )
+        elif not closing:
+            spent = window_spent_percent(window)
+            reasons.append(
+                "The window is established and not yet closing - %d days "
+                "remain, %d%% of the original %d elapsed."
+                % (window["days_remaining"], spent, window["total_days"])
+            )
+        if not grounded:
+            reasons.append(
+                "One side rests on the claim's own sentence rather than on a "
+                "document that was opened."
+            )
+        if not actionable:
+            reasons.append("No governed action is available from here.")
+        if not severe:
+            reasons.append("Consequence is not rated high.")
+
+    return {
+        "tier": tier,
+        "reasons": reasons,
+        "closing": closing,
+        "grounded": grounded,
+        "actionable": actionable,
+        "severe": severe,
+    }
 
 
 def horizon_order(items):
-    """Order the horizon by consequence x remaining window.
+    """Foreground first, then by how soon the window closes.
 
-    Unresolvable windows (BASIS_NONE) sort last, not first. An item whose
-    urgency cannot be established must not be able to claim the top of the
-    list by being unknown -- that is how "we don't know" becomes "it's
-    urgent", which is the fluency failure in scheduling clothes.
+    Unestablished windows sort last: an item whose urgency cannot be
+    established does not get to claim the top of the list by being unknown.
     """
-    rank = {"high": 0, "medium": 1, "low": 2}
-
     def key(item):
+        state = item.get("prominence") or assess(item)
         window = item["window"]
-        unknown = window["basis"] == BASIS_NONE
-        days = window["days_remaining"]
         return (
-            0 if (not unknown and days <= THRESHOLD_DAYS) else 1,
-            1 if unknown else 0,
-            days if days is not None else 10**6,
-            rank.get(item["severity"], 3),
+            0 if state["tier"] == PROMINENCE_FOREGROUND else 1,
+            0 if window_is_established(window) else 1,
+            window["days_remaining"] if window["days_remaining"] is not None else 10**6,
         )
 
     return sorted(items, key=key)
@@ -417,15 +536,18 @@ def surface():
         # alone is not enough, Developer Mode must be explicitly on.
         abort(403)
 
-    horizon = horizon_order(FINDINGS)
-    for finding in horizon:
+    for finding in FINDINGS:
         finding["window"]["spent_percent"] = window_spent_percent(finding["window"])
-    surfaced = [
-        f for f in horizon
-        if f["window"]["basis"] != BASIS_NONE
-        and f["window"]["days_remaining"] is not None
-        and f["window"]["days_remaining"] <= THRESHOLD_DAYS
-    ]
+        finding["prominence"] = assess(finding)
+
+    horizon = horizon_order(FINDINGS)
+
+    # Two bands, and every finding is in exactly one of them. Nothing is
+    # dropped: `tracked` is the band the earlier binary model silenced, and
+    # it is quiet rather than absent - a pin on the drawing and a line in the
+    # tracked band, one tap from its own evidence.
+    surfaced = [f for f in horizon if f["prominence"]["tier"] == PROMINENCE_FOREGROUND]
+    tracked = [f for f in horizon if f["prominence"]["tier"] == PROMINENCE_TRACKED]
     return render_template(
         "calm_lake_prototype.html",
         project=PROJECT,
@@ -433,6 +555,7 @@ def surface():
         verbs=VERBS,
         horizon=horizon,
         surfaced=surfaced,
+        tracked=tracked,
         threshold_days=THRESHOLD_DAYS,
         basis_labels=BASIS_LABELS,
         basis_meanings=BASIS_MEANINGS,
@@ -440,4 +563,5 @@ def surface():
         basis_none=BASIS_NONE,
         basis_asserted=BASIS_ASSERTED,
         basis_located=BASIS_LOCATED,
+        basis_read=BASIS_READ,
     )
