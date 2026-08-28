@@ -6,6 +6,11 @@ this document, and none performed while writing it. Nothing here amends
 
 **Baseline this describes:** `main` @ `6937b1a`. Measured directly, not recalled.
 
+**Revised 2026-08-28** with the Q1 control result (§3.1). That run **refuted**
+§9's original first premise, and §4 was restated accordingly — see §4.1. The
+original claim is not quietly deleted anywhere in this document; it is marked
+answered-negative and the reasoning that replaced it is given.
+
 **Read this first.** The provenance repair discussed throughout
 (`CaseWorkspaceStore.finding_provenance`) **is not on `main`.** It exists only on
 `origin/spike/multi-surface-canvas` @ `f0a12ce` and is unmerged. On `main` today,
@@ -55,6 +60,13 @@ provenance" has meant *groundedness* in every prior stage of this repository.
 The blind trial showed that a surface can score perfectly on groundedness and
 still deliver nothing, and — far more dangerous — can deliver fluently while
 grounded in nothing.
+
+**The Q1 control added a fourth observation that the table cannot hold** (§3.1):
+in the *not-reachable* cell, readers do not stop. They construct the missing
+citation themselves out of the finding's prose, silently and without record. So
+"not reachable" never means "no citation is made" — it means **the citation is
+made off the record**. This is why §4.1 restates the value of grounded links as
+inference *displacement* rather than step reduction.
 
 ---
 
@@ -229,6 +241,28 @@ meaningful share of the permanent chrome is the implementation of the *Look*
 verb, not accretion.** Any proposal that reads "51% is furniture, delete it"
 deletes navigation and calls it simplification.
 
+### 2.7 Defects observed while measuring — tracked here, not fixed
+
+Recorded because they were found by blind subjects doing a real task, which is
+the only way most of them would surface. Not addressed by this proposal.
+
+- **`brief.md` is an advertised document that 404s.** It is listed in the File
+  menu, in the tab strip, and as a document in the rail. Following it returns
+  **HTTP 404** (`/projects/<id>/workspace`). Earlier subjects reported it
+  "rendered nothing"; the Q1 control subject got a hard 404 and wrote: *"Being
+  told a document exists and then getting a 404 is worse than not listing it."*
+  It is also the only document a reader cannot rule out — one subject noted it
+  "could have contained the answer and I have no way to know."
+- **"Attention is full" renders in a project holding one Investigation**,
+  unprompted, and reads as a live limit the reader has hit. Reported
+  independently by four of five subjects. Also carries a stray space: `to pin ,`.
+- **"Not found - ARCHIOSK doesn't yet compare this image against the document
+  set."** renders with no image in play, directly beneath *"Paste, drop, or
+  capture an image to search"* — a control presented alongside its own admission
+  that it does not work.
+- **Display divisions 2–6 each print the full document list**, so the four
+  document names appear six times per page, five of them inert.
+
 ---
 
 ## 3. Empirical basis
@@ -264,6 +298,44 @@ attributed the ease to evidence links being present.
   What it does not contaminate is verification behaviour: both subjects went to
   the documents rather than trusting the sentence.
 
+### 3.1 The Q1 control (2026-08-28) — the deliberate no-links arm
+
+Run to settle §9's first open question. **No apparatus was built:** `main` itself
+is the control, because the Arm A repair is unmerged, so an analysis-chain
+Finding on `main` renders a statement, a confidence float and a review badge with
+no provenance block at all. The control is therefore the shipped product rather
+than a mock, which removes any argument that it was strawmanned. Same fixture,
+same harness, same prompt, same blind protocol. Rendered delta between arms:
+**10 lines**.
+
+| Arm | Evidence links | Views to verified answer |
+|---|---|---|
+| A — full chrome, record-grounded | yes | 3 |
+| B — calm canvas, prose-derived | yes | 3 |
+| **C — full chrome, none** (n=3) | **no** | **3, 3, 2–3** |
+
+**The gap does not reproduce.** Five subjects across three conditions all reached
+a verified answer in about three views. Links did not change navigation cost.
+
+**The 6-view outlier is explained, and not by links.** The finding text occurs
+twice on the page: at offset **2,707** as a discussion `<option>` label truncated
+at 50 characters — `"Door tag D-106 on A-101 has no corresponding row i"` —
+and in full at offset **5,064**. The invalidated run's 4,000-character window
+contained only the first. That subject knew A-101 was involved and **was never
+told the door schedule was**, because the sentence was cut immediately before
+those words. The variance was a truncated clause, not a missing citation.
+
+**Confound, and its direction matters.** Arm C displays `confidence 50%`, a
+distrust cue absent from Arm A, which should have *inflated* Arm C's count. It
+did not. The negative result holds despite a bias toward the hypothesis, which
+is why no cleaner single-variable arm was run: it could only strengthen the
+negative.
+
+**The dominant artifact is the fixture's filenames.** `A-601 Door Schedule.pdf`
+resolves the phrase "the door schedule" at zero inference cost. All three control
+subjects said so unprompted and bounded it themselves — *"with four documents
+that's trivial; with forty drawings named `SK-14-RevC.pdf` it is guesswork"*.
+
 ---
 
 ## 4. The Anti-Fluency Constraint, developed
@@ -289,7 +361,44 @@ means feel like progress.** Any future work that makes provenance more reachable
 must be checked against what the new mechanism is grounded in, or it will drift
 toward fluency by the path of least resistance.
 
-### 4.1 The rule this yields
+### 4.1 Inference displacement — the corrected statement of value
+
+**The Q1 control refuted the step-count case for links, and revealed a better
+one.** All three control subjects reached the evidence in three views with no
+citations at all — by reading the sheet names out of the finding's prose and
+matching them against the document rail themselves. One stated the mechanism
+outright:
+
+> *"I had to visually match 'A-101' against the Documents rail and **infer** that
+> 'the door schedule' meant `A-601 Door Schedule.pdf`."*
+
+**That inference is an `asserted`-basis citation, constructed in the reader's
+head.** It is ungrounded by exactly the definition in §4.2, it is unrecorded, and
+nobody — not a reviewer, not an auditor, not the reader themselves later — can
+check which document they actually consulted or whether the match was right.
+
+So the fluency hazard does not require the interface to render a prose-derived
+link. **A prose finding invites the reader to construct one unaided, and they
+will.** Arm B did not introduce the failure mode; it merely automated one the
+reader was already performing.
+
+This inverts the argument for record-grounded citation:
+
+> **The value of a record-grounded link is not that it saves steps — on a clean
+> fixture it saves none. It is that it replaces a silent, unverifiable human
+> inference with an auditable one.**
+
+Same destination, different epistemics, and only one of the two leaves a trace.
+That is a provenance argument rather than an efficiency argument, and it is the
+one this proposal should be defended on. It also aligns the mechanism with
+`constitutional-invariants.md` #3, which is about traceability, not convenience.
+
+**Where the efficiency case might still hold, unmeasured:** every control subject
+bounded their own inference at four self-describing filenames and expected it to
+fail at forty or four hundred opaque ones. That is the condition under which
+links could reduce cost, and this fixture cannot produce it. See §9 Q1.
+
+### 4.2 The rule this yields
 
 > **Every citation surface must be able to state its own basis, and bases that
 > differ in strength must not be rendered identically.**
@@ -506,9 +615,29 @@ finding it exposed, is worth more than a confirmed prediction would have been.
 
 ## 9. Open questions this cannot settle
 
-1. **Is the 6-vs-3 gap real?** The only cell separating "links" from "no links"
-   came from an invalidated run. The cheap decisive test is a deliberate control
-   arm: full chrome, no evidence links. Run before building on §4.
+1. **Is the 6-vs-3 gap real? — ANSWERED NEGATIVE (2026-08-28).** Run as a
+   deliberate no-links control against `main` itself, n=3. All subjects reached a
+   verified answer in ~3 views, matching both link-bearing arms; the 6-view
+   outlier was traced to a finding sentence truncated before the words "door
+   schedule", not to a missing citation. See §3.1. **Evidence links do not reduce
+   navigation cost on a clean fixture**, and §4 no longer rests on that claim —
+   it rests on inference displacement (§4.1) instead.
+
+   **The true empirical boundary, still open:** every control subject resolved
+   the citation by matching prose against *four self-describing filenames*
+   (`A-601 Door Schedule.pdf`). They each bounded that themselves at roughly
+   forty opaque names (`SK-14-RevC.pdf`). The unmeasured condition is therefore
+   **document-set scale crossed with filename opacity** — a set large enough, and
+   named poorly enough, that prose cannot be resolved by eye. If links reduce
+   cost anywhere, it is there, and only a fixture built for it can show it.
+   Note the asymmetry when designing that test: at scale the reader's inference
+   does not merely get slower, it starts being **wrong**, and a wrong silent
+   inference is the §4.1 hazard rather than a performance cost.
+
+   Also settled by the same run: a **preference signal is not a performance
+   signal**. All three control subjects named "the finding doesn't link to its
+   evidence" as the single largest gap *while succeeding in three views*. §4 must
+   not cite that as evidence of cost.
 2. **Does contrastive disclosure (§6.1) survive real scale?** Demonstrated on a
    6-row schedule. A 400-door set is a different problem.
 3. **Confidence calibration** — `reservations.md` item 14. Two model
