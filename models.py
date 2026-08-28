@@ -213,6 +213,50 @@ class StorageAgentEnrolment(db.Model):
                 f"agent={self.agent_label} revoked={self.revoked_at is not None}>")
 
 
+class StationEnrolment(db.Model):
+    """SPIKE / CLAUDE-STATION-01: a physical surface that mounts one project.
+
+    A Site Glass Box is a station for a job. Once mounted, the project IS the
+    application - no switcher on the working surface, because switching is an
+    explicit privileged act rather than navigation.
+
+    TWO FIELDS, DELIBERATELY SEPARATE, and this is the one place the design
+    departs from StorageAgentEnrolment: `token_hash` is the station's IMMUTABLE
+    identity, and `mounted_project_id` is MUTABLE. A table serves a different job
+    next month; re-pointing it must not destroy its identity, its history, or
+    every companion pairing with it. StorageAgentEnrolment binds a credential to
+    one project permanently because an agent speaks for exactly one storage root
+    forever - a station does not.
+
+    Same "never store the real secret" shape otherwise: only token_hash is
+    persisted. `mounted_project_id` is a plain string, not a foreign key, because
+    projects live in the flat-JSON store and have no table - exactly as
+    ProjectWorkspace.owner already works.
+
+    A MOUNT IS NOT AN ENTITLEMENT. This row says which project a surface shows.
+    It never says who may see it: can_access_project remains the failing-closed
+    gatekeeper for every participant who joins.
+    """
+    __tablename__ = "station_enrolments"
+
+    id = db.Column(db.Integer, primary_key=True)
+    label = db.Column(db.String(255), nullable=False)
+    token_hash = db.Column(db.String(64), unique=True, nullable=False, index=True)
+    mounted_project_id = db.Column(db.String(255), nullable=True, index=True)
+    mounted_at = db.Column(db.DateTime, nullable=True)
+    mounted_by = db.Column(db.String(255), nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    created_by = db.Column(db.String(255), nullable=True)
+    expires_at = db.Column(db.DateTime, nullable=False)
+    revoked_at = db.Column(db.DateTime, nullable=True)
+    revoked_by = db.Column(db.String(255), nullable=True)
+    last_seen_at = db.Column(db.DateTime, nullable=True)
+
+    def __repr__(self) -> str:
+        return (f"<StationEnrolment {self.label} "
+                f"mounted={self.mounted_project_id or 'none'}>")
+
+
 class DiagnosticReport(db.Model):
     """CLAUDE-DIAGNOSTIC-BRIDGE-01: one live product problem, captured in the
     application that produced it, for a development agent to investigate.
