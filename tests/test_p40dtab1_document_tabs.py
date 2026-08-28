@@ -472,9 +472,23 @@ class PdfViewerStatePersistenceTests(unittest.TestCase):
         # Section 6's own "where safe and appropriate" - restoring the
         # query text is safe; auto-re-running it could silently jump
         # away from the just-restored page, which is not.
+        # CLAUDE-CANVAS-STEP1-01: the saved query is now restored into the
+        # surface's OWN currentSearchQuery, which the shared toolbar then
+        # mirrors, rather than being written straight into #doc-search-input
+        # and read back out of it at save time. That indirection is the fix
+        # for the blanking defect in
+        # governance/proposals/pdf-viewer-dom-decoupling-audit.md 3.1, where
+        # an unfocused surface persisted '' over its own remembered query.
+        # The intent THIS test protects is unchanged and still asserted: the
+        # query is restored, and it is not re-run. The final assertion is new
+        # - it closes the hole the rename would otherwise have opened, since
+        # "runSearch(saved.searchQuery)" alone would no longer catch an
+        # auto-navigation reintroduced through the new variable.
         mount_fn = self.js[self.js.index("function mount(url, canvasContainer, downloadFilename, sourceId)"):self.js.index("function unmount(")]
-        self.assertIn("searchInput.value = (saved && saved.searchQuery) || '';", mount_fn)
+        self.assertIn("currentSearchQuery = (saved && saved.searchQuery) || '';", mount_fn)
+        self.assertIn("searchInput.value = currentSearchQuery;", mount_fn)
         self.assertNotIn("runSearch(saved.searchQuery)", mount_fn)
+        self.assertNotIn("runSearch(currentSearchQuery)", mount_fn)
 
 
 class AccountIsolationTests(_BaseTestCase):

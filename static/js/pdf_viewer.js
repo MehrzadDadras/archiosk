@@ -64,7 +64,6 @@
     'use strict';
 
     var container = document.getElementById('workspace-document-controls');
-    if (!container) return;
 
     var prevBtn = document.getElementById('doc-prev-page');
     var nextBtn = document.getElementById('doc-next-page');
@@ -97,7 +96,19 @@
     var resetOrientationBtn = document.getElementById('doc-reset-orientation');
     var orientationStatusEl = document.getElementById('doc-orientation-status');
     var regionStatusEl = document.getElementById('doc-region-status');
-    if (!prevBtn || !nextBtn || !pageInput || !zoomOutBtn || !zoomInBtn || !searchInput) return;
+    // CLAUDE-CANVAS-STEP1-01: the container lookup above and these six
+    // controls used to be two hard gates that returned out of the WHOLE
+    // module, so a chrome-less render produced no viewer and - more
+    // importantly - no window.ArchioskPdfViewer for anything else to drive.
+    // The engine never needed them: no chrome element appears in the render
+    // pipeline, the viewport lifecycle or the geometry math (the canvas
+    // arrives as a mount() parameter). Their absence therefore means "this
+    // page has no shared toolbar", not "there is no viewer". Every chrome
+    // write below goes through ownsToolbar(), and the toolbar wiring binds
+    // only when the control actually exists - this file's own existing
+    // `if (btn) btn.addEventListener(...)` idiom for optional controls,
+    // extended to the six that used to be mandatory.
+    var hasChrome = !!(container && prevBtn && nextBtn && pageInput && zoomOutBtn && zoomInBtn && searchInput);
 
     // -------- Responsive: move secondary controls into the overflow --
     // -------- panel below 900px (this file's own matchMedia listener, -
@@ -292,6 +303,11 @@
         var currentCanvasContainer = null;
         var currentUrl = null;
         var currentDownloadFilename = null;
+        // CLAUDE-CANVAS-STEP1-01: the search query is SURFACE state, not DOM
+        // state. It used to be read back out of #doc-search-input at save
+        // time, which meant an unfocused surface persisted '' and silently
+        // blanked its own remembered query on the pagehide flush.
+        var currentSearchQuery = '';
         var drawingCapabilityPanel = null;
         var drawingCapabilityEvidenceId = null;
         var viewStateSaveTimer = null;
@@ -440,6 +456,58 @@
 
         function isFocused() { return window.__activeDocumentSurface === name; }
 
+        // A chrome write requires BOTH that this surface owns the one shared
+        // toolbar AND that the toolbar physically exists on this page.
+        function ownsToolbar() { return hasChrome && isFocused(); }
+
+        // -------- Adapter contract (CLAUDE-CANVAS-STEP1-01) --------------
+        // The surface owns its state and publishes it; a consumer renders
+        // it. The shared toolbar is now just one such consumer, and a
+        // canvas-native or headless consumer needs no #doc-* element at all.
+        var stateListeners = [];
+
+        function snapshot() {
+            return {
+                surface: name,
+                hasDoc: !!pdfDoc,
+                page: currentPage,
+                pageCount: pdfDoc ? pdfDoc.numPages : 0,
+                canPrev: !!pdfDoc && currentPage > 1,
+                canNext: !!pdfDoc && currentPage < pdfDoc.numPages,
+                zoom: currentZoom,
+                rotation: currentRotation,
+                mirrorH: mirrorH,
+                mirrorV: mirrorV,
+                searchQuery: currentSearchQuery,
+                matchIndex: searchMatchIndex,
+                matchCount: searchMatches.length,
+                sourceId: currentSourceId,
+                downloadUrl: currentUrl,
+                downloadFilename: currentDownloadFilename
+            };
+        }
+
+        function subscribe(listener) {
+            if (typeof listener !== 'function') return function () {};
+            stateListeners.push(listener);
+            // Replay current state immediately so a consumer that subscribes
+            // after mount() is not blank until the next change.
+            try { listener('subscribe', snapshot()); } catch (e) { /* see emit */ }
+            return function unsubscribe() {
+                var i = stateListeners.indexOf(listener);
+                if (i !== -1) stateListeners.splice(i, 1);
+            };
+        }
+
+        function emit(event, data) {
+            if (!stateListeners.length) return;
+            var payload = data || snapshot();
+            // A consumer must never be able to break the viewer.
+            for (var i = 0; i < stateListeners.length; i++) {
+                try { stateListeners[i](event, payload); } catch (e) { /* ignore */ }
+            }
+        }
+
         function saveViewStateNow() {
             if (!currentSourceId) return;
             var state = {
@@ -450,7 +518,7 @@
                 mirrorV: mirrorV,
                 scrollLeft: currentCanvasContainer ? currentCanvasContainer.scrollLeft : 0,
                 scrollTop: currentCanvasContainer ? currentCanvasContainer.scrollTop : 0,
-                searchQuery: (isFocused() && searchInput) ? searchInput.value : ''
+                searchQuery: currentSearchQuery
             };
             try { window.localStorage.setItem(viewStateKey(currentSourceId), JSON.stringify(state)); } catch (e) { /* ignore */ }
         }
@@ -507,12 +575,12 @@
         // surface currently owns it - a non-focused surface mounting or
         // clearing a document must never steal or blank the toolbar the
         // reviewer is actively looking at.
-        function showControls() { if (isFocused()) container.hidden = false; }
-        function hideControls() { if (isFocused()) container.hidden = true; }
+        function showControls() { if (ownsToolbar()) container.hidden = false; }
+        function hideControls() { if (ownsToolbar()) container.hidden = true; }
 
         function updateNavState() {
             updateThumbnailCurrent();
-            if (!isFocused()) return;
+            if (!ownsToolbar()) return;
             pageInput.value = String(currentPage);
             prevBtn.disabled = currentPage <= 1;
             nextBtn.disabled = !pdfDoc || currentPage >= pdfDoc.numPages;
@@ -601,7 +669,7 @@
                 var ctx = canvas.getContext('2d');
                 if (renderTask) { try { renderTask.cancel(); } catch (e) { /* ignore - a newer render superseded it */ } }
                 renderTask = page.render({ canvasContext: ctx, viewport: viewport });
-                return renderTask.promise.then(function () { updateNavState(); redrawAnnotations(); });
+                return renderTask.promise.then(function () { updateNavState(); redrawAnnotations(); emit('render'); });
             });
         }
 
@@ -614,12 +682,14 @@
             updateAnnotationUi();
             renderPage();
             saveViewStateSoon();
+            emit('page');
         }
 
         function setZoom(z) {
             currentZoom = Math.max(0.25, Math.min(4, z));
             renderPage();
             saveViewStateSoon();
+            emit('zoom');
         }
 
         function fitWidth() {
@@ -647,6 +717,7 @@
             renderPage();
             updateOrientationStatus();
             saveViewStateSoon();
+            emit('rotation');
         }
 
         function applyMirrorTransform() {
@@ -657,7 +728,7 @@
         }
 
         function updateOrientationStatus() {
-            if (!isFocused() || !orientationStatusEl) return;
+            if (!ownsToolbar() || !orientationStatusEl) return;
             var parts = [];
             if (currentRotation % 360) parts.push('Rotated ' + currentRotation + '° clockwise');
             if (mirrorH) parts.push('mirrored horizontally');
@@ -672,6 +743,7 @@
             applyMirrorTransform();
             updateOrientationStatus();
             saveViewStateSoon();
+            emit('rotation');
         }
 
         function mirrorVertical() {
@@ -679,6 +751,7 @@
             applyMirrorTransform();
             updateOrientationStatus();
             saveViewStateSoon();
+            emit('rotation');
         }
 
         function resetOrientation() {
@@ -689,6 +762,7 @@
             renderPage();
             updateOrientationStatus();
             saveViewStateSoon();
+            emit('rotation');
         }
 
         function flippedCanvasPoint(pt) {
@@ -711,13 +785,13 @@
         }
 
         function updateSearchUi() {
-            if (!isFocused()) return;
+            if (!ownsToolbar()) return;
             searchPrevBtn.disabled = searchMatches.length === 0;
             searchNextBtn.disabled = searchMatches.length === 0;
             if (searchMatches.length) {
                 searchCount.textContent = (searchMatchIndex + 1) + ' / ' + searchMatches.length;
             } else {
-                searchCount.textContent = searchInput.value.trim() ? 'No matches' : '';
+                searchCount.textContent = currentSearchQuery.trim() ? 'No matches' : '';
             }
         }
 
@@ -1178,15 +1252,16 @@
                 currentSheetUnit = null;
                 drawingCapabilityEvidenceId = null;
                 drawingCapabilityPanel = null;
-                if (isFocused() && regionStatusEl) regionStatusEl.textContent = '';
+                if (ownsToolbar() && regionStatusEl) regionStatusEl.textContent = '';
                 applyMirrorTransform();
                 updateOrientationStatus();
                 pageTextCache = {};
                 searchMatches = [];
                 searchMatchIndex = -1;
-                if (isFocused()) searchInput.value = (saved && saved.searchQuery) || '';
-                if (isFocused()) pageTotal.textContent = String(pdfDoc.numPages);
-                if (isFocused()) {
+                currentSearchQuery = (saved && saved.searchQuery) || '';
+                if (ownsToolbar()) searchInput.value = currentSearchQuery;
+                if (ownsToolbar()) pageTotal.textContent = String(pdfDoc.numPages);
+                if (ownsToolbar()) {
                     downloadLink.href = url;
                     if (downloadFilename) downloadLink.setAttribute('download', downloadFilename); else downloadLink.removeAttribute('download');
                 }
@@ -1225,6 +1300,10 @@
             currentCanvasContainer = null;
             currentUrl = null;
             currentDownloadFilename = null;
+            // saveViewStateNow() above has already persisted this; clearing it
+            // keeps a post-unmount snapshot() honest rather than publishing the
+            // previous document's query to a subscribed consumer.
+            currentSearchQuery = '';
             thumbnailsOnlyMode = false;
             mirrorH = false;
             mirrorV = false;
@@ -1233,7 +1312,7 @@
             if (drawingCapabilityPanel && drawingCapabilityPanel.parentNode) drawingCapabilityPanel.parentNode.removeChild(drawingCapabilityPanel);
             drawingCapabilityPanel = null;
             regionDrag = null;
-            if (isFocused() && regionStatusEl) regionStatusEl.textContent = '';
+            if (ownsToolbar() && regionStatusEl) regionStatusEl.textContent = '';
             hideControls();
             clearThumbnails();
             resetAnnotationState();
@@ -1243,12 +1322,12 @@
         // Re-syncs the ONE shared toolbar to THIS surface's own state -
         // called whenever focus switches TO this surface (setFocus above).
         function refreshToolbar() {
-            if (!isFocused()) return;
+            if (!ownsToolbar()) return;
             if (!pdfDoc) { container.hidden = true; return; }
             container.hidden = false;
             downloadLink.href = currentUrl || '';
             if (currentDownloadFilename) downloadLink.setAttribute('download', currentDownloadFilename); else downloadLink.removeAttribute('download');
-            searchInput.value = searchInput.value; // no-op placeholder kept for clarity of intent
+            searchInput.value = currentSearchQuery;
             updateNavState();
             pageTotal.textContent = pdfDoc ? String(pdfDoc.numPages) : '';
             updateSearchUi();
@@ -1294,7 +1373,7 @@
             goToPage: goToPage,
             setPageFromInput: function (raw) {
                 var n = parseInt(raw, 10);
-                if (!isNaN(n)) goToPage(n); else if (isFocused()) pageInput.value = String(currentPage);
+                if (!isNaN(n)) goToPage(n); else if (ownsToolbar()) pageInput.value = String(currentPage);
             },
             zoomIn: function () { setZoom(currentZoom + 0.1); },
             zoomOut: function () { setZoom(currentZoom - 0.1); },
@@ -1306,13 +1385,18 @@
             mirrorVertical: mirrorVertical,
             resetOrientation: resetOrientation,
             onSearchInput: function (value) {
+                currentSearchQuery = value || '';
                 window.clearTimeout(searchDebounce);
                 searchDebounce = window.setTimeout(function () { runSearch(value); }, 300);
             },
             onSearchEnter: function (shiftKey) {
                 if (searchMatches.length) searchStep(shiftKey ? -1 : 1);
-                else runSearch(searchInput.value);
+                else runSearch(currentSearchQuery);
             },
+            setSearchQuery: function (value) { currentSearchQuery = value || ''; },
+            subscribe: subscribe,
+            emit: emit,
+            getState: snapshot,
             searchStep: searchStep,
             print: function () { if (currentUrl) window.open(currentUrl, '_blank'); },
             setActiveTool: setActiveTool,
@@ -1355,27 +1439,27 @@
 
     // -------- Event wiring: the ONE shared toolbar dispatches to
     // -------- whichever surface currently has focus. ---------------------
-    prevBtn.addEventListener('click', function () { var s = getFocused(); if (s) s.prevPage(); });
-    nextBtn.addEventListener('click', function () { var s = getFocused(); if (s) s.nextPage(); });
-    pageInput.addEventListener('change', function () { var s = getFocused(); if (s) s.setPageFromInput(pageInput.value); });
-    zoomOutBtn.addEventListener('click', function () { var s = getFocused(); if (s) s.zoomOut(); });
-    zoomInBtn.addEventListener('click', function () { var s = getFocused(); if (s) s.zoomIn(); });
-    fitWidthBtn.addEventListener('click', function () { var s = getFocused(); if (s) s.fitWidth(); });
-    fitPageBtn.addEventListener('click', function () { var s = getFocused(); if (s) s.fitPage(); });
-    rotateBtn.addEventListener('click', function () { var s = getFocused(); if (s) s.rotate(); });
+    if (prevBtn) prevBtn.addEventListener('click', function () { var s = getFocused(); if (s) s.prevPage(); });
+    if (nextBtn) nextBtn.addEventListener('click', function () { var s = getFocused(); if (s) s.nextPage(); });
+    if (pageInput) pageInput.addEventListener('change', function () { var s = getFocused(); if (s) s.setPageFromInput(pageInput.value); });
+    if (zoomOutBtn) zoomOutBtn.addEventListener('click', function () { var s = getFocused(); if (s) s.zoomOut(); });
+    if (zoomInBtn) zoomInBtn.addEventListener('click', function () { var s = getFocused(); if (s) s.zoomIn(); });
+    if (fitWidthBtn) fitWidthBtn.addEventListener('click', function () { var s = getFocused(); if (s) s.fitWidth(); });
+    if (fitPageBtn) fitPageBtn.addEventListener('click', function () { var s = getFocused(); if (s) s.fitPage(); });
+    if (rotateBtn) rotateBtn.addEventListener('click', function () { var s = getFocused(); if (s) s.rotate(); });
     if (mirrorHBtn) mirrorHBtn.addEventListener('click', function () { var s = getFocused(); if (s) s.mirrorHorizontal(); });
     if (mirrorVBtn) mirrorVBtn.addEventListener('click', function () { var s = getFocused(); if (s) s.mirrorVertical(); });
     if (resetOrientationBtn) resetOrientationBtn.addEventListener('click', function () { var s = getFocused(); if (s) s.resetOrientation(); });
-    searchInput.addEventListener('input', function () { var s = getFocused(); if (s) s.onSearchInput(searchInput.value); });
-    searchInput.addEventListener('keydown', function (e) {
+    if (searchInput) searchInput.addEventListener('input', function () { var s = getFocused(); if (s) s.onSearchInput(searchInput.value); });
+    if (searchInput) searchInput.addEventListener('keydown', function (e) {
         if (e.key !== 'Enter') return;
         e.preventDefault();
         var s = getFocused();
         if (s) s.onSearchEnter(e.shiftKey);
     });
-    searchPrevBtn.addEventListener('click', function () { var s = getFocused(); if (s) s.searchStep(-1); });
-    searchNextBtn.addEventListener('click', function () { var s = getFocused(); if (s) s.searchStep(1); });
-    printBtn.addEventListener('click', function () {
+    if (searchPrevBtn) searchPrevBtn.addEventListener('click', function () { var s = getFocused(); if (s) s.searchStep(-1); });
+    if (searchNextBtn) searchNextBtn.addEventListener('click', function () { var s = getFocused(); if (s) s.searchStep(1); });
+    if (printBtn) printBtn.addEventListener('click', function () {
         // A real, functional Print: opens the FOCUSED surface's own
         // original PDF (native browser PDF chrome) in a new tab.
         var s = getFocused();
