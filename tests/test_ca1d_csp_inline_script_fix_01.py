@@ -47,13 +47,47 @@ class CspNonceHeaderTests(unittest.TestCase):
             self.assertIn("script-src 'self' 'nonce-", header)
 
     def test_header_nonce_matches_every_inline_script_tag_in_the_same_response(self):
-        resp = self.client.get("/login")
+        # CLAUDE-ARM-A-REFMODE-ADMIN-01 moved this off /login. The property
+        # under test is unchanged - every inline <script> in a response must
+        # carry that same response's header nonce - but the page it was
+        # measured on no longer has an inline script to measure: /login's last
+        # one was the UI Reference Mode restore, removed with that stage (see
+        # templates/auth_shell.html's own note). No unauthenticated page has
+        # one now, so the assertTrue guard below - which exists precisely so
+        # this test cannot pass vacuously on a page with zero scripts - could
+        # not be satisfied by any public path.
+        #
+        # Deliberately NOT weakened to "assert equality for whatever is
+        # found": that would keep the test green while testing nothing, which
+        # is the exact failure mode the guard was written to prevent. An
+        # authenticated page carries eight inline nonce scripts, so the
+        # property is measured on real evidence again. The three sibling tests
+        # (header presence, no bare <script>, per-request rotation) still cover
+        # /login and the other public paths unchanged.
+        client = self.flask_app.test_client()
+        with client.session_transaction() as session:
+            session["user_id"] = 1
+            session["username"] = "csp_probe"
+            session["role"] = "read_only"
+
+        resp = client.get("/")
         nonce = self._nonce_from_header(resp)
         body = resp.get_data(as_text=True)
         inline_script_nonces = re.findall(r'<script nonce="([^"]+)">', body)
         self.assertTrue(inline_script_nonces, "expected at least one inline <script nonce=...> tag")
         for found in inline_script_nonces:
             self.assertEqual(found, nonce)
+
+    def test_login_has_no_inline_script_left_to_nonce(self):
+        """Guards the removal itself, so the change above stays honest.
+
+        If an inline script ever returns to the signed-out Sign-in page, this
+        fails and whoever added it has to decide deliberately whether the test
+        above should move back - rather than the coverage silently relocating
+        and nobody noticing which page is actually being measured.
+        """
+        body = self.client.get("/login").get_data(as_text=True)
+        self.assertEqual(re.findall(r'<script nonce="([^"]+)">', body), [])
 
     def test_no_bare_inline_script_tag_remains_anywhere_in_the_response(self):
         """A <script> tag with neither src= nor nonce= is exactly the

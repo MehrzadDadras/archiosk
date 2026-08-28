@@ -1183,6 +1183,19 @@ RESOLUTION_STATUS_UNSUPPORTED_REFERENCE_TYPE = "unsupported_reference_type"
 RESOLUTION_STATUS_PARTIALLY_RESOLVED = "partially_resolved"
 RESOLUTION_STATUS_UNKNOWN = "unknown"
 
+# CLAUDE-ARM-A-PROVENANCE-01: which chain answered "where did this claim
+# come from". Closed and derivation-owned for the same reason
+# RESOLUTION_STATUS_* above is - the evaluator names its own outcome, a
+# caller never supplies one. Not an open-world label set.
+PROVENANCE_BASIS_ARTIFACT = "artifact"
+PROVENANCE_BASIS_ANALYSIS = "analysis"
+PROVENANCE_BASIS_NONE = "none"
+PROVENANCE_BASES = (
+    PROVENANCE_BASIS_ARTIFACT,
+    PROVENANCE_BASIS_ANALYSIS,
+    PROVENANCE_BASIS_NONE,
+)
+
 
 from services.project_code import (
     REFERENCE_TYPE_CASE, REFERENCE_TYPE_TASK, issue_reference,
@@ -10855,6 +10868,100 @@ class CaseWorkspaceStore:
     def latest_disposition(self, workspace: ProjectWorkspace, finding_id: str) -> Optional[dict]:
         records = self.dispositions_for_finding(workspace, finding_id)
         return records[-1] if records else None
+
+    def finding_provenance(self, workspace: ProjectWorkspace, finding_id: str) -> dict:
+        """
+        Which real documents a Finding came from, resolved to names a
+        person can act on.
+
+        Deliberately NOT an extension of build_reference_snapshot. That
+        method's output is PERSISTED into RFIDraft.reference_snapshot, so
+        widening its shape would rewrite already-stored evidence records.
+        This is a pure read-side derivation over the same object chain -
+        the same kind of thing review_state_for_finding and
+        investigation_step_for_analysis already are - and stores nothing.
+
+        TWO CHAINS REACH A SOURCE. ONLY ONE WAS EVER RENDERED.
+
+            finding.artifact_id -> Artifact.source_id     -> one Source
+            finding.analysis_id -> AnalysisRun.source_ids -> many Sources
+
+        record_analysis mints an Artifact only when an item carries a
+        crop or an image (its own `if item.get("crop") or
+        item.get("image_path")`), and only drawing analysis supplies
+        those. Every Finding produced by requirement investigation and
+        quantitative investigation therefore has an analysis_id and no
+        artifact_id - and the Findings list rendered NO provenance for
+        them at all, while AnalysisRun.source_ids sat in storage
+        recording exactly which documents had been read.
+        governance/constitutional-invariants.md #3 - "every claim traces
+        to its source" - was satisfied in storage and simply not
+        delivered to the person being asked to trust the claim.
+
+        `basis` names which chain answered, so the surface can stay
+        honest about the difference rather than flattening it: an
+        Artifact is a specific region of a specific page; an AnalysisRun
+        is the set of documents a run read. Neither is dressed up as the
+        other, and PROVENANCE_BASIS_NONE is a real answer to render, not
+        a blank to hide.
+        """
+        finding = self._find(workspace.findings, finding_id)
+        if finding is None:
+            raise CaseWorkspaceError(f"Finding {finding_id} was not found.")
+
+        def _describe(source_id: str) -> dict:
+            source = self._find(workspace.sources, source_id)
+            if source is None:
+                # A Source id on record that no longer resolves is
+                # reported as itself, never dropped: a document that has
+                # gone missing is evidence about the claim, and silently
+                # omitting it would make this list quietly wrong.
+                return {"id": source_id, "name": None,
+                        "resolved": False, "removed": False}
+            return {
+                "id": source["id"],
+                "name": source["name"],
+                "resolved": True,
+                # remove_source is recoverable and deliberately not a
+                # deletion (CLAUDE-P40-E2), so a Finding can legitimately
+                # cite a removed document. Say so rather than pretending.
+                "removed": source.get("removed_at") is not None,
+            }
+
+        artifact = (
+            self._find(workspace.artifacts, finding["artifact_id"])
+            if finding.get("artifact_id") else None
+        )
+        analysis = (
+            self._find(workspace.analyses, finding["analysis_id"])
+            if finding.get("analysis_id") else None
+        )
+
+        if artifact is not None and artifact.get("source_id"):
+            sources = [_describe(artifact["source_id"])]
+            basis = PROVENANCE_BASIS_ARTIFACT
+        elif analysis is not None and analysis.get("source_ids"):
+            sources = [_describe(source_id) for source_id in analysis["source_ids"]]
+            basis = PROVENANCE_BASIS_ANALYSIS
+        else:
+            sources = []
+            basis = PROVENANCE_BASIS_NONE
+
+        carrier = artifact if artifact is not None else (analysis or {})
+        return {
+            "basis": basis,
+            "sources": sources,
+            "artifact_id": artifact["id"] if artifact else None,
+            "page": artifact.get("page") if artifact else None,
+            "region": artifact.get("crop") if artifact else None,
+            "analysis_id": finding.get("analysis_id"),
+            "engine_name": carrier.get("engine_name"),
+            "engine_version": carrier.get("engine_version"),
+            "created_at": (
+                artifact.get("created_at") if artifact is not None
+                else (analysis.get("completed_at") if analysis else None)
+            ),
+        }
 
     # -- apply ---------------------------------------------------------------------
 

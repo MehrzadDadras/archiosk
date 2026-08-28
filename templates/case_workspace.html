@@ -3198,8 +3198,23 @@
             {% set latest_validation = row.latest_validation %}
             {% set latest_disposition = row.latest_disposition %}
             <article class="finding-card{% if finding.id == focused_finding_id %} focused{% endif %}">
+                {# CLAUDE-ARM-A-PROVENANCE-01: the confidence percentage is gone,
+                   and this is an honesty fix rather than a design preference.
+                   services/case_workspace.py's own record_analysis-from-Claim
+                   path states the rule this was breaking: the float "exists only
+                   because Finding's own pre-existing schema requires a float -
+                   a coarse, honestly-labeled midpoint, never presented on its
+                   own as if it carried the categorical meaning". This template
+                   presented exactly that float, alone, as a percentage. Worse,
+                   conversation_interpreter's quantitative path hardcodes 0.5, so
+                   every such Finding rendered a literal constant as
+                   "confidence 50%". Claim.confidence_state (categorical, with a
+                   defined and testable meaning) is the authoritative signal;
+                   surfacing THAT here is separate work, and showing nothing is
+                   more honest than showing a number that means nothing. The
+                   stored field is untouched. #}
                 <p class="finding-confidence">
-                    Machine finding &middot; confidence {{ (finding.machine_confidence * 100)|round|int }}%
+                    Machine finding
                     &middot; <span class="review-state-badge review-state-{{ row.review_state|lower|replace(' ', '-') }}">{{ row.review_state }}</span>
                     {% if finding.claim_status == "applied" %}
                     <span class="applied-badge">Applied</span>
@@ -3207,21 +3222,76 @@
                 </p>
                 <p class="finding-statement">{{ finding.statement }}</p>
 
+                {# CLAUDE-ARM-A-PROVENANCE-01: this block used to be gated on
+                   `{% if artifact %}`, so provenance rendered ONLY for
+                   drawing-analysis Findings - the only ones record_analysis
+                   mints an Artifact for. Every requirement-investigation and
+                   quantitative-investigation Finding showed a statement with no
+                   attribution at all, while AnalysisRun.source_ids held exactly
+                   which documents had been read. It is now driven by the
+                   resolved provenance (CaseWorkspaceStore.finding_provenance),
+                   which answers over BOTH chains and names which one answered.
+
+                   The source is a NAME and a LINK, not a bare id. The
+                   destination already existed - show_workspace's own
+                   ?source=<id> opens the document - and build_reference_snapshot
+                   already resolved the name for the RFI card rendered a hundred
+                   lines below this one. A reviewer was reading a UUID here and
+                   the human filename there, for the same document. #}
+                {% set prov = row.provenance %}
                 {% if artifact %}
-                <img class="finding-artifact-thumb"
-                     src="{{ url_for('workspace.artifact_image', project_id=project_id, artifact_id=artifact.id) }}"
-                     alt="Focus Snip Artifact">
-                <div class="finding-provenance">
-                    <span>artifact:</span> <strong>{{ artifact.id }}</strong><br>
-                    <span>source:</span> <strong>{{ artifact.source_id }}</strong> &middot; page <strong>{{ artifact.page }}</strong><br>
-                    {% if artifact.crop %}
-                    <span>region:</span> <strong>x={{ "%.2f"|format(artifact.crop.x) }} y={{ "%.2f"|format(artifact.crop.y) }} w={{ "%.2f"|format(artifact.crop.width) }} h={{ "%.2f"|format(artifact.crop.height) }}</strong><br>
-                    {% endif %}
-                    <span>analysis:</span> <strong>{{ artifact.analysis_id }}</strong><br>
-                    <span>engine:</span> <strong>{{ artifact.engine_name }} {{ artifact.engine_version }}</strong><br>
-                    <span>created:</span> <strong>{{ artifact.created_at }}</strong>
-                </div>
+                <a class="finding-artifact-thumb-link"
+                   data-ui-ref="toolbox.investigation-findings.provenance.thumb"
+                   href="{{ url_for('workspace.show_workspace', project_id=project_id, source=artifact.source_id) }}">
+                    <img class="finding-artifact-thumb"
+                         src="{{ url_for('workspace.artifact_image', project_id=project_id, artifact_id=artifact.id) }}"
+                         alt="Focus Snip Artifact">
+                </a>
                 {% endif %}
+                <div class="finding-provenance" data-ui-ref="toolbox.investigation-findings.provenance">
+                    {% if prov.sources %}
+                    <p class="finding-provenance-sources">
+                        <span>{% if prov.basis == 'artifact' %}From{% else %}Read from{% endif %}</span>
+                        {% for s in prov.sources %}
+                        {%- if s.resolved -%}
+                        <a class="finding-provenance-source" data-ui-ref="toolbox.investigation-findings.provenance.source"
+                           href="{{ url_for('workspace.show_workspace', project_id=project_id, source=s.id) }}">{{ s.name }}</a>
+                        {%- if s.removed %} <span class="finding-provenance-note">(removed document)</span>{% endif -%}
+                        {%- else -%}
+                        <span class="finding-provenance-source finding-provenance-unresolved">{{ s.id }} <span class="finding-provenance-note">(no longer on record)</span></span>
+                        {%- endif -%}
+                        {%- if not loop.last %}, {% endif -%}
+                        {% endfor %}
+                        {%- if prov.basis == 'artifact' and prov.page is not none %} &middot; page <strong>{{ prov.page }}</strong>{% endif %}
+                    </p>
+                    {% if prov.basis == 'analysis' %}
+                    {# Named honestly rather than flattened into the artifact
+                       wording: an AnalysisRun records the documents a run READ,
+                       which is a weaker claim than "this exact region of this
+                       exact page", and a reviewer is entitled to know which of
+                       the two they are being shown. #}
+                    <p class="finding-provenance-note">
+                        Documents this analysis read - not a located region on a page.
+                    </p>
+                    {% endif %}
+                    {% else %}
+                    <p class="finding-provenance-note" data-ui-ref="toolbox.investigation-findings.provenance.absent">
+                        No source document on record for this finding.
+                    </p>
+                    {% endif %}
+
+                    {# The machine ids stay: they are what makes the record
+                       auditable, and removing them would trade one honesty
+                       problem for another. They are simply no longer the only
+                       thing offered to a person asking where a claim came from. #}
+                    {% if prov.artifact_id %}<span>artifact:</span> <strong>{{ prov.artifact_id }}</strong><br>{% endif %}
+                    {% if prov.region %}
+                    <span>region:</span> <strong>x={{ "%.2f"|format(prov.region.x) }} y={{ "%.2f"|format(prov.region.y) }} w={{ "%.2f"|format(prov.region.width) }} h={{ "%.2f"|format(prov.region.height) }}</strong><br>
+                    {% endif %}
+                    {% if prov.analysis_id %}<span>analysis:</span> <strong>{{ prov.analysis_id }}</strong><br>{% endif %}
+                    {% if prov.engine_name %}<span>engine:</span> <strong>{{ prov.engine_name }} {{ prov.engine_version }}</strong><br>{% endif %}
+                    {% if prov.created_at %}<span>created:</span> <strong>{{ prov.created_at }}</strong>{% endif %}
+                </div>
 
                 {% if row.investigation_step %}
                 {% set step = row.investigation_step %}

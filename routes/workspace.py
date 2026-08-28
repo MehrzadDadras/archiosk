@@ -1304,6 +1304,15 @@ def show_workspace(project_id):
                     "investigation_step": store.investigation_step_for_analysis(
                         workspace, finding["analysis_id"]
                     ),
+                    # CLAUDE-ARM-A-PROVENANCE-01: resolved here rather than
+                    # in the template because the template could only ever
+                    # reach `artifact`, and the artifact-less chain
+                    # (analysis_id -> AnalysisRun.source_ids) is the one
+                    # every requirement/quantitative investigation Finding
+                    # actually uses. `artifact` above stays as it was - it
+                    # still carries the thumbnail - this only adds the
+                    # named, linkable answer to "which document said so".
+                    "provenance": store.finding_provenance(workspace, finding_id),
                 }
             )
 

@@ -7428,6 +7428,70 @@ main:hover,
 .finding-provenance span { color: var(--text-metadata); }
 .finding-provenance strong { color: var(--text-primary); font-weight: 500; }
 
+/* CLAUDE-ARM-A-PROVENANCE-01 --------------------------------------------------
+   The block above was built to display ids, and its two defaults are actively
+   wrong for a human document name: --font-mono and word-break:break-all exist
+   so a UUID wraps instead of overflowing, and applying them to "L2 Level Floor
+   Plan.pdf" would shatter it mid-word. So the named line opts back out of both
+   rather than the id lines opting in - the ids are the majority of this block
+   and should keep owning its defaults.
+
+   NO NEW COLOR. main.css's own header states that color is used rarely and each
+   accent carries one meaning; a source link is not a new semantic category, so
+   it is --text-primary plus an underline. The underline is what marks it
+   actionable, which is the entire point of the change: the id was already
+   readable here and simply could not be clicked. */
+.finding-provenance-sources {
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    word-break: normal;
+    overflow-wrap: anywhere;
+    margin: 0 0 0.4rem;
+    line-height: 1.5;
+}
+
+.finding-provenance-source {
+    color: var(--text-primary);
+    font-weight: 500;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+.finding-provenance-source:hover,
+.finding-provenance-source:focus-visible {
+    text-decoration-thickness: 2px;
+}
+
+/* An id on record that no longer resolves to a document. Deliberately not an
+   alarm color: a removed or missing Source is a fact about the record, not an
+   error the reviewer caused, and the honest treatment is to keep showing it
+   quietly rather than to either hide it or shout. */
+.finding-provenance-unresolved {
+    /* No font-family here on purpose: this sits inside .finding-provenance,
+       which is already --font-mono, and re-declaring it would add a fourth
+       mono declaration to a file whose own test asserts exactly three
+       technical exceptions. Inheritance is the correct mechanism. */
+    text-decoration: none;
+    font-weight: 400;
+    word-break: break-all;
+}
+
+.finding-provenance-note {
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    color: var(--text-metadata);
+    word-break: normal;
+    margin: 0 0 0.4rem;
+}
+
+/* The thumbnail is now the same link as the name below it - Bluebeam's rule
+   that the canvas object and its list row are two views of one thing, and
+   clicking either goes to the same place. The <a> must not introduce its own
+   box: the image already owns the spacing. */
+.finding-artifact-thumb-link {
+    display: block;
+    text-decoration: none;
+}
+
 .snapshot-detail {
     background: var(--surface-secondary);
     border: 1px solid var(--border);

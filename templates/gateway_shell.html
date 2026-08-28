@@ -82,11 +82,15 @@
            already-enabled preference. The toggle itself DOES exist
            here (the Account menu below has one - see workspace-user-
            options), wired the normal way further down this file. #}
+        {# CLAUDE-ARM-A-REFMODE-ADMIN-01: gated for the same reason base.html's
+           restore is - a stale device preference must not survive the gate. #}
+        {% if is_admin %}
         try {
             if (window.localStorage.getItem('beehive:ui-reference-mode') === 'on') {
                 document.documentElement.classList.add('ui-reference-mode-active');
             }
         } catch (e) { /* localStorage unavailable - default to off */ }
+        {% endif %}
     </script>
 </head>
 <body>
@@ -105,10 +109,15 @@
                         <span aria-hidden="true">&hellip;</span>
                     </summary>
                     <div class="workspace-user-options" role="group" aria-label="Account">
-                        <label class="workspace-overflow-item workspace-overflow-checkbox">
+                        {# CLAUDE-ARM-A-REFMODE-ADMIN-01: same gate as base.html's copy of
+                           this control - see the fuller note there. #}
+                        {% if is_admin %}
+                        <label class="workspace-overflow-item workspace-overflow-checkbox"
+                               data-ui-ref="gateway.account.admin.ui-reference-mode">
                             <input type="checkbox" id="ui-reference-mode-toggle">
                             UI Reference Mode
                         </label>
+                        {% endif %}
                         <a class="workspace-overflow-item" href="{{ url_for('portal.removed_projects') }}">Removed Projects</a>
                         {# CLAUDE-UI-ACTION-REDUNDANCY-REVIEW-01, Disposition 2/3:
                            Security relocated out of this menu - Archiosk > Admin >
@@ -162,6 +171,9 @@
         // where a reviewer can actually turn Reference Mode ON, not
         // only see it honored (auth_shell.html's own copy is read-only).
         (function () {
+            {# CLAUDE-ARM-A-REFMODE-ADMIN-01: see base.html's note - gated, not
+               merely left inert by the null-guard. #}
+            {% if is_admin %}
             var toggle = document.getElementById('ui-reference-mode-toggle');
             if (!toggle) return;
             var key = 'beehive:ui-reference-mode';
@@ -171,6 +183,7 @@
                 html.classList.toggle('ui-reference-mode-active', toggle.checked);
                 try { window.localStorage.setItem(key, toggle.checked ? 'on' : 'off'); } catch (e) { /* ignore */ }
             });
+            {% endif %}
         })();
     </script>
     {# CLAUDE-UI-ACTION-REDUNDANCY-REVIEW-01, Disposition 2/3: the shared

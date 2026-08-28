@@ -46,9 +46,17 @@
                controls even outside an open Project. Applied pre-paint so
                a reviewer who left this on doesn't see an unbadged flash
                before it kicks in. #}
+            {# CLAUDE-ARM-A-REFMODE-ADMIN-01: the restore is gated too, not only
+               the toggle. localStorage is a device preference that outlives a
+               session, so a user who switched this on before it was admin-gated
+               would otherwise keep the badges forever with no control left to
+               turn them off - gating only the toggle would strand exactly the
+               people the gate is for. #}
+            {% if is_admin %}
             if (window.localStorage.getItem('beehive:ui-reference-mode') === 'on') {
                 document.documentElement.classList.add('ui-reference-mode-active');
             }
+            {% endif %}
             {# CLAUDE-MOBILE-FRAME-02: which tray owns the work zone, restored
                here for the same reason every other panel preference above is -
                a phone that painted three competing desktop columns for one
@@ -327,10 +335,23 @@
                            this stage's own browser verification) can read
                            off a control's stable reference id directly from
                            the rendered page. #}
-                        <label class="workspace-overflow-item workspace-overflow-checkbox">
+                        {# CLAUDE-ARM-A-REFMODE-ADMIN-01: admin-gated. This is a developer/QA
+                           tool - its own defining comment says so - that paints internal
+                           data-ui-ref identifiers over every instrumented control. It was
+                           reachable by EVERY signed-in user: the only enclosing condition
+                           was `{% if authenticated %}`. Nothing here is dangerous, but
+                           internal reference ids are not a customer-facing feature, and
+                           this was the one control in the Account menu with no data-ui-ref
+                           of its own - instrumentation that was never itself instrumented.
+                           is_admin is the same gate every other administration item in
+                           this menu bar already uses. #}
+                        {% if is_admin %}
+                        <label class="workspace-overflow-item workspace-overflow-checkbox"
+                               data-ui-ref="menu.account.admin.ui-reference-mode">
                             <input type="checkbox" id="ui-reference-mode-toggle">
                             UI Reference Mode
                         </label>
+                        {% endif %}
                     </div>
                 </details>
             </div>
@@ -1436,6 +1457,15 @@
             // verification, then turn it back off. Off by default; never
             // read by anything except this toggle and that CSS rule -
             // purely a presentation aid, not a Project-record write.
+            {# CLAUDE-ARM-A-REFMODE-ADMIN-01: the wiring is gated as well as the
+               control. The null-guard below already made this inert once the
+               markup was admin-gated, but inert is not the same as absent:
+               shipping a developer tool's script to every customer page is
+               weight with no reader, and the surviving
+               'beehive:ui-reference-mode' string advertised internal
+               instrumentation to sessions that can no longer reach it. Removed
+               from the payload rather than left switched off. #}
+            {% if is_admin %}
             var refModeToggle = document.getElementById('ui-reference-mode-toggle');
             if (refModeToggle) {
                 var refModeKey = 'beehive:ui-reference-mode';
@@ -1445,6 +1475,7 @@
                     try { window.localStorage.setItem(refModeKey, refModeToggle.checked ? 'on' : 'off'); } catch (e) { /* ignore */ }
                 });
             }
+            {% endif %}
         })();
     </script>
     <script nonce="{{ csp_nonce }}">

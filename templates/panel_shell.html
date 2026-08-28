@@ -25,11 +25,22 @@
            file the way a Document is; see routes/workspace.py's
            panel_only comment and case_workspace.js's own
            ArchioskDisplay.populateDivision for how it gets here). #}
+        {# CLAUDE-ARM-A-REFMODE-ADMIN-01: gated, like base.html's and
+           gateway_shell.html's copies. This is the FOURTH shell carrying this
+           restore and the easiest to miss - it renders only as the content of
+           a non-zero Display division inside an <iframe>, so it never appears
+           in an ordinary page-source read of the app. Found by grepping for
+           the localStorage key across templates/ rather than by working from
+           the list of shells, which is the only reason it was not left behind:
+           a duplicated block is exactly as reachable as its least-remembered
+           copy. #}
+        {% if is_admin %}
         try {
             if (window.localStorage.getItem('beehive:ui-reference-mode') === 'on') {
                 document.documentElement.classList.add('ui-reference-mode-active');
             }
         } catch (e) { /* localStorage unavailable - default to off */ }
+        {% endif %}
     </script>
 </head>
 <body>

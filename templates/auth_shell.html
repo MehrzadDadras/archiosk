@@ -49,26 +49,19 @@
        main.css so its more specific .gateway-card-compact overrides
        below still win. #}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/landing.css') }}?v={{ static_version }}">
-    <script nonce="{{ csp_nonce }}">
-        {# CLAUDE-P40-VW8-QA, Section 4: "must work on Sign-in, Gateway,
-           Project workspace, popups and dialogs" - a reviewer who
-           enabled UI Reference Mode while authenticated keeps that
-           localStorage preference across sign-out (it is a device/
-           browser preference, not session state), so a returning
-           Sign-in visit should still show badges on ITS OWN controls
-           (login.html's username/password/submit) rather than
-           silently losing the setting the moment the authenticated
-           shell isn't the one rendering. No toggle lives on this
-           standalone shell (nothing to turn it back off from here -
-           the Account menu the toggle lives in only exists once
-           authenticated) - this only ever reads the existing
-           preference, never sets one. #}
-        try {
-            if (window.localStorage.getItem('beehive:ui-reference-mode') === 'on') {
-                document.documentElement.classList.add('ui-reference-mode-active');
-            }
-        } catch (e) { /* localStorage unavailable - default to off */ }
-    </script>
+    {# CLAUDE-ARM-A-REFMODE-ADMIN-01: an inline script here used to restore UI
+       Reference Mode from localStorage on the signed-out Sign-in page, so a
+       reviewer who had switched it on while authenticated still saw
+       data-ui-ref badges over login.html's own controls (CLAUDE-P40-VW8-QA,
+       Section 4: "must work on Sign-in, Gateway, Project workspace, popups and
+       dialogs"). That whole justification is gone with the behaviour it
+       justified: UI Reference Mode is a developer/QA tool and is now
+       admin-gated, and this shell cannot honour that gate - app.py's context
+       processor forces is_admin to False on a standalone auth page, so a
+       `{% if is_admin %}` here could only ever evaluate false. A condition that
+       can never be true is worse than no code, because it reads as a live
+       capability. Removed rather than gated; the script element itself went
+       with it, since restoring the preference was all it ever did. #}
 </head>
 <body>
     {# CLAUDE-CA1D-SIGNIN-VISUAL-CONTINUITY-01: landing-page replaces
