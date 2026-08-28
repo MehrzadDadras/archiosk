@@ -1,5 +1,87 @@
 # Continuation checkpoint
 
+## 2026-08-28 — A canvas preview that could not exist, and the governance record it recovered
+
+A directive asked for a local interactive preview of the multi-surface canvas on
+`spike/multi-surface-canvas @ f0a12ce`. It was not executable, for two reasons
+that were verified against the repository rather than assumed, and the stage
+ended as a governance repair instead. Recorded because the negative result is
+the durable part.
+
+### Why the preview could not be built
+
+- **There is no canvas at `f0a12ce`.** That commit is the one that DELETED the
+  control-arm scaffold. `routes/spike_arm_b.py` and
+  `templates/spike/arm_b_canvas.html` were built and removed before commit, per
+  this repository's own discipline that exploratory apparatus stays out of
+  version control. Confirmed against the tree — no `templates/spike/` entry, no
+  `spike_arm_b` module, no canvas blueprint among `app.py`'s registrations —
+  not inferred from that commit's message. The branch name records the
+  EXPERIMENT, not a surviving surface.
+- **The standing no-localhost rule forbids the server.** The Product Owner rule
+  ("No localhost. Work on the application that the Product Owner actually sees
+  online") covers `python app.py` and `127.0.0.1:5000` for development,
+  testing, inspection and browser proof, explicitly including throwaway
+  pre-deploy checks. The `pytest` suite remains the one carve-out; it binds no
+  port.
+
+A local branch `preview/ui-surface` and an isolated worktree were created, then
+removed on Product Owner instruction. `git worktree remove`, `git branch -D`,
+nothing left behind. `f0a12ce` was confirmed reachable from
+`origin/spike/multi-surface-canvas` before the branch was deleted, so nothing
+was lost.
+
+### What actually landed — `dec5efb`
+
+`governance/proposals/surface-vs-substrate-interaction-grammar.md:283` cited
+`governance/specified-unbuilt/provenance-at-the-point-of-interaction.md` as
+"Full record:". That file existed only at `f0a12ce` on the unmerged spike and
+**did not exist on `main`** — a dangling citation of exactly the class `d849501`
+("PROVENANCE_BASIS_* was never written") was written to correct.
+
+The 116-line record was landed verbatim from `f0a12ce`, byte-identical. One
+subsection was added, **C.1**, recording the single rebuild constraint the
+record did not state: the canvas is not recoverable from git, so a rebuild
+starts from specification, not code. No new governance document was created —
+the chrome trap is already measured in the grammar at 2.6 and restated in
+section C, and a third copy would be the proliferation cycle `CLAUDE.md` names.
+
+### Constraints that now bind the formal Canvas UI phase
+
+- `static/js/pdf_viewer.js` resolves **30** document controls by
+  `getElementById` against `templates/base.html`'s menu bar; in a chrome-less
+  render they are all `null` and degrade silently. A meaningful share of the
+  permanent chrome is the implementation of **Look**, not accretion. Any
+  placement work must supply canvas-native Look first or carry the menu bar
+  with it. **This is 30 bindings, not the ~10 control families it looks like at
+  a glance** — an earlier count in-session said ~10 and was wrong.
+- The acceptance bar is **record-grounded** provenance
+  (`AnalysisRun.source_ids`), never links parsed from statement text. Arm B was
+  more reachable and epistemically weaker, and its subject trusted its links
+  completely: a citation that can lie is worse than a UUID.
+- Chrome costs attention, not steps. Both arms reached the correct answer in
+  three views.
+
+### State at close
+
+`main` @ `dec5efb`, pushed and verified via `git ls-remote` (`0/0` divergence).
+Governance markdown only — no `routes/`, `services/`, `models.py`, `config.py`,
+`app.py` or migrations touched, so the full suite was not the gate. `MANIFEST.md`
+unchanged by design; it states that `governance/*.md` is deliberately not
+catalogued there.
+
+**`spike/multi-surface-canvas` remains unmerged and is not superseded by this.**
+Only its governance file was landed. The station/presence spike code on that
+branch — `routes/station.py`, `services/presence_bus.py`, `services/station.py`,
+the `c72da4e1b806_station_enrolments` migration and their tests — is still
+branch-only and unreviewed.
+
+Also unrecorded here and still only in git: the four `2026-08-28` governance
+proposal commits this stage builds on (`48e9cdd`, `fb06d17`, `f70ba81`,
+`d849501`) — the Surface vs. Substrate grammar and the Scale Regions /
+Dimensional Reconciliation proposal.
+
+
 ## 2026-08-25 (later) — Entry simplified, Q made a real container, a development bridge, a Composer pen, and a capture preflight
 
 Continues the entry above, which stopped at `dae1045`. Six further stages
