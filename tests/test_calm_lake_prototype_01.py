@@ -37,7 +37,38 @@ from routes.calm_lake_prototype import (
     THRESHOLD_DAYS,
     horizon_order,
     window_spent_percent,
+    DOCUMENTS,
+    KNOWN_FACES,
+    KNOWN_MINIATURE_BASES,
+    MINIATURE_KIND,
+    MINIATURE_LIVE,
+    MINIATURE_VIEW,
+    PAGE_FIELDS,
+    documents_cited_by,
+    composer_state,
+    document_face,
+    field_count,
+    field_pins,
+    page_fields,
+    spin_trace,
+    COUNT_REPLAYABLE_TRACES,
+    FACE_COMPOSER,
+    FACE_DOCUMENTS,
+    FACE_DRAWING,
+    FACE_INTAKE,
+    FACE_SPIN,
 )
+
+
+def _field(face):
+    """Select by face, never by index.
+
+    PAGE_FIELDS is ordered for the SCREEN - Intake sits first because
+    beginning is what a person arriving with nothing must be able to do - so
+    an index here would silently start testing a different tile the moment
+    the field is rearranged. It did, once.
+    """
+    return next(f for f in PAGE_FIELDS if f["face"] == face)
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _CSS_PATH = _REPO_ROOT / "static" / "css" / "calm_lake.css"
@@ -620,3 +651,602 @@ class SpatialContinuityTests(unittest.TestCase):
         rule = rule[:rule.index("}")]
         self.assertIn("var(--w-anchor-h)", rule)
         self.assertIn("--w-anchor-h", self.css)
+
+
+class PageFieldSpecimenTests(unittest.TestCase):
+    """SCENE 1 - the Page-Field entry, specimen 01 (M-201 drawing).
+
+    A Page-Field is a touchable miniature WINDOW INTO A SURFACE. These tests
+    hold the two properties that separate it from a generic card, because both
+    are invisible in a screenshot and both are the whole point:
+
+      1. The `live` miniature is genuinely not a copy. It is the same
+         plan_geometry macro the full canvas calls, so it cannot go stale.
+      2. Every number the strip shows is DERIVED from the record, and is
+         absent rather than zero when the record supports nothing.
+
+    They are hermetic - the route reads fixture data from its own module and
+    reaches no store, no AnalysisRun and no external boundary.
+    """
+
+    def setUp(self):
+        import app as app_module
+        from models import User, db
+        import tempfile
+
+        self.tmp_dir = Path(tempfile.mkdtemp(prefix="beehive_test_calm_field_"))
+        self.flask_app = app_module.create_app("testing")
+        self.flask_app.config["REGISTRY_STORE_PATH"] = str(self.tmp_dir)
+        with self.flask_app.app_context():
+            db.session.add(User(username="field_admin",
+                                password_hash=generate_password_hash("x"),
+                                role="admin"))
+            db.session.commit()
+        self.findings = self._scored()
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmp_dir, ignore_errors=True)
+
+    def _scored(self):
+        for finding in FINDINGS:
+            finding["window"]["spent_percent"] = window_spent_percent(finding["window"])
+            finding["prominence"] = assess(finding)
+        return horizon_order(FINDINGS)
+
+    def _body(self):
+        client = self.flask_app.test_client()
+        with client.session_transaction() as sess:
+            sess["user_id"] = 1
+            sess["username"] = "field_admin"
+            sess["role"] = "admin"
+            sess["developer_mode"] = True
+        response = client.get("/admin/calm-lake/")
+        self.assertEqual(response.status_code, 200)
+        return response.get_data(as_text=True)
+
+    # --- the vocabulary is closed ---------------------------------------
+
+    def test_every_declared_field_uses_a_face_the_template_can_draw(self):
+        """KNOWN_FACES is the set that RENDERS, not the set intended.
+
+        A field declaring a face with no template branch would render an
+        empty box - a card asserting a surface it cannot show, which is the
+        precise failure the miniature-basis vocabulary exists to prevent.
+        """
+        for field in PAGE_FIELDS:
+            self.assertIn(field["face"], KNOWN_FACES)
+
+    def test_a_miniature_declares_a_basis_and_an_action_declares_none(self):
+        """Intake is not a Page-Field and the model must not pretend it is.
+
+        Every other tile is a window into an existing surface and says on
+        what basis it shows it. Intake opens nothing - that is the point of
+        it - so giving it a `live` or `kind` basis would be the same class of
+        claim the vocabulary exists to refuse.
+        """
+        for field in PAGE_FIELDS:
+            if field.get("action"):
+                self.assertIsNone(field["miniature"])
+            else:
+                self.assertIn(field["miniature"], KNOWN_MINIATURE_BASES)
+
+    def test_the_action_tile_declares_no_basis_in_the_markup_either(self):
+        body = self._body()
+        intake = body[body.index('id="field-INTAKE"'):]
+        intake = intake[:intake.index("</button>")]
+        self.assertNotIn("data-miniature", intake)
+
+    def test_there_is_no_cached_miniature_basis(self):
+        """A captured thumbnail cannot state its own age from inside itself."""
+        self.assertEqual(set(KNOWN_MINIATURE_BASES), {MINIATURE_LIVE, MINIATURE_KIND})
+        self.assertNotIn("cached", KNOWN_MINIATURE_BASES)
+
+    # --- `live` means NOT A COPY, and that is structural ----------------
+
+    def test_the_live_miniature_and_the_canvas_share_one_definition(self):
+        """The claim `live` is only honest if there is one geometry source.
+
+        Both the full canvas and the miniature call plan_geometry. If someone
+        later inlines a second copy of the SVG, this fails - which is the
+        moment the `live` badge would start lying.
+        """
+        template = _TEMPLATE_PATH.read_text(encoding="utf-8")
+        self.assertIn('{% from "_calm_lake_plan.html" import plan_geometry %}', template)
+        self.assertEqual(template.count("plan_geometry("), 2)
+        # The geometry itself must NOT be inlined in the page template.
+        self.assertNotIn('viewBox="0 0 1000 700"', template)
+
+    def test_the_two_renderings_do_not_collide_on_svg_pattern_ids(self):
+        """SVG ids are document-global.
+
+        Rendering the same markup twice with a fixed pattern id makes the
+        second instance silently reference the first one's pattern. The macro
+        suffixes every id it emits; this proves the suffixes actually differ.
+        """
+        body = self._body()
+        ids = re.findall(r'<pattern id="([^"]+)"', body)
+        self.assertGreaterEqual(len(ids), 2)
+        self.assertEqual(len(ids), len(set(ids)), "duplicate SVG pattern id: %r" % ids)
+
+    def test_the_miniature_crops_the_viewport_and_never_the_geometry(self):
+        """Cropping changes what is visible, never what the drawing is."""
+        body = self._body()
+        crop = "%s %s %s %s" % (MINIATURE_VIEW["x"], MINIATURE_VIEW["y"],
+                                MINIATURE_VIEW["w"], MINIATURE_VIEW["h"])
+        self.assertIn('viewBox="%s"' % crop, body)
+        self.assertIn('viewBox="0 0 1000 700"', body)
+        # Same room count in both renderings: the geometry is identical.
+        self.assertEqual(body.count('class="cl-room"'), 12)
+
+    def test_the_annotation_layer_is_dropped_only_in_the_miniature(self):
+        """Grid refs and dimension ticks are legible at full size and mush at 170px."""
+        body = self._body()
+        self.assertEqual(body.count('class="cl-grid-ref"'), 6)
+        self.assertEqual(body.count('class="cl-dim-tick"'), 8)
+
+    # --- the pin is a second species, and it is positioned honestly -----
+
+    def test_pins_are_projected_into_the_crop_not_used_raw(self):
+        """A raw sheet percentage would place the pin in the wrong room.
+
+        canvas x/y are percentages of the FULL sheet; the miniature shows a
+        window onto it. This is arithmetic no screenshot review would catch.
+        """
+        field = _field(FACE_DRAWING)
+        pins = field_pins(field, self.findings)
+        self.assertTrue(pins, "specimen 01 must carry at least one pin")
+        for pin in pins:
+            expected_x = round(
+                (pin["x"] / 100.0 * 1000.0 - MINIATURE_VIEW["x"]) / MINIATURE_VIEW["w"] * 100, 2)
+            expected_y = round(
+                (pin["y"] / 100.0 * 700.0 - MINIATURE_VIEW["y"]) / MINIATURE_VIEW["h"] * 100, 2)
+            self.assertAlmostEqual(pin["mini_x"], expected_x, places=2)
+            self.assertAlmostEqual(pin["mini_y"], expected_y, places=2)
+            self.assertNotEqual(pin["mini_x"], pin["x"])
+
+    def test_a_pin_exists_only_where_a_coordinate_space_does(self):
+        """Only a drawing has somewhere for a pin to be honest about."""
+        for field in PAGE_FIELDS:
+            if field["face"] != FACE_DRAWING:
+                self.assertEqual(field_pins(field, self.findings), [])
+
+    def test_pin_prominence_is_carried_by_form_not_hue(self):
+        """This file's ramp is monochrome; the tiers must survive greyscale."""
+        css = _CSS_PATH.read_text(encoding="utf-8")
+        self.assertIn(".cl-field-pin--foreground", css)
+        self.assertIn(".cl-field-pin--tracked", css)
+        foreground = css.split(".cl-field-pin--foreground")[1].split("}")[0]
+        tracked = css.split(".cl-field-pin--tracked")[1].split("}")[0]
+        # Filled vs hollow - a difference of form, not colour.
+        self.assertIn("background: var(--w-ink)", foreground)
+        self.assertIn("background: transparent", tracked)
+
+    # --- every number is derived, and absent when unsupported ----------
+
+    def test_the_strip_number_counts_grounded_citations_only(self):
+        """A side at `asserted` names a document without establishing one."""
+        field = _field(FACE_DRAWING)
+        expected = len([f for f in self.findings
+                        if field["id"] in documents_cited_by(f)])
+        self.assertEqual(field_count(field, self.findings), expected)
+        for finding in self.findings:
+            for doc, basis in documents_cited_by(finding).items():
+                self.assertIn(basis, (BASIS_LOCATED, BASIS_READ))
+                self.assertNotEqual(basis, BASIS_ASSERTED)
+
+    def test_a_field_with_nothing_countable_renders_no_number_at_all(self):
+        """A zero is a measurement. Absence is the honest rendering."""
+        field = dict(_field(FACE_DRAWING))
+        field["counts"] = "an-unmeasured-kind"
+        self.assertIsNone(field_count(field, self.findings))
+        template = _TEMPLATE_PATH.read_text(encoding="utf-8")
+        self.assertIn("{% if field.count is not none %}", template)
+
+    def test_page_fields_carry_their_count_meaning(self):
+        """A bare integer on a card is an unsourced claim."""
+        for field in page_fields(self.findings):
+            self.assertTrue(field["count_meaning"])
+
+    # --- the field is genuinely touchable ------------------------------
+
+    def test_the_field_is_a_real_focusable_button(self):
+        """The archive's first fish was pointer-events:none and faked hits.
+
+        See governance/proposals/fish-tank-design-archaeology.md sec 2: an
+        object that LOOKS interactive and is inert to keyboard and touch is
+        the failure this whole grammar is a correction of.
+        """
+        body = self._body()
+        self.assertIn('data-ui-ref="calm-lake-page-field"', body)
+        marker = body.index('data-ui-ref="calm-lake-page-field"')
+        tag = body[body.rindex("<", 0, marker):marker]
+        self.assertIn("<button", tag)
+        self.assertIn('type="button"', tag)
+        css = _CSS_PATH.read_text(encoding="utf-8")
+        self.assertIn(".cl-field:focus-visible", css)
+
+    def test_touch_and_keyboard_get_the_same_treatment(self):
+        css = _CSS_PATH.read_text(encoding="utf-8")
+        self.assertIn(".cl-field:hover,\n.cl-field:focus-visible", css)
+
+    def test_an_idle_field_never_animates_transform(self):
+        """CHANNEL SEPARATION, recovered from the archive (archaeology sec 3.1).
+
+        A running animation on `transform` wins the cascade over the
+        :hover/:focus-visible transform and silently deletes the focus
+        affordance. Both surviving archive engines drove motion through
+        layout position for exactly this reason.
+        """
+        css = _CSS_PATH.read_text(encoding="utf-8")
+        block = css.split("SCENE 1 - THE PAGE-FIELD")[1].split("REDUCED MOTION")[0]
+        self.assertNotIn("@keyframes", block)
+        self.assertNotIn("animation:", block)
+
+    def test_the_field_holds_a_deterministic_territory(self):
+        """Same surface, same place, every visit - and the coordinate the
+        expansion contracts back into."""
+        body = self._body()
+        css = _CSS_PATH.read_text(encoding="utf-8")
+        for field in PAGE_FIELDS:
+            row = "cl-field-slot--r%d" % field["territory"]["row"]
+            col = "cl-field-slot--c%d" % field["territory"]["col"]
+            self.assertIn(row, body)
+            self.assertIn(col, body)
+            # Enumerated, so a declared territory with no rule would silently
+            # collapse to auto-placement and the field would move between
+            # visits - which is the one thing a remembered coordinate cannot do.
+            self.assertIn(".%s {" % row, css)
+            self.assertIn(".%s {" % col, css)
+        coords = {(f["territory"]["row"], f["territory"]["col"]) for f in PAGE_FIELDS}
+        self.assertEqual(len(coords), len(PAGE_FIELDS), "two fields share a territory")
+
+    def test_the_specimen_renders_its_identity_strip(self):
+        body = self._body()
+        self.assertIn("M201", body)
+        self.assertIn("Level 02", body)
+
+    def test_the_live_specimen_is_a_document_on_record(self):
+        """The miniature may not claim `live` for a surface that is not there."""
+        ids = {d["id"] for d in DOCUMENTS}
+        for field in PAGE_FIELDS:
+            if field["miniature"] == MINIATURE_LIVE:
+                self.assertIn(field["id"], ids)
+
+
+class SpinFaceSpecimenTests(unittest.TestCase):
+    """SPECIMEN 02 - the Spin face.
+
+    The face draws a derivation trace, and the whole claim is that it is
+    DERIVED. No Spin fixture was invented for it: the trace already exists in
+    the findings, because every finding carries `sides` and every side names a
+    document and the basis on which it does so.
+
+    These tests hold that the drawing on screen is a function of the record.
+    If someone hardcodes a nicer-looking tree, they fail.
+    """
+
+    def setUp(self):
+        import app as app_module
+        from models import User, db
+        import tempfile
+
+        self.tmp_dir = Path(tempfile.mkdtemp(prefix="beehive_test_calm_spin_"))
+        self.flask_app = app_module.create_app("testing")
+        self.flask_app.config["REGISTRY_STORE_PATH"] = str(self.tmp_dir)
+        with self.flask_app.app_context():
+            db.session.add(User(username="spin_admin",
+                                password_hash=generate_password_hash("x"),
+                                role="admin"))
+            db.session.commit()
+        for finding in FINDINGS:
+            finding["window"]["spent_percent"] = window_spent_percent(finding["window"])
+            finding["prominence"] = assess(finding)
+        self.findings = horizon_order(FINDINGS)
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmp_dir, ignore_errors=True)
+
+    def _body(self):
+        client = self.flask_app.test_client()
+        with client.session_transaction() as sess:
+            sess["user_id"] = 1
+            sess["username"] = "spin_admin"
+            sess["role"] = "admin"
+            sess["developer_mode"] = True
+        response = client.get("/admin/calm-lake/")
+        self.assertEqual(response.status_code, 200)
+        return response.get_data(as_text=True)
+
+    # --- the trace is a function of the record --------------------------
+
+    def test_the_trace_has_one_branch_per_finding_and_one_leaf_per_side(self):
+        trace = spin_trace(self.findings)
+        self.assertIsNotNone(trace)
+        with_sides = [f for f in self.findings if f.get("sides")]
+        self.assertEqual(len(trace["branches"]), len(with_sides))
+        for branch, finding in zip(trace["branches"], with_sides):
+            self.assertEqual(branch["id"], finding["id"])
+            self.assertEqual(len(branch["leaves"]), len(finding["sides"]))
+
+    def test_removing_a_side_removes_a_leaf(self):
+        """The face is drawn from the record, not decorated to resemble it."""
+        full = spin_trace(self.findings)
+        leaves = sum(len(b["leaves"]) for b in full["branches"])
+
+        trimmed = []
+        for finding in self.findings:
+            copy = dict(finding)
+            if copy["id"] == "DAMPER-SD-14":
+                copy["sides"] = finding["sides"][:1]
+            trimmed.append(copy)
+
+        after = spin_trace(trimmed)
+        self.assertEqual(sum(len(b["leaves"]) for b in after["branches"]), leaves - 1)
+
+    def test_an_asserted_side_draws_ungrounded(self):
+        """It names a document without establishing one.
+
+        Drawing it like evidence would make the claim the basis vocabulary
+        exists to refuse - so the leaf is hollow and its link is broken.
+        """
+        trace = spin_trace(self.findings)
+        ungrounded = [leaf for b in trace["branches"] for leaf in b["leaves"]
+                      if not leaf["grounded"]]
+        asserted = [s for f in self.findings for s in f["sides"]
+                    if s["basis"] == BASIS_ASSERTED]
+        self.assertEqual(len(ungrounded), len(asserted))
+        self.assertTrue(ungrounded, "the fixture must keep one asserted side")
+        for leaf in ungrounded:
+            self.assertEqual(leaf["basis"], BASIS_ASSERTED)
+
+    def test_grounded_means_the_same_thing_here_as_everywhere_else(self):
+        trace = spin_trace(self.findings)
+        for branch in trace["branches"]:
+            for leaf in branch["leaves"]:
+                self.assertEqual(leaf["grounded"],
+                                 leaf["basis"] in (BASIS_LOCATED, BASIS_READ))
+
+    def test_a_branch_sits_at_the_mean_of_its_own_leaves(self):
+        """Deterministic layout, with no hand-placed constant to drift."""
+        trace = spin_trace(self.findings)
+        for branch in trace["branches"]:
+            mean = sum(leaf["y"] for leaf in branch["leaves"]) / len(branch["leaves"])
+            self.assertAlmostEqual(branch["y"], round(mean, 1), places=1)
+
+    def test_a_record_with_no_sides_draws_nothing(self):
+        """An empty face beats a plausible-looking invented one."""
+        self.assertIsNone(spin_trace([]))
+        self.assertIsNone(spin_trace([{"id": "X", "sides": [],
+                                       "prominence": {"tier": PROMINENCE_TRACKED}}]))
+
+    def test_exactly_one_node_is_the_active_clash(self):
+        trace = spin_trace(self.findings)
+        foreground = [b for b in trace["branches"] if b["tier"] == PROMINENCE_FOREGROUND]
+        self.assertEqual(len(foreground), 1)
+
+    # --- what reaches the page ------------------------------------------
+
+    def test_the_rendered_trace_matches_the_record(self):
+        body = self._body()
+        sides = sum(len(f["sides"]) for f in self.findings)
+        asserted = len([s for f in self.findings for s in f["sides"]
+                        if s["basis"] == BASIS_ASSERTED])
+        self.assertEqual(body.count('class="cl-trace-leaf"'), sides - asserted)
+        self.assertEqual(body.count("cl-trace-leaf cl-trace-leaf--ungrounded"), asserted)
+        self.assertEqual(body.count("cl-trace-node cl-trace-node--"), len(self.findings))
+        self.assertEqual(body.count('class="cl-trace-root"'), 1)
+
+    def test_the_spin_face_is_not_a_drawing(self):
+        """Same palette, different species. A drawing face answers `where is
+        it`; this one answers `how was it reached`."""
+        body = self._body()
+        trace = body.split('class="cl-field-trace"')[1].split("</svg>")[0]
+        for drawing_only in ("cl-room", "cl-wall-outer", "cl-duct", "cl-stair"):
+            self.assertNotIn(drawing_only, trace)
+
+    def test_prominence_on_the_trace_is_form_not_hue(self):
+        css = _CSS_PATH.read_text(encoding="utf-8")
+        foreground = css.split(".cl-trace-node--foreground")[1].split("}")[0]
+        self.assertIn("fill: var(--w-ink)", foreground)
+        base = css.split("\n.cl-trace-node {")[1].split("}")[0]
+        self.assertIn("fill: var(--w-surface)", base)
+
+    # --- the count, again derived ---------------------------------------
+
+    def test_the_trace_count_excludes_a_finding_that_reaches_nothing(self):
+        """A finding whose every side is `asserted` has a derivation that
+        lands on nothing, and is not a replayable trace."""
+        field = [f for f in PAGE_FIELDS if f["counts"] == COUNT_REPLAYABLE_TRACES][0]
+        self.assertEqual(field_count(field, self.findings),
+                         len([f for f in self.findings if documents_cited_by(f)]))
+
+        floating = {"id": "FLOATING", "prominence": {"tier": PROMINENCE_TRACKED},
+                    "sides": [{"role": "names", "document": "Something",
+                               "basis": BASIS_ASSERTED, "at": None}]}
+        self.assertEqual(field_count(field, [floating]), 0)
+
+    # --- the box is the same box ----------------------------------------
+
+    def test_every_face_shares_one_bounding_box(self):
+        """A Page-Field's outer geometry must not depend on which face it
+        carries - the grid is a field of equals, not a collage."""
+        css = _CSS_PATH.read_text(encoding="utf-8")
+        face_block = css.split(".cl-field-face {")[1].split("}")[0]
+        self.assertIn("aspect-ratio:", face_block)
+        # The aspect is declared once, on .cl-field-face, and never overridden
+        # per face - so adding a face cannot change the card's shape.
+        self.assertEqual(css.count("aspect-ratio:"), 1)
+
+    def test_specimen_02_is_declared_and_drawable(self):
+        spin = [f for f in PAGE_FIELDS if f["face"] == FACE_SPIN]
+        self.assertEqual(len(spin), 1)
+        self.assertIn(FACE_SPIN, KNOWN_FACES)
+        self.assertEqual(spin[0]["miniature"], MINIATURE_KIND)
+        body = self._body()
+        self.assertIn("Clash Trace", body)
+
+
+class SceneSeparationTests(unittest.TestCase):
+    """Two scenes, and only one of them on the page at a time.
+
+    This existed once in a broken form worth naming: the field was rendered
+    as a band bolted on TOP of the workspace, which made the entry
+    environment a header row inside the very surface it is an entry to.
+    These tests hold the corrected shape.
+    """
+
+    def setUp(self):
+        import app as app_module
+        from models import User, db
+        import tempfile
+
+        self.tmp_dir = Path(tempfile.mkdtemp(prefix="beehive_test_calm_scene_"))
+        self.flask_app = app_module.create_app("testing")
+        self.flask_app.config["REGISTRY_STORE_PATH"] = str(self.tmp_dir)
+        with self.flask_app.app_context():
+            db.session.add(User(username="scene_admin",
+                                password_hash=generate_password_hash("x"),
+                                role="admin"))
+            db.session.commit()
+        for finding in FINDINGS:
+            finding["window"]["spent_percent"] = window_spent_percent(finding["window"])
+            finding["prominence"] = assess(finding)
+        self.findings = horizon_order(FINDINGS)
+        self.css = _CSS_PATH.read_text(encoding="utf-8")
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmp_dir, ignore_errors=True)
+
+    def _body(self):
+        client = self.flask_app.test_client()
+        with client.session_transaction() as sess:
+            sess["user_id"] = 1
+            sess["username"] = "scene_admin"
+            sess["role"] = "admin"
+            sess["developer_mode"] = True
+        response = client.get("/admin/calm-lake/")
+        self.assertEqual(response.status_code, 200)
+        return response.get_data(as_text=True)
+
+    def test_the_page_lands_on_the_field(self):
+        self.assertIn('data-scene="field"', self._body())
+
+    def test_the_workspace_is_absent_not_merely_offscreen(self):
+        """A hidden workspace still in the tab order is worse than an absent
+        one: a phone user swiping through controls walks into a canvas they
+        cannot see, and a screen reader announces a disturbance banner for a
+        surface nobody opened."""
+        self.assertIn('body.cl[data-scene="field"] .cl-surface { display: none; }', self.css)
+        self.assertIn('body.cl[data-scene="surface"] .cl-scene { display: none; }', self.css)
+
+    def test_the_workspace_is_wrapped_so_it_can_be_absent_as_one_thing(self):
+        body = self._body()
+        self.assertIn('<div class="cl-surface" id="cl-surface">', body)
+        surface = body[body.index('id="cl-surface"'):]
+        # Everything the working surface is made of lives inside the wrapper.
+        for part in ('class="cl-header"', 'id="cl-lake"', 'class="cl-verbs"'):
+            self.assertIn(part, surface)
+        # ...and the field does not.
+        scene = body[body.index('data-ui-ref="calm-lake-scene-1"'):body.index('id="cl-surface"')]
+        for part in ('class="cl-verbs"', 'id="cl-lake"', 'class="cl-disturbance"'):
+            self.assertNotIn(part, scene)
+
+    def test_scene_one_carries_no_workspace_furniture(self):
+        """No disturbance banner, no closing-window bar, no verb bar."""
+        body = self._body()
+        scene = body[body.index('data-ui-ref="calm-lake-scene-1"'):body.index('id="cl-surface"')]
+        for banned in ("Closing window", "cl-halflife", "cl-disturbance",
+                       "cl-verb", "cl-lake"):
+            self.assertNotIn(banned, scene)
+
+    def test_there_is_a_way_back(self):
+        """A surface entered from the field must be leaveable from itself,
+        not by a browser gesture the phone may not have."""
+        body = self._body()
+        self.assertIn('data-ui-ref="calm-lake-return"', body)
+        surface = body[body.index('id="cl-surface"'):]
+        self.assertIn('id="cl-return"', surface)
+        self.assertIn(".cl-return:focus-visible", self.css)
+
+    def test_the_field_fills_the_viewport(self):
+        # Split on the rule at column 0: `.cl-scene {` also appears inside
+        # body.cl[data-scene="surface"] .cl-scene { display: none; }, and
+        # matching that one made this test pass against the wrong rule.
+        block = self.css.split("\n.cl-scene {")[1].split("}")[0]
+        self.assertIn("100dvh", block)
+
+    def test_the_return_restores_focus_to_the_tile_that_was_opened(self):
+        js = _JS_PATH.read_text(encoding="utf-8")
+        self.assertIn('document.getElementById("field-" + openedFieldId)', js)
+        self.assertIn("origin.focus()", js)
+
+    def test_every_field_holds_a_distinct_territory(self):
+        coords = [(f["territory"]["row"], f["territory"]["col"]) for f in PAGE_FIELDS]
+        self.assertEqual(len(set(coords)), len(coords))
+        self.assertEqual(len(PAGE_FIELDS), 5)
+
+
+class ComposerAndDocumentFaceTests(unittest.TestCase):
+    """SPECIMEN 03 and 04."""
+
+    def setUp(self):
+        for finding in FINDINGS:
+            finding["window"]["spent_percent"] = window_spent_percent(finding["window"])
+            finding["prominence"] = assess(finding)
+        self.findings = horizon_order(FINDINGS)
+
+    def test_the_composer_invents_no_exchange(self):
+        """There is no conversation anywhere in the fixture module.
+
+        The face may draw turn SHAPES; it may not draw sentences. If an
+        exchange fixture is ever added, this test should be replaced
+        deliberately rather than deleted quietly.
+        """
+        import routes.calm_lake_prototype as module
+        for name in dir(module):
+            self.assertNotIn(name.lower(), ("exchange", "messages", "turns",
+                                            "conversation", "transcript"))
+
+    def test_the_composer_is_bound_to_a_real_document(self):
+        field = _field(FACE_COMPOSER)
+        state = composer_state(field, self.findings)
+        self.assertIsNotNone(state)
+        self.assertIn(state["bound_id"], {d["id"] for d in DOCUMENTS})
+
+    def test_the_composer_citations_are_the_bound_documents_own_sides(self):
+        field = _field(FACE_COMPOSER)
+        state = composer_state(field, self.findings)
+        expected = [s for f in self.findings for s in f["sides"]
+                    if s["basis"] in (BASIS_LOCATED, BASIS_READ)
+                    and s["document"].split(" ")[0] == state["bound_id"]]
+        self.assertEqual(len(state["citations"]), len(expected))
+        for citation in state["citations"]:
+            self.assertIn(citation["basis"], (BASIS_LOCATED, BASIS_READ))
+
+    def test_an_unbound_composer_draws_nothing(self):
+        self.assertIsNone(composer_state({"bound_to": None}, self.findings))
+        self.assertIsNone(composer_state({"bound_to": "NOT-A-DOC"}, self.findings))
+
+    def test_the_composer_qualifier_is_derived_from_its_binding(self):
+        """Written twice, the two drift."""
+        rendered = {f["id"]: f for f in page_fields(self.findings)}
+        self.assertEqual(rendered["COMPOSER"]["qualifier"],
+                         rendered["M-201"]["qualifier"])
+
+    def test_the_document_stack_never_exaggerates_the_sheet_count(self):
+        field = _field(FACE_DOCUMENTS)
+        face = document_face(field)
+        document = next(d for d in DOCUMENTS if d["id"] == field["id"])
+        self.assertLessEqual(face["stack"], document["sheets"])
+        self.assertEqual(face["sheets"], document["sheets"])
+
+    def test_the_document_strip_reports_the_true_sheet_count(self):
+        field = _field(FACE_DOCUMENTS)
+        document = next(d for d in DOCUMENTS if d["id"] == field["id"])
+        self.assertEqual(field_count(field, self.findings), document["sheets"])
+
+    def test_the_intake_tile_counts_nothing(self):
+        self.assertIsNone(field_count(_field(FACE_INTAKE), self.findings))

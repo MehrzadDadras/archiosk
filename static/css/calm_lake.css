@@ -93,8 +93,6 @@ body.cl {
     /* 100dvh, not 100vh: on a 390x844 phone the dynamic unit is what
        stops the drawing sitting under a collapsing URL bar. */
     height: 100dvh;
-    display: grid;
-    grid-template-rows: auto auto auto 1fr auto auto;
     overflow: hidden;
     background: var(--w-page);
     color: var(--w-ink);
@@ -103,6 +101,90 @@ body.cl {
     line-height: 1.45;
     -webkit-font-smoothing: antialiased;
 }
+
+/* ============================================================
+   TWO SCENES
+
+   Scene 1 is the entry environment and Scene 2 is the working
+   surface, and only one of them exists on the page at a time.
+
+   `display: none` rather than an offscreen transform or
+   visibility:hidden, deliberately: a hidden workspace that is still
+   in the tab order is worse than an absent one - a phone user
+   swiping through controls would walk into a canvas they cannot see,
+   and a screen reader would read out a disturbance banner belonging
+   to a surface nobody has opened.
+
+   This was previously wrong in a way worth naming: the field was a
+   band bolted on TOP of the workspace, which made the entry
+   environment a header row inside the very surface it is an entry
+   to. The field is the screen now, or it is nothing.
+   ============================================================ */
+
+body.cl[data-scene="field"] .cl-surface { display: none; }
+body.cl[data-scene="surface"] .cl-scene { display: none; }
+
+.cl-surface {
+    height: 100dvh;
+    display: grid;
+    grid-template-rows: auto auto auto 1fr auto auto;
+}
+
+/* ------------------------------------------------------------
+   SCENE 1 - the entry environment. The whole viewport.
+   ------------------------------------------------------------ */
+
+.cl-scene {
+    height: 100dvh;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    padding: 0 14px 24px;
+    padding-top: calc(18px + env(safe-area-inset-top, 0px));
+    background: var(--w-page);
+}
+
+.cl-scene-head {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    padding: 4px 4px 20px;
+}
+
+.cl-scene-project {
+    font-size: 19px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    color: var(--w-ink);
+}
+
+.cl-scene-discipline { font-size: 12.5px; color: var(--w-ink-3); }
+
+/* ------------------------------------------------------------
+   SCENE 2 - the way back
+   ------------------------------------------------------------ */
+
+.cl-return {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 34px;
+    height: 34px;
+    margin-right: 2px;
+    padding: 0;
+    border: 1px solid var(--w-line);
+    border-radius: var(--w-radius);
+    background: var(--w-surface-2);
+    color: var(--w-ink);
+    cursor: pointer;
+    transition: background var(--w-fast) var(--w-ease-out),
+                transform var(--w-fast) var(--w-ease-out);
+}
+
+.cl-return-mark { font-size: 21px; line-height: 1; margin-top: -2px; }
+.cl-return:hover { background: var(--w-surface-3); }
+.cl-return:active { transform: scale(.94); }
+.cl-return:focus-visible { outline: 2px solid var(--w-ink); outline-offset: 2px; }
 
 /* ------------------------------------------------------------
    1. PROJECT HEADER
@@ -348,6 +430,8 @@ body.cl {
 .cl-stair       { fill: none; stroke: var(--w-line-2); stroke-width: 1.5; }
 .cl-stair-tread { stroke: var(--w-line); stroke-width: 1; }
 .cl-duct        { fill: none; stroke: var(--w-line-2); stroke-width: 2.5; stroke-dasharray: 9 5; }
+.cl-dim-line    { stroke: var(--w-line); stroke-width: .75; opacity: .55; }
+.cl-dim-tick    { stroke: var(--w-line); stroke-width: .75; opacity: .55; }
 .cl-grid-ref    { fill: var(--w-ink-3); font-family: var(--w-mono); font-size: 13px; }
 
 /* ------------------------------------------------------------
@@ -1231,6 +1315,426 @@ body.cl {
     .cl-scrim { display: none; }
 
     .cl-side { padding-left: 14px; }
+}
+
+/* ============================================================
+   SCENE 1 - THE PAGE-FIELD
+
+   A Page-Field is a touchable miniature WINDOW INTO A SURFACE. Two
+   species live here and the CSS must keep them apart:
+
+     .cl-field      the world. Large, recognisable, touchable, and
+                    STATIONARY - it holds a fixed grid territory and is
+                    in the same place on every visit.
+     .cl-field-pin  a grounded matter inside that world. It never
+                    displaces the world; prominence changes weight and
+                    form only, exactly as .cl-mark does on the canvas.
+
+   CHANNEL SEPARATION, recovered from the Holodeck archive and binding
+   here even though nothing moves at rest. See governance/proposals/
+   fish-tank-design-archaeology.md sec 3.1: both archive engines drove
+   motion through LAYOUT POSITION (`left`/`top`, `margin-*`) and never
+   through `transform`, because a running animation on `transform` wins
+   the cascade over the `:hover`/`:focus-visible` transform and silently
+   deletes the focus affordance - no error, on the one state a keyboard
+   user depends on.
+
+   So: the grid owns position. `transform` is reserved exclusively for
+   elevation on touch and for the Scene 2 expansion. Nothing in this
+   block may animate `transform` on an idle field.
+
+   And sec 3.2, which is why there is no drift here at all: proximity may
+   change APPEARANCE, never POSITION. The archive's v1.9 pulled its
+   objects toward the cursor and so made them unacquirable - the closer
+   you got, the worse it behaved.
+   ============================================================ */
+
+/* Deterministic territory. `--row`/`--col` come from the route, not from
+   source order, so a field keeps its coordinate even if the collection is
+   reordered - and that coordinate is what an expanded workspace contracts
+   back into. */
+/* 14px gutter matches .cl-header's own and yields a 175px card at 390px:
+   (390 - 28 gutter - 12 gap) / 2. Every face shares that box exactly. */
+.cl-field-grid {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px 12px;
+    max-width: 362px;
+    align-content: start;
+}
+
+/* Territory as enumerated classes rather than an inline custom property.
+   app.py's CSP is default-src 'self' with no style-src, so a parsed inline
+   style attribute is refused by the browser - and the static preview server
+   sends no CSP header, so that failure is invisible in the harness. The set
+   of territories is small, closed and deterministic, which is exactly when
+   enumeration beats script: the field lays out with JavaScript disabled. */
+.cl-field-slot { min-width: 0; }
+
+.cl-field-slot--r1 { grid-row: 1; }
+.cl-field-slot--r2 { grid-row: 2; }
+.cl-field-slot--r3 { grid-row: 3; }
+.cl-field-slot--r4 { grid-row: 4; }
+.cl-field-slot--c1 { grid-column: 1; }
+.cl-field-slot--c2 { grid-column: 2; }
+
+.cl-field {
+    /* ~165px at 390px viewport: 18 + 165 + 12 + 165 + 18 = 378. */
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    padding: 0;
+    border: 1px solid var(--w-line);
+    border-radius: 3px;
+    background: var(--w-surface);
+    overflow: hidden;
+    cursor: pointer;
+    text-align: left;
+    /* Elevation only. No position, no size - see channel separation above. */
+    transform: translateZ(0);
+    transition: transform 140ms ease, box-shadow 140ms ease, border-color 140ms ease;
+    box-shadow: 0 1px 2px rgba(27, 32, 39, .06);
+}
+
+/* Touch and keyboard get the SAME treatment. The archive's first fish was
+   reachable by neither; the correction is not to add a hover state, it is
+   to make the object a real focusable control and treat both alike. */
+.cl-field:hover,
+.cl-field:focus-visible {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(27, 32, 39, .13);
+    border-color: var(--w-line-2);
+}
+
+.cl-field:focus-visible {
+    outline: 2px solid var(--w-ink);
+    outline-offset: 2px;
+}
+
+.cl-field:active { transform: translateY(0); }
+
+/* A field carrying a foreground matter reads heavier at rest. Weight and
+   border only - no hue, per this file's ramp discipline. */
+.cl-field.is-raised { border-color: var(--w-line-2); }
+
+/* ------------------------------------------------------------
+   THE INTERIOR FACE - real geometry, drawn as vectors at the size
+   it is shown. Never a raster thumbnail, never an abstract glyph:
+   a picture that cannot state its own age asserts "this is what
+   that surface looks like" more fluently than a sentence, and is
+   the one representation this grammar refuses.
+   ------------------------------------------------------------ */
+
+.cl-field-face {
+    position: relative;
+    display: block;
+    /* Matches MINIATURE_VIEW (860x600) so the cropped plan fills the face
+       exactly - any other ratio would letterbox it and hand back the margin
+       the crop was introduced to reclaim. */
+    aspect-ratio: 860 / 600;
+    background: #FFFFFF;
+    border-bottom: 1px solid var(--w-line);
+}
+
+.cl-field-plan {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+/* Line weights are authored for a 1000-unit sheet shown ~950px wide. At
+   ~165px the same strokes render sub-pixel and grey out, so the miniature
+   scales them back up - the GEOMETRY is identical (that is what `live`
+   means), the pen is not. */
+/* Weighted so ARCHITECTURE dominates. The first pass gave the dashed ducts
+   a heavier pen than the room walls, and the face read as a services diagram
+   rather than as a floor plan - the ducts are now the lightest line on it,
+   which is also how a real architectural background sheet is drawn. Room
+   partitions use ink rather than the border grey, because at this size a
+   3:1 border contrast disappears into the white and the rooms merged into
+   one box. */
+.cl-field-plan .cl-grid-line   { stroke-width: 1.2; opacity: .16; }
+.cl-field-plan .cl-wall-outer  { stroke-width: 10; opacity: .85; }
+.cl-field-plan .cl-room        { stroke: var(--w-ink); stroke-width: 3.6; opacity: .55; }
+.cl-field-plan .cl-wall-rated  { stroke-width: 8; opacity: .72; }
+.cl-field-plan .cl-stair       { stroke: var(--w-ink); stroke-width: 3.6; opacity: .5; }
+.cl-field-plan .cl-stair-tread { stroke: var(--w-ink); stroke-width: 2.6; opacity: .38; }
+.cl-field-plan .cl-duct        { stroke-width: 3.6; opacity: .38; stroke-dasharray: 14 10; }
+
+/* ------------------------------------------------------------
+   THE EMBEDDED ATTENTION OBJECT
+   ------------------------------------------------------------ */
+
+.cl-field-pin {
+    position: absolute;
+    /* Set by calm_lake.js from data-mini-x/y, matching how .cl-mark is
+       positioned on the full canvas. A CSSOM write from allowed script is
+       permitted by the CSP that refuses a parsed style attribute. */
+    left: var(--w-pin-x, 50%);
+    top: var(--w-pin-y, 50%);
+    /* transform is the ONLY thing centring this pin, and it is static.
+       Nothing animates it - see the channel note at the top of the block. */
+    transform: translate(-50%, -50%);
+    border-radius: 50%;
+    pointer-events: none;
+}
+
+/* Foreground: the active matter. A filled disc with a halo that separates
+   it from the linework beneath without tinting it. */
+/* 6px, not 9px. The first pass put a 9px disc with a 4px halo on a 171px
+   face, and the pin stopped being a marker ON the drawing and became the
+   subject OF it - the world was displaced by the matter inside it, which is
+   the one thing the two-species rule forbids. The knockout ring is what
+   separates it from the linework; the pin itself stays small. */
+.cl-field-pin--foreground {
+    width: 6px;
+    height: 6px;
+    background: var(--w-ink);
+    box-shadow: 0 0 0 2px var(--w-surface), 0 0 0 3px rgba(27, 32, 39, .22);
+}
+
+/* Tracked: present, countable, quiet. Hollow, so the difference from
+   foreground is form rather than colour and survives greyscale. */
+.cl-field-pin--tracked {
+    width: 5px;
+    height: 5px;
+    background: transparent;
+    border: 1.5px solid var(--w-ink-3);
+    box-shadow: 0 0 0 1.5px var(--w-surface);
+}
+
+/* ------------------------------------------------------------
+   THE CONFIRMATION STRIP - it confirms the face, it does not carry
+   the page. If this strip is doing the identifying work, the face
+   has failed and the strip is not the place to fix it.
+   ------------------------------------------------------------ */
+
+.cl-field-strip {
+    display: flex;
+    align-items: baseline;
+    gap: 5px;
+    padding: 7px 9px;
+    background: var(--w-surface);
+    font-size: 11px;
+    line-height: 1.2;
+    min-width: 0;
+}
+
+.cl-field-id {
+    font-family: var(--w-mono);
+    font-weight: 700;
+    color: var(--w-ink);
+    letter-spacing: .01em;
+    flex: none;
+}
+
+.cl-field-sep { color: var(--w-line); flex: none; }
+
+.cl-field-level {
+    color: var(--w-ink-3);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+}
+
+/* Right-aligned, and absent entirely when nothing is countable - a zero
+   would itself be a measurement. */
+.cl-field-count {
+    margin-left: auto;
+    flex: none;
+    font-family: var(--w-mono);
+    font-weight: 700;
+    color: var(--w-ink);
+    font-variant-numeric: tabular-nums;
+}
+
+/* ------------------------------------------------------------
+   SPECIMEN 02 - THE SPIN FACE
+
+   Distinctly non-drawing and deliberately so: no walls, no rooms, no
+   sheet. A drawing face answers "where is it"; this one answers "how
+   was it reached". Same slate ramp, same monochrome discipline - the
+   difference between the two species of leaf is FORM (solid vs hollow,
+   continuous vs dashed), never hue, so it survives greyscale and does
+   not spend a colour this file has no budget for.
+   ------------------------------------------------------------ */
+
+.cl-field-trace {
+    display: block;
+    width: 100%;
+    height: 100%;
+    /* Not the drawing's paper white. This face is an analysis surface, not
+       a sheet, and the ground is the first thing that says so. */
+    background: var(--w-surface-2);
+}
+
+.cl-trace-link {
+    fill: none;
+    stroke: var(--w-ink-3);
+    stroke-width: 4;
+    opacity: .5;
+}
+
+/* An asserted side names a document without establishing one. The link that
+   reaches it is broken, because the derivation is. */
+.cl-trace-link--ungrounded {
+    stroke-dasharray: 12 10;
+    opacity: .34;
+}
+
+.cl-trace-root {
+    fill: var(--w-ink);
+    opacity: .85;
+}
+
+.cl-trace-node {
+    fill: var(--w-surface);
+    stroke: var(--w-ink);
+    stroke-width: 5;
+}
+
+/* The active clash. Filled, and the only filled circle on the face - the
+   same weight-not-hue promotion the foreground pin gets on the drawing. */
+.cl-trace-node--foreground {
+    fill: var(--w-ink);
+    stroke-width: 5;
+}
+
+.cl-trace-node--tracked {
+    stroke: var(--w-ink-3);
+    stroke-width: 4;
+}
+
+.cl-trace-leaf {
+    fill: var(--w-ink-3);
+    opacity: .42;
+}
+
+/* Hollow: it is a citation the derivation could not land. */
+.cl-trace-leaf--ungrounded {
+    fill: none;
+    stroke: var(--w-ink-3);
+    stroke-width: 3;
+    stroke-dasharray: 9 7;
+    opacity: .55;
+}
+
+/* ------------------------------------------------------------
+   SPECIMEN 03 - THE COMPOSER FACE
+
+   A drafting surface: an unfinished prompt against a bounded
+   synthesis block that carries its citations at the foot. Distinct
+   from the drawing (no sheet, no walls) and from the trace (no nodes,
+   no links) - this face is made of turns.
+
+   The bars are SKELETON GEOMETRY, not text. There is no exchange in
+   the fixture, and drawing plausible sentences would assert a
+   conversation that never happened. The only concrete marks are the
+   bound document's id and the citation chips, both derived.
+   ------------------------------------------------------------ */
+
+.cl-field-composer,
+.cl-field-docs,
+.cl-field-intake {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+.cl-field-composer { background: var(--w-surface); }
+
+.cl-comp-badge {
+    fill: var(--w-surface-2);
+    stroke: var(--w-line);
+    stroke-width: 3;
+}
+
+.cl-comp-badge-text {
+    fill: var(--w-ink);
+    font-family: var(--w-mono);
+    font-size: 44px;
+    font-weight: 700;
+}
+
+/* The unfinished turn. Lighter than the synthesis, because it is the
+   question and not the answer. */
+.cl-comp-ask { fill: var(--w-ink-3); opacity: .30; }
+
+/* Drafting, right now. The one mark on any face that says the surface is
+   in use rather than merely present. */
+.cl-comp-caret { fill: var(--w-ink); opacity: .75; }
+
+.cl-comp-block {
+    fill: var(--w-surface-2);
+    stroke: var(--w-line-faint);
+    stroke-width: 2;
+}
+
+.cl-comp-rule { stroke: var(--w-ink); stroke-width: 7; opacity: .55; }
+.cl-comp-line { fill: var(--w-ink-3); opacity: .38; }
+
+/* Citation chips. Form, not hue - `located` is solid because it names a
+   place, `read` is outlined because it names only a document. */
+.cl-comp-cite--located { fill: var(--w-ink); opacity: .55; }
+.cl-comp-cite--read {
+    fill: none;
+    stroke: var(--w-ink-3);
+    stroke-width: 3;
+    opacity: .8;
+}
+
+/* ------------------------------------------------------------
+   SPECIMEN 04 - THE DOCUMENTS FACE
+   ------------------------------------------------------------ */
+
+.cl-field-docs { background: var(--w-surface-2); }
+
+.cl-doc-cover {
+    fill: var(--w-surface);
+    stroke: var(--w-line);
+    stroke-width: 3;
+}
+
+/* Only the top cover carries content; the ones behind it are edges. */
+.cl-doc-cover--top { fill: #FFFFFF; }
+
+.cl-doc-line { fill: var(--w-ink-3); opacity: .34; }
+.cl-doc-rule { stroke: var(--w-line); stroke-width: 2.5; opacity: .6; }
+
+/* ------------------------------------------------------------
+   INTAKE - an action, not a surface
+
+   No miniature, because there is nothing behind it yet. The dashed
+   frame is the honest form for that: an outline waiting to be filled,
+   which is exactly what a new project is.
+   ------------------------------------------------------------ */
+
+.cl-field-intake { background: var(--w-page); }
+
+.cl-intake-frame {
+    fill: none;
+    stroke: var(--w-line);
+    stroke-width: 5;
+    stroke-dasharray: 22 18;
+    opacity: .75;
+}
+
+.cl-intake-cross {
+    stroke: var(--w-ink-2);
+    stroke-width: 12;
+    stroke-linecap: round;
+    opacity: .75;
+}
+
+.cl-field--intake { border-style: dashed; background: transparent; }
+.cl-field--intake .cl-field-face { border-bottom-style: dashed; }
+
+@media (min-width: 900px) {
+    .cl-scene { padding-left: 22px; padding-right: 22px; }
 }
 
 /* ============================================================

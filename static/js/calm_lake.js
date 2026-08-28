@@ -56,6 +56,79 @@
        style-src directive, so a parsed style attribute is refused.
        Setting element.style from a nonce-approved script is unaffected.
        -------------------------------------------------------- */
+    /* ========================================================
+       THE TWO SCENES
+
+       Scene 1 is the entry environment; Scene 2 is the working
+       surface. Only one is on the page at a time - the CSS drives
+       that off body[data-scene], so this code changes ONE attribute
+       and never hides anything itself.
+
+       The opened field's territory is remembered so a return
+       contracts back to the tile the person came from rather than
+       dumping them at the top of an unfamiliar grid. Territory is
+       already deterministic in the markup; this just re-focuses it.
+       ======================================================== */
+
+    var body = document.body;
+    var openedFieldId = null;
+
+    function showField() {
+        body.setAttribute("data-scene", "field");
+        /* Focus returns to the tile that was opened, not to the top of
+           the document. A keyboard or screen-reader user who came from
+           M-201 lands back on M-201. */
+        if (openedFieldId) {
+            var origin = document.getElementById("field-" + openedFieldId);
+            if (origin) { origin.focus(); }
+        }
+    }
+
+    function showSurface(fieldId) {
+        openedFieldId = fieldId || null;
+        body.setAttribute("data-scene", "surface");
+        var back = document.getElementById("cl-return");
+        if (back) { back.focus(); }
+    }
+
+    Array.prototype.forEach.call(document.querySelectorAll(".cl-field"), function (field) {
+        field.addEventListener("click", function () {
+            /* An action tile opens no surface - there is nothing behind it
+               yet. Saying so is better than transitioning to an empty
+               workspace and letting the person work out why it is blank. */
+            if (field.getAttribute("data-action") === "true") {
+                flashReason("Project intake is not built in this prototype.");
+                return;
+            }
+            if (field.getAttribute("data-field") === "M-201") {
+                showSurface("M-201");
+                refitSoon(40);
+                return;
+            }
+            flashReason("Only M-201 opens in this prototype.");
+        });
+    });
+
+    var returnBtn = document.getElementById("cl-return");
+    if (returnBtn) {
+        returnBtn.addEventListener("click", function () {
+            dismiss();
+            showField();
+        });
+    }
+
+    /* SCENE 1 - Page-Field pins. Same CSP-safe idiom as .cl-mark below: the
+       coordinate rides on a data attribute and is written through the CSSOM,
+       because app.py's CSP refuses a parsed inline style attribute.
+
+       data-mini-x/y are ALREADY projected into the miniature's cropped
+       viewBox by the route - they are not the raw sheet percentages, which
+       would place the pin in the wrong room. */
+    Array.prototype.forEach.call(document.querySelectorAll(".cl-field-pin"), function (pin) {
+        pin.style.setProperty("--w-pin-x", pin.getAttribute("data-mini-x") + "%");
+        pin.style.setProperty("--w-pin-y", pin.getAttribute("data-mini-y") + "%");
+    });
+
     Array.prototype.forEach.call(plan.querySelectorAll(".cl-mark"), function (mark) {
         mark.style.setProperty("--w-mark-x", mark.getAttribute("data-x") + "%");
         mark.style.setProperty("--w-mark-y", mark.getAttribute("data-y") + "%");

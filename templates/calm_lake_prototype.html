@@ -1,3 +1,4 @@
+{% from "_calm_lake_plan.html" import plan_geometry %}
 {# ============================================================
    CLAUDE-CALM-LAKE-SURFACE-PROTOTYPE-01
 
@@ -46,14 +47,232 @@
     <title>Calm Lake - {{ project.short }}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/calm_lake.css') }}?v={{ static_version }}">
 </head>
-<body class="cl" data-state="base">
+<body class="cl" data-scene="field" data-state="base">
 
 {# ---------------------------------------------------------------
    1. PROJECT HEADER - permanent. Two facts: which project, which
    drawing. Not a toolbar; its only action is changing the drawing,
    which is Look.
    --------------------------------------------------------------- #}
+{# ---------------------------------------------------------------
+   SCENE 1 - THE PAGE-FIELD ENTRY.
+
+   A Page-Field is a touchable miniature WINDOW INTO A SURFACE, not a
+   navigation button and not an icon card. The interior face carries
+   identity; the footer strip only confirms what the face already said.
+   A reader should know which sheet this is before reading the label.
+
+   TWO VISUAL SPECIES, and they must not converge:
+
+     the field  - a destination/world. Large, recognisable, touchable,
+                  and spatially STATIONARY. It occupies a remembered
+                  territory and is in the same place every visit.
+     the pin    - a grounded matter INSIDE that world. It never
+                  displaces the world; prominence changes its weight
+                  only, and it sits at the finding's own canvas
+                  coordinate so the reader finds it in the same place
+                  once the surface is open.
+
+   The miniature states its own basis, exactly as a citation does. This
+   one is `live`: it is not a picture of the drawing, it is the same
+   plan_geometry macro the full canvas calls, rendered smaller. It
+   cannot go stale because it is not a copy. There is deliberately no
+   `cached` basis - a captured thumbnail is the one representation that
+   cannot state its own age from inside itself.
+   --------------------------------------------------------------- #}
+<section class="cl-scene" data-ui-ref="calm-lake-scene-1" aria-label="Surfaces">
+    <header class="cl-scene-head">
+        <span class="cl-scene-project">{{ project.name }}</span>
+        <span class="cl-scene-discipline">{{ project.discipline }}</span>
+    </header>
+    <ol class="cl-field-grid">
+        {% for field in fields %}
+        <li class="cl-field-slot cl-field-slot--r{{ field.territory.row }} cl-field-slot--c{{ field.territory.col }}">
+            <button type="button"
+                    class="cl-field cl-field--{{ field.face }}{% if field.raises_foreground %} is-raised{% endif %}"
+                    id="field-{{ field.id }}"
+                    data-field="{{ field.id }}"
+                    data-face="{{ field.face }}"
+                    {% if field.miniature %}data-miniature="{{ field.miniature }}"{% endif %}
+                    data-ui-ref="calm-lake-page-field"
+                    {% if field.action %}data-action="true"{% endif %}
+                    aria-label="{% if field.action %}{{ field.qualifier }} - start a new project{% else %}{{ field.short }} {{ field.qualifier }}{% if field.count is not none %} - {{ field.count }} {{ field.count_meaning if field.count != 1 else field.count_meaning_one }}{% endif %}{% endif %}">
+
+                {# THE INTERIOR FACE. Real geometry, drawn as vectors at
+                   the size it is shown - never a raster thumbnail and
+                   never an abstract glyph. #}
+                <span class="cl-field-face" aria-hidden="true">
+                    {% if field.face == 'drawing' %}
+                    {{ plan_geometry("mini-" ~ field.id, "cl-field-plan", "",
+                         detail=false,
+                         view=miniature_view.x ~ " " ~ miniature_view.y ~ " "
+                              ~ miniature_view.w ~ " " ~ miniature_view.h) }}
+
+                    {% elif field.face == 'intake' %}
+                    {# NOT a miniature. There is no surface behind this tile
+                       yet, which is the point of it, so it draws an empty
+                       frame rather than a picture of something. The dashes
+                       are the honest form: an outline waiting to be filled. #}
+                    <svg class="cl-field-intake" viewBox="0 0 860 600" aria-hidden="true">
+                        <rect class="cl-intake-frame" x="120" y="90" width="620" height="420" rx="10"/>
+                        <line class="cl-intake-cross" x1="430" y1="230" x2="430" y2="370"/>
+                        <line class="cl-intake-cross" x1="360" y1="300" x2="500" y2="300"/>
+                    </svg>
+
+                    {% elif field.face == 'composer' and field.composer %}
+                    {# THE DRAFTING SURFACE.
+
+                       There is no exchange fixture in this module - it holds
+                       PROJECT, DOCUMENTS, FINDINGS and VERBS and nothing
+                       conversational - so the turns are drawn as SKELETON
+                       GEOMETRY, never as invented sentences. A face that put
+                       plausible words in a person's mouth would be asserting
+                       an exchange that never happened.
+
+                       Two things here are real and only two: the bound
+                       document, and the citation chips, which are the bases
+                       of the sides that actually cite it. #}
+                    <svg class="cl-field-composer" viewBox="0 0 860 600" aria-hidden="true">
+                        <rect class="cl-comp-badge" x="60" y="48" width="300" height="76" rx="8"/>
+                        <text class="cl-comp-badge-text" x="86" y="99">{{ field.composer.bound_short }}</text>
+
+                        {# The prompt turn: ragged, right-aligned, unfinished. #}
+                        <rect class="cl-comp-ask" x="330" y="176" width="470" height="30" rx="6"/>
+                        <rect class="cl-comp-ask" x="470" y="222" width="330" height="30" rx="6"/>
+                        <rect class="cl-comp-caret" x="440" y="220" width="8" height="34"/>
+
+                        {# The synthesis turn: bounded, structured, and it
+                           carries its citations at the foot rather than
+                           claiming anything on its own. #}
+                        <rect class="cl-comp-block" x="60" y="300" width="600" height="230" rx="8"/>
+                        <line class="cl-comp-rule" x1="60" y1="300" x2="60" y2="530"/>
+                        <rect class="cl-comp-line" x="96" y="332" width="530" height="24" rx="5"/>
+                        <rect class="cl-comp-line" x="96" y="372" width="470" height="24" rx="5"/>
+                        <rect class="cl-comp-line" x="96" y="412" width="510" height="24" rx="5"/>
+                        {% for citation in field.composer.citations %}
+                        <rect class="cl-comp-cite cl-comp-cite--{{ citation.basis }}"
+                              x="{{ 96 + loop.index0 * 108 }}" y="462" width="92" height="34" rx="5"/>
+                        {% endfor %}
+                    </svg>
+
+                    {% elif field.face == 'documents' and field.document %}
+                    {# Stacked covers. The stack depth is the document's real
+                       sheet count, capped at what still reads as separate
+                       sheets at this size - the strip carries the true
+                       number, so this is a simplification and never a
+                       contradiction of it. #}
+                    <svg class="cl-field-docs" viewBox="0 0 860 600" aria-hidden="true">
+                        {% for offset in range(field.document.stack) %}
+                        <rect class="cl-doc-cover{% if loop.last %} cl-doc-cover--top{% endif %}"
+                              x="{{ 150 + (field.document.stack - 1 - loop.index0) * 34 }}"
+                              y="{{ 60 + (field.document.stack - 1 - loop.index0) * 26 }}"
+                              width="430" height="470" rx="8"/>
+                        {% endfor %}
+                        <rect class="cl-doc-line" x="196" y="150" width="300" height="20" rx="4"/>
+                        <rect class="cl-doc-line" x="196" y="196" width="240" height="16" rx="4"/>
+                        <rect class="cl-doc-line" x="196" y="230" width="270" height="16" rx="4"/>
+                        <rect class="cl-doc-line" x="196" y="264" width="210" height="16" rx="4"/>
+                        <line class="cl-doc-rule" x1="196" y1="316" x2="496" y2="316"/>
+                        <rect class="cl-doc-line" x="196" y="342" width="256" height="16" rx="4"/>
+                        <rect class="cl-doc-line" x="196" y="376" width="288" height="16" rx="4"/>
+                    </svg>
+
+                    {% elif field.face == 'spin' and field.trace %}
+                    {# THE DERIVATION TRACE. run -> finding -> side, with every
+                       node and every link coming from the findings' own sides.
+                       Nothing here is placeholder geometry: remove a side from
+                       the record and a leaf disappears from this face.
+
+                       A side at `asserted` draws HOLLOW and DASHED. It names a
+                       document without establishing one, and a face that drew
+                       it like evidence would be making the claim the basis
+                       vocabulary exists to refuse. #}
+                    <svg class="cl-field-trace"
+                         viewBox="0 0 {{ spin_view.w }} {{ spin_view.h }}" aria-hidden="true">
+                        {% for branch in field.trace.branches %}
+                        <path class="cl-trace-link"
+                              d="M {{ field.trace.root_x }} {{ field.trace.root_y }}
+                                 C {{ (field.trace.root_x + field.trace.branch_x) // 2 }} {{ field.trace.root_y }},
+                                   {{ (field.trace.root_x + field.trace.branch_x) // 2 }} {{ branch.y }},
+                                   {{ field.trace.branch_x }} {{ branch.y }}"/>
+                        {% for leaf in branch.leaves %}
+                        <path class="cl-trace-link{% if not leaf.grounded %} cl-trace-link--ungrounded{% endif %}"
+                              d="M {{ field.trace.branch_x }} {{ branch.y }}
+                                 C {{ (field.trace.branch_x + field.trace.leaf_x) // 2 }} {{ branch.y }},
+                                   {{ (field.trace.branch_x + field.trace.leaf_x) // 2 }} {{ leaf.y }},
+                                   {{ field.trace.leaf_x }} {{ leaf.y }}"/>
+                        {% endfor %}
+                        {% endfor %}
+
+                        {# Leaves first, then branches, then the root - so a
+                           node always sits over the link that reaches it. #}
+                        {% for branch in field.trace.branches %}
+                        {% for leaf in branch.leaves %}
+                        <rect class="cl-trace-leaf{% if not leaf.grounded %} cl-trace-leaf--ungrounded{% endif %}"
+                              x="{{ field.trace.leaf_x }}" y="{{ leaf.y - 16 }}"
+                              width="86" height="32" rx="4"/>
+                        {% endfor %}
+                        {% endfor %}
+
+                        {% for branch in field.trace.branches %}
+                        <circle class="cl-trace-node cl-trace-node--{{ branch.tier }}"
+                                cx="{{ field.trace.branch_x }}" cy="{{ branch.y }}" r="20"/>
+                        {% endfor %}
+
+                        <rect class="cl-trace-root"
+                              x="{{ field.trace.root_x - 17 }}" y="{{ field.trace.root_y - 17 }}"
+                              width="34" height="34" rx="3"/>
+                    </svg>
+                    {% endif %}
+
+                    {# The embedded attention objects. #}
+                    {% for pin in field.pins %}
+                    <span class="cl-field-pin cl-field-pin--{{ pin.tier }}"
+                          data-mini-x="{{ pin.mini_x }}"
+                          data-mini-y="{{ pin.mini_y }}"
+                          title="{{ pin.tag }}"></span>
+                    {% endfor %}
+                </span>
+
+                {# THE CONFIRMATION STRIP. Restrained by intent: it
+                   confirms the face, it does not carry the page. The
+                   number is omitted entirely rather than shown as 0
+                   when nothing is countable - a zero is a measurement
+                   and would be a claim the record does not support. #}
+                <span class="cl-field-strip">
+                    <span class="cl-field-id">{{ field.short }}</span>
+                    <span class="cl-field-sep" aria-hidden="true">&middot;</span>
+                    <span class="cl-field-level">{{ field.qualifier }}</span>
+                    {% if field.count is not none %}
+                    <span class="cl-field-count">{{ field.count }}</span>
+                    {% endif %}
+                </span>
+            </button>
+        </li>
+        {% endfor %}
+    </ol>
+</section>
+
+{# ---------------------------------------------------------------
+   SCENE 2 - THE ACTIVE WORKING SURFACE.
+
+   Hidden entirely until a Page-Field is opened - `display: none`,
+   not merely off-screen, so nothing in here is focusable, readable
+   by a screen reader, or reachable by Tab while the field is up.
+   A workspace you can Tab into but cannot see is worse than one
+   that is honestly absent.
+   --------------------------------------------------------------- #}
+<div class="cl-surface" id="cl-surface">
+
 <header class="cl-header" data-ui-ref="calm-lake-header">
+    {# The way back. A surface entered from the field must be leaveable
+       from the surface itself - not by a browser gesture the phone may
+       not have. It contracts to the field, where the opened tile is
+       still in its own remembered territory. #}
+    <button type="button" class="cl-return" id="cl-return"
+            data-ui-ref="calm-lake-return" aria-label="Back to surfaces">
+        <span class="cl-return-mark" aria-hidden="true">&lsaquo;</span>
+    </button>
     <div class="cl-header-id">
         <span class="cl-project">{{ project.name }}</span>
         <span class="cl-discipline">{{ project.discipline }}</span>
@@ -128,46 +347,8 @@
 <main class="cl-lake" id="cl-lake" data-ui-ref="calm-lake-surface">
     <div class="cl-sheet-frame" id="cl-sheet-frame">
         <div class="cl-plan" id="cl-plan">
-            <svg class="cl-plan-svg" viewBox="0 0 1000 700" role="img"
-                 aria-label="Schematic Level 2 mechanical plan, prototype fixture">
-                <defs>
-                    <pattern id="cl-grid" width="50" height="50" patternUnits="userSpaceOnUse">
-                        <path d="M 50 0 L 0 0 0 50" fill="none" class="cl-grid-line"/>
-                    </pattern>
-                </defs>
-                <rect width="1000" height="700" class="cl-sheet-ground"/>
-                <rect width="1000" height="700" fill="url(#cl-grid)"/>
-
-                <rect x="90" y="70" width="820" height="560" class="cl-wall-outer"/>
-
-                <rect x="150" y="330" width="700" height="90" class="cl-corridor"/>
-                <line x1="150" y1="330" x2="850" y2="330" class="cl-wall-rated"/>
-                <line x1="150" y1="420" x2="850" y2="420" class="cl-wall-rated"/>
-
-                <rect x="150" y="110" width="200" height="220" class="cl-room"/>
-                <rect x="350" y="110" width="200" height="220" class="cl-room"/>
-                <rect x="550" y="110" width="300" height="220" class="cl-room"/>
-                <rect x="150" y="420" width="260" height="170" class="cl-room"/>
-                <rect x="410" y="420" width="240" height="170" class="cl-room"/>
-                <rect x="650" y="420" width="200" height="170" class="cl-room"/>
-
-                <rect x="150" y="420" width="120" height="170" class="cl-stair"/>
-                <line x1="150" y1="450" x2="270" y2="450" class="cl-stair-tread"/>
-                <line x1="150" y1="480" x2="270" y2="480" class="cl-stair-tread"/>
-                <line x1="150" y1="510" x2="270" y2="510" class="cl-stair-tread"/>
-                <line x1="150" y1="540" x2="270" y2="540" class="cl-stair-tread"/>
-
-                <path d="M 300 375 L 620 375 L 620 200" class="cl-duct"/>
-                <path d="M 300 375 L 300 200" class="cl-duct"/>
-                <path d="M 500 375 L 500 500" class="cl-duct"/>
-
-                <text x="300" y="96" class="cl-grid-ref">C</text>
-                <text x="500" y="96" class="cl-grid-ref">D</text>
-                <text x="700" y="96" class="cl-grid-ref">E</text>
-                <text x="104" y="200" class="cl-grid-ref">2</text>
-                <text x="104" y="375" class="cl-grid-ref">3</text>
-                <text x="104" y="520" class="cl-grid-ref">4</text>
-            </svg>
+            {{ plan_geometry("canvas", "cl-plan-svg",
+                 "Schematic Level 2 mechanical plan, prototype fixture") }}
 
             {# PINS. Prominence tier decides WEIGHT, never hue. A foreground
                pin carries its tag; an ambient pin is a bare marker that
@@ -536,6 +717,8 @@
 </section>
 
 <div class="cl-scrim" id="cl-scrim" hidden></div>
+
+</div>
 
 <script nonce="{{ csp_nonce }}" src="{{ url_for('static', filename='js/calm_lake.js') }}?v={{ static_version }}"></script>
 </body>

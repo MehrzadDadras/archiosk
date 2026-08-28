@@ -1,5 +1,140 @@
 # Continuation checkpoint
 
+## 2026-08-28 (later) — Phase 1: the Page-Field entry environment, and the archive it came out of
+
+A read-only design archaeology of an artifact outside this repository produced a
+design rule, a custody alarm, and then an implementation. Recorded together
+because the implementation is only justified by the archaeology.
+
+### The archaeology — `governance/proposals/fish-tank-design-archaeology.md`
+
+The "fish tank" is `C:\Archiosk\holodeck\archive\` — **232 files, 19,337,785
+bytes, 2026-05-03 to 2026-05-10**, cited once by `291d2cf` and never part of
+this repository. Two things about it matter here.
+
+**Custody is the finding with a deadline.** That directory is `.gitignore`'d out
+of its own repository (holodeck `4360f99`, "metabolize archive copies out of
+active Git tracking"), which tracks 5 files. The archive therefore exists as a
+single uncommitted copy on one disk, versioned only by filename. It is the sole
+record of the mechanisms below, which appear in no commit message or note
+anywhere. See `governance/proposals/holodeck-archive-custody.md` and
+`tools/backup_holodeck_archive.ps1` — the script is written and verified (232
+files → 3,578,945 bytes, 5.4×, every file re-hashed after round-trip; and
+`-VerifyOnly` re-checks the live tree against the manifest, distinguishing
+additions from ALTERED files so corruption is not laundered into the backup).
+**Tier 1 has NOT been run against a permanent destination** — that needs a
+volume from the Product Owner and is the outstanding ask.
+
+**The invariant the lineage produced:** *moving things are atmosphere and are
+unreachable; reachable things do not move.* The archive's v1.9 word-fish were
+`pointer-events: none` and faked being caught with cursor-distance arithmetic —
+they looked interactive and were inert to keyboard and touch. Five versions of
+rework followed (v2.16 → v2.17 → v2.17.1 `FIXED` → v2.17.2 `REPAIRED` → v2.18
+bespoke swimmer geometry) before v2.20 abandoned the approach entirely: *"Fix
+clickability using real HTML anchor links only. No JavaScript is required."*
+Independently, `291d2cf` refused the fish for this repository and `c6bd26b`'s
+landing layer states the same boundary in shipped code.
+
+Three mechanisms were recovered that existed only in the artifacts:
+
+- **Channel separation.** Both surviving engines drove motion through LAYOUT
+  POSITION (`left`/`top` in `archiosk_holodeck_v_3.html`, `margin-*` keyframes
+  in v2.20) and neither ever wrote `transform` — because a running animation on
+  `transform` wins the cascade over the `:hover`/`:focus-visible` transform and
+  silently deletes the focus affordance. The physics owns position; the
+  interaction state owns `transform`.
+- **Proximity may change appearance, never position.** v1.9 drifted its objects
+  toward the cursor and so made them unacquirable; `v_3.html` kept the proximity
+  band and deleted the drift.
+- **Hover-freeze.** Hovering halts the object's orbit, so a moving target can be
+  acquired. Single observation; whether it suffices for motor-impaired users is
+  recorded as **unmeasured**.
+
+**The warrant for stillness is the archive's own.** `v_3.html` carries two fish
+taxa: `procurement-fish`, driven by `requestAnimationFrame`, and `signal-fish`
+— Risk, Assumption, Decision, RFI, Cost — positioned by static CSS and never
+touched by the animation loop. At v3.0 the objects stopped meaning "where you
+go" and started meaning "what you must not miss", and in the same step they
+stopped moving. §5 of the record also corrects a provenance claim that was in
+uncommitted work at the time: it asserted the archive physics "only ever wrote
+`transform`", which is false in every stratum and inverts the actual reason
+focus worked.
+
+### The implementation — Phase 1 baseline
+
+A **Page-Field** is a stable, touchable miniature window into a real surface.
+The interior face carries identity; the footer strip only confirms it. Five
+tiles, deterministic territories, `175.00 × 152.17px` each — measured identical
+across every face, because the aspect is declared once on `.cl-field-face` and a
+test asserts it is never overridden per face.
+
+**Two scenes, and only one on the page at a time.** This was built wrong first
+and the correction is the point: the field was a band bolted on TOP of the
+workspace, making the entry environment a header row inside the very surface it
+is an entry to. The workspace is now wrapped in `.cl-surface`, the body carries
+`data-scene`, and the CSS uses `display: none` — not offscreen, not
+`visibility: hidden`. Measured: **0 focusable elements inside the hidden
+workspace**. A hidden workspace still in the tab order is worse than an absent
+one. Tapping M-201 enters Scene 2; the return contracts to the field and
+restores focus to the tile that was opened.
+
+**Every number on a tile is derived, and absent rather than zero when the record
+supports nothing.** Counts carry a stated meaning, and `field_count` returns
+`None` where nothing is countable — a zero would itself be a measurement.
+
+- **Specimen 01 — M-201, `live`.** The only surface whose miniature can honestly
+  claim `live`: `templates/_calm_lake_plan.html` defines the plan geometry once
+  and both the full canvas and the miniature call it, so the miniature is not a
+  picture of the drawing and cannot drift from it. `MINIATURE_VIEW` crops the
+  viewport to the building extent, and pin coordinates are PROJECTED into that
+  crop — a raw sheet percentage puts the pin in the wrong room, arithmetic no
+  screenshot review catches, so it has its own test.
+- **Specimen 02 — Spin, `kind`.** No Spin fixture was invented. The derivation
+  trace already existed in the findings: run → finding → side. Rendered as 3
+  findings, 6 sides, and the one `asserted` side draws hollow with a broken
+  link, because it names a document without establishing one.
+- **Intake is not a Page-Field and the model says so** — it opens nothing, so it
+  declares no miniature basis, emits no `data-miniature`, and counts nothing.
+- **Card 5 is SP-001, not "Specifications / Addenda"** — the directive asked for
+  addenda; the fixture holds none, and a category label implying documents that
+  do not exist is the failure this grammar refuses.
+
+**A CSP defect the static harness cannot see.** Scene 1 first used inline
+`style="--x:…"`. It rendered perfectly in the preview because `http.server`
+sends no CSP header, while `app.py` sets `default-src 'self'` with no
+`style-src`, which refuses parsed inline style attributes.
+`test_no_inline_style_attributes_anywhere` caught it. Fixed with the page's own
+idiom — `data-*` plus `style.setProperty`, a CSSOM write the CSP permits, as
+`.cl-mark` already does. Territory became enumerated CSS classes instead: the
+set is small and closed, and a field that will not lay out without JavaScript is
+worse than a pin that will not position without it.
+
+### Verification
+
+- **110 Calm Lake tests**, up from 63.
+- **Pre-existing failures, confirmed not caused here** by running them against a
+  clean `HEAD` worktree: `tests/test_write_collision_01.py` (5) and
+  `test_p40vw8qa_site_wide_visual_consistency.py::…::test_tokens_css_hardcoded_hex_only_appears_in_token_definitions`.
+  The latter is real drift that arrived with the Calm Lake commits —
+  `calm_lake.css` defines 18 raw hex values and that test globs every stylesheet
+  except `tokens.css`. **Open decision:** exempt the prototype explicitly, or
+  adopt `tokens.css` variables. Not resolved silently either way.
+- **`MANIFEST.md` drift fixed.** The Calm Lake prototype landed six tracked
+  files in `a4cfb19` and none were ever registered. Added, along with the new
+  files.
+- **`STATIC_VERSION` is now 126.** It had been bumped to 124, which is BELOW the
+  deployed baseline of 125 recorded above — a downgrade that would have left the
+  new CSS stale live. `.env` is per-host and git-ignored, so the deploying host
+  must set its own value above 125.
+
+### Not done, deliberately
+
+The live archive still has no backup. Scene 1 leaves ~350px of empty field below
+five cards at 844px; the approved 175px footprint was kept rather than scaling
+cards up unilaterally. Only M-201 opens — the other tiles say so rather than
+transitioning to a blank workspace. `spike/multi-surface-canvas` remains
+unmerged and unreviewed.
+
 ## 2026-08-28 — A canvas preview that could not exist, and the governance record it recovered
 
 A directive asked for a local interactive preview of the multi-surface canvas on

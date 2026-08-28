@@ -334,6 +334,111 @@ VERBS = [
 #                 than the other two, and the reason the vocabulary exists.
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# SCENE 1 - THE PAGE-FIELD ENTRY.
+#
+# A Page-Field is a stable, touchable MINIATURE WINDOW INTO AN ACTUAL SURFACE.
+# It is not a navigation button and not an icon card. The interior face carries
+# identity - a reader should recognise the drawing without reading the label -
+# and the footer strip only confirms what the face already said.
+#
+# BUILT ONE SPECIMEN AT A TIME. Each interior face is a distinct visual
+# species and gets its own review before the next is added, so PAGE_FIELDS
+# below holds exactly the faces that have been built. Nothing is declared
+# here that the template cannot render.
+#
+# Recovered from the Holodeck design archive (governance/proposals/
+# fish-tank-design-archaeology.md), with the motion deliberately left behind.
+# The archive's word-fish swam; these do not. What carried over is the part
+# that was load-bearing rather than atmospheric:
+#
+#   - The object is a real, focusable <button> with pointer-events. The
+#     archive's first attempt (v1.9) was pointer-events:none and faked being
+#     caught with cursor-distance arithmetic - it LOOKED interactive and was
+#     inert to keyboard and touch entirely. That is the failure this avoids.
+#
+#   - CHANNEL SEPARATION. Both surviving archive engines moved their objects
+#     by LAYOUT POSITION - `left`/`top` in archiosk_holodeck_v_3.html,
+#     `margin-*` keyframes in v2.20 - and neither ever wrote `transform`,
+#     because a running animation on `transform` wins the cascade over the
+#     `:hover`/`:focus-visible` transform and silently deletes the focus
+#     affordance. The physics owns position; the interaction state owns
+#     `transform`. Standing still does not make that rule optional: this
+#     surface reserves `transform` for elevation and expansion alone.
+#
+#   - PROXIMITY MAY CHANGE APPEARANCE, NEVER POSITION. v1.9 drifted its fish
+#     toward the cursor and so could not be acquired; v_3.html kept the
+#     proximity band and deleted the drift. Territory therefore stops being a
+#     wander-lane and becomes DETERMINISTIC LAYOUT - the archive gave each
+#     object an elliptical home orbit so it stayed roughly findable, and a
+#     still field gives it an exact one, which is strictly better: the same
+#     surface is in the same place every visit, and is remembered across the
+#     expansion so it can contract back into its own coordinate.
+#
+# The archive reached this position itself. Its v3.0 introduced `signal-fish`
+# - Risk, Assumption, Decision, RFI, Cost - positioned by static CSS and never
+# touched by the animation loop. The moment the objects stopped meaning "where
+# you go" and started meaning "what you must not miss", they stopped moving.
+#
+# WHY A MINIATURE NEEDS A BASIS, exactly like a citation does.
+#
+# A tile showing a picture of a surface makes a claim - "this is what that
+# surface looks like". A picture that is actually a stale cache makes that
+# claim more fluently than any sentence could, and terminates inquiry faster,
+# which is the Arm B failure in visual form. So the miniature carries its own
+# basis in the same closed, derivation-owned discipline the citations use:
+#
+#   live  - this IS the surface, rendered now from the same markup the
+#           workspace renders. It cannot be stale because it is not a copy.
+#           Structurally enforced: _calm_lake_plan.html defines the geometry
+#           once and both the full canvas and the miniature call that macro.
+#   kind  - a schematic standing for the KIND of surface. Honest about being
+#           a category face; never pretends to be specific content.
+#
+# There is deliberately no `cached` member. A captured thumbnail is the one
+# representation that cannot state its own age from inside itself, and
+# nothing here needs it - standing still is what makes `live` affordable.
+# ---------------------------------------------------------------------------
+
+MINIATURE_LIVE = "live"
+MINIATURE_KIND = "kind"
+
+KNOWN_MINIATURE_BASES = (MINIATURE_LIVE, MINIATURE_KIND)
+
+MINIATURE_MEANINGS = {
+    MINIATURE_LIVE: "the surface itself, rendered now - not a copy",
+    MINIATURE_KIND: "a schematic for this kind of surface, not its content",
+}
+
+# The miniature crops to the building extent rather than the full sheet.
+# Declared here, not in the template, because field_pins() must project pin
+# coordinates into exactly this window - a constant two files have to agree
+# on belongs in one of them. Sheet is 1000x700; the building occupies
+# x 90..910, y 70..630, and this keeps a thin margin around it.
+MINIATURE_VIEW = {"x": 70, "y": 50, "w": 860, "h": 600}
+
+FACE_DRAWING = "drawing"      # paper field, plan geometry, coordinate pins
+FACE_SPIN = "spin"            # derivation trace: run -> findings -> sides
+FACE_COMPOSER = "composer"    # drafting surface: bound context, turns, citations
+FACE_DOCUMENTS = "documents"  # stacked cover sheets
+FACE_INTAKE = "intake"        # NOT a surface - see below
+
+# Faces are added one reviewed specimen at a time. KNOWN_FACES is the set the
+# template can actually draw, not the set eventually intended.
+KNOWN_FACES = (FACE_DRAWING, FACE_SPIN, FACE_COMPOSER, FACE_DOCUMENTS, FACE_INTAKE)
+
+# INTAKE IS NOT A PAGE-FIELD, and the model says so rather than pretending.
+#
+# Every other tile is a miniature WINDOW INTO AN EXISTING SURFACE, and states
+# the basis on which it shows it. Intake opens nothing - there is no surface
+# behind it yet, which is the entire point of it. Giving it a `live` or `kind`
+# miniature would be the same class of lie the vocabulary exists to prevent, so
+# it carries NO basis at all and is drawn as an empty frame rather than as a
+# picture of something.
+#
+# It sits in the field because that is where a person looks to begin, not
+# because it is the same kind of object as the others.
+
 DOCUMENTS = [
     {"id": "M-201", "name": "M-201 Level 2 Mechanical Plan", "sheets": 2},
     {"id": "M-601", "name": "M-601 Smoke Damper Schedule", "sheets": 1},
@@ -342,6 +447,346 @@ DOCUMENTS = [
     {"id": "SP-001", "name": "SP-001 Smoke Management Narrative", "sheets": 14},
     {"id": "CS-01", "name": "CS-01 Construction Schedule Rev C", "sheets": 3},
 ]
+
+# The footer number MEASURES something named. A bare integer on a card is
+# exactly the kind of fluent, unsourced claim this prototype exists to refuse.
+COUNT_GROUNDED_PINS = "grounded_pins"
+COUNT_REPLAYABLE_TRACES = "replayable_traces"
+COUNT_BOUND_CONTEXT = "bound_context"
+COUNT_SHEETS = "sheets"
+COUNT_NONE = "none"
+
+COUNT_MEANINGS = {
+    COUNT_GROUNDED_PINS: "findings citing this drawing at a located or read basis",
+    COUNT_REPLAYABLE_TRACES: "findings whose derivation reaches at least one grounded side",
+    COUNT_BOUND_CONTEXT: "context items bound to the Composer",
+    COUNT_SHEETS: "sheets in this document",
+    COUNT_NONE: "nothing countable on record",
+}
+
+# The singular is carried explicitly rather than derived by stripping an "s".
+# The screen reader announcement is the only place this number is ever read as
+# a sentence, and "1 findings citing this drawing" is the kind of small
+# carelessness that makes a surface sound generated.
+COUNT_MEANINGS_ONE = {
+    COUNT_GROUNDED_PINS: "finding citing this drawing at a located or read basis",
+    COUNT_REPLAYABLE_TRACES: "finding whose derivation reaches at least one grounded side",
+    COUNT_BOUND_CONTEXT: "context item bound to the Composer",
+    COUNT_SHEETS: "sheet in this document",
+    COUNT_NONE: "nothing countable on record",
+}
+
+# SPECIMEN 01. `territory` is the remembered coordinate: deterministic, stable
+# between visits, and the coordinate an expanded workspace contracts back into.
+#
+# M-201 is the specimen because it is the ONLY surface whose miniature can
+# honestly claim the `live` basis - the full canvas on this page renders
+# exactly this plan, so the miniature is the same markup rather than a picture
+# of it. It is also the only drawing carrying a foreground finding, which is
+# what gives the embedded attention pin something real to be active about.
+PAGE_FIELDS = [
+    # Intake first, top-left, because beginning is the one thing a person
+    # arriving with nothing must be able to do. It opens no surface and
+    # therefore declares no miniature basis (see FACE_INTAKE above).
+    {
+        "id": "INTAKE", "short": "New", "qualifier": "Project intake",
+        "face": FACE_INTAKE, "miniature": None, "action": True,
+        "counts": COUNT_NONE, "territory": {"row": 1, "col": 1},
+    },
+    # SPECIMEN 01. The only surface whose miniature can honestly claim `live`:
+    # the full canvas renders exactly this plan from the same macro, so the
+    # miniature is the drawing rather than a picture of it. Also the only
+    # drawing carrying a foreground finding, which is what gives the embedded
+    # attention pin something real to be active about.
+    {
+        "id": "M-201", "short": "M201", "qualifier": "Level 02",
+        "face": FACE_DRAWING, "miniature": MINIATURE_LIVE, "action": False,
+        "counts": COUNT_GROUNDED_PINS, "territory": {"row": 1, "col": 2},
+        "opens": True,
+    },
+    # SPECIMEN 02. `kind`: a schematic of the derivation STRUCTURE. It does
+    # not claim to be a rendering of a Spin report page.
+    {
+        "id": "SPIN", "short": "Spin", "qualifier": "Clash Trace",
+        "face": FACE_SPIN, "miniature": MINIATURE_KIND, "action": False,
+        "counts": COUNT_REPLAYABLE_TRACES, "territory": {"row": 2, "col": 1},
+    },
+    # SPECIMEN 03. Bound to the same document the canvas shows - the Composer
+    # takes its context from what is on screen, so its qualifier is derived
+    # from that binding rather than written down twice.
+    {
+        "id": "COMPOSER", "short": "Composer", "qualifier": None,
+        "face": FACE_COMPOSER, "miniature": MINIATURE_KIND, "action": False,
+        "counts": COUNT_BOUND_CONTEXT, "territory": {"row": 2, "col": 2},
+        "bound_to": "M-201",
+    },
+    # SPECIMEN 04. The specification on record. The directive asked for
+    # "Specifications / Addenda"; the fixture holds SP-001 and NO addenda, so
+    # this tile is the document that exists rather than a category label
+    # implying documents that do not.
+    {
+        "id": "SP-001", "short": "SP001", "qualifier": "Narrative",
+        "face": FACE_DOCUMENTS, "miniature": MINIATURE_KIND, "action": False,
+        "counts": COUNT_SHEETS, "territory": {"row": 3, "col": 1},
+    },
+]
+
+# ---------------------------------------------------------------------------
+# THE SPIN FACE - a derivation trace, drawn from the record rather than
+# decorated to look analytical.
+#
+# There is no separate "Spin fixture" in this module and none was invented.
+# The trace already exists in the findings themselves: every finding carries
+# `sides`, and every side names a document and the BASIS on which it does so.
+# That is a real three-level derivation - run -> finding -> side - and it is
+# what this face draws:
+#
+#   root    the Spin run. One node.
+#   branch  a finding. Filled when foreground, hollow when tracked - the same
+#           form-not-hue rule the canvas pins follow.
+#   leaf    a side. Solid when the basis is `located` or `read`; hollow and
+#           dashed when the basis is `asserted`, because an asserted side
+#           names a document without establishing one and the face must not
+#           make it look like evidence. On the current fixture exactly one
+#           leaf is hollow, and it belongs to PRESSURE-STAIR-2 - the finding
+#           the whole basis vocabulary exists for.
+#
+# Coordinates are computed here rather than in the template because they are
+# derived data, and derived data is testable. Layout is deterministic: leaves
+# are spread evenly down the face, and each finding sits at the mean y of its
+# own leaves, so the tree balances itself without any hand-placed constant.
+# ---------------------------------------------------------------------------
+
+# The face's own coordinate space. Matches the drawing miniature's aspect so
+# every Page-Field has an identical outer bounding box regardless of face.
+SPIN_VIEW = {"w": 860, "h": 600}
+
+_SPIN_ROOT_X = 74
+_SPIN_BRANCH_X = 350
+_SPIN_LEAF_X = 700
+_SPIN_TOP = 96
+_SPIN_BOTTOM = 504
+
+
+def spin_trace(findings):
+    """run -> findings -> sides, as coordinates, straight from the record.
+
+    Returns None when there is nothing to draw. A face with no trace must
+    render empty rather than render a plausible-looking one.
+    """
+    branches = []
+    leaf_total = sum(len(f.get("sides") or []) for f in findings)
+    if not leaf_total:
+        return None
+
+    span = _SPIN_BOTTOM - _SPIN_TOP
+    step = span / float(leaf_total - 1) if leaf_total > 1 else 0
+    index = 0
+
+    for finding in findings:
+        sides = finding.get("sides") or []
+        if not sides:
+            continue
+        leaves = []
+        for side in sides:
+            y = _SPIN_TOP + step * index
+            leaves.append({
+                "y": round(y, 1),
+                "basis": side["basis"],
+                # `grounded` is the ONLY thing the face renders differently,
+                # and it is the same located/read test used everywhere else.
+                "grounded": side["basis"] in (BASIS_LOCATED, BASIS_READ),
+            })
+            index += 1
+        mid = sum(leaf["y"] for leaf in leaves) / float(len(leaves))
+        branches.append({
+            "id": finding["id"],
+            "tier": finding["prominence"]["tier"],
+            "y": round(mid, 1),
+            "leaves": leaves,
+        })
+
+    return {
+        "root_x": _SPIN_ROOT_X,
+        "branch_x": _SPIN_BRANCH_X,
+        "leaf_x": _SPIN_LEAF_X,
+        "root_y": round(SPIN_VIEW["h"] / 2.0, 1),
+        "branches": branches,
+    }
+
+
+def documents_cited_by(finding):
+    """Which document ids a finding's sides actually name, with their basis.
+
+    Derived from the sides rather than from the claim's prose - the same rule
+    the citation surfaces follow. A side whose basis is `asserted` names no
+    document on record, so it contributes nothing here; that is the point.
+    """
+    cited = {}
+    for side in finding.get("sides") or []:
+        if side["basis"] not in (BASIS_LOCATED, BASIS_READ):
+            continue
+        token = side["document"].split(" ")[0]
+        cited[token] = side["basis"]
+    return cited
+
+
+def field_pins(field, findings):
+    """The attention objects embedded IN a Page-Field.
+
+    A pin is a second visual species from the field itself: the field is the
+    world, the pin is a grounded matter inside it. Prominence decides the
+    pin's weight and never displaces the world - the pin sits at the finding's
+    own canvas coordinate, expressed as a percentage of the miniature face, so
+    a reader who later opens the full surface finds it in the same place.
+
+    Only drawings carry positioned pins, because only a drawing has a
+    coordinate space for a pin to be honest about. Any other face reports a
+    count and no position rather than inventing one.
+    """
+    if field["face"] != FACE_DRAWING:
+        return []
+    pins = []
+    for finding in findings:
+        if field["id"] not in documents_cited_by(finding):
+            continue
+        # canvas x/y are percentages of the FULL sheet. The miniature shows a
+        # cropped window of that sheet, so a pin placed at the raw percentage
+        # would sit in the wrong room. Project it into the crop.
+        sheet_x = finding["canvas"]["x"] / 100.0 * 1000.0
+        sheet_y = finding["canvas"]["y"] / 100.0 * 700.0
+        pins.append({
+            "id": finding["id"],
+            "tag": finding["tag"],
+            "tier": finding["prominence"]["tier"],
+            "x": finding["canvas"]["x"],
+            "y": finding["canvas"]["y"],
+            "mini_x": round((sheet_x - MINIATURE_VIEW["x"]) / MINIATURE_VIEW["w"] * 100, 2),
+            "mini_y": round((sheet_y - MINIATURE_VIEW["y"]) / MINIATURE_VIEW["h"] * 100, 2),
+        })
+    return pins
+
+
+def field_count(field, findings):
+    """The footer number - never a number without a stated meaning.
+
+    Returns None where nothing is countable on record, and None renders as no
+    number at all rather than a zero, which would itself be a measurement.
+    """
+    if field["counts"] == COUNT_GROUNDED_PINS:
+        return len([f for f in findings if field["id"] in documents_cited_by(f)])
+    if field["counts"] == COUNT_REPLAYABLE_TRACES:
+        # A finding whose every side is `asserted` has a derivation that
+        # reaches nothing on record, and must not be counted as replayable.
+        return len([f for f in findings if documents_cited_by(f)])
+    if field["counts"] == COUNT_BOUND_CONTEXT:
+        # What is actually bound at render time. A selection adds a second
+        # item at runtime; nothing is selected on arrival, so it is not
+        # counted here - a count must describe now, not a possible later.
+        return 1 if field.get("bound_to") else 0
+    if field["counts"] == COUNT_SHEETS:
+        for document in DOCUMENTS:
+            if document["id"] == field["id"]:
+                return document["sheets"]
+        return None
+    return None
+
+
+def composer_state(field, findings):
+    """What the Composer face may honestly draw.
+
+    THERE IS NO EXCHANGE FIXTURE IN THIS MODULE, and none was invented for
+    this face. The module holds PROJECT, DOCUMENTS, FINDINGS and VERBS; there
+    is no conversation anywhere in it. So the face draws the drafting
+    STRUCTURE as skeleton geometry - turn shapes, not sentences - and the only
+    concrete things on it are the two that are real:
+
+      bound       the document the Composer takes its context from. The real
+                  Composer binds to whatever the canvas is showing, so this
+                  is derived from the binding rather than written down twice.
+      citations   the bases a grounded answer about that document would carry,
+                  taken from the sides of the findings that actually cite it.
+
+    Returning None means the face draws nothing. An empty Composer beats a
+    convincing invented one.
+    """
+    bound_id = field.get("bound_to")
+    if not bound_id:
+        return None
+    bound = next((d for d in DOCUMENTS if d["id"] == bound_id), None)
+    if bound is None:
+        return None
+
+    citations = []
+    for finding in findings:
+        for side in finding.get("sides") or []:
+            if side["basis"] not in (BASIS_LOCATED, BASIS_READ):
+                continue
+            if side["document"].split(" ")[0] != bound_id:
+                continue
+            citations.append({"basis": side["basis"]})
+
+    return {
+        "bound_id": bound_id,
+        "bound_short": bound_id.replace("-", ""),
+        "citations": citations,
+    }
+
+
+def document_face(field):
+    """Stacked covers. The stack depth is the document's real sheet count,
+    capped only by what is legible at this size - never padded to look fuller.
+    """
+    document = next((d for d in DOCUMENTS if d["id"] == field["id"]), None)
+    if document is None:
+        return None
+    return {
+        "sheets": document["sheets"],
+        # At 175px more than four covers stop reading as separate sheets.
+        # The strip still shows the true count, so the drawing is a
+        # simplification and never a contradiction of it.
+        "stack": min(document["sheets"], 4),
+    }
+
+
+def page_fields(findings):
+    """Scene 1: every built field, at rest, in its remembered territory."""
+    by_id = {f["id"]: f for f in PAGE_FIELDS}
+    fields = []
+    for field in PAGE_FIELDS:
+        pins = field_pins(field, findings)
+        composer = (composer_state(field, findings)
+                    if field["face"] == FACE_COMPOSER else None)
+
+        # A field bound to another surface takes that surface's qualifier
+        # rather than repeating it. Written twice, the two drift.
+        qualifier = field["qualifier"]
+        if qualifier is None and field.get("bound_to") in by_id:
+            qualifier = by_id[field["bound_to"]]["qualifier"]
+
+        fields.append({
+            "id": field["id"],
+            "short": field["short"],
+            "qualifier": qualifier,
+            "face": field["face"],
+            "miniature": field["miniature"],
+            "action": field.get("action", False),
+            "opens": field.get("opens", False),
+            "territory": field["territory"],
+            "pins": pins,
+            "trace": spin_trace(findings) if field["face"] == FACE_SPIN else None,
+            "composer": composer,
+            "document": (document_face(field)
+                         if field["face"] == FACE_DOCUMENTS else None),
+            "count": field_count(field, findings),
+            "count_meaning": COUNT_MEANINGS[field["counts"]],
+            "count_meaning_one": COUNT_MEANINGS_ONE[field["counts"]],
+            "raises_foreground": any(
+                p["tier"] == PROMINENCE_FOREGROUND for p in pins
+            ),
+        })
+    return fields
+
 
 FINDINGS = [
     {
@@ -552,11 +997,13 @@ def surface():
         "calm_lake_prototype.html",
         project=PROJECT,
         documents=DOCUMENTS,
+        fields=page_fields(horizon),
+        miniature_view=MINIATURE_VIEW,
+        spin_view=SPIN_VIEW,
         verbs=VERBS,
         horizon=horizon,
         surfaced=surfaced,
         tracked=tracked,
-        threshold_days=THRESHOLD_DAYS,
         basis_labels=BASIS_LABELS,
         basis_meanings=BASIS_MEANINGS,
         prototype_notice=PROTOTYPE_NOTICE,

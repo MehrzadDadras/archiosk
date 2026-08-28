@@ -1,0 +1,90 @@
+{# ---------------------------------------------------------------------------
+   THE PLAN GEOMETRY, DEFINED ONCE.
+
+   This macro is what makes the `live` miniature basis structurally true
+   instead of merely asserted. The full canvas and the Page-Field miniature
+   both call it, so the miniature is not a picture of the drawing and cannot
+   drift from it - there is only one definition, rendered at two sizes. A
+   change to a wall here moves in both places in the same commit, which is
+   precisely the property a captured thumbnail cannot have.
+
+   `uid` exists because SVG <pattern> ids are document-global: rendering the
+   same markup twice on one page with a fixed id would silently make the
+   second instance reference the first one's pattern. Every id the macro
+   emits is suffixed.
+
+   `view` crops the viewport WITHOUT touching the geometry. The sheet is
+   1000x700 but the building only occupies x 90..910, y 70..630, so a
+   miniature that reuses the full sheet spends roughly a fifth of its
+   width on blank margin - at 171px that is the difference between
+   reading as a floor plan and reading as a diagram. Cropping changes
+   which part of the drawing is visible, never what the drawing is, so
+   the `live` claim survives it: still one definition, still not a copy.
+
+   The crop is declared in routes/calm_lake_prototype.py as
+   MINIATURE_VIEW, because the pin coordinates have to be projected into
+   the same window and a constant that two files must agree on belongs
+   in exactly one of them.
+
+   `detail` drops the annotation layer (grid references, dimension ticks) at
+   miniature scale, where it would collapse into noise. Geometry - walls,
+   rooms, corridor, stair, ducts - is identical in both, because that is what
+   makes the face recognisable as THIS sheet rather than a generic plan.
+   --------------------------------------------------------------------------- #}
+
+{% macro plan_geometry(uid, css_class, label, detail=true, view="0 0 1000 700") %}
+<svg class="{{ css_class }}" viewBox="{{ view }}" role="img" aria-label="{{ label }}">
+    <defs>
+        <pattern id="cl-grid-{{ uid }}" width="50" height="50" patternUnits="userSpaceOnUse">
+            <path d="M 50 0 L 0 0 0 50" fill="none" class="cl-grid-line"/>
+        </pattern>
+    </defs>
+    <rect width="1000" height="700" class="cl-sheet-ground"/>
+    <rect width="1000" height="700" fill="url(#cl-grid-{{ uid }})"/>
+
+    <rect x="90" y="70" width="820" height="560" class="cl-wall-outer"/>
+
+    <rect x="150" y="330" width="700" height="90" class="cl-corridor"/>
+    <line x1="150" y1="330" x2="850" y2="330" class="cl-wall-rated"/>
+    <line x1="150" y1="420" x2="850" y2="420" class="cl-wall-rated"/>
+
+    <rect x="150" y="110" width="200" height="220" class="cl-room"/>
+    <rect x="350" y="110" width="200" height="220" class="cl-room"/>
+    <rect x="550" y="110" width="300" height="220" class="cl-room"/>
+    <rect x="150" y="420" width="260" height="170" class="cl-room"/>
+    <rect x="410" y="420" width="240" height="170" class="cl-room"/>
+    <rect x="650" y="420" width="200" height="170" class="cl-room"/>
+
+    <rect x="150" y="420" width="120" height="170" class="cl-stair"/>
+    <line x1="150" y1="450" x2="270" y2="450" class="cl-stair-tread"/>
+    <line x1="150" y1="480" x2="270" y2="480" class="cl-stair-tread"/>
+    <line x1="150" y1="510" x2="270" y2="510" class="cl-stair-tread"/>
+    <line x1="150" y1="540" x2="270" y2="540" class="cl-stair-tread"/>
+
+    <path d="M 300 375 L 620 375 L 620 200" class="cl-duct"/>
+    <path d="M 300 375 L 300 200" class="cl-duct"/>
+    <path d="M 500 375 L 500 500" class="cl-duct"/>
+
+    {# The annotation layer. Dimension ticks read as a drawing at full size
+       and as grey mush at 150px, so the miniature asks for detail=false. #}
+    {% if detail %}
+    <line x1="90" y1="46" x2="910" y2="46" class="cl-dim-line"/>
+    <line x1="90" y1="38" x2="90" y2="54" class="cl-dim-tick"/>
+    <line x1="350" y1="38" x2="350" y2="54" class="cl-dim-tick"/>
+    <line x1="550" y1="38" x2="550" y2="54" class="cl-dim-tick"/>
+    <line x1="910" y1="38" x2="910" y2="54" class="cl-dim-tick"/>
+    <line x1="62" y1="70" x2="62" y2="630" class="cl-dim-line"/>
+    <line x1="54" y1="70" x2="70" y2="70" class="cl-dim-tick"/>
+    <line x1="54" y1="330" x2="70" y2="330" class="cl-dim-tick"/>
+    <line x1="54" y1="420" x2="70" y2="420" class="cl-dim-tick"/>
+    <line x1="54" y1="630" x2="70" y2="630" class="cl-dim-tick"/>
+
+    <text x="300" y="96" class="cl-grid-ref">C</text>
+    <text x="500" y="96" class="cl-grid-ref">D</text>
+    <text x="700" y="96" class="cl-grid-ref">E</text>
+    <text x="104" y="200" class="cl-grid-ref">2</text>
+    <text x="104" y="375" class="cl-grid-ref">3</text>
+    <text x="104" y="520" class="cl-grid-ref">4</text>
+    {% endif %}
+</svg>
+{% endmacro %}
