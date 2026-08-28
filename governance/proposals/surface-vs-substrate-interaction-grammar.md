@@ -11,6 +11,17 @@ this document, and none performed while writing it. Nothing here amends
 original claim is not quietly deleted anywhere in this document; it is marked
 answered-negative and the reasoning that replaced it is given.
 
+**Corrected 2026-08-28** — §4.2 and §8 cited `PROVENANCE_BASIS_*` as an existing
+precedent. **No such identifier exists in the codebase**; it was never written,
+and a repository-wide search found it only in this document. Both citations now
+name the real closed vocabularies (`RESOLUTION_STATUS_*`,
+`METADATA_RELIABILITY_*`, `KNOWN_EVIDENCE_CLASSES`), and §8's cross-reference to
+the basis vocabulary — which is in §4.2, not §4.1 — is fixed. This corrects a
+false citation, not a claim: the §4.2 rule and the §8 constraint are unchanged in
+substance, and the discipline they invoke is real and tested. Found while
+measuring `main` for `proposals/dimensional-reconciliation-and-scale-regions.md`,
+whose own appendix records the discovery.
+
 **Read this first.** The provenance repair discussed throughout
 (`CaseWorkspaceStore.finding_provenance`) **is not on `main`.** It exists only on
 `origin/spike/multi-surface-canvas` @ `f0a12ce` and is unmerged. On `main` today,
@@ -404,8 +415,10 @@ links could reduce cost, and this fixture cannot produce it. See §9 Q1.
 > differ in strength must not be rendered identically.**
 
 Concretely, a closed, derivation-owned vocabulary — the same discipline
-`RESOLUTION_STATUS_*` and `PROVENANCE_BASIS_*` already use, where the evaluator
-names its own outcome and a caller never supplies one:
+`RESOLUTION_STATUS_*` (`services/case_workspace.py:1177`),
+`METADATA_RELIABILITY_*` (line 3967) and `KNOWN_EVIDENCE_CLASSES` (line 3880)
+already use, where the evaluator names its own outcome and a caller never
+supplies one:
 
 | Basis | Means | Strength |
 |---|---|---|
@@ -610,8 +623,10 @@ finding it exposed, is worth more than a confirmed prediction would have been.
   `f0a12ce` carries Arm A and remains unmerged; whether it lands on `main` is a
   separate Product Owner decision.
 - **No claim that the trial confirmed the calm-surface thesis.** It did not.
-- **No new abstraction beyond the basis vocabulary in §4.1**, which extends the
-  existing `PROVENANCE_BASIS_*` shape rather than adding a parallel one.
+- **No new abstraction beyond the basis vocabulary in §4.2**, which follows the
+  closed, derivation-owned discipline `RESOLUTION_STATUS_*`,
+  `METADATA_RELIABILITY_*` and `KNOWN_EVIDENCE_CLASSES` already establish, rather
+  than adding a parallel mechanism.
 
 ## 9. Open questions this cannot settle
 

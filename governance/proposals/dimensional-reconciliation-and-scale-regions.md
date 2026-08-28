@@ -619,6 +619,10 @@ silently corrected in another document.
    **This proposal cites the real constants throughout and does not inherit the
    error.** Correcting the grammar document is that document's own revision, not a
    silent edit from here.
+   **Corrected on `main` after this proposal landed** — the grammar document's
+   §4.2 and §8 now name the real vocabularies, and its own header records the
+   correction. This entry is kept rather than deleted: it is the record of how the
+   false citation was found.
 2. **The scale warning is unconditional** (§2.5). It renders identically when scale
    is `unavailable` (where it is true but uninformative) and when a scale was
    extracted (where it silently undercuts the value shown two lines above it). §6.4
