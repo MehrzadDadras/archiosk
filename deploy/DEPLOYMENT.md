@@ -245,14 +245,55 @@ database. A schema change needs its own backup:
 
 ```bash
 ssh ubuntu@<server> "
-  sudo mkdir -p /var/www/archiosk-db-backups &&
-  sudo -u archiosk sqlite3 /var/www/archiosk/instance/bhive.db     \".backup '/tmp/bhive-pre-<hash>.db'\" &&
-  sudo cp -p /tmp/bhive-pre-<hash>.db     /var/www/archiosk-db-backups/bhive-pre-<hash>-$(date -u +%Y%m%dT%H%M%SZ).db
+  STAMP=\$(date -u +%Y%m%dT%H%M%SZ)
+  sudo mkdir -p /var/www/archiosk-db-backups
+  sudo -u archiosk /var/www/archiosk/.venv/bin/python -c \"
+import sqlite3
+src = sqlite3.connect('/var/www/archiosk/instance/bhive.db')
+dst = sqlite3.connect('/tmp/bhive-pre-<hash>.db')
+with dst:
+    src.backup(dst)
+dst.close(); src.close()
+c = sqlite3.connect('/tmp/bhive-pre-<hash>.db')
+print('integrity:', list(c.execute('PRAGMA integrity_check'))[0][0])
+\"
+  sudo cp -p /tmp/bhive-pre-<hash>.db /var/www/archiosk-db-backups/bhive-pre-<hash>-\$STAMP.db
+  sudo rm -f /tmp/bhive-pre-<hash>.db
 "
 ```
 
-`sqlite3 .backup` rather than `cp`, because it is safe against a live database
-with writers attached; a plain copy of a file mid-write is a corrupt file.
+**Python's `sqlite3.Connection.backup()`, NOT the `sqlite3` command-line tool.**
+That distinction is the entire point of this block, and it was got wrong once:
+an earlier version of this document prescribed
+`sudo -u archiosk sqlite3 ... ".backup '...'"`, and **the `sqlite3` binary is not
+installed on this server**. The command failed with `sudo: sqlite3: command not
+found`. Worse, the first deploys that ran it had a `|| sudo cp -p` fallback, so
+they silently produced plain file copies while the runbook claimed a write-safe
+online backup. The copies happened to be fine — the database was idle — but the
+document was asserting a safety property it was not delivering.
+
+`Connection.backup()` is the same online-backup API the CLI's `.backup` command
+wraps, and it ships with the interpreter the application already runs on, so
+there is nothing to install. It is safe against a live database with writers
+attached; a plain `cp` of a file mid-write is a corrupt file.
+
+Always print `PRAGMA integrity_check` on the copy, as above. A backup nobody
+verified is a belief, not a rollback point.
+
+Then check what is actually in it before trusting it:
+
+```bash
+ssh ubuntu@<server> "sudo -u archiosk /var/www/archiosk/.venv/bin/python -c \"
+import sqlite3
+c = sqlite3.connect('/var/www/archiosk-db-backups/<file>.db')
+print('tables:', len(list(c.execute(\\\"SELECT name FROM sqlite_master WHERE type='table'\\\"))))
+print('users :', list(c.execute('SELECT COUNT(*) FROM users'))[0][0])
+\""
+```
+
+Note also that the cleanup in the last section runs unprivileged and cannot
+remove the root-owned `/tmp` artefact `sudo cp` leaves behind — hence the
+explicit `sudo rm -f` above rather than leaving it for the sweep.
 
 ### Why `flask db upgrade` cannot be used here
 
