@@ -50,15 +50,30 @@ def _entry(path, payload):
 
 class _BridgeApp(unittest.TestCase):
     def setUp(self):
+        import shutil
+        import tempfile
+
         import app as app_module
         from models import db
+        from services.case_workspace import CaseWorkspaceStore
 
         self.app = app_module.create_app("testing")
-        self.addCleanup(reset_bridges_for_testing)
+        # CLAUDE-STORAGE-BRIDGE-07: the manifest now lands on the PROJECT
+        # record, so the project has to exist. The in-memory bridge never
+        # checked, which is exactly the sort of thing durable state makes
+        # honest - a manifest for a project that does not exist was always
+        # nonsense, it just had nowhere to be noticed.
+        self.registry = tempfile.mkdtemp(prefix="bridge-endpoints-")
+        self.addCleanup(shutil.rmtree, self.registry, ignore_errors=True)
+        self.app.config["REGISTRY_STORE_PATH"] = self.registry
         self.ctx = self.app.app_context()
         self.ctx.push()
         self.addCleanup(self.ctx.pop)
+        self.addCleanup(reset_bridges_for_testing, self.app)
         db.create_all()
+        store = CaseWorkspaceStore(self.registry)
+        store.get_or_create("project-a")
+        store.get_or_create("project-b")
         _, self.token_a = enrol_agent("project-a", "ex4100-office", actor="architect")
         _, self.token_b = enrol_agent("project-b", "ex4100-site", actor="architect")
         self.client = self.app.test_client()
@@ -94,22 +109,25 @@ class TheAgentCanCompleteAFullExchange(_BridgeApp):
         self.assertEqual(response.get_json()["requests"], [])
 
     def test_request_poll_deliver_round_trip(self):
-        from services.storage_agent_access import bridge_for_token
+        from services.bridge_queue import BridgeQueueStore
+        from services.storage_agent_access import request_bytes
 
         self.push_manifest(self.token_a, [_entry("drawings/A-101.pdf", _A101)])
-        bridge_for_token(self.token_a).request("drawings/A-101.pdf")
+        request_bytes("project-a", "drawings/A-101.pdf", "extract_text", app=self.app)
 
         polled = self.poll(self.token_a).get_json()["requests"]
         self.assertEqual(len(polled), 1)
         self.assertEqual(polled[0]["relative_path"], "drawings/A-101.pdf")
+        self.assertEqual(polled[0]["purpose"], "extract_text")
 
         delivered = self.deliver(self.token_a, polled[0]["id"], _A101)
         self.assertEqual(delivered.status_code, 200)
         self.assertEqual(delivered.get_json()["bytes_received"], len(_A101))
 
-        bridge = bridge_for_token(self.token_a)
-        self.assertEqual(bridge.consume("drawings/A-101.pdf"), _A101)
-        self.assertFalse(bridge.holds_bytes())
+        queue = BridgeQueueStore(self.registry)
+        _record, payload = queue.consume(polled[0]["id"])
+        self.assertEqual(payload, _A101)
+        self.assertFalse(queue.holds_payload(polled[0]["id"]))
 
     def test_the_agents_last_contact_is_recorded_for_a_human(self):
         from models import StorageAgentEnrolment
@@ -175,12 +193,12 @@ class CredentialsAreHandledSafely(_BridgeApp):
 
 class ProjectIsolationHoldsOverHttp(_BridgeApp):
     def test_one_agents_manifest_is_invisible_to_the_other(self):
+        from services.storage_agent_access import manifest_entries_for
+
         self.push_manifest(self.token_a, [_entry("drawings/A-101.pdf", _A101)])
         self.push_manifest(self.token_b, [_entry("drawings/B-201.pdf", _B201)])
-        from services.storage_agent_access import bridge_for_token
-
-        paths_a = [e.relative_path for e in bridge_for_token(self.token_a).entries()]
-        paths_b = [e.relative_path for e in bridge_for_token(self.token_b).entries()]
+        paths_a = [e.relative_path for e in manifest_entries_for("project-a", app=self.app)]
+        paths_b = [e.relative_path for e in manifest_entries_for("project-b", app=self.app)]
         self.assertEqual(paths_a, ["drawings/A-101.pdf"])
         self.assertEqual(paths_b, ["drawings/B-201.pdf"])
 
@@ -193,16 +211,18 @@ class ProjectIsolationHoldsOverHttp(_BridgeApp):
             self.assertNotIn(smell, source)
 
     def test_delivering_against_another_projects_request_id_fails(self):
-        from services.storage_agent_access import bridge_for_token
+        from services.bridge_queue import BridgeQueueStore
+        from services.storage_agent_access import request_bytes
 
         self.push_manifest(self.token_a, [_entry("drawings/A-101.pdf", _A101)])
         self.push_manifest(self.token_b, [_entry("drawings/B-201.pdf", _B201)])
-        bridge_for_token(self.token_a).request("drawings/A-101.pdf")
+        request_bytes("project-a", "drawings/A-101.pdf", "extract_text", app=self.app)
         stolen = self.poll(self.token_a).get_json()["requests"][0]["id"]
-        # Agent B presents A's request id against its own bridge.
+        # Agent B presents A's request id. The queue is shared, so this is the
+        # test that scoping is enforced rather than merely implied by storage.
         response = self.deliver(self.token_b, stolen, _A101)
         self.assertEqual(response.status_code, 422)
-        self.assertFalse(bridge_for_token(self.token_b).holds_bytes())
+        self.assertFalse(BridgeQueueStore(self.registry).holds_payload(stolen))
 
 
 class MalformedInputIsRefusedOnItsMerits(_BridgeApp):
@@ -227,16 +247,16 @@ class MalformedInputIsRefusedOnItsMerits(_BridgeApp):
         self.assertEqual(response.status_code, 422)
 
     def test_bytes_that_do_not_match_the_manifest_are_422(self):
-        from services.storage_agent_access import bridge_for_token
+        from services.storage_agent_access import request_bytes
 
         self.push_manifest(self.token_a, [_entry("drawings/A-101.pdf", _A101)])
-        bridge_for_token(self.token_a).request("drawings/A-101.pdf")
+        request_bytes("project-a", "drawings/A-101.pdf", "extract_text", app=self.app)
         request_id = self.poll(self.token_a).get_json()["requests"][0]["id"]
         response = self.deliver(self.token_a, request_id, b"tampered")
         self.assertEqual(response.status_code, 422)
         self.assertIn("hash", response.get_json()["message"])
 
-    def test_a_traversal_path_in_a_manifest_is_refused_and_never_stored(self):
+    def test_a_traversal_path_in_a_manifest_is_refused_and_never_stored(self):  # noqa: D401
         """422, not 400: the JSON was well formed and the CONTENT was refused.
 
         The refusal comes from normalize_relative_reference - the containment
@@ -245,19 +265,19 @@ class MalformedInputIsRefusedOnItsMerits(_BridgeApp):
         way of a manifest. The property that matters is the second assertion:
         whatever the status code, nothing traversing upward is ever recorded.
         """
-        from services.storage_agent_access import bridge_for_token
+        from services.storage_agent_access import manifest_entries_for
 
         response = self.push_manifest(
             self.token_a, [_entry("../../etc/passwd", _A101)])
         self.assertEqual(response.status_code, 422)
         self.assertIn("traverse", response.get_json()["message"])
-        self.assertEqual(bridge_for_token(self.token_a).entries(), [])
+        self.assertEqual(manifest_entries_for("project-a", app=self.app), [])
 
     def test_an_absolute_path_in_a_manifest_is_also_refused_or_neutralised(self):
-        from services.storage_agent_access import bridge_for_token
+        from services.storage_agent_access import manifest_entries_for
 
         self.push_manifest(self.token_a, [_entry("/etc/shadow", _A101)])
-        for entry in bridge_for_token(self.token_a).entries():
+        for entry in manifest_entries_for("project-a", app=self.app):
             self.assertFalse(entry.relative_path.startswith("/"))
 
 

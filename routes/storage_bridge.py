@@ -29,11 +29,14 @@ first person to add a route there would have to know which one applied.
 
 WHAT THESE ENDPOINTS CANNOT DO
 
-Nothing here writes a governed Source, creates a project, or persists bytes.
-The manifest lands in process-local bridge state and the payload is consumed
-once. Wiring this into ingestion is a separate, later change that must go
-through the existing Reconcile path rather than becoming a second way to
-create Sources.
+Nothing here writes a governed Source or creates a project. A manifest is
+persisted on the project record and a delivered payload is STAGED, then consumed
+once and destroyed - never retained. Turning a delivered payload into a Source
+must go through the existing Reconcile path rather than becoming a second way to
+create Sources, and that remains a separate change.
+
+CLAUDE-STORAGE-BRIDGE-07 moved both the manifest and the queue out of worker
+memory. Any of the fifteen production workers can now serve any of these calls.
 """
 from __future__ import annotations
 
@@ -41,8 +44,10 @@ from flask import Blueprint, current_app, jsonify, request
 
 from services.external_source import ExternalSourceError
 from services.storage_agent_access import (
-    authorise_agent, bridge_for_token, note_agent_contact,
+    authorise_agent, claim_pending_for_token, deliver_for_token,
+    note_agent_contact, record_manifest_for_token,
 )
+from services.bridge_queue import BridgeQueueError
 from services.storage_bridge import BridgeEnrolmentRevoked, ManifestEntry
 
 storage_bridge_bp = Blueprint("storage_bridge", __name__)
@@ -82,8 +87,10 @@ def receive_manifest():
     except (KeyError, TypeError, ValueError) as exc:
         return jsonify(error="invalid_manifest", message=str(exc)), 400
 
-    bridge = bridge_for_token(_presented_token())
-    digest = bridge.record_manifest(entries)
+    # Persisted on the PROJECT record, not in this worker's memory. Phase 2
+    # proved why: fifteen gunicorn workers meant a manifest in one of them was
+    # visible to about one request in fifteen.
+    digest = record_manifest_for_token(_presented_token(), entries)
     note_agent_contact(enrolment)
     current_app.logger.info(
         "Storage agent %s advertised %d entries for %s",
@@ -95,10 +102,12 @@ def receive_manifest():
 def pending_requests():
     """The agent's outbound poll. An empty answer is still proof of life."""
     enrolment = authorise_agent(_presented_token())
-    bridge = bridge_for_token(_presented_token())
-    outstanding = bridge.pending()
+    # Claimed atomically via os.rename, so two workers answering the same poll
+    # produce exactly one winner rather than a duplicated request.
+    outstanding = claim_pending_for_token(_presented_token())
     note_agent_contact(enrolment)
-    return jsonify(requests=[{"id": r.id, "relative_path": r.relative_path}
+    return jsonify(requests=[{"id": r["id"], "relative_path": r["relative_path"],
+                              "purpose": r["purpose"]}
                              for r in outstanding]), 200
 
 
@@ -120,13 +129,13 @@ def deliver_bytes():
         return jsonify(error="payload_too_large",
                        message="Payload exceeds the bridge limit."), 413
 
-    bridge = bridge_for_token(_presented_token())
-    # Integrity is checked inside deliver(): bytes that do not hash to the
-    # manifest's own digest are refused as an ERROR, never as a retryable
+    # Integrity is checked inside deliver_for_token: bytes that do not hash to
+    # what the manifest advertised are refused as an ERROR, never as a retryable
     # condition - retrying a wrong payload just fetches it again.
-    bridge.deliver(request_id, body)
+    record = deliver_for_token(_presented_token(), request_id, body)
     note_agent_contact(enrolment)
-    return jsonify(accepted=True, relative_path=None, bytes_received=len(body)), 200
+    return jsonify(accepted=True, relative_path=record["relative_path"],
+                   purpose=record["purpose"], bytes_received=len(body)), 200
 
 
 @storage_bridge_bp.errorhandler(BridgeEnrolmentRevoked)
@@ -142,6 +151,14 @@ def _enrolment_refused(err):
     current_app.logger.warning("Storage agent refused: %s", err)
     return jsonify(error="enrolment_not_authorised",
                    message="This storage agent is not authorised."), 401
+
+
+@storage_bridge_bp.errorhandler(BridgeQueueError)
+def _queue_refused(err):
+    """422, same as any other protocol fault: understood, refused on its
+    merits, and identical if retried unchanged."""
+    current_app.logger.warning("Storage bridge queue refused a request: %s", err)
+    return jsonify(error="bridge_request_refused", message=str(err)), 422
 
 
 @storage_bridge_bp.errorhandler(ExternalSourceError)

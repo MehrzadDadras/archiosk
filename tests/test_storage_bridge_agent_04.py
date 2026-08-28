@@ -90,12 +90,18 @@ class _AgentAgainstApp(unittest.TestCase):
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(payload)
 
+        from services.case_workspace import CaseWorkspaceStore
+
         self.app = app_module.create_app("testing")
-        self.addCleanup(reset_bridges_for_testing)
+        # The manifest lands on the project record now, so the project exists.
+        self.registry = str(self.base / "registry")
+        self.app.config["REGISTRY_STORE_PATH"] = self.registry
         self.ctx = self.app.app_context()
         self.ctx.push()
         self.addCleanup(self.ctx.pop)
+        self.addCleanup(reset_bridges_for_testing, self.app)
         db.create_all()
+        CaseWorkspaceStore(self.registry).get_or_create("wd-project")
         _, self.token = enrol_agent("wd-project", "ex4100-office", actor="architect")
 
         self.transport = _TestClientTransport(self.app.test_client())
@@ -178,24 +184,28 @@ class TheAgentCompletesARealExchange(_AgentAgainstApp):
         self.assertEqual(self.transport.calls.count(("POST", "/api/bridge/manifest")), 2)
 
     def test_it_streams_the_bytes_archiosk_asks_for(self):
-        from services.storage_agent_access import bridge_for_token
+        from services.bridge_queue import BridgeQueueStore
+        from services.storage_agent_access import request_bytes
 
         self.agent.run_once()
-        bridge_for_token(self.token).request("drawings/A-101.pdf")
+        record = request_bytes("wd-project", "drawings/A-101.pdf", "extract_text",
+                               app=self.app)
         self.agent.run_once()
-        self.assertEqual(bridge_for_token(self.token).consume("drawings/A-101.pdf"),
-                         _FILES["drawings/A-101.pdf"])
+        _served, payload = BridgeQueueStore(self.registry).consume(record["id"])
+        self.assertEqual(payload, _FILES["drawings/A-101.pdf"])
 
     def test_it_delivers_several_requests_in_one_cycle(self):
-        from services.storage_agent_access import bridge_for_token
+        from services.bridge_queue import BridgeQueueStore
+        from services.storage_agent_access import request_bytes
 
         self.agent.run_once()
-        bridge = bridge_for_token(self.token)
-        for reference in _FILES:
-            bridge.request(reference)
+        records = [request_bytes("wd-project", reference, "extract_text", app=self.app)
+                   for reference in _FILES]
         self.agent.run_once()
-        for reference, payload in _FILES.items():
-            self.assertEqual(bridge.consume(reference), payload)
+        queue = BridgeQueueStore(self.registry)
+        for record in records:
+            _served, payload = queue.consume(record["id"])
+            self.assertEqual(payload, _FILES[record["relative_path"]])
 
 
 class RevocationStopsTheAgentDead(_AgentAgainstApp):

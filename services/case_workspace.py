@@ -4485,6 +4485,24 @@ class ProjectWorkspace:
     # None means the existing behaviour, unchanged: ARCHIOSK holds every byte.
     # This is opt-in and changes nothing for a project that never sets it.
     external_storage_root: Optional[str] = None
+    # CLAUDE-STORAGE-BRIDGE-07: what the private-storage agent last reported was
+    # on that root - relative_path, size, mtime, sha256 per file. NEVER contents.
+    #
+    # Here rather than in the database, and here rather than in a worker's
+    # memory, for two separate reasons. It is PROJECT data: it describes this
+    # project's corpus and should die with the project, unlike the enrolment
+    # credential in models.StorageAgentEnrolment which must survive a reset. And
+    # it must be readable by ANY worker: production runs fifteen gunicorn
+    # processes, so a manifest held in one process's memory was visible to
+    # roughly one request in fifteen - which reads as intermittent rather than
+    # broken, the worst way for something to be wrong.
+    #
+    # This IS the epistemic-retention claim made durable: everything ARCHIOSK
+    # knows about externally-held evidence survives the storage going away, a
+    # restart, and a worker recycling.
+    external_manifest: list[dict] = field(default_factory=list)
+    external_manifest_digest: Optional[str] = None
+    external_manifest_recorded_at: Optional[str] = None
     # Project / Case Operating Instructions (Prompt 3 #7): human-authored
     # guidance (terminology, delivery-method context, reviewer conventions,
     # known assumptions) that is explicitly SUBORDINATE to governance -
@@ -5780,6 +5798,35 @@ class CaseWorkspaceStore:
         GovernanceLog event (Prompt 3 #3)."""
         workspace.starred = starred
         return self.save(workspace)
+
+    def record_external_manifest(
+        self, workspace: ProjectWorkspace, entries: list[dict], digest: str,
+        actor: str = "storage_agent", governance_log: Optional[GovernanceLog] = None,
+    ) -> ProjectWorkspace:
+        """The agent has walked its storage and reported what is there.
+
+        CLAUDE-STORAGE-BRIDGE-07. Writes through save()'s versioned path
+        deliberately: a manifest push is infrequent (only when the digest
+        changes) so contention is not a concern, and a collision SHOULD be
+        reported rather than silently won - two agents disagreeing about one
+        project's corpus is a fact worth surfacing.
+
+        Stores no bytes and no absolute paths. Entries are already normalised
+        project-relative references by the time they arrive.
+        """
+        workspace.external_manifest = [dict(entry) for entry in entries]
+        workspace.external_manifest_digest = digest
+        workspace.external_manifest_recorded_at = _now()
+        self.save(workspace)
+
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id, event_type="external_manifest_recorded",
+                actor=actor, role="system",
+                summary="Storage agent reported %d file(s); manifest digest %s."
+                        % (len(entries), digest[:12]),
+            )
+        return workspace
 
     def set_project_details(
         self,
