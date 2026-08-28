@@ -230,6 +230,90 @@ class AnUnmountedStationIsItsOwnAnswer(_StationApp):
             second)
 
 
+class ACompanionDisturbsWithoutSteeringTheTable(_StationApp):
+    """The asymmetry, which is a product decision before it is a technical one."""
+
+    def test_a_companion_can_point_at_something(self):
+        self.as_user("owner")
+        response = self.client.post("/api/station/focus", headers=self.auth(),
+                                    json={"focus": {"element": "D-101", "note": "rating?"}})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["author"], "owner")
+
+    def test_the_disturbance_does_not_move_the_camera(self):
+        # The whole point. People are physically standing at that table.
+        self.client.post("/api/station/viewport", headers=self.auth(),
+                         json={"viewport": {"sheet": "A-201", "zoom": 1.0}})
+        # The session must be established BEFORE the first poll: following is
+        # gated by can_access_project, so an unauthenticated read is a 404 with
+        # no viewport in it at all.
+        self.as_user("owner")
+        before = self.client.get("/api/station/viewport?since=0",
+                                 headers=self.auth()).get_json()
+        self.client.post("/api/station/focus", headers=self.auth(),
+                         json={"focus": {"element": "D-101"}})
+        after = self.client.get("/api/station/viewport?since=0",
+                                headers=self.auth()).get_json()
+        self.assertEqual(after["viewport"], before["viewport"])
+        self.assertEqual(after["revision"], before["revision"])
+
+    def test_the_station_sees_what_everyone_is_pointing_at(self):
+        self.as_user("owner")
+        self.client.post("/api/station/focus", headers=self.auth(),
+                         json={"focus": {"element": "D-101"}})
+        response = self.client.get("/api/station/focus?since=0", headers=self.auth())
+        self.assertEqual(response.status_code, 200)
+        disturbances = response.get_json()["disturbances"]
+        self.assertEqual(len(disturbances), 1)
+        self.assertEqual(disturbances[0]["focus"]["element"], "D-101")
+
+    def test_one_entry_per_author_keeps_it_bounded(self):
+        # Twenty taps from one phone is one pin, not twenty. Bounded by the
+        # number of people at the table, not the length of the meeting.
+        self.as_user("owner")
+        for n in range(20):
+            self.client.post("/api/station/focus", headers=self.auth(),
+                             json={"focus": {"element": "D-%d" % n}})
+        disturbances = self.client.get("/api/station/focus?since=0",
+                                       headers=self.auth()).get_json()["disturbances"]
+        self.assertEqual(len(disturbances), 1)
+        self.assertEqual(disturbances[0]["focus"]["element"], "D-19")
+
+    def test_nothing_new_answers_204(self):
+        self.as_user("owner")
+        response = self.client.get("/api/station/focus?since=0", headers=self.auth())
+        self.assertEqual(response.status_code, 204)
+
+    def test_a_stranger_cannot_disturb_the_table(self):
+        self.as_user("stranger")
+        response = self.client.post("/api/station/focus", headers=self.auth(),
+                                    json={"focus": {"element": "D-101"}})
+        self.assertEqual(response.status_code, 404)
+
+    def test_an_anonymous_caller_cannot_disturb_the_table(self):
+        # A disturbance is attributed. There is no such thing as an anonymous
+        # pin on a shared surface.
+        response = self.client.post("/api/station/focus", headers=self.auth(),
+                                    json={"focus": {"element": "D-101"}})
+        self.assertEqual(response.status_code, 404)
+
+    def test_the_focus_route_has_no_path_to_the_viewport(self):
+        # Enforced structurally, not by convention: a companion endpoint that
+        # could reach publish() would be one edit away from hijacking the table.
+        import ast
+        import inspect
+
+        import routes.station as module
+
+        tree = ast.parse(inspect.getsource(module))
+        target = next(n for n in ast.walk(tree)
+                      if isinstance(n, ast.FunctionDef) and n.name == "publish_focus")
+        called = {getattr(c.func, "attr", None) for c in ast.walk(target)
+                  if isinstance(c, ast.Call)}
+        self.assertIn("publish_focus", called)
+        self.assertNotIn("publish", called)
+
+
 class TheTransportStaysOutOfTheBus(unittest.TestCase):
     def test_no_long_lived_streaming_was_introduced(self):
         # This iteration must not hold a gthread slot open: 60 of them exist in

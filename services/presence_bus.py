@@ -122,10 +122,89 @@ class PresenceBus:
         moment = now if now is not None else time.time()
         return (moment - float(record.get("published_at") or 0)) > self.stale_after
 
+    # -- disturbances ------------------------------------------------------
+    #
+    # Viewport has ONE writer and focus has MANY, so they cannot share a
+    # document. A companion dropping a pin must never contend with the table
+    # publishing a pan, and two companions must never overwrite each other.
+    #
+    # So: one file PER AUTHOR, which removes contention entirely rather than
+    # managing it - the same conclusion BridgeQueueStore reached about requests.
+    # Each author's latest disturbance replaces only their own, which keeps the
+    # collection bounded by the number of people at the table rather than by how
+    # long the meeting runs. A basin that cannot fill needs no sweeping.
+
+    def _focus_dir(self, station_id: str) -> Path:
+        directory = self.root / ("%s.focus" % station_id)
+        directory.mkdir(parents=True, exist_ok=True)
+        return directory
+
+    def publish_focus(self, station_id: str, author: str, focus: dict, *,
+                      now: Optional[float] = None) -> dict:
+        """A companion points at something. It does NOT move the camera.
+
+        The whole asymmetry: a station owns its own viewport because the people
+        physically gathered around it are looking at it, and a remote tap must
+        not wrench the shared view out from under them. A disturbance appears
+        in place over whatever the table is already showing.
+        """
+        safe = "".join(c for c in author if c.isalnum() or c in "-_")[:64] or "anon"
+        record = {
+            "station_id": station_id,
+            "author": author,
+            "focus": focus,
+            "published_at": now if now is not None else time.time(),
+        }
+        path = self._focus_dir(station_id) / ("%s.json" % safe)
+        tmp = path.with_name(path.name + ".tmp-%s" % uuid.uuid4().hex)
+        tmp.write_text(json.dumps(record, indent=2), encoding="utf-8")
+        _replace_with_retry(tmp, path)
+        return record
+
+    def read_focus(self, station_id: str, *, since: float = 0.0,
+                   now: Optional[float] = None) -> list:
+        """Every disturbance newer than `since`, oldest first.
+
+        Time-ordered rather than revision-ordered because there is no single
+        writer to hold a counter, and because what a station wants to render is
+        "who is pointing at what right now" - a set, not a sequence.
+        """
+        moment = now if now is not None else time.time()
+        found = []
+        directory = self.root / ("%s.focus" % station_id)
+        if not directory.is_dir():
+            return []
+        for path in sorted(directory.glob("*.json")):
+            try:
+                record = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                continue
+            published = float(record.get("published_at") or 0)
+            if published <= since:
+                continue
+            if moment - published > self.stale_after:
+                # A pin from a phone that walked away is not a disturbance any
+                # more. Dropped on read, so nothing has to be swept.
+                continue
+            found.append(record)
+        return sorted(found, key=lambda r: r["published_at"])
+
+    def clear_focus(self, station_id: str, author: Optional[str] = None) -> None:
+        directory = self.root / ("%s.focus" % station_id)
+        if not directory.is_dir():
+            return
+        if author is None:
+            for path in directory.glob("*.json"):
+                path.unlink(missing_ok=True)
+            return
+        safe = "".join(c for c in author if c.isalnum() or c in "-_")[:64] or "anon"
+        (directory / ("%s.json" % safe)).unlink(missing_ok=True)
+
     def clear(self, station_id: str) -> None:
         """Unmounting a station must not leave it presenting a coordinate into
         a project it no longer holds."""
         self._path(station_id).unlink(missing_ok=True)
+        self.clear_focus(station_id)
 
 
 def _replace_with_retry(tmp_path: Path, target: Path, attempts: int = 40) -> None:

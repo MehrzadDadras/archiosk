@@ -4,6 +4,19 @@ SPIKE / CLAUDE-STATION-POLL-01 - the transport, deliberately the dullest part.
     GET  /api/station/join            a companion asks what this surface shows
     POST /api/station/viewport        the station says where it is looking
     GET  /api/station/viewport?since= a follower asks if that has moved
+    POST /api/station/focus           a companion points at something
+    GET  /api/station/focus?since=    what is everyone pointing at
+
+VIEWPORT AUTHORITY IS ASYMMETRIC, AND THAT IS THE PRODUCT DECISION
+
+The station owns its own camera. A companion cannot pan or zoom it remotely,
+because people are physically standing around that surface and having the view
+wrenched away by a remote tap would make the shared context unusable. Companions
+publish DISTURBANCES instead - a highlight, a question, a GO card - which appear
+in place over whatever the table is already showing.
+
+Enforced structurally: publish_focus has no path to the viewport document, and
+publish_viewport requires the station credential rather than a person.
 
 SHORT-POLLING, NOT SSE, AND THIS IS A MEASURED CHOICE
 
@@ -167,6 +180,73 @@ def poll_viewport():
         return response
     return jsonify(revision=record["revision"], viewport=record["viewport"],
                    published_by=record["published_by"],
+                   poll_interval_ms=POLL_INTERVAL_MS), 200
+
+
+@station_bp.route("/api/station/focus", methods=["POST"])
+def publish_focus():
+    """A companion points at something WITHOUT moving the table.
+
+    The asymmetry, enforced here rather than described: this endpoint writes a
+    disturbance and has no path to the viewport at all. A companion cannot
+    wrench the camera away from the people physically standing at the table -
+    which is the entire reason a shared physical surface is worth having.
+
+    Unlike the station endpoints, this one requires a PERSON: a disturbance is
+    attributed, and can_access_project decides whether they may be in this
+    project at all.
+    """
+    from flask import current_app
+
+    station = authorise_station(_presented_station_token())
+    project_id = mounted_project_for(_presented_station_token())
+    author = session.get("username")
+    if not author or not _viewer_may_see(project_id):
+        return jsonify(error="not_found",
+                       message="No such project, or you do not have access."), 404
+
+    body = request.get_json(silent=True) or {}
+    focus = body.get("focus")
+    if not isinstance(focus, dict):
+        return jsonify(error="invalid_focus",
+                       message="focus must be an object."), 400
+    if len(str(focus)) > _MAX_VIEWPORT_BYTES:
+        return jsonify(error="focus_too_large",
+                       message="A disturbance is a pointer, not a document."), 413
+
+    bus = PresenceBus(current_app.config["REGISTRY_STORE_PATH"])
+    record = bus.publish_focus(str(station.id), author, focus)
+    return jsonify(author=record["author"], published_at=record["published_at"]), 200
+
+
+@station_bp.route("/api/station/focus", methods=["GET"])
+def poll_focus():
+    """What is everyone pointing at, newer than `since`.
+
+    A SET, not a sequence: the station renders who is pointing where right now.
+    One entry per author by construction, so this stays bounded by the number of
+    people at the table rather than by how long the meeting has run.
+    """
+    from flask import current_app
+
+    station = authorise_station(_presented_station_token())
+    project_id = mounted_project_for(_presented_station_token())
+    if not _viewer_may_see(project_id):
+        return jsonify(error="not_found",
+                       message="No such project, or you do not have access."), 404
+    try:
+        since = float(request.args.get("since", 0))
+    except (TypeError, ValueError):
+        since = 0.0
+
+    bus = PresenceBus(current_app.config["REGISTRY_STORE_PATH"])
+    disturbances = bus.read_focus(str(station.id), since=since)
+    if not disturbances:
+        response = jsonify()
+        response.status_code = 204
+        response.headers["X-Poll-Interval-Ms"] = str(POLL_INTERVAL_MS)
+        return response
+    return jsonify(disturbances=disturbances,
                    poll_interval_ms=POLL_INTERVAL_MS), 200
 
 
