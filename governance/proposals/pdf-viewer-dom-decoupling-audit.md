@@ -163,7 +163,7 @@ genuine leaks in the engine:
 
 | Site | Leak | Consequence |
 |---|---|---|
-| `:453` | `searchQuery` read from `searchInput.value` when focused, else `''` | persistence reads chrome — see §3.1, likely a live defect |
+| `:453` | `searchQuery` read from `searchInput.value` when focused, else `''` | persistence reads chrome — see §3.1, a **confirmed** live defect |
 | `:1297` | `setPageFromInput` falls back to writing `pageInput.value` | engine writes chrome |
 | `onSearchEnter` (`:1316`) | falls back to reading `searchInput.value` | engine reads chrome |
 | `refreshToolbar` (`:1245`) | writes `container.hidden`, `downloadLink.href`, `pageTotal`, plus four `update*Ui()` calls | the sync-down half, by design |
@@ -227,7 +227,11 @@ deliberate test decision.
 is accidental. The assumption does not survive.** Five independent lines of
 evidence.
 
-### 3.1 The persisted-state hazard — probably a live defect, not just a decoupling trap
+### 3.1 The persisted-state hazard — a CONFIRMED live defect, not just a decoupling trap
+
+**Status: reproduced under control on 2026-08-28.** The reproduction record is
+§3.1.1 below. This section originally recorded the finding as static-analysis
+only; it is no longer provisional.
 
 `saveViewStateNow` (`:443`) persists `searchQuery` as `searchInput.value` only
 when the surface is focused, and as `''` otherwise. The `pagehide` handler
@@ -244,13 +248,56 @@ restores that empty string.
 **Consequence: closing the page while Eye holds focus appears to silently blank
 Main's remembered search query for that document** — and vice versa.
 
-This is a static-analysis finding, traced through the three call sites but
-**not executed**; it should be reproduced before being treated as confirmed. If
-confirmed, it is a pre-existing defect independent of any decoupling work, and
-it is *caused by* the DOM owning state the surface should own — the same root
-cause as §2.2. A naive `el ? el.value : ''` decoupling would make it
-unconditional rather than intermittent, which is precisely the trap the brief
-asked about.
+It is a pre-existing defect independent of any decoupling work, and it is
+*caused by* the DOM owning state the surface should own — the same root cause as
+§2.2. A naive `el ? el.value : ''` decoupling would make it unconditional rather
+than intermittent, which is precisely the trap the brief asked about.
+
+### 3.1.1 Reproduction record
+
+**Method.** The real `static/js/pdf_viewer.js` was loaded **unmodified** into a
+Node process under a minimal DOM stub and driven through its own public API.
+No logic was re-implemented: `saveViewStateNow`, the `pagehide` flush and
+`loadViewState` are the shipped functions, executed as written. Because
+`saveViewStateNow` is not on the public API, the only shipped path that reaches
+it — the `pagehide` flush — is what the harness fires; no private state was
+poked.
+
+**Sequence.** Main mounts `source-A`; `doc-search-input` is set to `"door"`;
+unload fires while Main is focused (baseline). Eye is then created, mounts
+`source-B`, and takes focus via the shipped `setFocus('eye')`. **The search box
+is never touched again.** Unload fires a second time.
+
+| Step | Focus at unload | Persisted `source-A` `searchQuery` |
+|---|---|---|
+| Baseline | `main` | `"door"` |
+| After focus switch | `eye` | `""` |
+
+**Control.** The identical run with the single line `V.setFocus('eye')` removed
+— Eye still created, still mounted, second unload still fired — preserves
+`"door"`. The sole differentiator is the focus switch, which isolates the cause
+to `isFocused()` inside `saveViewStateNow` (`:453`) rather than to the second
+unload, to Eye's existence, or to Eye's own save.
+
+**Reachability in the product.** `saveViewStateSoon` is triggered by page
+change, zoom, rotate, mirror and page render (`:616, :622, :649, :674, :681,
+:691, :749`) — **not** by typing in the search box. So a query is persisted
+opportunistically by whatever the reviewer does next on Main, and is then
+blanked at unload if Eye holds focus at that moment. Both halves are ordinary
+use; neither requires an unusual sequence.
+
+**Severity, stated honestly.** The lost value is a remembered convenience
+restored at `:1187`, not evidence, provenance or governance state. No Source,
+Finding, region or citation is affected. It is a real state-corruption defect of
+low user-facing severity — recorded here because it *confirms the §2.2 root
+cause* rather than because it is urgent on its own.
+
+**Falsification note.** The harness's first run was **invalid and was
+discarded**: it reported the same `""` outcome, but its baseline had never
+stored `"door"` (`saveViewStateNow` is absent from the public API, so the setup
+call silently did nothing). A first-ever write of `""` is not a blanking. The
+result above is from the corrected harness, where the baseline is asserted
+before the test proceeds and the run aborts if it is missing.
 
 ### 3.2 The single-toolbar constraint is an explicit Product Owner decision
 
@@ -389,10 +436,9 @@ cheaper to learn this way than from a partial rewrite.
 
 **Why this is the smallest.** It changes no observable behaviour, breaks no
 pinned string, needs no template edit, requires no decision about the
-single-toolbar constraint, and is revertible by deleting one function. It also
-answers §3.1 as a by-product: if `searchQuery` is absent or wrong in the
-snapshot stream for an unfocused surface, the persistence defect is confirmed by
-the same run.
+single-toolbar constraint, and is revertible by deleting one function. §3.1 no longer depends on it, having been reproduced
+separately (§3.1.1); the snapshot stream should nonetheless show `searchQuery`
+correct for an unfocused surface, which is the regression check for that fix.
 
 Estimated surface: roughly 40 lines added to one file, zero removed.
 
@@ -409,8 +455,10 @@ Estimated surface: roughly 40 lines added to one file, zero removed.
   estimate of that ordering, not the ordering itself.
 - **Not a verdict on the two hard gates.** Whether a chrome-less route *should*
   mount a viewer is a product question, not an architectural one.
-- **§3.1 is not confirmed.** It is traced statically through three call sites and
-  needs reproduction before being treated as a real defect.
+- **§3.1 is now confirmed** (reproduced under control, §3.1.1) and is therefore no
+  longer an open question. What it does *not* settle is whether it should be
+  fixed standalone or absorbed into the ownership move in §2.2 — that is a
+  scheduling decision, not a finding.
 
 ---
 
