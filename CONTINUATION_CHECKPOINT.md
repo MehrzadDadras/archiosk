@@ -1,5 +1,119 @@
 # Continuation checkpoint
 
+## 2026-08-28 — Provenance delivered, then measured against a calm surface that did not have it
+
+Branch `spike/multi-surface-canvas`. `main` untouched at `6937b1a` throughout.
+
+### What landed — `CLAUDE-ARM-A-PROVENANCE-01` (`4ae07b9`)
+
+A Finding now names the documents it came from and links to them. Two chains
+reach a Source and only one was ever rendered: `artifact_id -> Artifact.source_id`
+(one Source) and `analysis_id -> AnalysisRun.source_ids` (many). `record_analysis`
+mints an Artifact only for items carrying a crop or image, which only drawing
+analysis supplies — so **every requirement-investigation and
+quantitative-investigation Finding showed a statement, a review badge and no
+attribution whatsoever**, while `AnalysisRun.source_ids` sat in storage recording
+exactly which documents had been read. `constitutional-invariants.md` #3 held in
+storage and was not reaching the person being asked to trust the claim.
+
+- `CaseWorkspaceStore.finding_provenance` — read-side derivation over BOTH
+  chains, naming which one answered. Deliberately not a widening of
+  `build_reference_snapshot`, whose output is persisted into
+  `RFIDraft.reference_snapshot`.
+- The source renders as a NAME and a LINK. The destination already existed
+  (`show_workspace?source=<id>`) and `build_reference_snapshot` already resolved
+  the name — it was printed in the RFI card a hundred lines below, so a reviewer
+  read a UUID in one place and the human filename in the other, for the same
+  document.
+- `confidence NN%` removed from the Finding card. `case_workspace.py`'s own rule
+  says the float must never be "presented on its own as if it carried the
+  categorical meaning", and `conversation_interpreter`'s quantitative path
+  hardcodes `0.5` — the card rendered a literal constant as "confidence 50%".
+  Stored field untouched.
+- UI Reference Mode admin-gated across all four shells (markup, pre-paint
+  restore AND wiring script). It was reachable by every signed-in user;
+  `auth_shell.html`'s copy was REMOVED rather than gated, since `is_admin` is
+  forced False on a standalone auth page and a condition that can never be true
+  reads as a live capability.
+
+Full suite green on the final tree: **5680 passed, 2 skipped, 1738 subtests,
+37:17**. `STATIC_VERSION` 119 -> 120.
+
+### What was measured — the two-arm blind trial
+
+One real question ("Is door D-106 rated?") from the metabolic bridge blind
+audit, where ground truth was known. Two fresh agents, each given only an entry
+URL and the question; neither told which surface it had, that a second existed,
+or the answer. Both arms shared the same authorization choke point and the same
+derivation, differing only in presentation.
+
+| | Arm A (chrome + repaired) | Arm B (calm canvas + un-repaired) |
+|---|---|---|
+| Views to verified answer | **3** | **3** |
+| Inspection order | entry -> A-601 -> A-101 | entry -> A-601 -> A-101 |
+| Provenance position | line 337 of 388 | first screen |
+
+**Equal step count, identical inspection order.** Both subjects attributed the
+ease to evidence links being present. Full write-up, including the four defects
+the trial surfaced, is
+`governance/specified-unbuilt/provenance-at-the-point-of-interaction.md`.
+
+### What the evidence does and does not support
+
+Recorded at the strength it actually carries, because this entry is durable:
+
+- **Evidence links matter — suggestive, not confirmed.** The isolating condition
+  (no links at all) was never run deliberately. It occurred once by accident,
+  when a harness bug of mine truncated Arm A's page and hid the provenance
+  block; that subject took **6 views** instead of 3. Different subject, and the
+  truncation removed other content too. One observation, not a measurement.
+- **Chrome costs attention, not steps.** It did not change the step count. It
+  appeared as an unprompted "Attention is full" modal, a "Not found"
+  image-search string with no image in play, and the four document names
+  repeated six times on one page.
+- **The two mechanisms are not equivalent.** Arm A's links are grounded in what
+  the analysis READ; Arm B's were parsed from what the statement SAYS, and would
+  render a confident link to a document the analysis never opened. Arm B was
+  more reachable and epistemically weaker. **Arm A got grounding right and
+  placement wrong; Arm B got placement right and grounding wrong.**
+
+### Method caveats, stated so nobody over-reads this later
+
+The first run was **invalidated and discarded** — three harness defects, all
+mine: a 4000-character print limit that cut Arm A at 67% of its page and removed
+the feature under test while leaving Arm B's shorter page intact; literal `\n`
+in a fixture; and no HTML-entity decoding, which made a normal `&rarr;` read as
+a rendering bug. The fixture also **leaks the answer**: the finding sentence
+states the conclusion, so the retrieval half is answerable without provenance in
+either arm. What that does not contaminate is verification behaviour — both
+subjects went to the documents rather than taking the sentence on trust.
+
+### Blocked on nothing; next work is placement, not mechanism
+
+A blind subject called the card-level rendering "the best part of the surface …
+the single thing that made this fast, and it deserves to be kept." What needs
+changing is that it sits after ~5,500 characters of inactive chrome.
+
+**Do not read this as "strip the chrome."** `static/js/pdf_viewer.js` resolves
+every document control (`doc-page-input`, `doc-zoom-*`, `doc-fit-*`,
+`doc-rotate`, `doc-search-*`, `doc-download`, `doc-print`, `doc-snapshot`) by
+`getElementById` against `base.html`'s menu bar; in a chrome-less render they
+are all `null`. **A meaningful share of the permanent chrome is the
+implementation of Look**, not accretion.
+
+### Spike artifacts removed
+
+`routes/spike_arm_b.py` and `templates/spike/arm_b_canvas.html` were built for
+the control arm and **deleted**, per this repository's own scaffolding
+discipline — never committed. The durable output is the finding, not the
+harness. Also removed: a duplicated `from routes.station import station_bp` left
+by the station spike.
+
+Two remaining confidence percentages (`case_workspace.html:2074`, `:2358`) are
+**model self-reported values, not constants**, so not the defect fixed here —
+filed as `governance/deferred-reserved/reservations.md` item 14 rather than
+changed as a side effect.
+
 ## 2026-08-25 (later) — Entry simplified, Q made a real container, a development bridge, a Composer pen, and a capture preflight
 
 Continues the entry above, which stopped at `dae1045`. Six further stages

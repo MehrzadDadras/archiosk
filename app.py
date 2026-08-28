@@ -394,7 +394,6 @@ def _register_csrf(app: Flask) -> None:
     """
     from routes.api import api_bp
     from routes.station import station_bp
-    from routes.station import station_bp
     from routes.storage_bridge import storage_bridge_bp
 
     csrf = CSRFProtect()
