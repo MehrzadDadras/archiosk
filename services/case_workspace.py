@@ -35,6 +35,7 @@ import hashlib
 import json
 import re
 import threading
+import time
 import uuid
 from dataclasses import asdict, dataclass, field
 from dataclasses import fields as dataclass_fields
@@ -5373,6 +5374,38 @@ def check_citation_against_resolved_references(claimed_target: str, resolved_ref
     return "MISMATCH"
 
 
+def _replace_with_retry(tmp_path: Path, target: Path, attempts: int = 40) -> None:
+    """Atomic replace, tolerating Windows' open-file restriction.
+
+    rename(2) on Linux - which is what production runs - replaces a destination
+    another process is reading without complaint, and a reader sees either the
+    whole old inode or the whole new one. Windows refuses with
+    PermissionError/WinError 5 while any handle is open on the destination, so a
+    developer running several processes against one store hits a failure that
+    cannot occur on the deployed platform.
+
+    Retrying is the correct response rather than a workaround: the operation is
+    still atomic when it succeeds, the only thing that changed is waiting for a
+    reader to finish. Backs off briefly and re-raises if it never clears, so a
+    genuine permissions fault is not swallowed as flakiness.
+
+    Used by EVERY tempfile+replace writer in this module. An earlier version of
+    this change used it only for the view sidecar and left save() calling
+    Path.replace directly - which promptly failed the multi-process test, since
+    a governed write contends with concurrent readers exactly the same way. Two
+    different atomic-write behaviours in one module is the kind of seam that
+    looks harmless and produces a platform-specific bug nobody can reproduce.
+    """
+    for attempt in range(attempts):
+        try:
+            tmp_path.replace(target)
+            return
+        except PermissionError:
+            if attempt == attempts - 1:
+                raise
+            time.sleep(0.01 * (attempt + 1))
+
+
 class CaseWorkspaceStore:
     """
     Flat-JSON persistence: one `{project_id}.workspace.json` file per
@@ -5410,6 +5443,65 @@ class CaseWorkspaceStore:
     def _path_for(self, project_id: str) -> Path:
         return self.store_path / f"{project_id}.workspace.json"
 
+    def _view_state_path_for(self, project_id: str) -> Path:
+        """The per-project sidecar holding view metadata and nothing else.
+
+        CLAUDE-VIEW-STATE-ISOLATION-01. Deliberately a SEPARATE FILE, not a
+        field, not a lock, and not a smarter merge.
+
+        record_last_viewed used to read the whole workspace document, patch one
+        key, and write the whole document back - on every ordinary Project Home
+        GET, with no version check. `_save_lock` is a threading.Lock, so across
+        the fifteen gunicorn worker processes production runs it serialised
+        nothing. A GET in one worker could therefore land on top of a governed
+        POST in another and silently revert it: Finding, Disposition and version
+        counter gone, the reviewer shown a 302 and nothing wrong, and the
+        GovernanceLog left asserting a review the workspace no longer contains.
+
+        A version check on the patch would have DETECTED that and turned an
+        ordinary page view into a 409, which is not an improvement. The point is
+        that a view has no business touching evidence at all, so the fix is to
+        remove the ability rather than guard it - the same reasoning
+        visible_cases_for records for Case privacy, and the same reasoning that
+        made `file_path is None` the custody claim rather than a flag.
+
+        The residual race is now bounded to this file: two workers patching view
+        metadata concurrently can still lose one timestamp. That is cosmetic by
+        construction, because nothing governed can be reached from here.
+        """
+        # In a SUBDIRECTORY, not beside the workspace files. The first version
+        # of this used "<project_id>.view.json" at the registry root and broke
+        # services/requirements_registry.py's list_ids(), which globs "*.json"
+        # there and strips one suffix - yielding a bogus "<project_id>.view" id
+        # that then failed on KeyError: 'project_id'. That module's own comment
+        # already warns about exactly this for ".workspace"; a second sidecar at
+        # the root would have re-created the bug it was written to prevent.
+        #
+        # A subdirectory is also what ingestion.PendingReconcileStore and
+        # services/bridge_queue.py already do, for the same reason.
+        directory = self.store_path / "_view_state"
+        directory.mkdir(parents=True, exist_ok=True)
+        return directory / f"{project_id}.json"
+
+    def _read_view_state(self, project_id: str) -> dict:
+        path = self._view_state_path_for(project_id)
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            # Absent or half-written: view metadata is not worth an exception on
+            # a page load, and the next patch rewrites it wholesale.
+            return {}
+
+    def _patch_view_state(self, project_id: str, mutate) -> None:
+        """Read-modify-write the sidecar, atomically. Never the workspace."""
+        path = self._view_state_path_for(project_id)
+        with self._save_lock:
+            state = self._read_view_state(project_id)
+            mutate(state)
+            tmp_path = path.with_name(path.name + f".tmp-{uuid.uuid4().hex}")
+            tmp_path.write_text(json.dumps(state, indent=2), encoding="utf-8")
+            _replace_with_retry(tmp_path, path)
+
     def get(self, project_id: str) -> Optional[ProjectWorkspace]:
         path = self._path_for(project_id)
         if not path.exists():
@@ -5418,7 +5510,23 @@ class CaseWorkspaceStore:
         self._hydrate_legacy_reviews(data)
         workspace = ProjectWorkspace(**data)
         self._hydrate_legacy_cases(workspace)
+        self._overlay_view_state(workspace)
         return workspace
+
+    def _overlay_view_state(self, workspace: ProjectWorkspace) -> None:
+        """Sidecar wins over anything still embedded in the document.
+
+        Records written before CLAUDE-VIEW-STATE-ISOLATION-01 carry these keys
+        inside the workspace JSON. They are read as a fallback rather than
+        migrated: a migration would mean rewriting every workspace file to move
+        data that has no governance meaning, and the overlay makes the old copy
+        harmless the moment anything new is written.
+        """
+        state = self._read_view_state(workspace.project_id)
+        for reviewer, stamp in (state.get("last_viewed_by") or {}).items():
+            workspace.last_viewed_by[reviewer] = stamp
+        for reviewer, items in (state.get("item_reviewed_at") or {}).items():
+            workspace.item_reviewed_at.setdefault(reviewer, {}).update(items)
 
     @staticmethod
     def _hydrate_legacy_reviews(data: dict) -> None:
@@ -5571,9 +5679,20 @@ class CaseWorkspaceStore:
                     )
 
             workspace.version = expected + 1
+            document = asdict(workspace)
+            # CLAUDE-VIEW-STATE-ISOLATION-01: view metadata has ONE home, and it
+            # is not this file. get() overlays it back onto the dataclass so
+            # every reader is unchanged, but persisting it here would write a
+            # second copy on every governed save - a duplicate that is refreshed
+            # forever and authoritative never. Dropping it also lets records
+            # written before this change shed their embedded copy the first time
+            # anything real is saved, so the legacy fallback in
+            # _overlay_view_state is transitional rather than permanent.
+            for view_only_key in ("last_viewed_by", "item_reviewed_at"):
+                document.pop(view_only_key, None)
             tmp_path = path.with_name(path.name + f".tmp-{uuid.uuid4().hex}")
-            tmp_path.write_text(json.dumps(asdict(workspace), indent=2), encoding="utf-8")
-            tmp_path.replace(path)
+            tmp_path.write_text(json.dumps(document, indent=2), encoding="utf-8")
+            _replace_with_retry(tmp_path, path)
 
         return workspace
 
@@ -5632,14 +5751,18 @@ class CaseWorkspaceStore:
         workspace.last_viewed_by[reviewer] = timestamp
 
         path = self._path_for(workspace.project_id)
-        with self._save_lock:
-            if not path.exists():
-                return timestamp
-            raw = json.loads(path.read_text(encoding="utf-8"))
-            raw.setdefault("last_viewed_by", {})[reviewer] = timestamp
-            tmp_path = path.with_name(path.name + f".tmp-{uuid.uuid4().hex}")
-            tmp_path.write_text(json.dumps(raw, indent=2), encoding="utf-8")
-            tmp_path.replace(path)
+        # CLAUDE-VIEW-STATE-ISOLATION-01: the sidecar, never the workspace
+        # document. This method runs on every ordinary Project Home GET, and
+        # the whole-document write it used to perform could revert a governed
+        # POST landing in another worker process at the same moment.
+        if not path.exists():
+            return timestamp
+
+        def _mutate(state):
+            state.setdefault("last_viewed_by", {})[reviewer] = timestamp
+
+        self._patch_view_state(workspace.project_id, _mutate)
+        workspace.last_viewed_by[reviewer] = timestamp
 
         return timestamp
 
@@ -5684,14 +5807,18 @@ class CaseWorkspaceStore:
         workspace.item_reviewed_at.setdefault(reviewer, {})[object_id] = timestamp
 
         path = self._path_for(workspace.project_id)
-        with self._save_lock:
-            if not path.exists():
-                return timestamp
-            raw = json.loads(path.read_text(encoding="utf-8"))
-            raw.setdefault("item_reviewed_at", {}).setdefault(reviewer, {})[object_id] = timestamp
-            tmp_path = path.with_name(path.name + f".tmp-{uuid.uuid4().hex}")
-            tmp_path.write_text(json.dumps(raw, indent=2), encoding="utf-8")
-            tmp_path.replace(path)
+        # Same isolation as record_last_viewed above: this is per-reviewer
+        # display state with no governance meaning, and it must not be able to
+        # overwrite the document that holds the evidence.
+        if not path.exists():
+            return timestamp
+
+        def _mutate(state):
+            state.setdefault("item_reviewed_at", {}).setdefault(
+                reviewer, {})[object_id] = timestamp
+
+        self._patch_view_state(workspace.project_id, _mutate)
+        workspace.item_reviewed_at.setdefault(reviewer, {})[object_id] = timestamp
 
         return timestamp
 

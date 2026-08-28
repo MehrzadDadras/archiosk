@@ -1834,6 +1834,13 @@ def _delete_project_files(app, project_id: str) -> None:
     for suffix in (".json", ".governance.jsonl", ".workspace.json"):
         (store_path / f"{project_id}{suffix}").unlink(missing_ok=True)
 
+    # CLAUDE-VIEW-STATE-ISOLATION-01: the view sidecar lives in its own
+    # subdirectory, so it is not caught by the suffix loop above. Deleting a
+    # project must not leave its per-reviewer view state behind - an orphan
+    # nothing would ever collect, and the exact accumulation this codebase
+    # already suffers from in pending_reconciles/.
+    (store_path / "_view_state" / f"{project_id}.json").unlink(missing_ok=True)
+
     sources_dir = store_path / "workspace_sources" / project_id
     if sources_dir.exists():
         shutil.rmtree(sources_dir)

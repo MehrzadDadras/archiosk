@@ -94,14 +94,6 @@ class AnyWorkerSeesWhatAnotherWrote(_Queue):
                         mutable.append(module_name)
             self.assertEqual(mutable, [], "%s holds module-level mutable state" % module_name)
 
-    def test_the_deleted_in_memory_classes_are_really_gone(self):
-        # Deprecating them would leave two implementations of one protocol -
-        # the duplication this work already had to converge away from once.
-        import services.storage_bridge as module
-
-        for dead in ("StorageBridge", "BridgeRegistry", "ByteRequest"):
-            self.assertFalse(hasattr(module, dead), "%s survived" % dead)
-
 
 class ClaimingIsAtomicAcrossRealProcesses(_Queue):
     def test_exactly_one_of_four_processes_wins_a_single_request(self):

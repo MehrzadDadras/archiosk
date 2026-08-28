@@ -209,7 +209,9 @@ class RouteLevelGetDoesNotPersistHydrationTests(_BaseP40D2TestCase):
 
         after = self._raw_workspace(_LEGACY_VISIBILITY_PROJECT_ID)
         changed_keys = {k for k in set(before) | set(after) if before.get(k) != after.get(k)}
-        self.assertEqual(changed_keys, {"last_viewed_by"})
+        # See the note in the synthetic sweep below: a GET now writes nothing
+        # to the workspace document, which is what this test always meant.
+        self.assertEqual(changed_keys, set())
         self.assertEqual(before["cases"], after["cases"])
         # record_last_viewed never reads/bumps version - the fixture's
         # own pre-existing version value (1) must be completely untouched,
@@ -227,7 +229,9 @@ class RouteLevelGetDoesNotPersistHydrationTests(_BaseP40D2TestCase):
         after_second = self._raw_workspace(_LEGACY_REVIEWS_PROJECT_ID)
 
         changed_keys = {k for k in set(after_first) | set(after_second) if after_first.get(k) != after_second.get(k)}
-        self.assertEqual(changed_keys, {"last_viewed_by"})
+        # See the note in the synthetic sweep below: a GET now writes nothing
+        # to the workspace document, which is what this test always meant.
+        self.assertEqual(changed_keys, set())
         self.assertEqual(after_first["reviews"], after_second["reviews"])
 
 
@@ -298,7 +302,17 @@ class NineteenProjectSyntheticSweepTests(_BaseP40D2TestCase):
             after = self._raw_workspace(pid)
             b, a = before[pid], after
             changed_keys = {k for k in set(b) | set(a) if b.get(k) != a.get(k)}
-            self.assertEqual(changed_keys, {"last_viewed_by"}, f"{pid} had unexpected structural drift: {changed_keys}")
+            # CLAUDE-VIEW-STATE-ISOLATION-01 TIGHTENED this, it did not relax it.
+            # The intent was always "a GET must not rewrite the document";
+            # {"last_viewed_by"} was the tolerated exception because the
+            # mechanism of the day patched the document in place. That patch
+            # was a whole-document write with no version check, running on
+            # every Project Home GET, and across fifteen worker processes it
+            # could revert a governed POST landing at the same moment. View
+            # state now lives in _view_state/<project_id>.json, so the answer
+            # is set(): a view changes nothing in the evidence document at
+            # all.
+            self.assertEqual(changed_keys, set(), f"{pid} had unexpected structural drift: {changed_keys}")
 
 
 if __name__ == "__main__":

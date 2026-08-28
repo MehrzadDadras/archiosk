@@ -72,8 +72,15 @@ class LegacyAndDefaultStateTests(_BaseAttentionStateTestCase):
     def test_legacy_on_disk_record_with_no_item_reviewed_at_key_loads_safely(self):
         path = self.tmp_dir / f"{self.project_id}.workspace.json"
         raw = json.loads(path.read_text(encoding="utf-8"))
-        self.assertIn("item_reviewed_at", raw)  # sanity: field is present in a fresh record
-        del raw["item_reviewed_at"]  # simulate a genuinely pre-this-stage on-disk record
+        # CLAUDE-VIEW-STATE-ISOLATION-01: `item_reviewed_at` is no longer
+        # persisted in the workspace document at all - it lives in
+        # _view_state/<project_id>.json, because a whole-document patch from a
+        # GET could revert a governed write in another worker process. The
+        # assertIn precondition that used to stand here is therefore obsolete:
+        # every record is now written in exactly the shape this test simulates.
+        # The pop stays, tolerant of either shape, so the test keeps asserting
+        # what it is named for - that a record WITHOUT the key loads safely.
+        raw.pop("item_reviewed_at", None)
         path.write_text(json.dumps(raw), encoding="utf-8")
 
         reloaded = self.store.get(self.project_id)
