@@ -42,6 +42,7 @@ from pathlib import Path
 from typing import Optional
 
 from services.external_source import ExternalSourceError
+from services.bridge_queue import PURPOSE_REGISTER_SOURCE
 from services.storage_bridge import (
     DEFAULT_ENROLMENT_TTL_SECONDS,
     BridgeEnrolmentRevoked,
@@ -282,3 +283,112 @@ def reset_bridges_for_testing(app=None) -> None:
     except RuntimeError:
         return
     shutil.rmtree(root, ignore_errors=True)
+
+
+# ---------------------------------------------------------------------------
+# reconcile -> queue -> governed Source
+# ---------------------------------------------------------------------------
+
+def reconcile_external_manifest(project_id: str, *, app=None,
+                                requested_by: str = "system") -> dict:
+    """Classify the stored manifest and enqueue bytes for what actually needs them.
+
+    CLAUDE-BRIDGE-INGEST-01. This is the confirm step for a corpus ARCHIOSK
+    cannot read: Reconcile decides from hashes and sizes alone (Slice A), and
+    only the files it classifies NEW cause any bytes to cross the network.
+
+    WHAT IS ENQUEUED, AND WHAT DELIBERATELY IS NOT
+
+    NEW      -> one register_source request each. Genuinely new evidence that
+                nothing in the project yet represents.
+    UNCHANGED-> nothing. The hash already matches a registered Source; fetching
+                the bytes would confirm what the manifest already proved and
+                cost a network round trip per file. On a real drawing set this
+                is most of them, and it is the whole reason classification
+                happens before retrieval rather than after.
+    RENAMED  -> nothing. Same content, known identity, new path. That is a
+                reconciliation of the reference, not an ingestion.
+    MISSING  -> nothing, and never a deletion.
+    MODIFIED -> nothing, DELIBERATELY, and this one is a real constraint rather
+                than an oversight. ingestion.preview_data_room_reconcile's own
+                contract says a modified file is "never auto-registered as a
+                second Source and never overwrites the first - a human decision
+                this pass does not yet offer an action for". Fetching its bytes
+                would pull content across the boundary that nothing is permitted
+                to act on. The count is returned so a caller can surface it; the
+                action it needs does not exist yet, in this path or the Data
+                Room's.
+    """
+    from services.ingestion import classify_reconcile_descriptors
+
+    descriptors = descriptors_for_manifest(project_id, app=app)
+    report, new_descriptors = classify_reconcile_descriptors(
+        descriptors, project_id, app or _current_app())
+
+    queue = _queue(app)
+    already = {record["relative_path"]
+               for record in queue.pending_for(project_id) + queue.claimed_for(project_id)}
+    enqueued = []
+    for descriptor in new_descriptors:
+        # Idempotent: a second confirm before the agent has answered the first
+        # must not queue the same file twice.
+        if descriptor.relative_path in already:
+            continue
+        enqueued.append(queue.enqueue(
+            project_id, descriptor.relative_path, PURPOSE_REGISTER_SOURCE,
+            requested_by=requested_by))
+    return {
+        "report": report,
+        "enqueued": enqueued,
+        "modified_not_enqueued": report["summary"].get("modified", 0),
+    }
+
+
+def ingest_delivered_bytes(project_id: str, request_id: str, *, app=None,
+                           actor: str = "storage-agent") -> dict:
+    """Turn one delivered payload into governed derivatives, then destroy it.
+
+    The bytes exist between consume() and the end of this function and nowhere
+    else. consume() unlinks the staged file as it returns, so a crash here
+    leaves no payload behind, and there is no branch that writes them anywhere.
+
+    What is retained is what ARCHIOSK is allowed to keep: the Source record, its
+    hash, its provenance, and whatever the extractor derived. `file_path` stays
+    None, which IS the custody claim rather than a description of it.
+    """
+    from services.external_source import register_external_source_from_bytes
+
+    application = app or _current_app()
+    queue = _queue(application)
+    record, payload = queue.consume(request_id)
+    if record.get("project_id") != project_id:
+        raise ExternalSourceError(
+            "Request %s does not belong to project %s." % (request_id, project_id))
+
+    store = _store(application)
+    workspace = store.get(project_id)
+    if workspace is None:
+        raise ExternalSourceError("Project %s was not found." % project_id)
+
+    if record.get("purpose") != PURPOSE_REGISTER_SOURCE:
+        raise ExternalSourceError(
+            "No ingestion handler for purpose %r." % record.get("purpose"))
+
+    registered = register_external_source_from_bytes(
+        store, workspace, record["relative_path"], payload)
+    store.save(workspace)
+
+    result = {
+        "source": registered["source"],
+        "extracted_characters": len(registered.get("extracted_text") or ""),
+        "relative_path": record["relative_path"],
+        "purpose": record["purpose"],
+    }
+    del payload      # explicit, so an edit that keeps them has to remove this
+    return result
+
+
+def _current_app():
+    from flask import current_app
+
+    return current_app

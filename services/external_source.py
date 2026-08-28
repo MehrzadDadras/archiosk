@@ -223,7 +223,27 @@ def register_external_source(
     storage_root = root or workspace.external_storage_root
     reference = normalize_relative_reference(relative_path)
     raw_bytes = read_external_bytes(storage_root, reference)
+    return register_external_source_from_bytes(
+        store, workspace, reference, raw_bytes, kind=kind, extract_text=extract_text)
 
+
+def register_external_source_from_bytes(
+    store, workspace, relative_path: str, raw_bytes: bytes, *,
+    kind: str = SOURCE_KIND_PROJECT_DOCUMENT, extract_text: bool = True,
+) -> dict:
+    """Register an externally held file whose bytes the caller already has.
+
+    CLAUDE-BRIDGE-INGEST-01. Extracted from register_external_source so the two
+    ways bytes can arrive - a readable filesystem root, or a private-storage
+    agent delivering them over the queue - share ONE registration path. The
+    alternative was a second function that also called add_source with
+    file_path=None, and two places that both know how custody is claimed is
+    exactly how the claim drifts.
+
+    The bytes are still transient here. Nothing writes them; they go out of
+    scope at the end of this call exactly as they did before.
+    """
+    reference = normalize_relative_reference(relative_path)
     name = PurePosixPath(reference).name
     source = store.add_source(
         workspace,
