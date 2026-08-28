@@ -293,12 +293,23 @@ class TheCsrfExemptionExistsAndIsNarrow(unittest.TestCase):
         source = (_ROOT / "app.py").read_text(encoding="utf-8")
         self.assertIn("csrf.init_app(app)", source)
 
-    def test_only_the_two_machine_blueprints_are_exempt(self):
+    def test_only_the_machine_blueprints_are_exempt(self):
+        """The list is pinned so a fourth cannot be added quietly.
+
+        It fired once already, on SPIKE CLAUDE-STATION-POLL-01 adding
+        station_bp - which is exactly what it is for. Every entry here must be a
+        MACHINE surface authenticating with a bearer token and carrying no
+        session cookie, so the CSRF attack shape (a forged cross-site POST riding
+        the victim's cookie) cannot be constructed against it. A cookie-
+        authenticated blueprint appearing in this list is a defect, not a
+        configuration choice.
+        """
         source = (_ROOT / "app.py").read_text(encoding="utf-8")
         exempted = [line.strip() for line in source.splitlines()
                     if "csrf.exempt(" in line]
         self.assertEqual(sorted(exempted),
-                         ["csrf.exempt(api_bp)", "csrf.exempt(storage_bridge_bp)"])
+                         ["csrf.exempt(api_bp)", "csrf.exempt(station_bp)",
+                          "csrf.exempt(storage_bridge_bp)"])
 
 
 class TheMigrationChainIsIntact(unittest.TestCase):

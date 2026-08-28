@@ -393,12 +393,15 @@ def _register_csrf(app: Flask) -> None:
     production, on the first real POST an agent ever made.
     """
     from routes.api import api_bp
+    from routes.station import station_bp
+    from routes.station import station_bp
     from routes.storage_bridge import storage_bridge_bp
 
     csrf = CSRFProtect()
     csrf.init_app(app)
     csrf.exempt(api_bp)
     csrf.exempt(storage_bridge_bp)
+    csrf.exempt(station_bp)
 
 
 def get_csp_nonce() -> str:
@@ -475,6 +478,7 @@ def _register_blueprints(app: Flask) -> None:
     from routes.workspace import workspace_bp
     from routes.security import security_bp
     from routes.operations import operations_bp
+    from routes.station import station_bp
     from routes.storage_bridge import storage_bridge_bp
 
     app.register_blueprint(portal_bp)
@@ -487,6 +491,10 @@ def _register_blueprints(app: Flask) -> None:
     # which also puts them inside _wants_json()'s "/api/" test so a refusal
     # reaches an agent as JSON rather than as an HTML error page.
     app.register_blueprint(storage_bridge_bp)
+    # SPIKE CLAUDE-STATION-POLL-01: station/companion polling. Same
+    # /api/ prefix reasoning as the bridge - _wants_json() keys off it,
+    # so a refusal reaches a device as JSON rather than an HTML page.
+    app.register_blueprint(station_bp)
 
 
 def _register_error_handlers(app: Flask) -> None:
