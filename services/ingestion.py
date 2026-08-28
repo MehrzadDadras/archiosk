@@ -8,6 +8,7 @@ duplicated (and drifting) across a JSON endpoint and an HTML form handler.
 from __future__ import annotations
 
 import hashlib
+from dataclasses import dataclass
 import json
 import logging
 import time
@@ -909,20 +910,65 @@ KNOWN_RECONCILE_STATUSES = (
 )
 
 
-def preview_data_room_reconcile(
-    files: list[FileStorage], relative_paths: list[str], project_id: str, app: Flask,
-) -> tuple[dict, list[tuple[str, str, bytes]]]:
-    """
-    Read-only comparison of a real, browser-selected folder against this
-    project's already-registered Sources - never calls add_source,
-    set_source_folder, or ensure_folder_path. Returns `(report,
-    new_eligible_files)`: `report` is JSON-serializable (summary counts +
-    one list per non-empty classification, `unchanged` reported as a count
-    only - Section 10's own "avoid flooding... emphasize exceptions, not
-    unchanged inventory"); `new_eligible_files` is `(relative_path,
-    filename, raw_bytes)` for exactly the files a confirm step could safely
-    register, handed to `PendingReconcileStore.create` by the caller.
+@dataclass(frozen=True)
+class ReconcileDescriptor:
+    """One file as Reconcile needs to see it - never its contents.
 
+    `sha256`/`size_bytes` are Optional for one specific, load-bearing reason:
+    the extension check happens BEFORE any read, so a folder containing a 5GB
+    ISO never pulls it into memory. A descriptor for a file rejected on its
+    extension therefore legitimately has neither, and the classifier reaches the
+    same INELIGIBLE verdict without them. Making them mandatory would have
+    quietly turned that short-circuit into a full read of every file in the
+    folder - a memory regression invisible to every existing test, because no
+    test uses a file big enough to notice.
+    """
+
+    relative_path: str
+    filename: str
+    sha256: "Optional[str]" = None
+    size_bytes: "Optional[int]" = None
+
+
+def describe_upload_for_reconcile(
+    file_storage: FileStorage, relative_path: str, allowed,
+) -> "tuple[ReconcileDescriptor, Optional[bytes]]":
+    """Build a descriptor from a real upload, handing the bytes back with it.
+
+    The bytes are returned rather than discarded because the CALLER still needs
+    them - preview_data_room_reconcile passes the NEW ones to
+    PendingReconcileStore. Reads only once the extension has already passed, so
+    the short-circuit above is preserved exactly; None means "never read", which
+    is not the same as "empty".
+    """
+    rel = Path((relative_path or "").replace("\\", "/"))
+    filename = rel.name or "(unnamed file)"
+    if not relative_path or rel.suffix.lower() not in allowed:
+        return ReconcileDescriptor(relative_path, filename), None
+    raw_bytes = file_storage.read()
+    return (
+        ReconcileDescriptor(relative_path, filename,
+                            hashlib.sha256(raw_bytes).hexdigest(), len(raw_bytes)),
+        raw_bytes,
+    )
+
+
+def classify_reconcile_descriptors(
+    descriptors: list, project_id: str, app: Flask,
+) -> tuple[dict, list]:
+    """The byte-free half of Reconcile. Returns `(report, new_descriptors)`.
+
+    CLAUDE-RECONCILE-DESCRIPTORS-01. Every classification rule below, and the
+    ORDER they are applied in, is the code that used to live inline in
+    preview_data_room_reconcile - MOVED, not rewritten. That matters: a private
+    storage manifest and a browser-selected folder must be judged by one
+    standard, and a second implementation would drift from this one the first
+    time either changed.
+
+    Reconcile only ever needed three facts about a file - extension, size and
+    content hash - and read bytes solely to derive the last two. A manifest
+    already carries both, so the classification a Data Room folder gets is
+    available for storage ARCHIOSK never touches.
     Classification, in the order each file is actually checked:
     - INELIGIBLE: unsupported extension or oversize (same rules
       reconcile_data_room_upload already enforces - never a second,
@@ -984,20 +1030,20 @@ def preview_data_room_reconcile(
     }
 
     items: dict[str, list[dict]] = {status: [] for status in KNOWN_RECONCILE_STATUSES}
-    new_eligible_files: list[tuple[str, str, bytes]] = []
+    new_descriptors: list = []
     seen_origin_refs: set[str] = set()
     seen_hashes_this_scan: set[str] = set()
 
-    for file_storage, relative_path in zip(files, relative_paths):
+    for descriptor in descriptors:
+        relative_path = descriptor.relative_path
+        filename = descriptor.filename
         if not relative_path:
             items[RECONCILE_STATUS_INELIGIBLE].append(
                 {"filename": "(unnamed file)", "relative_path": relative_path, "reason": "No filename."}
             )
             continue
 
-        rel = Path(relative_path.replace("\\", "/"))
-        filename = rel.name
-        ext = rel.suffix.lower()
+        ext = Path(relative_path.replace("\\", "/")).suffix.lower()
 
         if ext not in allowed:
             items[RECONCILE_STATUS_INELIGIBLE].append({
@@ -1006,15 +1052,23 @@ def preview_data_room_reconcile(
             })
             continue
 
-        raw_bytes = file_storage.read()
-        if max_bytes and len(raw_bytes) > max_bytes:
+        if max_bytes and descriptor.size_bytes is not None and descriptor.size_bytes > max_bytes:
             items[RECONCILE_STATUS_INELIGIBLE].append({
                 "filename": filename, "relative_path": relative_path,
                 "reason": f"File exceeds the {max_bytes // (1024 * 1024)}MB size limit.",
             })
             continue
 
-        file_hash = hashlib.sha256(raw_bytes).hexdigest()
+        file_hash = descriptor.sha256
+        if file_hash is None:
+            # An eligible extension with no hash means the descriptor's
+            # source could not supply one. Reported rather than guessed at:
+            # every remaining rule depends on content identity.
+            items[RECONCILE_STATUS_INELIGIBLE].append({
+                "filename": filename, "relative_path": relative_path,
+                "reason": "No content hash was available for this file.",
+            })
+            continue
 
         if file_hash in seen_hashes_this_scan:
             items[RECONCILE_STATUS_AMBIGUOUS].append({
@@ -1050,7 +1104,7 @@ def preview_data_room_reconcile(
             continue
 
         items[RECONCILE_STATUS_NEW].append({"filename": filename, "relative_path": relative_path})
-        new_eligible_files.append((relative_path, filename, raw_bytes))
+        new_descriptors.append(descriptor)
 
     for origin_ref, source in by_origin_ref.items():
         if origin_ref not in seen_origin_refs:
@@ -1059,7 +1113,7 @@ def preview_data_room_reconcile(
             })
 
     summary = {status: len(items[status]) for status in KNOWN_RECONCILE_STATUSES}
-    summary["total_scanned"] = len(relative_paths)
+    summary["total_scanned"] = len(descriptors)
 
     report = {
         "project_id": project_id,
@@ -1073,6 +1127,37 @@ def preview_data_room_reconcile(
         # stage's own test suite caught, not guessed in advance.
         "by_status": items,
     }
+    return report, new_descriptors
+
+
+def preview_data_room_reconcile(
+    files: list[FileStorage], relative_paths: list[str], project_id: str, app: Flask,
+) -> tuple[dict, list[tuple[str, str, bytes]]]:
+    """Unchanged signature, unchanged return, unchanged verdicts.
+
+    Now a thin adapter: it builds descriptors from the uploads UP FRONT, hands
+    them to classify_reconcile_descriptors, and reattaches the bytes for exactly
+    the files classified NEW - which is the only thing the caller ever wanted
+    them for (PendingReconcileStore.create).
+
+    Kept as the Data Room's entry point rather than making every route build
+    descriptors: the routes have no reason to learn a new vocabulary for a
+    refactor that exists to serve a different caller entirely.
+    """
+    allowed = app.config["ALLOWED_UPLOAD_EXTENSIONS"]
+    descriptors, bytes_by_path = [], {}
+    for file_storage, relative_path in zip(files, relative_paths):
+        descriptor, raw_bytes = describe_upload_for_reconcile(
+            file_storage, relative_path, allowed)
+        descriptors.append(descriptor)
+        if raw_bytes is not None:
+            bytes_by_path[relative_path] = raw_bytes
+
+    report, new_descriptors = classify_reconcile_descriptors(descriptors, project_id, app)
+    new_eligible_files = [
+        (d.relative_path, d.filename, bytes_by_path[d.relative_path])
+        for d in new_descriptors if d.relative_path in bytes_by_path
+    ]
     return report, new_eligible_files
 
 
