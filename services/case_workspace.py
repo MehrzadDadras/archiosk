@@ -4504,6 +4504,17 @@ class ProjectWorkspace:
     external_manifest: list[dict] = field(default_factory=list)
     external_manifest_digest: Optional[str] = None
     external_manifest_recorded_at: Optional[str] = None
+    # CLAUDE-TRIAL-SAFE-LANDING-01: a project that brings its own provider
+    # credential is off the trial meter entirely (services/trial_allowance.py).
+    #
+    # ONLY EVER READ FOR PRESENCE by this codebase - `byok_key_present` returns
+    # a bool and nothing here returns, logs or compares the value. The name
+    # says `_encrypted` because that is the contract for whatever writes it:
+    # this field is not a place to put a plaintext key, and no code path in
+    # this repository writes one. Building the key store itself - encryption at
+    # rest, rotation, revocation, and the blast radius when a customer's
+    # provider credential leaks - is separate work that has not been done.
+    byok_api_key_encrypted: Optional[str] = None
     # Project / Case Operating Instructions (Prompt 3 #7): human-authored
     # guidance (terminology, delivery-method context, reviewer conventions,
     # known assumptions) that is explicitly SUBORDINATE to governance -

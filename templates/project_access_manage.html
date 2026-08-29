@@ -1,0 +1,173 @@
+{# CLAUDE-RBAC-TOKENS-04 - the architect's access panel.
+
+   Standalone, like the other project-scoped surfaces in this tranche: it does
+   not extend base.html, because base.html renders the Lists panel with its
+   global project tree and this page is deliberately about ONE project.
+
+   The generated link is shown ONCE, in the response to the POST that made it.
+   There is no way back to it - reloading this page will not show it again,
+   because the raw token was never stored anywhere. That is the correct
+   behaviour and the page says so plainly rather than letting the architect
+   discover it by losing one.
+#}<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>Access passes &mdash; {{ project_id }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/tokens.css') }}?v={{ static_version }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/project_manage.css') }}?v={{ static_version }}">
+</head>
+<body class="pm">
+
+<header class="pm-head">
+    <h1>Access passes</h1>
+    <p class="pm-project">{{ project_id }}</p>
+    <p class="pm-note">
+        A pass is a link. Anyone holding it has exactly the role and disciplines
+        set below, until it expires or is revoked &mdash; there is no password and
+        no account behind it, so send it to one person and revoke it when they are
+        done.
+    </p>
+</header>
+
+{% if error %}
+<p class="pm-error" role="alert" data-ui-ref="manage.access.error">{{ error }}</p>
+{% endif %}
+
+{% if issued_link %}
+{# Shown once. Never flashed: flash() stores its message in the session cookie,
+   which would write a live credential into the architect's own browser. #}
+<section class="pm-issued" data-ui-ref="manage.access.issued">
+    <h2>Pass issued &mdash; {{ issued_label }}</h2>
+    <p class="pm-issued-warn">
+        This link is shown <b>once</b>. It is not stored anywhere and cannot be
+        retrieved again. Copy it now; if you lose it, revoke the pass and issue
+        a new one.
+    </p>
+    <input class="pm-issued-link" type="text" readonly value="{{ issued_link }}"
+           data-ui-ref="manage.access.issued-link"
+           aria-label="Access link, copy it now">
+</section>
+{% endif %}
+
+<section class="pm-form-wrap">
+    <h2>Issue a pass</h2>
+    <form method="post" class="pm-form" data-ui-ref="manage.access.form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+        <label class="pm-field">
+            <span>Stakeholder name or contact reference</span>
+            <input type="text" name="label" required
+                   placeholder="Framing Subcontractor"
+                   data-ui-ref="manage.access.label">
+        </label>
+
+        <fieldset class="pm-field">
+            <legend>Role</legend>
+            {% for role in issuable_roles %}
+            <label class="pm-choice">
+                <input type="radio" name="role" value="{{ role }}"
+                       {% if loop.first %}checked{% endif %}>
+                <span>{{ role }}</span>
+            </label>
+            {% endfor %}
+            {# architect is deliberately not offered: a form that mints another
+               architect pass is a privilege-escalation control wearing a form
+               label. platform_admin is not offered because it grants no
+               drawing access at all. #}
+        </fieldset>
+
+        <fieldset class="pm-field">
+            <legend>Disciplines</legend>
+            <p class="pm-hint">
+                Leave every box clear for a role that spans the project
+                (<code>owner</code>). <code>engineer</code> and <code>trade</code>
+                must name at least one, or the pass is refused &mdash; an empty
+                scope that could mean &ldquo;all&rdquo; or &ldquo;none&rdquo; is
+                not something to resolve later.
+            </p>
+            {% for discipline in disciplines %}
+            <label class="pm-choice">
+                <input type="checkbox" name="disciplines" value="{{ discipline }}"
+                       data-ui-ref="manage.access.discipline">
+                <span>{{ discipline }}</span>
+            </label>
+            {% endfor %}
+        </fieldset>
+
+        <fieldset class="pm-field">
+            <legend>Expires</legend>
+            {% for preset in expiry_presets %}
+            <label class="pm-choice">
+                <input type="radio" name="expires_in" value="{{ preset }}"
+                       {% if preset == '24h' %}checked{% endif %}>
+                <span>{{ preset }}</span>
+            </label>
+            {% endfor %}
+            <label class="pm-field pm-field--inline">
+                <span>or a date</span>
+                <input type="date" name="expires_on"
+                       data-ui-ref="manage.access.expires-on">
+            </label>
+            <p class="pm-hint">
+                A date expires at the end of that day, UTC &mdash; a pass written
+                down as &ldquo;until Jan 21&rdquo; should still work on Jan 21.
+            </p>
+        </fieldset>
+
+        <button type="submit" class="pm-submit"
+                data-ui-ref="manage.access.generate">Generate access link</button>
+    </form>
+</section>
+
+<section class="pm-table-wrap">
+    <h2>Passes</h2>
+    {% if not passes %}
+    <p class="pm-empty">No passes have been issued for this project.</p>
+    {% else %}
+    <table class="pm-table" data-ui-ref="manage.access.table">
+        <thead>
+            <tr>
+                <th scope="col">Name</th>
+                <th scope="col">Role</th>
+                <th scope="col">Disciplines</th>
+                <th scope="col">Expires</th>
+                <th scope="col">Status</th>
+                <th scope="col"><span class="pm-sr">Actions</span></th>
+            </tr>
+        </thead>
+        <tbody>
+            {# Revoked and expired rows are KEPT. The table answers "who has
+               access"; one that dropped withdrawn passes could not answer
+               "who used to", which is the question asked after an incident. #}
+            {% for entry in passes %}
+            <tr class="pm-row pm-row--{{ entry.status }}">
+                <td>{{ entry.token.label }}</td>
+                <td><code>{{ entry.token.role }}</code></td>
+                <td>{{ entry.token.disciplines or 'all' }}</td>
+                <td>{{ entry.token.expires_at.strftime('%Y-%m-%d %H:%M') }} UTC</td>
+                <td><span class="pm-status pm-status--{{ entry.status }}">{{ entry.status }}</span></td>
+                <td>
+                    {% if entry.status == 'active' %}
+                    <form method="post" class="pm-revoke"
+                          action="{{ url_for('project_manage.revoke_access_pass', project_id=project_id, token_id=entry.token.id) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="pm-revoke-btn"
+                                data-ui-ref="manage.access.revoke">Revoke now</button>
+                    </form>
+                    {% else %}
+                    <span class="pm-dash" aria-hidden="true">&mdash;</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
+</section>
+
+{% include "components/public_footer.html" %}
+
+</body>
+</html>

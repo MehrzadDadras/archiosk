@@ -1,0 +1,53 @@
+{# CLAUDE-RBAC-TOKENS-03 — bidding marketplace, SCAFFOLD ONLY.
+
+   Nothing below renders while `ENABLE_BIDDING_PORTAL` is False, which is its
+   committed value. The guard is the `{% if %}` on the very next line: when the
+   flag is off Jinja emits NOTHING, so there is no element to click, focus,
+   read in devtools, or reveal by overriding a stylesheet.
+
+   That is why the guard is here and not in CSS. `display: none; visibility:
+   hidden` would still ship the markup to every visitor — hidden is not absent.
+   The `.bidding-portal` rules in main.css are defence in depth for the case
+   where somebody turns the flag on before the component is finished; they are
+   not the mechanism.
+
+   WHAT THIS IS NOT, YET. There is no route behind any of these controls, no
+   model, no persistence, and no submission path. Every button below is
+   `disabled` and carries `tabindex="-1"` and `aria-hidden="true"` — a
+   scaffold that could be tabbed into and pressed would be a promise the
+   product cannot keep. Building the real thing is a separate authorization.
+
+   Audience, recorded: services/project_rbac.py's BIDDING_PORTAL_ROLES — the
+   `trade` and `owner` roles, and no others. `architect` is deliberately absent:
+   the architect ISSUES the work, and a marketplace that let the issuer bid
+   would be a conflict of interest built into the software.
+#}
+{% if bidding_portal_visible %}
+<section class="bidding-portal" data-ui-ref="bidding.portal"
+         aria-labelledby="bidding-portal-heading">
+    <header class="bidding-portal-head">
+        <h2 id="bidding-portal-heading">Bidding</h2>
+        <span class="bidding-portal-state">Not open</span>
+    </header>
+
+    <p class="bidding-portal-note">
+        This project is not accepting bids. Nothing here is live &mdash; no
+        package has been issued, and no submission is possible.
+    </p>
+
+    <ul class="bidding-portal-list">
+        {# Deliberately empty. A scaffold showing invented example packages
+           would be a fabricated record of work that does not exist. #}
+        <li class="bidding-portal-empty">No bid packages issued.</li>
+    </ul>
+
+    <div class="bidding-portal-actions">
+        <button type="button" class="bidding-portal-act" disabled
+                tabindex="-1" aria-hidden="true"
+                data-ui-ref="bidding.portal.submit">Submit a bid</button>
+        <button type="button" class="bidding-portal-act" disabled
+                tabindex="-1" aria-hidden="true"
+                data-ui-ref="bidding.portal.watch">Watch this package</button>
+    </div>
+</section>
+{% endif %}

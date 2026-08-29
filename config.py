@@ -37,6 +37,43 @@ class BaseConfig:
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     REGISTRY_STORE_PATH = os.getenv("REGISTRY_STORE_PATH") or str(BASE_DIR / "instance" / "registry")
 
+    # CLAUDE-RBAC-TOKENS-01. Drawing sheets live HERE, under instance/, and
+    # never under static/. That is the whole protection: Flask serves static/
+    # with no authorization at all (measured - /static/nipigon/A204.svg
+    # answered 200 unauthenticated), so a role check on a route beside a
+    # world-readable tree stops nobody. Bytes are reachable only through
+    # routes/project_assets.py, which authorizes first.
+    PROJECT_ASSET_PATH = os.getenv("PROJECT_ASSET_PATH") or str(BASE_DIR / "instance" / "project_assets")
+
+    # CLAUDE-RBAC-TOKENS-03. The bidding marketplace is SCAFFOLD ONLY and this
+    # flag is the switch. It is False, and while it is False the component's
+    # markup is NEVER RENDERED - not rendered-and-hidden.
+    #
+    # That distinction is the whole point. `display: none; visibility: hidden`
+    # leaves the element in the DOM: it is readable in devtools, it ships to
+    # every visitor, one overriding stylesheet or one `hidden` attribute
+    # removed brings it back, and any route behind it stays live regardless of
+    # what CSS says. A server-side gate means there is nothing on the page to
+    # reveal. The CSS in main.css is defence in depth behind this, never the
+    # mechanism.
+    #
+    # Deliberately not read from the environment: a marketplace must not be
+    # switchable by a stray env var on a host somebody forgot about. Turning it
+    # on is a code change, reviewed, with its own authorization.
+    ENABLE_BIDDING_PORTAL = False
+
+    # CLAUDE-TRIAL-SAFE-LANDING-01. How many model-backed queries a trial
+    # project gets before the safe landing. Only OUTBOUND LLM calls are
+    # metered - reading drawings, zooming, panning and navigating are never
+    # counted and never blocked, which is the entire promise of the message.
+    TRIAL_QUERY_ALLOWANCE = int(os.getenv("TRIAL_QUERY_ALLOWANCE", "50"))
+
+    # Where the "contact admin" link points. A real default rather than an
+    # empty string: an unconfigured address here would render a mailto: to
+    # nowhere, which reads as a dead end at precisely the moment the product
+    # is promising help.
+    ADMIN_CONTACT_EMAIL = os.getenv("ADMIN_CONTACT_EMAIL", "admin@archiosk.com")
+
     # -- Upload / parsing limits ------------------------------------------
     MAX_CONTENT_LENGTH = int(os.getenv("MAX_UPLOAD_MB", "25")) * 1024 * 1024
     # CLAUDE-SPREADSHEET-SOURCE-ELIGIBILITY-01: .xlsx added here - a real,
@@ -148,6 +185,7 @@ class TestingConfig(BaseConfig):
     # say. A fixed path rather than a per-process temp dir so the artifacts stay
     # inspectable after a failure.
     REGISTRY_STORE_PATH = str(BASE_DIR / "instance" / "test_registry")
+    PROJECT_ASSET_PATH = str(BASE_DIR / "instance" / "test_project_assets")
     SESSION_COOKIE_SECURE = False
     # Hermetic tests must never attempt a real SMTP connection based on
     # whatever the developer's local .env happens to have configured -

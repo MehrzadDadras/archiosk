@@ -1,0 +1,168 @@
+/* CLAUDE-RBAC-TOKENS-04 - the access panel and the stakeholder entry page.
+   Consumes tokens.css rather than carrying raw hex, so these surfaces cannot
+   drift from the governed palette. */
+:root {
+    --pm-ink: var(--text-primary);
+    --pm-ink-2: var(--text-secondary);
+    --pm-ink-3: var(--text-metadata);
+    --pm-page: var(--canvas);
+    --pm-surface: var(--surface-primary);
+    --pm-surface-2: var(--surface-secondary);
+    --pm-line: var(--border);
+    --pm-machine: var(--machine-blue);
+    --pm-attention: var(--attention-amber);
+    --pm-seal: var(--seal-red);
+}
+* { box-sizing: border-box; }
+body.pm {
+    margin: 0;
+    padding: 20px 18px 60px;
+    background: var(--pm-page);
+    color: var(--pm-ink);
+    font: 14px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+.pm-head { max-width: 760px; margin: 0 0 22px; }
+.pm-head h1 { margin: 0 0 4px; font-size: 20px; }
+.pm-project { margin: 0 0 8px; font-family: ui-monospace, monospace; color: var(--pm-ink-2); }
+.pm-note { margin: 0; font-size: 12.5px; color: var(--pm-ink-3); max-width: 62ch; }
+.pm-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+
+.pm-error {
+    max-width: 760px; margin: 0 0 18px; padding: 10px 13px;
+    border: 1px solid var(--pm-seal); border-radius: 4px;
+    color: var(--pm-ink); font-size: 13px;
+}
+
+/* The one-time link. Deliberately the loudest thing on the page, because it
+   cannot be recovered: the raw token was never stored. */
+.pm-issued {
+    max-width: 760px; margin: 0 0 22px; padding: 14px 16px;
+    border: 2px solid var(--pm-attention); border-radius: 5px;
+    background: var(--pm-surface-2);
+}
+.pm-issued h2 { margin: 0 0 6px; font-size: 15px; }
+.pm-issued-warn { margin: 0 0 10px; font-size: 12.5px; color: var(--pm-ink-2); }
+.pm-issued-link {
+    width: 100%; padding: 9px 11px;
+    font-family: ui-monospace, monospace; font-size: 12.5px;
+    color: var(--pm-ink); background: var(--pm-surface);
+    border: 1px solid var(--pm-line); border-radius: 4px;
+}
+
+.pm-form-wrap, .pm-table-wrap, .pm-sheets { max-width: 760px; margin: 0 0 28px; }
+.pm-form-wrap h2, .pm-table-wrap h2, .pm-sheets h2 { font-size: 15px; margin: 0 0 10px; }
+.pm-form { display: flex; flex-direction: column; gap: 16px; }
+.pm-field { display: flex; flex-direction: column; gap: 6px; border: 0; padding: 0; margin: 0; }
+.pm-field--inline { flex-direction: row; align-items: center; gap: 9px; margin-top: 8px; }
+.pm-field legend { padding: 0; font-weight: 700; font-size: 13px; }
+.pm-field > span { font-size: 12.5px; color: var(--pm-ink-2); }
+.pm-field input[type="text"], .pm-field input[type="date"] {
+    padding: 9px 11px; font: inherit;
+    color: var(--pm-ink); background: var(--pm-surface);
+    border: 1px solid var(--pm-line); border-radius: 4px;
+}
+.pm-choice { display: inline-flex; align-items: center; gap: 6px; margin: 4px 14px 4px 0; font-size: 13px; }
+.pm-hint { margin: 6px 0 0; font-size: 12px; color: var(--pm-ink-3); max-width: 62ch; }
+.pm-submit {
+    align-self: flex-start; padding: 9px 18px; font: inherit; font-weight: 700;
+    color: var(--pm-surface); background: var(--pm-machine);
+    border: 1px solid var(--pm-machine); border-radius: 4px; cursor: pointer;
+}
+.pm-submit:focus-visible { outline: 2px solid var(--pm-ink); outline-offset: 2px; }
+
+.pm-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.pm-table th, .pm-table td {
+    text-align: left; padding: 8px 10px;
+    border-bottom: 1px solid var(--pm-line); vertical-align: middle;
+}
+.pm-table th { font-size: 11px; letter-spacing: .07em; text-transform: uppercase; color: var(--pm-ink-3); }
+
+/* Status differs in FORM as well as colour - an outline, an italic, a
+   strikethrough - so the table stays readable in greyscale, in print, and to a
+   reader who does not see the hue. Same discipline as the basis chips. */
+.pm-status {
+    display: inline-block; padding: 2px 8px; border-radius: 999px;
+    font-size: 11px; letter-spacing: .05em; text-transform: uppercase;
+    border: 1px solid currentColor;
+}
+.pm-status--active { color: var(--pm-machine); }
+.pm-status--expired { color: var(--pm-ink-3); font-style: italic; }
+.pm-status--revoked { color: var(--pm-seal); text-decoration: line-through; }
+.pm-row--revoked td, .pm-row--expired td { color: var(--pm-ink-3); }
+.pm-revoke { margin: 0; }
+.pm-revoke-btn {
+    padding: 5px 11px; font: inherit; font-size: 12px;
+    color: var(--pm-seal); background: transparent;
+    border: 1px solid var(--pm-seal); border-radius: 4px; cursor: pointer;
+}
+.pm-empty { color: var(--pm-ink-3); font-style: italic; }
+
+.pm-sheet-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.pm-sheet {
+    display: flex; align-items: baseline; gap: 10px;
+    padding: 11px 13px; text-decoration: none;
+    color: var(--pm-ink); background: var(--pm-surface);
+    border: 1px solid var(--pm-line); border-radius: 4px;
+}
+.pm-sheet:hover { border-color: var(--pm-machine); }
+.pm-sheet:focus-visible { outline: 2px solid var(--pm-machine); outline-offset: 2px; }
+.pm-sheet-mark { font-family: ui-monospace, monospace; font-weight: 700; }
+.pm-sheet-disc { font-size: 12px; color: var(--pm-ink-3); }
+
+/* The friction offer bar. One line, dismissible, never modal - a person who is
+   already frustrated must not have to fight a dialog as well. */
+.friction-offer {
+    position: fixed; left: 12px; right: 12px; bottom: 12px; z-index: 40;
+    display: flex; align-items: center; gap: 10px;
+    padding: 11px 13px; font-size: 13px;
+    color: var(--pm-ink); background: var(--pm-surface-2);
+    border: 1px solid var(--pm-machine); border-radius: 5px;
+}
+.friction-offer-act {
+    margin-left: auto; padding: 5px 12px; font: inherit; font-size: 12px;
+    color: var(--pm-surface); background: var(--pm-machine);
+    border: 1px solid var(--pm-machine); border-radius: 4px; cursor: pointer;
+}
+.friction-offer-dismiss {
+    padding: 2px 8px; font: inherit; font-size: 16px; line-height: 1;
+    color: var(--pm-ink-3); background: transparent; border: 0; cursor: pointer;
+}
+
+/* CLAUDE-PUBLIC-FOOTER-01 - the shared public footer.
+   Columns collapse to one at 375px rather than shrinking to unreadable
+   widths; a three-column grid on a phone gives three columns of two words. */
+.site-footer {
+    margin-top: 40px;
+    padding: 26px 18px 30px;
+    border-top: 1px solid var(--pm-line, currentColor);
+    font-size: 13px;
+    line-height: 1.6;
+}
+.site-footer-columns {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: 22px 32px;
+    max-width: 980px;
+}
+.site-footer-heading {
+    margin: 0 0 8px;
+    font-size: 11px;
+    letter-spacing: .09em;
+    text-transform: uppercase;
+    opacity: .7;
+}
+.site-footer-list { list-style: none; margin: 0; padding: 0; }
+.site-footer-list li { margin-bottom: 5px; opacity: .82; }
+/* A named capability is NOT a link and must not look like one - a
+   disabled-looking link invites a click and then refuses it. */
+.site-footer-list a { text-decoration: underline; }
+.site-footer-qualifier { opacity: .6; font-size: 12px; }
+.site-footer-legal {
+    margin: 24px 0 0;
+    font-size: 12px;
+    opacity: .6;
+    max-width: 980px;
+}
+@media (max-width: 420px) {
+    .site-footer-columns { grid-template-columns: 1fr; gap: 18px; }
+}

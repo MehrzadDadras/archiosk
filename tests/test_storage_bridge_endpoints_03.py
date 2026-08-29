@@ -293,12 +293,30 @@ class TheCsrfExemptionExistsAndIsNarrow(unittest.TestCase):
         source = (_ROOT / "app.py").read_text(encoding="utf-8")
         self.assertIn("csrf.init_app(app)", source)
 
-    def test_only_the_two_machine_blueprints_are_exempt(self):
+    def test_only_bearer_token_blueprints_are_exempt(self):
+        """Was: "only the TWO machine blueprints". The list is now four, and
+        the change is deliberate rather than drift.
+
+        CLAUDE-RBAC-TOKENS-01/02 added `project_assets_bp` and
+        `project_query_bp`. Both authenticate by BEARER TOKEN in a request
+        header, never by the session cookie - so the attack CSRF exists to
+        prevent does not apply to them: a browser will not attach an
+        X-Project-Token to a cross-site request, and an attacker who already
+        holds the token does not need the victim's browser at all.
+
+        What this test protects is NARROWNESS, not the number two. It is still
+        an exact allow-list, so a session-authenticated blueprint appearing
+        here fails immediately - which is the property worth keeping, and the
+        reason this is asserted by exact equality rather than by a count."""
         source = (_ROOT / "app.py").read_text(encoding="utf-8")
         exempted = [line.strip() for line in source.splitlines()
                     if "csrf.exempt(" in line]
-        self.assertEqual(sorted(exempted),
-                         ["csrf.exempt(api_bp)", "csrf.exempt(storage_bridge_bp)"])
+        self.assertEqual(sorted(exempted), [
+            "csrf.exempt(api_bp)",
+            "csrf.exempt(project_assets_bp)",
+            "csrf.exempt(project_query_bp)",
+            "csrf.exempt(storage_bridge_bp)",
+        ])
 
 
 class TheMigrationChainIsIntact(unittest.TestCase):

@@ -1,0 +1,62 @@
+{# CLAUDE-RBAC-TOKENS-04 - what a stakeholder sees when their link lands.
+
+   Only the sheets this pass permits are listed. A trade contractor scoped to
+   structural is never told an architectural sheet exists - a list showing
+   refused rows would leak the shape of the drawing set to everyone holding any
+   pass at all.
+
+   The token stays in the URL rather than being put into a session, so a
+   revocation takes effect on the very next click.
+#}<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>{{ project_id }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/tokens.css') }}?v={{ static_version }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/project_manage.css') }}?v={{ static_version }}">
+</head>
+<body class="pm pm--entry" data-project-id="{{ project_id }}"
+      data-project-token="{{ token }}">
+
+<header class="pm-head">
+    <h1>{{ project_id }}</h1>
+    <p class="pm-project">{{ label }} &middot; <code>{{ role }}</code></p>
+    <p class="pm-note">
+        Access until {{ expires_at.strftime('%Y-%m-%d %H:%M') }} UTC.
+        {% if disciplines %}
+        Scoped to {{ disciplines | join(', ') }}.
+        {% endif %}
+    </p>
+</header>
+
+<section class="pm-sheets">
+    <h2>Sheets</h2>
+    {% if not sheets %}
+    {# Honest: this pass permits nothing that is on disk. Saying so beats an
+       empty page that looks broken. #}
+    <p class="pm-empty">No sheets are available to this pass.</p>
+    {% else %}
+    <ul class="pm-sheet-list">
+        {% for sheet in sheets %}
+        <li>
+            <a class="pm-sheet"
+               href="{{ url_for('project_assets.project_sheet', project_id=project_id, sheet_id=sheet.sheet_id) }}?token={{ token }}"
+               data-sib="{{ sheet.sheet_id }}"
+               data-ui-ref="entry.sheet">
+                <span class="pm-sheet-mark">{{ sheet.sheet_id }}</span>
+                <span class="pm-sheet-disc">{{ sheet.discipline }}</span>
+            </a>
+        </li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+</section>
+
+{% include "_bidding_portal.html" %}
+
+{% include "components/public_footer.html" %}
+
+<script src="{{ url_for('static', filename='js/friction_telemetry.js') }}?v={{ static_version }}"></script>
+</body>
+</html>

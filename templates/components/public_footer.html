@@ -1,0 +1,67 @@
+{# CLAUDE-PUBLIC-FOOTER-01 — one footer, three honest columns.
+
+   EVERY LINK HERE POINTS AT SOMETHING THAT EXISTS. That is the whole
+   constraint on this file. A footer is where products quietly grow links to
+   pages nobody built — "Careers", "Docs", "Status" — and a dead link in the
+   footer of a product about evidence is a small lie in the worst possible
+   place.
+
+   So each entry is one of two kinds and never a third:
+     - a REAL route, resolved through url_for so it cannot rot silently; or
+     - a DESCRIPTION with no href, naming a capability that genuinely exists
+       inside the product but has no public page of its own yet.
+
+   The second kind is rendered as plain text, not as a disabled-looking link.
+   A greyed-out link invites a click and refuses it; a phrase does not pretend
+   to be anything.
+
+   Deliberately NOT included: social icons, a newsletter box, "About us", or a
+   status page. None of them exist.
+#}
+<footer class="site-footer" data-ui-ref="footer.public">
+    <nav class="site-footer-columns" aria-label="Footer">
+
+        <section class="site-footer-column">
+            <h2 class="site-footer-heading">ARCHIOSK Platform</h2>
+            <ul class="site-footer-list">
+                {# Real capabilities, no public pages yet - so they are named,
+                   not linked. Each one is a thing the product actually does. #}
+                <li>Vector coordination desk</li>
+                <li>Split-pane comparison</li>
+                <li>Proactive grounding officer</li>
+                <li><a href="{{ url_for('portal.explore') }}" data-ui-ref="footer.explore">Explore Archiosk</a></li>
+            </ul>
+        </section>
+
+        <section class="site-footer-column">
+            <h2 class="site-footer-heading">Practice &amp; Projects</h2>
+            <ul class="site-footer-list">
+                <li>Architect of record</li>
+                <li>Structural &amp; MEP coordination</li>
+                {# The pilot is named, not linked: reaching it requires a
+                   project pass, and a public link to a project page would
+                   promise access the footer cannot grant. #}
+                <li>Pilot: 1860 Alstep Dr <span class="site-footer-qualifier">(by invitation)</span></li>
+            </ul>
+        </section>
+
+        <section class="site-footer-column">
+            <h2 class="site-footer-heading">Standards &amp; Security</h2>
+            <ul class="site-footer-list">
+                <li>OBC / code compliance</li>
+                {# Not a marketing claim: drawing confidentiality is enforced
+                   in services/project_rbac.py and guarded by 104 tests. #}
+                <li>Project RBAC drawing confidentiality</li>
+                <li>
+                    <a href="mailto:{{ admin_contact_email | default('admin@archiosk.com') }}"
+                       data-ui-ref="footer.support">Support &amp; admin contact</a>
+                </li>
+            </ul>
+        </section>
+    </nav>
+
+    <p class="site-footer-legal">
+        &copy; {{ current_year | default(2026) }} ARCHIOSK. Confidential &amp;
+        Project-Scoped Spatial Coordination.
+    </p>
+</footer>

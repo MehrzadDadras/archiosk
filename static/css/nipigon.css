@@ -569,6 +569,13 @@ body.np[data-scene="surface"] .np-scene { display: none; }
 .np-bar-id b { font-family: var(--n-mono); font-size: 13px; color: var(--n-accent); }
 .np-bar-id span { font-size: 11px; color: var(--n-ink-3); }
 .np-bar-sel {
+    /* min-width:0 + ellipsis so a long selection label yields instead of
+       pushing the mic off the bar. A nowrap chip with margin-left:auto is
+       exactly the flex collision that squeezes a control out of reach on a
+       narrow phone - it does not overlap, it evicts. */
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
     margin-left: auto;
     font-size: 11px;
     padding: 4px 8px;

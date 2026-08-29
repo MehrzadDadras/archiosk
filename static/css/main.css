@@ -9640,3 +9640,37 @@ body {
 .capture-review-handle-ne { right: -7px; top: -7px; }
 .capture-review-handle-sw { left: -7px; bottom: -7px; }
 .capture-review-handle-se { right: -7px; bottom: -7px; }
+
+/* CLAUDE-RBAC-TOKENS-03 - bidding marketplace scaffold: DEFENCE IN DEPTH.
+
+   This is NOT the mechanism that keeps the component away from people. The
+   mechanism is config.ENABLE_BIDDING_PORTAL, checked server-side in
+   templates/_bidding_portal.html, so while the flag is off there is no markup
+   on the page at all - nothing to click, focus, read in devtools, or reveal by
+   overriding a stylesheet. Hidden is not absent, and only absent is safe.
+
+   These rules exist for the window where somebody turns the flag on before the
+   feature is finished. They make the scaffold inert rather than merely quiet:
+   pointer-events refuses the click, user-select refuses the drag, and the
+   markup's own disabled/tabindex=-1/aria-hidden refuse the keyboard and the
+   screen reader. A scaffold that could be pressed is a promise the product
+   cannot keep. */
+.bidding-portal {
+    pointer-events: none;
+    user-select: none;
+    opacity: .55;
+}
+.bidding-portal .bidding-portal-act {
+    pointer-events: none;
+    cursor: not-allowed;
+}
+.bidding-portal-state {
+    font-size: .75rem;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--text-metadata);
+}
+.bidding-portal-empty {
+    color: var(--text-metadata);
+    font-style: italic;
+}

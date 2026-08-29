@@ -203,6 +203,17 @@ body.cl[data-scene="surface"] .cl-scene { display: none; }
 .cl-voice-status[data-state="error"] { color: var(--w-ink); font-style: italic; }
 .cl-voice-status:empty { display: none; }
 
+/* CLAUDE-HEADER-OVERLAP-01. The mic below is absolutely positioned at the
+   top-right of this header, so a long project name would run underneath it at
+   375px. Reserving the gutter is the fix; z-index would only decide WHICH of
+   two overlapping things you cannot read.
+
+   This is the real collision in this header. There is no clock widget anywhere
+   in this application to collide with - verified across templates/ and
+   static/js/, where the only matches are "clockwise" on rotation controls. */
+.cl-scene-project,
+.cl-scene-discipline { padding-right: 40px; }
+
 .cl-scene-project {
     font-size: 19px;
     font-weight: 700;

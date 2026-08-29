@@ -286,3 +286,138 @@ class DiagnosticReport(db.Model):
 
     def __repr__(self) -> str:
         return f"<DiagnosticReport {self.id} {self.status}>"
+
+
+class ProjectAccessToken(db.Model):
+    """CLAUDE-RBAC-TOKENS-01: which stakeholder may read which discipline of
+    which project, and until when.
+
+    THE SHAPE IS DELIBERATELY THE ONE THIS CODEBASE ALREADY USES, four times
+    over -- PasswordResetToken, VerificationAccessToken, StorageAgentEnrolment
+    and now this: only `token_hash` (a SHA-256 digest) is ever persisted. The
+    raw token exists once, in what the issuing architect is shown, and nowhere
+    after. There is no column here capable of holding a usable secret, which is
+    a stronger statement than a promise not to write one.
+
+    `project_id` is a plain string, not a foreign key, for the same reason
+    StorageAgentEnrolment's is: projects live in the flat-JSON registry store
+    and have no table to point at.
+
+    WHY THE DATABASE AND NOT THE FLAT-JSON STORE. Identical to
+    StorageAgentEnrolment's own recorded reasoning: `routes/portal.py`'s
+    Reset/Restore RENAMES the whole registry store directory away and installs
+    a staged replacement. An access grant living there would be destroyed by a
+    project-data reset -- silently widening or revoking access as a side effect
+    of an unrelated operation, which is the worst possible way for an
+    authorization record to change.
+
+    REVOKING IS NOT DELETING. `revoked_at` is set and the row stays. A
+    withdrawn credential must mean access stops, never that the record of who
+    could once read the drawings disappears.
+
+    `disciplines` is a comma-separated subset of services.project_rbac's own
+    closed DISCIPLINES vocabulary, or NULL meaning "every discipline". NULL is
+    only ever written for roles that genuinely span the project (architect,
+    owner); services.project_rbac.issue_token REFUSES to issue a scoped role
+    with no disciplines named, because an empty scope that could be read as
+    either "all" or "none" is not a thing to resolve later at read time.
+    """
+    __tablename__ = "project_access_tokens"
+
+    id = db.Column(db.Integer, primary_key=True)
+    project_id = db.Column(db.String(255), nullable=False, index=True)
+    role = db.Column(db.String(32), nullable=False)
+    disciplines = db.Column(db.String(255), nullable=True)
+    label = db.Column(db.String(255), nullable=False)
+    token_hash = db.Column(db.String(64), unique=True, nullable=False, index=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    created_by = db.Column(db.String(255), nullable=True)
+    expires_at = db.Column(db.DateTime, nullable=False)
+    revoked_at = db.Column(db.DateTime, nullable=True)
+    revoked_by = db.Column(db.String(255), nullable=True)
+    last_used_at = db.Column(db.DateTime, nullable=True)
+
+    def __repr__(self) -> str:
+        return (f"<ProjectAccessToken project={self.project_id} role={self.role} "
+                f"revoked={self.revoked_at is not None}>")
+
+
+class ArchitectEscalation(db.Model):
+    """CLAUDE-RBAC-TOKENS-02: a question GO could not answer, handed to a human.
+
+    WHEN GO CANNOT RESOLVE something, the honest reply is that it cannot ("Sorry,
+    this is out of my league. Help is underway.") and the useful action is to put
+    the question in front of the project's architect with enough context to answer
+    it quickly. This row IS that queue.
+
+    WHY THE DATABASE AND NOT THE FLAT-JSON STORE. Same reasoning DiagnosticReport
+    and StorageAgentEnrolment already record: `routes/portal.py`'s Reset/Restore
+    RENAMES the whole registry store directory away. An unanswered question must
+    not vanish because somebody reset project data - that is precisely the moment
+    somebody is waiting for a reply.
+
+    WHAT IT DELIBERATELY IS NOT. Not a message channel and not a notification
+    transport. Nothing here is emailed, pushed or sent anywhere; ARCHIOSK does not
+    dial out on a friction event. It is inert data an architect reads. Adding a
+    transport is a separate, consequential decision with its own authorization -
+    see services/email.py's own gating for the precedent.
+
+    `asked_by_role` and `project_id` are copied FROM the presenting token, never
+    from anything the caller typed. A trade contractor cannot file an escalation
+    that claims to be an architect's, or one belonging to another project, because
+    there is no parameter through which either could be supplied.
+
+    `query_text` is the person's own words, verbatim. It is stored as given and
+    never rewritten: an escalation that paraphrases the question makes the
+    architect answer a question nobody asked.
+    """
+    __tablename__ = "architect_escalations"
+
+    id = db.Column(db.Integer, primary_key=True)
+    project_id = db.Column(db.String(255), nullable=False, index=True)
+    token_id = db.Column(db.Integer, db.ForeignKey("project_access_tokens.id"),
+                         nullable=True, index=True)
+    asked_by_role = db.Column(db.String(32), nullable=False)
+    sheet_id = db.Column(db.String(64), nullable=True)
+    view_box = db.Column(db.String(128), nullable=True)
+    query_text = db.Column(db.Text, nullable=False)
+    friction_signal = db.Column(db.String(32), nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    resolved_at = db.Column(db.DateTime, nullable=True)
+    resolved_by = db.Column(db.String(255), nullable=True)
+
+    def __repr__(self) -> str:
+        return (f"<ArchitectEscalation project={self.project_id} "
+                f"sheet={self.sheet_id} resolved={self.resolved_at is not None}>")
+
+
+class TrialAllowance(db.Model):
+    """CLAUDE-TRIAL-SAFE-LANDING-01: how much model-backed work a trial project
+    has used.
+
+    ONE ROW PER PROJECT, counting OUTBOUND LLM CALLS ONLY. Nothing about
+    reading a drawing, zooming, panning, navigating sheets or opening a split
+    pane is recorded here or affected by it - that is the promise the safe
+    landing message makes ("the system allows you to get home safely"), and a
+    counter that also metered the viewer would quietly make it false.
+
+    WHY THE DATABASE. Same reasoning as ProjectAccessToken and
+    ArchitectEscalation: `routes/portal.py`'s Reset/Restore renames the whole
+    registry store away, so a quota living in the flat-JSON store would silently
+    reset itself - handing out unlimited trial usage to anyone who noticed.
+
+    `used_count` only ever increases. There is deliberately no decrement and no
+    expiry sweep: a trial allowance that quietly refilled would make the message
+    a lie the second time somebody saw it.
+    """
+    __tablename__ = "trial_allowances"
+
+    id = db.Column(db.Integer, primary_key=True)
+    project_id = db.Column(db.String(255), unique=True, nullable=False, index=True)
+    used_count = db.Column(db.Integer, nullable=False, default=0)
+    first_used_at = db.Column(db.DateTime, nullable=True)
+    exhausted_at = db.Column(db.DateTime, nullable=True)
+
+    def __repr__(self) -> str:
+        return (f"<TrialAllowance project={self.project_id} "
+                f"used={self.used_count} exhausted={self.exhausted_at is not None}>")

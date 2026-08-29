@@ -394,11 +394,23 @@ def _register_csrf(app: Flask) -> None:
     """
     from routes.api import api_bp
     from routes.storage_bridge import storage_bridge_bp
+    from routes.project_assets import project_assets_bp
+    from routes.project_query import project_query_bp
 
     csrf = CSRFProtect()
     csrf.init_app(app)
     csrf.exempt(api_bp)
     csrf.exempt(storage_bridge_bp)
+    # CLAUDE-RBAC-TOKENS-02. These endpoints authenticate by BEARER TOKEN in a
+    # request header, never by the session cookie, so the attack CSRF exists to
+    # stop does not apply: a browser will not attach an X-Project-Token to a
+    # cross-site request, and an attacker who already knows the token does not
+    # need the victim's browser at all. Exempting them is correct rather than
+    # convenient - and per this function's own warning above, omitting it would
+    # have passed every local test (CSRF is disabled in the testing config) and
+    # failed on the first real POST in production.
+    csrf.exempt(project_assets_bp)
+    csrf.exempt(project_query_bp)
 
 
 def get_csp_nonce() -> str:
@@ -478,6 +490,10 @@ def _register_blueprints(app: Flask) -> None:
     from routes.storage_bridge import storage_bridge_bp
     from routes.calm_lake_prototype import calm_lake_bp
     from routes.nipigon_coordination import nipigon_bp
+    from routes.project_assets import project_assets_bp
+    from routes.project_manage import project_manage_bp
+    from routes.project_entry import project_entry_bp
+    from routes.project_query import project_query_bp
 
     app.register_blueprint(portal_bp)
     app.register_blueprint(api_bp, url_prefix="/api/v1")
@@ -495,6 +511,21 @@ def _register_blueprints(app: Flask) -> None:
     # `git rm` plus these two lines when it concludes.
     app.register_blueprint(calm_lake_bp)
     app.register_blueprint(nipigon_bp)
+    # CLAUDE-RBAC-TOKENS-01: the ONLY path to a project drawing sheet. No
+    # url_prefix - it carries its own /project/<id>/sheet/<id> path. It reads
+    # from instance/project_assets/, never from static/, because Flask serves
+    # static/ with no authorization at all and a role check beside a
+    # world-readable tree stops nobody.
+    app.register_blueprint(project_assets_bp)
+    # CLAUDE-RBAC-TOKENS-04: the architect's pass panel (session-gated,
+    # renders no drawing content) and the stakeholder entry page an
+    # issued link lands on (token-gated).
+    app.register_blueprint(project_manage_bp)
+    app.register_blueprint(project_entry_bp)
+    # CLAUDE-TRIAL-SAFE-LANDING-01: the ONLY route that spends trial
+    # allowance. Deliberately separate from the asset/entry blueprints,
+    # so no quota state can reach the viewer.
+    app.register_blueprint(project_query_bp)
 
 
 def _register_error_handlers(app: Flask) -> None:
