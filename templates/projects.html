@@ -41,7 +41,15 @@
     {% endif %}
 </form>
 
+{# CLAUDE-FISH-TANK-01: the tank supplies the bounded canvas and the scope
+   HUD. The cards inside are NOT flattened into tank.node - they carry
+   requirement counts, open RFIs and attention flags that the node macro has
+   no room for, and unifying a container must never cost information. #}
+{% import "components/fish_tank_container.html" as tank %}
 {% if projects %}
+<section class="tank" data-ui-ref="tank.container">
+    {{ tank.scope_hud([{'label': 'Projects'}]) }}
+    <div class="tank-canvas">
 <ul class="project-card-list" data-ui-ref="projects-directory.list">
     {% for p in projects %}
     <li class="project-card">
@@ -74,6 +82,9 @@
     </li>
     {% endfor %}
 </ul>
+    </div>
+    <p class="tank-caption">{{ projects | length }} project(s)</p>
+</section>
 {% else %}
 <div class="projects-empty" data-ui-ref="projects-directory.empty">
     {% if query %}
@@ -86,4 +97,6 @@
     {% endif %}
 </div>
 {% endif %}
+
+{% include "components/public_footer.html" %}
 {% endblock %}

@@ -15,6 +15,7 @@
     <title>{{ project_id }}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/tokens.css') }}?v={{ static_version }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/project_manage.css') }}?v={{ static_version }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/fish_tank.css') }}?v={{ static_version }}">
 </head>
 <body class="pm pm--entry" data-project-id="{{ project_id }}"
       data-project-token="{{ token }}">
@@ -30,28 +31,28 @@
     </p>
 </header>
 
-<section class="pm-sheets">
-    <h2>Sheets</h2>
-    {% if not sheets %}
-    {# Honest: this pass permits nothing that is on disk. Saying so beats an
-       empty page that looks broken. #}
-    <p class="pm-empty">No sheets are available to this pass.</p>
-    {% else %}
-    <ul class="pm-sheet-list">
-        {% for sheet in sheets %}
-        <li>
-            <a class="pm-sheet"
-               href="{{ url_for('project_assets.project_sheet', project_id=project_id, sheet_id=sheet.sheet_id) }}?token={{ token }}"
-               data-sib="{{ sheet.sheet_id }}"
-               data-ui-ref="entry.sheet">
-                <span class="pm-sheet-mark">{{ sheet.sheet_id }}</span>
-                <span class="pm-sheet-disc">{{ sheet.discipline }}</span>
-            </a>
-        </li>
-        {% endfor %}
-    </ul>
-    {% endif %}
-</section>
+{# CLAUDE-FISH-TANK-01: the sheet directory is the clearest case for the
+   shared container - a bounded set of things you pick one of. Every node is
+   the whole link, so choosing a sheet is one tap anywhere on the card rather
+   than a hunt for a target inside it.
+
+   The HUD reads [project] > Sheets. There is no organisation level above it
+   here because this page is reached by a project-scoped pass and the bearer
+   has no standing above the project - inventing an [Org] crumb they cannot
+   click would be chrome pretending to be navigation. #}
+{% import "components/fish_tank_container.html" as tank %}
+{% call tank.fish_tank(
+       trail=[{'label': project_id}, {'label': 'Sheets'}],
+       caption=(sheets | length | string) + ' sheet(s) available to this pass',
+       empty='No sheets are available to this pass.') %}
+    {% for sheet in sheets %}
+    {{ tank.node(
+        href=url_for('project_assets.project_sheet', project_id=project_id, sheet_id=sheet.sheet_id) ~ '?token=' ~ token,
+        mark=sheet.sheet_id,
+        title=sheet.discipline,
+        ui_ref='entry.sheet') }}
+    {% endfor %}
+{% endcall %}
 
 {% include "_bidding_portal.html" %}
 

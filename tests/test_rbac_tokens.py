@@ -1364,5 +1364,161 @@ class ByokOverrideTests(_SafeLandingTestCase):
         self.assertEqual(body["sheets_in_scope"], ["RS501"])
 
 
+# ===========================================================================
+# CLAUDE-FISH-TANK-01 / CLAUDE-PUBLIC-FOOTER-01
+# ===========================================================================
+class FishTankContainerTests(_ManagePanelTestCase):
+    def test_the_sheet_directory_renders_inside_the_tank(self):
+        _id, raw = self._issue("architect")
+        body = self.flask_app.test_client().get(
+            f"/project/{PILOT_PROJECT_ID}?token={raw}").get_data(as_text=True)
+        self.assertIn('data-ui-ref="tank.container"', body)
+        self.assertIn("tank-canvas", body)
+        self.assertIn("tank-grid", body)
+
+    def test_every_node_is_the_whole_link_not_a_card_with_a_button_in_it(self):
+        """A card that is decorative except for a button inside it teaches
+        people to aim, and aiming is what fails on a phone held at arm's length
+        on a site. It also keeps keyboard and screen-reader support for free."""
+        import re
+
+        _id, raw = self._issue("architect")
+        body = self.flask_app.test_client().get(
+            f"/project/{PILOT_PROJECT_ID}?token={raw}").get_data(as_text=True)
+        nodes = re.findall(r'<a class="tank-node[^"]*"[^>]*>(.*?)</a>', body, re.S)
+        self.assertTrue(nodes, "no tank nodes rendered")
+        for node in nodes:
+            with self.subTest(node=node[:40]):
+                self.assertNotIn("<button", node)
+                self.assertNotIn("<a ", node)
+
+    def test_the_hud_marks_the_current_step_rather_than_linking_to_it(self):
+        """A breadcrumb whose final crumb navigates to the page you are on is
+        a control that does nothing."""
+        _id, raw = self._issue("architect")
+        body = self.flask_app.test_client().get(
+            f"/project/{PILOT_PROJECT_ID}?token={raw}").get_data(as_text=True)
+        self.assertIn('aria-label="Breadcrumb"', body)
+        self.assertIn('aria-current="page"', body)
+
+    def test_the_tank_scopes_to_what_the_pass_permits(self):
+        """The container changes nothing about authorisation: a structural
+        trade sees one node, not four with three refused."""
+        _id, raw = self._issue("trade", disciplines=["structural"])
+        body = self.flask_app.test_client().get(
+            f"/project/{PILOT_PROJECT_ID}?token={raw}").get_data(as_text=True)
+        self.assertIn("RS501", body)
+        self.assertNotIn("A204", body)
+        self.assertIn("1 sheet(s) available", body)
+
+    def test_an_empty_tank_says_what_is_missing(self):
+        """A blank bounded box reads as a loading failure, which is a worse
+        answer than "nothing here yet"."""
+        # Exercised through the real page: a pass scoped to a discipline that
+        # has nothing on disk.
+        _id, raw = self._issue("engineer", disciplines=["landscape"])
+        body = self.flask_app.test_client().get(
+            f"/project/{PILOT_PROJECT_ID}?token={raw}").get_data(as_text=True)
+        self.assertIn("tank-empty", body)
+        self.assertIn("No sheets are available to this pass.", body)
+
+    def test_the_multi_project_index_uses_the_same_container(self):
+        source = (Path(__file__).resolve().parents[1]
+                  / "templates" / "projects.html").read_text(encoding="utf-8")
+        self.assertIn("components/fish_tank_container.html", source)
+        self.assertIn('data-ui-ref="tank.container"', source)
+        # The rich cards survive: unifying a container must not cost
+        # information the node macro has no room for.
+        self.assertIn("project-card-list", source)
+        self.assertIn("unresolved_conflict_count", source)
+
+
+class FooterPlacementTests(_ManagePanelTestCase):
+    """Where the footer belongs, and - more importantly - where it must not."""
+
+    def test_the_footer_is_on_the_public_landing_page(self):
+        body = self.flask_app.test_client().get("/").get_data(as_text=True)
+        self.assertIn('data-ui-ref="footer.public"', body)
+        self.assertIn("ARCHIOSK Platform", body)
+        # Whitespace-normalised: the legal line wraps across two source lines,
+        # and asserting the rendered FORMATTING rather than the words would
+        # fail on a reflow that changed nothing anyone reads.
+        import re
+
+        flat = re.sub(r"\s+", " ", body)
+        self.assertIn("Confidential &amp; Project-Scoped Spatial Coordination.", flat)
+
+    def test_the_footer_is_on_the_access_panel(self):
+        body = self._architect().get(
+            f"/project/{PILOT_PROJECT_ID}/manage/access").get_data(as_text=True)
+        self.assertIn('data-ui-ref="footer.public"', body)
+
+    def test_the_footer_is_never_on_a_drawing_viewport(self):
+        """A coordination desk is full-bleed on purpose: every pixel of chrome
+        is a pixel of drawing somebody cannot see. Asserted against the
+        TEMPLATES, because these surfaces are developer-gated and a route-level
+        check would silently pass on a redirect."""
+        root = Path(__file__).resolve().parents[1] / "templates"
+        for name in ("nipigon_coordination.html", "calm_lake_prototype.html"):
+            with self.subTest(template=name):
+                source = (root / name).read_text(encoding="utf-8")
+                self.assertNotIn("public_footer", source)
+                self.assertNotIn("site-footer", source)
+
+    def test_the_footer_is_never_on_an_authentication_surface(self):
+        """Learned the hard way, in this session.
+
+        The footer was added to auth_shell.html and
+        tests/test_p40d1_auth_shell_isolation.py failed immediately - because
+        the footer NAMES A REAL PILOT PROJECT, and CLAUDE-P40-D1 exists
+        because a Product Owner screenshot once showed /login rendering
+        project names. That is an authentication-boundary disclosure, not a
+        styling complaint, and the shell is safe precisely because project
+        markup does not EXIST in it to leak.
+
+        Asserted here as well as there, because the two tests fail for
+        different reasons: that one checks for leaked markers generally, this
+        one names the specific door it came through."""
+        root = Path(__file__).resolve().parents[1] / "templates"
+        source = (root / "auth_shell.html").read_text(encoding="utf-8")
+        self.assertNotIn('include "components/public_footer.html"', source)
+        for path in ("/login", "/forgot-password"):
+            with self.subTest(path=path):
+                body = self.flask_app.test_client().get(path).get_data(as_text=True)
+                self.assertNotIn('data-ui-ref="footer.public"', body)
+                self.assertNotIn("Alstep", body)
+
+    def test_the_sheet_route_returns_bytes_not_a_page(self):
+        """The strongest form of "no footer on a drawing": the sheet endpoint
+        serves the asset itself, so there is no document to put chrome in."""
+        _id, raw = self._issue("architect")
+        response = self._get_sheet(raw, "A204")
+        self.assertEqual(response.status_code, 200)
+        body = response.get_data(as_text=True)
+        self.assertNotIn("site-footer", body)
+        self.assertNotIn("<footer", body)
+
+    def test_every_footer_entry_is_a_real_route_or_plain_text(self):
+        """A footer is where dead links breed, and a dead link in a product
+        about evidence is a lie in the worst possible place. Anything that is
+        not a resolvable route is rendered as text, never as a link."""
+        import re
+
+        body = self.flask_app.test_client().get("/").get_data(as_text=True)
+        start = body.index('data-ui-ref="footer.public"')
+        footer = body[start:body.index("</footer>", start)]
+        hrefs = re.findall(r'href="([^"]+)"', footer)
+        self.assertTrue(hrefs, "footer renders no links at all")
+        for href in hrefs:
+            with self.subTest(href=href):
+                self.assertFalse(href.startswith("#"), "placeholder anchor")
+                if href.startswith("mailto:"):
+                    continue
+                self.assertTrue(href.startswith("/"), href)
+                self.assertNotEqual(
+                    self.flask_app.test_client().get(href).status_code, 404,
+                    f"footer link 404s: {href}")
+
+
 if __name__ == "__main__":
     unittest.main()

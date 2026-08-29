@@ -828,6 +828,10 @@ def _register_context_processors(app: Flask) -> None:
         return {
             "draft_actions": available_actions(),
             "current_year": datetime.now(timezone.utc).year,
+            # CLAUDE-PUBLIC-FOOTER-01: the footer's support link reads
+            # this rather than hardcoding an address, so one config
+            # change moves it everywhere it appears.
+            "admin_contact_email": app.config.get("ADMIN_CONTACT_EMAIL", ""),
             "static_version": app.config["STATIC_VERSION"],
             # CLAUDE-CA1D-CSP-INLINE-SCRIPT-FIX-01: every inline <script>
             # tag needs this exact request's nonce (set_csp_header, above,

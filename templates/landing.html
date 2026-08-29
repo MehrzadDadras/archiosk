@@ -123,5 +123,8 @@
 <button type="button" id="landing-sound-toggle" class="landing-sound-toggle"
         data-ui-ref="landing.sound-toggle" aria-pressed="false"
         aria-label="Startup sound on - turn it off" hidden></button>
-<p class="landing-footer">&copy; {{ current_year }} Archiosk</p>
+{# CLAUDE-PUBLIC-FOOTER-01: was a bare copyright line. Replaced rather
+   than joined by the component, because two footers on one page is the
+   duplication this was meant to end. #}
+{% include "components/public_footer.html" %}
 {% endblock %}

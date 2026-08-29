@@ -129,5 +129,20 @@
        run/registered first, matching this shell's existing script-
        ordering pattern. #}
     <script src="{{ url_for('static', filename='js/ocean_field.js') }}?v={{ static_version }}"></script>
+{# NO PUBLIC FOOTER HERE, DELIBERATELY.
+
+   It was added and then removed the same day, because
+   tests/test_p40d1_auth_shell_isolation.py caught what it actually did: the
+   footer names a real pilot project, and CLAUDE-P40-D1 exists because a real
+   Product Owner screenshot once showed /login rendering project names - an
+   authentication-boundary disclosure, not a styling complaint.
+
+   The whole point of this shell is that project markup DOES NOT EXIST in it
+   to leak; CSS-hiding is explicitly not what makes it safe. A footer naming
+   "Pilot: 1860 Alstep Dr" on the sign-in page is that defect returning
+   through a different door.
+
+   The footer belongs on the public landing page and on authenticated
+   surfaces. Not here. #}
 </body>
 </html>

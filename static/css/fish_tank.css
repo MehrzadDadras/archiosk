@@ -1,0 +1,124 @@
+/* CLAUDE-FISH-TANK-01 — the spatial container, in one file.
+
+   Its own stylesheet rather than a block appended to main.css, because two
+   different shells need it: base.html (the project index) and the standalone
+   stakeholder pages, which deliberately do not load main.css. One file linked
+   twice beats the same rules pasted into two stylesheets that then drift.
+
+   Every colour is a token. Nothing here sets a raw hex, so the tank inherits
+   whichever appearance the reader has chosen and cannot fork the palette. */
+
+.tank {
+    margin: 0 0 26px;
+    max-width: 1100px;
+}
+
+/* ---- the HUD ---------------------------------------------------------
+   Reads as a trail, not as a toolbar: no borders, no buttons, just the path
+   with the current step non-interactive. */
+.tank-hud { margin: 0 0 10px; }
+.tank-hud-trail {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0 6px;
+    font-size: 12px;
+}
+.tank-hud-step { display: inline-flex; align-items: baseline; gap: 6px; min-width: 0; }
+.tank-hud-step a { color: var(--machine-blue); text-decoration: none; }
+.tank-hud-step a:hover { text-decoration: underline; }
+.tank-hud-step [aria-current] { color: var(--text-primary); font-weight: 700; }
+.tank-hud-sep { color: var(--text-metadata); }
+
+/* ---- the CANVAS ------------------------------------------------------
+   The bounded volume. A visible edge is the whole point: it makes a set of
+   things read as a SET rather than as items loose on a page. The inner shadow
+   is the "looking into" depth cue, and it is deliberately faint - depth here
+   is a hint, not a texture. */
+.tank-canvas {
+    padding: 16px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface-secondary);
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, .07);
+}
+.tank-grid {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+    gap: 12px;
+}
+.tank-empty {
+    margin: 0;
+    padding: 20px 4px;
+    color: var(--text-metadata);
+    font-style: italic;
+    text-align: center;
+}
+.tank-caption {
+    margin: 8px 2px 0;
+    font-size: 12px;
+    color: var(--text-metadata);
+}
+
+/* ---- a NODE ----------------------------------------------------------
+   The WHOLE card is the link. A card that is decorative except for a button
+   inside it teaches people to aim, and aiming is what fails on a phone held
+   at arm's length on a site. Being a real <a> also means keyboard and screen
+   reader support arrive for free rather than being re-implemented.
+
+   min-height 64px keeps every node comfortably past the 44px touch minimum
+   even when it carries a single short line. */
+.tank-node {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-height: 64px;
+    padding: 12px 14px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--surface-primary);
+    color: var(--text-primary);
+    text-decoration: none;
+    /* Only these two. Transitioning `all` would animate layout properties and
+       cost a paint on every hover, which is the opposite of the point. */
+    transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+.tank-node:hover {
+    border-color: var(--machine-blue);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, .10);
+}
+.tank-node:focus-visible {
+    outline: 2px solid var(--machine-blue);
+    outline-offset: 2px;
+}
+.tank-node-mark {
+    font-family: var(--font-mono, ui-monospace, monospace);
+    font-weight: 700;
+    font-size: 13px;
+    color: var(--machine-blue);
+}
+.tank-node-title { font-size: 14px; line-height: 1.35; }
+.tank-node-meta { font-size: 12px; color: var(--text-metadata); }
+
+/* Selected and unavailable differ in FORM as well as colour - a heavier edge,
+   a dashed edge - so both survive greyscale and a reader who does not see the
+   hue. Same discipline as the basis chips and the pass-status pills. */
+.tank-node--current {
+    border-width: 2px;
+    border-color: var(--machine-blue);
+}
+.tank-node--unresolved {
+    border-style: dashed;
+    color: var(--text-metadata);
+}
+
+@media (max-width: 420px) {
+    .tank-canvas { padding: 10px; }
+    .tank-grid { grid-template-columns: 1fr; gap: 8px; }
+}

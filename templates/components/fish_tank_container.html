@@ -1,0 +1,99 @@
+{# CLAUDE-FISH-TANK-01 — one spatial container for every set of things.
+
+   THE NAME IS THE SPECIFICATION. A fish tank is a bounded volume you look
+   INTO: it has edges you can see, the things inside sit at a depth, and
+   nothing floats out of it. That is the whole grammar, and it is why this is
+   one component rather than three similar-looking grids.
+
+   THREE PARTS, AND WHAT EACH ONE IS FOR
+
+     the HUD      where you are, as a trail. Persistent, so a person two levels
+                  down never has to reconstruct how they got there.
+     the CANVAS   the bounded volume. Its edge is visible, so a set of things
+                  reads as a set rather than as items loose on a page.
+     the NODES    what is inside. Every node is ONE TAP to its destination.
+
+   WHY THE NODE IS A LINK AND NOT A CARD WITH A BUTTON IN IT
+
+   A card that is decorative except for a "View" button inside it teaches
+   people to aim, and aiming is what fails on a phone at arm's length on a
+   site. The whole node is the target, it is a real <a>, and it therefore
+   works with a keyboard and with a screen reader for free. Any secondary
+   action lives OUTSIDE the node, never nested inside the link - a link
+   containing a button is invalid HTML and behaves differently in every
+   browser.
+
+   WHAT THIS DELIBERATELY DOES NOT DO
+
+   It renders no drawing and it must never be wrapped around a drawing
+   viewport. A coordination desk is full-bleed on purpose: every pixel of
+   chrome is a pixel of drawing somebody cannot see. The tank is for CHOOSING
+   a thing; once chosen, the thing gets the whole screen.
+
+   USAGE
+
+     {% import "components/fish_tank_container.html" as tank %}
+     {% call tank.fish_tank(trail=[{'label': 'Projects'}], caption='6 projects') %}
+        {{ tank.node(href=..., mark='A204', title='Ground Floor Plan',
+                     meta='architectural') }}
+     {% endcall %}
+#}
+
+{# ---- the HUD -------------------------------------------------------- #}
+{% macro scope_hud(trail) %}
+{% if trail %}
+<nav class="tank-hud" aria-label="Breadcrumb">
+    <ol class="tank-hud-trail">
+        {% for step in trail %}
+        <li class="tank-hud-step">
+            {# The LAST step is where you already are, so it is not a link.
+               A breadcrumb whose final crumb navigates to the current page is
+               a control that does nothing, and aria-current says so to a
+               screen reader rather than only to the eye. #}
+            {% if step.href and not loop.last %}
+            <a href="{{ step.href }}">{{ step.label }}</a>
+            {% else %}
+            <span aria-current="page">{{ step.label }}</span>
+            {% endif %}
+            {% if not loop.last %}<span class="tank-hud-sep" aria-hidden="true">&rsaquo;</span>{% endif %}
+        </li>
+        {% endfor %}
+    </ol>
+</nav>
+{% endif %}
+{% endmacro %}
+
+
+{# ---- the CANVAS ----------------------------------------------------- #}
+{% macro fish_tank(trail=None, caption=None, empty=None, css_class='') %}
+<section class="tank{% if css_class %} {{ css_class }}{% endif %}"
+         data-ui-ref="tank.container">
+    {{ scope_hud(trail) }}
+    <div class="tank-canvas">
+        {% set body = caller() %}
+        {% if body is not none and body | trim %}
+        <ul class="tank-grid">{{ body }}</ul>
+        {% else %}
+        {# An empty tank says what is missing. A blank bounded box reads as a
+           loading failure, which is a worse answer than "nothing here yet". #}
+        <p class="tank-empty">{{ empty or 'Nothing here yet.' }}</p>
+        {% endif %}
+    </div>
+    {% if caption %}
+    <p class="tank-caption">{{ caption }}</p>
+    {% endif %}
+</section>
+{% endmacro %}
+
+
+{# ---- a NODE --------------------------------------------------------- #}
+{% macro node(href, title, mark=None, meta=None, state=None, ui_ref='tank.node') %}
+<li class="tank-node-slot">
+    <a class="tank-node{% if state %} tank-node--{{ state }}{% endif %}"
+       href="{{ href }}" data-ui-ref="{{ ui_ref }}">
+        {% if mark %}<span class="tank-node-mark">{{ mark }}</span>{% endif %}
+        <span class="tank-node-title">{{ title }}</span>
+        {% if meta %}<span class="tank-node-meta">{{ meta }}</span>{% endif %}
+    </a>
+</li>
+{% endmacro %}
