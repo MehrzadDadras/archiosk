@@ -516,6 +516,20 @@ than being omitted. Structural is `inferred`, not `direct`, because only one of
 its two named numbering systems arrived and that disagreement is shown rather
 than reconciled.
 
+**DEPLOYED.** `9307bd3` is live on archiosk.com at `STATIC_VERSION=135`
+(measured live before at 133 and after at 135 — never assumed from the local
+file, which is per-host and git-ignored). Production was **13 commits behind**,
+not one: the live tree was pinned by CRLF-normalised checksum to `dec5efb` or
+an ancestor, so the deploy spanned `dec5efb..9307bd3` and carried Calm Lake,
+Nipigon, Decision Mechanics and this tranche. `68ed4bb` rode along as an
+ancestor. Rollback: `/var/www/archiosk-backup-pre-9307bd3` (764 files) and
+`.env.bak-pre-9307bd3`; no database backup needed because nothing in the range
+touches `migrations/` or `models.py` — re-verified across the TRUE range after
+first checking only `127b72f..9307bd3`, which is the one-commit mistake
+`deploy/DEPLOYMENT.md` step 7 warns about by name. Post-deploy sweep found
+`static/demo_vector_desk.html` answering 200 on the public web root; moved to
+`docs/demos/`. Full record: DPL-0005 Part 7.
+
 **Also:** the landing page's portrait centering defect was `content-box` +
 `min-height: 100dvh` + `8vh/10vh` padding = 118dvh; fixed with `border-box`
 scoped to `.landing-page`. The scene-1 grid axis now keys on `orientation`

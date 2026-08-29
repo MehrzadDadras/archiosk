@@ -95,7 +95,7 @@ emitted.
 
 ### The mechanism, demonstrated in isolation
 
-`static/demo_vector_desk.html` (new) is a single self-contained page showing
+`docs/demos/demo_vector_desk.html` (new) is a single self-contained page showing
 the two mechanics without the weight of a real 8 MB sheet: dynamic `viewBox`
 framing with independent pan/zoom per pane and live coordinate telemetry, and
 the split-pane coordination move where pressing `1/A801` frames the detail in
@@ -113,15 +113,23 @@ Three decisions inside it are worth recording:
   asked for a 1500 mm turning envelope; the verified A204 note records
   **1900** for room 104. Both appear, labelled. Quietly picking one would have
   been the opposite of what a coordination desk does.
-- **Self-contained means it will not run from `/static/`.** Measured, not
-  assumed: `app.py`'s `set_csp_header` is an `@app.after_request`, so it
-  applies to static responses too, and it sends `default-src 'self'` with
-  `script-src 'self' 'nonce-<per-request>'`. A static file cannot carry a
-  per-request nonce, and `style-src` is absent so inline styles fall back to
-  `default-src` as well — both the inline `<style>` and the inline `<script>`
-  would be refused. It runs from `file://`, and from
-  `tools/serve_https_harness.py`, which sends no CSP. The requirement was one
-  self-contained file; the constraint is stated rather than worked around.
+- **Self-contained means it will not run from `/static/` — so it does not
+  live there.** Measured, not assumed: `app.py`'s `set_csp_header` is an
+  `@app.after_request`, so it applies to static responses too, and it sends
+  `default-src 'self'` with `script-src 'self' 'nonce-<per-request>'`. A
+  static file cannot carry a per-request nonce, and `style-src` is absent so
+  inline styles fall back to `default-src` as well — both the inline `<style>`
+  and the inline `<script>` are refused. It runs from `file://`, and from
+  `tools/serve_https_harness.py`, which sends no CSP.
+
+  It shipped at `static/demo_vector_desk.html` in `9307bd3` and was found
+  answering **200** on the public web root during post-deploy verification.
+  Moved to `docs/demos/` (CLAUDE-DEMO-RELOCATE-01). The inert-markup problem
+  was the lesser half: a publicly-served page showing a plausible floor plan
+  labelled A204 is a provenance hazard whether or not its script runs, and
+  the banner saying the geometry is invented only helps a reader who reads
+  it. **Not publishing it is stronger than explaining it.** It is
+  documentation, and it now lives with the documentation.
 
 ### UNRESOLVED
 
@@ -507,6 +515,105 @@ go.chosen.asset %}` — a *raster crop* — while the `src` it rendered was
 false and silently deleted the entire GO affordance, with the vector it needed
 sitting right there on disk. A guard has to test the thing it guards; it now
 reads `{% if go.chosen and target_svg %}`.
+
+---
+
+---
+
+## Part 7 - Deployed to production
+
+**`9307bd3e435e8a3359d518b1920db56b8ecb1967`, live on `archiosk.com`,
+2026-08-29.**
+
+### What the deploy actually spanned
+
+Production was **13 commits behind**, not one. The live tree was pinned by
+checksum before anything was packaged, because no marker on the server records
+the deployed commit: `app.py`, `routes/portal.py`, `CONTINUATION_CHECKPOINT.md`
+and `MANIFEST.md` were CRLF-normalised and matched against history, which put
+live at **`dec5efb` or an ancestor** — confirmed independently by
+`templates/calm_lake_prototype.html`, `governance/decision-mechanics/CHARTER.md`
+and `tools/backup_holodeck_archive.ps1` all being absent from the live tree.
+
+The server holds **CRLF** copies of the same content: `git archive` run on this
+Windows host emits CRLF into the tarball. A naive `md5sum` comparison of a
+deployed file against `git show` therefore never matches, and reads as drift
+that is not there. Normalise before concluding anything.
+
+`dec5efb..9307bd3` — 13 commits, carrying the Calm Lake prototype, the Nipigon
+coordination surface, the Decision Mechanics programme, and this tranche.
+`68ed4bb` (the Canvas UI step the Product Owner explicitly disowned as a
+direction) was **not** previously deployed and rode along as an ancestor; it
+cannot be excluded from a deploy of `9307bd3` without rewriting history.
+
+### The gate that was nearly checked against the wrong range
+
+Steps 7 and 8 of `deploy/DEPLOYMENT.md` (pinned dependencies, schema changes)
+were first checked across `127b72f..9307bd3` — **one commit**, not thirteen.
+That is precisely the failure the runbook warns about in its own step 7: *"This
+was found before it caused an outage, but only because the deploy was being
+checked against the diff rather than run by rote."* Re-checked across the true
+`dec5efb..9307bd3` span:
+
+| Path | Changed? |
+|---|---|
+| `requirements.txt` | no |
+| `migrations/`, `models.py` | no |
+| `config.py`, `.env.example` | no |
+
+Both sections correctly skipped, and no database backup was required. Had any
+been non-empty, the first check would have said "skip" and been wrong.
+
+### Rollback point
+
+- **Code:** `/var/www/archiosk-backup-pre-9307bd3` (764 files), taken before
+  any write, excluding the persistent paths.
+- **Secrets:** `/var/www/archiosk/.env.bak-pre-9307bd3`, taken before the
+  `STATIC_VERSION` edit.
+- **No database backup**, correctly: nothing in the range touches
+  `migrations/` or `models.py`, so step 4's code-only rollback is a complete
+  reversal.
+
+### Verification performed
+
+Dry-run first: **0 deletions**, 848 entries, and the single persistent-path
+match was `.env.example` (tracked; documents variable *names*, never values).
+Real `.env`, `instance/`, `.venv/`, `.claude/`: zero. After the sync: service
+`active`, 14 workers, `/health` `ok`, `.env` and `instance/` intact, ownership
+`archiosk:archiosk`.
+
+Live content was then checked at the **new** asset URL, so a cache hit could
+not be mistaken for a successful deploy: `landing.css` carries the
+`box-sizing` fix, `voice_input.js` carries the secure-context guard,
+`landing.js` contains **zero** `SpeechRecognitionCtor` and does reference
+`ArchioskVoiceInput`. `/`, `/start-trial`, `/explore`, `/login` all 200;
+`/admin/nipigon/` 403 and `/admin/calm-lake/` 302, so the prototypes are not
+publicly reachable.
+
+### `STATIC_VERSION` 133 → 135
+
+`.env` is per-host and git-ignored, so nothing in the synced tree carries it
+and nothing in a diff can catch it being wrong. Production was measured
+serving **133** before the deploy and **135** after.
+
+Direction matters more than the number. The checkpoint's own recorded
+near-miss was a local bump to `124`, then `128`, both **below** what
+production was already serving — a downgrade leaves every browser on its
+cached stylesheet and looks exactly like a successful deploy. Measured live
+both before and after, never assumed from a local file.
+
+The edit itself was refused to this agent by the sandbox (a write to a
+production secrets file) and was performed by the Product Owner from the
+command line. Recorded because the refusal is correct behaviour worth
+preserving, not an obstacle that was worked around.
+
+### One defect found by verifying rather than by assuming
+
+`static/demo_vector_desk.html` shipped in this commit and answered **200** on
+the public web root. It was moved to `docs/demos/`
+(CLAUDE-DEMO-RELOCATE-01) — see Part 1. The post-deploy check that caught it
+was not looking for it; it was a routine sweep of what the deploy had made
+reachable. That sweep is worth keeping.
 
 ---
 

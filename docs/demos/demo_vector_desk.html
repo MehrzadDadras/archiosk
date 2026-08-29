@@ -50,14 +50,29 @@
   rather than arbitrary user units, and the turning envelope is literally 1500
   units across.
 
-  CSP
-  ---
-  Self-contained by requirement: one file, inline <style> and <script>, no
-  external anything. That means it runs from `file://` and NOT from Flask's
-  own `/static/` route, whose `default-src 'self'` (app.py, set_csp_header)
-  refuses an inline <style> and an inline <script> carrying no nonce. Open it
-  by double-clicking the file, or serve it from a host that sends no CSP -
-  `tools/serve_https_harness.py` does not.
+  WHERE THIS LIVES, AND WHY NOT IN static/
+  ----------------------------------------
+  It was briefly at `static/demo_vector_desk.html` and was moved out
+  (CLAUDE-DEMO-RELOCATE-01) after the deploy of 9307bd3 showed it answering
+  200 on the public web root.
+
+  Two reasons, and the second is the real one:
+
+    - It could not work there anyway. `app.py`'s `set_csp_header` is an
+      `@app.after_request`, so it applies to static responses too, and sends
+      `default-src 'self'` with `script-src 'self' 'nonce-<per-request>'`. A
+      static file cannot carry a per-request nonce, and `style-src` is absent
+      so inline styles fall back to `default-src` as well - both the inline
+      <style> and the inline <script> are refused. It rendered as inert
+      markup.
+    - A page serving a plausible-looking floor plan labelled A204, publicly,
+      is a provenance hazard regardless of whether its script runs. The banner
+      below says the geometry is invented; nothing guarantees a passer-by
+      reads it. Not publishing it is stronger than explaining it.
+
+  OPEN IT by double-clicking the file (file:// applies no CSP), or serve the
+  containing directory from `tools/serve_https_harness.py`, which sends none.
+  It is documentation, and it lives with the documentation.
   ============================================================================
 -->
 <style>
