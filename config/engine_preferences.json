@@ -1,0 +1,82 @@
+{
+  "_comment": [
+    "Engine DNA defaults. This file is the FALLBACK, not the state: a viewer's",
+    "own choices live in localStorage under ARCHIOSK_ENGINE_PREFS and win over",
+    "these values. Shipping the defaults as data rather than as literals in JS",
+    "means the starting posture of the engine is reviewable in a diff.",
+    "",
+    "Every preference here changes how a drawing is PRESENTED. None of them",
+    "changes a source document, a derived orientation, or a classification -",
+    "turning the semantic overlay off does not un-classify anything, it stops",
+    "drawing it."
+  ],
+  "version": 1,
+  "storage_key": "ARCHIOSK_ENGINE_PREFS",
+  "groups": [
+    {
+      "id": "theme",
+      "label": "Theme",
+      "preferences": [
+        {
+          "id": "theme",
+          "label": "Field",
+          "type": "choice",
+          "default": "gold-black",
+          "options": [
+            { "value": "gold-black", "label": "Gold on black" },
+            { "value": "slate", "label": "High-contrast paper" }
+          ],
+          "note": "Drawings with real colour are never re-tinted by either field."
+        }
+      ]
+    },
+    {
+      "id": "linework",
+      "label": "Linework",
+      "preferences": [
+        {
+          "id": "semantic_overlay",
+          "label": "Semantic overlays",
+          "type": "toggle",
+          "default": false,
+          "note": "RS-series beams and columns, where a text layer supports grounding. 11 of 49 sheets."
+        },
+        {
+          "id": "annotation_leaders",
+          "label": "Red annotations / leaders",
+          "type": "toggle",
+          "default": false,
+          "available": false,
+          "note": "Requires a text layer. Not derived for any sheet yet, so this stays off and disabled rather than presenting an empty layer as a working one."
+        }
+      ]
+    },
+    {
+      "id": "coordination",
+      "label": "Coordination",
+      "preferences": [
+        {
+          "id": "auto_center_on_summon",
+          "label": "Auto-centre on summon",
+          "type": "toggle",
+          "default": true,
+          "note": "GO centres the evidence it selected. You remain free to pan and zoom afterwards."
+        },
+        {
+          "id": "independent_sibling_stepping",
+          "label": "Independent sibling stepping",
+          "type": "toggle",
+          "default": true,
+          "note": "Stepping in Pane 2 never moves the anchored Pane 1."
+        },
+        {
+          "id": "strict_provenance_tooltips",
+          "label": "Strict provenance tooltips",
+          "type": "toggle",
+          "default": true,
+          "note": "Pointing cards carry the basis and the source file. Turning this off shows the classification without its grounding."
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,790 @@
+/* ============================================================
+   5 NIPIGON - Phase 2 Scenario 01
+
+   Loaded by exactly one template. main.css and calm_lake.css are both
+   untouched by this work and cannot be affected by it.
+
+   Same restraint as calm_lake.css and for the same reason: the ramp is a
+   cool near-neutral and NO hue carries meaning. Relationship basis -
+   direct / inferred / unresolved - is the one thing on this surface that
+   most tempts a traffic-light palette, and it is carried by weight, fill
+   and border form instead, so the distinction survives greyscale, print,
+   and a colour-blind reader.
+
+   The drawings themselves are the only strong marks on the page. Chrome
+   that competes with a construction drawing for attention is chrome that
+   has misunderstood what it is for.
+   ============================================================ */
+
+:root {
+    --n-ink: #1B2027;
+    --n-ink-2: #2E3742;
+    --n-ink-3: #4F5B69;
+    --n-page: #E9ECF0;
+    --n-surface: #F7F9FB;
+    --n-surface-2: #DFE4EA;
+    --n-surface-3: #CBD2DB;
+    --n-line: #7C8795;
+    --n-line-2: #6B7686;
+    --n-line-faint: #D5DBE3;
+
+    /* THE RESERVED EMPHASIS COLOUR.
+       --n-ink* is the TEXT ramp and carries no meaning. --n-accent is the one
+       token allowed to mean something, and it is spent only on: active
+       selection, Page-Field identity, focus, relationship traces, provenance
+       cues, and consequential attention. In the default theme it is simply the
+       ink, because that theme is monochrome by design. */
+    --n-accent: #1B2027;
+    --n-accent-dim: #4F5B69;
+    --n-on-accent: #F7F9FB;
+    --n-radius: 4px;
+    --n-fast: 130ms;
+    --n-ease: cubic-bezier(.33, 1, .68, 1);
+    --n-font: "Arial Nova Cond", "Arial Narrow", Arial, sans-serif;
+    --n-mono: "IBM Plex Mono", ui-monospace, "Courier New", monospace;
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; padding: 0; }
+
+body.np {
+    height: 100dvh;
+    overflow: hidden;
+    background: var(--n-page);
+    color: var(--n-ink);
+    font-family: var(--n-font);
+    font-size: 15px;
+    line-height: 1.45;
+    -webkit-font-smoothing: antialiased;
+}
+
+/* Two scenes, one at a time. display:none rather than offscreen, so the
+   scene that is not showing is not in the tab order either. */
+body.np[data-scene="field"] .np-surface { display: none; }
+body.np[data-scene="surface"] .np-scene { display: none; }
+
+/* ------------------------------------------------------------
+   SCENE 1
+   ------------------------------------------------------------ */
+
+.np-scene {
+    height: 100dvh;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    padding: 0 14px 22px;
+    padding-top: calc(16px + env(safe-area-inset-top, 0px));
+}
+
+.np-scene-head { display: flex; flex-direction: column; gap: 1px; padding: 4px 2px 16px; }
+.np-project { font-size: 19px; font-weight: 700; letter-spacing: -.01em; }
+.np-sub { font-size: 12px; color: var(--n-ink-3); }
+.np-sub--quiet { font-size: 11px; color: var(--n-line-2); }
+
+.np-warn {
+    margin: 0 0 14px;
+    padding: 9px 11px;
+    border: 1px solid var(--n-line);
+    border-left-width: 3px;
+    border-radius: var(--n-radius);
+    background: var(--n-surface-2);
+    font-size: 12px;
+}
+.np-warn code { font-family: var(--n-mono); font-size: 11px; }
+
+.np-field-grid {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px 12px;
+    max-width: 362px;
+    align-content: start;
+}
+
+/* Enumerated territory, not an inline custom property: the CSP refuses a
+   parsed style attribute, and the set of positions is small and closed. */
+.np-slot { min-width: 0; }
+.np-slot--r1 { grid-row: 1; } .np-slot--r2 { grid-row: 2; }
+.np-slot--r3 { grid-row: 3; } .np-slot--r4 { grid-row: 4; }
+.np-slot--c1 { grid-column: 1; } .np-slot--c2 { grid-column: 2; }
+
+.np-field {
+    width: 100%;
+    /* Pinned, not derived. The card must match Page-Field Specimens 01 and
+       02 at exactly 175.00 x 152.17px. Deriving the height from the face
+       aspect plus the strip put it 1.3px short, because border-box means the
+       face is 173px wide rather than 175 - and a tile whose height depends on
+       which font loaded is not a stable territory. The face takes the
+       remainder, so the strip stays legible and the box stays exact. */
+    height: 152.17px;
+    display: flex;
+    flex-direction: column;
+    padding: 0;
+    border: 1px solid var(--n-line);
+    border-radius: 3px;
+    background: var(--n-surface);
+    overflow: hidden;
+    cursor: pointer;
+    text-align: left;
+    /* transform is reserved for elevation. Nothing animates it at rest -
+       a running animation on transform would win the cascade over the
+       :focus-visible transform and delete the focus affordance. */
+    transition: transform var(--n-fast) var(--n-ease),
+                box-shadow var(--n-fast) var(--n-ease),
+                border-color var(--n-fast) var(--n-ease);
+    box-shadow: 0 1px 2px rgba(27, 32, 39, .06);
+}
+
+.np-field:hover,
+.np-field:focus-visible {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(27, 32, 39, .13);
+    border-color: var(--n-line-2);
+}
+.np-field:focus-visible { outline: 2px solid var(--n-accent); outline-offset: 2px; }
+.np-field:active { transform: translateY(0); }
+.np-field.is-anchor { border-color: var(--n-accent); border-width: 2px; }
+
+.np-face {
+    position: relative;
+    display: block;
+    flex: 1 1 auto;
+    min-height: 0;
+    background: #FFFFFF;
+    border-bottom: 1px solid var(--n-line);
+    overflow: hidden;
+}
+
+/* The sheet is portrait and the face is landscape. `cover` on the top edge
+   shows the drawing itself rather than letterboxing a whole E-size sheet
+   into a 170px box, where it would be a grey smudge. */
+.np-thumb {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: 50% 22%;
+}
+
+.np-face-absent {
+    display: grid;
+    place-items: center;
+    height: 100%;
+    font-size: 11px;
+    color: var(--n-ink-3);
+    font-style: italic;
+}
+
+.np-intake { display: block; width: 100%; height: 100%; background: var(--n-page); }
+.np-intake-frame {
+    fill: none; stroke: var(--n-line); stroke-width: 5;
+    stroke-dasharray: 22 18; opacity: .75;
+}
+.np-intake-cross { stroke: var(--n-accent); stroke-width: 12; stroke-linecap: round; opacity: .75; }
+.np-field--intake { border-style: dashed; background: transparent; }
+.np-field--intake .np-face { border-bottom-style: dashed; background: transparent; }
+
+/* Height is pinned, not left to the text metrics. The card must match
+   Specimens 01 and 02 at exactly 175.00 x 152.17px: the face is
+   175/(860/600) = 122.09, the two borders are 2, so the strip is 28.08.
+   Left to intrinsic sizing it came out 1.11px short, and a Page-Field
+   whose height depends on which font loaded is not a stable territory. */
+.np-strip {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    /* flex: none - as a flex child of the column it was shrinking below its
+       height and the card came out 1.3px short. */
+    flex: 0 0 28.08px;
+    height: 28.08px;
+    padding: 0 9px;
+    font-size: 11px;
+    line-height: 1.2;
+    min-width: 0;
+}
+.np-strip-id { font-family: var(--n-mono); font-weight: 700; flex: none; color: var(--n-accent); }
+.np-strip-sep { color: var(--n-line); flex: none; }
+.np-strip-title {
+    color: var(--n-ink-3);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;
+}
+
+.np-scene-foot { margin: 18px 2px 0; font-size: 11px; color: var(--n-ink-3); max-width: 362px; }
+
+/* ------------------------------------------------------------
+   SCENE 2
+   ------------------------------------------------------------ */
+
+.np-surface {
+    height: 100dvh;
+    display: grid;
+    grid-template-rows: auto 1fr auto auto auto;
+    overflow: hidden;
+}
+
+.np-bar {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 8px 12px;
+    padding-top: calc(8px + env(safe-area-inset-top, 0px));
+    background: var(--n-surface);
+    border-bottom: 1px solid var(--n-line);
+}
+
+.np-return {
+    flex: none;
+    display: grid; place-items: center;
+    width: 32px; height: 32px;
+    padding: 0;
+    border: 1px solid var(--n-line);
+    border-radius: var(--n-radius);
+    background: var(--n-surface-2);
+    color: var(--n-ink);
+    font-size: 20px; line-height: 1;
+    cursor: pointer;
+}
+.np-return:hover { background: var(--n-surface-3); }
+.np-return:focus-visible { outline: 2px solid var(--n-accent); outline-offset: 2px; }
+
+.np-bar-id { display: flex; flex-direction: column; min-width: 0; line-height: 1.2; }
+.np-bar-id b { font-family: var(--n-mono); font-size: 13px; color: var(--n-accent); }
+.np-bar-id span { font-size: 11px; color: var(--n-ink-3); }
+.np-bar-sel {
+    margin-left: auto;
+    font-size: 11px;
+    padding: 4px 8px;
+    color: var(--n-accent);
+    border: 1px solid var(--n-accent);
+    border-radius: 999px;
+    background: var(--n-surface-2);
+    white-space: nowrap;
+}
+
+/* Panes stack on mobile and sit side by side once there is room. Pane 1
+   never changes size when pane 2 opens on desktop - the anchor must not
+   reflow, or the reader loses the place they were coordinating from.
+
+   min-height is load-bearing on a phone. With the reasoning and provenance
+   panels both open the panes were squeezed to roughly 40px each, which is a
+   coordination view where you cannot see either drawing - the panels won
+   the space from the thing they are annotating. The drawings get a floor;
+   the panels scroll inside their own caps instead. */
+.np-panes { display: grid; grid-template-rows: 1fr; min-height: 46dvh; }
+body.np[data-split="none"] .np-pane--2 { display: none; }
+body.np:not([data-split="none"]) .np-panes { grid-template-rows: 1fr 1fr; }
+
+.np-pane {
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    min-height: 0;
+    min-width: 0;
+    background: var(--n-surface);
+    border-bottom: 1px solid var(--n-line);
+}
+
+.np-pane-head {
+    display: flex; align-items: baseline; gap: 8px;
+    padding: 5px 10px;
+    background: var(--n-surface-2);
+    border-bottom: 1px solid var(--n-line-faint);
+    font-size: 10.5px;
+}
+.np-pane-tag { font-weight: 700; text-transform: none; }
+.np-pane-sheet { color: var(--n-ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.np-pane-body {
+    min-height: 0;
+    overflow: auto;
+    display: grid;
+    place-items: center;
+    background: #FFFFFF;
+}
+
+.np-page { display: block; max-width: 100%; max-height: 100%; object-fit: contain; }
+
+.np-pane-empty { margin: 0; padding: 18px; font-size: 12px; color: var(--n-ink-3); text-align: center; }
+
+.np-pane-foot {
+    display: flex; align-items: center; gap: 6px;
+    padding: 5px 10px;
+    font-size: 10.5px;
+    border-top: 1px solid var(--n-line-faint);
+}
+.np-chip {
+    padding: 2px 7px;
+    color: var(--n-accent);
+    border: 1px solid var(--n-accent);
+    border-radius: 999px;
+    font-family: var(--n-mono);
+    font-size: 10px;
+}
+.np-chip--quiet { border-color: var(--n-line-faint); color: var(--n-ink-3); }
+.np-pane-note { margin-left: auto; color: var(--n-ink-3); font-style: italic; }
+
+/* Local sibling stepping, inside pane 2 only. */
+.np-siblings {
+    display: flex; align-items: center; gap: 6px;
+    padding: 5px 8px;
+    border-top: 1px solid var(--n-line-faint);
+    background: var(--n-surface-2);
+}
+.np-sib-list { list-style: none; margin: 0; padding: 0; display: flex; gap: 5px; overflow-x: auto; }
+.np-sib, .np-step {
+    padding: 3px 8px;
+    border: 1px solid var(--n-line);
+    border-radius: var(--n-radius);
+    background: var(--n-surface);
+    font-family: var(--n-mono);
+    font-size: 10.5px;
+    cursor: pointer;
+    white-space: nowrap;
+}
+.np-step { flex: none; font-family: var(--n-font); font-size: 14px; line-height: 1; padding: 2px 7px; }
+.np-sib.is-current { background: var(--n-accent); color: var(--n-on-accent); border-color: var(--n-accent); }
+.np-sib.is-target { border-width: 2px; border-color: var(--n-accent); }
+.np-sib:focus-visible, .np-step:focus-visible { outline: 2px solid var(--n-ink); outline-offset: 1px; }
+
+/* ------------------------------------------------------------
+   ACTIONS
+   ------------------------------------------------------------ */
+
+.np-actions { display: flex; gap: 6px; padding: 7px 10px; background: var(--n-surface); border-bottom: 1px solid var(--n-line); }
+.np-act {
+    flex: 1 1 auto;
+    padding: 8px 6px;
+    border: 1px solid var(--n-line);
+    border-radius: var(--n-radius);
+    background: var(--n-surface-2);
+    font-family: var(--n-font);
+    font-size: 11.5px;
+    cursor: pointer;
+}
+.np-act--go { border-width: 2px; border-color: var(--n-accent); font-weight: 700; color: var(--n-ink); }
+.np-act--quiet { flex: 0 0 auto; color: var(--n-ink-3); }
+.np-act:hover { background: var(--n-surface-3); }
+.np-act:focus-visible { outline: 2px solid var(--n-ink); outline-offset: 2px; }
+
+/* ------------------------------------------------------------
+   WHY THIS SURFACE / PROVENANCE
+   ------------------------------------------------------------ */
+
+.np-why, .np-prov {
+    padding: 9px 12px 12px;
+    background: var(--n-surface);
+    border-top: 1px solid var(--n-line);
+    max-height: 17dvh;
+    overflow-y: auto;
+}
+.np-why h2, .np-prov h2 { margin: 0 0 7px; font-size: 12px; }
+
+.np-cand { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.np-cand-item { padding: 7px 9px; border: 1px solid var(--n-line-faint); border-radius: var(--n-radius); }
+
+/* Basis by FORM, never hue. Direct is a solid heavy rule, inferred is
+   lighter, unresolved is dashed and unfilled - the same discipline the
+   citation vocabulary uses, so the three survive greyscale. */
+.np-cand-item--direct { border-left: 4px solid var(--n-accent); background: var(--n-surface-2); }
+.np-cand-item--inferred { border-left: 4px solid var(--n-ink-3); }
+.np-cand-item--unresolved { border-left: 4px dashed var(--n-line); background: transparent; }
+
+.np-cand-head { display: flex; align-items: baseline; gap: 8px; }
+.np-cand-target { font-family: var(--n-mono); font-size: 11.5px; font-weight: 700; color: var(--n-accent); }
+.np-basis { margin-left: auto; font-size: 10px; padding: 1px 7px; border-radius: 999px; }
+.np-basis--direct { background: var(--n-accent); color: var(--n-on-accent); }
+.np-basis--inferred { border: 1px solid var(--n-ink-3); color: var(--n-ink-2); }
+.np-basis--unresolved { border: 1px dashed var(--n-line); color: var(--n-ink-3); font-style: italic; }
+
+.np-cand-title { margin: 3px 0 4px; font-size: 11.5px; }
+.np-cand-ev { margin: 0; padding-left: 15px; font-size: 11px; color: var(--n-ink-2); }
+.np-cand-ev li { margin-bottom: 2px; }
+.np-why-foot, .np-prov-foot { margin: 8px 0 0; font-size: 10.5px; color: var(--n-ink-3); }
+
+.np-prov-table { width: 100%; border-collapse: collapse; font-size: 10.5px; }
+.np-prov-table th { text-align: left; font-weight: 700; padding: 3px 6px 3px 0; border-bottom: 1px solid var(--n-line); }
+.np-prov-table td { padding: 3px 6px 3px 0; vertical-align: top; border-bottom: 1px solid var(--n-line-faint); }
+.np-mono { font-family: var(--n-mono); font-size: 10px; word-break: break-all; }
+.np-sha { color: var(--n-ink-3); }
+.np-prov-verified td { color: var(--n-ink-3); font-style: italic; padding-bottom: 7px; }
+
+/* ------------------------------------------------------------
+   DESKTOP - panes go side by side, and pane 1 keeps its width
+   ------------------------------------------------------------ */
+
+@media (min-width: 900px) {
+    .np-scene { padding-left: 22px; padding-right: 22px; }
+    .np-panes { grid-template-rows: 1fr; grid-template-columns: 1fr; }
+    body.np:not([data-split="none"]) .np-panes {
+        grid-template-rows: 1fr;
+        grid-template-columns: 1fr 1fr;
+    }
+    .np-pane { border-bottom: 0; }
+    .np-pane--1 { border-right: 1px solid var(--n-line); }
+    .np-why, .np-prov { max-height: 26dvh; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation-duration: .001ms !important;
+        transition-duration: .001ms !important;
+    }
+}
+
+/* ============================================================
+   GOLD-ON-BLACK INSTRUMENT FIELD  -  body[data-theme="gold-black"]
+
+   A TOKEN VARIANT AND NOTHING ELSE: it redefines custom property values
+   and adds one filter for the rasters. No selector structure, no
+   geometry, no DOM changes, so the 175px grid and every markup
+   assertion are untouched by construction.
+
+   TWO CORRECTIONS THIS REVISION IMPLEMENTS
+
+   1. THE FIELD IS NEAR-BLACK, NOT MEDIUM GREY. The first pass lifted the
+      card and panel grounds to a slate blue-grey, which put a mid-tone
+      behind gold text and cost it most of its contrast. Every surface
+      step is now within a few points of black, and the drawings are the
+      brightest thing on the page - which is the correct hierarchy for an
+      instrument whose subject is a drawing.
+
+   2. GOLD IS NO LONGER THE BODY TEXT. It was being spent on every
+      character on screen, which is the fastest way to make an accent
+      mean nothing. Normal interface and explanatory text is now
+      light-grey; --n-accent is the ONLY token carrying emphasis, and it
+      is spent only on active selection, Page-Field identity, focus,
+      relationship traces, provenance cues, and consequential attention.
+
+   CONTRAST, computed rather than eyeballed (WCAG relative luminance,
+   every text tier against every ground it is actually used on):
+
+                    page      surface   surface-2  surface-3  pane black
+     text  #E8EAED  16.53     15.69     14.76      13.24      17.42
+     text-2 #B4BAC4 10.21      9.69      9.12       8.18      10.76
+     text-3 #868D99  5.96      5.66      5.32       4.78       6.28
+     gold  #E5B869  10.81     10.26      9.65       8.66      11.39
+
+   Worst pair 4.78:1 - every tier clears 4.5:1 on every ground. Black on
+   the gold badge is 10.81:1. Borders are non-text and held to 3:1: see
+   the --n-line-2 note above.
+   ============================================================ */
+
+body.np[data-theme="gold-black"] {
+    /* TEXT - carries no meaning, and is what almost everything uses. */
+    --n-ink: #E8EAED;
+    --n-ink-2: #B4BAC4;
+    --n-ink-3: #868D99;
+
+    /* GROUND - near-black throughout, separated by a few points only. */
+    --n-page: #07090D;
+    --n-surface: #0E1116;
+    --n-surface-2: #14181F;
+    --n-surface-3: #1D222B;
+
+    /* --n-line dissolves into the field by intent: it is only ever a
+       decorative rim inside an already-bounded container.
+       --n-line-2 draws the boundary of an actual CONTROL and is therefore
+       held to the 3:1 non-text bar - measured 3.64:1 on the page ground and
+       3.25:1 on the lightest surface. The first pass had it at 2.06:1, which
+       is a button whose edge you cannot find. */
+    --n-line: #2B313C;
+    --n-line-2: #606A7A;
+    --n-line-faint: #191D25;
+
+    /* THE RESERVED EMPHASIS. Spent nowhere else. */
+    --n-accent: #E5B869;
+    --n-accent-dim: #A98544;
+    --n-on-accent: #07090D;
+
+    color-scheme: dark;
+}
+
+/* The drawing is the brightest thing on the page, on its own black. */
+body.np[data-theme="gold-black"] .np-face,
+body.np[data-theme="gold-black"] .np-pane-body {
+    background: #000000;
+}
+
+/* MONOCHROME SHEETS ONLY, and the flag is measured at render time rather
+   than assumed - see tools/render_nipigon_assets.py.
+
+   A plain inversion, with no tint. Black ink on white paper becomes white
+   line on black, which is what a drawing should look like on a dark field
+   and is exactly reversible. The earlier pass tinted the linework gold,
+   which both spent the accent on the largest object on screen and would
+   have destroyed any real colour in the sheet - A100 carries colour, and
+   would have been silently recoloured. A sheet with colour gets no filter
+   at all and is shown as drawn. */
+body.np[data-theme="gold-black"] .np-thumb[data-mono="true"],
+body.np[data-theme="gold-black"] .np-page[data-mono="true"] {
+    filter: invert(1);
+}
+
+/* Elevation reads as a faint rim of light on a dark ground, not a shadow. */
+body.np[data-theme="gold-black"] .np-field {
+    box-shadow: inset 0 0 0 1px rgba(232, 234, 237, .03);
+}
+body.np[data-theme="gold-black"] .np-field:hover,
+body.np[data-theme="gold-black"] .np-field:focus-visible {
+    box-shadow: 0 6px 20px rgba(0, 0, 0, .7);
+    border-color: var(--n-accent-dim);
+}
+
+body.np[data-theme="gold-black"] .np-intake-frame { stroke: var(--n-line-2); }
+
+/* An unresolved candidate must not borrow the accent by sitting next to it. */
+body.np[data-theme="gold-black"] .np-basis--inferred { border-color: var(--n-ink-3); color: var(--n-ink-2); }
+body.np[data-theme="gold-black"] .np-basis--unresolved { border-color: var(--n-line-2); color: var(--n-ink-3); }
+
+/* ============================================================
+   VIEWPORT - pan / zoom / fit / manual rotate
+
+   The transform lives on .np-stage, which holds the drawing AND its
+   semantic overlay, so both move together and the overlay cannot slide
+   off the linework it is annotating.
+
+   This is a WAY OF LOOKING. It never touches the source PDF and never
+   redefines the sheet's derived native orientation - Reset returns to
+   that value, which is why manual rotation is safe to offer at all.
+   State is per pane: --vx/--vy/--vs/--vr are set on each stage
+   individually by nipigon.js, so Pane 1 stays anchored while Pane 2 is
+   navigated. They are written through the CSSOM because the CSP
+   refuses a parsed inline style attribute.
+   ============================================================ */
+
+.np-pane-body { position: relative; overflow: hidden; }
+
+.np-stage {
+    position: relative;
+    display: grid;
+    place-items: center;
+    transform: translate(var(--vx, 0px), var(--vy, 0px))
+               scale(var(--vs, 1)) rotate(var(--vr, 0deg));
+    transform-origin: center center;
+    /* Not animated: a running animation on transform would win the cascade
+       over these values and the pane would fight the pointer. */
+    will-change: transform;
+    cursor: grab;
+    touch-action: none;
+}
+.np-stage.is-panning { cursor: grabbing; }
+/* The image is CONTAINED in the pane, and the overlay is given the same
+   aspect ratio and the same contain constraints, so the two resolve to an
+   identical box. Sizing the overlay to the stage instead let it stretch to
+   the pane while the image letterboxed inside it - the strokes then sat
+   beside the members they annotate, which is worse than no overlay. The
+   ratio comes from the semantics view box and is set by nipigon.js. */
+.np-stage { width: 100%; height: 100%; }
+.np-stage > .np-page {
+    grid-area: 1 / 1;
+    display: block;
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+}
+.np-overlay {
+    grid-area: 1 / 1;
+    aspect-ratio: var(--ov-aspect, 3 / 2);
+    max-width: 100%;
+    max-height: 100%;
+    width: auto;
+    height: auto;
+    pointer-events: none;
+}
+.np-overlay:not([hidden]) { pointer-events: auto; }
+
+.np-view {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px;
+    background: var(--n-surface-2);
+    border-top: 1px solid var(--n-line-faint);
+    flex-wrap: wrap;
+}
+
+/* Compact and subordinate: this is a project surface, not a toolbar. */
+.np-vbtn {
+    padding: 2px 7px;
+    border: 1px solid var(--n-line-2);
+    border-radius: var(--n-radius);
+    background: var(--n-surface);
+    color: var(--n-ink-2);
+    font-family: var(--n-font);
+    font-size: 11px;
+    line-height: 1.5;
+    cursor: pointer;
+}
+.np-vbtn:hover { background: var(--n-surface-3); color: var(--n-ink); }
+.np-vbtn:focus-visible { outline: 2px solid var(--n-accent); outline-offset: 1px; }
+.np-vzoom {
+    min-width: 42px;
+    text-align: center;
+    font-family: var(--n-mono);
+    font-size: 10.5px;
+    color: var(--n-ink-3);
+}
+.np-vbtn--sem[aria-pressed="true"] {
+    border-color: var(--n-accent);
+    color: var(--n-accent);
+}
+.np-vbtn--go { margin-left: auto; }
+
+/* ------------------------------------------------------------
+   SEMANTIC OVERLAY
+
+   Only classified geometry is stroked. The 822 unresolved segments get
+   nothing - colouring them would assert a grounding that does not exist,
+   which is the whole failure this probe was built to avoid.
+
+   DIRECT and INFERRED differ in WEIGHT AND DASH as well as hue, so the
+   distinction survives greyscale and does not depend on a reader telling
+   cyan from amber.
+   ------------------------------------------------------------ */
+
+/* non-scaling-stroke: the overlay lives in a 2592-unit viewBox shown ~800px
+   wide, so a plain stroke-width would render sub-pixel at fit zoom and the
+   classification would simply be invisible until the reader zoomed in. The
+   stroke is a UI annotation, not drawing content, so it keeps its weight at
+   every zoom. */
+.np-sem {
+    fill: none;
+    pointer-events: stroke;
+    cursor: help;
+    vector-effect: non-scaling-stroke;
+}
+.np-sem--direct { stroke: #35E0D0; stroke-width: 5; stroke-linecap: round; }
+.np-sem--inferred {
+    stroke: #E5B869;
+    stroke-width: 3.5;
+    stroke-dasharray: 14 9;
+    stroke-linecap: butt;
+    opacity: .85;
+}
+.np-sem:hover, .np-sem.is-active { stroke-width: 8; }
+
+.np-tip {
+    position: absolute;
+    z-index: 40;
+    left: var(--tip-x, 12px);
+    top: var(--tip-y, 12px);
+    max-width: 300px;
+    padding: 8px 10px;
+    border: 1px solid var(--n-line-2);
+    border-left: 3px solid var(--n-accent);
+    border-radius: var(--n-radius);
+    background: var(--n-surface);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, .55);
+    font-size: 11px;
+    pointer-events: none;
+}
+.np-tip-head { display: flex; align-items: baseline; gap: 8px; }
+.np-tip-token { font-family: var(--n-mono); font-weight: 700; color: var(--n-accent); }
+.np-tip-kind { margin: 4px 0 2px; color: var(--n-ink); }
+.np-tip-ev { margin: 0 0 3px; color: var(--n-ink-2); }
+.np-tip-src { margin: 0; color: var(--n-ink-3); font-family: var(--n-mono); font-size: 10px; }
+
+/* ============================================================
+   ENGINE DNA PREFERENCES PANEL
+
+   Reached from a gear in the Scene 1 header, and only from there. The
+   drawing surface keeps its viewport controls - those act on what you
+   are looking at right now - and loses every flag that configures the
+   engine. A switch that changes the engine does not belong beside the
+   sheet it changes.
+   ============================================================ */
+
+.np-gear {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 30px;
+    height: 30px;
+    margin-bottom: 6px;
+    padding: 0;
+    border: 1px solid var(--n-line-2);
+    border-radius: var(--n-radius);
+    background: var(--n-surface);
+    color: var(--n-ink-2);
+    cursor: pointer;
+}
+.np-gear svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.6; }
+.np-gear:hover { background: var(--n-surface-2); color: var(--n-accent); }
+.np-gear:focus-visible { outline: 2px solid var(--n-accent); outline-offset: 2px; }
+.np-gear[aria-expanded="true"] { border-color: var(--n-accent); color: var(--n-accent); }
+
+.np-visually-hidden {
+    position: absolute; width: 1px; height: 1px;
+    margin: -1px; padding: 0; overflow: hidden;
+    clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
+.np-prefs {
+    position: fixed;
+    z-index: 60;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: min(370px, calc(100vw - 28px));
+    max-height: min(78dvh, 640px);
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--n-line-2);
+    border-radius: 6px;
+    background: var(--n-surface);
+    box-shadow: 0 24px 60px rgba(0, 0, 0, .7);
+}
+
+.np-prefs-head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--n-line-faint);
+}
+.np-prefs-head h2 { margin: 0; font-size: 13px; flex: 1 1 auto; }
+
+.np-prefs-body { padding: 4px 12px 10px; overflow-y: auto; }
+.np-prefs-group { padding: 8px 0; border-bottom: 1px solid var(--n-line-faint); }
+.np-prefs-group:last-child { border-bottom: 0; }
+.np-prefs-group h3 {
+    margin: 0 0 6px;
+    font-size: 10.5px;
+    font-weight: 700;
+    color: var(--n-accent);
+    letter-spacing: .04em;
+}
+
+.np-pref { padding: 5px 0; }
+.np-pref-label {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 12px;
+    color: var(--n-ink);
+    cursor: pointer;
+}
+.np-pref-label input { accent-color: var(--n-accent); width: 15px; height: 15px; }
+.np-pref-choices { display: flex; gap: 5px; margin-top: 5px; }
+.np-pref-choice[aria-pressed="true"] {
+    border-color: var(--n-accent);
+    color: var(--n-accent);
+    background: var(--n-surface-2);
+}
+.np-pref-note { margin: 3px 0 0 22px; font-size: 10.5px; color: var(--n-ink-3); }
+
+/* Unavailable is shown, not hidden: a preference that exists but has no
+   derivation behind it yet is information, and silently omitting it would
+   make the panel look complete when it is not. */
+.np-pref.is-unavailable { opacity: .5; }
+.np-pref.is-unavailable .np-pref-label { cursor: not-allowed; }
+
+.np-prefs-foot {
+    margin: 0;
+    padding: 9px 12px;
+    border-top: 1px solid var(--n-line-faint);
+    font-size: 10px;
+    color: var(--n-ink-3);
+}
+.np-prefs-foot code { font-family: var(--n-mono); color: var(--n-ink-2); }

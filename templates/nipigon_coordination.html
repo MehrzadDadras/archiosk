@@ -1,0 +1,405 @@
+{# ============================================================
+   5 NIPIGON - Phase 2 Scenario 01: architectural washroom coordination.
+
+   Standalone document, like calm_lake_prototype.html: it does NOT extend
+   base.html and loads only its own stylesheet, so nothing here can affect
+   the application chrome and the chrome cannot affect it.
+
+   NO INLINE style ATTRIBUTES. app.py's CSP is default-src 'self' with no
+   style-src, so a parsed inline style attribute is refused by the browser -
+   and a static preview server sends no CSP header, which means that class
+   of defect is invisible in the harness. Anything positional rides on a
+   data-* attribute and is applied through the CSSOM by nipigon.js.
+
+   Every sheet, room and relationship rendered below was verified by opening
+   the source PDF. See routes/nipigon_coordination.py for what each
+   inspection actually established.
+   ============================================================ #}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#eceef1">
+    <title>5 Nipigon - Coordination</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/nipigon.css') }}?v={{ static_version }}">
+</head>
+<body class="np" data-scene="field" data-split="none" data-theme="{{ theme }}">
+
+{# ---------------------------------------------------------------
+   SCENE 1 - THE PAGE-FIELD. Real sheets, rendered faces.
+   --------------------------------------------------------------- #}
+<section class="np-scene" data-ui-ref="nipigon-scene-1" aria-label="Project surfaces">
+    <header class="np-scene-head">
+        {% if prefs %}
+        <button type="button" class="np-gear" id="np-prefs-open"
+                aria-expanded="false" aria-controls="np-prefs"
+                data-ui-ref="nipigon-preferences-open"
+                title="Engine preferences">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <circle cx="12" cy="12" r="3.2"/>
+                <path d="M12 2.6v3M12 18.4v3M2.6 12h3M18.4 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M18.7 5.3l-2.1 2.1M7.4 16.6l-2.1 2.1"/>
+            </svg>
+            <span class="np-visually-hidden">Engine preferences</span>
+        </button>
+        {% endif %}
+        <span class="np-project">{{ project.short }}</span>
+        <span class="np-sub">{{ project.number }} &middot; {{ project.name }}</span>
+        <span class="np-sub np-sub--quiet">{{ project.address }} &middot; {{ project.architect }}</span>
+    </header>
+
+    {% if assets_missing %}
+    <p class="np-warn" data-ui-ref="nipigon-assets-missing">
+        Sheet faces are not rendered. Run
+        <code>tools/render_nipigon_assets.py</code>. Nothing below is a
+        drawing until it is.
+    </p>
+    {% endif %}
+
+    <ol class="np-field-grid">
+        {% for field in fields %}
+        <li class="np-slot np-slot--r{{ field.territory.row }} np-slot--c{{ field.territory.col }}">
+            <button type="button"
+                    class="np-field np-field--{{ field.face }}{% if field.opens %} is-anchor{% endif %}"
+                    id="field-{{ field.id }}"
+                    data-field="{{ field.id }}"
+                    {% if field.action %}data-action="true"{% endif %}
+                    {% if field.miniature %}data-miniature="{{ field.miniature }}"{% endif %}
+                    data-ui-ref="nipigon-page-field"
+                    aria-label="{{ field.short }} {{ field.qualifier }}">
+                <span class="np-face" aria-hidden="true">
+                    {% if field.face == 'intake' %}
+                    <svg class="np-intake" viewBox="0 0 860 600">
+                        <rect class="np-intake-frame" x="120" y="90" width="620" height="420" rx="10"/>
+                        <line class="np-intake-cross" x1="430" y1="230" x2="430" y2="370"/>
+                        <line class="np-intake-cross" x1="360" y1="300" x2="500" y2="300"/>
+                    </svg>
+                    {% elif field.asset %}
+                    {# The actual drawing, not a glyph standing for one. #}
+                    {# data-mono is a MEASURED fact from the render manifest, not a
+                       guess. Only a sheet that is genuinely black-line-on-white
+                       may be inverted to light-on-black; a sheet carrying real
+                       colour is shown as drawn. #}
+                    <img class="np-thumb" alt=""
+                         data-mono="{{ 'true' if field.monochrome else 'false' }}"
+                         src="{{ url_for('static', filename='nipigon/' ~ field.asset) }}">
+                    {% else %}
+                    <span class="np-face-absent">not rendered</span>
+                    {% endif %}
+                </span>
+                <span class="np-strip">
+                    <span class="np-strip-id">{{ field.short }}</span>
+                    <span class="np-strip-sep" aria-hidden="true">&middot;</span>
+                    <span class="np-strip-title">{{ field.qualifier }}</span>
+                </span>
+            </button>
+        </li>
+        {% endfor %}
+    </ol>
+
+    <p class="np-scene-foot">
+        Faces are rendered from the source PDFs and carry their basis. Source
+        files are unmodified; see the provenance panel once a sheet is open.
+    </p>
+</section>
+
+{# ---------------------------------------------------------------
+   SCENE 2 - THE WORKING SURFACE.
+
+   Pane 1 is ANCHORED: it holds A204 and the selected room, and nothing
+   Pane 2 does may move it. That is the whole property being tested -
+   a coordination view where the thing you are coordinating FROM stays
+   put while you go looking.
+   --------------------------------------------------------------- #}
+<div class="np-surface" id="np-surface">
+    <header class="np-bar">
+        <button type="button" class="np-return" id="np-return"
+                data-ui-ref="nipigon-return" aria-label="Back to surfaces">
+            <span aria-hidden="true">&lsaquo;</span>
+        </button>
+        <span class="np-bar-id">
+            <b id="np-bar-sheet">A204</b>
+            <span id="np-bar-title">Ground Floor Plan</span>
+        </span>
+        <span class="np-bar-sel" id="np-bar-sel">
+            Room {{ selection.room }} &middot; {{ selection.label }}
+        </span>
+    </header>
+
+    <div class="np-panes" id="np-panes">
+
+        {# ---- PANE 1, anchored ---- #}
+        <section class="np-pane np-pane--1" aria-label="Pane 1, anchored">
+            <div class="np-pane-head">
+                <span class="np-pane-tag">Pane 1 &middot; anchored</span>
+                <span class="np-pane-sheet">A204 Ground Floor Plan</span>
+            </div>
+            <div class="np-pane-body" id="np-body1" data-pane="1">
+                {# The stage carries the VIEW transform. It is a way of looking,
+                   not a change to the drawing: it never touches the source PDF
+                   and never redefines the sheet's derived native orientation,
+                   which Reset returns to. #}
+                <div class="np-stage" id="np-stage1">
+                    <img class="np-page" id="np-pane1-img" alt="A204 ground floor plan, room 104"
+                         data-mono="{{ 'true' if anchor_monochrome else 'false' }}"
+                         src="{{ url_for('static', filename='nipigon/A204_washroom-104.png') }}">
+                </div>
+            </div>
+            <div class="np-view" data-pane="1" aria-label="Pane 1 view controls">
+                <button type="button" class="np-vbtn" data-act="out" aria-label="Zoom out">&minus;</button>
+                <span class="np-vzoom" id="np-zoom1">100%</span>
+                <button type="button" class="np-vbtn" data-act="in" aria-label="Zoom in">+</button>
+                <button type="button" class="np-vbtn" data-act="fit">Fit</button>
+                <button type="button" class="np-vbtn" data-act="rccw" aria-label="Rotate left">&#8634;</button>
+                <button type="button" class="np-vbtn" data-act="rcw" aria-label="Rotate right">&#8635;</button>
+                <button type="button" class="np-vbtn" data-act="reset" title="Back to derived native orientation">Reset</button>
+            </div>
+            <div class="np-pane-foot">
+                <span class="np-chip">Room {{ selection.room }}</span>
+                <span class="np-chip np-chip--quiet">off corridor {{ selection.off_corridor }}</span>
+                <span class="np-pane-note">selection held</span>
+            </div>
+        </section>
+
+        {# ---- PANE 2, independent ---- #}
+        <section class="np-pane np-pane--2" id="np-pane2" aria-label="Pane 2">
+            <div class="np-pane-head">
+                <span class="np-pane-tag" id="np-pane2-tag">Pane 2</span>
+                <span class="np-pane-sheet" id="np-pane2-sheet">&mdash;</span>
+            </div>
+
+            <div class="np-pane-body" id="np-body2" data-pane="2">
+                <div class="np-stage" id="np-stage2">
+                    <img class="np-page" id="np-pane2-img" alt="" src="" data-mono="false" hidden>
+                    {% if semantics %}
+                    {# NON-DESTRUCTIVE OVERLAY. The base drawing underneath is
+                       untouched - this is a second layer of strokes over it, and
+                       the toggle removes it completely so the raw sheet can
+                       always be inspected. Only classified geometry is drawn;
+                       the 822 unresolved segments get no colour, because
+                       colouring them would assert a grounding that does not
+                       exist. #}
+                    <svg class="np-overlay" id="np-overlay" hidden
+                         viewBox="0 0 {{ semantics.view_width_pt }} {{ semantics.view_height_pt }}"
+                         preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+                        {% for g in semantics.inferred %}
+                        <line class="np-sem np-sem--inferred"
+                              x1="{{ g.seg.x0 }}" y1="{{ g.seg.y0 }}"
+                              x2="{{ g.seg.x1 }}" y2="{{ g.seg.y1 }}"
+                              data-token="{{ g.token }}" data-kind="{{ g.kind }}"
+                              data-basis="inferred" data-evidence="{{ g.evidence }}"></line>
+                        {% endfor %}
+                        {% for g in semantics.direct %}
+                        <line class="np-sem np-sem--direct"
+                              x1="{{ g.seg.x0 }}" y1="{{ g.seg.y0 }}"
+                              x2="{{ g.seg.x1 }}" y2="{{ g.seg.y1 }}"
+                              data-token="{{ g.token }}" data-kind="{{ g.kind }}"
+                              data-basis="direct" data-evidence="{{ g.evidence }}"></line>
+                        {% endfor %}
+                    </svg>
+                    {% endif %}
+                </div>
+                {# The pointing card. Every recoloured stroke can say what it was
+       classified as, on what grounding, and from which annotation - so the
+       colour is inspectable rather than decorative. #}
+    <div class="np-tip" id="np-tip" hidden role="status" data-ui-ref="nipigon-semantic-tip">
+        <div class="np-tip-head">
+            <span class="np-tip-token" id="np-tip-token"></span>
+            <span class="np-basis" id="np-tip-basis"></span>
+        </div>
+        <p class="np-tip-kind" id="np-tip-kind"></p>
+        <p class="np-tip-ev" id="np-tip-ev"></p>
+        <p class="np-tip-src" id="np-tip-src"></p>
+    </div>
+                <p class="np-pane-empty" id="np-pane2-empty">
+                    Nothing opened yet. Ask GO, or summon a surface yourself.
+                </p>
+            </div>
+            <div class="np-view" data-pane="2" aria-label="Pane 2 view controls">
+                <button type="button" class="np-vbtn" data-act="out" aria-label="Zoom out">&minus;</button>
+                <span class="np-vzoom" id="np-zoom2">100%</span>
+                <button type="button" class="np-vbtn" data-act="in" aria-label="Zoom in">+</button>
+                <button type="button" class="np-vbtn" data-act="fit">Fit</button>
+                <button type="button" class="np-vbtn" data-act="rccw" aria-label="Rotate left">&#8634;</button>
+                <button type="button" class="np-vbtn" data-act="rcw" aria-label="Rotate right">&#8635;</button>
+                <button type="button" class="np-vbtn" data-act="reset">Reset</button>
+                <button type="button" class="np-vbtn np-vbtn--go" id="np-regofocus" hidden
+                        title="Return to the region GO selected">GO region</button>
+                {# The semantic overlay switch used to live here, on the
+                   drawing. It is now an Engine DNA preference: this element
+                   remains only as the state carrier the pane reads, and it
+                   is never shown. #}
+                {% if semantics %}
+                <button type="button" class="np-vbtn np-vbtn--sem" id="np-sem-toggle" hidden
+                        aria-pressed="false" tabindex="-1"
+                        data-ui-ref="nipigon-overlay-state">Semantic overlay: OFF</button>
+                {% endif %}
+            </div>
+
+            {# Sibling stepping is LOCAL to this pane and to the detail-sheet
+               family. Deliberately not a global swipe chain across unrelated
+               surface types: stepping from a washroom detail to an elevation
+               to a schedule would be movement without a relationship. #}
+            <div class="np-siblings" id="np-siblings" hidden>
+                <button type="button" class="np-step" id="np-prev" aria-label="Previous detail sheet">&lsaquo;</button>
+                <ol class="np-sib-list">
+                    {% for sib in siblings %}
+                    <li>
+                        <button type="button" class="np-sib{% if sib.is_target %} is-target{% endif %}"
+                                data-sib="{{ sib.id }}"
+                                data-asset="{{ url_for('static', filename='nipigon/' ~ sib.asset) }}"
+                                data-mono="{{ 'true' if sib.monochrome else 'false' }}"
+                                data-title="{{ sib.title }}">{{ sib.id }}</button>
+                    </li>
+                    {% endfor %}
+                </ol>
+                <button type="button" class="np-step" id="np-next" aria-label="Next detail sheet">&rsaquo;</button>
+            </div>
+        </section>
+    </div>
+
+    {# ---- THE TWO PATHS ---- #}
+    <div class="np-actions">
+        <button type="button" class="np-act np-act--go" id="np-ask-go" data-ui-ref="nipigon-ask-go"
+                {% if go.chosen and go.chosen.asset %}
+                data-go-asset="{{ url_for('static', filename='nipigon/' ~ go.chosen.asset) }}"
+                data-go-sheet="{{ go.chosen.target }}"
+                data-go-detail="{{ go.chosen.detail }}"
+                data-go-title="{{ go.chosen.detail_title }}"
+                data-go-mono="{{ 'true' if target_monochrome else 'false' }}"
+                {% endif %}>
+            Ask GO &mdash; &ldquo;find the washroom detail&rdquo;
+        </button>
+        <button type="button" class="np-act" id="np-split" data-ui-ref="nipigon-manual-split">
+            Split &amp; summon myself
+        </button>
+        <button type="button" class="np-act np-act--quiet" id="np-close2">Close pane 2</button>
+    </div>
+
+
+    {# ---- WHY THIS SURFACE. GO must show its reasoning, ranked. ---- #}
+    <section class="np-why" id="np-why" hidden data-ui-ref="nipigon-why">
+        <h2>Why this surface</h2>
+        <ol class="np-cand">
+            {% for cand in go.candidates %}
+            <li class="np-cand-item np-cand-item--{{ cand.basis }}">
+                <div class="np-cand-head">
+                    <span class="np-cand-target">
+                        {% if cand.target %}{{ cand.target }}{% if cand.detail %} &middot; detail {{ cand.detail }}{% endif %}
+                        {% else %}not in this set{% endif %}
+                    </span>
+                    <span class="np-basis np-basis--{{ cand.basis }}">{{ relationship_labels[cand.basis] }}</span>
+                </div>
+                <p class="np-cand-title">{{ cand.detail_title }}</p>
+                <ul class="np-cand-ev">
+                    {% for line in cand.evidence %}<li>{{ line }}</li>{% endfor %}
+                </ul>
+            </li>
+            {% endfor %}
+        </ol>
+        <p class="np-why-foot">
+            {% if go.unique %}
+            One candidate is carried by an explicit callout on the sheet; the
+            others are shown so the ranking can be audited rather than trusted.
+            {% else %}
+            No candidate is established by an explicit reference. Nothing was
+            opened automatically.
+            {% endif %}
+        </p>
+    </section>
+
+    {# ---- PROVENANCE. Not reconstructed from the UI text above. ---- #}
+    <section class="np-prov" id="np-prov" hidden data-ui-ref="nipigon-provenance">
+        <h2>Provenance</h2>
+        {% if provenance %}
+        <table class="np-prov-table">
+            <thead>
+                <tr><th>Sheet</th><th>Role</th><th>Source file</th><th>SHA-256</th><th>Page</th></tr>
+            </thead>
+            <tbody>
+                {% for row in provenance %}
+                <tr>
+                    <td><b>{{ row.sheet }}</b></td>
+                    <td>{{ row.role }}</td>
+                    <td class="np-mono">{{ row.source_file }}</td>
+                    <td class="np-mono np-sha">{{ row.sha_short }}&hellip;</td>
+                    <td>{{ row.page }}</td>
+                </tr>
+                <tr class="np-prov-verified">
+                    <td colspan="5">Verified by inspection: {{ row.verified }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p class="np-warn">No provenance available &mdash; assets not rendered.</p>
+        {% endif %}
+        <p class="np-prov-foot">
+            Relationship basis:
+            <b>{{ relationship_labels[rel_direct] }}</b> &mdash;
+            {{ relationship_meanings[rel_direct] }}.
+        </p>
+    </section>
+</div>
+
+{% if prefs %}
+{# ---------------------------------------------------------------
+   ENGINE DNA PREFERENCES
+
+   Every flag that changes how a drawing is PRESENTED lives here, not
+   on the drawing. A row of switches beside a sheet competes with the
+   sheet, and teaches the reader that the switches matter as much as
+   the drawing does.
+
+   Rendered from config/engine_preferences.json rather than hand-written
+   markup, so the shipped defaults and the panel cannot disagree - a
+   preference that exists in one and not the other is not
+   representable.
+   --------------------------------------------------------------- #}
+<div class="np-prefs" id="np-prefs" hidden role="dialog" aria-modal="false"
+     aria-label="Engine preferences" data-ui-ref="nipigon-preferences">
+    <div class="np-prefs-head">
+        <h2>Engine preferences</h2>
+        <button type="button" class="np-vbtn" id="np-prefs-reset">Reset</button>
+        <button type="button" class="np-vbtn" id="np-prefs-close" aria-label="Close">Close</button>
+    </div>
+    <div class="np-prefs-body" id="np-prefs-body">
+        {% for group in prefs.groups %}
+        <section class="np-prefs-group">
+            <h3>{{ group.label }}</h3>
+            {% for pref in group.preferences %}
+            <div class="np-pref{% if pref.available is defined and not pref.available %} is-unavailable{% endif %}">
+                {% if pref.type == 'choice' %}
+                <span class="np-pref-label">{{ pref.label }}</span>
+                <span class="np-pref-choices">
+                    {% for opt in pref.options %}
+                    <button type="button" class="np-vbtn np-pref-choice"
+                            data-pref-group="{{ pref.id }}" value="{{ opt.value }}"
+                            aria-pressed="false">{{ opt.label }}</button>
+                    {% endfor %}
+                </span>
+                {% else %}
+                <label class="np-pref-label">
+                    <input type="checkbox" data-pref="{{ pref.id }}"
+                           {% if pref.available is defined and not pref.available %}disabled{% endif %}>
+                    <span>{{ pref.label }}</span>
+                </label>
+                {% endif %}
+                {% if pref.note %}<p class="np-pref-note">{{ pref.note }}</p>{% endif %}
+            </div>
+            {% endfor %}
+        </section>
+        {% endfor %}
+    </div>
+    <p class="np-prefs-foot">
+        Stored in this browser under <code>{{ prefs.storage_key }}</code>.
+        Defaults ship in <code>config/engine_preferences.json</code>. None of
+        these change a source document, a derived orientation, or a
+        classification &mdash; only whether it is drawn.
+    </p>
+</div>
+<script type="application/json" id="np-prefs-data" nonce="{{ csp_nonce }}">{{ prefs | tojson }}</script>
+{% endif %}
+<script nonce="{{ csp_nonce }}" src="{{ url_for('static', filename='js/nipigon.js') }}?v={{ static_version }}"></script>
+</body>
+</html>

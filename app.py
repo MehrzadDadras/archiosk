@@ -477,6 +477,7 @@ def _register_blueprints(app: Flask) -> None:
     from routes.operations import operations_bp
     from routes.storage_bridge import storage_bridge_bp
     from routes.calm_lake_prototype import calm_lake_bp
+    from routes.nipigon_coordination import nipigon_bp
 
     app.register_blueprint(portal_bp)
     app.register_blueprint(api_bp, url_prefix="/api/v1")
@@ -493,6 +494,7 @@ def _register_blueprints(app: Flask) -> None:
     # last and deliberately in its own module so the whole experiment is one
     # `git rm` plus these two lines when it concludes.
     app.register_blueprint(calm_lake_bp)
+    app.register_blueprint(nipigon_bp)
 
 
 def _register_error_handlers(app: Flask) -> None:

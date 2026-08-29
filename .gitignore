@@ -42,3 +42,7 @@ tools/static_preview/build/
 # generated workspace/governance files sat untracked where a `git add -A` would
 # have swept them into a commit as if they were fixtures.
 tests/fixtures/nreocrc/_lab_instance_scratch*/
+
+# Derived rasters of the 5 Nipigon source PDFs (tools/render_nipigon_assets.py).
+# The PDFs remain authoritative; these are regenerable bytes.
+static/nipigon/
