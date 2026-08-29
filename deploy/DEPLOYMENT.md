@@ -195,6 +195,29 @@ git diff <currently-live-hash>..<new-hash> -- requirements.txt
 
 If that is empty, skip this section entirely — most deploys do.
 
+**As of CLAUDE-QR-PASS-01 it is NOT empty for the next deploy.** `segno==1.6.6`
+was added — a pure-Python QR encoder with no dependencies of its own, used by
+`services/qr_pass.py` to render Building Box field passes locally rather than
+through an external image service (the payload is a live bearer token).
+
+This one is the FAIL-TO-BOOT kind, not the silently-inert kind. `services/
+qr_pass.py` is imported by `routes/project_manage.py`, which `app.py` registers
+at start-up, so a server that syncs this commit without installing it does not
+degrade — it stops. Install before restarting:
+
+```bash
+ssh ubuntu@<server> "
+  /var/www/archiosk/.venv/bin/pip install --dry-run segno==1.6.6 2>&1 | tail -5
+"
+ssh ubuntu@<server> "
+  sudo -u archiosk /var/www/archiosk/.venv/bin/pip install segno==1.6.6 &&
+  sudo -u archiosk /var/www/archiosk/.venv/bin/python -c 'import segno; print(segno.__version__)'
+"
+```
+
+`sudo -u archiosk`, not bare `sudo` — see the ownership warning below, which
+this pin is subject to like any other.
+
 If it is not empty, note what the failure would actually look like before
 deciding urgency. A dependency imported at application start makes the service
 fail to boot; one imported lazily (as `engine/pdf_extractor.py` is — nothing in

@@ -166,3 +166,101 @@ body.pm {
 @media (max-width: 420px) {
     .site-footer-columns { grid-template-columns: 1fr; gap: 18px; }
 }
+
+/* CLAUDE-QR-PASS-01 - the Building Box field pass card. */
+.pm-bb {
+    max-width: 760px; margin: 0 0 24px; padding: 16px 18px;
+    border: 2px solid var(--pm-attention); border-radius: 6px;
+    background: var(--pm-surface-2);
+}
+.pm-bb-head h2 { margin: 0 0 4px; font-size: 16px; }
+.pm-bb-rotated { margin: 0 0 10px; font-size: 12.5px; color: var(--pm-seal); }
+.pm-bb-body { display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start; }
+
+/* THE QR GETS ITS OWN WHITE PLATE, in every theme. A scanner needs contrast,
+   not brand: a dark-mode QR in muted greys is the classic way to make a code
+   that looks correct on screen and reads unreliably in daylight. The plate is
+   why the symbol can stay pure black on pure white while the page around it
+   follows the reader's chosen appearance. */
+.pm-bb-qr {
+    flex: none; padding: 10px;
+    background: var(--qr-plate-light); border-radius: 4px;
+    border: 1px solid var(--pm-line);
+    line-height: 0;
+}
+.pm-bb-qr svg { display: block; width: 208px; height: 208px; }
+
+.pm-bb-meta { flex: 1 1 260px; margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; font-size: 13px; }
+.pm-bb-meta dt { color: var(--pm-ink-3); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; align-self: center; }
+.pm-bb-meta dd { margin: 0; }
+.pm-bb-badge {
+    display: inline-block; padding: 2px 9px; border-radius: 999px;
+    border: 1px solid var(--pm-machine); color: var(--pm-machine);
+    font-size: 11px; letter-spacing: .05em; text-transform: uppercase;
+}
+.pm-bb-abs { color: var(--pm-ink-3); font-size: 12px; }
+.pm-bb-warn { margin: 14px 0 10px; font-size: 12.5px; color: var(--pm-ink-2); }
+.pm-bb-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.pm-bb-actions .pm-issued-link { flex: 1 1 320px; width: auto; }
+.pm-bb-print, .pm-rotate-btn {
+    padding: 6px 12px; font: inherit; font-size: 12px;
+    color: var(--pm-ink); background: var(--pm-surface);
+    border: 1px solid var(--pm-line-2, var(--pm-line)); border-radius: 4px; cursor: pointer;
+}
+.pm-row-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+
+/* PRINT: the placard. Everything except the pass card is hidden, so what comes
+   out of the printer is the code, the scope and the expiry - taped to a site
+   box, that IS the pass. A printed page carrying the form and the whole token
+   table would be a credential list left on a table. */
+@media print {
+    body.pm > *:not(.pm-bb) { display: none !important; }
+    .pm-bb {
+        border: 2px solid var(--qr-plate-dark);
+        background: var(--qr-plate-light);
+        color: var(--qr-plate-dark);
+        max-width: none;
+    }
+    .pm-bb-qr svg { width: 320px; height: 320px; }
+    .pm-bb-actions, .pm-bb-print { display: none !important; }
+    .pm-bb-meta dt { color: var(--pm-ink-3); }
+}
+
+/* CLAUDE-HELP-CENTER-01 - the contextual [?].
+   Small, quiet, and a real link: it navigates, so it works with a keyboard,
+   middle-click and a screen reader without any script. 22px is under the 44px
+   touch minimum on purpose - it sits INSIDE a line of text, and a 44px target
+   in a sentence pushes the line apart. It is never the only way to reach the
+   guide; /help lists all of them. */
+.pm-help {
+    display: inline-grid; place-items: center;
+    width: 18px; height: 18px; margin-left: 4px;
+    border: 1px solid var(--pm-line); border-radius: 50%;
+    color: var(--pm-ink-3); background: var(--pm-surface);
+    font-size: 11px; font-weight: 700; line-height: 1;
+    text-decoration: none; vertical-align: middle;
+}
+.pm-help:hover { color: var(--pm-machine); border-color: var(--pm-machine); }
+.pm-help:focus-visible { outline: 2px solid var(--pm-machine); outline-offset: 2px; }
+
+/* The help pages themselves. Reading width is capped: a guide set in 100ch
+   lines is a guide nobody finishes. */
+.help-body { max-width: 68ch; margin: 0 0 32px; }
+.help-body section { margin: 0 0 26px; }
+.help-body h2 { font-size: 15px; margin: 0 0 8px; }
+.help-body p { margin: 0 0 10px; color: var(--pm-ink-2); }
+.help-defs { margin: 0 0 12px; }
+.help-defs dt { margin-top: 8px; font-weight: 700; }
+.help-defs dd { margin: 2px 0 0 16px; color: var(--pm-ink-2); }
+.help-steps { margin: 0 0 12px; padding-left: 20px; color: var(--pm-ink-2); }
+.help-steps li { margin-bottom: 7px; }
+.help-note { font-size: 12.5px; color: var(--pm-ink-3); }
+.help-warn {
+    padding: 10px 12px; border-left: 3px solid var(--pm-attention);
+    background: var(--pm-surface-2); font-size: 13px;
+}
+.help-quote {
+    margin: 0 0 10px; padding: 10px 14px;
+    border-left: 3px solid var(--pm-machine); background: var(--pm-surface-2);
+    font-style: italic;
+}

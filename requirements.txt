@@ -24,3 +24,12 @@ reportlab==4.2.5
 # `fitz` alias. Checked with tools/dependency_fit.py - PASS on all six
 # constraints.
 pymupdf==1.28.2
+
+# CLAUDE-QR-PASS-01: pure-Python QR encoder for Building Box field passes.
+# Zero dependencies of its own and makes NO network call - the QR payload is a
+# live bearer token, so rendering it locally is a security property, not a
+# preference. dependency_fit.py returns PASS.
+# NOTE FOR DEPLOYS: this is a NEW pin. deploy/DEPLOYMENT.md step 7 applies -
+# install it explicitly as the venv owner before restarting, or the app will
+# fail to import services/qr_pass.py.
+segno==1.6.6

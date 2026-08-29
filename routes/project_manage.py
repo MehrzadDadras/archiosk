@@ -35,6 +35,12 @@ from flask import (
 
 from services.auth import login_required
 from services.project_access import can_access_project
+from services.qr_pass import (
+    pass_target_url,
+    remaining_duration,
+    render_token_qr_svg,
+    rotate_pass,
+)
 from services.project_rbac import (
     DISCIPLINES,
     ProjectAccessRefused,
@@ -110,6 +116,30 @@ def _parse_expiry(form) -> tuple[int | None, datetime | None]:
     return EXPIRY_PRESETS[preset], None
 
 
+def _pass_reveal(project_id: str, row, raw_token: str) -> dict:
+    """Everything the one-time reveal and the rotation modal both show.
+
+    ONE builder for both flows, deliberately: two call sites assembling the
+    same credential URL independently is how one of them ends up with a subtly
+    different shape that scans to a 403.
+
+    `request.url_root` rather than a configured hostname: the QR must encode
+    the origin the person is ACTUALLY on. A code generated on the LAN test
+    server that points at archiosk.com scans to a host the phone cannot reach,
+    and does it silently.
+    """
+    url = pass_target_url(request.url_root, project_id, raw_token)
+    return {
+        "link": url,
+        "qr_svg": render_token_qr_svg(url),
+        "label": row.label,
+        "role": row.role,
+        "disciplines": row.disciplines or "all disciplines",
+        "expires_at": row.expires_at,
+        "remaining": remaining_duration(row.expires_at),
+    }
+
+
 @project_manage_bp.route("/project/<project_id>/manage/access", methods=["GET"])
 @login_required
 def manage_access(project_id: str):
@@ -121,8 +151,8 @@ def manage_access(project_id: str):
         disciplines=DISCIPLINES,
         expiry_presets=list(EXPIRY_PRESETS.keys()),
         passes=list_all_tokens(project_id),
-        issued_link=None,
-        issued_label=None,
+        reveal=None,
+        rotated=False,
         error=None,
     )
 
@@ -137,8 +167,7 @@ def create_access_pass(project_id: str):
     disciplines = request.form.getlist("disciplines")
 
     error = None
-    issued_link = None
-    issued_label = None
+    reveal = None
 
     try:
         if not label:
@@ -156,10 +185,10 @@ def create_access_pass(project_id: str):
             expires_at=explicit,
         )
         # Shown ONCE, here, in this response. Never flashed - see the module
-        # docstring: flash() would write a live credential into a cookie.
-        issued_link = url_for("project_entry.project_entry",
-                              project_id=project_id, token=raw_token)
-        issued_label = row.label
+        # docstring: flash() would write a live credential into a cookie. The
+        # QR is rendered from the same raw token, in the same breath, because
+        # this response is the only moment it exists.
+        reveal = _pass_reveal(project_id, row, raw_token)
     except ProjectAccessRefused:
         # One message. The form is behind an authenticated administrative gate,
         # so this is a usability message rather than a security boundary - but
@@ -174,10 +203,10 @@ def create_access_pass(project_id: str):
         disciplines=DISCIPLINES,
         expiry_presets=list(EXPIRY_PRESETS.keys()),
         passes=list_all_tokens(project_id),
-        issued_link=issued_link,
-        issued_label=issued_label,
+        reveal=reveal,
+        rotated=False,
         error=error,
-    ), (200 if issued_link else 400)
+    ), (200 if reveal else 400)
 
 
 @project_manage_bp.route("/project/<project_id>/manage/access/<int:token_id>/revoke",
@@ -197,3 +226,49 @@ def revoke_access_pass(project_id: str, token_id: int):
         abort(403)
     revoke_token(token_id, actor=_current_username())
     return redirect(url_for("project_manage.manage_access", project_id=project_id))
+
+
+@project_manage_bp.route("/project/<project_id>/manage/access/<int:token_id>/rotate",
+                         methods=["POST"])
+@login_required
+def rotate_access_pass(project_id: str, token_id: int):
+    """Flow B — re-issue an existing pass as a scannable code.
+
+    The raw token of the pass on screen is GONE: only its sha256 was ever
+    stored. So this does not "show the QR for that pass" - it cannot. It mints
+    a replacement carrying the same role, disciplines and expiry, revokes the
+    old credential, and shows the new one.
+
+    The previous link stops working immediately. That is correct rather than
+    regrettable: the reason to re-issue is usually that the first link went
+    somewhere it should not have.
+    """
+    from models import ProjectAccessToken, db
+
+    _guard(project_id)
+    old = db.session.get(ProjectAccessToken, token_id)
+    # A pass belonging to another project must not be rotatable from this
+    # project's page, exactly as revoke already refuses.
+    if old is None or old.project_id != project_id:
+        abort(403)
+
+    reveal = None
+    error = None
+    try:
+        new_row, raw_token = rotate_pass(token_id, actor=_current_username())
+        reveal = _pass_reveal(project_id, new_row, raw_token)
+    except ProjectAccessRefused:
+        error = ("That pass could not be re-issued. A revoked or expired pass "
+                 "cannot be rotated - issue a new one instead.")
+
+    return render_template(
+        "project_access_manage.html",
+        project_id=project_id,
+        issuable_roles=ISSUABLE_ROLES,
+        disciplines=DISCIPLINES,
+        expiry_presets=list(EXPIRY_PRESETS.keys()),
+        passes=list_all_tokens(project_id),
+        reveal=reveal,
+        rotated=bool(reveal),
+        error=error,
+    ), (200 if reveal else 400)

@@ -1520,5 +1520,344 @@ class FooterPlacementTests(_ManagePanelTestCase):
                     f"footer link 404s: {href}")
 
 
+# ===========================================================================
+# CLAUDE-QR-PASS-01 — a pass you can hold up and someone can scan
+# ===========================================================================
+class QrRenderingTests(unittest.TestCase):
+    """The renderer itself. No app, no database - it is a pure function."""
+
+    URL = "https://10.0.0.177:8643/project/222109-1860-alstep-dr?token=AbC-123_xyz"
+
+    def test_the_svg_parses_as_xml(self):
+        import xml.etree.ElementTree as ET
+
+        from services.qr_pass import render_token_qr_svg
+
+        ET.fromstring(render_token_qr_svg(self.URL))
+
+    def test_it_carries_no_xml_declaration_because_it_is_embedded(self):
+        """A second <?xml ...?> mid-document is invalid HTML."""
+        from services.qr_pass import render_token_qr_svg
+
+        self.assertFalse(render_token_qr_svg(self.URL).lstrip().startswith("<?xml"))
+
+    def test_nothing_is_fetched_from_anywhere(self):
+        """The payload IS a live credential. Handing it to an external image
+        service would mail every stakeholder pass to a company nobody chose -
+        so the renderer is local, and the markup references no host but the SVG
+        namespace itself."""
+        from services.qr_pass import render_token_qr_svg
+
+        svg = render_token_qr_svg(self.URL)
+        stripped = svg.replace("http://www.w3.org/2000/svg", "")
+        for forbidden in ("http://", "https://", "chart.googleapis", "<image", "xlink:href"):
+            with self.subTest(token=forbidden):
+                self.assertNotIn(forbidden, stripped)
+
+    def test_the_symbol_is_black_on_white_regardless_of_theme(self):
+        """A scanner needs contrast, not brand. A dark-mode QR in muted greys
+        is the classic way to make a code that looks correct on screen and
+        reads unreliably in daylight."""
+        from services.qr_pass import render_token_qr_svg
+
+        svg = render_token_qr_svg(self.URL).lower()
+        self.assertIn("#000", svg)
+
+    def test_an_empty_target_is_refused_rather_than_encoded(self):
+        """A QR of an empty string scans to nothing and looks identical to a
+        working one from three feet away."""
+        from services.qr_pass import render_token_qr_svg
+
+        for bad in ("", "   ", None):
+            with self.subTest(value=bad):
+                with self.assertRaises(ValueError):
+                    render_token_qr_svg(bad)
+
+    def test_the_url_builder_produces_the_exact_expected_scheme(self):
+        from services.qr_pass import pass_target_url
+
+        self.assertEqual(
+            pass_target_url("https://host:8643/", "222109-1860-alstep-dr", "TOK"),
+            "https://host:8643/project/222109-1860-alstep-dr?token=TOK")
+
+    def test_remaining_duration_never_rounds_optimistically(self):
+        """A pass that says 2 days and dies in 25 hours strands somebody on a
+        deck, so the error is always in the safe direction."""
+        from datetime import datetime, timedelta, timezone
+
+        from services.qr_pass import remaining_duration
+
+        now = datetime.now(timezone.utc)
+        cases = {
+            timedelta(hours=47): "1 day",
+            timedelta(hours=25): "1 day",
+            timedelta(minutes=119): "1 hour",
+            timedelta(seconds=90): "1 minute",
+            timedelta(seconds=-1): "expired",
+        }
+        for delta, expected in cases.items():
+            with self.subTest(delta=str(delta)):
+                self.assertEqual(remaining_duration(now + delta, now=now), expected)
+
+
+class QrFlowATests(_ManagePanelTestCase):
+    """Flow A — the one-time reveal, at issue time."""
+
+    def test_issuing_a_pass_renders_a_scannable_code_beside_the_link(self):
+        response = self._create(self._architect())
+        self.assertEqual(response.status_code, 200)
+        body = response.get_data(as_text=True)
+        self.assertIn('data-ui-ref="manage.access.bb-pass"', body)
+        self.assertIn('data-ui-ref="manage.access.qr"', body)
+        self.assertIn("Building Box (BB)", body)
+
+    def test_the_qr_encodes_the_exact_url_that_was_shown(self):
+        """The code and the copyable link must be the same credential. Two
+        call sites assembling it separately is how one of them ends up
+        scanning to a 403."""
+        import re
+        import xml.etree.ElementTree as ET
+
+        from services.qr_pass import render_token_qr_svg
+
+        body = self._create(self._architect()).get_data(as_text=True)
+        link = re.search(r'class="pm-issued-link"[^>]*value="([^"]+)"', body).group(1)
+        self.assertIn("/project/" + PILOT_PROJECT_ID + "?token=", link)
+
+        # Re-render the same URL and compare the path data: identical input
+        # must give an identical symbol.
+        expected = render_token_qr_svg(link)
+        shown_start = body.index('data-ui-ref="manage.access.qr"')
+        shown = body[body.index("<svg", shown_start):body.index("</svg>", shown_start) + 6]
+        ET.fromstring(shown)
+        self.assertEqual(
+            re.findall(r'd="([^"]+)"', shown), re.findall(r'd="([^"]+)"', expected))
+
+    def test_the_scanned_url_actually_opens_the_project(self):
+        """End to end: whatever the QR encodes must work when followed."""
+        import re
+
+        body = self._create(self._architect(),
+                            role="trade", disciplines=["structural"]).get_data(as_text=True)
+        link = re.search(r'class="pm-issued-link"[^>]*value="([^"]+)"', body).group(1)
+        path = link[link.index("/project/"):]
+        landed = self.flask_app.test_client().get(path)
+        self.assertEqual(landed.status_code, 200)
+        self.assertIn("RS501", landed.get_data(as_text=True))
+
+    def test_the_table_offers_no_qr_for_an_existing_pass(self):
+        """It cannot: only sha256(token) was ever stored. A button promising
+        one would be lying about the property that makes the table safe."""
+        self._create(self._architect())
+        body = self._architect().get(
+            f"/project/{PILOT_PROJECT_ID}/manage/access").get_data(as_text=True)
+        self.assertNotIn('data-ui-ref="manage.access.qr"', body)
+        self.assertIn('data-ui-ref="manage.access.rotate"', body)
+
+
+class QrFlowBRotationTests(_ManagePanelTestCase):
+    """Flow B — re-issue, which mints a replacement and kills the original."""
+
+    def _issue_and_capture(self, **form):
+        import re
+
+        body = self._create(self._architect(), **form).get_data(as_text=True)
+        link = re.search(r'class="pm-issued-link"[^>]*value="([^"]+)"', body).group(1)
+        return re.search(r"\?token=([A-Za-z0-9_\-]+)", link).group(1)
+
+    def test_rotating_invalidates_the_previous_credential_immediately(self):
+        from services import project_rbac
+
+        old_raw = self._issue_and_capture(role="trade", disciplines=["structural"])
+        self.assertEqual(self._get_sheet(old_raw, "RS501").status_code, 200)
+
+        with self.flask_app.app_context():
+            token_id = project_rbac.list_all_tokens(PILOT_PROJECT_ID)[0]["token"].id
+        response = self._architect().post(
+            f"/project/{PILOT_PROJECT_ID}/manage/access/{token_id}/rotate")
+        self.assertEqual(response.status_code, 200)
+
+        # The old link is dead on the very next request.
+        self.assertEqual(self._get_sheet(old_raw, "RS501").status_code, 403)
+
+    def test_the_replacement_works_and_keeps_the_same_scope(self):
+        """Rotation is a new CREDENTIAL, never a new GRANT - anything else
+        would make "re-issue" a quiet way to widen access."""
+        import re
+
+        from services import project_rbac
+
+        self._issue_and_capture(role="trade", disciplines=["structural"])
+        with self.flask_app.app_context():
+            token_id = project_rbac.list_all_tokens(PILOT_PROJECT_ID)[0]["token"].id
+        body = self._architect().post(
+            f"/project/{PILOT_PROJECT_ID}/manage/access/{token_id}/rotate").get_data(as_text=True)
+        new_raw = re.search(r"\?token=([A-Za-z0-9_\-]+)", body).group(1)
+
+        self.assertEqual(self._get_sheet(new_raw, "RS501").status_code, 200)
+        self.assertEqual(self._get_sheet(new_raw, "A204").status_code, 403)
+
+    def test_the_replacement_does_not_extend_the_expiry(self):
+        from datetime import timezone
+
+        from services import project_rbac
+
+        self._issue_and_capture(role="trade", disciplines=["structural"])
+        with self.flask_app.app_context():
+            before = project_rbac.list_all_tokens(PILOT_PROJECT_ID)[0]["token"]
+            original_expiry = before.expires_at
+            token_id = before.id
+        self._architect().post(
+            f"/project/{PILOT_PROJECT_ID}/manage/access/{token_id}/rotate")
+        with self.flask_app.app_context():
+            after = [e for e in project_rbac.list_all_tokens(PILOT_PROJECT_ID)
+                     if e["status"] == "active"][0]["token"]
+            self.assertEqual(after.expires_at, original_expiry)
+
+    def test_a_revoked_pass_cannot_produce_a_scannable_code(self):
+        from services import project_rbac
+
+        self._issue_and_capture()
+        with self.flask_app.app_context():
+            token_id = project_rbac.list_all_tokens(PILOT_PROJECT_ID)[0]["token"].id
+            project_rbac.revoke_token(token_id, actor="architect_user")
+        response = self._architect().post(
+            f"/project/{PILOT_PROJECT_ID}/manage/access/{token_id}/rotate")
+        self.assertEqual(response.status_code, 400)
+        self.assertNotIn('data-ui-ref="manage.access.qr"',
+                         response.get_data(as_text=True))
+
+    def test_an_expired_pass_cannot_be_rotated_into_a_live_one(self):
+        """Rotating an expired pass would silently extend it. Reissuing is the
+        architect's decision on the form, not something rotation does on their
+        behalf."""
+        from services import project_rbac
+
+        token_id, _raw = self._issue_expired("architect")
+        response = self._architect().post(
+            f"/project/{PILOT_PROJECT_ID}/manage/access/{token_id}/rotate")
+        self.assertEqual(response.status_code, 400)
+        self.assertNotIn('data-ui-ref="manage.access.qr"',
+                         response.get_data(as_text=True))
+
+    def test_a_pass_from_another_project_cannot_be_rotated_here(self):
+        from services import project_rbac
+
+        with self.flask_app.app_context():
+            foreign, _ = project_rbac.issue_token(
+                "some-other-project", "architect", label="foreign",
+                actor="someone", ttl_seconds=3600)
+            foreign_id = foreign.id
+        response = self._architect().post(
+            f"/project/{PILOT_PROJECT_ID}/manage/access/{foreign_id}/rotate")
+        self.assertEqual(response.status_code, 403)
+
+    def test_rotation_requires_the_same_session_gate_as_everything_else(self):
+        from services import project_rbac
+
+        self._issue_and_capture()
+        with self.flask_app.app_context():
+            token_id = project_rbac.list_all_tokens(PILOT_PROJECT_ID)[0]["token"].id
+        stranger = self._session("nobody", 99, "read_only")
+        self.assertEqual(stranger.post(
+            f"/project/{PILOT_PROJECT_ID}/manage/access/{token_id}/rotate").status_code, 403)
+
+
+# ===========================================================================
+# CLAUDE-HELP-CENTER-01 — the guides, and what the desks stopped saying
+# ===========================================================================
+class HelpCenterTests(_ManagePanelTestCase):
+    def test_every_guide_renders(self):
+        client = self._architect()
+        for guide in ("field-access-passes", "spatial-coordination",
+                      "building-box-meetings"):
+            with self.subTest(guide=guide):
+                self.assertEqual(client.get(f"/help/{guide}").status_code, 200)
+        self.assertEqual(client.get("/help").status_code, 200)
+
+    def test_the_guide_list_is_a_closed_set(self):
+        """A help route that renders any template name it is handed is a
+        template-injection surface, and "guides" is not a directory anyone
+        should be able to walk."""
+        client = self._architect()
+        for attempt in ("nope", "../base", "..%2fbase", "index"):
+            with self.subTest(attempt=attempt):
+                self.assertIn(client.get(f"/help/{attempt}").status_code, (404, 308))
+
+    def test_help_is_authenticated_because_it_names_real_surfaces(self):
+        """These guides name project surfaces and role scopes. The sign-in page
+        is deliberately isolated from exactly that content (CLAUDE-P40-D1), so
+        the guides sit behind the session boundary too."""
+        self.assertIn(self.flask_app.test_client().get("/help").status_code,
+                      (302, 401, 403))
+
+    def test_the_index_uses_the_shared_container(self):
+        body = self._architect().get("/help").get_data(as_text=True)
+        self.assertIn('data-ui-ref="tank.container"', body)
+        self.assertIn('data-ui-ref="help.guide"', body)
+
+    def test_every_help_link_on_the_access_panel_resolves(self):
+        """Zero dead hrefs: each [?] is fetched and must not 404."""
+        import re
+
+        client = self._architect()
+        body = client.get(
+            f"/project/{PILOT_PROJECT_ID}/manage/access").get_data(as_text=True)
+        links = re.findall(r'class="pm-help"\s+href="([^"]+)"', body)
+        self.assertTrue(links, "no contextual help links rendered")
+        for href in links:
+            with self.subTest(href=href):
+                self.assertFalse(href.startswith("#"), "bare anchor, no route")
+                self.assertNotEqual(client.get(href.split("#")[0]).status_code, 404)
+
+    def test_the_desk_no_longer_carries_the_long_explanations(self):
+        """The paragraphs moved; the panel keeps controls and micro-copy."""
+        body = self._architect().get(
+            f"/project/{PILOT_PROJECT_ID}/manage/access").get_data(as_text=True)
+        for moved in ("there is no password and", "not something to resolve later",
+                      "should still work on Jan 21"):
+            with self.subTest(phrase=moved):
+                self.assertNotIn(moved, body)
+
+    def test_the_one_time_warning_did_NOT_move(self):
+        """Not an explanation - the only warning before an unrecoverable
+        credential disappears. Trimming this one to look clean costs somebody
+        real work."""
+        body = self._create(self._architect()).get_data(as_text=True)
+        self.assertIn("Shown <b>once</b>", body)
+        self.assertIn("Re-issue", body)
+
+    def test_the_building_box_guide_does_not_describe_unbuilt_sync(self):
+        """The brief asked for step-by-step presenter/follower, Lead Room,
+        Free Roam and LERP tracking. None of it exists - there is no
+        routes/bb_sync.py and no static/js/bb_sync_engine.js - and the relay it
+        needs fails this project's own dependency check on two settled
+        constraints.
+
+        Documenting it in the present tense would put a procedure in front of
+        somebody in a site trailer for a feature that will not respond. The
+        guide names it as NOT BUILT instead, and this asserts that it keeps
+        doing so."""
+        from pathlib import Path
+
+        root = Path(__file__).resolve().parents[1]
+        self.assertFalse((root / "routes" / "bb_sync.py").exists())
+        self.assertFalse((root / "static" / "js" / "bb_sync_engine.js").exists())
+
+        body = self._architect().get(
+            "/help/building-box-meetings").get_data(as_text=True)
+        self.assertIn("not built", body.lower())
+        self.assertIn("does not exist in this product", body)
+
+    def test_the_guides_describe_only_capabilities_that_exist(self):
+        """Spot-check: the field-access guide's claims are things the suite
+        elsewhere proves, not aspirations."""
+        body = self._architect().get(
+            "/help/field-access-passes").get_data(as_text=True)
+        self.assertIn("Reads no drawings at all", body)   # platform_admin
+        self.assertIn("shown once", body.lower())         # hash-only storage
+        self.assertIn("run out of fuel", body)            # safe landing
+
+
 if __name__ == "__main__":
     unittest.main()

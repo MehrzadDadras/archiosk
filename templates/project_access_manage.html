@@ -23,11 +23,15 @@
 <header class="pm-head">
     <h1>Access passes</h1>
     <p class="pm-project">{{ project_id }}</p>
+    {# CLAUDE-HELP-CENTER-01: the four-sentence explanation that used to sit
+       here moved to /help/field-access-passes. A superintendent reads a
+       paragraph like that once and scrolls past it forever, while it competes
+       every day with the control they came for. One line and a [?]. #}
     <p class="pm-note">
-        A pass is a link. Anyone holding it has exactly the role and disciplines
-        set below, until it expires or is revoked &mdash; there is no password and
-        no account behind it, so send it to one person and revoke it when they are
-        done.
+        A pass is a link. Scoped, expiring, revocable.
+        <a class="pm-help" href="{{ url_for('help_center.guide', guide='field-access-passes') }}"
+           data-ui-ref="help.link" title="Roles, scope, QR onboarding and revocation"
+           aria-label="Help: field access passes">?</a>
     </p>
 </header>
 
@@ -35,19 +39,71 @@
 <p class="pm-error" role="alert" data-ui-ref="manage.access.error">{{ error }}</p>
 {% endif %}
 
-{% if issued_link %}
-{# Shown once. Never flashed: flash() stores its message in the session cookie,
-   which would write a live credential into the architect's own browser. #}
-<section class="pm-issued" data-ui-ref="manage.access.issued">
-    <h2>Pass issued &mdash; {{ issued_label }}</h2>
-    <p class="pm-issued-warn">
-        This link is shown <b>once</b>. It is not stored anywhere and cannot be
-        retrieved again. Copy it now; if you lose it, revoke the pass and issue
-        a new one.
+{% if reveal %}
+{# THE BUILDING BOX FIELD PASS.
+
+   Shown once, in the response that minted the token, and never flashed:
+   flash() stores its message in the session cookie, which would write a live
+   credential into the architect's own browser and into anything that logs
+   cookies.
+
+   The QR is rendered from that same raw token in the same breath, because
+   this response is the only moment it exists. There is no "show QR" button on
+   the table below and there cannot be - only sha256(token) was ever stored.
+   Re-issue rotates instead, which is the honest version of the same action. #}
+<section class="pm-bb" data-ui-ref="manage.access.bb-pass">
+    <header class="pm-bb-head">
+        <h2>Building Box (BB) &mdash; Field Access Pass</h2>
+        {% if rotated %}
+        <p class="pm-bb-rotated" role="status">
+            Re-issued. <b>The previous link stopped working immediately.</b>
+        </p>
+        {% endif %}
+    </header>
+
+    <div class="pm-bb-body">
+        {# The symbol gets its own white plate regardless of theme. A scanner
+           needs contrast, not brand - a dark-mode QR in muted greys is the
+           classic way to make a code that looks right and reads badly in
+           daylight. #}
+        <div class="pm-bb-qr" role="img"
+             aria-label="Scan to open {{ reveal.label }} on a phone"
+             data-ui-ref="manage.access.qr">
+            {{ reveal.qr_svg | safe }}
+        </div>
+
+        <dl class="pm-bb-meta">
+            <dt>Pass</dt><dd>{{ reveal.label }}</dd>
+            <dt>Role</dt>
+            <dd><span class="pm-bb-badge">{{ reveal.role }}</span></dd>
+            <dt>Project</dt><dd><code>{{ project_id }}</code></dd>
+            <dt>Scope</dt><dd>{{ reveal.disciplines }}</dd>
+            <dt>Expires in</dt>
+            <dd><b>{{ reveal.remaining }}</b>
+                <span class="pm-bb-abs">({{ reveal.expires_at.strftime('%Y-%m-%d %H:%M') }} UTC)</span></dd>
+        </dl>
+    </div>
+
+    {# Deliberately NOT moved to help. This is not an explanation, it is the
+       only warning before an unrecoverable credential disappears - the one
+       case where trimming text to look clean costs somebody real work. #}
+    <p class="pm-bb-warn">
+        Shown <b>once</b> and never stored. Copy or scan it now &mdash; if lost,
+        use <b>Re-issue</b>, which mints a fresh pass and kills this one.
+        <a class="pm-help" href="{{ url_for('help_center.guide', guide='field-access-passes') }}#qr"
+           data-ui-ref="help.link" aria-label="Help: QR onboarding">?</a>
     </p>
-    <input class="pm-issued-link" type="text" readonly value="{{ issued_link }}"
-           data-ui-ref="manage.access.issued-link"
-           aria-label="Access link, copy it now">
+
+    <div class="pm-bb-actions">
+        <input class="pm-issued-link" type="text" readonly value="{{ reveal.link }}"
+               data-ui-ref="manage.access.issued-link"
+               aria-label="Access link, copy it now">
+        {# Print goes through the browser's own dialog - no new dependency, and
+           the print stylesheet hides everything except this card, so a placard
+           taped to a site box is the pass and nothing else. #}
+        <button type="button" class="pm-bb-print" onclick="window.print()"
+                data-ui-ref="manage.access.print">Print placard</button>
+    </div>
 </section>
 {% endif %}
 
@@ -81,11 +137,10 @@
         <fieldset class="pm-field">
             <legend>Disciplines</legend>
             <p class="pm-hint">
-                Leave every box clear for a role that spans the project
-                (<code>owner</code>). <code>engineer</code> and <code>trade</code>
-                must name at least one, or the pass is refused &mdash; an empty
-                scope that could mean &ldquo;all&rdquo; or &ldquo;none&rdquo; is
-                not something to resolve later.
+                <code>owner</code> spans the project. <code>engineer</code> and
+                <code>trade</code> must name at least one.
+                <a class="pm-help" href="{{ url_for('help_center.guide', guide='field-access-passes') }}#roles"
+                   data-ui-ref="help.link" aria-label="Help: roles and scope">?</a>
             </p>
             {% for discipline in disciplines %}
             <label class="pm-choice">
@@ -110,10 +165,7 @@
                 <input type="date" name="expires_on"
                        data-ui-ref="manage.access.expires-on">
             </label>
-            <p class="pm-hint">
-                A date expires at the end of that day, UTC &mdash; a pass written
-                down as &ldquo;until Jan 21&rdquo; should still work on Jan 21.
-            </p>
+            <p class="pm-hint">A date expires at end of day, UTC.</p>
         </fieldset>
 
         <button type="submit" class="pm-submit"
@@ -150,12 +202,28 @@
                 <td><span class="pm-status pm-status--{{ entry.status }}">{{ entry.status }}</span></td>
                 <td>
                     {% if entry.status == 'active' %}
-                    <form method="post" class="pm-revoke"
-                          action="{{ url_for('project_manage.revoke_access_pass', project_id=project_id, token_id=entry.token.id) }}">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        <button type="submit" class="pm-revoke-btn"
-                                data-ui-ref="manage.access.revoke">Revoke now</button>
-                    </form>
+                    {# Two actions, and the labels say what they DO rather than
+                       what they are about. "Re-issue" rather than "Show QR",
+                       because the raw token of this pass is gone - only its
+                       sha256 was stored - so there is no QR of THIS pass to
+                       show. Rotation mints a replacement and kills this one,
+                       and a button promising otherwise would be lying about
+                       the security property that makes the table safe. #}
+                    <div class="pm-row-actions">
+                        <form method="post" class="pm-revoke"
+                              action="{{ url_for('project_manage.rotate_access_pass', project_id=project_id, token_id=entry.token.id) }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="pm-rotate-btn"
+                                    title="Mint a fresh pass with the same scope and revoke this one"
+                                    data-ui-ref="manage.access.rotate">Re-issue QR</button>
+                        </form>
+                        <form method="post" class="pm-revoke"
+                              action="{{ url_for('project_manage.revoke_access_pass', project_id=project_id, token_id=entry.token.id) }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="pm-revoke-btn"
+                                    data-ui-ref="manage.access.revoke">Revoke now</button>
+                        </form>
+                    </div>
                     {% else %}
                     <span class="pm-dash" aria-hidden="true">&mdash;</span>
                     {% endif %}

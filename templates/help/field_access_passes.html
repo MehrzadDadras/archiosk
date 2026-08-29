@@ -1,0 +1,155 @@
+{# CLAUDE-HELP-CENTER-01 — field access passes.
+
+   Everything described here is BUILT and tested. Where a limit exists it is
+   stated as a limit, not softened: a guide that promises a capability the
+   product does not have is read on a site by somebody who then cannot do the
+   thing.
+#}<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>Field access passes &mdash; Help</title>
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='app-icon.svg') }}?v={{ static_version }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/tokens.css') }}?v={{ static_version }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/project_manage.css') }}?v={{ static_version }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/fish_tank.css') }}?v={{ static_version }}">
+</head>
+<body class="pm">
+
+{% import "components/fish_tank_container.html" as tank %}
+{{ tank.scope_hud([{'label': 'Help', 'href': url_for('help_center.index')},
+                   {'label': 'Field access passes'}]) }}
+
+<header class="pm-head">
+    <h1>Field access passes</h1>
+    <p class="pm-note">
+        A pass is a link. Anyone holding it has exactly the role and disciplines
+        it was issued with, until it expires or is revoked. There is no password
+        and no account behind it.
+    </p>
+</header>
+
+<article class="help-body">
+
+    <section id="roles">
+        <h2>Roles</h2>
+        <p>
+            Five exist. Three can be issued from the access panel.
+        </p>
+        <dl class="help-defs">
+            <dt><code>owner</code></dt>
+            <dd>Client or owner side. Reads every discipline.</dd>
+            <dt><code>engineer</code></dt>
+            <dd>Reads only the disciplines named on the pass.</dd>
+            <dt><code>trade</code></dt>
+            <dd>Narrowest. Reads only the disciplines named on the pass.</dd>
+            <dt><code>architect</code></dt>
+            <dd>
+                Reads everything and manages passes. <b>Not issuable from the
+                form</b> &mdash; a form that mints another architect pass is a
+                privilege-escalation control wearing a form label.
+            </dd>
+            <dt><code>platform_admin</code></dt>
+            <dd>
+                Infrastructure and tenants. <b>Reads no drawings at all.</b>
+                Managing access is not the same capability as having it.
+            </dd>
+        </dl>
+        <p class="help-note">
+            <code>engineer</code> and <code>trade</code> must name at least one
+            discipline. An empty scope could mean &ldquo;all&rdquo; or
+            &ldquo;none&rdquo;, and that is not a thing to resolve later.
+        </p>
+    </section>
+
+    <section id="scope">
+        <h2>What a scope actually blocks</h2>
+        <p>
+            Discipline scope is enforced where the bytes are served, not on the
+            page that lists them. A structural pass asking for an architectural
+            sheet is refused with a 403, and the sheet is never listed for them
+            in the first place &mdash; a sheet mark is itself information.
+        </p>
+        <p>
+            The same scope applies to anything the assistant is asked. Context
+            is filtered before a prompt is built, so a boundary that holds over
+            HTTP cannot be walked around by asking a question instead.
+        </p>
+    </section>
+
+    <section id="qr">
+        <h2>QR onboarding</h2>
+        <p>
+            Issuing a pass shows a <b>Building Box field pass</b>: a scannable
+            code, the role, the scope, and how long is left. Hold the screen up
+            and the trade scans it with their phone camera. No typing.
+        </p>
+        <p class="help-warn">
+            <b>The code is shown once.</b> Only a SHA-256 digest of the token is
+            ever stored, so the link cannot be recovered afterwards &mdash; not
+            by an architect, not by an administrator, not from the database.
+            Copy it or scan it from that screen.
+        </p>
+        <p>
+            The code is generated on this server. It is never sent to an
+            external image service: the payload is a live credential, and
+            handing it to a third party would mail every stakeholder pass to a
+            company nobody chose.
+        </p>
+    </section>
+
+    <section id="rotation">
+        <h2>Lost a link? Re-issue it</h2>
+        <p>
+            The passes table has <b>Re-issue QR</b>, not &ldquo;show QR&rdquo;.
+            The difference is real: the original token no longer exists to show.
+            Re-issue mints a replacement carrying the same role, scope and
+            expiry, and <b>revokes the original immediately</b>.
+        </p>
+        <p>
+            That is usually what you want. The reason a link needs re-issuing is
+            normally that it went somewhere it should not have.
+        </p>
+        <p class="help-note">
+            Rotation never extends an expiry and never widens a scope. It is a
+            new credential, not a new grant. An expired pass cannot be rotated
+            &mdash; issue a new one, which is a decision the form makes you make.
+        </p>
+    </section>
+
+    <section id="revocation">
+        <h2>Revoking</h2>
+        <p>
+            <b>Revoke now</b> takes effect on the very next request. There is no
+            cache and no session to wait out.
+        </p>
+        <p>
+            Revoked and expired rows stay in the table. It answers &ldquo;who
+            has access&rdquo;; one that dropped withdrawn passes could not
+            answer &ldquo;who used to&rdquo;, which is the question asked after
+            an incident.
+        </p>
+    </section>
+
+    <section id="running-out">
+        <h2>If the assistant stops answering</h2>
+        <p>
+            A trial project has a query allowance. When it runs out you will see:
+        </p>
+        <blockquote class="help-quote">
+            You have run out of fuel, but the system allows you to get home
+            safely. Contact admin for further help.
+        </blockquote>
+        <p>
+            The query that used the last of it still completes in full. After
+            that, <b>everything except the assistant keeps working</b> &mdash;
+            sheets open, zoom and pan work, navigation works, and you can still
+            escalate a question to a human. Only the model stops.
+        </p>
+    </section>
+</article>
+
+{% include "components/public_footer.html" %}
+</body>
+</html>

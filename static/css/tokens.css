@@ -145,6 +145,20 @@
     --accepted-green: #2E5F38;
     --accepted-green-tint: #DCEADB;
     --attention-amber: #7A4A08;
+
+    /* CLAUDE-QR-PASS-01 - the QR plate, and the one pair of values in this
+       file that are NOT a design choice.
+       A scanner needs maximum contrast, not brand. A QR rendered in themed
+       greys looks correct on screen and reads unreliably in daylight on a
+       cracked phone at an angle - which is the ordinary case on a site, not
+       the bad one. So the symbol is pure black on pure white in EVERY
+       appearance, and these live here rather than as raw hex in
+       project_manage.css because tokens.css is the one place raw hex belongs
+       (test_p40vw8qa_site_wide_visual_consistency enforces exactly that, and
+       caught them). Named for their MEANING - the plate a code is printed on -
+       so nobody re-themes them thinking they are surface colours. */
+    --qr-plate-light: #FFFFFF;
+    --qr-plate-dark: #000000;
     --attention-amber-tint: #F2E2C4;
     --failure-red: #8C2E22;
     --failure-red-tint: #F3DAD4;

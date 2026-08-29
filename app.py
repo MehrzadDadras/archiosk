@@ -494,6 +494,7 @@ def _register_blueprints(app: Flask) -> None:
     from routes.project_manage import project_manage_bp
     from routes.project_entry import project_entry_bp
     from routes.project_query import project_query_bp
+    from routes.help_center import help_bp
 
     app.register_blueprint(portal_bp)
     app.register_blueprint(api_bp, url_prefix="/api/v1")
@@ -526,6 +527,9 @@ def _register_blueprints(app: Flask) -> None:
     # allowance. Deliberately separate from the asset/entry blueprints,
     # so no quota state can reach the viewer.
     app.register_blueprint(project_query_bp)
+    # CLAUDE-HELP-CENTER-01: where the long explanations live, so the
+    # operational desks can carry controls and a [?] instead.
+    app.register_blueprint(help_bp)
 
 
 def _register_error_handlers(app: Flask) -> None:

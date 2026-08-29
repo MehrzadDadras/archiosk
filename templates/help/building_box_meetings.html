@@ -1,0 +1,159 @@
+{# CLAUDE-HELP-CENTER-01 — Building Box in meetings.
+
+   THIS GUIDE DOCUMENTS WHAT IS BUILT, AND SAYS SO WHERE SOMETHING IS NOT.
+
+   The brief for it described a two-layer architecture with live presenter/
+   follower sync, a Lead Room, Free Roam, re-centering and LERP-smoothed cursor
+   ghosts. None of that exists: there is no routes/bb_sync.py, no
+   static/js/bb_sync_engine.js, and the WebSocket relay it needs FAILS this
+   project's own dependency check on two settled constraints (no async runtime -
+   gunicorn runs gthread workers; no background-worker infrastructure - deploy/
+   documents exactly one gunicorn+nginx process model).
+
+   Writing it in the present tense anyway would put a step-by-step procedure in
+   front of somebody in a site trailer for a feature that will not respond. So
+   the meeting workflow below is the one that works TODAY, using passes and
+   screen sharing, and the unbuilt part is named as unbuilt at the end.
+#}<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>Building Box in meetings &mdash; Help</title>
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='app-icon.svg') }}?v={{ static_version }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/tokens.css') }}?v={{ static_version }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/project_manage.css') }}?v={{ static_version }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/fish_tank.css') }}?v={{ static_version }}">
+</head>
+<body class="pm">
+
+{% import "components/fish_tank_container.html" as tank %}
+{{ tank.scope_hud([{'label': 'Help', 'href': url_for('help_center.index')},
+                   {'label': 'Building Box in meetings'}]) }}
+
+<header class="pm-head">
+    <h1>Building Box in meetings</h1>
+    <p class="pm-note">
+        Running a shanty or trailer meeting from a Building Box pass.
+    </p>
+</header>
+
+<article class="help-body">
+
+    <section id="two-layers">
+        <h2>Two layers, and only one of them is ours</h2>
+        <p>
+            A meeting has a <b>conversation layer</b> &mdash; whatever video or
+            phone bridge you already use &mdash; and a <b>drawing layer</b>, which
+            is this. ARCHIOSK deliberately does not host the call. Nothing here
+            captures audio, video, or a participant list.
+        </p>
+        <p>
+            Today the two are joined by screen sharing and by everyone holding
+            their own pass. That is less clever than it sounds, and it has one
+            large advantage: <b>every person sees only what their own pass
+            permits</b>, even while looking at the same drawing.
+        </p>
+    </section>
+
+    <section id="before">
+        <h2>Before the meeting</h2>
+        <ol class="help-steps">
+            <li>Open the access panel for the project.</li>
+            <li>
+                Issue one pass per attending party. Give each the narrowest role
+                that lets them do their job &mdash; a framing sub needs
+                structural, not the architectural set.
+            </li>
+            <li>
+                <b>Copy each link as you create it.</b> It is shown once and
+                cannot be recovered.
+            </li>
+            <li>Set the expiry to the length of the meeting, or the day.</li>
+        </ol>
+    </section>
+
+    <section id="in-the-trailer">
+        <h2>In the trailer &mdash; QR onboarding</h2>
+        <p>
+            The point of the QR is that nobody types a token on a site.
+        </p>
+        <ol class="help-steps">
+            <li>
+                On the access panel, press <b>Re-issue QR</b> on the row for the
+                party in front of you. A Building Box field pass appears with a
+                scannable code.
+            </li>
+            <li>
+                Turn the laptop around. They scan it with the phone camera
+                &mdash; no app, no account.
+            </li>
+            <li>
+                They land on their own sheet directory, scoped to their own
+                disciplines.
+            </li>
+        </ol>
+        <p class="help-warn">
+            <b>Re-issue kills the previous link.</b> That is intentional: the
+            usual reason to re-issue is that the first one went somewhere it
+            should not have. If they already have a working link, do not press it.
+        </p>
+        <p>
+            <b>Print placard</b> produces a single sheet carrying just the code,
+            the scope and the expiry &mdash; taped to a site box, that is the
+            pass. The printed page deliberately excludes the form and the token
+            table, which would otherwise be a credential list left on a table.
+        </p>
+    </section>
+
+    <section id="during">
+        <h2>During the meeting</h2>
+        <p>
+            Share the presenter's screen for the discussion, and let people open
+            their own pass on their own phone for anything they need to look at
+            closely. Zoom and pan are per-device; nobody is dragged around by
+            somebody else's scrolling.
+        </p>
+        <p>
+            When the assistant cannot answer something, it says so and files the
+            question &mdash; verbatim, with the sheet and the view &mdash; for the
+            project's architect. That is a better outcome in a meeting than a
+            confident guess nobody can check.
+        </p>
+    </section>
+
+    <section id="after">
+        <h2>After</h2>
+        <p>
+            <b>Revoke the passes.</b> It takes effect on the next request, and
+            the row stays in the table so the record of who had access survives.
+        </p>
+    </section>
+
+    <section id="not-built">
+        <h2>Live shared navigation &mdash; not built</h2>
+        <p class="help-warn">
+            Synchronised presenter/follower navigation &mdash; a lead room whose
+            view others follow, free-roam and re-centering, smoothed cursor
+            ghosts &mdash; <b>does not exist in this product.</b> It is described
+            here only so nobody plans a meeting around it.
+        </p>
+        <p>
+            It needs a live relay between browsers. That conflicts with two
+            constraints this project has deliberately settled: the application
+            runs threaded <code>gthread</code> workers rather than an async event
+            loop, and the deployment is a single server with no queue or worker
+            infrastructure. Both are recorded decisions, not oversights, and
+            reversing either is an architectural change with its own
+            authorisation rather than a feature that can be added quietly.
+        </p>
+        <p>
+            Until then, screen sharing carries the shared view and passes carry
+            the private ones.
+        </p>
+    </section>
+</article>
+
+{% include "components/public_footer.html" %}
+</body>
+</html>

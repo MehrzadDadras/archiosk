@@ -308,6 +308,9 @@ class RegistryConsistencyTests(unittest.TestCase):
         # CLAUDE-POST-SIGNIN-GATEWAY-SIMPLIFICATION-01, Option C added
         # "index" - the consolidated post-sign-in entry page (portal.index,
         # `/`), replacing the retired separate Gateway shell.
+        # CLAUDE-HELP-CENTER-01 added "help" - the guides the operational
+        # desks stopped carrying inline, plus the contextual [?] links that
+        # reach them.
         # CLAUDE-FISH-TANK-01 added "tank" - the shared spatial container
         # (templates/components/fish_tank_container.html). It is a NAMESPACE
         # rather than a page prefix, because the same container wraps several
@@ -317,7 +320,7 @@ class RegistryConsistencyTests(unittest.TestCase):
                 ref,
                 r"^(menu|lists|display|toolbox|chat|eye|shell|gateway|auth|upload|errors|"
                 r"security|operations|projects-directory|removed-projects|developer|"
-                r"landing|explore|start-trial|spin|pdm|index|tank)\.[a-z0-9._\-]+$",
+                r"landing|explore|start-trial|spin|pdm|index|tank|help)\.[a-z0-9._\-]+$",
                 ref,
             )
 

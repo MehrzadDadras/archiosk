@@ -1,0 +1,132 @@
+{# CLAUDE-HELP-CENTER-01 — spatial coordination.
+
+   Describes the coordination desk as it is actually built. The vector standard
+   and the relationship bases below are real, recorded decisions
+   (docs/DECISION_PROVENANCE_LEDGER.md DPL-0005), not aspirations.
+#}<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>Spatial coordination &mdash; Help</title>
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='app-icon.svg') }}?v={{ static_version }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/tokens.css') }}?v={{ static_version }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/project_manage.css') }}?v={{ static_version }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/fish_tank.css') }}?v={{ static_version }}">
+</head>
+<body class="pm">
+
+{% import "components/fish_tank_container.html" as tank %}
+{{ tank.scope_hud([{'label': 'Help', 'href': url_for('help_center.index')},
+                   {'label': 'Spatial coordination'}]) }}
+
+<header class="pm-head">
+    <h1>Spatial coordination</h1>
+    <p class="pm-note">
+        Two panes. The one you are coordinating <i>from</i> stays put while you
+        go looking.
+    </p>
+</header>
+
+<article class="help-body">
+
+    <section id="split-pane">
+        <h2>The split pane</h2>
+        <p>
+            <b>Pane 1 is anchored.</b> It holds the sheet and the selection you
+            started from, and nothing pane 2 does may move it. That is the whole
+            property: a coordination view where you do not lose your place while
+            checking something else.
+        </p>
+        <p>
+            Each pane holds its own zoom, pan and rotation. They are deliberately
+            not linked &mdash; two sheets at different scales, snapped together,
+            would imply an alignment nobody measured.
+        </p>
+    </section>
+
+    <section id="vector">
+        <h2>Why zoom never goes soft</h2>
+        <p>
+            Panes serve <b>vectors</b>, not pictures. A sheet is one SVG, and a
+            crop is a different <code>viewBox</code> onto that same file &mdash;
+            four numbers, not a second image.
+        </p>
+        <p>
+            Two consequences worth knowing. Linework stays sharp at any
+            magnification, because there is no resolution to run out of. And a
+            crop cannot disagree with the full sheet about what the drawing
+            says, because there is only one drawing: framing a region changes
+            what you are looking at, never what is there.
+        </p>
+        <p class="help-note">
+            Thumbnails are still pictures. A 175&nbsp;px tile has no zoom, and
+            parsing 57,906 paths to fill one would be wasted work.
+        </p>
+    </section>
+
+    <section id="callouts">
+        <h2>Callouts</h2>
+        <p>
+            A callout reading <code>1/A801</code> names its own target. Pressing
+            it frames that detail in pane 2 and <b>does not touch pane 1</b>.
+        </p>
+        <p>
+            If you press something that looks like a control and nothing happens,
+            the desk notices and offers the sheet the callout names. It does not
+            guess: the suggestion is read off the drawing, never inferred, so it
+            can only ever offer a target that is genuinely there.
+        </p>
+    </section>
+
+    <section id="provenance">
+        <h2>Where a relationship came from</h2>
+        <p>
+            Every stated relationship between two sheets carries a basis, and the
+            three are told apart by <b>form</b> as well as colour, so they survive
+            a greyscale print:
+        </p>
+        <dl class="help-defs">
+            <dt>Direct</dt>
+            <dd>
+                The sheet itself carries the reference &mdash; a callout bubble, a
+                matching room number, a shared dimension.
+            </dd>
+            <dt>Inferred</dt>
+            <dd>
+                Plausible from the set, but not drawn on the sheet. Shown, and
+                labelled as inference rather than fact.
+            </dd>
+            <dt>Unresolved</dt>
+            <dd>
+                Named somewhere, but the target is not in the material. Shown
+                rather than hidden &mdash; a missing discipline is often the most
+                useful thing on the screen.
+            </dd>
+        </dl>
+        <p>
+            A discipline the cover index names but that delivered no sheets still
+            appears, marked unresolved. A project page showing only the
+            disciplines that happen to have files would hide exactly the fact
+            somebody needs.
+        </p>
+    </section>
+
+    <section id="orientation">
+        <h2>Sheet orientation</h2>
+        <p>
+            Native orientation is <b>derived</b>, then applied as an additional
+            rotation on top of whatever the file already declares &mdash; not as
+            an absolute one. Treating it as absolute undoes a publisher's own
+            correct rotation and stands upright sheets on end.
+        </p>
+        <p>
+            <b>Reset</b> returns to that derived orientation. Rotating a pane is
+            a way of looking; it never edits the source PDF.
+        </p>
+    </section>
+</article>
+
+{% include "components/public_footer.html" %}
+</body>
+</html>
