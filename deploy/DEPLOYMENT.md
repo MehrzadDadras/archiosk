@@ -30,6 +30,23 @@ These live only on the server, are never part of the exact-commit export, and mu
 be excluded from every sync:
 
 - `.env` — real secrets (API keys, Flask secret key, `STATIC_VERSION`, etc.).
+- `.env.bak-*` — any backup of the above. **Added after a near-miss**
+  (CLAUDE-DEPLOY-ENV-BACKUP-01): a `.env.bak-pre-<hash>` written beside `.env`
+  before a `STATIC_VERSION` edit was *proposed for deletion* by the step-5
+  dry-run, because `--exclude='.env'` matches that name **exactly** and does
+  not match `.env.bak-pre-<hash>`. Nothing had been lost — the dry-run is what
+  caught it — but a real write would have destroyed the only way back from the
+  secrets change while claiming to have deployed successfully.
+
+  **Why the pattern is `.env` plus `.env.bak-*` and not the broader `.env*`.**
+  `.env.example` is a **tracked** file that documents variable names (never
+  values) and is meant to deploy like any other source file. `--exclude='.env*'`
+  would match it too, so a commit adding a newly-documented variable would ship
+  an updated `.env.example` that silently never reached the server — the same
+  class of invisible no-op this document exists to prevent, just quieter. Two
+  precise patterns, not one broad one.
+
+  Better still, **do not put the backup here at all** — see step 4.
 - `instance/` — the real, live project registry and all real project data.
   Also the SQLite database, which the code rollback in step 4 does NOT cover:
   a schema change needs its own backup, see step 8.
@@ -82,11 +99,38 @@ currently-deployed commit:
 ssh ubuntu@<server> "
   sudo mkdir -p /var/www/archiosk-backup-<current-short-hash> &&
   sudo rsync -a \
-    --exclude='.claude/' --exclude='.env' --exclude='.venv/' \
+    --exclude='.claude/' --exclude='.env' --exclude='.env.bak-*' --exclude='.venv/' \
     --exclude='__pycache__/' --exclude='instance/' \
     /var/www/archiosk/ /var/www/archiosk-backup-<current-short-hash>/
 "
 ```
+
+### Also back up `.env`, and put it OUTSIDE `/var/www/archiosk/`
+
+The rsync above deliberately excludes `.env`, so the rollback tree does **not**
+contain it — and step 10 may edit it. Capture it explicitly, into the rollback
+tree (which is a sibling directory, not inside the sync target):
+
+```bash
+ssh ubuntu@<server> "
+  sudo cp -p /var/www/archiosk/.env /var/www/archiosk-backup-<current-short-hash>/.env &&
+  sudo chmod 600 /var/www/archiosk-backup-<current-short-hash>/.env &&
+  sudo stat -c '%U:%G %a %n' /var/www/archiosk-backup-<current-short-hash>/.env
+"
+```
+
+**Never write it beside the live `.env`** as `/var/www/archiosk/.env.bak-<hash>`.
+That is what CLAUDE-DEPLOY-ENV-BACKUP-01 got wrong: a rollback point stored
+inside the tree it protects is fragile by construction, and the very next
+`rsync --delete` proposed removing it. The excludes above now defend against
+that, but the excludes are the seatbelt — the fix is not to put it there.
+
+It holds real secrets, so `chmod 600` is not optional, and it must never be
+copied off the host, printed, or committed. Note that the application directory
+is **not** an nginx document root (nginx reverse-proxies `443` to gunicorn on
+`127.0.0.1:8000`), so a stray file there is not reachable over HTTP — verified,
+`https://archiosk.com/.env` and `/.env.bak-…` both return 404. That is a reason
+not to panic about a past one, not a reason to keep writing them there.
 
 This is a flat, single-generation rollback point — not a versioned releases/symlink
 scheme. Good enough for the current scale; revisit if routine deploys become
@@ -101,7 +145,7 @@ directory and `/var/www/archiosk` are local to the server, so this needs no loca
 ```bash
 ssh ubuntu@<server> "
   sudo rsync -avn --delete \
-    --exclude='.claude/' --exclude='.env' --exclude='.venv/' \
+    --exclude='.claude/' --exclude='.env' --exclude='.env.bak-*' --exclude='.venv/' \
     --exclude='__pycache__/' --exclude='instance/' \
     /tmp/archiosk-deploy-staging/ /var/www/archiosk/
 "
@@ -128,7 +172,7 @@ surface: **stop**. Do not proceed until the reason is understood.
 ```bash
 ssh ubuntu@<server> "
   sudo rsync -a --delete \
-    --exclude='.claude/' --exclude='.env' --exclude='.venv/' \
+    --exclude='.claude/' --exclude='.env' --exclude='.env.bak-*' --exclude='.venv/' \
     --exclude='__pycache__/' --exclude='instance/' \
     --chown=archiosk:archiosk \
     /tmp/archiosk-deploy-staging/ /var/www/archiosk/
@@ -377,7 +421,19 @@ silently stays stale.
 This is the one step in this whole procedure that edits a file already on the
 server rather than something shipped from the repo — treat it with the same care
 as any other production `.env` edit (scoped, minimal, never printing the file's
-other contents, which include real secrets):
+other contents, which include real secrets).
+
+**Back it up first, to the step-4 rollback tree** — not beside the live file.
+If step 4's `.env` copy was already taken, this is done; if not, take it now
+using the command there. A `.env.bak-*` written into `/var/www/archiosk/` is
+the exact mistake CLAUDE-DEPLOY-ENV-BACKUP-01 records.
+
+Read the CURRENT value from the live file rather than trusting any local
+record: `.env` is per-host and git-ignored, so nothing in a diff can catch a
+wrong number, and the recorded near-miss was a bump to a value **below** what
+production was already serving — which leaves every browser on its cached
+stylesheet and looks exactly like a successful deploy. `+ 1` from the live
+value, as below, is safe by construction; an absolute number is not.
 
 ```bash
 ssh ubuntu@<server> "
@@ -436,7 +492,7 @@ speculative changes on a broken deploy) and restore the step-4 backup:
 ```bash
 ssh ubuntu@<server> "
   sudo rsync -a --delete \
-    --exclude='.claude/' --exclude='.env' --exclude='.venv/' \
+    --exclude='.claude/' --exclude='.env' --exclude='.env.bak-*' --exclude='.venv/' \
     --exclude='__pycache__/' --exclude='instance/' \
     --chown=archiosk:archiosk \
     /var/www/archiosk-backup-<previous-short-hash>/ /var/www/archiosk/ &&
