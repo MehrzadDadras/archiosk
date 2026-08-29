@@ -9674,3 +9674,34 @@ body {
     color: var(--text-metadata);
     font-style: italic;
 }
+
+/* CLAUDE-HELP-CENTER-01 - the contextual [?] inside a Toolbox pane.
+   Same shape and reasoning as .pm-help on the access panel: a real link so it
+   works with a keyboard and a screen reader without script, sized to sit
+   INSIDE a line of text rather than to the 44px touch minimum, which in a
+   sentence would push the line apart. Opens in a new tab - the Toolbox is
+   beside an open workspace, and reading a guide should not cost the state
+   somebody is working in. */
+.pane-help {
+    display: inline-grid;
+    place-items: center;
+    /* 18px, not 16: the glyph inside is 11px, which is this application's
+       floor for any text a person is expected to read
+       (test_global_search_and_header's typography rule, which caught this at
+       10px). A 16px circle around 11px text leaves no optical breathing room,
+       so the ring grew rather than the text shrinking - the floor is the
+       fixed thing here. */
+    width: 18px;
+    height: 18px;
+    margin-left: 4px;
+    border: 1px solid var(--border);
+    border-radius: 50%;
+    color: var(--text-metadata);
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1;
+    text-decoration: none;
+    vertical-align: middle;
+}
+.pane-help:hover { color: var(--machine-blue); border-color: var(--machine-blue); }
+.pane-help:focus-visible { outline: 2px solid var(--machine-blue); outline-offset: 2px; }

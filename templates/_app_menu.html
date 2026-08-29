@@ -526,6 +526,43 @@
                         <summary class="workspace-topbar-btn">Help</summary>
                         <div class="workspace-menubar-panel" role="group" aria-label="Help">
                             <button type="button" class="workspace-menubar-item" data-ui-ref="menu.help.shortcuts" data-action="open-keyboard-shortcuts">Keyboard Shortcuts&hellip;</button>
+                            {# CLAUDE-HELP-CENTER-01: the guides.
+
+                               EVERY ONE OPENS IN A NEW TAB. This menu is
+                               reachable from an open coordination desk, where a
+                               person may have two panes framed on a detail they
+                               spent a minute finding - navigating away in place
+                               would throw that state away to read a paragraph.
+                               A new tab is the difference between consulting
+                               help and losing your place.
+
+                               rel="noopener" because target="_blank" otherwise
+                               hands the opened page a window.opener handle back
+                               into this one.
+
+                               Built with url_for, never hardcoded paths: the
+                               slugs are `field-access-passes` and
+                               `building-box-meetings` (hyphens), and a
+                               hand-typed `/help/passes` or
+                               `/help/building_box_meetings` would 404 silently
+                               from a menu nobody tests by clicking. url_for
+                               fails loudly at render time instead. #}
+                            <div class="workspace-menubar-separator" role="separator"></div>
+                            <a class="workspace-menubar-item" data-ui-ref="menu.help.centre"
+                               href="{{ url_for('help_center.index') }}"
+                               target="_blank" rel="noopener">Help Centre</a>
+                            <a class="workspace-menubar-item" data-ui-ref="menu.help.passes"
+                               href="{{ url_for('help_center.guide', guide='field-access-passes') }}"
+                               target="_blank" rel="noopener">Access passes &amp; field QR</a>
+                            <a class="workspace-menubar-item" data-ui-ref="menu.help.coordination"
+                               href="{{ url_for('help_center.guide', guide='spatial-coordination') }}"
+                               target="_blank" rel="noopener">Spatial coordination</a>
+                            <a class="workspace-menubar-item" data-ui-ref="menu.help.spin"
+                               href="{{ url_for('help_center.guide', guide='spin-and-survival-modes') }}"
+                               target="_blank" rel="noopener">Spin &amp; Survival Mode</a>
+                            <a class="workspace-menubar-item" data-ui-ref="menu.help.meetings"
+                               href="{{ url_for('help_center.guide', guide='building-box-meetings') }}"
+                               target="_blank" rel="noopener">Building Box &amp; meetings</a>
                         </div>
                     </details>
                 </nav>

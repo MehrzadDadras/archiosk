@@ -37,6 +37,11 @@ GUIDES = {
         "title": "Spatial coordination",
         "summary": "Split-pane comparison, vector framing, and where a claim came from.",
     },
+    "spin-and-survival-modes": {
+        "template": "help/spin_and_survival_modes.html",
+        "title": "Spin & Survival Mode",
+        "summary": "First Spin, Delta Spin, and the Survival lens - what each is for.",
+    },
     "building-box-meetings": {
         "template": "help/building_box_meetings.html",
         "title": "Building Box in meetings",

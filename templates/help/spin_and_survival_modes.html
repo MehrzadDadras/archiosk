@@ -1,0 +1,167 @@
+{# CLAUDE-HELP-CENTER-01 — Spin and Survival Mode.
+
+   Written from services/spin.py and services/case_workspace.py, not from the
+   toolbox copy it replaces. The eight delta classifications and the Survival
+   objective below are the ACTUAL closed vocabularies the engine uses, read out
+   of the code — so this guide cannot describe a classification the product
+   would never produce.
+#}<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>Spin &amp; Survival Mode &mdash; Help</title>
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='app-icon.svg') }}?v={{ static_version }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/tokens.css') }}?v={{ static_version }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/project_manage.css') }}?v={{ static_version }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/fish_tank.css') }}?v={{ static_version }}">
+</head>
+<body class="pm">
+
+{% import "components/fish_tank_container.html" as tank %}
+{{ tank.scope_hud([{'label': 'Help', 'href': url_for('help_center.index')},
+                   {'label': 'Spin &amp; Survival Mode'}]) }}
+
+<header class="pm-head">
+    <h1>Spin &amp; Survival Mode</h1>
+    <p class="pm-note">
+        A comprehensive machine review of a project's evidence. Always
+        explicitly triggered, never automatic.
+    </p>
+</header>
+
+<article class="help-body">
+
+    <section id="what">
+        <h2>What a Spin is</h2>
+        <p>
+            A Spin reads the evidence already in a project and characterises it
+            as a whole. It is a <b>deliberate act</b>: nothing schedules one,
+            nothing runs one in the background, and no upload triggers one. You
+            press the button.
+        </p>
+        <p class="help-note">
+            That is a design decision rather than a limitation. A review that
+            ran itself would produce findings nobody asked for, attached to a
+            moment nobody chose, and the record would not say who wanted them.
+        </p>
+    </section>
+
+    <section id="first">
+        <h2>First Spin</h2>
+        <p>
+            Characterises the project <b>as it stands</b>. It has nothing to
+            compare against, so its findings carry no delta classification —
+            the surface says so plainly: <i>&ldquo;First Spin establishes a
+            baseline &mdash; no prior state to classify against.&rdquo;</i>
+        </p>
+        <p>
+            <b>Trigger:</b> the <b>Run First Spin</b> button in the Toolbox.
+            Available at any time.
+        </p>
+    </section>
+
+    <section id="delta">
+        <h2>Delta Spin</h2>
+        <p>
+            Characterises <b>what has materially changed in project
+            understanding</b> since an earlier Spin. Not what changed in the
+            files — what changed in what the project is understood to say.
+        </p>
+        <p>
+            <b>Trigger:</b> the <b>Run Delta Spin</b> button, which appears
+            only once a First Spin exists. Until then the surface says
+            <i>&ldquo;Run First Spin before Delta Spin is available.&rdquo;</i>
+            There is no baseline to be a delta from, so the control is absent
+            rather than present-and-failing.
+        </p>
+        <p>
+            Each Delta finding carries one of <b>eight</b> classifications, and
+            only these eight — the engine drops anything outside the closed set
+            rather than inventing a label:
+        </p>
+        <dl class="help-defs">
+            <dt><code>new</code></dt>
+            <dd>Understanding that was not present before.</dd>
+            <dt><code>unchanged</code></dt>
+            <dd>Present before, and materially the same.</dd>
+            <dt><code>strengthened</code></dt>
+            <dd>Present before, now better supported.</dd>
+            <dt><code>weakened</code></dt>
+            <dd>Present before, now less well supported.</dd>
+            <dt><code>resolved</code></dt>
+            <dd>An earlier open question that now has an answer.</dd>
+            <dt><code>superseded</code></dt>
+            <dd>Replaced by a later understanding.</dd>
+            <dt><code>new_verification_gap</code></dt>
+            <dd>Something now needs checking that did not before.</dd>
+            <dt><code>indeterminate</code></dt>
+            <dd>
+                The relationship to prior understanding could not be
+                established. Kept as its own honest answer rather than being
+                forced into one of the seven above.
+            </dd>
+        </dl>
+    </section>
+
+    <section id="survival">
+        <h2>Survival Mode</h2>
+        <p>
+            A <b>lens</b>, not a third kind of Spin. It is a checkbox on either
+            button, and it changes what the same engine is looking for:
+        </p>
+        <blockquote class="help-quote">
+            Find consequential conditions that could materially harm project
+            success if overlooked.
+        </blockquote>
+        <p>
+            An ordinary Spin characterises the project. A Survival Spin goes
+            looking for what could hurt it. Same evidence, same machinery, a
+            different objective added to the instruction.
+        </p>
+        <p>
+            <b>Trigger:</b> tick <b>Survival Mode</b> before pressing either
+            Run button. It combines with both — a Survival First Spin and a
+            Survival Delta Spin are both real and both useful.
+        </p>
+        <p class="help-note">
+            It does not lower a threshold, widen a search, or make the engine
+            more suspicious in general. The entire mechanism is the objective
+            above being added to the pass, which is why a Survival run is not
+            &ldquo;more thorough&rdquo; — it is <i>aimed differently</i>.
+        </p>
+    </section>
+
+    <section id="results">
+        <h2>Where results appear</h2>
+        <p>
+            Spin findings render in their own clearly-labelled section and
+            <b>never mix into the ordinary Findings list</b>. First Spin and
+            Delta Spin runs stay separate from one another, and each run's
+            classification is shown prominently rather than buried.
+        </p>
+        <p>
+            That separation is deliberate: a machine characterisation and a
+            recorded project Finding are different kinds of claim, and a list
+            that blended them would make the weaker one look like the stronger.
+        </p>
+    </section>
+
+    <section id="choosing">
+        <h2>Which to run</h2>
+        <dl class="help-defs">
+            <dt>Nothing has been Spun yet</dt>
+            <dd>First Spin. It is the only option, and it makes the baseline.</dd>
+            <dt>Evidence has arrived since the last Spin</dt>
+            <dd>Delta Spin. It answers &ldquo;what is different now&rdquo;.</dd>
+            <dt>Before a milestone, a submission, or a difficult meeting</dt>
+            <dd>Either, with Survival Mode ticked.</dd>
+            <dt>You want the whole picture again, not the difference</dt>
+            <dd>First Spin. Running one again re-characterises from scratch.</dd>
+        </dl>
+    </section>
+</article>
+
+{% include "components/public_footer.html" %}
+</body>
+</html>

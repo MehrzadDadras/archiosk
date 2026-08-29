@@ -3431,10 +3431,17 @@
            larger ARCHIOSK visual-language programme is out of scope here. #}
         <div data-ui-ref="toolbox.spin">
             <h3>Spin</h3>
+            {# CLAUDE-HELP-CENTER-01: the three-sentence definition moved to
+               /help/spin-and-survival-modes. It explained the feature to
+               somebody who had already decided to use it, every time they
+               opened the Toolbox. #}
             <p class="pane-note">
-                A comprehensive machine review of this project's evidence. First Spin
-                characterizes the project as a whole; Delta Spin characterizes what has
-                materially changed in project understanding since an earlier Spin.
+                Machine review of this project's evidence.
+                <a class="pane-help" data-ui-ref="toolbox.spin.help"
+                   href="{{ url_for('help_center.guide', guide='spin-and-survival-modes') }}"
+                   target="_blank" rel="noopener"
+                   title="First Spin, Delta Spin and the Survival lens"
+                   aria-label="Help: Spin and Survival Mode">?</a>
             </p>
             {% if spin_generation_in_progress %}
             <p class="pane-note" data-ui-ref="toolbox.spin.in-progress">A Spin is currently running&hellip;</p>
@@ -3461,10 +3468,16 @@
                 <span class="pane-note">(Run First Spin before Delta Spin is available.)</span>
                 {% endif %}
             </p>
+            {# Likewise. The one fact worth keeping inline is that Survival is
+               a LENS on either run rather than a third kind of Spin - that is
+               what the checkbox's placement already implies, and what a person
+               needs at the moment of ticking it. #}
             <p class="pane-note">
-                Survival Mode reframes Spin's own attention toward conditions that could
-                materially harm project success if overlooked - the same Spin engine, a
-                different lens.
+                Survival Mode is a lens on either run, not a third kind of Spin.
+                <a class="pane-help" data-ui-ref="toolbox.spin.help-survival"
+                   href="{{ url_for('help_center.guide', guide='spin-and-survival-modes') }}#survival"
+                   target="_blank" rel="noopener"
+                   aria-label="Help: Survival Mode">?</a>
             </p>
             {% endif %}
             {# CLAUDE-SPIN-SURFACE-02: relocated - the full per-run/per-
