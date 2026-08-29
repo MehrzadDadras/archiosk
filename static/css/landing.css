@@ -33,6 +33,28 @@
  * ruled out.
  */
 
+/* CLAUDE-LANDING-CENTERING-01. Reported from a phone: "the landing page on
+   my phone is not centered in portrait position but it is ok in landscape."
+
+   The arithmetic, not a guess. .landing-content below asks for a min-height
+   of 100dvh AND 8vh/10vh of vertical padding. Under the CSS default of
+   content-box, padding is added OUTSIDE that height - so the flex container
+   that is meant to fill the screen is 118dvh tall, and `justify-content:
+   center` faithfully centres its content inside a box 18% taller than the
+   viewport. The content sits low and the page scrolls.
+
+   Landscape hid it: 18% of a short viewport is ~90px rather than ~150px, and
+   the hero is short enough there that the overflow stayed under the fold.
+   Same defect, quieter symptom - which is why it read as a portrait-only bug.
+
+   Scoped to this page's own subtree rather than declared globally, because
+   landing.css is loaded by the public shell alone and a bare `*` rule here
+   would still be a wider claim than the fix needs. */
+.landing-page,
+.landing-page *,
+.landing-page *::before,
+.landing-page *::after { box-sizing: border-box; }
+
 .landing-page {
     position: relative;
     /* CLAUDE-MOBILE-ICON-01 correction: 100dvh, not 100vh. On iOS Safari
@@ -466,6 +488,10 @@
     color: rgba(150, 255, 238, .95);
     font-weight: 700;
 }
+/* Was an inline .style.margin write from landing.js. It moved here with the
+   voice convergence: the response paragraph's spacing is a property of the
+   card, and the card is described in one place. */
+.landing-voice-answer { margin: 0 0 10px; }
 .landing-voice-transcript {
     display: block;
     margin-bottom: 6px;
@@ -553,11 +579,30 @@
    deep-ocean background never competes with actually typing into the
    field. */
 .landing-request-form {
+    /* CLAUDE-REQUEST-ACCESS-PRUNE-01: centred as a column now that the page
+       is a heading and a form and nothing else. The 480px measure is
+       unchanged - it is a comfortable line length for the labels - but with
+       the explanatory paragraph and the footer buttons removed, a left-hung
+       column left the form stranded against one edge of an otherwise empty
+       page. `margin-inline: auto` centres the column itself; the fields
+       inside stay left-aligned, because a centred LABEL over a full-width
+       input has no common edge to read down. */
     margin-top: 32px;
+    margin-inline: auto;
     display: flex;
     flex-direction: column;
     gap: 18px;
     max-width: 480px;
+    width: 100%;
+}
+/* The one action on the page. Centred under the fields rather than hung on
+   the left edge, and sized to its own text instead of stretching the width
+   of the form - a full-bleed button reads as a banner, not a control. */
+.landing-request-form .landing-action-primary {
+    align-self: center;
+    margin-top: 6px;
+    min-width: 200px;
+    text-align: center;
 }
 .landing-form-field {
     display: flex;

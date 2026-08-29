@@ -171,6 +171,28 @@ def _semantics(sheet):
         return json.load(handle)
 
 
+def _asset_svg(manifest, sheet):
+    """The vector asset for a sheet, or None if it was not produced."""
+    for asset in (manifest or {}).get("assets", []):
+        if asset["sheet"] == sheet and asset.get("svg"):
+            return asset["svg"]
+    return None
+
+
+def _asset_focus(manifest, sheet, label):
+    """A focus rectangle in the sheet's NATIVE VIEW space.
+
+    A crop is a VIEW onto the one vector asset, not a second file - a cropped
+    SVG is not smaller, because a cropbox changes the viewport and not the
+    content. Framing a rectangle keeps the crop and the full sheet incapable
+    of disagreeing about what the drawing says.
+    """
+    for asset in (manifest or {}).get("assets", []):
+        if asset["sheet"] == sheet:
+            return (asset.get("focus") or {}).get(label)
+    return None
+
+
 def _manifest():
     """Provenance for every rendered asset, or None when assets are absent.
 
@@ -291,7 +313,10 @@ CANDIDATES = [
             "The dimension 2653 appears on the room on both sheets - an "
             "agreement on a measured value, not only on a label.",
         ],
-        "asset": "A801_detail-1-104.png",
+        # No asset name here. The pane serves A801's VECTOR and frames the
+        # detail's focus rectangle on it; naming a raster crop would be naming
+        # a file the pipeline deliberately no longer produces.
+        "asset": None,
     },
     {
         "target": "A701",
@@ -338,6 +363,162 @@ def go_selection():
         "candidates": CANDIDATES,
         "unique": len([c for c in CANDIDATES if c["basis"] == REL_DIRECT]) == 1,
     }
+
+
+# ==========================================================================
+# DISCIPLINES - what the project HAS, one entry per trade.
+#
+# Scene 1 used to be one tile per sheet. That is the wrong first object:
+# nobody opens a project looking for "A302", they open it looking for the
+# architectural set. The Product Owner said so directly - "the project page
+# must have architectural icon [with all the drawing in it], the mechanical,
+# the structural and so on and not individual drawings."
+#
+# EVERY NUMBER BELOW WAS COUNTED, NOT ESTIMATED. Two independent readings,
+# because they disagree and the disagreement is the interesting part:
+#
+#   DELIVERED - counted off the source directory C:\Archiosk\Samples\5 Nipigon
+#     A-series  39 PDFs
+#     RS-series 10 PDFs (RS501-RS510)
+#     (51 files total; the remaining two - "5 Nipigon.pdf" and "Nipigan
+#      Starter.pdf" - are not numbered sheets and are not counted as any
+#      discipline's)
+#
+#   NAMED - read out of the DRAWING INDEX on 212109 A100 COVER PAGE.pdf
+#     ARCHITECTURAL  CV, A1xx-A9xx
+#     STRUCTURAL     S1-S10 AND  RS501-RS510
+#     MECHANICAL     M1-M5   (M1 "U/G GARAGE PLAN PLUMBING AND HVAC",
+#                             M2 "PLUMBING PLAN" - see below)
+#     ELECTRICAL     E1-E5
+#     LANDSCAPE      L1
+#     CIVIL          SP1     "SITE SERVICING AND GRADING PLAN"
+#
+# PLUMBING IS NOT A DISCIPLINE ON THIS PROJECT, and neither is a "C-series".
+# A directive asked for a "Plumbing / Civil (P / C-Series)" container. The
+# index was searched for both: there is NO P-series at all, and the only
+# `C1` token on the sheet is a zoning designation in the project-data block
+# ("563.34 sq.m | C1 | 5 Nipigon Ave"), not a drawing number. Plumbing scope
+# is carried by the MECHANICAL series - it is the TITLE of M1 and M2.
+#
+# So no P/C container is invented here. Building one would produce a card
+# standing for a series this project does not have, which is the same defect
+# as naming a sheet A201 because a directive said so when the title block
+# says FIRE SCHEMATIC LAYOUT. The discrepancy is reported instead.
+#
+# Four disciplines are named on the cover and delivered nothing at all. A
+# fifth, Structural, is named TWICE under two different numbering systems and
+# delivered only one of them. Those gaps are the whole reason this object
+# exists: a project page that silently showed three disciplines because three
+# had files would be hiding the most useful fact on the screen, which is that
+# the mechanical drawings referenced by the cover sheet are not here.
+#
+# So a discipline with nothing behind it still gets a tile, and it renders
+# UNRESOLVED - which is a basis this codebase already has a meaning and a form
+# for, and which is deliberately not the same claim as "there are none".
+# ==========================================================================
+DISCIPLINES = [
+    {
+        "id": "ARCH", "name": "Architectural", "prefix": "A",
+        "delivered": 39,
+        "named": "CV, A101-A902",
+        "basis": REL_DIRECT,
+        "note": "39 sheets delivered. Index numbering matches the files.",
+    },
+    {
+        "id": "STRUCT", "name": "Structural", "prefix": "RS",
+        "delivered": 10,
+        "named": "S1-S10 and RS501-RS510",
+        "basis": REL_INFERRED,
+        # Not tidied away. The cover index carries TWO structural sets under
+        # two numbering systems; only the RS framing series arrived. Calling
+        # this DIRECT would assert a completeness the source does not support,
+        # and reconciling the two silently is exactly what the evidence rule
+        # for this project forbids.
+        "note": "10 framing sheets delivered (RS501-RS510). The index also "
+                "names a separate S1-S10 set, which is not in the source "
+                "material. Both numberings appear on A100.",
+    },
+    {
+        "id": "MECH", "name": "Mechanical", "prefix": "M",
+        "delivered": 0,
+        "named": "M1-M5",
+        "basis": REL_UNRESOLVED,
+        "note": "Named on the A100 index as M1-M5, which is also where "
+                "PLUMBING lives on this project - M1 is \u201cU/G GARAGE PLAN "
+                "PLUMBING AND HVAC\u201d and M2 is \u201cPLUMBING PLAN\u201d. "
+                "There is no separate P-series. No mechanical sheet is in the "
+                "source material.",
+    },
+    {
+        "id": "ELEC", "name": "Electrical", "prefix": "E",
+        "delivered": 0,
+        "named": "E1-E5",
+        "basis": REL_UNRESOLVED,
+        "note": "Named on the A100 index as E1-E5. No electrical sheet is in "
+                "the source material.",
+    },
+    {
+        "id": "LAND", "name": "Landscape", "prefix": "L",
+        "delivered": 0,
+        "named": "L1",
+        "basis": REL_UNRESOLVED,
+        "note": "Named on the A100 index as L1, with a landscape consultant "
+                "credited. No landscape sheet is in the source material.",
+    },
+    {
+        "id": "CIVIL", "name": "Civil", "prefix": "SP",
+        "delivered": 0,
+        "named": "SP1",
+        "basis": REL_UNRESOLVED,
+        # Reading the cover sheet added a discipline nobody had listed. It is
+        # kept for that reason: the index is the authority on what the project
+        # is supposed to contain, not our memory of it.
+        "note": "Named on the A100 index as SP1, \u201cSITE SERVICING AND "
+                "GRADING PLAN\u201d. Numbered SP, not C - the only C1 on the "
+                "cover is a zoning designation, not a drawing. No civil sheet "
+                "is in the source material.",
+    },
+]
+
+
+def disciplines(manifest):
+    """Scene 1: one tile per trade, each holding the sheets we really have.
+
+    A tile's FACE is built from the actual rendered sheet faces belonging to
+    that discipline - never a glyph standing for a drawing, and never more
+    faces than were genuinely rendered. The strip says both numbers ("4 of 39
+    rendered") because the difference between what exists and what has been
+    prepared is a fact the reader needs and cannot recover from a picture.
+    """
+    have = set()
+    mono = {}
+    if manifest:
+        have = {a["sheet"] for a in manifest["assets"]}
+        mono = {a["sheet"]: a.get("monochrome", False) for a in manifest["assets"]}
+
+    out = []
+    for row, spec in enumerate(DISCIPLINES, start=1):
+        sheets = []
+        for sheet in SHEETS:
+            if sheet["discipline"] != spec["name"] or sheet["id"] not in have:
+                continue
+            sheets.append({
+                "id": sheet["id"],
+                "short": sheet["number"],
+                "qualifier": sheet["title"],
+                "asset": "%s_thumb.png" % sheet["id"],
+                "monochrome": mono.get(sheet["id"], False),
+                "opens": sheet["id"] == SELECTION["on_sheet"],
+            })
+        entry = dict(spec)
+        entry["sheets"] = sheets
+        entry["rendered"] = len(sheets)
+        # The face carries at most four, because a tile this size cannot show
+        # more without each one ceasing to be legible as a drawing.
+        entry["face_sheets"] = sheets[:4]
+        entry["opens"] = bool(sheets)
+        out.append(entry)
+    return out
 
 
 def page_fields(manifest):
@@ -415,7 +596,10 @@ def siblings(manifest):
         out.append({
             "id": sheet_id,
             "title": SIBLING_TITLES.get(sheet_id, "Detail"),
-            "asset": "%s_page.png" % sheet_id,
+            # The VECTOR asset, not the raster. A pane is the one place a
+            # reader zooms, and a stretched raster is exactly what made the
+            # linework mush at 200%.
+            "asset": "%s.svg" % sheet_id,
             "monochrome": mono.get(sheet_id, False),
             "is_target": sheet_id == "A801",
         })
@@ -463,6 +647,11 @@ def surface():
         sheets=SHEETS,
         fields=page_fields(manifest),
         selection=SELECTION,
+        disciplines=disciplines(manifest),
+        anchor_svg=_asset_svg(manifest, SELECTION["on_sheet"]),
+        anchor_focus=_asset_focus(manifest, SELECTION["on_sheet"], "washroom-104"),
+        target_svg=_asset_svg(manifest, "A801"),
+        target_focus=_asset_focus(manifest, "A801", "detail-1-104"),
         anchor_monochrome=next(
             (a.get("monochrome", False) for a in (manifest or {}).get("assets", [])
              if a["sheet"] == SELECTION["on_sheet"]), False),

@@ -104,9 +104,15 @@ class NothingSpeaksWithoutBeingAskedTests(unittest.TestCase):
 
     def test_voice_input_survives_because_it_is_opt_in(self):
         """"Voice must remain opt-in" retires OUTPUT, not INPUT. Push-to-talk
-        recognition is already gated behind a real press and never speaks."""
+        recognition is already gated behind a real press and never speaks.
+
+        CLAUDE-VOICE-CONSISTENCY-02: the landing page still has recognition,
+        it just no longer carries its own copy of the recogniser - so the
+        surviving INPUT path is asserted through the seam it now uses."""
         js = self.client.get("/static/js/landing.js").get_data(as_text=True)
-        self.assertIn("SpeechRecognitionCtor", js)
+        self.assertIn("window.ArchioskVoiceInput", js)
+        engine = self.client.get("/static/js/voice_input.js").get_data(as_text=True)
+        self.assertIn("SpeechRecognitionCtor", engine)
 
 class MicIconOnlyTests(unittest.TestCase):
     def setUp(self):
@@ -150,6 +156,18 @@ class VoiceDirectNavigationTests(unittest.TestCase):
         self.flask_app = app_module.create_app("testing")
         self.client = self.flask_app.test_client()
 
+    @staticmethod
+    def _end_handler(js):
+        """The block that decides what a finished sentence MEANS.
+
+        CLAUDE-VOICE-CONSISTENCY-02 moved this out of a locally-owned
+        `recognition.addEventListener('end')` and into the `onEnd` callback
+        the shared engine invokes. Same code, same ordering requirement, one
+        recogniser instead of two - so these tests follow it rather than
+        asserting where it used to sit."""
+        start = js.index("onEnd: function ()")
+        return js[start:js.index("\n        },", start)]
+
     def test_direct_nav_list_covers_exactly_the_three_safe_local_destinations(self):
         js = self.client.get("/static/js/landing.js").get_data(as_text=True)
         section = js[js.index("setUpLandingVoiceInput"):]
@@ -165,9 +183,7 @@ class VoiceDirectNavigationTests(unittest.TestCase):
         (window.location.href) rather than call showResult (which
         renders the response-card markup)."""
         js = self.client.get("/static/js/landing.js").get_data(as_text=True)
-        end_handler_start = js.index("recognition.addEventListener('end'")
-        end_handler_body_end = js.index("\n        });", end_handler_start)
-        end_handler = js[end_handler_start:end_handler_body_end]
+        end_handler = self._end_handler(js)
         self.assertIn("classifyDirectNav", end_handler)
         self.assertIn("window.location.href = navMatch.href", end_handler)
         self.assertIn("showResult(transcript)", end_handler)
@@ -186,9 +202,7 @@ class VoiceDirectNavigationTests(unittest.TestCase):
 
     def test_end_handler_checks_direct_nav_before_falling_back_to_show_result(self):
         js = self.client.get("/static/js/landing.js").get_data(as_text=True)
-        end_handler_start = js.index("recognition.addEventListener('end'")
-        end_handler_body_end = js.index("\n        });", end_handler_start)
-        end_handler = js[end_handler_start:end_handler_body_end]
+        end_handler = self._end_handler(js)
         self.assertLess(end_handler.index("classifyDirectNav"), end_handler.index("showResult(transcript)"))
 
     def test_ambiguous_transcript_still_falls_back_honestly_not_a_guessed_navigation(self):

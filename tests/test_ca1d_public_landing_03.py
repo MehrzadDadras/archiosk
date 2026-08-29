@@ -116,9 +116,16 @@ class SpeakToArchioskTests(unittest.TestCase):
         """Section 5: 'never request microphone permission on page
         load' - recognition.start() lives inside beginListening(), and
         beginListening() itself is only ever invoked from inside the mic
-        button's own click handler, never eagerly at setup time."""
-        js = self.client.get("/static/js/landing.js").get_data(as_text=True)
-        voice_section_start = js.index("setUpLandingVoiceInput")
+        button's own click handler, never eagerly at setup time.
+
+        CLAUDE-VOICE-CONSISTENCY-02 retargets this from landing.js to
+        voice_input.js. The requirement is unchanged and is now guarded at
+        the ONE place the recogniser is constructed, rather than in one of
+        two copies of it - which is strictly stronger, because the landing
+        page can no longer acquire a second, unguarded start path without
+        also reintroducing the duplicate this convergence removed."""
+        js = self.client.get("/static/js/voice_input.js").get_data(as_text=True)
+        voice_section_start = js.index("function setUpVoiceInput")
         voice_section = js[voice_section_start:]
         begin_listening_def_start = voice_section.index("function beginListening")
         begin_listening_def_end = voice_section.index("\n    }", begin_listening_def_start)
@@ -156,10 +163,42 @@ class SpeakToArchioskTests(unittest.TestCase):
         self.assertIn('querySelector(\'[data-ui-ref="landing.sign-in"]\')', voice_section)
 
     def test_voice_js_skips_setup_gracefully_when_speech_recognition_unsupported(self):
-        js = self.client.get("/static/js/landing.js").get_data(as_text=True)
-        voice_section = js[js.index("setUpLandingVoiceInput"):]
+        """CLAUDE-VOICE-CONSISTENCY-02: retargeted to the shared engine, which
+        is where the capability check now lives for every mic in the product.
+
+        CLAUDE-VOICE-SECURE-CONTEXT-01 also strengthened what "unsupported"
+        means. The constructor being defined is not the capability: on a plain
+        http LAN origin `webkitSpeechRecognition` is a function and
+        `navigator.mediaDevices` is undefined, so the old symbol-only check
+        revealed a mic that could never reach a microphone. Both conditions
+        are asserted, because dropping either one restores that defect."""
+        js = self.client.get("/static/js/voice_input.js").get_data(as_text=True)
+        voice_section = js[js.index("function setUpVoiceInput"):]
+        preamble = voice_section[:voice_section.index("micButton.hidden = false")]
         self.assertIn("SpeechRecognitionCtor", voice_section)
-        self.assertIn("return", voice_section[:voice_section.index("micButton.hidden = false")])
+        self.assertIn("window.isSecureContext", preamble)
+        self.assertIn("return", preamble)
+
+    def test_the_landing_page_uses_the_shared_engine_rather_than_its_own_copy(self):
+        """CLAUDE-VOICE-CONSISTENCY-02. The landing block used to mirror
+        voice_input.js line for line. One report of a broken mic then needed
+        the same fix applied twice, in two files - which is the whole cost of
+        a mirror. The router below it is genuinely this page's own; the
+        recogniser never was."""
+        js = self.client.get("/static/js/landing.js").get_data(as_text=True)
+        section = js[js.index("setUpLandingVoiceInput"):]
+        self.assertIn("window.ArchioskVoiceInput", section)
+        for engine_token in ("SpeechRecognitionCtor", "function beginListening",
+                             "recognition.start()", "new SpeechRecognition"):
+            with self.subTest(token=engine_token):
+                self.assertNotIn(engine_token, section)
+
+    def test_the_landing_shell_loads_the_engine_before_the_router(self):
+        """Order is load-bearing: landing.js checks for the global at parse
+        time and stays silent if it is absent, so a reversed pair costs the
+        landing page its microphone without any error to notice."""
+        body = self.client.get("/").get_data(as_text=True)
+        self.assertLess(body.index("js/voice_input.js"), body.index("js/landing.js"))
 
     def test_voice_pulse_disabled_under_reduced_motion(self):
         css = self.client.get("/static/css/landing.css").get_data(as_text=True)

@@ -73,10 +73,17 @@ class PublicLandingRouteTests(unittest.TestCase):
         self.assertEqual(resp.status_code, 200)
         body = resp.get_data(as_text=True)
         self.assertNotIn("isn&rsquo;t self-serve yet", body)
-        self.assertIn("opening trial access gradually", body)
+        # CLAUDE-REQUEST-ACCESS-PRUNE-01 removed the explanatory
+        # paragraph. What this test is named for - honesty, and a REAL
+        # request action rather than a dead end - is carried by the
+        # assertions around this line, not by that copy.
+        self.assertIn('data-ui-ref="start-trial.request-form"', body)
         self.assertIn("<form", body)
         self.assertIn('data-ui-ref="start-trial.request-submit"', body)
-        self.assertIn('href="/login"', body)
+        # Was `href="/login"` - the removed secondary Sign In button. The
+        # page is still not a dead end, but the way out is now the top-left
+        # link back to the landing gate, which carries Sign In itself.
+        self.assertIn('data-ui-ref="start-trial.back"', body)
 
     def test_explore_and_start_trial_never_leak_authenticated_shell(self):
         for path in ("/explore", "/start-trial"):

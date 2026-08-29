@@ -241,60 +241,52 @@
 // never speaks.
 
 // CLAUDE-CA1D-PUBLIC-LANDING-03, Sections 3-8: "Speak to Archiosk" --
-// the landing page's own bounded voice-entry path. Deliberately mirrors
-// static/js/case_workspace.js's own setUpVoiceInput (CLAUDE-POSTCAMEL-
-// VOICE1-PRE) as closely as possible -- same browser-native
-// SpeechRecognition mechanism (no vendor, no API key, no server round
-// trip, no audio blob ever handled by this code), same push-to-talk
-// model, same hidden-until-feature-detected default, same
-// ERROR_MESSAGES vocabulary, same voice-input-listening state class.
-// The one real difference: there is no existing draft/composer field on
-// this public, unauthenticated page to fill, so a final transcript is
-// run through a small, deterministic, client-side-only keyword lookup
-// instead -- never a generative/LLM call, never a network request,
-// never a durable record of any kind. CLAUDE-CA1D-PUBLIC-LANDING-05,
-// Sections 9/10: a clear, safe, local navigation command (DIRECT_NAV
-// below -- Sign In/Explore/Request Trial Access only) executes directly,
-// no second click and no response card duplicating a button already on
-// the page; anything less direct still gets the small informational
-// response card (INFORMATIONAL below) rather than guessing. This keeps
-// the landing mic at Level 2/3 (Suggest / reversible local navigation)
-// of the future Voice authority ladder (governance/specified-unbuilt/
-// voice-conversational-presence.md, Section 6) at most -- never Level
-// 4/5, never anything destructive/authenticated/consequential.
+// the landing page's own bounded voice-entry path.
+//
+// CLAUDE-VOICE-CONSISTENCY-02: this block used to CARRY ITS OWN COPY of the
+// recognition engine - constructor lookup, ERROR_MESSAGES, on-device model
+// negotiation, push-to-talk click handling, listening state class, the lot -
+// deliberately "mirroring" static/js/voice_input.js as closely as possible.
+// Mirroring is not sharing. The two copies drifted the moment one of them
+// was wrong: the insecure-origin defect (a mic button revealed on a plain
+// http LAN origin where the browser will never grant a microphone) had to be
+// found and fixed TWICE, in two files, from one report. A duplicate is a
+// second place for the same bug to survive being fixed.
+//
+// So the ENGINE is now the shared one, and this file keeps only the part
+// that is genuinely the landing page's own: the small, deterministic,
+// client-side ROUTER below. That division is the honest one - every page's
+// microphone listens identically, and only what it DOES with a sentence
+// differs. Sign-In matches a navigation intent, the Composer fills a draft,
+// and this page routes to one of three safe local destinations or answers
+// with a card.
+//
+// Unchanged by the convergence, and still true: the browser's own
+// SpeechRecognition (no vendor, no API key, no server round trip, no audio
+// blob ever handled by this code); push-to-talk, never listening on load;
+// hidden until the capability is real. There is no existing draft/composer
+// field on this public, unauthenticated page to fill, so a final transcript
+// is run through a small, deterministic, client-side-only keyword lookup
+// instead -- never a generative/LLM call, never a network request, never a
+// durable record of any kind. A clear, safe, local navigation command
+// (DIRECT_NAV below -- Sign In/Explore/Request Trial Access only) executes
+// directly, no second click and no response card duplicating a button
+// already on the page; anything less direct still gets the small
+// informational response card (INFORMATIONAL below) rather than guessing.
+// This keeps the landing mic at Level 2/3 (Suggest / reversible local
+// navigation) of the future Voice authority ladder (governance/
+// specified-unbuilt/voice-conversational-presence.md, Section 6) at most --
+// never Level 4/5, never anything destructive/authenticated/consequential.
 (function setUpLandingVoiceInput() {
     var micButton = document.getElementById('landing-voice-button');
-    var statusEl = document.getElementById('landing-voice-status');
     var resultEl = document.getElementById('landing-voice-result');
     if (!micButton || !resultEl) return;
 
-    var SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognitionCtor) {
-        // Graceful degradation (Section 5): unsupported browser -- the
-        // button stays hidden (its own default state); the real Explore/
-        // Request Trial Access/Sign In actions above remain the fully
-        // equivalent path. Nothing to show here.
-        return;
-    }
-
-    micButton.hidden = false;
-
-    function setStatus(message, isError) {
-        if (!statusEl) return;
-        statusEl.textContent = message || '';
-        if (isError) statusEl.setAttribute('data-state', 'error');
-        else statusEl.removeAttribute('data-state');
-    }
-
-    var ERROR_MESSAGES = {
-        'not-allowed': 'Microphone permission denied',
-        'service-not-allowed': 'Microphone permission denied',
-        'permission-denied': 'Microphone permission denied',
-        'audio-capture': 'No microphone available',
-        'no-speech': 'No speech detected',
-        'network': 'Speech recognition unavailable in this browser',
-        'language-not-supported': 'Speech recognition unavailable in this browser',
-    };
+    // The shared engine is a hard dependency now, not a preference. If
+    // landing_shell.html ever stops loading voice_input.js, the mic must stay
+    // hidden rather than half-work - the same graceful degradation the engine
+    // itself performs on an unsupported browser or an insecure origin.
+    if (typeof window.ArchioskVoiceInput !== 'function') return;
 
     // hrefs are resolved once at load time from real url_for()-rendered
     // links already on this page (never hardcoded paths), so this can
@@ -395,123 +387,81 @@
         resultEl.hidden = false;
     }
 
-    var recognition = null;
-    var listening = false;
-    var userInitiatedStop = false;
-    var gotFinalResult = false;
+    // Section 9's own "ambiguous commands should clarify rather than
+    // guess": a transcript only ever executes direct navigation on an
+    // actual pattern match here -- everything else, including anything
+    // ambiguous, falls through to the informational path (a real
+    // response, never a silent/guessed navigation).
+    function classifyDirectNav(transcript) {
+        for (var i = 0; i < DIRECT_NAV.length; i += 1) {
+            if (DIRECT_NAV[i].pattern.test(transcript)) return DIRECT_NAV[i];
+        }
+        return null;
+    }
+
+    function classifyInformational(transcript) {
+        for (var i = 0; i < INFORMATIONAL.length; i += 1) {
+            if (INFORMATIONAL[i].pattern.test(transcript)) return INFORMATIONAL[i];
+        }
+        return FALLBACK;
+    }
+
+    function showResult(transcript) {
+        var match = classifyInformational(transcript);
+        resultEl.innerHTML = '';
+        var transcriptLine = document.createElement('span');
+        transcriptLine.className = 'landing-voice-transcript';
+        transcriptLine.textContent = '\u201c' + transcript + '\u201d';
+        var responseLine = document.createElement('p');
+        responseLine.className = 'landing-voice-answer';
+        responseLine.textContent = match.text;
+        var link = document.createElement('a');
+        link.href = match.href;
+        link.textContent = match.label;
+        resultEl.appendChild(transcriptLine);
+        resultEl.appendChild(responseLine);
+        resultEl.appendChild(link);
+        resultEl.hidden = false;
+    }
+
     var finalTranscript = '';
+    var gotFinalResult = false;
 
-    function stopListening() {
-        listening = false;
-        micButton.classList.remove('voice-input-listening');
-        micButton.setAttribute('aria-pressed', 'false');
-    }
+    var voice = window.ArchioskVoiceInput({
+        buttonId: 'landing-voice-button',
+        statusId: 'landing-voice-status',
 
-    var hasOnDeviceApi = typeof SpeechRecognitionCtor.available === 'function'
-        && typeof SpeechRecognitionCtor.install === 'function';
+        onStart: function () {
+            finalTranscript = '';
+            gotFinalResult = false;
+            resultEl.hidden = true;
+        },
 
-    async function ensureOnDeviceReady(lang) {
-        if (!hasOnDeviceApi) return false;
-        var state;
-        try {
-            state = await SpeechRecognitionCtor.available({ langs: [lang], processLocally: true });
-        } catch (err) {
-            return false;
-        }
-        if (state === 'available') return true;
-        if (state === 'unavailable') return false;
-        setStatus('Downloading speech model…', false);
-        try {
-            return await SpeechRecognitionCtor.install({ langs: [lang] });
-        } catch (err) {
-            return false;
-        }
-    }
-
-    function beginListening(useOnDevice) {
-        recognition = new SpeechRecognitionCtor();
-        recognition.lang = document.documentElement.lang || 'en-US';
-        recognition.interimResults = true;
-        recognition.maxAlternatives = 1;
-        if (useOnDevice) recognition.processLocally = true;
-
-        recognition.addEventListener('speechstart', function () {
-            setStatus('Transcribing…', false);
-        });
-
-        recognition.addEventListener('result', function (event) {
-            var transcript = '';
-            for (var i = 0; i < event.results.length; i += 1) {
-                transcript += event.results[i][0].transcript;
-                if (event.results[i].isFinal) gotFinalResult = true;
-            }
+        onTranscript: function (transcript, isFinal) {
             finalTranscript = transcript;
-            setStatus('Transcribing…', false);
-        });
+            if (isFinal) gotFinalResult = true;
+        },
 
-        recognition.addEventListener('error', function (event) {
-            if (event.error === 'aborted' && userInitiatedStop) {
-                setStatus('Recognition stopped', false);
+        // The engine has already reported the failure cases by the time this
+        // runs ("No speech detected", a permission error) and cleared the
+        // status on a clean finish, so this only ever decides what a REAL
+        // sentence means.
+        onEnd: function () {
+            if (!gotFinalResult || !finalTranscript.trim()) return;
+            var transcript = finalTranscript.trim();
+            var navMatch = classifyDirectNav(transcript);
+            if (navMatch) {
+                // Section 9/10: execute directly, no response card
+                // duplicating a button already on this page -- the brief
+                // confirmText (reusing the engine's own status live region)
+                // is the only feedback before the real navigation happens,
+                // so the visitor still perceives cause and effect rather
+                // than an instant jump.
+                if (voice) voice.setStatus(navMatch.confirmText, false);
+                window.setTimeout(function () { window.location.href = navMatch.href; }, 350);
             } else {
-                setStatus(ERROR_MESSAGES[event.error] || 'Speech recognition unavailable in this browser', true);
+                showResult(transcript);
             }
-            stopListening();
-        });
-
-        recognition.addEventListener('end', function () {
-            stopListening();
-            if (gotFinalResult && finalTranscript.trim()) {
-                var transcript = finalTranscript.trim();
-                var navMatch = classifyDirectNav(transcript);
-                if (navMatch) {
-                    // Section 9/10: execute directly, no response card
-                    // duplicating a button already on this page -- the
-                    // brief confirmText (reusing the existing status
-                    // live region) is the only feedback before the real
-                    // navigation happens, so the visitor still perceives
-                    // cause and effect rather than an instant jump.
-                    setStatus(navMatch.confirmText, false);
-                    window.setTimeout(function () { window.location.href = navMatch.href; }, 350);
-                } else {
-                    setStatus('', false);
-                    showResult(transcript);
-                }
-            } else if (!statusEl || !statusEl.getAttribute('data-state')) {
-                setStatus(userInitiatedStop ? 'Recognition stopped' : 'No speech detected', !userInitiatedStop);
-            }
-        });
-
-        try {
-            recognition.start();
-            listening = true;
-            micButton.classList.add('voice-input-listening');
-            micButton.setAttribute('aria-pressed', 'true');
-            setStatus('Listening…', false);
-        } catch (err) {
-            stopListening();
-            setStatus('Speech recognition unavailable in this browser', true);
-        }
-    }
-
-    micButton.addEventListener('click', async function () {
-        if (listening) {
-            // Push-to-Talk, not push-to-toggle-forever (Section 5's own
-            // "provide an obvious cancel/stop control").
-            userInitiatedStop = true;
-            if (recognition) recognition.stop();
-            stopListening();
-            return;
-        }
-
-        userInitiatedStop = false;
-        gotFinalResult = false;
-        finalTranscript = '';
-        resultEl.hidden = true;
-        setStatus('Listening…', false);
-
-        var lang = document.documentElement.lang || 'en-US';
-        var useOnDevice = await ensureOnDeviceReady(lang);
-        if (userInitiatedStop) return;
-        beginListening(useOnDevice);
+        },
     });
 })();

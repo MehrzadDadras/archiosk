@@ -34,7 +34,20 @@
         body.setAttribute("data-scene", "field");
         if (openedFieldId) {
             var origin = document.getElementById("field-" + openedFieldId);
-            if (origin) { origin.focus(); }
+            /* The tile came from inside a discipline, and coming back to a
+               collapsed grid loses the reader's place - and focus lands on
+               something display:none, which silently does nothing. So the
+               discipline that holds it is reopened first. */
+            if (origin) {
+                var holder = origin.closest(".np-disc-sheets");
+                if (holder && holder.hidden) {
+                    holder.hidden = false;
+                    var owner = document.querySelector(
+                        "[aria-controls='" + holder.id + "']");
+                    if (owner) { owner.setAttribute("aria-expanded", "true"); }
+                }
+                origin.focus();
+            }
         }
     }
 
@@ -43,6 +56,8 @@
         body.setAttribute("data-scene", "surface");
         var back = document.getElementById("np-return");
         if (back) { back.focus(); }
+        /* Now that the pane has layout, frame the selected room. */
+        if (window.npFrameAnchor) { window.npFrameAnchor(); }
     }
 
     Array.prototype.forEach.call(document.querySelectorAll(".np-field"), function (field) {
@@ -55,6 +70,45 @@
                support, so the others stay closed and say nothing. */
             if (id !== "A204") { return; }
             showSurface(id);
+        });
+    });
+
+    /* ---- disciplines ----------------------------------------------
+       A discipline is a container, so pressing one OPENS IT rather than
+       jumping somewhere. What it opens into differs by what is actually
+       behind it, and every one of the three answers is truthful:
+
+         - sheets delivered  -> its own Page-Fields, which then behave
+                                exactly as they did when they were the top
+                                level of this screen
+         - named, none here  -> the note saying what the A100 index names
+                                and what the source material contains
+         - intake            -> the same refusal the Calm Lake prototype
+                                gives, because it is the same non-feature
+
+       One open at a time. Seven disciplines expanded together is the grid
+       this object replaced, back again with more scrolling.
+       ---------------------------------------------------------------- */
+    var discButtons = Array.prototype.slice.call(
+        document.querySelectorAll("[aria-controls^='sheets-']"));
+
+    function collapseAll(except) {
+        discButtons.forEach(function (btn) {
+            if (btn === except) { return; }
+            btn.setAttribute("aria-expanded", "false");
+            var panel = document.getElementById(btn.getAttribute("aria-controls"));
+            if (panel) { panel.hidden = true; }
+        });
+    }
+
+    discButtons.forEach(function (btn) {
+        btn.addEventListener("click", function () {
+            var panel = document.getElementById(btn.getAttribute("aria-controls"));
+            if (!panel) { return; }
+            var open = btn.getAttribute("aria-expanded") === "true";
+            collapseAll(btn);
+            btn.setAttribute("aria-expanded", open ? "false" : "true");
+            panel.hidden = open;
         });
     });
 
@@ -89,7 +143,12 @@
         pane2Sheet.textContent = btn.getAttribute("data-sib") + " " + btn.getAttribute("data-title");
         if (tagText) { pane2Tag.textContent = tagText; }
         if (window.npSyncOverlay) { window.npSyncOverlay(btn.getAttribute("data-sib")); }
-        if (window.npViews && window.npViews["2"]) { window.npViews["2"].reset(); }
+        if (window.npViews && window.npViews["2"]) {
+            window.npViews["2"].focus = null;
+            window.npViews["2"].reset();
+        }
+        var regoBtn = document.getElementById("np-regofocus");
+        if (regoBtn) { regoBtn.hidden = true; }
     }
 
     function openPane2(mode) {
@@ -135,6 +194,29 @@
                 pane2Img.hidden = false;
                 pane2Empty.hidden = true;
                 pane2Tag.textContent = "Pane 2 · GO selected";
+                /* window-scoped, not bare: parseFocus and views live in the
+                   VIEWPORT IIFE, and this handler is in another one. Calling
+                   them bare threw a ReferenceError that aborted the rest of
+                   the handler silently - the pane still loaded, so it looked
+                   like a framing bug rather than a scope bug. */
+                var gf = window.npParseFocus
+                    ? window.npParseFocus(askGo, "data-go-focus", "data-go-view") : null;
+                var v2 = window.npViews && window.npViews["2"];
+                if (gf && v2) {
+                    var apply = function () {
+                        if (pane2Img.clientWidth) { v2.focusRect(gf.rect, gf.viewW, gf.viewH); }
+                    };
+                    if (pane2Img.complete && pane2Img.clientWidth) { apply(); }
+                    else {
+                        pane2Img.addEventListener("load", apply, { once: true });
+                        requestAnimationFrame(apply);
+                    }
+                    var back = document.getElementById("np-regofocus");
+                    if (back) {
+                        back.hidden = false;
+                        back.onclick = function () { v2.refocus(); };
+                    }
+                }
                 pane2Sheet.textContent = sheet + " · " + askGo.getAttribute("data-go-title");
                 if (window.npSyncOverlay) { window.npSyncOverlay(sheet); }
                 if (window.npViews && window.npViews["2"]) { window.npViews["2"].reset(); }
@@ -164,6 +246,7 @@
 
     var closeBtn = document.getElementById("np-close2");
     if (closeBtn) { closeBtn.addEventListener("click", closePane2); }
+    window.npClosePane2 = closePane2;
 
     /* ---- local sibling stepping, inside pane 2 only ----------------
        Stepping is bounded to the detail-sheet family. It is deliberately
@@ -252,6 +335,42 @@
         this.apply();
     };
 
+    /* Frame a rectangle expressed in the sheet's own point space.
+
+       This is what replaced the cropped raster. A crop is now a VIEW onto the
+       one vector asset - which is also why "return to the GO region" is a
+       real thing the reader can do rather than a reload. */
+    Viewport.prototype.focusRect = function (rect, viewW, viewH) {
+        var img = this.stage.querySelector(".np-page");
+        if (!img || !rect || !viewW || !viewH) { return; }
+        var dw = img.clientWidth, dh = img.clientHeight;
+        if (!dw || !dh) { return; }
+
+        var pane = this.body.getBoundingClientRect();
+        var pxPerPtX = dw / viewW, pxPerPtY = dh / viewH;
+        var rw = rect.w * pxPerPtX, rh = rect.h * pxPerPtY;
+        if (rw <= 0 || rh <= 0) { return; }
+
+        /* 0.92 leaves a margin, so the thing you asked to see is not welded
+           to the edge of the pane. */
+        var s = Math.min(pane.width / rw, pane.height / rh) * 0.92;
+        s = Math.min(MAX, Math.max(MIN, s));
+
+        var cx = (rect.x + rect.w / 2) * pxPerPtX;
+        var cy = (rect.y + rect.h / 2) * pxPerPtY;
+        this.scale = s;
+        this.x = s * (dw / 2 - cx);
+        this.y = s * (dh / 2 - cy);
+        this.apply();
+        this.focus = { rect: rect, viewW: viewW, viewH: viewH };
+    };
+
+    Viewport.prototype.refocus = function () {
+        if (this.focus) {
+            this.focusRect(this.focus.rect, this.focus.viewW, this.focus.viewH);
+        }
+    };
+
     Viewport.prototype.rotateBy = function (deg) {
         this.rot = (this.rot + deg) % 360;
         this.apply();
@@ -321,6 +440,15 @@
         });
     };
 
+    function parseFocus(el, rectAttr, viewAttr) {
+        if (!el) { return null; }
+        var r = (el.getAttribute(rectAttr) || "").split(",").map(Number);
+        var v = (el.getAttribute(viewAttr) || "").split(",").map(Number);
+        if (r.length !== 4 || v.length !== 2 || !v[0]) { return null; }
+        return { rect: { x: r[0], y: r[1], w: r[2], h: r[3] }, viewW: v[0], viewH: v[1] };
+    }
+    window.npParseFocus = parseFocus;
+
     var views = {};
     [["1", "np-stage1", "np-body1", "np-zoom1"],
      ["2", "np-stage2", "np-body2", "np-zoom2"]].forEach(function (spec) {
@@ -331,6 +459,32 @@
         }
     });
     window.npViews = views;
+
+    /* Framing must wait for the pane to be VISIBLE, not merely for the image
+       to load. On arrival the workspace is display:none, so clientWidth is 0 -
+       and framing against 0 produces a transform that is silently wrong rather
+       than obviously broken. A cached vector makes it worse: `load` never
+       fires, so a load-listener alone would never run at all.
+
+       So this is exported and called when the scene switches, and it verifies
+       it has real layout before trusting it. */
+    window.npFrameAnchor = function () {
+        var v = views["1"];
+        var img = document.getElementById("np-pane1-img");
+        if (!v || !img) { return; }
+        var f = parseFocus(img, "data-focus", "data-view");
+        if (!f) { return; }
+        var go = function () {
+            if (!img.clientWidth) { return; }
+            v.focusRect(f.rect, f.viewW, f.viewH);
+        };
+        if (img.complete && img.clientWidth) { go(); }
+        else { img.addEventListener("load", go, { once: true }); requestAnimationFrame(go); }
+    };
+    window.addEventListener("resize", function () {
+        if (views["1"]) { views["1"].refocus(); }
+        if (views["2"]) { views["2"].refocus(); }
+    });
 
     Array.prototype.forEach.call(document.querySelectorAll(".np-view"), function (bar) {
         var v = views[bar.getAttribute("data-pane")];
@@ -364,9 +518,19 @@
         }
     }
 
+    function overlayIsOn() {
+        return !!overlay && overlay.classList.contains("is-on");
+    }
+    window.npOverlayIsOn = overlayIsOn;
+
     function setOverlay(on) {
         if (!overlay || !semToggle) { return; }
-        overlay.hidden = !on;
+        /* classList, not .hidden - see the note in nipigon.css. `hidden` is an
+           HTMLElement property and does nothing on an SVG element, so writing
+           it produced a state machine that reported cleanly while controlling
+           nothing. */
+        overlay.classList.toggle("is-on", !!on);
+        overlay.removeAttribute("hidden");
         semToggle.setAttribute("aria-pressed", on ? "true" : "false");
         semToggle.textContent = "Semantic overlay: " + (on ? "ON" : "OFF");
         if (!on && tip) { tip.hidden = true; }
@@ -374,7 +538,7 @@
     window.npSetOverlay = setOverlay;
 
     if (semToggle) {
-        semToggle.addEventListener("click", function () { setOverlay(overlay.hidden); });
+        semToggle.addEventListener("click", function () { setOverlay(!overlayIsOn()); });
     }
 
     /* The overlay is only meaningful on the sheet it was derived from.
@@ -576,9 +740,12 @@
         });
     }
 
+    var scrim = document.getElementById("np-prefs-scrim");
+
     function open(on) {
         if (!panel) { return; }
         panel.hidden = !on;
+        if (scrim) { scrim.hidden = !on; }
         if (openBtn) { openBtn.setAttribute("aria-expanded", on ? "true" : "false"); }
         if (on) {
             render();
@@ -591,6 +758,9 @@
 
     if (openBtn) { openBtn.addEventListener("click", function () { open(panel.hidden); }); }
     if (closeBtn) { closeBtn.addEventListener("click", function () { open(false); }); }
+    /* A tap outside is how a dialog is dismissed on a phone, where the Close
+       button is a small target at the top of a tall panel. */
+    if (scrim) { scrim.addEventListener("click", function () { open(false); }); }
     if (resetBtn) { resetBtn.addEventListener("click", function () { prefs.reset(); }); }
     document.addEventListener("keydown", function (e) {
         if (e.key === "Escape" && panel && !panel.hidden) { open(false); }
@@ -618,4 +788,270 @@
     });
 
     render();
+}());
+
+/* ============================================================
+   DISMISS BY DRAGGING A PANE OFF THE SCREEN
+
+   The gesture lives on the pane HEAD, not on the drawing, and that is
+   the whole design of it. Dragging the drawing already pans it - which
+   is the primary gesture on a coordination surface - so putting
+   "dismiss" on the same drag would mean panning too far makes the pane
+   you are comparing against disappear. Losing the reference mid-
+   comparison is the worst accident available on this screen, so the two
+   gestures get separate targets: the drawing pans, its header dismisses.
+
+   PANE 1 IS NOT DISMISSIBLE, and this is not an oversight. It is the
+   anchor: the thing being coordinated FROM. A workspace where the
+   anchor can be swiped away is a workspace that can be left showing
+   only an answer with nothing to check it against.
+
+   Under threshold the pane springs back, so a hesitant drag costs
+   nothing and the gesture is discoverable by trying it.
+   ============================================================ */
+(function () {
+    "use strict";
+
+    var pane = document.querySelector(".np-pane--2");
+    var head = pane && pane.querySelector(".np-pane-head");
+    if (!pane || !head) { return; }
+
+    var dragging = false, startX = 0, dx = 0, id = null;
+    var THRESHOLD = 0.32;   /* of the pane's own width */
+
+    function set(x) {
+        pane.style.setProperty("--dismiss-x", x + "px");
+        pane.style.setProperty("--dismiss-fade", String(Math.max(0, 1 - Math.abs(x) / (pane.offsetWidth || 1))));
+    }
+
+    function clear() {
+        /* Set to zero rather than removed. Removing the property left the
+           computed transform sitting at its last value instead of falling
+           back to 0px, so a short drag stayed offset instead of springing
+           back - visible only by reading the computed transform, not the
+           inline style, which read as cleared. */
+        pane.style.setProperty("--dismiss-x", "0px");
+        pane.style.setProperty("--dismiss-fade", "1");
+    }
+
+    head.addEventListener("pointerdown", function (e) {
+        if (e.button !== undefined && e.button !== 0) { return; }
+        dragging = true; startX = e.clientX; dx = 0; id = e.pointerId;
+        pane.classList.add("is-dragging");
+        try { head.setPointerCapture(id); } catch (err) { /* not fatal */ }
+    });
+
+    head.addEventListener("pointermove", function (e) {
+        if (!dragging || e.pointerId !== id) { return; }
+        dx = e.clientX - startX;
+        set(dx);
+    });
+
+    function end() {
+        if (!dragging) { return; }
+        dragging = false;
+        pane.classList.remove("is-dragging");
+        var far = Math.abs(dx) > (pane.offsetWidth || 1) * THRESHOLD;
+        if (far) {
+            /* Let it leave in the direction it was thrown, then close. The
+               close itself resets pane state, so nothing is left half-shut. */
+            pane.classList.add("is-dismissing");
+            set(dx > 0 ? (pane.offsetWidth + 40) : -(pane.offsetWidth + 40));
+            window.setTimeout(function () {
+                pane.classList.remove("is-dismissing");
+                clear();
+                if (window.npClosePane2) { window.npClosePane2(); }
+            }, 160);
+        } else {
+            clear();
+        }
+        dx = 0; id = null;
+    }
+    head.addEventListener("pointerup", end);
+    head.addEventListener("pointercancel", end);
+
+    /* ---- FLICK TO DISMISS, on the drawing itself -------------------
+
+       Speed is what separates the two intents, because the target
+       cannot: a slow drag on a drawing means pan, and a fast throw
+       means get rid of it. Both are the same finger on the same pixels.
+
+       Three conditions must hold together, so ordinary panning can
+       never trip it by accident:
+
+         velocity   > 1.1 px/ms over the last 90ms - far above the speed
+                      anyone moves at while reading a drawing
+         distance   > 70px - a flick, not a twitch
+         direction  horizontal by at least 2:1 - panning down a tall
+                      sheet must never read as a sideways throw
+
+       Pane 1 is excluded here as it is on the handle: the anchor is not
+       dismissible by any gesture. */
+
+    var body2 = document.getElementById("np-body2");
+    if (!body2) { return; }
+
+    var samples = [];
+    var V_MIN = 1.1, D_MIN = 70, RATIO = 2;
+
+    body2.addEventListener("pointerdown", function (e) {
+        samples = [{ x: e.clientX, y: e.clientY, t: performance.now() }];
+    });
+
+    body2.addEventListener("pointermove", function (e) {
+        var now = performance.now();
+        samples.push({ x: e.clientX, y: e.clientY, t: now });
+        /* Only the tail matters - a long slow pan that ends in a flick is
+           still a flick, and a flick that ends in a pause is not. */
+        while (samples.length > 2 && now - samples[0].t > 90) { samples.shift(); }
+    });
+
+    function flickEnd() {
+        if (samples.length < 2) { samples = []; return; }
+        var a = samples[0], b = samples[samples.length - 1];
+        var dt = b.t - a.t;
+        if (dt <= 0) { samples = []; return; }
+        var fx = b.x - a.x, fy = b.y - a.y;
+        var vx = Math.abs(fx) / dt;
+        samples = [];
+
+        if (vx < V_MIN) { return; }
+        if (Math.abs(fx) < D_MIN) { return; }
+        if (Math.abs(fx) < Math.abs(fy) * RATIO) { return; }
+
+        pane.classList.add("is-dismissing");
+        set(fx > 0 ? (pane.offsetWidth + 40) : -(pane.offsetWidth + 40));
+        window.setTimeout(function () {
+            pane.classList.remove("is-dismissing");
+            clear();
+            if (window.npClosePane2) { window.npClosePane2(); }
+        }, 160);
+    }
+    body2.addEventListener("pointerup", flickEnd);
+    body2.addEventListener("pointercancel", function () { samples = []; });
+}());
+
+/* =======================================================================
+   VOICE - a second way to reach the controls that are already here.
+
+   CLAUDE-VOICE-CONSISTENCY-02. Two rules, and everything below follows
+   from them:
+
+     1. It uses the SHARED engine (static/js/voice_input.js). This surface
+        does not get its own recogniser, because the last page that had one
+        needed the same defect fixed twice.
+
+     2. It DISPATCHES REAL CONTROLS. Every branch ends in .click() on a
+        button that is on the page and reachable by finger and by Tab.
+        Nothing here performs an action itself, so voice cannot become a
+        path around a guard the visible control carries - and a control
+        that is disabled, absent or hidden simply cannot be spoken to
+        either.
+
+   The vocabulary is deliberately small and closed. An unrecognised
+   sentence is reported back verbatim and does nothing: on a coordination
+   surface, guessing which sheet someone meant is the one failure mode
+   worth designing against.
+   ======================================================================= */
+(function () {
+    "use strict";
+    var button = document.getElementById("np-voice-button");
+    var status = document.getElementById("np-voice-status");
+    if (!button || typeof window.ArchioskVoiceInput !== "function") { return; }
+
+    /* Recognisers punctuate and space sheet marks unpredictably - "A801"
+       comes back as "a 801", "A-801", "eight oh one". Folding to bare
+       alphanumerics catches the first two honestly; the spelled-out form is
+       deliberately NOT guessed at. */
+    function fold(text) {
+        return (text || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+    }
+
+    function fire(el) {
+        if (!el || el.disabled || el.hidden) { return false; }
+        el.click();
+        return true;
+    }
+
+    function dispatch(transcript) {
+        var folded = fold(transcript);
+        var lower = (transcript || "").toLowerCase();
+
+        /* A named sheet wins over everything else: it is the most specific
+           thing anyone says on this screen. */
+        var sibs = document.querySelectorAll("[data-sib]");
+        for (var i = 0; i < sibs.length; i += 1) {
+            if (folded.indexOf(fold(sibs[i].getAttribute("data-sib"))) !== -1) {
+                if (fire(sibs[i])) { return sibs[i].getAttribute("data-sib"); }
+            }
+        }
+
+        /* ORDERED BY SPECIFICITY, and the order is load-bearing: the first
+           match wins, so a short pattern placed early swallows the sentences
+           a longer one was meant to catch. "go back" is the case that
+           matters - it contains a bare "go", and GO used to be listed
+           first, so the commonest navigation phrase on this screen would
+           have opened a coordination pane instead of leaving. */
+        var COMMANDS = [
+            { re: /\bgo back\b|\bback\b|surfaces|all drawings/, id: "np-return", said: "Back to surfaces" },
+            { re: /close( the)?( second)?( pane)?( two| 2)?\b/, id: "np-close2", said: "Close pane 2" },
+            { re: /ask go\b|washroom detail|find the detail|^go\b|\bgo\b(?! (back|to))/, id: "np-ask-go", said: "Ask GO" },
+            { re: /\bsplit\b|second pane|summon/, id: "np-split", said: "Split" },
+            { re: /preferences|settings|engine/, id: "np-prefs-open", said: "Engine preferences" },
+        ];
+        for (var c = 0; c < COMMANDS.length; c += 1) {
+            if (COMMANDS[c].re.test(lower)) {
+                if (fire(document.getElementById(COMMANDS[c].id))) { return COMMANDS[c].said; }
+            }
+        }
+
+        /* View controls belong to a pane, and there can be two. "Pane 2"
+           addresses the second; anything else means the one in front. */
+        var VIEW = [
+            { re: /zoom in|closer|magnif/, act: "in", said: "Zoom in" },
+            { re: /zoom out|further|smaller/, act: "out", said: "Zoom out" },
+            { re: /\bfit\b|whole sheet|fit the page/, act: "fit", said: "Fit" },
+            { re: /rotate (left|counter)|anticlockwise/, act: "rccw", said: "Rotate left" },
+            { re: /rotate( right)?|clockwise/, act: "rcw", said: "Rotate right" },
+            { re: /reset|native|upright/, act: "reset", said: "Reset" },
+        ];
+        var pane = /pane ?(two|2)|second pane/.test(lower) ? "2" : "1";
+        for (var v = 0; v < VIEW.length; v += 1) {
+            if (VIEW[v].re.test(lower)) {
+                var bar = document.querySelector('.np-view[data-pane="' + pane + '"]');
+                var btn = bar && bar.querySelector('[data-act="' + VIEW[v].act + '"]');
+                if (fire(btn)) { return VIEW[v].said + " \u00b7 pane " + pane; }
+            }
+        }
+        return null;
+    }
+
+    var heard = "";
+    var final = false;
+
+    var voice = window.ArchioskVoiceInput({
+        buttonId: "np-voice-button",
+        statusId: "np-voice-status",
+        onStart: function () { heard = ""; final = false; },
+        onTranscript: function (transcript, isFinal) {
+            heard = transcript;
+            if (isFinal) { final = true; }
+        },
+        onEnd: function () {
+            if (!final || !heard.trim()) { return; }
+            var did = dispatch(heard.trim());
+            if (!voice) { return; }
+            if (did) {
+                voice.setStatus(did, false);
+            } else {
+                /* Verbatim, and no action. Reporting what was actually heard
+                   is the difference between "I did not understand" and the
+                   reader believing the microphone is deaf. */
+                voice.setStatus("\u201c" + heard.trim() + "\u201d \u2014 no control here matches that.", true);
+            }
+            if (status) {
+                window.setTimeout(function () { voice.setStatus("", false); }, 3200);
+            }
+        },
+    });
 }());

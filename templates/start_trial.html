@@ -18,19 +18,22 @@
         </p>
     </div>
     {% else %}
-    <span class="landing-doc-kicker">Request Trial Access</span>
+    {# CLAUDE-REQUEST-ACCESS-PRUNE-01. The eyebrow here repeated the h1
+       verbatim - the same three words stacked above themselves - so it is
+       gone and the title appears once. It is KEPT on the submitted branch
+       above, where "REQUEST TRIAL ACCESS / Request received" is a flow name
+       and an outcome rather than the same string twice.
+
+       The explanatory paragraph is gone too. It explained the programme
+       rather than the form, and the form is the page: a visitor who reached
+       "Request Trial Access" has already decided. What it protected is
+       preserved where it belongs - CLAUDE-CA1D-TRIAL-ACCESS-HOTFIX-01's real
+       requirement was that the old dead end ("isn't self-serve yet", "check
+       back soon") never returns and that nothing here claims self-service
+       signup or an instant account. None of that depended on the paragraph;
+       it depended on there being a working form and no false promise, and
+       both still hold. #}
     <h1>Request Trial Access</h1>
-    <div class="landing-doc-section">
-        {# CLAUDE-CA1D-TRIAL-ACCESS-HOTFIX-01, Section 2: leads with what
-           Archiosk offers, not what it lacks -- the old headline ("Trial
-           access isn't self-serve yet") is retired. Still honest: no
-           self-service signup claim, no implied instant account. #}
-        <p>
-            Archiosk is opening trial access gradually while the live product continues
-            to be validated. Request access and we&rsquo;ll use the current
-            controlled-access process to get you started.
-        </p>
-    </div>
 
     <form class="landing-request-form" method="post" data-ui-ref="start-trial.request-form">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -50,10 +53,14 @@
         <button type="submit" class="landing-action landing-action-primary" data-ui-ref="start-trial.request-submit">Request Access</button>
     </form>
     {% endif %}
+    {# The two secondary buttons that used to sit here are gone. Product Owner
+       direction: the top-left "<- Archiosk" link is the SOLE exit path back to
+       the landing gate, where Sign In and Explore both already live as real
+       CTAs. Two more copies of them at the bottom of a form asked a visitor
+       who had already chosen to choose again.
 
-    <div class="landing-doc-actions">
-        <a class="landing-action landing-action-secondary" href="{{ url_for('portal.login') }}" data-ui-ref="start-trial.sign-in">Already have an account? Sign In</a>
-        <a class="landing-action landing-action-secondary" href="{{ url_for('portal.explore') }}" data-ui-ref="start-trial.explore">Explore Archiosk</a>
-    </div>
+       Note the consequence, which is deliberate rather than overlooked: the
+       submitted/confirmation state now also exits only through that top-left
+       link. #}
 </div>
 {% endblock %}

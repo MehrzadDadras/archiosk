@@ -84,10 +84,35 @@
         if (!micButton) return null;
 
         const SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
-        if (!SpeechRecognitionCtor) {
-            // Graceful degradation: unsupported browser - the button
-            // stays hidden (its own default state), typing/clicking
-            // remains the only, fully-equivalent input path.
+
+        // CLAUDE-VOICE-SECURE-CONTEXT-01. TWO conditions, because the
+        // constructor alone is a LIAR about capability.
+        //
+        // Measured on the exact origin a phone uses over the LAN
+        // (http://10.0.0.177:8642): `isSecureContext` false,
+        // `navigator.mediaDevices` UNDEFINED, `getUserMedia` absent - and
+        // `typeof webkitSpeechRecognition === 'function'` anyway. The
+        // constructor is defined on an insecure origin; it just cannot
+        // reach a microphone. So the old single check passed, the button
+        // was revealed, and the start call below failed on press. That is
+        // the reported "voice fails to respond": not a broken recogniser,
+        // a mic offered where the browser will never grant one.
+        //
+        // Feature detection has to test the CAPABILITY, not the symbol.
+        // Hiding the button restores the honest contract this file already
+        // claims below - the affordance appears only where it works, and
+        // typing remains the fully-equivalent path everywhere else.
+        //
+        // Note the asymmetry this creates in testing: localhost IS a secure
+        // context, so voice works on the developing machine and is absent on
+        // the phone over plain http. That is the browser's rule, not ours -
+        // testing voice on a device needs an https origin (see
+        // tools/serve_https_harness.py).
+        if (!SpeechRecognitionCtor || !window.isSecureContext) {
+            // Graceful degradation: unsupported browser, or an origin the
+            // browser will not grant a microphone to - the button stays
+            // hidden (its own default state), typing/clicking remains the
+            // only, fully-equivalent input path.
             return null;
         }
 
@@ -217,6 +242,10 @@
 
             userInitiatedStop = false;
             gotFinalResult = false;
+            // Before anything is heard. The landing page's response card is
+            // the case this exists for: a stale answer sitting under a live
+            // mic reads as a reply to what is being said right now.
+            if (options.onStart) options.onStart();
             setStatus('Listening…', false);
 
             const lang = document.documentElement.lang || 'en-US';
@@ -225,7 +254,11 @@
             beginListening(useOnDevice);
         });
 
-        return { stopListening };
+        // setStatus is returned, not merely used internally: a caller with
+        // something of its own to say ("Opening Sign In...") must be able to
+        // say it in the SAME live region, or the page grows a second status
+        // area and a screen reader hears the announcement twice.
+        return { stopListening, setStatus };
     }
 
     window.ArchioskVoiceInput = setUpVoiceInput;

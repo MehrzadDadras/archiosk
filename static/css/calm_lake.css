@@ -69,6 +69,7 @@
     --w-line-2: #6B7686;
     --w-line-faint: #D5DBE3;
 
+
     --w-radius: 5px;
     --w-radius-lg: 14px;
 
@@ -145,11 +146,62 @@ body.cl[data-scene="surface"] .cl-scene { display: none; }
 }
 
 .cl-scene-head {
+    position: relative;
     display: flex;
     flex-direction: column;
     gap: 1px;
     padding: 4px 4px 20px;
 }
+
+/* THE MICROPHONE. Absolutely placed rather than made a flex child: this
+   header is a COLUMN, and a third child would push the field grid down by a
+   row. Outline at rest, solid fill while listening - the states differ in
+   fill rather than shade, so they stay apart in greyscale. Hidden until
+   static/js/voice_input.js confirms the browser will really grant a mic on
+   this origin (an https one; never a plain http LAN address). */
+.cl-mic {
+    position: absolute;
+    right: 4px; top: 0;
+    display: grid; place-items: center;
+    width: 30px; height: 30px;
+    padding: 0;
+    border: 1px solid var(--w-line);
+    border-radius: var(--w-radius);
+    background: var(--w-surface);
+    color: var(--w-ink-2);
+    cursor: pointer;
+}
+.cl-mic-glyph { width: 16px; height: 16px; }
+.cl-mic:hover { background: var(--w-surface-2); color: var(--w-ink); }
+.cl-mic:focus-visible { outline: 2px solid var(--w-ink); outline-offset: 2px; }
+/* LISTENING. The real application fills this button with --attention-amber
+   (main.css, .voice-input-button.voice-input-listening). Here it inverts
+   instead, because this surface is a grayscale wireframe on purpose and
+   admitting one warm accent for one control would break the single rule the
+   whole study is testing. What carries across is the part that matters: the
+   state is a change of FILL, not of shade, so ready and listening cannot be
+   mistaken for one another in greyscale, in print, or by a reader who does
+   not see the hue at all. */
+.cl-mic.voice-input-listening {
+    background: var(--w-ink);
+    border-color: var(--w-ink);
+    color: var(--w-surface);
+}
+
+/* Empty almost always, and absolutely positioned so it costs no row when it
+   is - the field grid must not shift because the mic had something to say. */
+.cl-voice-status {
+    position: absolute;
+    left: 4px; right: 40px; bottom: 2px;
+    z-index: 4;
+    margin: 0;
+    font-size: 11px;
+    line-height: 1.4;
+    color: var(--w-ink-3);
+    pointer-events: none;
+}
+.cl-voice-status[data-state="error"] { color: var(--w-ink); font-style: italic; }
+.cl-voice-status:empty { display: none; }
 
 .cl-scene-project {
     font-size: 19px;

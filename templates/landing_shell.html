@@ -37,6 +37,13 @@
     {% block landing_body %}{% endblock %}
 </div>
 <script src="{{ url_for('static', filename='js/ocean_field.js') }}?v={{ static_version }}"></script>
+{# CLAUDE-VOICE-CONSISTENCY-02: the shared recognition engine, loaded FIRST
+   because landing.js's "Speak to Archiosk" router now calls
+   window.ArchioskVoiceInput rather than carrying a second copy of it. Order
+   matters: landing.js checks for the global at parse time and leaves the mic
+   hidden if it is missing, so a reversed pair would silently cost the
+   landing page its microphone rather than erroring. #}
+<script src="{{ url_for('static', filename='js/voice_input.js') }}?v={{ static_version }}"></script>
 <script src="{{ url_for('static', filename='js/landing.js') }}?v={{ static_version }}"></script>
 {# CLAUDE-LANDING-SONIC-01, EXPERIMENTAL: loaded ONLY on this shell. The cue
    belongs to the launch moment, and this is the surface an installed ARCHIOSK

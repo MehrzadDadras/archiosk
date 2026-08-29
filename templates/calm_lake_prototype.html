@@ -84,6 +84,14 @@
     <header class="cl-scene-head">
         <span class="cl-scene-project">{{ project.name }}</span>
         <span class="cl-scene-discipline">{{ project.discipline }}</span>
+        {# VOICE. Hidden until static/js/voice_input.js finds a browser that
+           will really grant a microphone. Speaking a field's name clicks
+           that field's own button, so a spoken request lands on exactly the
+           same path - and the same honest refusals - as a tap. #}
+        <button type="button" class="cl-mic" id="cl-voice-button"
+                data-ui-ref="calm-lake-voice" hidden aria-pressed="false"
+                aria-label="Speak a surface name"><svg class="cl-mic-glyph" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><line x1="12" y1="18" x2="12" y2="21"/></svg></button>
+        <p class="cl-voice-status" id="cl-voice-status" role="status" aria-live="polite"></p>
     </header>
     <ol class="cl-field-grid">
         {% for field in fields %}
@@ -720,6 +728,7 @@
 
 </div>
 
+<script nonce="{{ csp_nonce }}" src="{{ url_for('static', filename='js/voice_input.js') }}?v={{ static_version }}"></script>
 <script nonce="{{ csp_nonce }}" src="{{ url_for('static', filename='js/calm_lake.js') }}?v={{ static_version }}"></script>
 </body>
 </html>

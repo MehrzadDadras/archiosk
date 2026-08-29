@@ -724,3 +724,89 @@
 
     syncVerbs();
 }());
+
+/* =======================================================================
+   VOICE - naming a surface out loud.
+
+   CLAUDE-VOICE-CONSISTENCY-02. The shared engine, and no second copy of
+   it. A match ends in .click() on the field's own button, which means the
+   prototype's existing honest refusals still fire: saying "new project"
+   out loud gets "Project intake is not built in this prototype", exactly
+   as tapping it does, rather than a smoother-sounding lie.
+
+   Matching is on the sheet mark carried by data-field and on the words
+   already in the tile's own aria-label - never a separate vocabulary
+   list, which would be one more thing able to disagree with the screen.
+   ======================================================================= */
+(function () {
+    "use strict";
+    var button = document.getElementById("cl-voice-button");
+    if (!button || typeof window.ArchioskVoiceInput !== "function") { return; }
+
+    function fold(text) {
+        return (text || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+    }
+
+    function dispatch(transcript) {
+        var folded = fold(transcript);
+        var lower = (transcript || "").toLowerCase();
+        var fields = document.querySelectorAll(".cl-field");
+
+        for (var i = 0; i < fields.length; i += 1) {
+            var mark = fields[i].getAttribute("data-field");
+            if (mark && folded.indexOf(fold(mark)) !== -1) {
+                fields[i].click();
+                return mark;
+            }
+        }
+        /* Then the tile's own words - "the composer", "documents". Short
+           words are excluded because they match almost any sentence, and so
+           are these: every one appears in a tile's own label while carrying
+           no intent about WHICH tile. "show me the project" contains
+           "project", which is in the intake tile's label - acting on that
+           would be the machine guessing, which is precisely what this
+           surface exists to not do. A word with no intent in it is a reason
+           to say nothing matched. */
+        var GENERIC = ["project", "start", "surface", "surfaces", "open", "show",
+                       "this", "that", "with", "from", "into", "page", "sheet"];
+        for (var j = 0; j < fields.length; j += 1) {
+            var label = (fields[j].getAttribute("aria-label") || "").toLowerCase();
+            var words = label.split(/[^a-z]+/);
+            for (var w = 0; w < words.length; w += 1) {
+                if (GENERIC.indexOf(words[w]) !== -1) { continue; }
+                if (words[w].length > 3 && lower.indexOf(words[w]) !== -1) {
+                    fields[j].click();
+                    return fields[j].getAttribute("data-field") || words[w];
+                }
+            }
+        }
+        var back = document.getElementById("cl-return");
+        if (back && !back.hidden && /\bback\b|surfaces|all of them/.test(lower)) {
+            back.click();
+            return "Back to surfaces";
+        }
+        return null;
+    }
+
+    var heard = "";
+    var final = false;
+
+    var voice = window.ArchioskVoiceInput({
+        buttonId: "cl-voice-button",
+        statusId: "cl-voice-status",
+        onStart: function () { heard = ""; final = false; },
+        onTranscript: function (transcript, isFinal) {
+            heard = transcript;
+            if (isFinal) { final = true; }
+        },
+        onEnd: function () {
+            if (!final || !heard.trim() || !voice) { return; }
+            var did = dispatch(heard.trim());
+            voice.setStatus(did
+                ? did
+                : "\u201c" + heard.trim() + "\u201d \u2014 no surface here has that name.",
+                !did);
+            window.setTimeout(function () { voice.setStatus("", false); }, 3200);
+        },
+    });
+}());

@@ -16,27 +16,52 @@
    has misunderstood what it is for.
    ============================================================ */
 
-:root {
-    --n-ink: #1B2027;
-    --n-ink-2: #2E3742;
-    --n-ink-3: #4F5B69;
-    --n-page: #E9ECF0;
-    --n-surface: #F7F9FB;
-    --n-surface-2: #DFE4EA;
-    --n-surface-3: #CBD2DB;
-    --n-line: #7C8795;
-    --n-line-2: #6B7686;
-    --n-line-faint: #D5DBE3;
+/* ------------------------------------------------------------
+   CONVERGED ONTO tokens.css
 
-    /* THE RESERVED EMPHASIS COLOUR.
-       --n-ink* is the TEXT ramp and carries no meaning. --n-accent is the one
-       token allowed to mean something, and it is spent only on: active
-       selection, Page-Field identity, focus, relationship traces, provenance
-       cues, and consequential attention. In the default theme it is simply the
-       ink, because that theme is monochrome by design. */
-    --n-accent: #1B2027;
-    --n-accent-dim: #4F5B69;
-    --n-on-accent: #F7F9FB;
+   Every value below is now a reference, not a literal. The private ramp
+   this file used to carry was a parallel palette that had drifted to
+   within a hair of the real one by eye - which is worse than either
+   matching or differing on purpose, because nothing propagates.
+
+   THE ACCENT RULE, taken from the app rather than invented:
+   --brand-gold appears THREE times in main.css's 415KB. It marks the
+   ARCHIOSK identity and nothing else. --machine-blue appears 150 times
+   and does the working, because it has exactly one meaning:
+   machine/system/reference - focus rings, links, machine-generated
+   Finding markers.
+
+   This file previously spent its accent 29 times on identity AND focus
+   AND selection AND badges AND buttons. That is a gold theme wearing a
+   restrained palette's notes. Gold now marks identity only; blue takes
+   the machine/reference work it is defined for.
+   ------------------------------------------------------------ */
+
+:root {
+    --n-ink: var(--text-primary);
+    --n-ink-2: var(--text-secondary);
+    --n-ink-3: var(--text-metadata);
+    --n-page: var(--canvas);
+    --n-surface: var(--surface-primary);
+    --n-surface-2: var(--surface-secondary);
+    --n-surface-3: var(--surface-hover);
+    --n-line: var(--border);
+    --n-line-2: var(--border-strong);
+    --n-line-faint: var(--surface-secondary);
+
+    /* IDENTITY. Spent on the sheet number and the gear, and nowhere else -
+       the discipline --brand-gold keeps in the app it was borrowed from. */
+    --n-accent: var(--brand-gold);
+    --n-accent-dim: var(--text-metadata);
+    --n-on-accent: var(--canvas);
+
+    /* MACHINE / SYSTEM / REFERENCE. Focus rings, selection, and the
+       machine-generated Finding markers the semantic overlay draws -
+       which is the documented job of this token, not a colour choice. */
+    --n-machine: var(--machine-blue);
+
+    /* PENDING ATTENTION. The one place a basis badge earns a hue. */
+    --n-attention: var(--attention-amber);
     --n-radius: 4px;
     --n-fast: 130ms;
     --n-ease: cubic-bezier(.33, 1, .68, 1);
@@ -46,6 +71,17 @@
 
 * { box-sizing: border-box; }
 html, body { height: 100%; margin: 0; padding: 0; }
+
+/* THE `hidden` ATTRIBUTE MUST ACTUALLY HIDE.
+   The UA rule is only `[hidden] { display: none }`, which ANY author rule
+   setting `display` silently defeats. This file had three such cases -
+   .np-prefs and .np-siblings are display:flex, and .np-page is display:block -
+   so `el.hidden = true` set the attribute, the property read back true, and
+   the element stayed on screen. The Close button on the preferences panel
+   "did nothing" for exactly this reason: the state was correct and the pixels
+   disagreed.
+   Declared once, as a class of bug rather than three instances. */
+[hidden] { display: none !important; }
 
 body.np {
     height: 100dvh;
@@ -77,6 +113,30 @@ body.np[data-scene="surface"] .np-scene { display: none; }
 }
 
 .np-scene-head { display: flex; flex-direction: column; gap: 1px; padding: 4px 2px 16px; }
+/* The brand lockup, matching the gateway's own: the mark in identity gold
+   beside the project name in primary text. Gold appears HERE and on the
+   gear, and nowhere else on this surface. */
+.np-lockup { display: flex; align-items: center; gap: 9px; }
+/* No colour of its own set here: this asset ships its own tile and palette,
+   and matching the home-screen icon exactly is the point of using it. */
+.np-mark { display: block; flex: none; border-radius: 7px; }
+
+/* The mark as a control. It must look pressable without being dressed as a
+   button - the tile already has an edge, so the affordance is a ring on
+   hover and focus, not a second frame around it. */
+.np-mark-btn {
+    display: inline-flex;
+    padding: 0;
+    border: 0;
+    border-radius: 8px;
+    background: none;
+    cursor: pointer;
+    line-height: 0;
+    transition: box-shadow var(--n-fast) var(--n-ease);
+}
+.np-mark-btn:hover { box-shadow: 0 0 0 3px var(--n-surface-3); }
+.np-mark-btn:focus-visible { outline: 2px solid var(--n-machine); outline-offset: 3px; }
+.np-mark-btn[aria-expanded="true"] { box-shadow: 0 0 0 3px var(--n-machine); }
 .np-project { font-size: 19px; font-weight: 700; letter-spacing: -.01em; }
 .np-sub { font-size: 12px; color: var(--n-ink-3); }
 .np-sub--quiet { font-size: 11px; color: var(--n-line-2); }
@@ -91,6 +151,213 @@ body.np[data-scene="surface"] .np-scene { display: none; }
     font-size: 12px;
 }
 .np-warn code { font-family: var(--n-mono); font-size: 11px; }
+
+/* ==================================================================
+   SCENE 1 - THE DISCIPLINE GRID, AND THE AXIS IT RUNS ON
+
+   Product Owner: "the icons on the phone should spread vertical when it is
+   portrait and horizontal to fill the screen when is landscape."
+
+   Taken literally, and keyed on `orientation` rather than on a width
+   breakpoint - because the request is about the SHAPE of the space, and a
+   width breakpoint answers a different question. A landscape phone and a
+   narrow desktop window can be the same number of pixels wide and want
+   opposite layouts.
+
+   PORTRAIT: one column. The tiles run down the screen and share its height,
+   which is the axis there is room on.
+
+   LANDSCAPE: one row. `grid-auto-flow: column` with equal auto-columns, so
+   seven tiles divide the width rather than wrapping into a second row that
+   would be cut off by the fold - the same complaint that produced the
+   landscape rail in the working surface below.
+
+   Desktop keeps the ordinary wrapping grid: a 1400px window laid out as one
+   row of seven would be seven tall thin slivers.
+   ================================================================== */
+.np-disc-grid {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+    gap: 14px 12px;
+    max-width: 760px;
+    align-content: start;
+}
+.np-disc-slot { min-width: 0; min-height: 0; }
+
+@media (max-width: 720px) and (orientation: portrait) {
+    .np-disc-grid {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 10px;
+        max-width: none;
+    }
+    /* A discipline in portrait is a wide, short band: the face sits beside
+       the words instead of above them, because a stack of seven full tiles
+       would need three screens of scrolling to see the project. */
+    .np-disc { flex-direction: row; height: 76px; align-items: stretch; }
+    .np-disc-face { flex: 0 0 116px; border-bottom: 0; border-right: 1px solid var(--n-line); }
+    .np-disc-strip {
+        flex: 1 1 auto;
+        flex-direction: column;
+        justify-content: center;
+        align-items: flex-start;
+        gap: 2px;
+        height: auto;
+        padding: 0 12px;
+    }
+}
+
+@media (max-height: 560px) and (orientation: landscape) {
+    .np-disc-grid {
+        grid-auto-flow: column;
+        grid-auto-columns: minmax(0, 1fr);
+        grid-template-columns: none;
+        gap: 8px;
+        max-width: none;
+    }
+    /* Shorter than the portrait tile and much narrower. The mosaic keeps
+       working at this size because each cell is a crop of a real drawing,
+       not a whole sheet scaled down to a smudge. */
+    .np-disc { height: 132px; }
+    .np-disc-name { font-size: 11px; }
+    .np-disc-count { font-size: 9.5px; }
+    /* An expanded discipline cannot open a second row here - there is no
+       second row - so its sheets scroll horizontally under the grid. */
+    .np-disc-sheets {
+        position: fixed;
+        left: 12px; right: 12px; bottom: 8px;
+        z-index: 6;
+        grid-auto-flow: column;
+        grid-auto-columns: 175px;
+        overflow-x: auto;
+        padding: 8px;
+        background: var(--n-surface);
+        border: 1px solid var(--n-line);
+        border-radius: var(--n-radius);
+    }
+}
+
+/* THE DISCIPLINE TILE. Deliberately NOT a Page-Field: it is a container, not
+   a window onto a surface, and giving it the Page-Field's pinned 175 x 152.17
+   geometry would claim a kinship it does not have. The sheets INSIDE it are
+   real Page-Fields and keep that geometry exactly. */
+.np-disc {
+    width: 100%;
+    height: 152px;
+    display: flex;
+    flex-direction: column;
+    padding: 0;
+    border: 1px solid var(--n-line);
+    border-radius: 3px;
+    background: var(--n-surface);
+    overflow: hidden;
+    cursor: pointer;
+    text-align: left;
+    transition: transform var(--n-fast) var(--n-ease),
+                box-shadow var(--n-fast) var(--n-ease),
+                border-color var(--n-fast) var(--n-ease);
+    box-shadow: 0 1px 2px rgba(27, 32, 39, .06);
+}
+.np-disc:hover,
+.np-disc:focus-visible {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(27, 32, 39, .13);
+    border-color: var(--n-line-2);
+}
+.np-disc:focus-visible { outline: 2px solid var(--n-machine); outline-offset: 2px; }
+.np-disc:active { transform: translateY(0); }
+.np-disc[aria-expanded="true"] { border-color: var(--n-machine); border-width: 2px; }
+
+.np-disc-face {
+    position: relative;
+    display: block;
+    flex: 1 1 auto;
+    min-height: 0;
+    background: var(--surface-primary);
+    border-bottom: 1px solid var(--n-line);
+    overflow: hidden;
+}
+.np-disc-strip {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    flex: 0 0 30px;
+    height: 30px;
+    padding: 0 9px;
+    min-width: 0;
+    line-height: 1.2;
+}
+.np-disc-name { font-weight: 700; font-size: 12px; color: var(--n-ink); flex: none; }
+.np-disc-count {
+    font-size: 10.5px;
+    color: var(--n-ink-3);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;
+}
+
+/* THE MOSAIC - a discipline's own drawings, not a glyph standing for them.
+   Cells are cropped the same way a single Page-Field face is, so a tile
+   reads as several drawings rather than several grey rectangles. */
+.np-mosaic {
+    display: grid;
+    width: 100%; height: 100%;
+    gap: 1px;
+    background: var(--n-line);
+}
+.np-mosaic--1 { grid-template-columns: 1fr; }
+.np-mosaic--2 { grid-template-columns: 1fr 1fr; }
+.np-mosaic--3 { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; }
+.np-mosaic--3 .np-mosaic-cell:first-child { grid-row: span 2; }
+.np-mosaic--4 { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; }
+.np-mosaic-cell {
+    display: block;
+    width: 100%; height: 100%;
+    object-fit: cover;
+    object-position: 50% 22%;
+    background: var(--surface-primary);
+}
+
+/* UNRESOLVED - named on the cover index, absent from the source material.
+   Dashed and empty, the same form the intake tile uses for "nothing behind
+   this yet", because that is the same claim. Distinguished by FORM, so it
+   survives greyscale and does not depend on the reader noticing a tint. */
+.np-disc--unresolved { border-style: dashed; }
+.np-disc--unresolved .np-disc-face { border-bottom-style: dashed; background: transparent; }
+.np-disc--unresolved .np-disc-name { color: var(--n-ink-3); font-style: italic; }
+.np-absent { display: block; width: 100%; height: 100%; background: var(--n-page); }
+.np-absent-frame {
+    fill: none; stroke: var(--n-line); stroke-width: 5;
+    stroke-dasharray: 22 18; opacity: .6;
+}
+/* INFERRED sits between the two: real sheets behind it, and a documented
+   disagreement between what the index names and what arrived. A single
+   border weight, not a colour, carries that. */
+.np-disc--inferred { border-style: dashed; border-color: var(--n-line-2); }
+.np-disc--inferred .np-disc-face { border-bottom-style: solid; }
+
+.np-disc--intake { border-style: dashed; background: transparent; }
+.np-disc--intake .np-disc-face { border-bottom-style: dashed; background: transparent; }
+
+/* The expanded set. Real Page-Fields at their real geometry. */
+.np-disc-sheets {
+    list-style: none;
+    margin: 10px 0 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(175px, 1fr));
+    gap: 12px;
+}
+.np-disc-absent {
+    margin: 8px 0 0;
+    padding: 9px 11px;
+    font-size: 11px;
+    line-height: 1.5;
+    color: var(--n-ink-2);
+    border: 1px dashed var(--n-line);
+    border-radius: var(--n-radius);
+    background: var(--n-surface-2);
+}
 
 .np-field-grid {
     list-style: none;
@@ -143,16 +410,16 @@ body.np[data-scene="surface"] .np-scene { display: none; }
     box-shadow: 0 4px 12px rgba(27, 32, 39, .13);
     border-color: var(--n-line-2);
 }
-.np-field:focus-visible { outline: 2px solid var(--n-accent); outline-offset: 2px; }
+.np-field:focus-visible { outline: 2px solid var(--n-machine); outline-offset: 2px; }
 .np-field:active { transform: translateY(0); }
-.np-field.is-anchor { border-color: var(--n-accent); border-width: 2px; }
+.np-field.is-anchor { border-color: var(--n-machine); border-width: 2px; }
 
 .np-face {
     position: relative;
     display: block;
     flex: 1 1 auto;
     min-height: 0;
-    background: #FFFFFF;
+    background: var(--surface-primary);
     border-bottom: 1px solid var(--n-line);
     overflow: hidden;
 }
@@ -182,7 +449,7 @@ body.np[data-scene="surface"] .np-scene { display: none; }
     fill: none; stroke: var(--n-line); stroke-width: 5;
     stroke-dasharray: 22 18; opacity: .75;
 }
-.np-intake-cross { stroke: var(--n-accent); stroke-width: 12; stroke-linecap: round; opacity: .75; }
+.np-intake-cross { stroke: var(--n-ink-3); stroke-width: 12; stroke-linecap: round; opacity: .75; }
 .np-field--intake { border-style: dashed; background: transparent; }
 .np-field--intake .np-face { border-bottom-style: dashed; background: transparent; }
 
@@ -225,6 +492,7 @@ body.np[data-scene="surface"] .np-scene { display: none; }
 }
 
 .np-bar {
+    position: relative;
     display: flex;
     align-items: center;
     gap: 9px;
@@ -247,7 +515,55 @@ body.np[data-scene="surface"] .np-scene { display: none; }
     cursor: pointer;
 }
 .np-return:hover { background: var(--n-surface-3); }
-.np-return:focus-visible { outline: 2px solid var(--n-accent); outline-offset: 2px; }
+.np-return:focus-visible { outline: 2px solid var(--n-machine); outline-offset: 2px; }
+
+/* THE MICROPHONE.
+
+   Same size and same frame as .np-return, because it is the same kind of
+   thing: a control on the bar, not a feature being advertised. No accent
+   colour at rest - a permanently coloured mic reads as recording.
+
+   READY and LISTENING must be unmistakably different, which is why the two
+   states differ in FILL rather than merely in shade: ready is an outline on
+   the bar's own surface, listening is a solid --n-attention field. That
+   distinction survives greyscale, and it is the same grammar main.css uses
+   for the Composer mic, so a reviewer who has learned one has learned both. */
+.np-mic {
+    flex: none;
+    display: grid; place-items: center;
+    width: 32px; height: 32px;
+    padding: 0;
+    border: 1px solid var(--n-line);
+    border-radius: var(--n-radius);
+    background: var(--n-surface-2);
+    color: var(--n-ink-2);
+    cursor: pointer;
+}
+.np-mic-glyph { width: 17px; height: 17px; }
+.np-mic:hover { background: var(--n-surface-3); color: var(--n-ink); }
+.np-mic:focus-visible { outline: 2px solid var(--n-machine); outline-offset: 2px; }
+.np-mic.voice-input-listening {
+    background: var(--n-attention);
+    border-color: var(--n-attention);
+    color: var(--n-surface);
+}
+
+/* Absolutely positioned so an empty live region occupies nothing. A status
+   line that reserves a row shifts the drawing every time it speaks. */
+.np-voice-status {
+    position: absolute;
+    left: 12px; right: 12px; top: 100%;
+    z-index: 4;
+    margin: 0;
+    padding: 2px 2px 4px;
+    font-size: 11px;
+    line-height: 1.5;
+    color: var(--n-ink-3);
+    background: var(--n-surface);
+    pointer-events: none;
+}
+.np-voice-status[data-state="error"] { color: var(--n-attention); }
+.np-voice-status:empty { display: none; }
 
 .np-bar-id { display: flex; flex-direction: column; min-width: 0; line-height: 1.2; }
 .np-bar-id b { font-family: var(--n-mono); font-size: 13px; color: var(--n-accent); }
@@ -256,8 +572,8 @@ body.np[data-scene="surface"] .np-scene { display: none; }
     margin-left: auto;
     font-size: 11px;
     padding: 4px 8px;
-    color: var(--n-accent);
-    border: 1px solid var(--n-accent);
+    color: var(--n-machine);
+    border: 1px solid var(--n-machine);
     border-radius: 999px;
     background: var(--n-surface-2);
     white-space: nowrap;
@@ -300,7 +616,7 @@ body.np:not([data-split="none"]) .np-panes { grid-template-rows: 1fr 1fr; }
     overflow: auto;
     display: grid;
     place-items: center;
-    background: #FFFFFF;
+    background: var(--surface-primary);
 }
 
 .np-page { display: block; max-width: 100%; max-height: 100%; object-fit: contain; }
@@ -315,8 +631,8 @@ body.np:not([data-split="none"]) .np-panes { grid-template-rows: 1fr 1fr; }
 }
 .np-chip {
     padding: 2px 7px;
-    color: var(--n-accent);
-    border: 1px solid var(--n-accent);
+    color: var(--n-machine);
+    border: 1px solid var(--n-machine);
     border-radius: 999px;
     font-family: var(--n-mono);
     font-size: 10px;
@@ -343,8 +659,8 @@ body.np:not([data-split="none"]) .np-panes { grid-template-rows: 1fr 1fr; }
     white-space: nowrap;
 }
 .np-step { flex: none; font-family: var(--n-font); font-size: 14px; line-height: 1; padding: 2px 7px; }
-.np-sib.is-current { background: var(--n-accent); color: var(--n-on-accent); border-color: var(--n-accent); }
-.np-sib.is-target { border-width: 2px; border-color: var(--n-accent); }
+.np-sib.is-current { background: var(--n-machine); color: var(--n-on-accent); border-color: var(--n-machine); }
+.np-sib.is-target { border-width: 2px; border-color: var(--n-machine); }
 .np-sib:focus-visible, .np-step:focus-visible { outline: 2px solid var(--n-ink); outline-offset: 1px; }
 
 /* ------------------------------------------------------------
@@ -362,7 +678,7 @@ body.np:not([data-split="none"]) .np-panes { grid-template-rows: 1fr 1fr; }
     font-size: 11.5px;
     cursor: pointer;
 }
-.np-act--go { border-width: 2px; border-color: var(--n-accent); font-weight: 700; color: var(--n-ink); }
+.np-act--go { border-width: 2px; border-color: var(--n-machine); font-weight: 700; color: var(--n-ink); }
 .np-act--quiet { flex: 0 0 auto; color: var(--n-ink-3); }
 .np-act:hover { background: var(--n-surface-3); }
 .np-act:focus-visible { outline: 2px solid var(--n-ink); outline-offset: 2px; }
@@ -386,14 +702,14 @@ body.np:not([data-split="none"]) .np-panes { grid-template-rows: 1fr 1fr; }
 /* Basis by FORM, never hue. Direct is a solid heavy rule, inferred is
    lighter, unresolved is dashed and unfilled - the same discipline the
    citation vocabulary uses, so the three survive greyscale. */
-.np-cand-item--direct { border-left: 4px solid var(--n-accent); background: var(--n-surface-2); }
+.np-cand-item--direct { border-left: 4px solid var(--n-machine); background: var(--n-surface-2); }
 .np-cand-item--inferred { border-left: 4px solid var(--n-ink-3); }
 .np-cand-item--unresolved { border-left: 4px dashed var(--n-line); background: transparent; }
 
 .np-cand-head { display: flex; align-items: baseline; gap: 8px; }
-.np-cand-target { font-family: var(--n-mono); font-size: 11.5px; font-weight: 700; color: var(--n-accent); }
+.np-cand-target { font-family: var(--n-mono); font-size: 11.5px; font-weight: 700; color: var(--n-machine); }
 .np-basis { margin-left: auto; font-size: 10px; padding: 1px 7px; border-radius: 999px; }
-.np-basis--direct { background: var(--n-accent); color: var(--n-on-accent); }
+.np-basis--direct { background: var(--n-machine); color: var(--n-on-accent); }
 .np-basis--inferred { border: 1px solid var(--n-ink-3); color: var(--n-ink-2); }
 .np-basis--unresolved { border: 1px dashed var(--n-line); color: var(--n-ink-3); font-style: italic; }
 
@@ -423,6 +739,121 @@ body.np:not([data-split="none"]) .np-panes { grid-template-rows: 1fr 1fr; }
     .np-pane { border-bottom: 0; }
     .np-pane--1 { border-right: 1px solid var(--n-line); }
     .np-why, .np-prov { max-height: 26dvh; }
+}
+
+/* ============================================================
+   SHORT VIEWPORTS - a phone held in landscape
+
+   Measured at 844x390 before this rule existed: bar 49 + panes 179 +
+   actions 48 + why 57 + provenance 57 = 390. Every pixel was chrome and
+   THE DRAWINGS GOT ZERO. A coordination surface that cannot show a
+   drawing is not a coordination surface.
+
+   The height, not the width, is what is scarce here, so the rule keys on
+   height. Three things give way, in order of how little they cost:
+
+     1. The panes go SIDE BY SIDE. There is 844px of width available and
+        stacking spent it on nothing.
+     2. The pane footer goes. It carried "Room 104 / off corridor 103",
+        which the top bar already states - it was duplication that
+        happened to be affordable in portrait.
+     3. The reasoning and provenance panels keep their content but lose
+        their generous height and scroll instead. They are reference
+        material read after a decision; the drawing is what the decision
+        is made from. They are NOT removed - a provenance panel you
+        cannot reach is the same as one that does not exist.
+   ============================================================ */
+
+@media (max-height: 560px) {
+    /* THE CHROME GOES VERTICAL AND THE DRAWING TAKES THE HEIGHT.
+
+       Shrinking the horizontal bars only ever bought back pixels a few at a
+       time, because every one of them spends the axis that is scarce. In
+       landscape the scarcity is inverted: 844px of width against 390px of
+       height. So the bar, the actions and the two reference panels move into
+       a RAIL down the side, where they cost width - which there is plenty of -
+       and cost the drawing no height at all.
+
+       Done with grid areas rather than new markup: the DOM order stays
+       bar -> panes -> actions -> why -> provenance, which is also the order a
+       screen reader and the Tab key follow, and only the placement changes. */
+    .np-surface {
+        grid-template-columns: 146px 1fr;
+        grid-template-rows: auto auto minmax(0, 1fr) minmax(0, auto);
+        grid-template-areas:
+            "bar     panes"
+            "actions panes"
+            "why     panes"
+            "prov    panes";
+    }
+    .np-bar     { grid-area: bar; }
+    .np-panes   { grid-area: panes; }
+    .np-actions { grid-area: actions; }
+    .np-why     { grid-area: why; }
+    .np-prov    { grid-area: prov; }
+
+    /* The rail stacks. Everything in it reads top-to-bottom in a narrow
+       column, so nothing needs to be rotated or abbreviated away. */
+    .np-bar {
+        flex-direction: column;
+        align-items: stretch;
+        border-right: 1px solid var(--n-line);
+        border-bottom: 1px solid var(--n-line-faint);
+    }
+    .np-bar-sel { margin-left: 0; white-space: normal; text-align: center; }
+    .np-actions {
+        flex-direction: column;
+        border-right: 1px solid var(--n-line);
+        border-bottom: 1px solid var(--n-line-faint);
+    }
+    .np-act { flex: none; }
+    .np-why, .np-prov {
+        border-right: 1px solid var(--n-line);
+        border-top: 0;
+        max-height: none;
+    }
+    .np-prov-table { font-size: 9px; }
+    .np-prov-table th:nth-child(3), .np-prov-table td:nth-child(3),
+    .np-prov-table th:nth-child(4), .np-prov-table td:nth-child(4) { display: none; }
+
+    .np-panes { min-height: 0; }
+    body.np:not([data-split="none"]) .np-panes {
+        grid-template-rows: 1fr;
+        grid-template-columns: 1fr 1fr;
+    }
+    .np-pane { border-bottom: 0; }
+    .np-pane--1 { border-right: 1px solid var(--n-line); }
+
+    .np-pane-foot { display: none; }
+    .np-pane-head { padding: 2px 8px; }
+    .np-view { padding: 2px 6px; gap: 3px; }
+    .np-vbtn { padding: 1px 6px; }
+    .np-siblings { padding: 2px 6px; }
+    /* THE TOP BAR, shrunk hard. At 41px it was eating drawing for chrome
+       that is legible at half the size. The sheet id and its title stop
+       stacking and sit on one line - two lines of 13px and 11px text cost
+       more height than either line is worth on a 390px screen. */
+    .np-bar {
+        gap: 5px;
+        padding: 6px 8px;
+        padding-top: calc(6px + env(safe-area-inset-top, 0px));
+    }
+    .np-return { width: 24px; height: 24px; font-size: 15px; }
+    .np-bar-id { flex-direction: column; align-items: flex-start; gap: 0; }
+    .np-bar-id b { font-size: 11.5px; }
+    .np-bar-id span { font-size: 10px; }
+    .np-bar-sel { padding: 1px 7px; font-size: 10px; }
+
+    /* Each pane head is a second row of the same tax, twice over. */
+    .np-pane-head { padding: 1px 8px; font-size: 9.5px; }
+    .np-actions { padding: 6px 8px; gap: 5px; }
+    .np-act { padding: 4px 6px; }
+
+    .np-why, .np-prov { max-height: 12vh; padding: 6px 10px 8px; }
+    .np-why h2, .np-prov h2 { margin-bottom: 4px; }
+
+    /* The preferences dialog cannot be 603px tall on a 390px screen. */
+    .np-prefs { max-height: 92dvh; width: min(420px, calc(100vw - 24px)); }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -457,53 +888,55 @@ body.np:not([data-split="none"]) .np-panes { grid-template-rows: 1fr 1fr; }
       relationship traces, provenance cues, and consequential attention.
 
    CONTRAST, computed rather than eyeballed (WCAG relative luminance,
-   every text tier against every ground it is actually used on):
+   every text tier against every ground it is used on). Measured on the
+   app's own dark family, on pure black:
 
-                    page      surface   surface-2  surface-3  pane black
-     text  #E8EAED  16.53     15.69     14.76      13.24      17.42
-     text-2 #B4BAC4 10.21      9.69      9.12       8.18      10.76
-     text-3 #868D99  5.96      5.66      5.32       4.78       6.28
-     gold  #E5B869  10.81     10.26      9.65       8.66      11.39
+     text-primary    16.56      machine-blue   9.60
+     text-secondary  11.41      brand-gold    11.41
+     text-metadata    6.28      attention-amber 10.92
 
-   Worst pair 4.78:1 - every tier clears 4.5:1 on every ground. Black on
-   the gold badge is 10.81:1. Borders are non-text and held to 3:1: see
-   the --n-line-2 note above.
+   Worst pair 4.78:1 - every tier clears 4.5:1 on every ground. Borders
+   are non-text and held to 3:1. No literal colour appears in this file:
+   the values live in tokens.css, which is the point of the convergence.
+
    ============================================================ */
 
 body.np[data-theme="gold-black"] {
-    /* TEXT - carries no meaning, and is what almost everything uses. */
-    --n-ink: #E8EAED;
-    --n-ink-2: #B4BAC4;
-    --n-ink-3: #868D99;
+    /* The app's own dark family, not a near-miss of it. The ground is PURE
+       BLACK - --dark-canvas, not the near-black this file used to carry -
+       where the sharper contrast comes from, and the text is the warm
+       off-white --dark-text-primary rather than a cool grey, which lets gold sit
+       WITH the field instead of against it.
 
-    /* GROUND - near-black throughout, separated by a few points only. */
-    --n-page: #07090D;
-    --n-surface: #0E1116;
-    --n-surface-2: #14181F;
-    --n-surface-3: #1D222B;
+       Measured on pure black: text 16.56, gold 11.41, blue 9.60,
+       amber 10.92. Every tier clears 4.5:1. */
+    --n-ink: var(--dark-text-primary);
+    --n-ink-2: var(--dark-text-secondary);
+    --n-ink-3: var(--dark-text-metadata);
 
-    /* --n-line dissolves into the field by intent: it is only ever a
-       decorative rim inside an already-bounded container.
-       --n-line-2 draws the boundary of an actual CONTROL and is therefore
-       held to the 3:1 non-text bar - measured 3.64:1 on the page ground and
-       3.25:1 on the lightest surface. The first pass had it at 2.06:1, which
-       is a button whose edge you cannot find. */
-    --n-line: #2B313C;
-    --n-line-2: #606A7A;
-    --n-line-faint: #191D25;
+    --n-page: var(--dark-canvas);
+    --n-surface: var(--dark-surface-primary);
+    --n-surface-2: var(--dark-surface-secondary);
+    --n-surface-3: var(--dark-surface-hover);
 
-    /* THE RESERVED EMPHASIS. Spent nowhere else. */
-    --n-accent: #E5B869;
-    --n-accent-dim: #A98544;
-    --n-on-accent: #07090D;
+    --n-line: var(--dark-border);
+    --n-line-2: var(--dark-border-strong);
+    --n-line-faint: var(--dark-surface-hover);
+
+    --n-accent: var(--dark-brand-gold);
+    --n-accent-dim: var(--dark-text-metadata);
+    --n-on-accent: var(--dark-canvas);
+    --n-machine: var(--dark-machine-blue);
+    --n-attention: var(--dark-attention-amber);
 
     color-scheme: dark;
 }
 
 /* The drawing is the brightest thing on the page, on its own black. */
+body.np[data-theme="gold-black"] .np-disc-face,
 body.np[data-theme="gold-black"] .np-face,
 body.np[data-theme="gold-black"] .np-pane-body {
-    background: #000000;
+    background: var(--dark-canvas);
 }
 
 /* MONOCHROME SHEETS ONLY, and the flag is measured at render time rather
@@ -516,15 +949,19 @@ body.np[data-theme="gold-black"] .np-pane-body {
    have destroyed any real colour in the sheet - A100 carries colour, and
    would have been silently recoloured. A sheet with colour gets no filter
    at all and is shown as drawn. */
+body.np[data-theme="gold-black"] .np-mosaic-cell[data-mono="true"],
 body.np[data-theme="gold-black"] .np-thumb[data-mono="true"],
 body.np[data-theme="gold-black"] .np-page[data-mono="true"] {
     filter: invert(1);
 }
 
 /* Elevation reads as a faint rim of light on a dark ground, not a shadow. */
+body.np[data-theme="gold-black"] .np-disc,
 body.np[data-theme="gold-black"] .np-field {
-    box-shadow: inset 0 0 0 1px rgba(232, 234, 237, .03);
+    box-shadow: inset 0 0 0 1px rgba(232, 228, 220, .04);
 }
+body.np[data-theme="gold-black"] .np-disc:hover,
+body.np[data-theme="gold-black"] .np-disc:focus-visible,
 body.np[data-theme="gold-black"] .np-field:hover,
 body.np[data-theme="gold-black"] .np-field:focus-visible {
     box-shadow: 0 6px 20px rgba(0, 0, 0, .7);
@@ -592,7 +1029,23 @@ body.np[data-theme="gold-black"] .np-basis--unresolved { border-color: var(--n-l
     height: auto;
     pointer-events: none;
 }
-.np-overlay:not([hidden]) { pointer-events: auto; }
+/* VISIBILITY IS A CLASS, NOT THE `hidden` ATTRIBUTE, and the reason is a real
+   defect that produced two opposite symptoms from one cause.
+
+   `hidden` is an HTMLElement IDL property. SVGElement DOES NOT IMPLEMENT IT.
+   So `svg.hidden = false` quietly sets a JavaScript expando and never touches
+   the content attribute - the switch was never connected in either direction.
+
+   Before an explicit rule existed, grid blockification meant the stale
+   attribute had no effect and the overlay drew ALWAYS: RS501's classification
+   appeared over A801, which is exactly what the sheet-scoping exists to
+   prevent. Adding `[hidden] { display: none }` inverted it - the attribute
+   could now never be removed, so the overlay drew NEVER. Both readings of the
+   state machine were wrong because the state machine was writing to nothing.
+
+   A class works identically on SVG and HTML, which is the whole point. */
+.np-overlay { display: none; }
+.np-overlay.is-on { display: block; pointer-events: auto; }
 
 .np-view {
     display: flex;
@@ -617,7 +1070,7 @@ body.np[data-theme="gold-black"] .np-basis--unresolved { border-color: var(--n-l
     cursor: pointer;
 }
 .np-vbtn:hover { background: var(--n-surface-3); color: var(--n-ink); }
-.np-vbtn:focus-visible { outline: 2px solid var(--n-accent); outline-offset: 1px; }
+.np-vbtn:focus-visible { outline: 2px solid var(--n-machine); outline-offset: 1px; }
 .np-vzoom {
     min-width: 42px;
     text-align: center;
@@ -626,8 +1079,8 @@ body.np[data-theme="gold-black"] .np-basis--unresolved { border-color: var(--n-l
     color: var(--n-ink-3);
 }
 .np-vbtn--sem[aria-pressed="true"] {
-    border-color: var(--n-accent);
-    color: var(--n-accent);
+    border-color: var(--n-machine);
+    color: var(--n-machine);
 }
 .np-vbtn--go { margin-left: auto; }
 
@@ -654,9 +1107,18 @@ body.np[data-theme="gold-black"] .np-basis--unresolved { border-color: var(--n-l
     cursor: help;
     vector-effect: non-scaling-stroke;
 }
-.np-sem--direct { stroke: #35E0D0; stroke-width: 5; stroke-linecap: round; }
+/* --machine-blue by its DEFINITION: "machine-generated Finding markers".
+   The invented cyan was a colour choice; this is the semantically correct
+   token. DIRECT vs INFERRED still differ in weight AND dash, so the
+   distinction survives greyscale exactly as the app's own selection does
+   with its 1px->2px border-width change. */
+.np-sem--direct {
+    stroke: var(--n-machine);
+    stroke-width: 5;
+    stroke-linecap: round;
+}
 .np-sem--inferred {
-    stroke: #E5B869;
+    stroke: var(--n-attention);
     stroke-width: 3.5;
     stroke-dasharray: 14 9;
     stroke-linecap: butt;
@@ -672,7 +1134,7 @@ body.np[data-theme="gold-black"] .np-basis--unresolved { border-color: var(--n-l
     max-width: 300px;
     padding: 8px 10px;
     border: 1px solid var(--n-line-2);
-    border-left: 3px solid var(--n-accent);
+    border-left: 3px solid var(--n-machine);
     border-radius: var(--n-radius);
     background: var(--n-surface);
     box-shadow: 0 8px 24px rgba(0, 0, 0, .55);
@@ -680,7 +1142,7 @@ body.np[data-theme="gold-black"] .np-basis--unresolved { border-color: var(--n-l
     pointer-events: none;
 }
 .np-tip-head { display: flex; align-items: baseline; gap: 8px; }
-.np-tip-token { font-family: var(--n-mono); font-weight: 700; color: var(--n-accent); }
+.np-tip-token { font-family: var(--n-mono); font-weight: 700; color: var(--n-machine); }
 .np-tip-kind { margin: 4px 0 2px; color: var(--n-ink); }
 .np-tip-ev { margin: 0 0 3px; color: var(--n-ink-2); }
 .np-tip-src { margin: 0; color: var(--n-ink-3); font-family: var(--n-mono); font-size: 10px; }
@@ -695,29 +1157,20 @@ body.np[data-theme="gold-black"] .np-basis--unresolved { border-color: var(--n-l
    sheet it changes.
    ============================================================ */
 
-.np-gear {
-    flex: none;
-    display: grid;
-    place-items: center;
-    width: 30px;
-    height: 30px;
-    margin-bottom: 6px;
-    padding: 0;
-    border: 1px solid var(--n-line-2);
-    border-radius: var(--n-radius);
-    background: var(--n-surface);
-    color: var(--n-ink-2);
-    cursor: pointer;
-}
-.np-gear svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.6; }
-.np-gear:hover { background: var(--n-surface-2); color: var(--n-accent); }
-.np-gear:focus-visible { outline: 2px solid var(--n-accent); outline-offset: 2px; }
-.np-gear[aria-expanded="true"] { border-color: var(--n-accent); color: var(--n-accent); }
 
 .np-visually-hidden {
     position: absolute; width: 1px; height: 1px;
     margin: -1px; padding: 0; overflow: hidden;
     clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
+/* Sits under the dialog and over everything else. Dark rather than tinted:
+   this file spends no hue on chrome, and a scrim is the last place to start. */
+.np-scrim {
+    position: fixed;
+    inset: 0;
+    z-index: 55;
+    background: rgba(3, 5, 9, .72);
 }
 
 .np-prefs {
@@ -752,7 +1205,7 @@ body.np[data-theme="gold-black"] .np-basis--unresolved { border-color: var(--n-l
     margin: 0 0 6px;
     font-size: 10.5px;
     font-weight: 700;
-    color: var(--n-accent);
+    color: var(--n-ink-2);
     letter-spacing: .04em;
 }
 
@@ -765,11 +1218,11 @@ body.np[data-theme="gold-black"] .np-basis--unresolved { border-color: var(--n-l
     color: var(--n-ink);
     cursor: pointer;
 }
-.np-pref-label input { accent-color: var(--n-accent); width: 15px; height: 15px; }
+.np-pref-label input { accent-color: var(--n-machine); width: 15px; height: 15px; }
 .np-pref-choices { display: flex; gap: 5px; margin-top: 5px; }
 .np-pref-choice[aria-pressed="true"] {
-    border-color: var(--n-accent);
-    color: var(--n-accent);
+    border-color: var(--n-machine);
+    color: var(--n-machine);
     background: var(--n-surface-2);
 }
 .np-pref-note { margin: 3px 0 0 22px; font-size: 10.5px; color: var(--n-ink-3); }
@@ -788,3 +1241,47 @@ body.np[data-theme="gold-black"] .np-basis--unresolved { border-color: var(--n-l
     color: var(--n-ink-3);
 }
 .np-prefs-foot code { font-family: var(--n-mono); color: var(--n-ink-2); }
+
+/* Rasters are Page-Field thumbnails only, and they are downscaled from a
+   much larger render. crisp-edges on a downscale would alias the linework
+   into a moire, so the thumbnails keep smooth interpolation and the PANES -
+   the only place a reader zooms - carry vectors instead, where interpolation
+   does not arise. Stated because the obvious setting is the wrong one here. */
+.np-thumb { image-rendering: auto; }
+
+/* ------------------------------------------------------------
+   DRAG-TO-DISMISS
+
+   The pane head is the handle, so it advertises itself as one: it
+   shows a grab cursor and the drag never starts on the drawing, where
+   the same gesture means pan. Pane 1's head deliberately does NOT get
+   this treatment - the anchor is not dismissible, and a handle it does
+   not have is the clearest way to say so.
+   ------------------------------------------------------------ */
+
+.np-pane--2 {
+    transform: translateX(var(--dismiss-x, 0px));
+    opacity: var(--dismiss-fade, 1);
+}
+.np-pane--2 .np-pane-head { cursor: grab; touch-action: none; }
+.np-pane--2.is-dragging .np-pane-head { cursor: grabbing; }
+
+/* No transition while the finger is down - the pane must track the
+   pointer exactly - and a short one when it springs back or leaves. */
+.np-pane--2:not(.is-dragging) {
+    transition: transform 160ms var(--n-ease), opacity 160ms var(--n-ease);
+}
+.np-pane--2.is-dragging { transition: none; }
+
+/* A quiet affordance: three grip dots at the leading edge of the head,
+   the same grammar a sheet handle uses elsewhere in the product. */
+.np-pane--2 .np-pane-head::before {
+    content: "";
+    flex: none;
+    width: 12px;
+    height: 3px;
+    margin-right: 2px;
+    border-top: 1px solid var(--n-line-2);
+    border-bottom: 1px solid var(--n-line-2);
+    opacity: .7;
+}

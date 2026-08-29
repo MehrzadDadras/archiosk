@@ -223,6 +223,27 @@ Continues the entry above, which stopped at `dae1045`. Six further stages
 landed the same day; this records them so the durable record is not six commits
 behind the code. Deployed baseline is now `1cfb711` at `STATIC_VERSION=125`.
 
+> **Correction, 2026-08-29.** That last sentence has since gone stale and was
+> believed on two later occasions before being checked. **Production is serving
+> `STATIC_VERSION=133`, measured** — an anonymous `curl` of `archiosk.com/`
+> returns `app-icon.svg?v=133`. The `125` above is left standing because it was
+> true when written and this file is a record, not a dashboard; it is corrected
+> here rather than overwritten.
+>
+> The failure mode this caused is worth naming, because it nearly shipped
+> twice: a local `.env` was bumped to `124`, then `128`, both **below** what
+> production was already serving. Deploying either would have *lowered* the
+> version, left every browser on its cached stylesheet, and made the new CSS
+> invisible live — a silent no-op that looks exactly like a successful deploy.
+> `.env` is per-host and git-ignored, so nothing in a diff can catch this.
+>
+> **Do not trust a recorded version number before a deploy. Measure the live
+> one.** `curl -s https://archiosk.com/ | grep -oE '\?v=[0-9]+'` costs nothing
+> and is the only authority — per this repository's own precedence rule, the
+> deployed state is evidence and a checkpoint that disagrees with it is the
+> thing that drifted. Local is now `135` — bumped again for the voice/vector
+> tranche below, which changed three stylesheets and four scripts.
+
 ### What landed
 
 - **`CLAUDE-ENTRY-SIMPLIFY-01`** (`ae4ff02`) — the two-card "Choose where you'd
@@ -448,6 +469,121 @@ routinely named `X` and `CLAUDE-X`.
   remains outstanding" — is stale; many deployments have landed since, most
   recently `5627a79`. Recorded here rather than edited into someone else's
   provisional text.
+
+## 2026-08-29 — Voice convergence, HTTPS harness, discipline containers
+
+Landed in one tranche; full reasoning in `docs/DECISION_PROVENANCE_LEDGER.md`
+DPL-0005.
+
+**Voice.** `static/js/voice_input.js` is now the ONLY recognition engine in the
+product. Its capability check was wrong in a way that produced the reported
+"voice fails to respond": the `SpeechRecognition` constructor is *defined* on an
+insecure origin, so `if (!Ctor) return null` passed, the mic was revealed, and
+the start call failed on press. Measured on the phone's own origin
+(`http://10.0.0.177:8642`): `isSecureContext false`, `navigator.mediaDevices`
+undefined, constructor `"function"`. The guard is now
+`!Ctor || !window.isSecureContext`. `static/js/landing.js` carried a second,
+independently maintained copy of the whole engine — one report needed the same
+fix in two files — and now keeps only its own router (`DIRECT_NAV`,
+`INFORMATIONAL`, `FALLBACK`, and the transcription-variant patterns, all
+preserved verbatim). Nipigon and Calm Lake gained mics that DISPATCH REAL
+CONTROLS (`.click()` on a button a finger could reach), so voice can never
+reach anything a tap cannot.
+
+**Consequence worth knowing before testing.** Voice now works on `localhost`
+and is correctly ABSENT on any plain-http LAN address. That is the browser's
+rule, not ours. `tools/serve_https_harness.py` (new) serves a static harness
+over TLS on `0.0.0.0:8643` with a self-signed certificate naming the LAN IP in
+`subjectAltName`, and gzips SVG/CSS/JS in memory (A204.svg 9.82 MB → 779 KB on
+the wire, verified byte-identical). `app.py` was deliberately NOT given an
+`--ssl` mode; its `__main__` binds `127.0.0.1` by explicit decision and the LAN
+exposure belongs in a tool that can reach neither the database nor a session.
+
+**Still UNRESOLVED:** no sentence has been spoken into a phone yet. Everything
+above is verified by construction and by test, not by a device. Also
+unresolved: production serves these SVGs **uncompressed** — nothing in this
+repository enables transport compression, so the 14.2x is real in the harness
+and not on `archiosk.com`. That is a deployment-layer decision and no evidence
+was gathered about what that layer currently does.
+
+**Disciplines.** 5 Nipigon scene 1 is now one tile per trade rather than one
+per sheet. Counted, not assumed: 39 A-series and 10 RS-series PDFs on disk;
+the A100 DRAWING INDEX names Architectural, Structural (as **both** S1-S9 and
+RS501-RS510), Mechanical M1-M5, Electrical E1-E5, Landscape L1, and Civil SP1.
+Reading the cover sheet added Civil, which was in nobody's working list. Four
+disciplines are named and delivered nothing; they render `unresolved` rather
+than being omitted. Structural is `inferred`, not `direct`, because only one of
+its two named numbering systems arrived and that disagreement is shown rather
+than reconciled.
+
+**Also:** the landing page's portrait centering defect was `content-box` +
+`min-height: 100dvh` + `8vh/10vh` padding = 118dvh; fixed with `border-box`
+scoped to `.landing-page`. The scene-1 grid axis now keys on `orientation`
+(portrait: one column of wide short bands; landscape: one row of equal
+auto-columns) rather than on a width breakpoint.
+
+**Request Trial Access pruned.** Eyebrow (a verbatim repeat of the h1),
+explanatory paragraph, and the bottom Sign In / Explore pair all removed; the
+top-left `← Archiosk` link is the sole exit. Note the consequence, which is
+deliberate: the **confirmation state** now also exits only through that link,
+where it used to offer three ways onward. Five tests failed on the removals and
+each was classified rather than edited into agreement — two were defending copy
+rather than intent, one is a real narrowing now asserted as such, one was a
+correct `UI_REFERENCE_MAP.md` staleness failure (both rows marked **retired**
+with reasons, not deleted), and one was a wrong assertion of mine caught before
+commit.
+
+**Crop rasters are gone from the pipeline.** `tools/render_nipigon_assets.py`
+no longer emits `<sheet>_<label>.png` at a fixed dpi. A crop is a `viewBox`
+view onto the one vector asset, so a second lower-fidelity picture of the same
+region could only ever disagree with it — which is not hypothetical here.
+**This surfaced a live defect:** the GO block's Jinja guard tested
+`go.chosen.asset` (a raster crop) while rendering `target_svg.file` (a vector),
+so retiring the crops would have silently deleted the whole GO affordance with
+its vector present and usable. Now guards on `target_svg`.
+
+**`tests/test_nipigon_vector_and_disciplines_01.py` (new, 21 tests).** This
+surface had no test file at all. Nine guard the vector standard, seven the
+counted discipline evidence, five the voice contract. One exists purely to
+record a refusal: `test_no_plumbing_or_c_series_container_was_invented`.
+
+**Two source-reading corrections, logged not silently applied.** The structural
+S-series runs to **S10**, not S9 — the first regex was `\bS\d\b`, which
+cannot match two digits and stopped without any sign it had. And a directive
+asked for a "Plumbing / Civil (P / C-Series)" card: the A100 index has **no
+P-series at all** (plumbing is the *title* of M1 and M2, inside Mechanical) and
+the only `C1` on the sheet is a zoning designation in the project-data block,
+not a drawing number. Civil is numbered SP1. No card was invented.
+
+**"Field mode" does not exist — surfaced, not built.** A directive asked to
+suppress the global project sidebar "in field/standard mode". A full read-only
+map of the navigation surface found **no such mode anywhere** in the product;
+`operating_environment` is a per-project stakeholder side, `developer_mode` is
+an admin session boolean with no counterpart, and the PWA is responsive
+behaviour nothing branches on server-side. Executing the clause would mean
+inventing a new user-visible operating mode on one line of instruction, so
+nothing in the authenticated navigation was changed. The seam it wants already
+exists (`app.py:720` `_NO_PROJECT_LISTING_ENDPOINTS`), as does typed entry
+(three search inputs) — the gaps are lookup-by-project-code and the orphaned
+`GET /search` at `routes/portal.py:2855`, which returns exactly the JSON a
+quick-open overlay needs and is referenced by nothing. See DPL-0005 Part 5 for
+what would unblock it. The prototype surfaces never rendered the launcher panel
+at all, so there is no cross-project leakage on the site desk today.
+
+## 2026-08-18 — ARCHIOSK/GO Prompt, Visual, and Deployment Continuation
+
+- `governance/prompt-depository/` exists and is the authoritative Prompt Depository. Preserved prompt records include:
+  - `CLAUDE-BAUHAUS-CONSTRUCTIVIST-UI-01`
+  - `CLAUDE-BAUHAUS-CONSTRUCTIVIST-UI-01A`
+  - `CLAUDE-HOLODECK-WORLDS-SPIN-01`
+  - `CLAUDE-PROJECT-WORLD-NAMING-01`
+  - `CODEX-PROJECT-NORTH-STAR-ADVANCEMENT-RULE-01`
+  - `CODEX-NORTH-BAYVIEW-TO-PROJECT-NORTH-STAR-01`
+- The corrected blue Deep Ocean baseline is Product Owner accepted and governed; preserve it.
+- The Bauhaus/Constructivist visual direction remains pending actual live review.
+- Survival Mode / Project World live verification remains pending deployment.
+- Production deployment of application HEAD `4274808` remains outstanding.
+- `/health` alone is not proof that `4274808` is deployed; direct live-content verification is required.
 
 ## 2026-08-10 — CLAUDE-CA1D-INSTRUMENT-RAIL-01 (Plan Mode + Smallest Implementation Tranche)
 

@@ -26,26 +26,62 @@ class StartTrialRequestFormTests(unittest.TestCase):
         self.client = self.flask_app.test_client()
 
     def test_get_renders_the_request_form_not_the_old_rejection(self):
+        """CLAUDE-REQUEST-ACCESS-PRUNE-01 removed the explanatory paragraph
+        this used to assert on by its copy ("opening trial access
+        gradually").
+
+        The assertion is not weakened by dropping it, because the paragraph
+        was never what this test protects. The requirement is that the old
+        DEAD END never returns and that a real request action is here
+        instead - the two `assertNotIn`s and the form/submit refs say that
+        directly, and they are unaffected. A page can satisfy every one of
+        them with no prose at all, which is now the case."""
         body = self.client.get("/start-trial").get_data(as_text=True)
         self.assertNotIn("isn&rsquo;t self-serve yet", body)
         self.assertNotIn("check back soon", body)
-        self.assertIn("opening trial access gradually", body)
         self.assertIn('data-ui-ref="start-trial.request-form"', body)
         self.assertIn('data-ui-ref="start-trial.request-submit"', body)
         self.assertIn(">Request Access<", body)
+
+    def test_the_title_is_not_printed_twice(self):
+        """The eyebrow above the h1 repeated it verbatim - the same three
+        words stacked on themselves. One title, once."""
+        body = self.client.get("/start-trial").get_data(as_text=True)
+        # Counted inside the document body only. <title> legitimately carries
+        # the same words and is not a second visible heading - asserting
+        # against the whole response would fail for a reason that has nothing
+        # to do with what a visitor sees.
+        visible = body[body.index('<div class="landing-doc">'):]
+        self.assertEqual(visible.count("Request Trial Access"), 1)
+        self.assertIn("<h1>Request Trial Access</h1>", visible)
+        self.assertNotIn("landing-doc-kicker", visible)
 
     def test_form_carries_a_real_csrf_token_field(self):
         body = self.client.get("/start-trial").get_data(as_text=True)
         self.assertIn('name="csrf_token"', body)
 
-    def test_request_access_is_the_primary_action_sign_in_and_explore_are_secondary(self):
+    def test_request_access_is_the_only_action_on_the_page(self):
+        """Was: "Request Access is primary, Sign In and Explore are
+        secondary", asserted by source order.
+
+        CLAUDE-REQUEST-ACCESS-PRUNE-01 removed the secondary pair entirely on
+        Product Owner direction, which satisfies the original intent more
+        strongly than ordering did - there is nothing left for the primary
+        action to be primary OVER. Inverted rather than deleted: the risk
+        worth guarding is now that competing CTAs come back, and an empty
+        space in the suite guards nothing.
+
+        The exit path is deliberately not zero. `start-trial.back` is the
+        top-left link, and it is asserted here so "sole exit path" cannot
+        quietly become "no exit path"."""
         body = self.client.get("/start-trial").get_data(as_text=True)
-        submit_index = body.index('data-ui-ref="start-trial.request-submit"')
-        sign_in_index = body.index('data-ui-ref="start-trial.sign-in"')
-        explore_index = body.index('data-ui-ref="start-trial.explore"')
-        self.assertLess(submit_index, sign_in_index)
-        self.assertLess(submit_index, explore_index)
-        self.assertIn("Already have an account? Sign In", body)
+        self.assertIn('data-ui-ref="start-trial.request-submit"', body)
+        self.assertIn('data-ui-ref="start-trial.back"', body)
+        for gone in ('data-ui-ref="start-trial.sign-in"',
+                     'data-ui-ref="start-trial.explore"',
+                     "Already have an account?"):
+            with self.subTest(token=gone):
+                self.assertNotIn(gone, body)
 
     def test_no_billing_or_payment_fields_present(self):
         body = self.client.get("/start-trial").get_data(as_text=True).lower()
@@ -80,11 +116,17 @@ class StartTrialRequestFormTests(unittest.TestCase):
         self.assertNotIn("hours", body.lower())
         self.assertNotIn("your account has been created", body.lower())
 
-    def test_success_state_still_offers_sign_in_and_explore(self):
+    def test_success_state_is_not_a_dead_end(self):
+        """The footer pair went from BOTH states, not just the form - so the
+        thing actually worth asserting is that a visitor who has just
+        submitted can still leave. They can: the top-left link is outside the
+        submitted/not-submitted branch and renders in both.
+
+        Recorded plainly because it is a real narrowing: the confirmation
+        screen now offers one way onward where it used to offer three."""
         resp = self.client.post("/start-trial", data={"email": "jamie@example.com"})
         body = resp.get_data(as_text=True)
-        self.assertIn('data-ui-ref="start-trial.sign-in"', body)
-        self.assertIn('data-ui-ref="start-trial.explore"', body)
+        self.assertIn('data-ui-ref="start-trial.back"', body)
         # The form itself is gone once submitted - no re-submission encouraged.
         self.assertNotIn('data-ui-ref="start-trial.request-form"', body)
 

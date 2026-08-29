@@ -16,6 +16,31 @@ page index, the dpi, and the render time. A `rendered` miniature can therefore
 state exactly what it is a picture of and when it was taken; an anonymous
 thumbnail cannot.
 
+VECTOR, NOT RASTER, FOR ANYTHING A READER ZOOMS INTO
+
+The pane views were rasters at 110 dpi, and stretching them past ~150% turned
+the linework to mush - which is the whole complaint. Raising the dpi only moves
+the blur to a higher zoom, so the pipeline emits SVG for the pane instead:
+these are vector PDFs (A204 alone carries 57,906 paths), so the linework stays
+mathematically sharp at any magnification.
+
+Two measurements decided the shape of this:
+
+  - A full-page SVG is 2.8-9.5 MB raw but gzips 12-15x (A204: 9532 KB -> 760 KB).
+    Five sheets total 2.4 MB compressed, which is fine over a LAN.
+  - A CROPPED SVG is not smaller. Setting a cropbox changes the viewport, not
+    the content: the A204 washroom crop came out at 9609 KB, LARGER than the
+    full page, because all 57,906 paths are still emitted.
+
+So there is exactly ONE vector asset per sheet, and a crop is a VIEW onto it -
+a focus rectangle the viewport frames - rather than a second file. That also
+means the crop and the full sheet cannot disagree about what the drawing says,
+for the same reason the `live` Page-Field miniature cannot: there is one
+definition, shown two ways.
+
+Rasters are still emitted for the Page-Field thumbnails, where a 175px tile has
+no zoom and a vector parse would be wasted work.
+
 Nothing under the source root is written, moved or renamed. Output is
 git-ignored: these are derived bytes, and the PDFs remain authoritative.
 """
@@ -283,44 +308,63 @@ def render(source_root: str, out_dir: str, thumb_dpi: int, page_dpi: int) -> dic
                 "clip_pt": None,
             })
 
+        # --- the vector asset the panes actually use ---------------------
+        svg_name = "%s.svg" % sheet
+        svg_markup = page.get_svg_image()
+        with open(os.path.join(out_dir, svg_name), "w", encoding="utf-8") as handle:
+            handle.write(svg_markup)
+        entry["svg"] = {
+            "file": svg_name,
+            "bytes": len(svg_markup.encode("utf-8")),
+            "view_width_pt": round(page.rect.width, 2),
+            "view_height_pt": round(page.rect.height, 2),
+        }
+
+        # --- focus rectangles, expressed in the NATIVE VIEW ---------------
         # CROPS are declared in the page's STORED display space, because that
-        # is the space they were measured in by looking at the sheet. Applying
-        # them after the native rotation silently moved the washroom crop onto
-        # a car - a clip rect is not rotation-invariant. So crop in the space
-        # the rect belongs to, then rotate the resulting image.
+        # is the space they were measured in by looking at the sheet. A rect is
+        # not rotation-invariant - applying one after the native rotation once
+        # moved the washroom crop onto a car - so each is transformed through
+        # the same rotation matrix the SVG was emitted under, and recorded as
+        # a view rectangle the viewport can frame.
+        to_view = page.rotation_matrix
+        focus = {}
         for label, rect in CROPS.get(sheet, {}).items():
-            page.set_rotation(orientation["stored_rotate"])
-            clip = fitz.Rect(*rect)
-            pix = page.get_pixmap(dpi=page_dpi, clip=clip)
-            page.set_rotation(orientation["absolute"])
-            name = "%s_%s.png" % (sheet, label)
-            dest = os.path.join(out_dir, name)
-            pix.save(dest)
-            add = orientation["additional"] % 360
-            if add:
-                # PDF rotation is clockwise; PIL rotates counter-clockwise.
-                from PIL import Image
-                with Image.open(dest) as img:
-                    img.rotate((360 - add) % 360, expand=True).save(dest)
-                pix = None
-            from PIL import Image as _I
-            with _I.open(dest) as _im:
-                cw, ch = _im.size
-            entry["renders"].append({
-                "role": label, "file": name, "dpi": page_dpi,
-                "width": cw, "height": ch,
-                "clip_pt": [round(v, 2) for v in rect],
-                "clip_space": "stored_rotation",
-                "rotated_by": add,
-            })
+            r = fitz.Rect(*rect) * to_view
+            focus[label] = {
+                "x": round(min(r.x0, r.x1), 2), "y": round(min(r.y0, r.y1), 2),
+                "w": round(abs(r.x1 - r.x0), 2), "h": round(abs(r.y1 - r.y0), 2),
+                "declared_in": "stored_rotation",
+            }
+        if focus:
+            entry["focus"] = focus
+
+        # NO RASTER CROPS ARE EMITTED. There used to be one PNG per entry in
+        # CROPS, cut at a fixed dpi. They are gone, and this comment is what
+        # stands in their place because the absence is the decision:
+        #
+        #   - Nothing consumes them. A pane frames `entry["focus"]` above on
+        #     the ONE vector asset, so a crop is a way of LOOKING rather than
+        #     a second file.
+        #   - A second picture of the same region can disagree with the first.
+        #     That is not hypothetical here: cropping after the native
+        #     rotation once silently moved the washroom crop onto AUTOMOBILE
+        #     ELEV. 110, and the raster was the only place that lie existed.
+        #   - A fixed dpi has a ceiling. Enlarging past it is the mush that
+        #     started this work, and raising the dpi only moves the ceiling.
+        #
+        # Full-page and thumbnail rasters are still produced above: a
+        # Page-Field tile and a discipline mosaic have no zoom, and parsing
+        # 57,906 paths to fill a 175px box would be wasted work.
 
         doc.close()
         manifest["assets"].append(entry)
-        print("  %-5s /Rot=%-3d +%-3d = %-3d  %-10s %-11s %s%d render(s)"
+        print("  %-5s /Rot=%-3d +%-3d = %-3d  %-10s %-11s %ssvg %5.0fKB  %d raster"
               % (sheet, orientation["stored_rotate"], orientation["additional"],
                  orientation["absolute"], orientation["signal"],
                  "monochrome" if entry["monochrome"] else "HAS COLOUR",
                  "CONFIRM " if orientation["needs_confirmation"] else "",
+                 entry["svg"]["bytes"] / 1024.0,
                  len(entry["renders"])))
 
     with open(os.path.join(out_dir, "manifest.json"), "w", encoding="utf-8") as handle:

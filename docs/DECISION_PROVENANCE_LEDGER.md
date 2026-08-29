@@ -15,6 +15,514 @@ domain-model decisions, and pushed `origin/main` remains the system of record.
 
 ---
 
+## DPL-0005 - 2026-08-29 - Vector sheet standard, and one microphone
+
+**Status:** complete, with two items recorded as `UNRESOLVED` rather than
+closed - production transport compression, and device-verified speech.
+
+### Directive received
+
+> Consolidate the voice module: guard `voice_input.js` against insecure
+> contexts, refactor `landing.js` onto the unified
+> `window.ArchioskVoiceInput`, wire voice into the Nipigon and Calm Lake
+> workspace headers. Provide an HTTPS local test server on port 8643 so real
+> microphone speech recognition can be tested over a LAN IP. Complete landing
+> box-sizing, discipline containers and the orientation grid, and record
+> DPL-0005 covering the gzipped SVG + `viewBox` vector rendering standard and
+> the voice secure-context requirement and module convergence.
+
+---
+
+## Part 1 - The vector sheet standard
+
+### Evidence scanned
+
+Every rendered sheet measured, raw and gzipped at level 6:
+
+| Sheet | Raw | Gzipped | Ratio |
+|---|---|---|---|
+| A902 | 20.22 MB | 1.16 MB | 17.5x |
+| A204 | 9.36 MB | 0.74 MB | 12.6x |
+| A701 | 8.79 MB | 0.57 MB | 15.4x |
+| A510 | 7.37 MB | 0.55 MB | 13.5x |
+| A511 | 7.03 MB | 0.49 MB | 14.3x |
+| A205 | 6.71 MB | 0.52 MB | 12.9x |
+| A509 | 5.38 MB | 0.36 MB | 15.1x |
+| A801 | 4.64 MB | 0.37 MB | 12.7x |
+| A302 | 4.01 MB | 0.38 MB | 10.4x |
+| RS501 | 2.77 MB | 0.18 MB | 15.4x |
+| A100 | 1.51 MB | 0.18 MB | 8.4x |
+| **All 11** | **77.79 MB** | **5.50 MB** | **14.2x** |
+
+A second measurement decided the shape of the standard, and is the
+counter-intuitive one: **a cropped SVG is not smaller.** Setting a cropbox
+changes the viewport, not the content - the A204 washroom crop came out at
+9609 KB, *larger* than the full page, because all 57,906 paths are still
+emitted.
+
+### The standard
+
+1. **One vector asset per sheet.** A crop is a `viewBox` **view** onto it - a
+   focus rectangle the viewport frames - never a second file. This is the same
+   property the `live` Page-Field miniature has: one definition, shown two
+   ways, so the crop and the full sheet *cannot* disagree about what the
+   drawing says.
+2. **Vector for anything a reader zooms; raster for anything they do not.**
+   Panes get SVG, because linework stays mathematically sharp at any
+   magnification rather than up to a chosen dpi. Page-Field thumbnails and
+   discipline mosaics stay raster, because a 175px tile has no zoom and
+   parsing 57,906 paths to fill one would be wasted work.
+3. **Focus rectangles are recorded in the sheet's native view space**,
+   transformed through the same rotation matrix the SVG was emitted under.
+4. **Transport is compressed.** SVG is text; 14.2x is not an optimisation, it
+   is the difference between a sheet arriving in seconds and in a minute.
+
+### Architectural decisions & trade-offs
+
+- **`tools/serve_https_harness.py` compresses in memory, not on disk.** The
+  served tree is a build output regenerated constantly, and a stale `.gz`
+  beside a fresh `.svg` would serve yesterday's drawing under today's
+  timestamp. `Vary: Accept-Encoding` is set, because a LAN proxy replaying a
+  gzipped body to an `identity` client would hand it bytes it cannot read.
+
+### Verifications executed
+
+- A204.svg over TLS: 9,818,961 bytes identity, 779,309 gzipped (12.6x),
+  `Content-Encoding: gzip`, `Vary: Accept-Encoding`, and the decompressed body
+  **byte-identical** to the identity response.
+- nipigon.css: 40,280 -> 12,200 (3.3x), identical after decompression.
+- An `Accept-Encoding: identity` client still receives the raw file.
+
+### The mechanism, demonstrated in isolation
+
+`static/demo_vector_desk.html` (new) is a single self-contained page showing
+the two mechanics without the weight of a real 8 MB sheet: dynamic `viewBox`
+framing with independent pan/zoom per pane and live coordinate telemetry, and
+the split-pane coordination move where pressing `1/A801` frames the detail in
+pane 2 **without moving pane 1**.
+
+Three decisions inside it are worth recording:
+
+- **The geometry is schematic and says so, unmissably.** A page that draws a
+  plausible floor plan and labels it A204 becomes a picture of a building
+  nobody surveyed. A dashed provenance banner states that the geometry was
+  drawn for the demo, is not extracted from the source PDFs, and must not be
+  cited as evidence — while naming what IS real (the room numbers, the
+  callout, automobile elevator 110, read off the source annotations).
+- **The briefed figure and the recorded figure are both drawn.** The demo was
+  asked for a 1500 mm turning envelope; the verified A204 note records
+  **1900** for room 104. Both appear, labelled. Quietly picking one would have
+  been the opposite of what a coordination desk does.
+- **Self-contained means it will not run from `/static/`.** Measured, not
+  assumed: `app.py`'s `set_csp_header` is an `@app.after_request`, so it
+  applies to static responses too, and it sends `default-src 'self'` with
+  `script-src 'self' 'nonce-<per-request>'`. A static file cannot carry a
+  per-request nonce, and `style-src` is absent so inline styles fall back to
+  `default-src` as well — both the inline `<style>` and the inline `<script>`
+  would be refused. It runs from `file://`, and from
+  `tools/serve_https_harness.py`, which sends no CSP. The requirement was one
+  self-contained file; the constraint is stated rather than worked around.
+
+### UNRESOLVED
+
+**Production does not compress these.** Neither `app.py` nor any config in
+this repository enables transport compression, and Flask does not do it by
+default. The 14.2x above is real and is now real *in the harness*; on
+`archiosk.com` it is not, and a 20 MB A902 would be served whole. This is
+recorded rather than fixed because it is a deployment-layer decision (the
+front-end web server's `gzip`/`brotli` configuration) and no evidence was
+gathered here about what that layer currently does.
+
+---
+
+## Part 2 - One microphone, and the origin it needs
+
+### Evidence scanned
+
+The audit read every voice path in `static/js/`: `voice_input.js`,
+`landing.js`, `case_workspace.js`, `login.js`, and the six templates that load
+a mic. The decisive measurement was taken on the exact origin the reviewer's
+phone was using, not on a stand-in:
+
+| | `http://10.0.0.177:8642` | `http://127.0.0.1:8642` |
+|---|---|---|
+| `isSecureContext` | **false** | true |
+| `navigator.mediaDevices` | **undefined** | present |
+| `getUserMedia` | **false** | true |
+| `SpeechRecognition` | **`"function"`** | `"function"` |
+
+`isSecureContext` appeared **zero times** in `voice_input.js`, `landing.js`
+and `case_workspace.js`.
+
+### Epistemic classification
+
+- **DIRECT - the defect.** The constructor is defined on an insecure origin.
+  The guard `if (!Ctor) return null` therefore **passes**, the mic button is
+  revealed, and the start call fails on press. The symptom reported as "voice
+  fails to respond" was never a broken recogniser: it was a microphone offered
+  where the browser will not grant one. Feature detection tested the *symbol*,
+  not the *capability*.
+- **DIRECT - the duplication.** `landing.js` carried a second, independently
+  maintained copy of the engine, its own header comment describing it as
+  deliberately "mirroring" `voice_input.js`. One report of one defect therefore
+  required the same fix in two files.
+- **UNRESOLVED - whether speech now works on the device.** Everything below is
+  verified by construction and by test; none of it is a spoken sentence
+  transcribed on a phone. That verification needs the reviewer, an accepted
+  certificate, and a voice.
+
+### Architectural decisions & trade-offs
+
+- **The guard tests the capability: `!Ctor || !window.isSecureContext`.**
+  Hiding the button is the honest outcome - typing remains the fully
+  equivalent path, and an absent affordance is better than a present one that
+  cannot work.
+- **`landing.js` keeps its ROUTER and loses its ENGINE.** The division is the
+  honest one: every page's microphone *listens* identically, and only what it
+  *does* with a sentence differs. `DIRECT_NAV`, `INFORMATIONAL`, `FALLBACK`
+  and the transcription-variant patterns are preserved verbatim - that work
+  came from a real Product Owner report ("sing in") and had no reason to be
+  rewritten.
+- **Voice dispatches real controls, and never performs an action itself.**
+  On Nipigon a spoken "A801" calls `.click()` on the same sibling button a
+  finger would; on Calm Lake a spoken surface name clicks that field's own
+  button, so the prototype's existing honest refusals still fire ("Project
+  intake is not built in this prototype") rather than a smoother-sounding lie.
+  Voice cannot reach anything a tap cannot, so it inherits every guard the
+  visible control already carries. The vocabulary is closed, and an
+  unrecognised sentence is quoted back verbatim and does nothing.
+- **`setStatus` is returned from the engine** so a caller says its own piece in
+  the *same* live region, rather than growing a second one a screen reader
+  would announce twice.
+- **Listening is a change of FILL, not of shade** on every surface, so ready
+  and listening stay distinguishable in greyscale. On Calm Lake it inverts to
+  solid ink rather than amber: that surface is a deliberately grayscale
+  wireframe, and `test_the_ramp_is_a_cool_near_neutral_and_never_warm` names
+  `#7A4A08` by value as the thing it exists to exclude. The test was right and
+  the wireframe's own grammar produced the better answer.
+- **`app.py` was NOT given an `--ssl` mode.** Its `__main__` block binds
+  `127.0.0.1` unconditionally and its own comment records that as deliberate -
+  the same block that disabled Werkzeug's interactive debugger after a real
+  incident. Adding "listen on every interface" to the application's dev
+  entrypoint would loosen that constraint for a need that is not about the
+  application: device testing here has always driven the static harness. The
+  LAN exposure lives in `tools/serve_https_harness.py`, which serves
+  pre-rendered files and can neither authenticate anybody nor reach the
+  database. The directive offered either route; this is the narrower one.
+
+### Verifications executed
+
+- `tools/serve_https_harness.py` generates a certificate whose
+  `subjectAltName` names the LAN IP, and a client validating against it
+  fetches over TLS successfully - so the browser interstitial is the only
+  barrier, not a rejected certificate. (An IP certificate without an `IP:` SAN
+  is refused outright; CommonName has not been honoured for years.)
+- Full suite green on every landing/voice file touched; the engine assertions
+  in `test_ca1d_public_landing_03/05` were retargeted to `voice_input.js` with
+  the reasoning recorded in each docstring, and two new tests were added: one
+  asserting `landing.js` contains no engine tokens at all, one asserting the
+  shell loads the engine before the router.
+- `node --check` clean on all four changed scripts.
+
+---
+
+## Part 3 - Disciplines, and the counts behind them
+
+Not in the directive's ledger list, but it is the change with the most
+evidence behind it and the ledger is where evidence goes.
+
+### Evidence scanned
+
+Two independent readings, kept separate because they disagree:
+
+**Delivered** - counted off `C:\Archiosk\Samples\5 Nipigon`: 51 PDFs, of
+which 39 are A-series and 10 are RS501-RS510. The other two ("5 Nipigon.pdf",
+"Nipigan Starter.pdf") are not numbered sheets and are counted as no
+discipline's.
+
+**Named** - read out of the DRAWING INDEX on `212109 A100 COVER PAGE.pdf`:
+
+| Discipline | Index numbering | Delivered | Basis |
+|---|---|---|---|
+| Architectural | CV, A101-A902 | 39 | `direct` |
+| Structural | S1-**S10** **and** RS501-RS510 | 10 | `inferred` |
+| Mechanical | M1-M5 | 0 | `unresolved` |
+| Electrical | E1-E5 | 0 | `unresolved` |
+| Landscape | L1 | 0 | `unresolved` |
+| Civil | SP1 | 0 | `unresolved` |
+
+**Correction, logged rather than silently applied.** The structural set was
+first recorded as S1-S9. It runs to **S10** (`UNDERGROUND FOUNDATION`). The
+first reading used `\bS\d\b`, which matches a single digit and stopped at S9
+without any sign that it had — a regex that cannot express the answer returns
+a confident wrong one. Re-measured with `\bS\d{1,2}\b`.
+
+**There is no P-series and no C-series on this project.** A later directive
+asked for a "Plumbing / Civil (P / C-Series)" container. The index was searched
+for both before building one:
+
+- **No P-series exists at all.** Plumbing scope is carried by the MECHANICAL
+  series — it is the *title* of M1 (`U/G GARAGE PLAN PLUMBING AND HVAC`) and
+  M2 (`PLUMBING PLAN`), not a discipline of its own here.
+- **The only `C1` on the cover is a zoning designation**, in the project-data
+  block (`563.34 sq.m | C1 | 5 Nipigon Ave`), not a drawing number. Civil is
+  numbered **SP1**.
+
+So no P/C card was invented. Building one would put a container on screen
+standing for a series this project does not have — the same defect as
+accepting "A201 is the Level 2 floor plan" when its title block says FIRE
+SCHEMATIC LAYOUT. The discrepancy is reported instead, and the Mechanical
+tile's own note now says where plumbing actually lives.
+
+### Epistemic classification
+
+- **Reading the cover sheet added a discipline nobody had listed.** Civil
+  (SP1, site servicing and grading) was not in the working set until A100 was
+  actually opened. The index is the authority on what the project is supposed
+  to contain; our memory of it is not.
+- **Structural is `inferred`, not `direct`.** A100 carries *two* structural
+  sets under two numbering systems, and only the RS framing series arrived.
+  Calling it `direct` would assert a completeness the source does not support,
+  and quietly reconciling the two is precisely what this project's evidence
+  rule forbids. The disagreement is shown, not resolved.
+- Four disciplines are named on the cover and delivered nothing. They still
+  get a tile, rendered `unresolved` - because a project page that showed only
+  the two disciplines with files would be hiding the most useful fact on the
+  screen.
+
+### Architectural decisions & trade-offs
+
+- **A discipline tile is not a Page-Field.** It is a container, not a window
+  onto a surface, so it does not take the pinned 175.00 x 152.17px geometry -
+  that would claim a kinship it does not have. The sheets *inside* it are real
+  Page-Fields and keep that geometry exactly.
+- **Its face is a mosaic of its own real rendered faces**, at most four,
+  because a fifth stops being a drawing at that size and becomes a texture.
+  An empty discipline draws an empty dashed frame and never borrows another
+  discipline's picture to look populated.
+- **The strip always carries both numbers** ("39 sheets - 6 rendered"),
+  because "39 sheets" and "39 sheets, all prepared" are different claims.
+- **The grid axis keys on `orientation`, not on a width breakpoint.** The
+  request was about the shape of the space; a landscape phone and a narrow
+  desktop window can be the same width and want opposite layouts. Portrait is
+  one column of wide short bands; landscape is one row of equal auto-columns,
+  so seven tiles divide the width rather than wrapping below the fold.
+
+---
+
+## Part 4 - Request Trial Access, pruned
+
+### Directive received
+
+> Remove the eyebrow label so the h1 appears only once. Delete the descriptive
+> paragraph. Strip the bottom secondary footer button container. Retain the
+> top-left `← ARCHIOSK` link as the sole exit path. Align the form fields and
+> centre the primary button.
+
+### Evidence scanned
+
+The page and everything asserting on it: `templates/start_trial.html`,
+`tests/test_ca1d_trial_access_hotfix_01.py`,
+`tests/test_ca1d_public_landing_01.py`,
+`tests/test_p40vw7a_ui_reference_map.py`, and `UI_REFERENCE_MAP.md`.
+
+The directive described the eyebrow as `<div class="eyebrow">`; the real
+element is `<span class="landing-doc-kicker">`. Acted on what is there.
+
+### Epistemic classification
+
+Five tests failed on the removals, and each had to be classified rather than
+edited into agreement:
+
+- **Defending copy, not intent.** `test_get_renders_the_request_form_not_the_old_rejection`
+  asserted the literal string "opening trial access gradually". What it is
+  named for — the old dead end never returns, a real request action is here
+  instead — is carried by its two `assertNotIn`s and the form/submit refs, all
+  untouched. Removing the paragraph cannot restore a dead end.
+- **Intent satisfied more strongly than before.**
+  `test_request_access_is_the_primary_action_sign_in_and_explore_are_secondary`
+  proved primacy by source order. With the secondary pair gone there is
+  nothing left for the primary action to be primary *over*. Inverted rather
+  than deleted, the way this suite already handles a retired capability
+  (`NothingSpeaksWithoutBeingAskedTests`): the risk worth guarding is now that
+  competing CTAs come back.
+- **A real narrowing, recorded as one.** `test_success_state_still_offers_sign_in_and_explore`
+  guarded the confirmation screen. The footer pair sat outside the
+  submitted/not-submitted branch, so removing it removed it from **both**
+  states: a visitor who has just submitted now has one way onward where they
+  had three. That is the directive as written, and it is flagged rather than
+  quietly softened. The replacement test asserts the confirmation is still not
+  a dead end, via the top-left link.
+- **A registry consequence, not a test to edit.**
+  `test_every_active_registry_row_actually_exists_in_a_template` was correct to
+  fail. `UI_REFERENCE_MAP.md`'s two rows are marked **retired** with the reason
+  attached rather than deleted — a deleted row loses why it went.
+- **A wrong assertion of my own.** A new "title appears once" test counted the
+  whole response and found two, because `<title>` legitimately carries the same
+  words. Scoped to the document body. Caught before it was committed, not
+  after.
+
+### Architectural decisions & trade-offs
+
+- **The eyebrow is kept on the SUBMITTED branch.** There it reads "REQUEST
+  TRIAL ACCESS / Request received" — a flow name and an outcome, not the same
+  string twice. Removing it would leave a confirmation with no statement of
+  what was confirmed. The duplication was only ever on the form view.
+- **The form column is centred; the fields inside stay left-aligned.** A
+  centred label over a full-width input has no common edge to read down. The
+  480px measure is unchanged.
+- **The button is sized to its text, not to the form.** A full-bleed primary
+  action reads as a banner rather than a control.
+
+---
+
+---
+
+## Part 5 - Single Active Project on Site: the constraint, not the code
+
+### Directive received
+
+> In field/standard mode, suppress the global sidebar list of unrelated test
+> runs/projects to uphold the "Single Active Project on Site" boundary. Route
+> project entry via direct code/search input ("5 Nipigon") directly into the
+> active site desk.
+
+### Evidence scanned
+
+A read-only map of the whole authenticated navigation surface was taken before
+touching anything: `config.py`, `app.py`, `routes/`, `services/`, `templates/`,
+`static/js/`, `static/css/main.css`, `governance/`, `docs/`.
+
+### Epistemic classification
+
+**UNRESOLVED, and it is the premise rather than the work.** *There is no
+field/standard mode in this application.* Searches for `field mode`, `site
+mode`, `standard mode`, `on-site`, `kiosk`, `tablet mode` and `single active
+project` return zero product hits — the only matches are unrelated prose and
+~1095 uses of the Python `field` keyword. `config.py` has no mode variable at
+all; its only environment axis is Flask's `development`/`production`/`testing`
+config classes, which is deployment config.
+
+Three things are easy to mistake for it, and none is one:
+
+| Looks like a mode | What it actually is |
+|---|---|
+| `operating_environment` (`services/environment_capabilities.py:47`) | A per-project, locked, governed **stakeholder side** — Client/Owner vs Design-Builder/Proponent. A project fact, never a session or UI mode. |
+| `developer_mode` (`routes/portal.py:185`) | A session boolean, admin-only, on/off against the default UI. It has **no counterpart**. |
+| The PWA + narrow-viewport CSS | Responsive and installable behaviour. `static/js/pwa.js:14` even says "on a phone the reviewer may be standing on site" — but nothing branches on it server-side. |
+
+**So the directive's first clause cannot be executed as written without first
+inventing a new, user-visible operating mode.** That is a product decision, not
+engineering difficulty, and it is the kind this repository's own operating
+notes single out: *"Internal complexity must earn user visibility... For each
+internal distinction ask whether the user genuinely needs to understand it to
+do their work."* A second mode would also need gating decided at every one of
+the six surfaces below.
+
+### What the surfaces actually are
+
+Six authenticated surfaces render a list of projects. All of them already
+filter through one of two access functions, and both end at
+`services/project_access.py:33` `can_access_project` (admin, owner, or
+allow-list):
+
+| # | Surface | Renders in | Data |
+|---|---|---|---|
+| 1 | Left rail "Projects" tree | `templates/base.html:870` | `app.py:1025` `_nav_recent_projects`, injected globally |
+| 2 | File ▸ Open Project… | `templates/_app_menu.html:339` | same call, never a second query |
+| 3 | Home `/` | `templates/index.html:94` | `_accessible_documents`, top 6 |
+| 4 | Projects directory `/projects` | `templates/projects.html:46` | `_accessible_documents` |
+| 5 | Project chooser `/projects/choose` | `templates/project_chooser.html:114` | `_accessible_documents` |
+| 6 | Removed Projects | `templates/removed_projects.html:15` | `_accessible_documents(include_removed=True)` |
+
+**The seam the directive is reaching for already exists.**
+`app.py:720` `_NO_PROJECT_LISTING_ENDPOINTS` already suppresses surface 1 for a
+named set of endpoints (auth pages, the gateway). Extending it is a one-line
+change — *once someone decides which surfaces count as "on site."*
+
+**Entry by typing already exists too**, three times over: the chooser search
+(`project_chooser.html:90`, server-side substring on filename/project_id), the
+directory search (`projects.html:26`), and a client-side filter in the Open
+Project menu (`app_menu.js:214`). Two gaps are worth naming:
+
+- **There is no lookup by project CODE.** `services/project_code.py` defines a
+  governed 3-4 letter acronym, but its only UI is the New Project form
+  (`upload.html:307`). Nothing resolves a typed code back to a project.
+- **`GET /search` is orphaned.** `routes/portal.py:2855` `global_search()`
+  returns exactly the JSON a quick-open overlay would need, and **nothing in
+  `templates/` or `static/js/` references it**.
+
+### Decision
+
+**Nothing in the authenticated navigation was changed.** Of the four honest
+outcomes available for architectural work — do it, run the smallest
+disproving experiment, surface the constraint, or reject it with reasons —
+this is the third. Removing the Projects tree unconditionally would be a
+material change to the main product's navigation that the directive scoped to
+a mode which does not exist; inventing the mode instead would add a
+user-visible operating concept on a single line of instruction.
+
+The prototype surfaces are unaffected either way: `nipigon_coordination.html`
+and `calm_lake_prototype.html` are standalone templates that never extend
+`base.html`, so they have never rendered the launcher panel. There is no
+cross-project leakage on the site desk today.
+
+**What would unblock it**, in the order it would be built: (1) decide whether
+"on site" is a mode, a per-device setting, or simply "a project is open" —
+the third needs no new concept at all and is the cheapest honest reading;
+(2) extend `_NO_PROJECT_LISTING_ENDPOINTS`, or gate the injection at
+`app.py:846`; (3) wire the orphaned `/search` to a quick-open overlay and add
+code resolution beside the existing name/id substring match.
+
+---
+
+## Part 6 - The guards, because none existed
+
+The 5 Nipigon surface had **no test file at all**. Everything it proves — that
+a pane serves a vector, that a discipline count came off the source material,
+that a microphone is hidden where it cannot work — was guarded only by whoever
+last looked at it. `tests/test_nipigon_vector_and_disciplines_01.py` adds 21
+tests, and each one guards something that has **already been violated once**
+during this work:
+
+- **Vector standard (9).** Both panes serve `.svg`; no `<sheet>_<label>.png`
+  crop is referenced anywhere; the render tool no longer contains
+  `pix.save(dest)`; focus rectangles reach the page as `data-focus`/`data-view`;
+  thumbnails stay raster because a 175px tile has no zoom.
+- **Discipline evidence (7).** All six named disciplines render; the counted
+  39 and 10 appear; exactly four cards say "none delivered"; Structural is
+  `inferred`; RS501 sits under Structural and A204 does not; the grid keys on
+  `orientation`. One test exists purely to record a refusal —
+  `test_no_plumbing_or_c_series_container_was_invented`.
+- **Voice (5).** The engine tests capability rather than symbol; this surface
+  carries no recogniser of its own; the mic is `hidden` by default; dispatch
+  contains no `fetch`, no `XMLHttpRequest` and no `location.href` — only
+  `.click()` on controls already on the page; and "go back" reaches the return
+  control rather than Ask GO.
+
+**A defect this work found by writing them.** Making the crops go was supposed
+to be a deletion. The GO block's Jinja guard read `{% if go.chosen and
+go.chosen.asset %}` — a *raster crop* — while the `src` it rendered was
+`target_svg.file`, a vector. Retiring the crops would have made that guard
+false and silently deleted the entire GO affordance, with the vector it needed
+sitting right there on disk. A guard has to test the thing it guards; it now
+reads `{% if go.chosen and target_svg %}`.
+
+---
+
+### Also in this tranche
+
+**The landing page centering defect**, reported from a phone as portrait-only.
+`.landing-content` asks for `min-height: 100dvh` **and** `8vh/10vh` of vertical
+padding; under the CSS default `content-box`, padding is added *outside* that
+height, so a container meant to fill the screen is 118dvh tall and
+`justify-content: center` faithfully centres inside a box 18% too tall.
+Landscape hid it because 18% of a short viewport is ~90px rather than ~150px.
+Same defect, quieter symptom. Fixed with `box-sizing: border-box` scoped to
+`.landing-page`'s own subtree.
+
+---
+
 ## DPL-0004 - 2026-08-28 - Archive custody moved to the WD My Cloud NAS
 
 **Status:** complete. The archive now has a second copy on a different machine.
