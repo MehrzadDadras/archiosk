@@ -27,8 +27,14 @@
     Directory to preserve. Defaults to the Holodeck archive.
 
 .PARAMETER DestinationRoot
-    Where snapshots are written. Should be on a DIFFERENT physical volume from
-    SourcePath; the script warns when it is not.
+    Where snapshots are written. Defaults to the WD My Cloud EX4100 share,
+    which is a different MACHINE rather than merely a different volume - the
+    strongest destination reachable without leaving the site.
+
+    A local destination should at minimum be on a different physical volume.
+    The same-volume check below is a drive-letter comparison and therefore
+    says nothing at all about a UNC path, so that case is reported separately
+    rather than silently passing a test it was never subject to.
 
 .PARAMETER KeepLast
     Retain only the N most recent verified snapshots. 0 (default) keeps all.
@@ -42,7 +48,7 @@
 
 .EXAMPLE
     ./tools/backup_holodeck_archive.ps1
-    ./tools/backup_holodeck_archive.ps1 -DestinationRoot E:\archiosk-backups -KeepLast 6
+    ./tools/backup_holodeck_archive.ps1 -DestinationRoot D:\archiosk-backups -KeepLast 6
     ./tools/backup_holodeck_archive.ps1 -VerifyOnly
 
 .NOTES
@@ -55,7 +61,7 @@
 [CmdletBinding()]
 param(
     [string] $SourcePath      = 'C:\Archiosk\holodeck\archive',
-    [string] $DestinationRoot = 'C:\Archiosk\_archive-backups\holodeck',
+    [string] $DestinationRoot = '\\WDMYCLOUDEX4100\Public\archiosk-backups',
     [int]    $KeepLast        = 0,
     [switch] $VerifyOnly
 )
@@ -200,10 +206,20 @@ if (-not (Test-Path -LiteralPath $DestinationRoot)) {
     New-Item -ItemType Directory -Path $DestinationRoot -Force | Out-Null
     Write-Ok "Created $DestinationRoot"
 }
-$destFull = (Resolve-Path -LiteralPath $DestinationRoot).Path
+# ProviderPath, not Path. Resolve-Path returns a PROVIDER-QUALIFIED string for
+# a UNC target - "Microsoft.PowerShell.Core\FileSystem::\host\share" - so the
+# UNC test below saw 'M', reported nothing, and fell through to a drive-letter
+# comparison it was never subject to. It passed for the wrong reason, which is
+# the failure mode this script exists to refuse.
+$destFull = (Resolve-Path -LiteralPath $DestinationRoot).ProviderPath
 
-# Same-volume backup protects against accidental deletion and nothing else.
-if ($sourceFull.Substring(0,1) -eq $destFull.Substring(0,1)) {
+# A UNC destination is a different MACHINE, which is strictly stronger than a
+# different volume. The drive-letter comparison would be meaningless for it -
+# and worse, would silently pass - so the two cases are separated.
+if ($destFull.StartsWith('\\')) {
+    Write-Ok "Destination is a network share: $destFull"
+    Write-Ok 'Different machine: survives failure of this computer. NOT offsite.'
+} elseif ($sourceFull.Substring(0,1) -eq $destFull.Substring(0,1)) {
     Write-Warn "Destination is on the SAME volume ($($destFull.Substring(0,2))) as the source."
     Write-Warn 'This protects against accidental deletion, NOT against drive failure.'
     Write-Warn 'Pass -DestinationRoot on a different physical volume, and keep an offsite copy.'

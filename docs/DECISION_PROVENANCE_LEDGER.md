@@ -15,6 +15,108 @@ domain-model decisions, and pushed `origin/main` remains the system of record.
 
 ---
 
+## DPL-0004 - 2026-08-28 - Archive custody moved to the WD My Cloud NAS
+
+**Status:** complete. The archive now has a second copy on a different machine.
+
+### Directive received
+
+Retarget the Holodeck archive backup from a local disk to the WD My Cloud
+EX4100 at `\WDMYCLOUDEX4100\Publicrchiosk-backups`: verify the share is
+reachable, create the directory, change the script default, run the snapshot,
+confirm all 232 files match over SMB, and log the migration.
+
+### Evidence scanned
+
+Reachability established before anything was changed:
+
+| Check | Result |
+|---|---|
+| DNS | `WDMyCloudEX4100.local` -> `10.0.0.148` |
+| SMB port 445 | `TcpTestSucceeded = True` (ICMP blocked, which is normal) |
+| Shares visible | `Public`, `TimeMachineBackup`, `Recycle Bin - Volume_1` |
+| Target directory | absent; created |
+| Write/read probe | round-tripped over SMB before trusting the share |
+
+A prior local Tier 1 snapshot exists on `D:rchiosk-backups`. `D:` was
+confirmed to be **DiskNumber 1** against `C:`'s **DiskNumber 0** - genuinely a
+separate physical device, not a second partition - so that copy survives a
+drive failure and is retained rather than discarded.
+
+### Epistemic classification
+
+- `DIRECT` - the share is reachable, writable, and the snapshot verified: DNS,
+  port, share enumeration, write probe, and a full hash comparison all
+  measured, none assumed.
+- `UNRESOLVED` - **whether the NAS itself is redundant.** Its own disk
+  configuration was not inspected. A NAS is a different machine, which is
+  strictly stronger than a different volume; it is *not* evidence of RAID, and
+  this ledger does not claim it.
+- `UNRESOLVED` - **offsite.** All copies are now in one building. A fire,
+  theft or power event still takes every one of them. Tier 3 remains open.
+
+### Architectural decisions & trade-offs
+
+**A defect the run itself exposed, and the reason to read output rather than
+exit codes.** The first NAS snapshot succeeded and reported
+`VERIFIED SNAPSHOT: Microsoft.PowerShell.Core\FileSystem::\WDMYCLOUDEX4100\...`
+- and the new "destination is a network share" line never printed.
+
+`Resolve-Path` returns a PROVIDER-QUALIFIED string for a UNC target. The UNC
+test therefore examined `M`, reported nothing, and fell through to a
+drive-letter comparison of `M` against `C` - which "passed" for entirely the
+wrong reason. A same-volume warning that cannot fire on the one destination
+type it most needs to reason about is worse than no warning, because it reads
+as a clean bill of health. Fixed by resolving `.ProviderPath`, and the fix was
+confirmed by the message appearing on the next run.
+
+The exit code was 0 both times. Nothing about the failure was visible in
+pass/fail.
+
+**The message says what the destination actually buys, and what it does not:**
+"Different machine: survives failure of this computer. NOT offsite." A backup
+tool that overstates its own protection is the specific way this kind of tool
+fails people.
+
+**The local `D:` snapshot is kept.** Retargeting the default is not a reason to
+discard a verified copy on independent hardware.
+
+### Verifications executed
+
+Three independent confirmations, not one repeated:
+
+1. **Round-trip during write** - 232 files re-expanded from the NAS zip and
+   re-hashed against the source: match, hash-for-hash.
+2. **`-VerifyOnly` over SMB** - live archive compared to the stored manifest:
+   "Live archive is identical to the last verified snapshot."
+3. **Zip integrity after the fact** - the manifest's recorded `ZipSha256`
+   (`0C6D130D4A618ED3...`) re-computed against the file as it now sits on the
+   NAS: MATCH. This is the one that proves the bytes survived the network, not
+   merely that the write returned success.
+
+Manifest: `FileCount = 232`, `Verified = True`.
+
+On the share:
+```
+holodeck-archive-20260828-223408.zip            3,578,945 bytes
+holodeck-archive-20260828-223408.manifest.json     47,146 bytes
+holodeck-archive-20260828-223502.zip            3,578,945 bytes
+holodeck-archive-20260828-223502.manifest.json     47,146 bytes
+```
+
+Two snapshots because the first ran before the ProviderPath fix; both are
+independently verified and `-KeepLast 6` rotates them.
+
+### Executive residue
+
+- **Offsite is still open.** Every copy is in one building.
+- **NAS redundancy is unverified.** Worth confirming its disk configuration
+  before treating it as the durable copy.
+- Re-run: `./tools/backup_holodeck_archive.ps1 -KeepLast 6` (now defaults to
+  the NAS), and `-VerifyOnly` as a periodic integrity check.
+
+---
+
 ## DPL-0003 · 2026-08-28 · Engine DNA preferences, and a test exemption made explicit
 
 **Status:** complete.
