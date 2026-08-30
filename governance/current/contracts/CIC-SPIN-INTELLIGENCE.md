@@ -3,7 +3,7 @@
 - **CONTRACT ID:** CIC-SPIN-INTELLIGENCE
 - **TITLE:** Spin Intelligence Contract
 - **VERSION:** v1.0
-- **STATUS:** CURRENT
+- **STATUS:** SUPERSEDED
 - **SCOPE:** Spin evidence selection, assembly, model invocation, findings, and provenance.
 - **APPLIES WHEN:** Project/document Spin, evidence-to-model plumbing, prompts, findings, or run history is touched.
 - **DOES NOT APPLY WHEN:** A purely presentational Spin timestamp/history change does not alter analytical behavior.

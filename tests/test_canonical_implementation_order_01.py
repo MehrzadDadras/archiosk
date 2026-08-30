@@ -37,8 +37,12 @@ class CanonicalImplementationOrderTests(unittest.TestCase):
         # CIC-GO-CONVERSATION-v1.1 (CLAUDE-AIRLOCK-WEB-RESEARCH-01, which both
         # added external research as an answering domain and corrected a KNOWN
         # LIMITATION that CLAUDE-GO-GATEWAY-COGNITION-01/02 had already made
-        # untrue). What this test actually guards is the line below: one
+        # untrue), and now CIC-SPIN-INTELLIGENCE-v1.2 (GOV-CN-001, approved
+        # 2026-08-30 and recorded by GOV-S-001 - a PARTIAL supersession
+        # admitting Multi-Observer Shear as a layer distinct from Helix; every
+        # v1.1 invariant, both Helix clauses included, carries forward
+        # verbatim). What this test actually guards is the line below: one
         # registry, in one place.
         records = list((ROOT / "governance").rglob("CIC-*.md"))
-        self.assertEqual(len(records), 13)
+        self.assertEqual(len(records), 14)
         self.assertEqual((CONTRACTS / "README.md").exists(), True)

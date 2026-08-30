@@ -3,7 +3,7 @@
 - **CONTRACT ID:** CIC-SPIN-INTELLIGENCE
 - **TITLE:** Spin Intelligence Contract
 - **VERSION:** v1.1
-- **STATUS:** CURRENT
+- **STATUS:** SUPERSEDED
 - **SCOPE:** Spin evidence selection, assembly, model invocation, findings, provenance, and Helix / Progressive Project Convergence assessment.
 - **APPLIES WHEN:** Project/document Spin, evidence-to-model plumbing, prompts, findings, run history, or Helix assessment governance is touched.
 - **DOES NOT APPLY WHEN:** A purely presentational Spin timestamp/history change does not alter analytical behavior.
@@ -14,6 +14,6 @@
 - **REFERENCE TESTS:** `tests/test_helix_qa_absorption_01.py`; Spin, evidence-readability, and source-scope lanes.
 - **KNOWN LIMITATIONS:** External authority remains governed by the Airlock; no hidden Oracle is project evidence; Helix is not a universal scoring or correction engine.
 - **SUPERSEDES:** [CIC-SPIN-INTELLIGENCE v1.0](CIC-SPIN-INTELLIGENCE.md) — adds explicit Helix / Progressive Project Convergence lineage and the already-tested closed-vocabulary / anti-scoring invariant; all v1.0 invariants remain in force.
-- **SUPERSEDED BY:** None.
+- **SUPERSEDED BY:** [CIC-SPIN-INTELLIGENCE v1.2](CIC-SPIN-INTELLIGENCE-v1.2.md), PARTIAL, via [GOV-S-001](../../records/GOV-S-001.md) — the SCOPE and APPLIES WHEN clauses above no longer govern. Every MANDATORY INVARIANT in this record, including both Helix clauses, remains in force verbatim through v1.2.
 - **LAST REVIEWED:** 2026-08-21 (Helix authority reconciliation maintenance).
 - **GOVERNANCE SOURCE:** [GO-HELIX-01](../../prompt-depository/GO-HELIX-01.md); [GO-HELIX-QA-01](../../prompt-depository/GO-HELIX-QA-01.md); Spin governance, Airlock governance, and MM evidence contract.
