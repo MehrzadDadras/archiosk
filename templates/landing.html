@@ -43,10 +43,18 @@
        Sized in the stylesheet to stay modest on a phone: this is the entrance,
        and the entry actions matter more than the badge above them.
 
-       EXPERIMENTAL until Product Owner visual acceptance. #}
+       EXPERIMENTAL until Product Owner visual acceptance.
+
+       CLAUDE-IDENTITY-ICON-RESOLVE-01: width/height are the RESERVATION, not
+       the size - landing.css wins - but 76 was a size no rendering path could
+       ever produce once the icon was capped at clamp(38px, 7vw, 64px). Aligned
+       to that cap so the attribute states something true. Both must stay
+       present and equal: they are what reserves a square box before the asset
+       arrives, and dropping them would reflow the wordmark and the entry
+       actions below it on first paint. #}
     <div class="landing-brand">
         <img class="landing-app-icon" src="{{ url_for('static', filename='app-icon.svg') }}?v={{ static_version }}"
-             alt="" aria-hidden="true" width="76" height="76">
+             alt="" aria-hidden="true" width="64" height="64">
         <h1 class="landing-wordmark">Archiosk</h1>
     </div>
     {# CLAUDE-LANDING-SIMPLIFY-01: the "Data Room Intelligence" category

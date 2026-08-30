@@ -3,8 +3,9 @@
     ./venv/Scripts/python.exe tools/render_app_icon.py
     ./venv/Scripts/python.exe tools/render_app_icon.py --proof
 
-Writes static/app-icon.svg AND the PNG sizes phone home screens request, both
-from the single geometry definition below. One source, so the vector and the
+Writes static/app-icon.svg, the PNG sizes phone home screens request, and the
+static/icons/app-icon.ico a browser asks for at /favicon.ico - all from the
+single geometry definition below. One source, so the vector and the
 rasters cannot drift apart - an earlier version of this tool restated the
 geometry separately from the SVG and that duplication was a defect waiting to
 happen.
@@ -51,6 +52,7 @@ from PIL import Image, ImageDraw
 REPO_ROOT = Path(__file__).resolve().parent.parent
 ICON_DIR = REPO_ROOT / "static" / "icons"
 SVG_PATH = REPO_ROOT / "static" / "app-icon.svg"
+ICO_PATH = ICON_DIR / "app-icon.ico"
 
 GROUND = "#0b1f28"
 MARK = "#e9f4f7"
@@ -80,6 +82,9 @@ LEFT_CUT_Y = 158.0
 RIGHT_CUT_X = 372.0
 
 MASKABLE_INSET = 0.10
+# The frames a .ico carries. 16 is the browser tab, 32 the Windows taskbar and
+# bookmark bar, 48 the desktop shortcut; 64 covers a HiDPI tab strip.
+ICO_SIZES = (16, 32, 48, 64)
 SUPERSAMPLE = 8
 
 
@@ -251,6 +256,27 @@ def write_shipped_icons() -> list[Path]:
     path = ICON_DIR / "app-icon-maskable-512.png"
     render(512, inset=MASKABLE_INSET).save(path)
     written.append(path)
+    # CLAUDE-IDENTITY-ICON-RESOLVE-01 - the .ico, for the same reason the PNGs
+    # exist: a format the client insists on, not a legacy courtesy. A browser
+    # requests /favicon.ico at the site ROOT on its own initiative, regardless
+    # of what <link rel="icon"> declares, and nothing in this repository was
+    # answering that path. It is generated HERE, from the same render() as
+    # every other size, so the tab icon cannot drift from the home-screen one
+    # - the same discipline that made the PNGs generated rather than committed
+    # by hand. Each embedded size is rendered at its own size rather than
+    # downsampled from one large frame: the 16px frame is the one a tab strip
+    # actually shows, and it is the one a double resize damages most.
+    # Largest first: Pillow's ICO writer silently DROPS any requested size
+    # larger than the base image it is called on, so a 16px base would have
+    # written a one-frame .ico while reporting success.
+    frames = [render(size) for size in sorted(ICO_SIZES, reverse=True)]
+    frames[0].save(
+        ICO_PATH,
+        format="ICO",
+        sizes=[(size, size) for size in ICO_SIZES],
+        append_images=frames[1:],
+    )
+    written.append(ICO_PATH)
     return written
 
 

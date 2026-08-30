@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-from flask import Blueprint, abort, current_app, flash, jsonify, make_response, redirect, render_template, request, session, url_for
+from flask import Blueprint, abort, current_app, flash, jsonify, make_response, redirect, render_template, request, send_from_directory, session, url_for
 from werkzeug.datastructures import FileStorage
 
 from services.auth import (
@@ -778,6 +778,42 @@ def web_manifest():
     """What makes ARCHIOSK installable, and what the icon opens into."""
     response = make_response(render_template("manifest.webmanifest"))
     response.headers["Content-Type"] = "application/manifest+json"
+    return response
+
+
+# CLAUDE-IDENTITY-ICON-RESOLVE-01. Every shell already declares
+# <link rel="icon" type="image/svg+xml" href="/static/app-icon.svg">, and that
+# is what a current browser uses. This route is not a duplicate of it.
+#
+# Browsers request /favicon.ico at the site ROOT on their own initiative,
+# without being told to and regardless of what the document declares - for a
+# response that is not HTML, for a bookmark or pinned tile, for the first paint
+# before the head is parsed, and from clients that do not take SVG at all. That
+# request was answering 404 here (verified against the test client, not
+# assumed), so the one identity asset the application could not choose when it
+# was shown was also the one it did not serve.
+#
+# It needs its own route rather than a file: nginx aliases only /static/, so a
+# root path reaches gunicorn. Served from the SAME generated family as the
+# home-screen PNGs and the SVG (tools/render_app_icon.py writes all of them
+# from one centreline), so this cannot become a fifth, older mark the way
+# static/favicon.svg quietly did.
+#
+# Deliberately public and unauthenticated, like /sw.js and the manifest beside
+# it: it is the application's identity, not its content, and a sign-in page
+# with no tab icon is the state a browser would otherwise cache.
+@portal_bp.route("/favicon.ico")
+def favicon_ico():
+    """The root favicon a browser asks for whether or not it is told to."""
+    response = send_from_directory(
+        Path(current_app.static_folder) / "icons",
+        "app-icon.ico",
+        mimetype="image/x-icon",
+    )
+    # A week, not immutable: the path carries no ?v= cache-buster (the browser
+    # invents the request, so nothing can add one), which means STATIC_VERSION
+    # cannot flush it and the expiry is the only control there is.
+    response.headers["Cache-Control"] = "public, max-age=604800"
     return response
 
 
