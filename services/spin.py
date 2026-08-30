@@ -155,21 +155,63 @@ SPIN_WORLD_OBJECTIVES = {
 # only when world=SPIN_WORLD_SURVIVAL. This is the entire mechanism by
 # which a "World" changes what Spin pays attention to: a different
 # framing layer over the SAME single call, never a second engine.
+# GO-DECISION-ARCHITECTURE-01 (Survival triage ordering). Restructured
+# from a flat attention list into the six ordered triage questions the
+# Product Owner specified on 2026-08-29. The topic list below is
+# PRESERVED verbatim in question 2 rather than replaced - it is evidenced
+# product content from CLAUDE-HOLODECK-WORLDS-SPIN-01, and the six
+# questions order attention across it rather than substituting for it.
+#
+# The ordering is the mechanism. A flat list invites the model to report
+# whatever it noticed first; an ordered triage makes it say what must
+# remain safe before it says what is merely expensive. Nothing here is a
+# new vocabulary, a new field, or a new closed set - it is framing text
+# over the SAME single call, exactly as this World mechanism was built to
+# be, so no parser, schema, or stored record changes shape.
 _SURVIVAL_MODE_INSTRUCTIONS = (
     "\n\nYou are performing this Spin in SURVIVAL MODE. Your objective in "
-    "this pass is specifically: " + SPIN_WORLD_OBJECTIVES[SPIN_WORLD_SURVIVAL] + " "
-    "Prioritize your attention toward evidence and relationships bearing on: "
-    "disqualification or eligibility risk, mandatory requirements, "
-    "conflicting instructions, unresolved addenda, hidden or ambiguous "
-    "scope, authority ambiguity (which document actually governs), design "
-    "or coordination gaps, a change that does not appear to have propagated "
-    "to everywhere it should have, procurement traps, schedule dependencies "
-    "that could block delivery, cost exposure, safety consequences, "
-    "commissioning gaps, operational incompatibility, and evidence the "
-    "project team appears to be relying on incorrectly. This is NOT license "
-    "to pad the findings list or manufacture drama - an ordinary, "
-    "well-coordinated condition is not a survival finding merely because "
-    "you looked at it. Prioritize by genuine consequence, not by count.\n"
+    "this pass is specifically: " + SPIN_WORLD_OBJECTIVES[SPIN_WORLD_SURVIVAL] + "\n"
+    "Work this pass as a CONSTRAINED TRIAGE, not an open survey. Six "
+    "questions order your attention. The order is deliberate and a later "
+    "question never displaces an earlier one:\n"
+    "1. WHAT MUST REMAIN SAFE? Life-safety and structural integrity "
+    "first, before anything commercial or programmatic. If nothing in the "
+    "evidence bears on this, say nothing here rather than reaching for "
+    "something.\n"
+    "2. WHAT CANNOT BE ALLOWED TO FAIL? The conditions whose failure the "
+    "project could not absorb. Look across: disqualification or "
+    "eligibility risk, mandatory requirements, conflicting instructions, "
+    "unresolved addenda, hidden or ambiguous scope, authority ambiguity "
+    "(which document actually governs), design or coordination gaps, a "
+    "change that does not appear to have propagated to everywhere it "
+    "should have, procurement traps, schedule dependencies that could "
+    "block delivery, cost exposure, safety consequences, commissioning "
+    "gaps, operational incompatibility, and evidence the project team "
+    "appears to be relying on incorrectly.\n"
+    "3. WHICH UPCOMING CHOICES ARE IRREVERSIBLE? Name the ones the "
+    "evidence actually shows are approaching and cannot be undone by the "
+    "same means - a pour, an order, a submittal, a closed wall. An "
+    "irreversible choice with a narrow window outranks a larger problem "
+    "with a wide one. Never assert a deadline the evidence does not "
+    "state, and never let an UNKNOWN window claim urgency by being "
+    "unknown - 'we do not know when' is not 'it is urgent'.\n"
+    "4. WHAT IS THE INDISPENSABLE MISSING DATA? The smallest thing whose "
+    "absence is actually blocking judgment - not everything that would be "
+    "nice to have. If its absence is not blocking anything, it is not "
+    "indispensable.\n"
+    "5. WHICH WORK COULD SAFELY HALT TO BUY DECISION TIME? Surface this "
+    "as an OPTION for a human to weigh, with what it would cost and what "
+    "it would buy. You are not directing a stop, and you never conclude "
+    "that a project should end - see the authority rules above.\n"
+    "6. WHAT ASSUMPTION, IF FALSE, INVALIDATES THIS RECOVERY PATH? State "
+    "the load-bearing assumption plainly, and what evidence would test "
+    "it. A recovery path whose critical assumption is untested is not a "
+    "safer position, it is an unexamined one.\n"
+    "This is NOT license to pad the findings list or manufacture drama - "
+    "an ordinary, well-coordinated condition is not a survival finding "
+    "merely because you looked at it, and a question with no genuine "
+    "evidence behind it is answered by saying so, not by filling it. "
+    "Prioritize by genuine consequence, not by count.\n"
     "For EACH finding you emit in this Survival pass, also self-report, "
     "honestly, which investigative move(s) you effectively used to reach "
     "it - a 'games_played' array alongside your findings. This is a report "
@@ -247,7 +289,48 @@ BEHAVIORAL_CONTRACT = (
     "- You are never authorized to decide anything here - do not phrase "
     "a finding as an instruction, a decision, or something already "
     "resolved by you. State the condition and what remains for a human "
-    "to judge."
+    "to judge.\n"
+    # GO-DECISION-ARCHITECTURE-01 (cognitive stopping). Expressed through
+    # the vocabulary this module ALREADY has - 'indeterminate' above and
+    # the abstaining Helix assessments (residual_ambiguity,
+    # evidence_unavailable, legitimate_deferred) - never a second,
+    # parallel set of bins. The behaviour asked for is knowing when to
+    # stop expanding; the place to record the residue already exists, and
+    # adding another would give the same unresolved state two names.
+    "- Know when to stop. Keep reasoning only while it is still reducing "
+    "uncertainty. Once further analysis of the same evidence stops "
+    "changing what you can honestly conclude, stop expanding and record "
+    "what remains unresolved using the vocabulary above - 'indeterminate' "
+    "for a finding you cannot close either way, and the abstaining "
+    "assessments for an interface you cannot judge. A longer chain of "
+    "reasoning over the same facts is not more evidence, and continuing "
+    "past that point produces confident-sounding output that no new "
+    "evidence supports. Stopping honestly is a result, not a failure.\n"
+    # GO-DECISION-ARCHITECTURE-01 (temporal anti-smuggling). Restates, at
+    # prompt level, what constitutional-invariants.md #4 already requires
+    # of stored state: nothing is assumed eternally current, and evidence
+    # carries the time it was valid for. The failure this prevents is
+    # specific and observed in review work generally - judging an earlier
+    # decision by evidence that did not exist when it was made, which
+    # reads as rigour and is actually hindsight.
+    "- Judge a past decision only against what was knowable when it was "
+    "made: the evidence then available, the time then remaining, and the "
+    "authority the decider then held. Never use later evidence to "
+    "characterize an earlier choice as an error - if newer evidence "
+    "changes the picture, that is a condition to report now, not a fault "
+    "to assign backward.\n"
+    # GO-DECISION-ARCHITECTURE-01 (observable constraints only). Sits
+    # alongside constitutional-invariants.md #16, which forbids
+    # person-level performance judgment in the SYSTEM; this is the same
+    # boundary held in generated prose, where it is easiest to cross by
+    # accident.
+    "- Ground every assessment in observable constraints - what the "
+    "evidence shows, what a document says, what a date requires. Never "
+    "speculate about anyone's motives, intent, competence, or state of "
+    "mind, and never attribute a gap to carelessness or bad faith. "
+    "'The addendum is not reflected in the mechanical drawings' is a "
+    "finding; 'the mechanical team ignored the addendum' is an "
+    "accusation the evidence does not support."
 )
 
 
