@@ -225,45 +225,39 @@ class MenubarCssTests(unittest.TestCase):
 
 
 class IdentityMarkAndActivityIndicatorTests(unittest.TestCase):
-    """CLAUDE-ARCHIOSK-IDENTITY-ACTIVITY-INDICATOR-01 - stationary identity
-    mark + three-dot working indicator, both structurally distinct from
-    the Archiosk menu item itself (Section 1: neither may substitute for
-    the other)."""
+    """CLAUDE-ARCHIOSK-IDENTITY-ACTIVITY-INDICATOR-01 - originally a
+    stationary identity mark PLUS a three-dot working indicator, both
+    structurally distinct from the Archiosk menu item itself (Section 1:
+    neither may substitute for the other).
+
+    CLAUDE-LETTERMARK-PURGE-01 retired the mark half on 2026-08-30: at the
+    16px it rendered at here it read as a bowtie beside the word "Archiosk"
+    it sat next to. The activity indicator is untouched and every assertion
+    about it below is unchanged - Section 1's separation still holds, with
+    one of the two things it separated now absent rather than merged.
+    """
 
     def setUp(self):
         self.html = _APP_MENU_HTML_PATH.read_text(encoding="utf-8")
         self.css = _MAIN_CSS_PATH.read_text(encoding="utf-8")
         self.js = _APP_MENU_JS_PATH.read_text(encoding="utf-8")
 
-    def test_mark_reuses_the_one_existing_archiosk_mark_macro(self):
-        # Not a new brand asset - macros.archiosk_mark() verbatim.
-        idx = self.html.index('class="workspace-app-mark"')
-        tag = self.html[idx - 40:idx + 200]
-        self.assertIn("macros.archiosk_mark(", tag)
+    def test_the_retired_mark_has_not_returned(self):
+        # CLAUDE-LETTERMARK-PURGE-01. Four tests stood here asserting the
+        # mark's macro, its position before the nav, its decorative-only
+        # semantics and its separation from the indicator. They are replaced
+        # by one guard rather than deleted silently: the risk now is not that
+        # the mark is wrong, it is that a future session reintroduces it.
+        self.assertNotIn("workspace-app-mark", self.html)
+        self.assertNotIn("archiosk_mark", self.html)
+        self.assertNotIn(".workspace-app-mark", self.css)
 
-    def test_mark_sits_before_the_nav_not_inside_any_menu_item(self):
-        mark_idx = self.html.index('class="workspace-app-mark"')
-        nav_idx = self.html.index('class="workspace-menubar"')
-        archiosk_menu_idx = self.html.index('data-ui-ref="menu.archiosk"')
-        self.assertLess(mark_idx, nav_idx)
-        self.assertLess(mark_idx, archiosk_menu_idx)
-        # Not inside any <details>/<summary> - no menu semantics of its own.
-        span = self.html[mark_idx - 10:mark_idx + 5]
-        self.assertNotIn("<details", span)
-        self.assertNotIn("<summary", span)
-
-    def test_mark_is_decorative_not_a_second_tab_stop(self):
-        idx = self.html.index('class="workspace-app-mark"')
-        tag = self.html[idx - 10:idx + 100]
-        self.assertIn('aria-hidden="true"', tag)
-        self.assertNotIn("<a ", tag)
-        self.assertNotIn("href=", tag)
-
-    def test_activity_indicator_is_a_separate_element_from_the_mark(self):
-        mark_idx = self.html.index('class="workspace-app-mark"')
+    def test_activity_indicator_still_sits_before_the_nav(self):
+        # Was asserted relative to the mark; now asserted on its own terms.
+        # The indicator's placement was never a consequence of the mark's.
         activity_idx = self.html.index('id="workspace-app-activity"')
-        self.assertLess(mark_idx, activity_idx)
         self.assertLess(activity_idx, self.html.index('class="workspace-menubar"'))
+        self.assertLess(activity_idx, self.html.index('data-ui-ref="menu.archiosk"'))
 
     def test_activity_indicator_hidden_by_default_with_three_dots(self):
         idx = self.html.index('id="workspace-app-activity"')
@@ -377,10 +371,14 @@ class MenuRendersEverywhereTests(_BaseTestCase):
         self.assertIn('data-ui-ref="menu.appearance"', body)
         self.assertNotIn('data-ui-ref="menu.display-layout"', body)
 
-    def test_identity_mark_and_activity_indicator_render_on_every_authenticated_page(self):
+    def test_activity_indicator_renders_on_every_authenticated_page(self):
+        # CLAUDE-LETTERMARK-PURGE-01: was "identity mark AND activity
+        # indicator". The mark is retired, so this asserts the half that
+        # survives - and that the retired half really is gone from a rendered
+        # page, not merely from the template source.
         client = self._client_as("menu_owner", 1)
         body = client.get("/projects").get_data(as_text=True)
-        self.assertIn('class="workspace-app-mark"', body)
+        self.assertNotIn('class="workspace-app-mark"', body)
         self.assertIn('id="workspace-app-activity"', body)
         idx = body.index('id="workspace-app-activity"')
         self.assertIn("hidden", body[idx - 20:idx + 200])

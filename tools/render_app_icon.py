@@ -1,14 +1,43 @@
 """CLAUDE-MOBILE-ICON-01 - generate the ARCHIOSK app icon.
+CLAUDE-LETTERMARK-PURGE-01 - the geometry below is now a lettermark.
 
     ./venv/Scripts/python.exe tools/render_app_icon.py
     ./venv/Scripts/python.exe tools/render_app_icon.py --proof
 
 Writes static/app-icon.svg, the PNG sizes phone home screens request, and the
 static/icons/app-icon.ico a browser asks for at /favicon.ico - all from the
-single geometry definition below. One source, so the vector and the
-rasters cannot drift apart - an earlier version of this tool restated the
-geometry separately from the SVG and that duplication was a defect waiting to
-happen.
+single geometry definition below. One source, so the vector and the rasters
+cannot drift apart - an earlier version of this tool restated the geometry
+separately from the SVG and that duplication was a defect waiting to happen.
+
+WHAT CHANGED, AND WHY
+
+This tool used to draw an X with a closed bottom and a waist - a constructed
+symbol, reconciled with templates/_macros.html's archiosk_mark. Product Owner
+direction, 2026-08-30, retired both: the constructed mark read as an hourglass
+in the tab and as a bowtie in the menu bar and on the sign-in card, and the
+acceptance bar the earlier mark was held to ("must not collapse into an
+ambiguous X") turned out not to hold at the sizes it actually shipped at - 16px
+in a tab strip, 16px beside the app menu.
+
+So there is no constructed symbol in the product any more. The UI surfaces
+carry the "Archiosk" wordmark alone, and this file draws the one place a
+graphic is unavoidable: a tab, a bookmark and a home screen must show
+something. That something is now a letter.
+
+WHY A LETTER, DRAWN, RATHER THAN TYPE
+
+A lettermark cut as geometry rather than set in a font is not decoration - it
+is what keeps the icon legible at 16px, where a text glyph's own hinting and
+side bearings are outside our control and where the display face's thin strokes
+disappear. The strokes here are 50 units in a 512 box, so the thinnest thing in
+the mark is about 1.6px at 16px: still a real mark rather than a grey smudge.
+
+The apex is CUT FLAT rather than pointed, and the feet are cut flat too. A
+sharp apex is the first thing to vanish under a LANCZOS downsample; a flat one
+holds its width all the way down. The counter - the triangular hole above the
+crossbar - is what makes it read as A rather than as a tent, and it is sized so
+it survives the smallest frame the .ico carries.
 
 WHY PNG IS REQUIRED, NOT A CONVENIENCE
 
@@ -17,23 +46,6 @@ page, which is how an installed app ends up on a home screen with no icon. So
 the PNGs must exist as real committed binaries - and a committed binary nobody
 can regenerate is exactly the kind of asset that silently drifts from its
 source. This script is what keeps that from happening.
-
-WHY THE MARK IS A FILLED OUTLINE AND NOT A STROKED LINE
-
-Product Owner: "Cut the icon's ends with a knife. The left shorter one
-horizontally and the right one vertically. And make the edges of the base
-angles sharp."
-
-A stroked polyline cannot do that. SVG offers exactly three line caps - butt,
-round, square - and every one of them is PERPENDICULAR to the stroke's own
-direction. Both free ends here are diagonal, so no cap setting can produce a
-horizontal cut on one and a vertical cut on the other; `butt` would give two
-diagonal cuts at different angles, which is not what was asked for.
-
-So the centreline is offset into a real closed polygon here, in code, with
-MITRE joins (the sharp base angles) and each end terminated against a chosen
-line rather than against the stroke's own perpendicular. That makes the two
-knife cuts a property of the geometry instead of something the renderer decides.
 
 --proof writes a sheet at true home-screen sizes (48/60/76/120) to the system
 temp directory. Judge the icon there first: a mark that looks considered at
@@ -56,31 +68,26 @@ ICO_PATH = ICON_DIR / "app-icon.ico"
 
 GROUND = "#0b1f28"
 MARK = "#e9f4f7"
-ACCENT = "#4db3c9"
 
-# The centreline, in a 512 box. Product Owner geometry: an X whose BOTTOM IS
-# CLOSED and whose UPPER-LEFT ARM IS SHORTER. Read as one continuous walk:
-#   short upper-left arm -> waist -> bottom-left foot -> CLOSING BASE ->
-#   bottom-right foot -> back through the waist -> long upper-right arm.
-CENTRELINE = [
-    (178.0, 158.0),   # upper-left end   - cut HORIZONTALLY
-    (256.0, 268.0),   # waist
-    (150.0, 388.0),   # bottom-left foot - sharp
-    (362.0, 388.0),   # bottom-right foot- sharp
-    (256.0, 268.0),   # waist again
-    (372.0, 128.0),   # upper-right end  - cut VERTICALLY
-]
-WIDTH = 36.0
+# The lettermark, in a 512 box. An "A": two legs from a flat apex, one
+# crossbar, one triangular counter.
+#
+# Symmetric on purpose. The retired mark's identity was its asymmetry, and
+# asymmetry is exactly what stopped it reading as the letter it was next to.
+# A lettermark has no such licence: an A that leans is a worse A.
+APEX = (256.0, 128.0)
+FOOT_Y = 396.0
+LEFT_FOOT = (160.0, FOOT_Y)
+RIGHT_FOOT = (352.0, FOOT_Y)   # 160 + 352 = 512, so the form is centred
+STROKE = 50.0
+
+# The crossbar sits low. Placed at the optical centre rather than the
+# geometric one - a crossbar on the true midline reads as too high, because
+# the counter above it is narrower than the space below it.
+BAR_Y = 308.0
+BAR_HALF = 22.0
+
 CORNER_RADIUS = 112
-WAIST = (256.0, 268.0)
-WAIST_RADIUS = 20.0
-
-# The knife cuts. The left arm ends against a horizontal line, the right arm
-# against a vertical one - so the two terminations disagree with each other on
-# purpose, which is what stops the form reading as a symmetrical X.
-LEFT_CUT_Y = 158.0
-RIGHT_CUT_X = 372.0
-
 MASKABLE_INSET = 0.10
 # The frames a .ico carries. 16 is the browser tab, 32 the Windows taskbar and
 # bookmark bar, 48 the desktop shortcut; 64 covers a HiDPI tab strip.
@@ -98,101 +105,107 @@ def _normal(direction):
     return -direction[1], direction[0]
 
 
-def outline(points=CENTRELINE, width=WIDTH):
-    """Offset the centreline into a closed polygon with mitre joins.
+def _leg(apex, foot, width=STROKE):
+    """One diagonal, offset into a closed quad with both ends cut FLAT.
 
-    Returns the polygon in order. It self-intersects at the waist, because the
-    centreline passes through that point twice - which is fine and intended:
-    filled with the nonzero rule the overlap renders solid, and the alternative
-    (splitting the mark into separate shapes) would put a visible seam through
-    the middle of the form.
+    The cut is the point. Offsetting a centreline and letting the ends
+    terminate perpendicular to the stroke would leave the apex and the feet
+    sloping, which at 16px reads as a blurred edge rather than a deliberate
+    one. Each end is instead carried along its own direction until it meets a
+    horizontal line - so the apex is level and the feet sit flat on a shared
+    baseline, both as real geometry rather than a renderer setting.
     """
+    direction = _unit(apex, foot)
+    normal = _normal(direction)
     half = width / 2.0
-    directions = [_unit(points[i], points[i + 1]) for i in range(len(points) - 1)]
-    normals = [_normal(d) for d in directions]
 
-    def side(sign):
-        result = []
-        # Start cap: terminate against the horizontal cut line rather than
-        # against the segment's own perpendicular.
-        start = (
-            points[0][0] + sign * half * normals[0][0],
-            points[0][1] + sign * half * normals[0][1],
-        )
-        t = (LEFT_CUT_Y - start[1]) / directions[0][1]
-        result.append((start[0] + t * directions[0][0], LEFT_CUT_Y))
+    def cut(point, sign, target_y):
+        x = point[0] + sign * half * normal[0]
+        y = point[1] + sign * half * normal[1]
+        t = (target_y - y) / direction[1]
+        return (x + t * direction[0], target_y)
 
-        for j in range(1, len(points) - 1):
-            n1, n2 = normals[j - 1], normals[j]
-            # Standard mitre: where the two offset lines actually meet. At a
-            # sharp vertex this runs a long way past the corner, which is
-            # precisely the requested "sharp edge" at the feet.
-            denominator = 1.0 + (n1[0] * n2[0] + n1[1] * n2[1])
-            scale = half / denominator
-            result.append((
-                points[j][0] + sign * scale * (n1[0] + n2[0]),
-                points[j][1] + sign * scale * (n1[1] + n2[1]),
-            ))
-
-        end = (
-            points[-1][0] + sign * half * normals[-1][0],
-            points[-1][1] + sign * half * normals[-1][1],
-        )
-        t = (RIGHT_CUT_X - end[0]) / directions[-1][0]
-        result.append((RIGHT_CUT_X, end[1] + t * directions[-1][1]))
-        return result
-
-    left = side(1.0)
-    right = side(-1.0)
-    return left + list(reversed(right))
+    return [
+        cut(apex, 1.0, apex[1]),
+        cut(apex, -1.0, apex[1]),
+        cut(foot, -1.0, foot[1]),
+        cut(foot, 1.0, foot[1]),
+    ]
 
 
-def svg_path_data(polygon=None):
-    polygon = polygon or outline()
-    parts = ["M %.1f %.1f" % polygon[0]]
-    parts += ["L %.1f %.1f" % point for point in polygon[1:]]
-    parts.append("Z")
-    return " ".join(parts)
+def _crossbar():
+    """The bar, spanning between the two legs at BAR_Y.
+
+    Its ends are pushed past each leg's centreline by half a stroke so the
+    three shapes overlap rather than abut. An abutment leaves a hairline seam
+    at some rasterisation sizes and not others; an overlap filled nonzero
+    never does.
+    """
+    def leg_x_at(foot):
+        t = (BAR_Y - APEX[1]) / (foot[1] - APEX[1])
+        return APEX[0] + t * (foot[0] - APEX[0])
+
+    left = leg_x_at(LEFT_FOOT) - STROKE / 2.0
+    right = leg_x_at(RIGHT_FOOT) + STROKE / 2.0
+    return [
+        (left, BAR_Y - BAR_HALF),
+        (right, BAR_Y - BAR_HALF),
+        (right, BAR_Y + BAR_HALF),
+        (left, BAR_Y + BAR_HALF),
+    ]
 
 
-SVG_TEMPLATE = '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="ARCHIOSK">
-    <!-- CLAUDE-MOBILE-ICON-01 - the home-screen app icon.
-         EXPERIMENTAL until Product Owner visual acceptance.
+def polygons():
+    """The three closed shapes the mark is made of, in draw order.
 
-         GENERATED by tools/render_app_icon.py from the centreline in that file.
+    Three separate polygons rather than one merged outline: filled with the
+    nonzero rule they render as a single solid form, and keeping them separate
+    means the counter above the crossbar is simply the space they do not
+    cover - never a subtracted hole that a fill-rule change could accidentally
+    flood.
+    """
+    return [
+        _leg(APEX, LEFT_FOOT),
+        _leg(APEX, RIGHT_FOOT),
+        _crossbar(),
+    ]
+
+
+def svg_path_data(shapes=None):
+    shapes = shapes or polygons()
+    subpaths = []
+    for shape in shapes:
+        parts = ["M %.1f %.1f" % shape[0]]
+        parts += ["L %.1f %.1f" % point for point in shape[1:]]
+        parts.append("Z")
+        subpaths.append(" ".join(parts))
+    return " ".join(subpaths)
+
+
+SVG_TEMPLATE = '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Archiosk">
+    <!-- CLAUDE-LETTERMARK-PURGE-01 - the app icon.
+
+         GENERATED by tools/render_app_icon.py from the geometry in that file.
          Do not hand-edit the path below: change the geometry there and re-run,
          or the SVG and the PNG home-screen icons will disagree.
 
-         PRODUCT OWNER DIRECTION, carried forward:
-           - based on an X; THE BOTTOM PORTION IS CLOSED; the upper-left portion
-             is SHORTER; intentional, dynamic, recognisable; legible small;
-             architectural/technical, not decorative;
-           - "Cut the icon's ends with a knife. The left shorter one
-             horizontally and the right one vertically. And make the edges of
-             the base angles sharp."
+         PRODUCT OWNER DIRECTION, 2026-08-30: the constructed mark is retired.
+         It read as an hourglass in the browser tab and as a bowtie on the
+         sign-in card and in the app menu. The UI surfaces now carry the
+         "Archiosk" wordmark with no symbol beside it; this file draws the one
+         place a graphic cannot be omitted, because a tab, a bookmark and a
+         home screen must all show something.
 
-         Closing the bottom turns four open arms into a base the form stands on,
-         which is also why it survives being shrunk - a closed area holds its
-         shape at 48px where four thin open arms do not. The asymmetry is the
-         identity: the upper-left arm is about two-thirds the reach of the
-         upper-right.
+         What replaced it is a letter, cut as geometry rather than set in a
+         font - a text glyph's hinting and side bearings are outside our
+         control at 16px, which is the size that actually matters here. Flat
+         apex and flat feet for the same reason: a sharp apex is the first
+         thing a downsample destroys.
 
-         The knife cuts are why this is a FILLED OUTLINE rather than a stroked
-         line: SVG's three line caps are all perpendicular to the stroke, and
-         both free ends here are diagonal, so no cap setting can give one a
-         horizontal termination and the other a vertical one. The mitred feet
-         are sharp for the same reason - the corner is real geometry now, not a
-         renderer setting.
-
-         Reconciled with existing branding rather than invented: the waist point
-         and the two-arms-from-a-centre construction both come from
-         templates/_macros.html's archiosk_mark. -->
+         Deliberately symmetric. The retired mark's identity was its asymmetry,
+         and that asymmetry is what stopped it reading as a letter. -->
     <rect width="512" height="512" rx="112" fill="%(ground)s"/>
     <path d="%(path)s" fill="%(mark)s" fill-rule="nonzero"/>
-    <!-- The waist, carried over from the wordmark mark. It is what stops the
-         form reading as a plain arrowhead, and it is the one place the accent
-         appears - colour is used once, and means "this is the centre". -->
-    <circle cx="%(cx)s" cy="%(cy)s" r="%(r)s" fill="%(accent)s"/>
 </svg>
 '''
 
@@ -202,11 +215,7 @@ def write_svg() -> Path:
         SVG_TEMPLATE % {
             "ground": GROUND,
             "mark": MARK,
-            "accent": ACCENT,
             "path": svg_path_data(),
-            "cx": "%g" % WAIST[0],
-            "cy": "%g" % WAIST[1],
-            "r": "%g" % WAIST_RADIUS,
         },
         encoding="utf-8",
     )
@@ -230,16 +239,10 @@ def render(size: int, inset: float = 0.0, ground: bool = True) -> Image.Image:
         x, y = point
         return ((x - 256) * shrink + 256) * scale, ((y - 256) * shrink + 256) * scale
 
-    # The same polygon the SVG carries - drawn filled, so the knife cuts and the
-    # sharp feet survive rasterisation exactly as the vector has them.
-    draw.polygon([place(p) for p in outline()], fill=MARK)
-
-    waist_x, waist_y = place(WAIST)
-    waist_r = WAIST_RADIUS * scale * shrink
-    draw.ellipse(
-        [waist_x - waist_r, waist_y - waist_r, waist_x + waist_r, waist_y + waist_r],
-        fill=ACCENT,
-    )
+    # The same three polygons the SVG carries - drawn filled, so the flat apex
+    # and flat feet survive rasterisation exactly as the vector has them.
+    for shape in polygons():
+        draw.polygon([place(p) for p in shape], fill=MARK)
 
     return image.resize((size, size), Image.LANCZOS)
 
@@ -301,9 +304,9 @@ def main() -> None:
                         help="also write a small-size proof sheet to the temp directory")
     args = parser.parse_args()
 
-    polygon = outline()
-    xs = [p[0] for p in polygon]
-    ys = [p[1] for p in polygon]
+    points = [p for shape in polygons() for p in shape]
+    xs = [p[0] for p in points]
+    ys = [p[1] for p in points]
     print("mark bounds: x %.1f..%.1f  y %.1f..%.1f" % (min(xs), max(xs), min(ys), max(ys)))
 
     print(f"wrote {write_svg().relative_to(REPO_ROOT)}")

@@ -15,7 +15,6 @@
    reset-password's own .gateway-card-compact modifier still relies on.
    ============================================================ #}
 {% extends "gateway_shell.html" %}
-{% import "_macros.html" as macros %}
 
 {% block title %}{% block gateway_title %}Archiosk{% endblock %}{% endblock %}
 
@@ -29,9 +28,11 @@
            populates it. See that template for the actual link/script. #}
         {% block gateway_back_action %}{% endblock %}
         <div class="gateway-brand">
-            {# CLAUDE-BOTTLENECK-ADOPTION-01: same swap as auth_shell.html
-               - see that template's own comment. #}
-            <div class="gateway-logo">{{ macros.archiosk_mark(size=36) }}</div>
+            {# CLAUDE-LETTERMARK-PURGE-01: the constructed mark that stood here is
+               retired (Product Owner, 2026-08-30) - it read as a bowtie beside the
+               wordmark. The wordmark stands alone now; the only surviving graphic is
+               the app icon, which exists because a tab and a home screen must show
+               something. See tools/render_app_icon.py. #}
             <div>
                 <h1>Archiosk</h1>
                 {% block gateway_subtitle %}{% endblock %}

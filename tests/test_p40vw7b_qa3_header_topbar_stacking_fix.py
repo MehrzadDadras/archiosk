@@ -443,16 +443,27 @@ class ArchiosMenuIdentityActivityRealBrowserTests(unittest.TestCase):
         html = re.sub(r'<script[^>]+src="[^"]*"[^>]*></script>', "", html)
         return html
 
-    def test_mark_and_activity_indicator_are_visually_distinct_at_idle(self):
+    def test_idle_topbar_is_quiet_and_carries_no_identity_mark(self):
+        # CLAUDE-LETTERMARK-PURGE-01: was "mark and activity indicator are
+        # visually distinct at idle". The mark half was retired on 2026-08-30
+        # for reading as a bowtie at the 16px it rendered at here, so the
+        # distinction it proved has one term left.
+        #
+        # The surviving half - idle is quiet, nothing rendered at rest - is
+        # asserted unchanged. The retired half is inverted rather than dropped:
+        # a real browser, laying out the real stylesheet, is the strongest
+        # place to prove the mark is genuinely absent rather than merely
+        # absent from template source.
         html = self._standalone_workspace_page()
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
             try:
                 page = browser.new_page(viewport={"width": 1400, "height": 900})
                 page.set_content(html, wait_until="load")
-                mark = page.query_selector(".workspace-app-mark")
-                self.assertIsNotNone(mark)
-                self.assertTrue(mark.is_visible())
+                self.assertIsNone(page.query_selector(".workspace-app-mark"),
+                                  "the retired identity mark is rendering again")
+                self.assertIsNone(page.query_selector(".archiosk-mark"),
+                                  "the retired mark's SVG is rendering again")
                 activity = page.query_selector("#workspace-app-activity")
                 self.assertIsNotNone(activity)
                 self.assertFalse(activity.is_visible(), "idle state must be quiet - no dots rendered at rest")

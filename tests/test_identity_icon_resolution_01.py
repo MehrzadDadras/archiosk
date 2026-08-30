@@ -189,42 +189,26 @@ class ViewBoxContainmentTests(unittest.TestCase):
         viewbox = _numbers(re.search(r'viewBox="([^"]+)"', svg).group(1))
         self.assertEqual(viewbox, [0.0, 0.0, 512.0, 512.0])
 
+        # CLAUDE-LETTERMARK-PURGE-01: one path, now carrying three subpaths
+        # (two legs and a crossbar), and no <circle> - the retired mark's
+        # accent dot went with it. Every coordinate in the path is checked
+        # rather than a sampled subset.
         coords = _numbers(re.search(r'<path[^>]*\sd="([^"]+)"', svg).group(1))
         xs, ys = coords[0::2], coords[1::2]
+        self.assertTrue(xs, "no path geometry found in the app icon")
+        self.assertNotIn("<circle", svg, "the accent dot was retired with the old mark")
 
-        circle = re.search(r'<circle[^>]*cx="([\d.]+)"[^>]*cy="([\d.]+)"[^>]*r="([\d.]+)"', svg)
-        cx, cy, r = (float(g) for g in circle.groups())
+        self.assertGreaterEqual(min(xs), viewbox[0])
+        self.assertGreaterEqual(min(ys), viewbox[1])
+        self.assertLessEqual(max(xs), viewbox[2])
+        self.assertLessEqual(max(ys), viewbox[3])
 
-        self.assertGreaterEqual(min(min(xs), cx - r), viewbox[0])
-        self.assertGreaterEqual(min(min(ys), cy - r), viewbox[1])
-        self.assertLessEqual(max(max(xs), cx + r), viewbox[2])
-        self.assertLessEqual(max(max(ys), cy + r), viewbox[3])
-
-    def test_the_chrome_mark_stroke_sits_inside_its_viewbox(self):
-        # A STROKE is centred on its path, so half of it lies outside the
-        # coordinates in the `d`. Checking the raw points would pass a mark
-        # whose stroke is visibly shaved off at 16px in the menu bar.
-        macro = _MACROS_PATH.read_text(encoding="utf-8")
-        svg = re.search(r'(<svg class="archiosk-mark.*?</svg>)', macro, flags=re.S).group(1)
-
-        viewbox = _numbers(re.search(r'viewBox="([^"]+)"', svg).group(1))
-        half = float(re.search(r'stroke-width="([\d.]+)"', svg).group(1)) / 2
-
-        xs: list[float] = []
-        ys: list[float] = []
-        for d in re.findall(r'<path[^>]*\sd="([^"]+)"', svg):
-            coords = _numbers(d)
-            xs += coords[0::2]
-            ys += coords[1::2]
-        self.assertTrue(xs, "no path geometry found in the mark")
-
-        circle = re.search(r'<circle[^>]*cx="([\d.]+)"[^>]*cy="([\d.]+)"[^>]*r="([\d.]+)"', svg)
-        cx, cy, r = (float(g) for g in circle.groups())
-
-        self.assertGreaterEqual(min(min(xs) - half, cx - r), viewbox[0])
-        self.assertGreaterEqual(min(min(ys) - half, cy - r), viewbox[1])
-        self.assertLessEqual(max(max(xs) + half, cx + r), viewbox[2])
-        self.assertLessEqual(max(max(ys) + half, cy + r), viewbox[3])
+    # CLAUDE-LETTERMARK-PURGE-01: test_the_chrome_mark_stroke_sits_inside_its_
+    # viewbox was removed here, not weakened. It checked that the inline
+    # archiosk_mark's STROKE stayed inside its own 64-unit viewBox; that macro
+    # was retired on 2026-08-30 and there is no longer a stroked chrome mark
+    # anywhere in the product for it to measure. The app-icon check above is
+    # the only viewBox containment that still has a subject.
 
 
 class NoLayoutShiftTests(unittest.TestCase):
@@ -254,11 +238,12 @@ class NoLayoutShiftTests(unittest.TestCase):
             height = re.search(r'\sheight="([^"]+)"', tag).group(1)
             self.assertEqual(width, height, f"{path}: {tag}")
 
-    def test_the_shared_chrome_mark_declares_its_own_size(self):
-        macro = _MACROS_PATH.read_text(encoding="utf-8")
-        svg = re.search(r'(<svg class="archiosk-mark[^>]*>)', macro).group(1)
-        self.assertIn('width="{{ size }}"', svg)
-        self.assertIn('height="{{ size }}"', svg)
+    # CLAUDE-LETTERMARK-PURGE-01: test_the_shared_chrome_mark_declares_its_own_
+    # size was removed here. It asserted the inline archiosk_mark macro
+    # rendered width/height from its own `size` argument so the menu bar
+    # reserved space before paint. The macro is retired; the two <img> tests
+    # above still cover every identity image that remains, which is the whole
+    # of the layout-shift risk now.
 
 
 class ShellDeclarationsAreConsistentTests(unittest.TestCase):

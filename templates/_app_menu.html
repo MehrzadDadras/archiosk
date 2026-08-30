@@ -22,35 +22,14 @@
    command-reuse behavior) and set static_version-qualified script src
    the same way base.html already does.
 
-   CLAUDE-ARCHIOSK-IDENTITY-ACTIVITY-INDICATOR-01: this file's own
-   {% import %} is self-contained (never relies on the including
-   template having already imported _macros.html itself) - base.html
-   does, but gateway_shell.html does not, and {% include %} only shares
-   variables already bound in the CALLING template's context, not a
-   second template's own imports. #}
-            {% import "_macros.html" as macros %}
+   CLAUDE-LETTERMARK-PURGE-01: this file's own {% import %} went with the
+   mark it existed for - nothing here uses a macro any more. #}
             <div class="workspace-topbar-identity">
-                {# CLAUDE-ARCHIOSK-IDENTITY-ACTIVITY-INDICATOR-01, Section 1:
-                   a small, persistent, stationary identity mark at the
-                   absolute top-left corner, immediately before the
-                   Archiosk menu trigger - NOT itself a menu item (no
-                   href, no <details>/<summary>, not inside menu.archiosk's
-                   own <details>), not the working/activity indicator
-                   (that is the SEPARATE element immediately after it,
-                   below). Reuses macros.archiosk_mark() verbatim - the
-                   one and only mark that has ever existed in this
-                   repository (see that macro's own header comment) -
-                   never a new brand asset. Restrained: --text-metadata
-                   (the same "clearly readable, not decorative" tier
-                   metadata/labels already use elsewhere), NOT the bold
-                   --brand-gold the now-retired CLAUDE-P40-BRAND1 treatment
-                   used - Section 1's own "must not visually dominate the
-                   menu bar" requirement, and genuinely distinct from
-                   Archiosk's own plain-menu-item treatment (Product
-                   Owner, explicit, CLAUDE-APP-MENU-01: "not a separate
-                   logo") since this sits OUTSIDE that menu item
-                   entirely, never inside its summary/trigger. #}
-                <span class="workspace-app-mark" data-ui-ref="menu.archiosk.mark" aria-hidden="true">{{ macros.archiosk_mark(size=16) }}</span>
+                {# CLAUDE-LETTERMARK-PURGE-01: the constructed mark that stood here is
+                   retired (Product Owner, 2026-08-30) - it read as a bowtie beside the
+                   wordmark. The wordmark stands alone now; the only surviving graphic is
+                   the app icon, which exists because a tab and a home screen must show
+                   something. See tools/render_app_icon.py. #}
                 {% if developer_ui_reveal and template_identity %}
                 <span class="developer-template-identity" data-ui-ref="developer.template.identity" aria-label="{{ template_identity.template_id }} {{ template_identity.name }}">
                     <form method="post" action="{{ url_for('portal.developer_home_context') }}" class="developer-template-identity-form">

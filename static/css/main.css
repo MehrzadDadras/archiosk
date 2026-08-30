@@ -2222,25 +2222,16 @@ main:has(.document-viewer-canvas-container) {
 .gateway-back-action { padding: 1.4rem 2rem 0; }
 .gateway-back-action .btn { padding: 0.4rem 0.9rem; font-size: 0.85rem; }
 .gateway-brand { display: flex; align-items: center; gap: 1.2rem; padding: 2rem 2rem 1.5rem; }
-/* CLAUDE-BOTTLENECK-ADOPTION-01: was a flat bee-yellow filled badge with
-   a literal "A" glyph (font-family/font-size/font-weight below existed
-   only to render that letter) - now holds the real archiosk_mark SVG
-   (CLAUDE-P40-BRAND1's shared macro), so the badge fill/glyph-typography
-   properties are gone; footprint (56x56, same flex/width/height) and
-   position are untouched, preserving the established sign-in/gateway
-   composition. Color via --brand-gold, the same token the authenticated
-   header's own mark already uses - .gateway-card-compact and
-   .gateway-shell each redefine it locally (see their own rules) so this
-   repaints correctly against both the sign-in card and the Gateway
-   card's dark backdrop without a separate override here. */
-.gateway-logo {
-    display: grid;
-    place-items: center;
-    flex: 0 0 56px;
-    width: 56px;
-    height: 56px;
-    color: var(--brand-gold);
-}
+/* CLAUDE-LETTERMARK-PURGE-01: .gateway-brand is now a wordmark lockup
+   with nothing beside it. Its history, kept because it explains why the
+   rule below is only typography: it began as a flat bee-yellow badge
+   carrying a literal "A" glyph, became the archiosk_mark SVG under
+   CLAUDE-BOTTLENECK-ADOPTION-01, and lost the symbol entirely on
+   2026-08-30 when that mark was retired for reading as a bowtie beside
+   the very word it sat next to. The `gap: 1.2rem` above now has one
+   child to space and is harmless; it is left in place so a future
+   second element lands in the established composition rather than
+   flush against the card edge. */
 .gateway-brand h1 { font-family: var(--font-display); font-size: 1.8rem; font-weight: 300; margin: 0; color: var(--text-primary); }
 .gateway-subtitle { margin: 0.3rem 0 0; color: var(--text-secondary); font-size: var(--text-sm); }
 .gateway-divider { height: 1px; margin: 0 2rem; background: var(--border); }
@@ -2399,14 +2390,6 @@ main:has(.document-viewer-canvas-container) {
     --border-strong: rgba(176, 219, 255, .5);
     --machine-blue: rgba(200, 230, 255, .8);
     --failure-red: rgba(255, 170, 150, .95);
-    /* CLAUDE-BOTTLENECK-ADOPTION-01: was never redefined here before
-       (nothing in this card used --brand-gold pre-adoption) - without
-       this, .gateway-logo's mark would inherit the unscoped Light-theme
-       value (tokens.css's own dark-bronze --brand-gold), nearly
-       invisible against this card's own dark translucent background.
-       Same alias .gateway-shell already uses for the identical reason
-       (see its own rule below). */
-    --brand-gold: var(--bee-yellow);
     background-color: rgba(8, 28, 36, .72);
     -webkit-backdrop-filter: blur(14px);
     backdrop-filter: blur(14px);
@@ -2763,13 +2746,6 @@ main:has(.document-viewer-canvas-container) {
     font-family: var(--font-display);
     font-size: 1.2rem;
     font-weight: 600;
-}
-/* The mark is an inline SVG (stroke="currentColor"), so it inherits
-   this SAME --brand-gold color for free - one declaration drives both
-   the icon and the wordmark, no separate color rule needed for either. */
-.archiosk-mark {
-    flex-shrink: 0;
-    align-self: center;
 }
 /* CLAUDE-P40-BRAND1: no per-Appearance override rule here on purpose -
    .workspace-topbar is already one of the combined "owned surface
@@ -3139,21 +3115,6 @@ main:has(.document-viewer-canvas-container) {
    than inventing a second one - this rule intentionally does not touch
    those three's own tested selector group above; it duplicates the same
    properties for the menu bar's own panels instead. */
-/* CLAUDE-ARCHIOSK-IDENTITY-ACTIVITY-INDICATOR-01: the stationary identity
-   mark (Section 1) - small (16px), restrained --text-metadata (the same
-   "clearly readable, not decorative" tier as timestamps/ids elsewhere),
-   vertically centered via the shared align-items:baseline on
-   .workspace-topbar-identity actually needing center alignment for this
-   one non-text glyph specifically - align-self overrides just this
-   child. Never itself a menu item: no href, no cursor:pointer, no
-   hover/focus treatment of any kind. */
-.workspace-app-mark {
-    display: inline-flex;
-    align-items: center;
-    align-self: center;
-    color: var(--text-metadata);
-    flex-shrink: 0;
-}
 /* Section 2/3/4: the three-dot working indicator. Hidden by default
    (Section 3/7 - idle is quiet, nothing rendered at rest, not merely
    dim) - static/js/case_workspace.js's own Composer submit handler

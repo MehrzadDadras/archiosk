@@ -58,128 +58,65 @@ def _rule_body(css: str, selector: str) -> str:
         pos = match.end()
 
 
-class RepositoryGroundingTests(unittest.TestCase):
-    """Section 1-style check: exactly one shared mark source exists, not
-    a per-caller copy - the whole point of "one shared SVG/source"."""
+class MarkRetirementTests(unittest.TestCase):
+    """CLAUDE-LETTERMARK-PURGE-01 - the mark this file was written to guard
+    no longer exists.
 
-    def test_svg_path_data_appears_exactly_once_in_macros(self):
-        source = _MACROS_HTML_PATH.read_text(encoding="utf-8")
-        # CLAUDE-BOTTLENECK-ADOPTION-01: gap widened (see the macro's own
-        # comment) - path data changed, needle updated to match.
-        needle = "M12 8 L21 30 L7 58"
-        self.assertEqual(source.count(needle), 1)
+    What stood here: RepositoryGroundingTests (the path data appears exactly
+    once, nowhere copied) and MacroGeometryTests (two straight-line paths, no
+    curves, no crossbar, mirrored halves, a bottleneck gap that does not close,
+    a filled dot below it, stroke ~5 units on a 64 viewBox). Fifteen tests, all
+    asserting a shape.
 
-    def test_no_second_copy_of_the_mark_path_anywhere_else_in_templates(self):
-        needle = "M12 8 L21 30 L7 58"
-        for path in (_REPO_ROOT / "templates").rglob("*.html"):
-            if path == _MACROS_HTML_PATH:
-                continue
-            self.assertNotIn(needle, path.read_text(encoding="utf-8"), path)
+    They were not weakened and they did not start failing. Their subject was
+    retired by the Product Owner on 2026-08-30: at the sizes the mark actually
+    shipped at - 16px beside the app menu, 36px on the sign-in card - it read
+    as a bowtie next to the word "Archiosk", and the acceptance bar it had been
+    held to was that it "must not collapse into an ambiguous X". That bar was
+    met at 512px and not where it mattered.
 
-
-class MacroGeometryTests(unittest.TestCase):
-    """Pins down the five required visible elements from the corrected,
-    straight-line-only construction: two mirrored asymmetrical open
-    angles (short arm, longer leaning leg) with a non-touching
-    "bottleneck" gap between their inner vertices, plus one dot on the
-    centreline just below the gap. No curves, no crossbar - both
-    explicitly prohibited additions."""
+    Deleting the file would have left nothing watching the space. So the
+    geometry assertions are replaced by the inverse invariant: the mark stays
+    gone, and it stays gone everywhere, including in CSS that would style a
+    reintroduced one. Everything below this class - the topbar wordmark, its
+    token scoping, and the contrast checks - is untouched and still governs.
+    """
 
     def setUp(self):
-        self.source = _MACROS_HTML_PATH.read_text(encoding="utf-8")
-        start = self.source.index("{% macro archiosk_mark")
-        end = self.source.index("{% endmacro %}", start)
-        self.macro = self.source[start:end]
+        self.macros = _MACROS_HTML_PATH.read_text(encoding="utf-8")
+        self.css = _MAIN_CSS_PATH.read_text(encoding="utf-8")
 
-    def test_exactly_two_straight_line_paths_and_one_dot(self):
-        self.assertEqual(self.macro.count("<path "), 2)
-        self.assertEqual(self.macro.count("<circle "), 1)
+    def test_the_macro_is_gone(self):
+        self.assertNotIn("{% macro archiosk_mark", self.macros)
 
-    def test_no_curves_of_any_kind(self):
-        # Q (quadratic)/C (cubic)/A (arc) commands are all explicitly
-        # prohibited - straight lines (M/L) only.
-        for forbidden in (" Q ", " C ", " A "):
-            self.assertNotIn(forbidden, self.macro)
+    def test_no_template_still_calls_it(self):
+        templates = _REPO_ROOT / "templates"
+        for path in templates.rglob("*.html"):
+            body = re.sub(r"\{#.*?#\}", "", path.read_text(encoding="utf-8"), flags=re.S)
+            self.assertNotIn("archiosk_mark(", body, str(path))
 
-    def test_no_crossbar(self):
-        # Each angle is exactly M-L-L (vertex, arm, leg) - 2 "L" line-to
-        # commands per path, 2 paths, 4 total. A crossbar would need a
-        # third path or a third L within one - the one explicitly
-        # prohibited "A" feature this mark must still suggest without.
-        self.assertEqual(len(re.findall(r"L\d", self.macro)), 4)
-        for path_body in re.findall(r'<path d="([^"]+)"', self.macro):
-            self.assertEqual(len(re.findall(r"L\d", path_body)), 2)
+    def test_the_retired_path_data_appears_nowhere(self):
+        # The mark's own geometry, verbatim. A reintroduction that copied the
+        # old shape under a new name would still be the same bowtie.
+        for needle in ("M12 8 L21 30 L7 58", "M52 8 L43 30 L57 58"):
+            for path in (_REPO_ROOT / "templates").rglob("*.html"):
+                self.assertNotIn(needle, path.read_text(encoding="utf-8"), str(path))
 
-    def test_each_angle_has_a_shorter_upper_arm_and_a_longer_lower_leg(self):
-        import math
+    def test_no_css_remains_to_style_a_reintroduced_mark(self):
+        # Orphan rules are how a retired element quietly comes back looking
+        # correct - the markup returns and the styling is already waiting.
+        for selector in (".archiosk-mark", ".workspace-app-mark", ".gateway-logo"):
+            self.assertNotIn(selector + " ", self.css)
+            self.assertNotIn(selector + "{", self.css)
+            self.assertNotIn(selector + " {", self.css)
 
-        def seg_len(p, q):
-            return math.hypot(q[0] - p[0], q[1] - p[1])
-
-        for path_match in re.finditer(r'<path d="M([\d.\- ]+)L([\d.\- ]+)L([\d.\- ]+)"', self.macro):
-            pts = [tuple(float(v) for v in group.split()) for group in path_match.groups()]
-            vertex, arm_end, leg_end = pts
-            self.assertLess(seg_len(vertex, arm_end), seg_len(vertex, leg_end))
-
-    def test_left_and_right_paths_are_exact_horizontal_mirrors(self):
-        paths = re.findall(r'<path d="M([\d.\- ]+)L([\d.\- ]+)L([\d.\- ]+)"', self.macro)
-        self.assertEqual(len(paths), 2)
-        left_pts = [tuple(float(v) for v in group.split()) for group in paths[0]]
-        right_pts = [tuple(float(v) for v in group.split()) for group in paths[1]]
-        for (lx, ly), (rx, ry) in zip(left_pts, right_pts):
-            self.assertAlmostEqual(lx + rx, 64.0)  # mirrored across x=32 (viewBox 0 0 64 64)
-            self.assertAlmostEqual(ly, ry)
-
-    def test_inner_vertices_do_not_touch_the_bottleneck_gap(self):
-        paths = re.findall(r'<path d="M([\d.\- ]+)L([\d.\- ]+)L([\d.\- ]+)"', self.macro)
-        left_vertex = tuple(float(v) for v in paths[0][1].split())
-        right_vertex = tuple(float(v) for v in paths[1][1].split())
-        self.assertGreater(right_vertex[0] - left_vertex[0], 0, "vertices must not touch or cross")
-
-    def test_dot_sits_on_centreline_below_the_gap(self):
-        match = re.search(r'<circle cx="([\d.]+)" cy="([\d.]+)" r="([\d.]+)"', self.macro)
-        self.assertIsNotNone(match)
-        cx, cy, r = (float(v) for v in match.groups())
-        self.assertAlmostEqual(cx, 32.0)  # viewBox centreline
-        paths = re.findall(r'<path d="M([\d.\- ]+)L([\d.\- ]+)L([\d.\- ]+)"', self.macro)
-        vertex_y = float(paths[0][1].split()[1])
-        self.assertGreater(cy, vertex_y, "dot must sit below the vertex gap, not above/level with it")
-        self.assertGreater(r, 0)
-
-    def test_dot_is_filled_not_only_stroked(self):
-        match = re.search(r"<circle [^>]*>", self.macro)
-        self.assertIn('fill="currentColor"', match.group())
-
-    def test_paths_use_no_fill_only_stroke(self):
-        self.assertIn('fill="none"', self.macro)
-        self.assertIn('stroke="currentColor"', self.macro)
-
-    def test_rounded_caps_and_joins(self):
-        self.assertIn('stroke-linecap="round"', self.macro)
-        self.assertIn('stroke-linejoin="round"', self.macro)
-
-    def test_stroke_width_approximately_5_units_on_64_viewbox(self):
-        self.assertIn('viewBox="0 0 64 64"', self.macro)
-        self.assertIn('stroke-width="5"', self.macro)
-
-    def test_color_is_driven_entirely_by_currentcolor(self):
-        self.assertIn('stroke="currentColor"', self.macro)
-        self.assertIn('fill="currentColor"', self.macro)
-        # No caller-independent hardcoded color anywhere in the SVG.
-        self.assertNotIn("#", self.macro)
-
-    def test_decorative_by_default(self):
-        self.assertIn('aria-hidden="true"', self.macro)
-        self.assertIn('focusable="false"', self.macro)
-
-    def test_size_parameter_drives_width_and_height(self):
-        self.assertIn('width="{{ size }}"', self.macro)
-        self.assertIn('height="{{ size }}"', self.macro)
-
-    def test_macro_declares_a_default_size_within_suggested_22_to_26px_range(self):
-        match = re.search(r"macro archiosk_mark\(size=(\d+)", self.source)
-        self.assertIsNotNone(match)
-        self.assertTrue(22 <= int(match.group(1)) <= 26)
+    def test_the_wordmark_it_sat_beside_is_untouched(self):
+        # The purge removed a symbol, not the brand. This is the assertion
+        # that would catch an over-broad revert.
+        self.assertIn(".workspace-topbar-brand", self.css)
+        for path in ("auth_shell.html", "gateway_base.html"):
+            body = (_REPO_ROOT / "templates" / path).read_text(encoding="utf-8")
+            self.assertIn("<h1>Archiosk</h1>", body, path)
 
 
 class HeaderMarkupTests(unittest.TestCase):
@@ -234,27 +171,21 @@ class HeaderMarkupTests(unittest.TestCase):
         self.assertNotIn("archiosk_mark(", summary_tag)
         self.assertNotIn("workspace-topbar-brand-text", summary_tag)
 
-    def test_mark_reintroduced_outside_the_menu_item_never_the_old_brand_link(self):
-        # CLAUDE-ARCHIOSK-IDENTITY-ACTIVITY-INDICATOR-01 (Product Owner,
-        # explicit) reintroduced archiosk_mark() in the authenticated
-        # topbar - but as a small, separate, stationary identity element
-        # (.workspace-app-mark, decorative, no href) sitting BEFORE the
-        # menu bar, never inside menu.archiosk's own <details>/<summary>
-        # and never the old .workspace-topbar-brand single-link/wordmark
-        # treatment this file's own HeaderMarkupTests originally retired.
-        # That retirement's real invariant - "Archiosk" the MENU ITEM
-        # carries no mark/enlarged-wordmark of its own - still holds;
-        # only the narrower "archiosk_mark() is never called here at all"
-        # assertion needed updating for this deliberate, authorized
-        # change.
-        self.assertIn("archiosk_mark(", self.app_menu_source)
+    def test_the_menu_item_carries_no_mark_and_no_brand_link(self):
+        # This file's original invariant was that "Archiosk" the MENU ITEM
+        # carries no mark or enlarged-wordmark of its own.
+        # CLAUDE-ARCHIOSK-IDENTITY-ACTIVITY-INDICATOR-01 later reintroduced the
+        # mark BESIDE the menu (never inside it), and this test was widened to
+        # allow that. CLAUDE-LETTERMARK-PURGE-01 retired the mark entirely, so
+        # the assertion returns to its original, stricter form: the mark is not
+        # in the menu item, and it is not beside it either.
+        self.assertNotIn("archiosk_mark(", self.app_menu_source)
+        self.assertNotIn('class="workspace-app-mark"', self.app_menu_source)
         self.assertNotIn('class="workspace-topbar-brand"', self.app_menu_source)
-        mark_idx = self.app_menu_source.index('class="workspace-app-mark"')
         archiosk_menu_idx = self.app_menu_source.index('data-ui-ref="menu.archiosk"')
-        self.assertLess(mark_idx, archiosk_menu_idx, "the mark must sit BEFORE the Archiosk menu item, never inside it")
         summary_start = self.app_menu_source.index("<summary", archiosk_menu_idx)
         summary_end = self.app_menu_source.index("</summary>", summary_start)
-        self.assertNotIn("archiosk_mark(", self.app_menu_source[summary_start:summary_end])
+        self.assertNotIn("<svg", self.app_menu_source[summary_start:summary_end])
 
     def test_home_navigation_relocated_not_removed(self):
         idx = self.app_menu_source.index('data-ui-ref="menu.archiosk.home"')
@@ -281,19 +212,15 @@ class HeaderRenderingTests(unittest.TestCase):
             sess["username"] = "brand1_owner"
             sess["role"] = "admin"
 
-    def test_archiosk_mark_renders_as_the_separate_stationary_identity_only(self):
-        # CLAUDE-ARCHIOSK-IDENTITY-ACTIVITY-INDICATOR-01: the mark is
-        # back, but only inside .workspace-app-mark (decorative, no
-        # href, sitting before the menu bar) - never inside the Archiosk
-        # menu item's own clickable summary, and never the old bold/gold
-        # single-link .workspace-topbar-brand treatment.
+    def test_no_brand_symbol_renders_on_any_authenticated_page(self):
+        # CLAUDE-LETTERMARK-PURGE-01: asserted against real rendered pages,
+        # not template source, because a symbol could reach the page through a
+        # shell this file does not read.
         for url in ("/", "/projects", "/upload"):
             body = self.client.get(url).get_data(as_text=True)
-            self.assertIn('class="archiosk-mark"', body, url)
+            self.assertNotIn('class="archiosk-mark"', body, url)
+            self.assertNotIn('class="workspace-app-mark"', body, url)
             self.assertNotIn('class="workspace-topbar-brand"', body, url)
-            wrapper_idx = body.index('class="workspace-app-mark"')
-            mark_idx = body.index('class="archiosk-mark"')
-            self.assertLess(abs(mark_idx - wrapper_idx), 200, "the mark must render inside its own restrained wrapper, not loose in the page")
 
     def test_archiosk_menu_renders_with_plain_text_label(self):
         body = self.client.get("/").get_data(as_text=True)
@@ -339,11 +266,11 @@ class BrandCssTests(unittest.TestCase):
         body = _rule_body(self.css, ".workspace-topbar-brand")
         self.assertIn("var(--brand-gold)", body)
 
-    def test_mark_element_has_no_independent_color_rule(self):
-        # The SVG inherits color from .workspace-topbar-brand via
-        # currentColor - .archiosk-mark itself must not set its own.
-        body = _rule_body(self.css, ".archiosk-mark")
-        self.assertNotIn("color:", body)
+    def test_the_mark_rule_is_gone_entirely(self):
+        # Was: .archiosk-mark must not set its own color, inheriting instead
+        # via currentColor. CLAUDE-LETTERMARK-PURGE-01 removed the element, so
+        # the stronger statement now holds - there is no rule at all.
+        self.assertNotIn(".archiosk-mark", self.css)
 
     def test_brand_gold_redefined_in_the_shared_owned_surface_scoping_blocks(self):
         # .workspace-topbar is one of the "owned surface roots" that

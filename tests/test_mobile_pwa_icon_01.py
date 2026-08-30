@@ -236,17 +236,24 @@ class ShellTemplatesAdvertiseInstallabilityTests(unittest.TestCase):
 
 
 class IconGeometryTests(unittest.TestCase):
-    """The Product Owner's geometric constraints, asserted as numbers.
+    """The lettermark's constraints, asserted as numbers.
 
-    "The bottom portion is closed", "the upper-left portion is shorter", "cut
-    the ends with a knife - the left one horizontally and the right one
-    vertically", "make the edges of the base angles sharp" are all checkable
-    facts about the geometry, not matters of taste. So they are checked here,
-    and the taste question is left where it belongs, with the Product Owner.
+    CLAUDE-LETTERMARK-PURGE-01 replaced what this class used to guard. The
+    earlier icon was a constructed symbol - an X with a closed bottom, a waist
+    and one accent dot - and the tests here asserted the Product Owner's
+    geometry for it: "the bottom portion is closed", "the upper-left portion is
+    shorter", "cut the ends with a knife". Those constraints were retired with
+    the mark on 2026-08-30, because the form read as an hourglass in a browser
+    tab. They are not weakened here, they no longer have a subject.
 
-    Asserted against tools/render_app_icon.py, which is the single source the
-    SVG and every PNG are generated from - plus a check that the committed SVG
-    still matches what that source produces, so the two cannot drift.
+    What replaced them is a letter, and a letter has its own checkable facts: a
+    flat apex, feet on a shared baseline, a counter that stays open, symmetry.
+    Those are asserted below. The taste question is left where it belongs, with
+    the Product Owner.
+
+    Still asserted against tools/render_app_icon.py as the single source the SVG
+    and every PNG are generated from, plus a check that the committed SVG
+    matches what that source produces, so the two cannot drift.
     """
 
     @classmethod
@@ -260,80 +267,83 @@ class IconGeometryTests(unittest.TestCase):
     def setUp(self):
         self.svg = _ICON_SVG_PATH.read_text(encoding="utf-8")
         self.body = re.sub(r"<!--.*?-->", "", self.svg, flags=re.S)
-        self.points = self.tool.CENTRELINE
-        self.polygon = self.tool.outline()
+        self.shapes = self.tool.polygons()
 
     def test_the_committed_svg_matches_its_generator(self):
         # A hand-edited SVG would silently disagree with the PNGs the home
         # screen actually uses, and nothing else would notice.
         self.assertIn(self.tool.svg_path_data(), self.body)
 
-    def test_the_mark_is_one_shape(self):
-        # Separate pieces merge into a smudge when downscaled to 48px, and a
-        # seam through the waist would be visible at large sizes.
-        self.assertEqual(len(re.findall(r"<path", self.body)), 1)
+    def test_the_mark_is_a_letter_not_a_symbol(self):
+        # Two legs and a crossbar. Three shapes is what an A is made of; the
+        # retired mark was one self-intersecting outline, which is the shape
+        # that read as an hourglass.
+        self.assertEqual(len(self.shapes), 3)
+        for shape in self.shapes:
+            self.assertEqual(len(shape), 4, "each stroke is a quad")
 
-    def test_the_bottom_portion_is_closed(self):
-        # Two feet at the same depth, joined by a horizontal segment: that is
-        # what "closed" means geometrically, and it is what turns four open arms
-        # into a base the form stands on.
-        bottom = max(y for _, y in self.points)
-        feet = [p for p in self.points if abs(p[1] - bottom) < 1.0]
-        self.assertEqual(len(feet), 2, "expected exactly two feet on the base")
-        left, right = sorted(feet)
-        self.assertGreater(right[0] - left[0], 150, "base too narrow to read as closed")
-        index_left, index_right = self.points.index(left), self.points.index(right)
-        self.assertEqual(abs(index_left - index_right), 1, "the feet are not joined")
+    def test_the_apex_is_cut_flat(self):
+        # A sharp apex is the first thing a LANCZOS downsample destroys. Flat
+        # means both legs terminate on the same horizontal line at the top.
+        apex_y = self.tool.APEX[1]
+        on_apex = [p for shape in self.shapes[:2] for p in shape
+                   if abs(p[1] - apex_y) < 0.05]
+        self.assertEqual(len(on_apex), 4, "both legs must terminate on the apex line")
 
-    def test_the_upper_left_portion_is_shorter_than_the_upper_right(self):
-        waist = self.tool.WAIST
-        top = sorted((p for p in self.points if p[1] < waist[1]), key=lambda p: p[0])
-        self.assertEqual(len(top), 2, "expected two arms above the waist")
-        upper_left, upper_right = top
-        self.assertLess(upper_left[0], waist[0])
-        self.assertGreater(upper_right[0], waist[0])
-        left_len = self._length(waist, upper_left)
-        right_len = self._length(waist, upper_right)
-        self.assertLess(left_len, right_len, "the upper-left arm must be shorter")
-        # Shorter, but still an arm - a stub would read as damage, not design.
-        self.assertGreater(left_len / right_len, 0.45)
-        self.assertLess(left_len / right_len, 0.90)
+    def test_the_feet_sit_flat_on_a_shared_baseline(self):
+        foot_y = self.tool.FOOT_Y
+        on_base = [p for shape in self.shapes[:2] for p in shape
+                   if abs(p[1] - foot_y) < 0.05]
+        self.assertEqual(len(on_base), 4, "both feet must sit on one baseline")
 
-    def test_the_left_end_is_cut_horizontally(self):
-        # A horizontal cut means two outline vertices sharing one y, and that y
-        # is the cut line. Both ends are diagonal, so this cannot come from a
-        # line cap - it has to be real geometry.
-        cut = self.tool.LEFT_CUT_Y
-        on_cut = [p for p in self.polygon if abs(p[1] - cut) < 0.05]
-        self.assertEqual(len(on_cut), 2, "no horizontal terminating edge")
-        self.assertGreater(abs(on_cut[0][0] - on_cut[1][0]), 20, "cut edge too short to read")
+    def test_the_form_is_symmetric_about_the_centreline(self):
+        # The inverse of what the retired mark asserted. Its identity was its
+        # lean, and the lean is exactly what stopped it reading as the letter
+        # it sat beside. A leaning A is a worse A.
+        left, right = self.shapes[0], self.shapes[1]
+        mirrored = sorted((512.0 - x, y) for x, y in right)
+        for (lx, ly), (mx, my) in zip(sorted(left), mirrored):
+            self.assertAlmostEqual(lx, mx, places=3)
+            self.assertAlmostEqual(ly, my, places=3)
 
-    def test_the_right_end_is_cut_vertically(self):
-        cut = self.tool.RIGHT_CUT_X
-        on_cut = [p for p in self.polygon if abs(p[0] - cut) < 0.05]
-        self.assertEqual(len(on_cut), 2, "no vertical terminating edge")
-        self.assertGreater(abs(on_cut[0][1] - on_cut[1][1]), 20, "cut edge too short to read")
+    def test_the_counter_stays_open(self):
+        # The triangular hole above the crossbar is what makes it read as A
+        # rather than as a tent. Checked as a real point-in-polygon test at the
+        # centre of that hole, not by eye.
+        probe = (self.tool.APEX[0],
+                 self.tool.BAR_Y - self.tool.BAR_HALF - 20.0)
+        for shape in self.shapes:
+            self.assertFalse(self._contains(shape, probe),
+                             "the counter is filled in - the mark reads as a tent")
 
-    def test_the_two_cuts_disagree_with_each_other(self):
-        # One horizontal, one vertical. If both ends were cut the same way the
-        # form would read as a symmetrical X again, which is the thing the whole
-        # redesign exists to avoid.
-        horizontal = [p for p in self.polygon if abs(p[1] - self.tool.LEFT_CUT_Y) < 0.05]
-        vertical = [p for p in self.polygon if abs(p[0] - self.tool.RIGHT_CUT_X) < 0.05]
-        self.assertAlmostEqual(horizontal[0][1], horizontal[1][1], places=3)
-        self.assertAlmostEqual(vertical[0][0], vertical[1][0], places=3)
-        self.assertNotAlmostEqual(horizontal[0][0], horizontal[1][0], places=1)
-        self.assertNotAlmostEqual(vertical[0][1], vertical[1][1], places=1)
+    def test_the_crossbar_overlaps_both_legs(self):
+        # Abutting shapes leave a hairline seam at some rasterisation sizes and
+        # not others. The bar must run past each leg's centreline.
+        bar = self.shapes[2]
+        bar_left = min(x for x, _ in bar)
+        bar_right = max(x for x, _ in bar)
+        for leg in self.shapes[:2]:
+            xs = [x for x, y in leg if abs(y - self.tool.FOOT_Y) < 0.05]
+            self.assertTrue(xs)
+        self.assertLess(bar_left, self.tool.APEX[0])
+        self.assertGreater(bar_right, self.tool.APEX[0])
 
-    def test_the_base_angles_are_sharp_not_rounded(self):
-        # Mitred, so the outer corner runs PAST the centreline vertex and comes
-        # to a point. A rounded or butted foot would sit at or inside it.
-        bottom = max(y for _, y in self.points)
-        deepest = max(p[1] for p in self.polygon)
-        self.assertGreater(deepest, bottom + 8, "feet are not mitred to a point")
+    def test_the_mark_weight_survives_a_small_icon(self):
+        # Below roughly 5% of the canvas the strokes vanish at 48px; above
+        # roughly 12% the counter fills in.
+        self.assertGreaterEqual(self.tool.STROKE / 512.0, 0.05)
+        self.assertLessEqual(self.tool.STROKE / 512.0, 0.12)
+
+    def test_the_whole_mark_sits_inside_the_square_with_margin(self):
+        for shape in self.shapes:
+            for x, y in shape:
+                self.assertGreater(x, 40, "mark reaches the left edge")
+                self.assertLess(x, 472, "mark reaches the right edge")
+                self.assertGreater(y, 40, "mark reaches the top edge")
+                self.assertLess(y, 472, "mark reaches the bottom edge")
 
     def test_nothing_relies_on_a_renderer_line_style(self):
-        # The mark is a filled outline now. A leftover stroke-linecap or
+        # The mark is a filled outline. A leftover stroke-linecap or
         # stroke-linejoin would mean the shape is still partly the renderer's
         # decision rather than the geometry's.
         self.assertNotIn("stroke-linecap", self.body)
@@ -341,35 +351,38 @@ class IconGeometryTests(unittest.TestCase):
         self.assertNotIn("stroke-width", self.body)
         self.assertIn('fill-rule="nonzero"', self.body)
 
-    def test_the_silhouette_is_asymmetric(self):
-        # A symmetric X is static and generic; the lean is the identity.
-        waist = self.tool.WAIST
-        upper = [p for p in self.points if p[1] < waist[1]]
-        self.assertNotAlmostEqual(
-            abs(upper[0][0] - waist[0]), abs(upper[1][0] - waist[0]), delta=10.0
-        )
-
-    def test_the_mark_weight_survives_a_small_icon(self):
-        # Below roughly 5% of the canvas the mark disappears at 48px; above
-        # roughly 9% the triangle's counter fills in.
-        self.assertGreaterEqual(self.tool.WIDTH / 512.0, 0.05)
-        self.assertLessEqual(self.tool.WIDTH / 512.0, 0.09)
-
-    def test_the_whole_mark_sits_inside_the_square_with_margin(self):
-        # The mitred feet extend well past the centreline, so this has to be
-        # checked against the real outline rather than the centreline points.
-        for x, y in self.polygon:
-            self.assertGreater(x, 40, "mark reaches the left edge")
-            self.assertLess(x, 472, "mark reaches the right edge")
-            self.assertGreater(y, 40, "mark reaches the top edge")
-            self.assertLess(y, 472, "mark reaches the bottom edge")
-
-    def test_colour_is_used_once(self):
+    def test_the_icon_carries_no_accent_colour_at_all(self):
         # main.css's own header: colour is used rarely and must mean something.
-        # Ground and mark are both neutral; the accent is the only colour.
+        # The retired mark spent its one accent on a waist dot. A lettermark
+        # has nothing for an accent to mean, so it has none - ground and mark,
+        # both neutral, and nothing else.
         fills = set(re.findall(r'fill="(#[0-9a-fA-F]{6})"', self.body))
-        self.assertEqual(len(fills), 3, "ground, mark, and exactly one accent")
-        self.assertIn(self.tool.ACCENT, fills)
+        self.assertEqual(fills, {self.tool.GROUND, self.tool.MARK})
+
+    def test_no_trace_of_the_retired_symbol_remains(self):
+        # A guard, not a tautology: the generator kept its module shape across
+        # the rewrite, so a partial revert could leave the old constants behind
+        # and silently reintroduce the hourglass.
+        for retired in ("CENTRELINE", "WAIST", "WAIST_RADIUS", "ACCENT",
+                        "LEFT_CUT_Y", "RIGHT_CUT_X", "outline"):
+            self.assertFalse(hasattr(self.tool, retired),
+                             f"{retired} survived the lettermark rewrite")
+
+    @staticmethod
+    def _contains(polygon, point):
+        """Ray casting. Used to prove the counter is a real hole rather than
+        assuming it from the draw order."""
+        x, y = point
+        inside = False
+        n = len(polygon)
+        for i in range(n):
+            x0, y0 = polygon[i]
+            x1, y1 = polygon[(i + 1) % n]
+            if (y0 > y) != (y1 > y):
+                t = (y - y0) / (y1 - y0)
+                if x < x0 + t * (x1 - x0):
+                    inside = not inside
+        return inside
 
     @staticmethod
     def _length(a, b):
