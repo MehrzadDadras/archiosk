@@ -9,13 +9,18 @@ a deliberate, standing architectural rule, not something this stage is
 free to quietly relax.
 
 Capability boundary, reused not re-derived: services/drawing_intake.py's
-own repository-grounded audit (2026-08-04, CLAUDE-P40-VW8-QA-R2A) already
-established, and this stage re-confirms, that PDF-to-image rendering and
-local OCR are NOT available in this environment (no pypdfium2/PyMuPDF/
-pdf2image, no pytesseract, no tesseract OS binary) - see that module's own
-header comment for the full audit. This module makes no attempt at either;
-an image-only PDF is classified honestly, never silently downgraded to
-"unsupported" or upgraded with fabricated text.
+own repository-grounded audit (2026-08-04, CLAUDE-P40-VW8-QA-R2A)
+established, and this stage re-confirmed at the time, that PDF-to-image
+rendering and local OCR were NOT available in this environment (no
+pypdfium2/PyMuPDF/pdf2image, no pytesseract, no tesseract OS binary) -
+see that module's own header comment for the full audit and for its
+2026-08-29 partial supersession: `pymupdf` IS a pinned dependency today
+(engine/pdf_extractor.py uses it for vector geometry and positioned text
+spans), so the rendering LIBRARY is present even though local OCR still
+is not. This module's own boundary is unchanged by that: it still makes
+no attempt at either, and an image-only PDF is classified honestly,
+never silently downgraded to "unsupported" or upgraded with fabricated
+text.
 """
 from __future__ import annotations
 

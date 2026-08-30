@@ -10,10 +10,19 @@ of it):
     extraction path.
   - DOCX native-text extraction: YES, already a dependency
     (`python-docx`, same file).
-  - PDF page RENDERING (page -> raster image): NOT AVAILABLE. No
-    PDF-to-image library (pypdfium2/PyMuPDF/pdf2image+poppler) is
-    installed, and none is added by this stage - see "what remains
-    unavailable" below.
+  - PDF page RENDERING (page -> raster image): NOT AVAILABLE AT THE
+    TIME OF THIS AUDIT (2026-08-04). No PDF-to-image library
+    (pypdfium2/PyMuPDF/pdf2image+poppler) was installed, and none was
+    added by this stage - see "what remains unavailable" below.
+    SUPERSEDED IN PART, 2026-08-29: `pymupdf==1.28.2` is now a pinned
+    dependency (added by CLAUDE-DRAWING-REFS-01 for vector geometry and
+    positioned text spans, see requirements.txt's own note) and is used
+    by engine/pdf_extractor.py. So the LIBRARY is present today and page
+    rasterization is technically reachable. What has NOT changed is this
+    module's own scope: drawing_intake.py still performs no rendering
+    and still has no consumer for one. Treat the line above as the
+    historical record of why this module is shaped the way it is, not as
+    a current statement of what the environment can do.
   - Local OCR: NOT AVAILABLE. No `pytesseract`/OCR Python package is
     installed, AND the underlying `tesseract` OS binary is not present
     on this machine (confirmed directly: `where tesseract` finds
