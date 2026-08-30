@@ -218,11 +218,38 @@ ssh ubuntu@<server> "
 `sudo -u archiosk`, not bare `sudo` — see the ownership warning below, which
 this pin is subject to like any other.
 
+**As of CLAUDE-GEMINI-VISION-01 there is a second new pin:** `google-genai==2.20.0`,
+the Google half of `services/llm_gateway.py`'s two-provider boundary, used by
+`services/sheet_vision.py` for governed drawing-sheet vision.
+
+This one is the OPPOSITE kind to `segno` above — it cannot stop the server, and
+skipping it degrades honestly rather than silently. It is imported lazily behind
+`services/llm_gateway.py:_import_google_genai`, and an `ImportError` there
+becomes an ordinary `skipped_reason` on a sheet read whose LOCAL PyMuPDF
+extraction still completed and is still returned. Nothing in `app.py` or
+`routes/` imports `services/sheet_vision.py` yet either. So: install it when
+convenient, not before restarting.
+
+```bash
+ssh ubuntu@<server> "
+  sudo -u archiosk /var/www/archiosk/.venv/bin/pip install google-genai==2.20.0 &&
+  sudo -u archiosk /var/www/archiosk/.venv/bin/python -c 'from google import genai; print(genai.__version__)'
+"
+```
+
+`GEMINI_API_KEY` is a NEW `.env` variable and is deliberately OPTIONAL — unlike
+`ANTHROPIC_API_KEY`, leaving it blank is a supported steady state, not a
+degraded one (see `.env.example`). Sheet vision is additionally gated by
+`ACTION_GEMINI_VISION_REQUEST`, whose floor default is `require_approval`, so
+installing the package and setting the key does not by itself start sending
+drawings anywhere.
+
 If it is not empty, note what the failure would actually look like before
 deciding urgency. A dependency imported at application start makes the service
-fail to boot; one imported lazily (as `engine/pdf_extractor.py` is — nothing in
-`app.py`/`routes/`/`services/` imports it) leaves the app healthy and the
-capability silently inert, which `/health` will NOT catch.
+fail to boot; one imported lazily (as `engine/pdf_extractor.py` is — `services/sheet_vision.py`
+imports it, but lazily and inside a function, and nothing in `app.py`/`routes/`
+imports either) leaves the app healthy and the capability silently inert, which
+`/health` will NOT catch.
 
 Install the specific pinned packages that changed — **never**
 `pip install -r requirements.txt`:

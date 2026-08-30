@@ -33,3 +33,33 @@ pymupdf==1.28.2
 # install it explicitly as the venv owner before restarting, or the app will
 # fail to import services/qr_pass.py.
 segno==1.6.6
+
+# CLAUDE-GEMINI-VISION-01: the SECOND external AI provider, for the
+# governed sheet-vision path (services/sheet_vision.py). Product Owner
+# authorized 2026-08-29 - transmitting rendered drawing content to
+# Google - which is what lifts services/drawing_intake.py's own
+# 2026-08-04 recorded block on external-AI vision over uploaded
+# drawings.
+#
+# tools/dependency_fit.py: PASS on five constraints, WARN on one.
+# Run honestly WITH --cloud-only, since Gemini is a hosted service:
+#     python tools/dependency_fit.py --name "google-genai" --cloud-only
+# -> WARN no-new-cloud-dependency, whose own text asks for "the same
+# kind of graceful-degradation story, not just an API key check."
+# That story, concretely: services/sheet_vision.py ALWAYS completes its
+# local PyMuPDF vector/text extraction first and returns it whether or
+# not this package is installed, whether or not GEMINI_API_KEY is set,
+# and whether or not the gate allows transmission. An absent
+# google-genai is an honest skipped_reason on an otherwise-successful
+# local read - never an import error, never a failed sheet read. The
+# app runs fully offline without this, which is the condition the rule
+# actually protects.
+#
+# NOTE FOR DEPLOYS: a NEW pin. deploy/DEPLOYMENT.md step 7 applies -
+# install it explicitly as the venv owner before restarting.
+# Pinned at the current release (2.20.0), verified against the index
+# rather than assumed. The SDK surface this repo uses - genai.Client,
+# client.models.generate_content, types.GenerateContentConfig,
+# types.Part.from_bytes, types.HttpOptions - is the documented public
+# interface and is unchanged across the 1.x/2.x boundary.
+google-genai==2.20.0

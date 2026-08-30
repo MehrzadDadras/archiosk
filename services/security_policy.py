@@ -64,6 +64,30 @@ def is_valid_classification(value: Optional[str]) -> bool:
 # or is a real, name-stable placeholder for a mechanism that does not
 # exist yet (never silently implied to be enforced when it isn't).
 ACTION_EXTERNAL_AI_REQUEST = "external_ai_request"
+# CLAUDE-GEMINI-VISION-01. Deliberately PROVIDER-NAMED, unlike every
+# other action in this closed set, which is capability-named.
+#
+# That inconsistency is the point, and it is load-bearing. What the
+# Product Owner authorized on 2026-08-29 was one specific thing:
+# transmitting a project's rendered drawing content to GOOGLE. It was
+# not a general "vision is now allowed" grant, and a capability-shaped
+# name like `external_ai_vision_request` would silently extend to a
+# third vendor the day one is added - the reviewer who granted this
+# would have consented to Google and been given OpenAI. Naming the
+# vendor makes that impossible without a new, separately-granted
+# action, which is exactly the protection services/drawing_intake.py's
+# own 2026-08-04 audit asked for when it recorded that sending a
+# reviewer's uploaded drawing to a vision model "would be a genuinely
+# new confidentiality-relevant decision... needing its own explicit,
+# separately-authorized, opt-in stage."
+#
+# This action is ADDITIONAL to ACTION_EXTERNAL_AI_REQUEST, never a
+# replacement for it: a Gemini vision call is still an external AI
+# request, so services/sheet_vision.py resolves BOTH and takes the more
+# restrictive (see most_restrictive_decision below). A project that
+# denies external AI can therefore never be reached through the vision
+# path, and AI_CALLS_DISABLED still kills both.
+ACTION_GEMINI_VISION_REQUEST = "gemini_vision_request"
 ACTION_LOCAL_AI_REQUEST = "local_ai_request"
 ACTION_TECHNICAL_TELEMETRY = "technical_telemetry"
 ACTION_CONTENT_BEARING_SUPPORT_PACKAGE = "content_bearing_support_package"
@@ -74,6 +98,7 @@ ACTION_SHARED_ARCHIOSK_CONTRIBUTION = "shared_archiosk_contribution"
 
 GOVERNED_ACTIONS = (
     ACTION_EXTERNAL_AI_REQUEST,
+    ACTION_GEMINI_VISION_REQUEST,
     ACTION_LOCAL_AI_REQUEST,
     ACTION_TECHNICAL_TELEMETRY,
     ACTION_CONTENT_BEARING_SUPPORT_PACKAGE,
@@ -141,10 +166,20 @@ CLASSIFICATION_PROFILE_DECISIONS: dict[str, dict[str, str]] = {
     },
     CLASSIFICATION_RESTRICTED: {
         ACTION_EXTERNAL_AI_REQUEST: DECISION_DENY,
+        # CLAUDE-GEMINI-VISION-01: stated explicitly rather than left to
+        # be inferred from the ACTION_EXTERNAL_AI_REQUEST denial above.
+        # sheet_vision.py does resolve both actions and take the more
+        # restrictive, so this row is redundant for that call path - but
+        # a future caller that forgets the conjunction would otherwise
+        # find a RESTRICTED project blocking text-to-Anthropic while
+        # permitting drawings-to-Google, which is the wrong way round.
+        # Defence in depth, not duplication.
+        ACTION_GEMINI_VISION_REQUEST: DECISION_DENY,
         ACTION_EXPORT: DECISION_REQUIRE_APPROVAL,
     },
     CLASSIFICATION_HIGHLY_RESTRICTED: {
         ACTION_EXTERNAL_AI_REQUEST: DECISION_DENY,
+        ACTION_GEMINI_VISION_REQUEST: DECISION_DENY,
         ACTION_EXPORT: DECISION_DENY,
         ACTION_CONTENT_BEARING_SUPPORT_PACKAGE: DECISION_ISOLATE,
     },
@@ -177,6 +212,16 @@ def profile_decision_for(classification: Optional[str], action_id: str) -> Optio
 # sufficiently privileged caller could still flip).
 MANDATORY_FLOOR_DEFAULTS: dict[str, str] = {
     ACTION_EXTERNAL_AI_REQUEST: DECISION_ALLOW,
+    # CLAUDE-GEMINI-VISION-01: REQUIRE_APPROVAL, not ALLOW - the same
+    # "a missing answer must not become permission" (Part V) reasoning
+    # already applied to ACTION_CONTENT_BEARING_SUPPORT_PACKAGE below,
+    # and for the same reason: this action transmits actual drawing
+    # content, not extracted requirement strings, to a party the
+    # deployment had never previously sent anything to. Not DENY - the
+    # capability IS authorized, so making it unreachable without a
+    # governance exception would overstate the restriction; a human
+    # confirming each transmission is what was actually asked for.
+    ACTION_GEMINI_VISION_REQUEST: DECISION_REQUIRE_APPROVAL,
     ACTION_LOCAL_AI_REQUEST: DECISION_ALLOW,
     ACTION_TECHNICAL_TELEMETRY: DECISION_ALLOW,
     # Content-bearing anything defaults to requiring explicit
@@ -300,6 +345,40 @@ def evaluate_action(
     )
 
 
+def most_restrictive_decision(*decisions: SecurityDecision) -> SecurityDecision:
+    """
+    CLAUDE-GEMINI-VISION-01: resolve several INDEPENDENTLY governed
+    actions that one real operation triggers at once, returning the
+    winning SecurityDecision unchanged - with its own action_id, reason
+    and controlling_layer intact, so the denial a reviewer is shown
+    names the actual rule that stopped it rather than a merged summary
+    of several.
+
+    The motivating case is a Gemini sheet read, which is simultaneously
+    an ACTION_EXTERNAL_AI_REQUEST and an ACTION_GEMINI_VISION_REQUEST.
+    Checking only the second would let a project that has denied
+    external AI altogether be reached through the vision path; checking
+    only the first would ignore the separate Google grant. Both are
+    resolved and the stricter governs.
+
+    DECISION_UNSUPPORTED is not a point on the restrictiveness scale
+    (see _more_restrictive) - it means "not evaluable at all". If any
+    input is UNSUPPORTED this returns it immediately, which fails
+    closed: an operation whose governance cannot be resolved does not
+    proceed on the strength of the other actions that could be.
+    """
+    if not decisions:
+        raise ValueError("most_restrictive_decision requires at least one decision.")
+    for decision in decisions:
+        if decision.decision == DECISION_UNSUPPORTED:
+            return decision
+    winner = decisions[0]
+    for candidate in decisions[1:]:
+        if _RESTRICTIVENESS_ORDER.index(candidate.decision) > _RESTRICTIVENESS_ORDER.index(winner.decision):
+            winner = candidate
+    return winner
+
+
 # -- Security claims registry (Part XVI) -------------------------------------
 
 CLAIM_IMPLEMENTED_AND_TESTED = "implemented_and_tested"
@@ -323,6 +402,15 @@ SECURITY_CLAIMS_REGISTRY: dict[str, str] = {
     "external AI request gating (kill switch)": CLAIM_IMPLEMENTED_AND_TESTED,
     "organization-wide security baseline (single deployment)": CLAIM_IMPLEMENTED_WITH_LIMITATIONS,
     "external AI processing (Anthropic API)": CLAIM_CONFIGURED_DEPENDENT_ON_PROVIDER,
+    # CLAUDE-GEMINI-VISION-01: same claim class as Anthropic above -
+    # configured, and dependent on a provider whose retention/processing
+    # this deployment does not control. Note what is deliberately NOT
+    # added here: nothing claiming that drawing content is withheld,
+    # regionally confined, or unretained by Google. "no AI provider
+    # retention" and "data never leaves a specific country" both remain
+    # CLAIM_PROHIBITED_FROM_CLAIMING below and this feature does not
+    # change that.
+    "external AI vision processing (Google Gemini API)": CLAIM_CONFIGURED_DEPENDENT_ON_PROVIDER,
     "multi-organization tenant isolation": CLAIM_SPECIFIED_BUT_UNBUILT,
     "AI-assisted policy clause extraction": CLAIM_SPECIFIED_BUT_UNBUILT,
     "shared cross-customer learning pipeline": CLAIM_SPECIFIED_BUT_UNBUILT,

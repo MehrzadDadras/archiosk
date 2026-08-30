@@ -27,6 +27,20 @@ class BaseConfig:
     ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
     ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-6")
 
+    # CLAUDE-GEMINI-VISION-01: the SECOND external AI provider, and
+    # optional in a stronger sense than ANTHROPIC_API_KEY above.
+    # Anthropic is this app's reasoning path (Spin, Composer, classify,
+    # consistency). Gemini exists for exactly one thing: the governed
+    # sheet-vision path in services/sheet_vision.py, which ALWAYS
+    # produces its local PyMuPDF extraction whether or not this key is
+    # set. An absent key therefore means "local-only sheet reading",
+    # never a failed read - which is why this is deliberately NOT added
+    # to validate() below and NOT warned about in app.py's
+    # _validate_production_config the way ANTHROPIC_API_KEY is. It is a
+    # genuinely optional enrichment, not a degraded core capability.
+    GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+    GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+
     # -- Storage ---------------------------------------------------------
     # `or` (not getenv's own default arg) so a blank .env value -- e.g.
     # "DATABASE_URL=" -- falls through too, not just a fully unset var:

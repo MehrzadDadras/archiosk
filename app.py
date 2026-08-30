@@ -33,6 +33,13 @@ def create_app(config_name: str | None = None) -> Flask:
         # tests/test_requirement_investigation.py) rather than relying on
         # ambient environment state.
         os.environ["ANTHROPIC_API_KEY"] = ""
+        # CLAUDE-GEMINI-VISION-01: identical reasoning for the second
+        # provider. services/llm_gateway.py's call_gemini_json reads
+        # GEMINI_API_KEY from the environment directly (same as the
+        # Anthropic path), so clearing it here is what actually stops a
+        # developer's real key from turning the suite into billed,
+        # network-dependent calls that transmit drawing bytes to Google.
+        os.environ["GEMINI_API_KEY"] = ""
 
     app = Flask(
         __name__,
@@ -59,6 +66,7 @@ def create_app(config_name: str | None = None) -> Flask:
         # second boundary, but callers may pass this configured value
         # explicitly, so the test app must be credential-free too.
         app.config["ANTHROPIC_API_KEY"] = ""
+        app.config["GEMINI_API_KEY"] = ""
 
     _configure_logging(app)
     _validate_production_config(app, config_cls)
