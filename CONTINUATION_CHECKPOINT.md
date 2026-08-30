@@ -1,5 +1,100 @@
 # Continuation checkpoint
 
+## 2026-08-30 — `9d16b8c` deployed at `v=141`, and a prior deploy that had synced but never restarted
+
+`9d16b8c` (the lettermark purge — the constructed mark retired, the app icon
+becomes a letter A) is **live on `archiosk.com` at `STATIC_VERSION=141`**,
+verified in served content rather than by command exit status. The rollback
+marker for this deploy is **`/var/www/archiosk-backup-1db81eb`** — 825 code
+files, plus the pre-edit `.env` at mode `600` and the pre-edit
+`archiosk-go.service` unit file, both held INSIDE that sibling tree and never
+beside the live `.env`, per `CLAUDE-DEPLOY-ENV-BACKUP-01`.
+
+Relative to the previously-running build this carried five commits, not one:
+`5c5b4ef`, `932c905` (Gemini vision), `0eb6b16` (GO Decision Architecture),
+`1f2b150` and `9d16b8c`. No `migrations/` or `models.py` change, so
+`deploy/DEPLOYMENT.md` step 8 did not apply.
+
+### The finding — the deploy was already half-done, and inert
+
+The routine was run from step 1, and steps 2–7 turned out to be **no-ops that
+had already happened**. A prior run had synced the tree at `15:10:36 UTC` and
+stopped there. A checksum-based `rsync -avnc` — ignoring mtime, comparing
+content — reported **zero file differences** against a fresh `git archive` of
+`9d16b8c`, and `google-genai==2.20.0` and `segno==1.6.6` were already installed
+and importing in the venv.
+
+**The service had never been restarted.** Gunicorn's `ExecMainStartTimestamp`
+was `01:34:42 UTC`, roughly fourteen hours BEFORE the code it was supposedly
+running reached the disk. The workers were serving `1db81eb` from memory, which
+is also why the systemd `Description` marker still naming `1db81eb` was
+accurate about the running build while the disk sat a release ahead.
+
+That produced the exact mixed state step 10 exists to prevent, already in
+progress. nginx serves `/static/` directly from disk, so the NEW CSS and icons
+were being served under the OLD `?v=140` URL: every browser holding a cached
+`v=140` stylesheet kept the old CSS, every new visitor got the new CSS rendered
+by old Python, and `/health` returned 200 throughout. **A successful sync and a
+green `/health` prove nothing about which code is executing.** The 2026-08-18
+entry below already recorded that principle in the abstract — this is its
+concrete instance, and the gap it hid was fourteen hours wide.
+
+### What completing it actually required
+
+`.env` bumped 140 → 141 using the runbook's `CURRENT + 1` form read from the
+live file, not an absolute number, because the recorded near-miss is a bump that
+landed BELOW production and looked like success. The requested value, the live
+`+1`, and `9d16b8c`'s own commit message (`STATIC_VERSION 140 -> 141`) all
+independently agreed at 141. The unit `Description` was updated `1db81eb` →
+`9d16b8c` and `daemon-reload`ed BEFORE the restart, so a single restart
+activated code, environment and marker together rather than the runbook's
+literal restart → bump → restart; step 7's own "restarted twice" reasoning is
+the warrant for that deviation.
+
+### Verification — served content, not exit codes
+
+Service active since `20:06:42 UTC`. Journal error/traceback/exception grep
+empty. `/health` 200 on both `127.0.0.1:8000` and public HTTPS. Served assets
+now carry `?v=141`. `archiosk-mark` appears **0** times in the served
+`main.css` and **0** times in the rendered sign-in HTML, and the retired
+`.gateway-logo` / `.workspace-app-mark` classes are absent from the served
+stylesheet. `app-icon-192.png` fetched over HTTPS is **byte-identical** to the
+blob in `9d16b8c`.
+
+`static/app-icon.svg` matches only after newline normalization. This machine's
+`core.autocrlf=true` converts LF → CRLF during `git archive`, so deployed TEXT
+files are not byte-identical to their committed blobs while the rasters are.
+Harmless to rendering, but it means byte-comparing any deployed text file
+against its commit will always show a false difference — worth knowing before
+someone reads one as corruption. `.gitattributes` currently disables conversion
+only for the NREOCRC corpus and the vendored PDF.js files. Recorded, not
+changed: it is a repository-wide decision, not a deploy-time one.
+
+### Carried forward
+
+- **NOT VERIFIED IN AN AUTHENTICATED BROWSER.** The sign-in page renders and the
+  retired mark is absent from it, but Gateway, opening a project and the
+  workspace surfaces were not exercised — that needs a Product Owner session,
+  which `CIC-DEPLOYMENT` already names as a known limitation. The lettermark is
+  proven present in the served bytes; it has not been LOOKED at, and the
+  2026-08-25 entry's warning applies unchanged — a green suite and matching
+  checksums do not prove the human interaction is good.
+- **`GEMINI_API_KEY` is unset on the host**, which is the supported steady state,
+  not a degraded one: `services/sheet_vision.py` completes its local PyMuPDF
+  extraction and returns an honest `skipped_reason`. Setting it is a separate,
+  credential-touching decision, and `ACTION_GEMINI_VISION_REQUEST` still gates
+  transmission independently of the key.
+- **Host scratch and rollback trees are accumulating.** `/tmp` holds five
+  superseded staging directories (`archiosk-deploy-staging-62fcfb1`,
+  `archiosk-stage-{61c088b,9d9bd0b,b99597a,f4e422c}`) and two `bhive-pre-*.db`
+  files from prior sessions; `/var/www` holds **106** `archiosk-backup-*` trees
+  totalling **1.7G** under two different naming conventions
+  (`archiosk-backup-<hash>` and `archiosk-backup-pre-<hash>`). At 87G free this
+  is not a threat, and step 13 was followed for this deploy's own scratch. But
+  `CLAUDE-DEV-CLEANUP-01` found the same accumulation before and the backlog
+  predating it is untouched — pruning older generations is the deliberate,
+  per-occasion decision the runbook says it is, and it has not been taken.
+
 ## 2026-08-28 (later) — Phase 1: the Page-Field entry environment, and the archive it came out of
 
 A read-only design archaeology of an artifact outside this repository produced a
