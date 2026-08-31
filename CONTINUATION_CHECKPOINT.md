@@ -1,5 +1,78 @@
 # Continuation checkpoint
 
+## 2026-08-31 (later) — Product Owner authenticated browser verification of `f332681`: the standing gap is closed
+
+**Reported by the Product Owner, 2026-08-31.** This entry records a HUMAN
+verification, not a machine one. Nothing below was observed by this agent; it is
+logged as the Product Owner's own report, with that provenance explicit, because
+the whole value of this record is that a person actually looked. Attributing it
+otherwise would make the strongest evidence in this file indistinguishable from
+the weakest.
+
+**Verified live on `https://archiosk.com`, authenticated:**
+
+- Gateway.
+- Project-open, on Project North Star.
+- Workspace top-nav.
+- Clean wordmark rendering and the lettermark favicon, with **zero residual mark
+  artifacts**.
+- CSRF and session handling.
+
+### What this closes
+
+The **"NOT VERIFIED IN AN AUTHENTICATED BROWSER"** item carried forward by the
+two entries below is **CLOSED**. It had been open across two deploys, and
+`CIC-DEPLOYMENT` names authenticated browser verification as a known limitation
+precisely because it needs a Product Owner session. Those entries are left
+exactly as written — the item was genuinely open when each was recorded, and
+editing them to say otherwise would falsify the record of what was known at the
+time. This entry supersedes the item; it does not rewrite its history.
+
+Two things in particular now have human confirmation that no test in this
+repository could supply:
+
+- **The lettermark purge (`9d16b8c`) is visually confirmed.** Its own commit
+  message records that the retired mark's real defect was only visible at
+  shipped sizes — a bowtie at 16px beside the wordmark, an hourglass in a
+  browser tab — and that the Product Owner reported it three times before it was
+  believed. Byte-identical assets and a green suite were never going to settle
+  that; "zero residual mark artifacts", seen, is what settles it.
+- **CSRF and session handling behave correctly for a real signed-in user.** The
+  deploy verified both handler branches by request, but `WTF_CSRF_ENABLED` is
+  `False` under `TestingConfig`, and no test in this repository exercises a real
+  browser session at all.
+
+### One question raised, deliberately not resolved here
+
+The verification names the opened project as **Project North Star**.
+`CLAUDE.md` records `CODEX-NORTH-BAYVIEW-TO-PROJECT-NORTH-STAR-01` as **APPROVED
+and UNEXECUTED**, conditioned on its own text — *"After this Spin, ask Codex to
+rename the project"* — with no such Spin review on record.
+
+This agent did not authenticate and so cannot say what the project's live
+display name currently is. Either the rename has since been executed (a real
+state change that deserves its own record, since the condition it was gated on
+does not appear to have been met), or the approved future name was used
+informally for a project still live under its earlier identity. **Recorded as an
+open question rather than resolved by assumption**, and no "North Bayview"
+reference anywhere in this repository has been touched: `CLAUDE.md` is explicit
+that those are historical evidence of work genuinely done under that name, not
+drift to tidy, and rewriting them would falsify provenance against
+constitutional invariant 3.
+
+### Still carried forward
+
+- **The 5998-pass suite result covers a COMBINED tree** including uncommitted
+  in-progress work (`routes/api.py`, `tests/test_api_authentication.py`,
+  `CLAUDE.md`, plus untracked `tests/conftest.py`, the PSD spin-source
+  diagnostic, the registry isolation test, and the metabolic_bridge /
+  wd_nas_bridge fixtures). None of it shipped; the green nonetheless covers more
+  than what was deployed.
+- **The unexplained full-suite stall** (78% in 4h27m, then 100% in 2h52m on the
+  same tree) remains unidentified and non-recurring.
+- **Rollback trees are 107** (~1.7G against 87G free); pruning remains the
+  deliberate per-occasion decision the runbook describes.
+
 ## 2026-08-31 — `f332681` deployed: graceful CSRF expiry, and a green suite that was not green
 
 `f332681` is **live on `archiosk.com`**, carrying four commits: this checkpoint's
