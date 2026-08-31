@@ -148,6 +148,7 @@ from services.ingestion import (
     reject_if_display_name_taken,
 )
 from services.bhive_parser import BHiveParser
+from services.chunked_upload import ChunkedUploadError, ChunkedUploadStore
 from services.investigation_snapshot import build_archive_snapshot
 from services.project_clock import open_project
 from services.rfi_export import RFIExportError, build_rfi_docx, build_rfi_draft_docx
@@ -3510,6 +3511,154 @@ def add_document_source(project_id):
     if attached_to_case:
         return redirect(url_for("workspace.show_workspace", project_id=project_id, case=attach_case_id))
     return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
+
+
+# -- CLAUDE-CHUNKED-UPLOAD-01: the same Source, arriving in pieces -----------
+#
+# These two routes are a TRANSPORT for add_document_source above, not a second
+# way to create a Source. upload-complete deliberately performs the identical
+# add_source + _register_source_content sequence, so a chunked document and a
+# single-request document are indistinguishable once registered - same kind,
+# same origin_type, same governance event, same Spin-readability. A second
+# ingestion path producing subtly different Sources would be a provenance
+# defect, not a feature.
+#
+# They return JSON because only JavaScript calls them; every human-facing
+# outcome still arrives through the ordinary flash + redirect on the page.
+
+
+@workspace_bp.route("/projects/<project_id>/workspace/sources/upload-chunk", methods=["POST"])
+@login_required
+def upload_source_chunk(project_id):
+    """Accept one chunk. Authorization is re-checked on EVERY chunk.
+
+    Deliberately not "authorize once at chunk 0 and trust the upload_id after":
+    an upload spans minutes and many requests, and access can be revoked inside
+    that window. The id is a correlation handle, never a capability.
+    """
+    if not user_can_upload_to_storage():
+        abort(403)
+    _load_workspace_or_404(project_id)
+
+    file_storage = request.files.get("chunk")
+    if file_storage is None:
+        return jsonify(error="missing_chunk", message="No chunk was supplied."), 400
+
+    filename = request.form.get("filename") or ""
+    ext = Path(filename).suffix.lower()
+    if ext not in ALLOWED_DOCUMENT_EXTENSIONS:
+        # Checked at the FIRST chunk rather than only at completion - otherwise
+        # a rejected format still costs the user the whole upload first.
+        return jsonify(error="unsupported_format",
+                       message=f"Unsupported document format '{ext}'."), 400
+
+    staging = ChunkedUploadStore(current_app.config["REGISTRY_STORE_PATH"])
+    try:
+        progress = staging.save_chunk(
+            project_id=project_id,
+            upload_id=request.form.get("upload_id") or "",
+            chunk_index=request.form.get("chunk_index"),
+            total_chunks=request.form.get("total_chunks"),
+            filename=filename,
+            data=file_storage.read(),
+        )
+    except ChunkedUploadError as exc:
+        return jsonify(error="invalid_chunk", message=str(exc)), 400
+
+    return jsonify(ok=True, **progress)
+
+
+@workspace_bp.route("/projects/<project_id>/workspace/sources/upload-complete", methods=["POST"])
+@login_required
+def complete_source_upload(project_id):
+    """Assemble the staged chunks into a real Project Source."""
+    if not user_can_upload_to_storage():
+        abort(403)
+    _, store, workspace = _load_workspace_or_404(project_id)
+
+    original_name = request.form.get("filename") or ""
+    ext = Path(original_name).suffix.lower()
+    if ext not in ALLOWED_DOCUMENT_EXTENSIONS:
+        return jsonify(error="unsupported_format",
+                       message=f"Unsupported document format '{ext}'."), 400
+
+    upload_id = request.form.get("upload_id") or ""
+    staging = ChunkedUploadStore(current_app.config["REGISTRY_STORE_PATH"])
+
+    sources_dir = Path(current_app.config["REGISTRY_STORE_PATH"]) / "workspace_sources" / project_id
+    safe_name = secure_filename(original_name)
+    stored_path = sources_dir / f"{uuid.uuid4().hex}_{safe_name}"
+    max_total = int(current_app.config.get("MAX_CHUNKED_UPLOAD_MB", 500)) * 1024 * 1024
+
+    try:
+        result = staging.assemble(
+            project_id=project_id,
+            upload_id=upload_id,
+            filename=original_name,
+            total_chunks=request.form.get("total_chunks"),
+            destination=stored_path,
+            max_total_bytes=max_total,
+        )
+    except ChunkedUploadError as exc:
+        return jsonify(error="assembly_failed", message=str(exc)), 400
+
+    # The digest is computed WHILE streaming, so it covers exactly the bytes
+    # that landed on disk - not a re-read afterwards, which would prove only
+    # that the file can be read twice consistently.
+    client_digest = (request.form.get("sha256") or "").strip().lower()
+    if client_digest and client_digest != result["sha256"]:
+        stored_path.unlink(missing_ok=True)
+        staging.discard(upload_id)
+        return jsonify(error="integrity_failed",
+                       message="The assembled file did not match the expected "
+                               "checksum and was discarded."), 400
+
+    source = store.add_source(
+        workspace,
+        name=safe_name,
+        file_path=str(stored_path),
+        kind=SOURCE_KIND_PROJECT_DOCUMENT,
+        file_hash=result["sha256"],
+        origin_type=SOURCE_ORIGIN_TYPE_UPLOAD,
+        origin_reference=original_name,
+        actor=_reviewer(),
+        governance_log=_log(),
+    )
+
+    # Only now: the Source is durably registered and its governance event is
+    # written, so the staged chunks have no remaining value. Cleaning earlier
+    # would make a failure between assembly and registration unrecoverable.
+    staging.discard(upload_id)
+
+    parser = BHiveParser(
+        anthropic_api_key=current_app.config.get("ANTHROPIC_API_KEY"),
+        model=current_app.config.get("ANTHROPIC_MODEL"),
+    )
+    try:
+        status, reason = _register_source_content(
+            store, workspace, source, stored_path.read_bytes(), safe_name, parser,
+            actor=_reviewer(), governance_log=_log(),
+        )
+    except Exception:  # Source is already durably registered; report honestly.
+        current_app.logger.exception("Content registration failed for Source %s", source["id"])
+        status, reason = "skipped", "an internal content-processing error occurred"
+
+    if status == "added":
+        flash("Document added as a Project Source. Content processed as "
+              "Spin-readable project evidence.", "success")
+    else:
+        flash("Document registered, but its content could not be processed. "
+              f"Spin cannot read this document yet: {reason}", "warning")
+
+    return jsonify(
+        ok=True,
+        source_id=source["id"],
+        name=safe_name,
+        sha256=result["sha256"],
+        size_bytes=result["size_bytes"],
+        content_status=status,
+        redirect=url_for("workspace.show_workspace", project_id=project_id, view="overview"),
+    )
 
 
 @workspace_bp.route("/projects/<project_id>/workspace/sources/text-record", methods=["POST"])

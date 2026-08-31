@@ -35,8 +35,17 @@
        greying as upload.html's own folder-establishment fieldset - real
        server-side gate lives in workspace.add_document_source, this
        `disabled` is a convenience on top of that, never the only gate. #}
+    {# CLAUDE-CHUNKED-UPLOAD-01: the two data-* URLs below are what
+       static/js/chunked_upload.js binds to. The form's own `action` and
+       `method` are UNCHANGED and still work by themselves - a file at or
+       under the chunk threshold, or any browser where the script did not
+       load, posts to workspace.add_document_source exactly as before.
+       Chunking is an upgrade applied only where the single request would
+       actually fail, never a replacement for the path that already works. #}
     <form class="workspace-form" method="post" enctype="multipart/form-data"
           action="{{ url_for('workspace.add_document_source', project_id=active_project.project_id) }}"
+          data-chunk-url="{{ url_for('workspace.upload_source_chunk', project_id=active_project.project_id) }}"
+          data-complete-url="{{ url_for('workspace.complete_source_upload', project_id=active_project.project_id) }}"
           data-ui-ref="pdm.add-documents.form">
         {# CLAUDE-MM3: .xlsx matches routes/workspace.py's own
            ALLOWED_DOCUMENT_EXTENSIONS - same accept hint as the rail's
@@ -161,4 +170,10 @@
     </section>
     {% endif %}
 {% endcall %}
+{% endblock %}
+
+{% block extra_scripts %}
+{# CLAUDE-CHUNKED-UPLOAD-01: deferred, so a parse error here can never delay
+   or break the page the ordinary upload form lives on. #}
+<script src="{{ url_for('static', filename='js/chunked_upload.js') }}?v={{ static_version }}" defer></script>
 {% endblock %}

@@ -101,6 +101,14 @@ class BaseConfig:
     # where .xlsx is routed to that pipeline instead of BHiveParser.
     ALLOWED_UPLOAD_EXTENSIONS = {".pdf", ".docx", ".txt", ".csv", ".md", ".xlsx"}
 
+    # CLAUDE-CHUNKED-UPLOAD-01: the ceiling for an upload ASSEMBLED FROM CHUNKS,
+    # which MAX_CONTENT_LENGTH above deliberately does not govern - that one
+    # bounds a single request, and under chunking every request is one ~5 MB
+    # chunk. Without a separate ceiling, chunking would turn a bounded upload
+    # path into an unbounded one, which is the obvious way this feature could
+    # make things worse rather than better.
+    MAX_CHUNKED_UPLOAD_MB = int(os.getenv("MAX_CHUNKED_UPLOAD_MB", "500"))
+
     # -- Static asset cache-busting ----------------------------------------
     # Appended as a ?v= query string on static asset URLs (see base.html).
     # deploy/nginx.conf serves /static/ with a 30-day immutable cache, which
