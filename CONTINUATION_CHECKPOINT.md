@@ -1,5 +1,90 @@
 # Continuation checkpoint
 
+## 2026-08-31 (fourth deploy) — `921d851` live at `v=144`: upload progress, Help guides, and a red suite that earned its keep
+
+**`921d851` is live on `https://archiosk.com`**, replacing `bb2b276`. Confirmed
+from systemd: `Gunicorn - ArchiOSK GO (accepted build 921d851)`.
+
+Rollback marker **`/var/www/archiosk-backup-bb2b276`** (841 files, `.env` at
+`600`, pre-edit unit). Rollback trees now **5**; 8.6G used / 89G free.
+
+**`STATIC_VERSION` 143 → 144**, stepped as `CURRENT + 1` from the live file.
+Genuinely required: `static/js/chunked_upload.js` changed by +77/−21.
+
+### What shipped
+
+**Upload progress** — an explicit `<progress>` bar with
+`Uploading chunk 10 of 22 — 45% (32.0 MB / 71.0 MB)`, then
+`Assembling & verifying file...`, then `✓ Upload complete`.
+
+**Three Help guides** — `drawing-ingestion`, `what-is-reconciliation`,
+`file-types-and-limits` — with the paragraphs taken off the upload card and the
+Reconcile control and replaced by a label and a link.
+
+### The suite went red, and that is the entry
+
+The full run failed at 67% on
+`test_every_template_data_ref_has_a_registry_row` **after a targeted lane of 218
+tests had passed clean**. Two new `data-ui-ref` values had no
+`UI_REFERENCE_MAP.md` row. Nothing smaller than the full suite could have caught
+it, and it was caught before anything was committed or deployed.
+
+Adding the rows then failed the **reverse** assertion: the three progress refs are
+created by `chunked_upload.js` at submit time, so no template contains them.
+There were two ways out and one was wrong — marking them non-`active` would have
+satisfied the scanner by **putting a false status in the registry to make a test
+pass**, which is backwards from what the registry is for.
+
+This repository already had the right mechanism: four dynamic-ref allowlists in
+that test exist for exactly this case. `_CHUNKED_UPLOAD_DYNAMIC_REFS` is a fifth,
+and is **read from the JS by regex rather than hard-coded**, so renaming a ref in
+the script fails there with a clear diff instead of drifting silently out of the
+registry. Verified it discovers all three rather than passing vacuously on an
+empty set.
+
+### Written against the code, not the brief
+
+The brief for the reconciliation guide asked it to explain *"cross-discipline
+clash/version alignment"*. **There is no clash detection in this codebase** —
+grepped across `services/`, `routes/`, `engine/` and `templates/`; the only
+"Clash" string is a label inside the fixture-fed `calm_lake` prototype.
+`help_center.py`'s own docstring forbids describing an unbuilt capability
+("indistinguishable from a lie to the person reading it on a site"), so the guide
+documents the seven real `RECONCILE_STATUS_*` verdicts and **states the absence
+plainly** rather than dropping it silently. A test pins that sentence.
+
+**One sentence deliberately did not move.** *"Nothing is added, relinked, or
+removed until you review the report and approve it"* stays on the Reconcile
+control. It is the assurance that makes that button safe to press, and an
+assurance about a governed action belongs at the point of action — behind a link,
+the only people who read it are the ones who already went looking.
+
+### Verified live
+
+- Dry run: **8 modified + 4 new = 12, zero deletions**, matching
+  `git diff --name-status` exactly; 833 metadata-only re-copies.
+- `/health` 200 (public and internal), `/login` 200, `/gateway` 302, no journal
+  errors.
+- Assets serve **`?v=144`** in served content.
+- **The deployed JS was fetched back over HTTPS** (15,864 bytes) and carries
+  `createElement('progress')`, `Assembling & verifying file`, `Upload complete`
+  and `needsReauth`.
+- **All seven guides are gated, not broken** — each 302s to
+  `/login?next=/help/<guide>` for a browser and returns
+  `401 session_expired` to a script, which is what distinguishes a working
+  auth gate from a 500. The `next=` preserves the guide, so signing in lands on
+  the page that was asked for.
+
+### Still carried forward
+
+- **No human has exercised a chunked upload, the re-auth path, or the new
+  guides.** Everything above is automated HTTP, a node truth table, and the
+  suite. The guides in particular have never been *read* by anyone.
+- `admin_required`'s **403** for an authenticated-but-`read_only` script caller
+  still renders HTML — same `.json()` problem, different case, still unaddressed.
+- **Rollback trees are back to 5** after being pruned to 2 earlier today; four
+  deploys in one session rebuilt them. Worth knowing before the next prune.
+
 ## 2026-08-31 (third deploy) — `bb2b276` live at `v=143`: the re-auth case that actually happens
 
 **`bb2b276` is live on `https://archiosk.com`**, replacing `2d80d1f`. Confirmed
