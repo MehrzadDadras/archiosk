@@ -1,5 +1,130 @@
 # Continuation checkpoint
 
+## 2026-08-31 (reconciliation) — The three open items from the entry below, closed; and a route no authentication test had ever touched
+
+Three commits, pushed to `origin/main` at `414834f`:
+
+- **`2d91615`** `fix(tests)` — closes an API route coverage gap and guards it with
+  `RouteListsCoverTheRealBlueprintTests`.
+- **`6a30dbb`** `chore` — the deprecated `fitz` alias retired in favour of direct
+  `pymupdf` imports.
+- **`414834f`** `docs` — `MANIFEST.md`'s API surface and `CLAUDE.md`'s test
+  metrics reconciled against measured reality.
+
+This entry closes **all three** items the entry below recorded as "Open items
+recorded, not fixed."
+
+### The finding: a documented surface audit turned up an untested route
+
+The reconciliation began as documentation work — `MANIFEST.md` claimed nine
+routes where the blueprint has 43. Enumerating the real surface from the live
+`url_map` (rather than by reading decorators, which is what let the row drift in
+the first place) produced the actual shape: **43 `api.*` rules, 24 admin-gated
+via `_ADMIN_ONLY_ENDPOINTS`, 19 login-only.**
+
+Diffing that ground truth against `tests/test_api_authentication.py`'s two
+hand-maintained lists found
+`POST /api/v1/documents/<project_id>/sources/<source_id>/snapshot`
+(`api.create_document_snapshot`, CLAUDE-SNAPSHOT-DUAL-SURFACE-01) in **neither**.
+
+It was correctly gated in production the whole time — it is listed in
+`_ADMIN_ONLY_ENDPOINTS` and the blueprint-wide `before_request` hook enforced it.
+What was missing was any test: absent from `API_ROUTES`, the "every route rejects
+an unauthenticated request" sweep never touched it; absent from
+`ADMIN_ONLY_ROUTE_PATHS`, which was consistent only because the route was missing
+upstream of it. **Nothing failed.** A route nobody lists is a route nobody tests,
+and the hook's own merit — that a new route cannot omit the gate by accident — is
+exactly what kept the omission invisible.
+
+That list's own comment claims it is kept explicit "so a route added later and
+left out of this list is an obvious gap." It was not obvious. It was silent, and
+the route had been in the blueprint long enough to carry its own CLAUDE- tag. A
+comment asserting a property the file cannot enforce is the thing that actually
+failed.
+
+`RouteListsCoverTheRealBlueprintTests` now asks the app instead of trusting the
+lists: it walks `url_map` for `api.*` rules, substitutes the same placeholder ids
+the lists use, and asserts every registered route is listed, that nothing listed
+has stopped existing (a stale entry asserts against a 404 and passes for the
+wrong reason), and that `ADMIN_ONLY_ROUTE_PATHS` equals the actually-gated set in
+both directions. It fails loudly on a route parameter it cannot substitute rather
+than silently checking a path containing a literal `<param>`.
+
+**Verified by mutation, not by passing.** Removing the snapshot entry from
+`API_ROUTES` makes the guard fail naming that exact route; restored, all three
+pass. A guard that has never been seen to fail is not yet evidence of anything.
+
+### What the documents now say
+
+`MANIFEST.md`'s `routes/api.py` row enumerates all 43 endpoints grouped by the
+CLAUDE- tag each section already carries, with the gate stated per group, and
+records two things a reader would otherwise have to rediscover: that `POST` and
+`GET /relationships` share one path — which is *why* the test lists are keyed by
+`(method, path)` — and that the Spin diagnostic is the one deliberate admin-only
+READ, because it discloses a whole run's input set rather than a single object.
+Its "Connects to" column now names the six services imported inside their
+handlers, which the previous text omitted entirely.
+
+`CLAUDE.md` carries the measured baseline in full rather than as one number:
+**6,004 collected / 4 deselected / 6,000 selected → 5,998 passed, 2 skipped,
+1,951 subtests, 25:28**, measured on the tree committed as `72a4a7d`..`9c2408f`.
+Quoting all of them is the point — collected, selected and passed are three
+different numbers here, and a lone "test count" silently meaning one of the
+others is precisely how "approximately 4,964" drifted roughly a thousand tests
+out of date without anyone noticing.
+
+The pipe rule was also promoted into `CLAUDE.md`. It existed only in `705aa2a`'s
+commit message, which is not where anyone looks before running a suite.
+
+### The `fitz` retirement
+
+`requirements.txt` has always said PyMuPDF is "Imported as `pymupdf`, not the
+deprecated `fitz` alias", and `engine/pdf_extractor.py` — the application code
+that actually depends on it — already complied. Three scripts outside the
+application did not. `import pymupdf as fitz` would have satisfied the note's
+letter while leaving every call site reading `fitz.`, so the rename went all the
+way through; no `fitz` token remains anywhere outside the venv.
+
+`generate_drawings.py` was deliberately **not executed**. It rewrites the tracked,
+digest-pinned `builder_corpus/Drawings_Set.pdf`. Confirmed byte-identical after
+the change — `sha256 41c6524e3343b760…`, still matching that corpus's
+`manifest.json` exactly.
+
+### Evidence
+
+Targeted lane across the authentication, PDF-extractor, Nipigon, spatial-compiler,
+metabolic-bridge and PSD corpus tests: **239 passed, 74 subtests, `PYTEST_EXIT=0`**,
+redirected to a log with the exit code captured as its own line.
+
+The full suite was **not** re-run for these commits, and deliberately so: nothing
+under `routes/`, `services/`, `templates/`, `models.py`, `config.py`, `app.py` or
+`migrations/` changed, which is the condition `CLAUDE.md` actually states. It was
+also verified that no test reads `MANIFEST.md` or `CLAUDE.md` as data — every
+reference to either in `tests/` is prose inside a docstring — so the documentation
+half of this work carries no test risk at all.
+
+### Why three commits and not one
+
+The requested commit was a single `docs:` reconciliation. The route-coverage gap
+is a security-test repair that the audit happened to surface, and burying it in a
+documentation commit would hide it from exactly the person later asking when that
+route started being tested. It also lands *first* on purpose: the new
+`MANIFEST.md` row asserts that both test lists cover every route, and that
+sentence only became true with `2d91615`.
+
+### Still carried forward
+
+- **Live production remains `f332681`.** None of `72a4a7d`, `7d7e078`, `9c2408f`,
+  `edfd672`, `3ab4e6e`, `2d91615`, `6a30dbb` or `414834f` is deployed. The
+  authenticated browser verification recorded two entries below covers `f332681`,
+  not any of this work.
+- **`tests/fixtures/wd_nas_bridge/` remains deliberately untracked** — no test
+  reads it, and committing unused scaffolding would assert a dependency that does
+  not exist.
+- **Rollback trees are 107** (~1.7G against 87G free). Pruning remains the
+  deliberate per-occasion decision the runbook describes.
+- **The unexplained full-suite stall** remains unidentified and non-recurring.
+
 ## 2026-08-31 (later still) — The parked working tree audited and shipped: test-store isolation, a Spin input diagnostic, and a custody boundary that nothing enforced
 
 Three commits, all on a full suite green **before** any of them landed:
