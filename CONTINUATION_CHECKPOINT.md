@@ -1,5 +1,77 @@
 # Continuation checkpoint
 
+## 2026-08-31 (verification) — Document upload verified end to end by the Product Owner, and independently corroborated server-side: the upload-500 incident is CLOSED
+
+**Reported by the Product Owner, 2026-08-31**, during authenticated browser use of
+`https://archiosk.com`: the document upload processed cleanly with zero 500s, and
+the document rendered and was indexed in the active project workspace.
+
+Unlike the previous human-verification entry, this one is **not solely a report**.
+The human judgement — that the document rendered and reads correctly in the
+workspace — is the Product Owner's and is recorded as theirs. The mechanical facts
+below were independently confirmed by this agent from the server's own state, and
+the two agree.
+
+### Server-side corroboration
+
+- `instance/registry/222109-1860-alstep-dr.workspace.json` modified **17:24:04
+  UTC**, growing 6,211 → **7,264 bytes** — it had previously been untouched since
+  30 August 23:25.
+- That workspace's Source count went **0 → 1**: `A-01.pdf`, `kind:
+  project_document`, `origin_type: upload`, `removed_at: None`.
+- The project's append-only governance log gained a **`source_registered`** event
+  (actor `admin`), growing 481 → 1,011 bytes.
+- **Zero** HTTP 5xx in `archiosk-go.service` since the fix, and **zero**
+  `body/... Permission denied` entries in nginx since 16:04:41. The last 500 of
+  any kind on this path remains 16:03:17, before the fix.
+
+This is the first entry in this file where a human's verification and the
+application's own persisted state have been checked against each other rather
+than one standing alone.
+
+### The two attempts are worth recording, because 302 does not mean what it looks like
+
+There were exactly two `POST .../workspace/sources/document` requests after the
+nginx fix, and **both returned 302**:
+
+- **17:22:53 → 302 (261 bytes).** Not a success. The session had lapsed, so the
+  POST was bounced; the very next request is
+  `GET /login?next=/admin/reset-project-data`. Nothing was written.
+- **17:23:24** — `POST /login` → 302: the Product Owner signs back in.
+- **17:24:04 → 302 (297 bytes).** The real one. This is the request that wrote the
+  workspace file and the governance event.
+
+A 302 is the normal post-upload redirect **and** the normal auth bounce, so the
+status code alone distinguishes nothing. Only the persisted state does. An
+intermediate check run at 17:23 — between the two attempts — showed `total
+sources: 0` and would have supported exactly the wrong conclusion if it had been
+treated as final. The store, not the access log, is what settles whether an
+upload happened.
+
+It also incidentally demonstrates the authorization gate holding correctly under
+real use: an unauthenticated upload POST was refused rather than processed.
+
+### What this closes
+
+- **The upload-500 incident (entry below) is CLOSED.** The
+  `nginx -t -c`-induced ownership defect is fixed, and the path it broke is now
+  proven working by a real human upload that persisted real state — not only by
+  the synthetic 1MB/2MB buffered POSTs used to verify the fix at the time.
+- **Authenticated browser verification of `e7e8962` is substantially exercised.**
+  Sign-in, an authenticated session, the project workspace, document upload,
+  rendering and indexing have all now been driven by a human against the deployed
+  build. Recorded as what was actually reported and corroborated — Gateway and
+  project-open were not separately named in this round, so this is not claimed as
+  a complete sweep of every surface.
+
+### Still carried forward
+
+- **`e7e8962` remains the live commit**; the checkpoint commits after it are not
+  deployed, and nothing in this entry changes that.
+- **Nothing alerts on nginx `[crit]` lines.** The ownership defect ran for ~40
+  hours unnoticed and was found only because a human hit it. That gap is
+  unchanged by this verification.
+
 ## 2026-08-31 (incident) — Document upload returning 500: an `nginx -t` config test had silently re-owned nginx's temp directories
 
 **Reported by the Product Owner during authenticated browser verification of
