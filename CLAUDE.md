@@ -160,13 +160,28 @@ preserved wherever consequences require it.
 
 ## Testing
 
-Full suite: `./venv/Scripts/python.exe -m pytest -q` (approximately 4,964
-tests in the current collection). Recent observed wall-clock runs include
-approximately 26:49, 27:57, 43:35, 59:47, 77:42, and 2:44:54 - note 27:57 and
-59:47 are the SAME suite on the same machine hours apart; duration varies substantially
-with the environment and is not a fixed service-level expectation. Treat
-pass/fail as the assurance signal, not wall-clock time. An unusually long run
-is not automatically evidence of a code regression. There is no CI here — this is the only gate, so run it
+Full suite: `./venv/Scripts/python.exe -m pytest -q`. **Measured baseline,
+2026-08-31, on the tree committed as `72a4a7d`..`9c2408f`: 6,004 collected / 4 deselected / 6,000 selected →
+5,998 passed, 2 skipped, 1,951 subtests, in 25:28.** Quote all four numbers
+rather than one "test count": collected, selected and passed differ here, and a
+figure that silently means one of the others is how the previously-recorded
+"approximately 4,964" drifted roughly a thousand tests out of date without
+anyone noticing. Recent observed wall-clock runs include approximately 25:28,
+26:49, 27:57, 43:35, 59:47, 77:42, and 2:44:54 - note 27:57 and 59:47 are the
+SAME suite on the same machine hours apart, and 25:28 and 2:52:35 are likewise
+the same suite on materially the same tree. Duration varies substantially with
+the environment and is not a fixed service-level expectation. Treat pass/fail as
+the assurance signal, not wall-clock time. An unusually long run is not
+automatically evidence of a code regression.
+
+**Never read the result through a pipe.** Redirect to a log file and capture
+the exit code as its own line (`... > run.log 2>&1; echo "PYTEST_EXIT=$?" >>
+run.log`). `pytest -q 2>&1 | tail -40` reports *tail's* exit status, not
+pytest's, and a background-task notification saying "exit code 0" for the
+wrapper is not evidence the suite passed - that combination once nearly landed a
+commit on a fabricated pass (see `705aa2a`).
+
+There is no CI here — this is the only gate, so run it
 before committing anything that touches `routes/`, `services/`, or
 `templates/`. If a CSS-only change breaks
 `test_common_ui_elements_no_longer_reference_font_mono` or
