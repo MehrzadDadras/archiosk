@@ -175,6 +175,25 @@ always updating that test's own selector list, not reverting the CSS —
 both tests assert against specific selector names, not against the
 design intent.
 
+**The test stores are cleared at session start, not torn down after.**
+`tests/conftest.py`'s `pytest_sessionstart` empties
+`instance/test_registry` and `instance/test_project_assets` before
+collection. This is not tidiness: `TestingConfig` points those at fixed
+paths (deliberately — `config.py` wants the artifacts inspectable after a
+failure) and nothing ever emptied them, so every run's Projects
+accumulated forever. `services/project_code.py` issues each Project a 3–4
+character acronym and refuses to reuse one, and tests that ingest Projects
+share a fixed name stem, so the space exhausts. It surfaced as 15 failures
+across `test_write_collision_01.py` and `test_mobile_continuation_01.py`,
+all `ProjectCodeError: Could not derive a unique project acronym` — in
+features that had nothing to do with the accumulating state, only after
+enough prior runs, reading exactly like a regression. One run leaves ~130
+entries; it had reached 815. Clearing at the START rather than the end is
+what keeps both properties: the last run's artifacts survive for as long
+as you are looking at them, and no run inherits another's. Set
+`ARCHIOSK_KEEP_TEST_REGISTRY=1` to preserve a previous run's store while
+re-running a subset against it.
+
 **Hermetic tests — spy on external calls, don't let them run for real.**
 Any test path that can reach `ingest_upload`/`BHiveParser.parse` (or any
 other call to the Anthropic API, SMTP, or external networking) must
