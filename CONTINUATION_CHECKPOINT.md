@@ -1,5 +1,126 @@
 # Continuation checkpoint
 
+## 2026-08-31 (later still) — The parked working tree audited and shipped: test-store isolation, a Spin input diagnostic, and a custody boundary that nothing enforced
+
+Three commits, all on a full suite green **before** any of them landed:
+
+- **`72a4a7d`** `test(infra)` — `tests/conftest.py` clears the test stores at
+  session start, plus its guard test and the `CLAUDE.md` section describing it.
+- **`7d7e078`** `feat(api)` — `GET /api/v1/documents/<id>/spin-runs/<run>/source-signature`,
+  admin-gated, plus its own test and both `tests/test_api_authentication.py` lists.
+- **`9c2408f`** `chore(fixtures)` — the held-out oracle boundary made enforceable,
+  and the metabolic-bridge corpus's manifest and generator tracked.
+
+### What was parked, and what it turned out to be
+
+The tree had been carried, uncommitted, across the two entries below — both of
+which flagged it as work whose green "covers more than what was deployed." It
+was not abandoned scratch. It was three unrelated pieces of finished work with no
+commit boundary drawn through them, which is why it needed an audit before a
+commit rather than a `git add -A`.
+
+The test-store piece is the one with teeth. `TestingConfig` points the registry
+at a FIXED path, deliberately, so artifacts stay inspectable after a failure —
+and nothing ever emptied it. `services/project_code.py` refuses to reuse a
+Project acronym and the space is ~100 variants per name stem, so accumulation
+eventually exhausts it. It had reached 815 entries and surfaced as 15 failures in
+`test_write_collision_01.py` / `test_mobile_continuation_01.py`, features with no
+relationship to the state actually accumulating. That is the worst shape a test
+failure can take, and one measured run leaves ~130 entries — six or seven runs of
+headroom remained.
+
+### The finding: a documented custody property that nothing enforced
+
+Five **tracked** test files — `test_storage_bridge_01.py`, `_trust_02`,
+`_endpoints_03`, `_agent_04`, and `test_external_custody_disconnect_02.py` — each
+assert in their own docstring that `tests/fixtures/wd_nas_bridge/oracle/`
+"remains unread and untracked", and each corpus `manifest.json` names its oracle
+as "private evaluation material" under an ingest rule of "Register only files
+beneath `builder_corpus`".
+
+Nothing enforced any of it. There was no `.gitignore` rule, and both oracle
+directories sat untracked in the working tree. A single `git add -A` — the
+obvious way to clear a parked tree — would have committed the held-out answers
+and made all five of those claims false in the same stroke that recorded them.
+`tests/fixtures/*/oracle/` is now ignored, following the precedent that file
+already set for `tests/fixtures/nreocrc/_lab_instance_scratch*/`, which was added
+for exactly this failure mode. Verified with `git check-ignore` in both
+directions: it catches both oracle files and nothing else.
+
+**Neither oracle file was read at any point during this audit.**
+
+`tests/fixtures/wd_nas_bridge/` (its `builder_corpus` and `manifest.json`)
+remains deliberately untracked. No test reads it — the storage-bridge tests build
+their own temp corpora inline — and committing unused scaffolding would assert a
+dependency that does not exist.
+
+The metabolic-bridge `manifest.json` records a digest for the already-tracked
+`Drawings_Set.pdf`. It was verified against the bytes rather than trusted:
+`41c6524e3343b760…`, 15515 bytes, both exact. A manifest that asserts a digest
+has to be true or it is worse than absent.
+
+### The suite
+
+**5998 passed, 2 skipped, 4 deselected, 1951 subtests, 25:28, pytest exit 0** —
+6004 collected, 4 deselected, 6000 selected. Targeted API/auth lane beforehand:
+232 passed, 154 subtests, exit 0.
+
+Both runs were redirected to a log file with the exit code captured as its own
+line, never through a pipe. `705aa2a` records why: a piped run's `tail` reported
+ITS OWN status as 0 and nearly landed a commit on a fabricated pass. The
+background-task notification for this run likewise reported "exit code 0" for the
+wrapper script, and that was **not** what was trusted — `PYTEST_EXIT=0` was read
+out of the log.
+
+One absence worth recording as understood rather than unexplained: the full run
+printed no `[conftest] reset test stores` line, while the lane run did. That is
+the hook behaving correctly. The lane ended with
+`test_it_is_a_no_op_when_the_store_is_already_absent`, which removes the store
+itself, so the full session started with nothing to remove and the message is
+conditional on having removed something — the fresh-clone path, exercised at
+full-suite scale.
+
+At **25:28** this is the fastest full run recorded here, against 2:52:35 and a
+stalled 4h27m on materially the same tree. That is further evidence the stall
+logged below was non-recurring; it is **not** an explanation of it, which remains
+unidentified.
+
+### What this narrows in the two entries below
+
+Both carry an item stating the 5998-pass result covered a COMBINED tree including
+uncommitted work, of which "None of it shipped." Most of it has now shipped, so
+that item is **narrowed, not closed**: `routes/api.py`,
+`tests/test_api_authentication.py`, `CLAUDE.md`, `tests/conftest.py`, the PSD
+spin-source diagnostic, the registry isolation test and the metabolic_bridge
+fixtures are all now committed. The `wd_nas_bridge` fixtures remain untracked by
+decision, so a run from a clean checkout still is not byte-for-byte the same test
+population as the runs those entries describe. Those entries are left as written.
+
+### Open items recorded, not fixed
+
+- **`MANIFEST.md`'s `routes/api.py` row is stale**, and was already stale before
+  this work. It documents only the original ~9 routes ("these six now all go
+  through…") and was never updated for the MM1/MM2/MM3/MM6 additions, so the new
+  diagnostic is not the cause and fixing it properly is a larger, separate pass.
+- **`CLAUDE.md`'s stated collection size is stale** — it says "approximately
+  4,964 tests in the current collection" against a measured 6004 collected /
+  6000 selected. Its wall-clock list also predates the 25:28 run above.
+- **`tests/fixtures/metabolic_bridge/generate_drawings.py` imports the deprecated
+  `fitz` alias**, while `requirements.txt` explicitly notes PyMuPDF is "Imported
+  as `pymupdf`, not the deprecated `fitz` alias." Two existing `tools/` scripts
+  do the same, so it is consistent with practice but contradicts the stated
+  convention. Not run by any test.
+
+### Still carried forward
+
+- **Rollback trees are 107** (~1.7G against 87G free). Pruning remains the
+  deliberate per-occasion decision the runbook describes.
+- **The unexplained full-suite stall** remains unidentified and non-recurring.
+- **Nothing here is deployed.** These three commits are pushed to `origin/main`
+  and have not been released to `archiosk.com`; the live commit remains
+  `f332681`. The authenticated browser verification recorded in the entry below
+  covers that deploy, not this work.
+
 ## 2026-08-31 (later) — Product Owner authenticated browser verification of `f332681`: the standing gap is closed
 
 **Reported by the Product Owner, 2026-08-31.** This entry records a HUMAN
