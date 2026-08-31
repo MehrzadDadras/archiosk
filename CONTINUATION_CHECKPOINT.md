@@ -1,5 +1,125 @@
 # Continuation checkpoint
 
+## 2026-08-31 (feature) — Chunked document upload, lifting a deferral this repository had already written down
+
+`CLAUDE-CHUNKED-UPLOAD-01`, committed as `aa8f550`. **1,180 insertions, zero
+deletions** — the existing single-request upload path is untouched.
+
+### This was a recorded deferral, not a new idea
+
+`.env.example` has carried the reason verbatim: *"A full scanned drawing package
+(100MB+) is NOT safely supported by this synchronous architecture yet … requiring
+streaming/chunked upload or background processing, not something to raise this
+number further to paper over."* This is that work. The note now says which half
+is lifted, because "chunked upload exists" read as covering everything would be
+worse than the original limitation:
+
+- **Lifted** — the Workspace "Add Documents" surface (Admin → Project Data
+  Management).
+- **Still deferred** — every other surface, notably the new-project folder upload
+  in `routes/portal.py`, which remains single-request and still bound by
+  `MAX_UPLOAD_MB`.
+
+### The limit was not where it looked
+
+Three ceilings apply, and the binding one is not the obvious one:
+
+| | |
+|---|---|
+| Flask `MAX_CONTENT_LENGTH` | **25 MB** (`MAX_UPLOAD_MB`) — the real limit |
+| nginx `client_max_body_size` | 60 MB |
+| gunicorn `timeout` | 150 s |
+
+Raising all three is two lines of config and is a legitimate alternative. It was
+not chosen because it does not survive a dropped connection at 90% of a 400 MB
+transfer, and it holds the whole body in one `gthread` worker for the duration.
+
+### A transport, not a second ingestion path
+
+`upload-complete` performs the **identical** `add_source` +
+`_register_source_content` sequence as `add_document_source`. A chunked document
+and a single-request document are indistinguishable once registered — same kind,
+same `origin_type`, same `source_registered` governance event, same
+Spin-readability. A second ingestion path producing subtly different Sources
+would be a provenance defect rather than a feature, so the test suite asserts
+that equivalence **directly against a Source created the ordinary way in the same
+test**, not by inspection.
+
+### Three decisions that departed from the obvious
+
+**Staging under `REGISTRY_STORE_PATH`, not `/tmp`.** `deploy/gunicorn.service`
+sets `PrivateTmp=true`, so `/tmp` is a per-service namespace discarded on
+restart — a deploy mid-upload would silently take every in-flight chunk with it.
+And `services/bridge_queue.py` already records Phase 2 discovering that state
+landing in one of fifteen workers is invisible to the other fourteen,
+*"intermittent rather than broken - the worst way for something to be wrong."*
+This is that conclusion applied rather than re-derived.
+
+**`PendingReconcileStore` examined first and deliberately not extended.**
+CLAUDE.md requires identifying what already serves the purpose before adding an
+abstraction. Its `create()` takes the complete bytes of every file up front and
+writes its manifest once — the opposite lifecycle to fragments arriving across
+many requests. Its *pattern* is reused (directory under the store, JSON manifest,
+the same 24-hour TTL); its contract is not.
+
+**No client-side SHA-256, and the code says why.** `crypto.subtle.digest` has no
+streaming API, so hashing a 400 MB file in the browser means holding 400 MB in
+memory — the exact problem this feature exists to avoid. The server hashes
+*while* streaming to disk, so the digest covers precisely the bytes that landed
+rather than a re-read afterwards. The endpoint still accepts an optional client
+digest; both the matching and mismatching cases are tested.
+
+### Security properties
+
+**Cross-project reach is inexpressible, not refused.** The manifest records the
+owning project and every entry point re-derives the directory from an id
+validated against `^[0-9a-f]{32}$` — so `..`, `/` and a drive letter all fail by
+the same rule instead of by a list of things to strip.
+
+**Authorization is re-checked on every chunk**, not once at chunk 0. An upload
+spans minutes and many requests, and access can be revoked inside that window, so
+the `upload_id` is a correlation handle and never a capability.
+
+**`MAX_CHUNKED_UPLOAD_MB` (500 MB) is a deliberately separate ceiling.**
+`MAX_CONTENT_LENGTH` bounds one request, and under chunking one request is one
+~5 MB chunk — without its own ceiling, chunking would convert a bounded upload
+path into an unbounded one, which is the obvious way this feature could make
+things worse rather than better.
+
+Chunks are written temp-then-renamed, so a retried chunk is never observable
+half-written by an `assemble()` that only checks existence. Assembly streams into
+a `.assembling` file that gets its real name only once fully written and
+size-checked. Staged chunks are discarded only **after** the Source is durably
+registered — cleaning earlier would make a failure between assembly and
+registration unrecoverable.
+
+### Evidence
+
+**Full suite green: 6,055 passed, 2 skipped, 4 deselected, 1,973 subtests,
+53:04, `PYTEST_EXIT=0`** — captured to a log file, never read through a pipe. All
+32 `tests/test_chunked_upload.py` tests present in that run.
+
+Three of those 32 failed on first write and were **my test bug, not the
+implementation**: the fixture project legitimately already holds the baseline
+document `ingest_upload` creates it with, so a `sources == 0` baseline was wrong.
+Corrected to assert on the specific Source by name, which does not depend on the
+fixture's shape.
+
+Collection is now **6,061 / 6,057 selected**.
+
+### Carried forward
+
+- **`STATIC_VERSION` must be bumped on the SERVER at deploy.**
+  `static/js/chunked_upload.js` is new and nginx caches `/static/` as immutable
+  for 30 days. Bumped locally 141 → 142, but `.env` is git-ignored by design, so
+  that bump **cannot** ship in a commit — `DEPLOYMENT.md` step 10 is the only
+  place it happens.
+- **Not deployed.** `e7e8962` remains live; this and every commit after it are
+  unreleased.
+- **Expiry sweeps on new-upload creation**, matching `PendingReconcileStore`. If
+  no new upload ever starts, an abandoned set persists past 24 hours. That is the
+  existing store's behaviour too, and is recorded rather than quietly accepted.
+
 ## 2026-08-31 (monitoring) — nginx `[crit]` alerting installed, and the bug its own fail-closed design caught on the first run
 
 `CLAUDE-NGINX-CRIT-MONITOR-01`, committed as `db612af`/`80a466c`. Closes the gap
