@@ -1,5 +1,85 @@
 # Continuation checkpoint
 
+## 2026-08-31 (third deploy) — `bb2b276` live at `v=143`: the re-auth case that actually happens
+
+**`bb2b276` is live on `https://archiosk.com`**, replacing `2d80d1f`. Confirmed
+from systemd: `Gunicorn - ArchiOSK GO (accepted build bb2b276)`.
+
+Rollback marker **`/var/www/archiosk-backup-2d80d1f`** (841 files, `.env` at
+`600`, pre-edit unit). Rollback trees now **4**; 8.6G used / 89G free.
+
+**`STATIC_VERSION` 142 → 143**, stepped as `CURRENT + 1` from the live file.
+
+### What this fixes, and why the previous deploy only half-fixed it
+
+The entry below recorded the discovery that `CLAUDE-SESSION-EXPIRY-JSON-01`'s new
+`401 session_expired` path is unreachable for a POST: Flask-WTF's CSRF check is a
+`before_request` hook, so it runs **before** the view's `@login_required`, and
+the CSRF token is bound to the session — an expired session takes the token with
+it. Every request `chunked_upload.js` makes is a POST, so handling only the 401
+handled only the case that cannot occur here.
+
+`needsReauth()` now recognises 401, `session_expired`, `csrf_expired`, the literal
+`"CSRF token expired"` reason, and a 400 carrying an explicit `redirect`.
+
+### The guard that mattered most
+
+`needsReauth()` returns **false for any ok response, on its first line**.
+`upload-complete` returns a `redirect` field on **success** — the workspace URL to
+return to — and the completion path consults this helper *before* testing
+`response.ok`. Treating a bare `redirect` as a re-auth signal without checking
+status first would have sent every completed upload to the login page. The
+directive did list `data.redirect` as a trigger; it is honoured, scoped to 4xx.
+
+### Evidence
+
+`needsReauth()` was **extracted from the shipped file** and run under node
+against a 12-case truth table — not a retyped copy, so it tests what ships. All
+pass, including the success-carrying-`redirect` trap and correct discrimination
+between `csrf_expired` and ordinary 400 refusals (`unsupported_format`,
+`invalid_chunk`, `integrity_failed` all correctly false, as do 404 and 500).
+
+Lane: **153 passed** (session expiry, chunked upload, api auth, csrf expiry, csrf
+protection, auth shell isolation, route authorization).
+
+**The full suite was deliberately not re-run**, and the reasoning is recorded
+rather than assumed: nothing under `routes/`, `services/`, `templates/`,
+`models.py`, `config.py`, `app.py` or `migrations/` changed — only `static/js`
+and one test — which is the condition `CLAUDE.md` actually states. The two
+suite-wide scanners that glob **every** `static/js/*.js`
+(`test_landing_simplify_01`, `test_p40vw7b_qa2_header_vestibule_link_fix`) were
+identified by search and run explicitly rather than assumed irrelevant: 35
+passed.
+
+### Verified live
+
+- Dry run: **3 modified, 0 new, 0 deletions**, exactly matching
+  `git diff --name-status`; 838 metadata-only re-copies.
+- `/health` 200 (public and internal), `/login` 200, `/gateway` 302, no journal
+  errors across the restart.
+- Assets serve **`?v=143`** in served content.
+- **The served JavaScript was fetched back over HTTPS and inspected** — it
+  carries `needsReauth`, both `csrf_expired` occurrences, the `CSRF token
+  expired` reason and the `response.ok` guard. Verifying the file on disk would
+  only have proved rsync worked; this proves what a browser will actually
+  receive.
+- `Cache-Control: public, immutable, max-age=2592000` on that asset — a 30-day
+  cache, which is precisely why the version bump is not optional.
+- nginx `[crit]` monitor still active after the deploy.
+
+### Still carried forward
+
+- **No human has yet exercised a chunked upload**, and now no human has exercised
+  the re-auth path either. Everything above is automated HTTP and a node truth
+  table. The feature's whole point — a large drawing set uploading in pieces
+  through a real browser, and an expired sign-in mid-upload returning the person
+  cleanly to the login card — remains unverified by a person.
+- `admin_required`'s **403** for an authenticated-but-`read_only` script caller
+  still renders HTML: same `.json()` problem, different case (a standing
+  authorization decision, not an expiring session), still deliberately
+  unaddressed.
+- Rollback trees are **4**. Pruning remains a deliberate per-occasion decision.
+
 ## 2026-08-31 (second deploy) — `2d80d1f` live at `v=142`: chunked upload, JSON session expiry, and the ordering discovery that qualifies it
 
 **`2d80d1f` is live on `https://archiosk.com`**, replacing `e7e8962`. Confirmed
