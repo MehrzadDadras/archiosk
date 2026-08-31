@@ -1,5 +1,105 @@
 # Continuation checkpoint
 
+## 2026-08-31 (second deploy) — `2d80d1f` live at `v=142`: chunked upload, JSON session expiry, and the ordering discovery that qualifies it
+
+**`2d80d1f` is live on `https://archiosk.com`**, replacing `e7e8962`. Confirmed
+from systemd rather than from commands exiting zero: `systemctl show
+archiosk-go.service -p Description --value` returns `Gunicorn - ArchiOSK GO
+(accepted build 2d80d1f)`.
+
+**Rollback marker: `/var/www/archiosk-backup-e7e8962`** — 832 code files plus the
+pre-edit `.env` at mode `600` and the pre-edit unit, inside that sibling tree.
+Rollback trees are now **3** (`e7e8962`, `f332681`, `9d16b8c`), 8.6G used / 89G
+free.
+
+**`STATIC_VERSION` 141 → 142**, and this time it was genuinely required —
+`static/js/chunked_upload.js` is new. Stepped as `CURRENT + 1` read from the live
+`.env`, never as an absolute number, per the runbook's own record of a bump that
+once landed *below* what production was serving. Verified in **served content**:
+`main.css?v=142`, `login.js?v=142`, `ocean_field.js?v=142`, `pwa.js?v=142`,
+`voice_input.js?v=142`.
+
+Steps 7 and 8 skipped, verified rather than presumed: `git diff` over
+`requirements.txt` and over `models.py`/`migrations/` are both empty for this
+range.
+
+### Ten commits, and the dry run proved the change set exactly
+
+The delta was `e7e8962..HEAD` — **not** the two most recent commits. The
+originally-stated range began at `1401304`, which had never been deployed; naming
+the rollback tree from it would have produced a marker for a commit that was
+never live.
+
+Step 5's itemized dry run resolved the change set to **8 modified + 9 new = 17
+files, zero deletions**, matching `git diff --name-status`'s own 8 `M` and 9 `A`
+exactly. 824 further entries were metadata-only re-copies — the `git archive`
+timestamp artifact — which is why a `-v` listing's raw line count is not evidence
+of anything. The only protected-path name in the output was `.env.example`, the
+tracked template that is *supposed* to deploy.
+
+### The discovery: CSRF runs before the auth gate
+
+`CLAUDE-SESSION-EXPIRY-JSON-01` makes `login_required` return
+`401 {"error": "session_expired", "redirect": ...}` to a script instead of a 302
+an XHR would follow into unparseable HTML. Verified live, both halves:
+
+- browser-shaped `GET /projects/some-project/workspace` → **302** to
+  `/login?next=/projects/some-project/workspace`
+- script-shaped (`X-Requested-With`) → **401** with exactly that JSON body
+
+**But a POST does not reach it.** Flask-WTF's CSRF check is a `before_request`
+hook and therefore runs *before* the view's own `@login_required`. A script POST
+without a valid token is refused as `400 {"error": "csrf_expired"}` first — and
+because the CSRF token is bound to the session, a session that has expired takes
+the token with it. So in practice:
+
+| | what a script actually receives |
+|---|---|
+| GET, expired session | `401 session_expired` ← the new path |
+| POST, expired session | `400 csrf_expired` ← the pre-existing CSRF handler |
+
+This was found by testing the deployed endpoints rather than by reading the code,
+and it is recorded because it **narrows what the new work actually changed**. The
+401 path is real, correct and live, and it is not the path most chunked-upload
+failures will take.
+
+It is not a regression — `CLAUDE-CSRF-EXPIRY-01` already made that 400 a clean
+JSON refusal rather than a raw Flask-WTF error page, so a script gets a parseable
+body either way. What is **not** yet handled is the client: `chunked_upload.js`
+auto-redirects on 401 but merely *reports* a 400 `csrf_expired` as
+`Refused (CSRF token missing or expired)`. The reviewer sees an honest message
+and no automatic return to sign-in.
+
+**Deliberately not fixed in this deploy.** Stacking a further change onto a
+just-completed production deploy, to fix something discovered during its own
+verification, is how a good deploy becomes a bad afternoon. Carried forward
+below.
+
+### Verified live
+
+- `/health` **200** (public and internal), `/login` **200**, `/gateway` **302**.
+- Both new endpoints registered and gated: `upload-chunk` and `upload-complete`
+  return **302** to a browser and a JSON refusal to a script.
+- No `error|traceback|exception|critical` in the journal across either restart
+  (the deploy restart and the `daemon-reload` restart for step 12).
+- The nginx `[crit]` monitor survived the deploy: timer active, last run
+  `Finished ARCHIOSK nginx critical-error check`.
+- Deploy scratch removed from `/tmp` on both ends.
+
+### Still carried forward
+
+- **`chunked_upload.js` should treat `csrf_expired` the way it treats
+  `session_expired`** — both mean "sign in again" to the person looking at the
+  screen. This is the next change, not part of this deploy.
+- **No human has exercised a chunked upload.** Everything above is HTTP-level and
+  automated. The feature's whole point — a large drawing set uploading in pieces
+  through a real browser — has not been done by a person, and the last time a
+  human first exercised an upload path it found a 40-hour-old defect.
+- `admin_required`'s **403** for an authenticated-but-`read_only` script caller
+  still renders HTML. Same `.json()` problem, different case (a standing
+  authorization decision, not an expiring session), deliberately unaddressed.
+- **Rollback trees are 3.** Pruning remains the deliberate per-occasion decision.
+
 ## 2026-08-31 (feature) — Chunked document upload, lifting a deferral this repository had already written down
 
 `CLAUDE-CHUNKED-UPLOAD-01`, committed as `aa8f550`. **1,180 insertions, zero
