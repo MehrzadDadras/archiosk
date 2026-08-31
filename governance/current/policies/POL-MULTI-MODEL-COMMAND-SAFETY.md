@@ -111,7 +111,7 @@ not new policy; it is the operational restatement of **constitutional invariant
 knowledge never automatically increases machine authority* — and this policy is
 subordinate to that invariant wherever they overlap.
 
-**[IMPLEMENTED] AI models hold no administrative rank.** No model adjudicates
+**[IMPLEMENTED] AI engines hold no administrative rank.** No model adjudicates
 authority, modifies a governance contract, or promotes its own output to
 governed truth. `CIC-SPIN-INTELLIGENCE v1.2` carries `no model-memory
 authority` as a mandatory invariant, and
@@ -132,16 +132,16 @@ growing capability never narrows the gap. Consequential acts remain behind the
 Approval Gate (`routes/workspace.py::_require_approval`) regardless of how
 confident any model is.
 
-**Model divergence is an analytical signal, never a vote.** Where two engines
-disagree, the disagreement is evidence about the question — not a tie to be
-broken by majority, seniority, or provider reputation. There is no quorum, no
-casting vote, and no notion of a model being outranked. This is why the concept
-is **Multi-Observer Shear** and not consensus: per `CIC-SPIN-INTELLIGENCE
-v1.2`, Shear *"maps where distinct rational positions diverge and never
-adjudicates between them, so divergence is not error, a party's position is not
-scored, and no observer frame is ranked above another."* Constitutional
-invariant 10 governs the same shape for authorities generally: conflicts
-**surface**, they do not resolve silently.
+**Multi-model divergence is an analytical signal, never a vote.** Where two
+engines disagree, the disagreement is evidence about the question — not a tie
+to be broken by majority, seniority, or provider reputation. There is no
+quorum, no casting vote, and no notion of a model being outranked. This is why
+the concept is **Multi-Observer Shear** and not consensus: per
+`CIC-SPIN-INTELLIGENCE v1.2`, Shear *"maps where distinct rational positions
+diverge and never adjudicates between them, so divergence is not error, a
+party's position is not scored, and no observer frame is ranked above
+another."* Constitutional invariant 10 governs the same shape for authorities
+generally: conflicts **surface**, they do not resolve silently.
 
 **[SPECIFIED-UNBUILT] Multi-Observer Shear has no implementation.**
 `CIC-SPIN-INTELLIGENCE v1.2` states this in its own words — *"Multi-Observer
