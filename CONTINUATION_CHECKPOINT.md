@@ -1,5 +1,114 @@
 # Continuation checkpoint
 
+## 2026-08-31 (monitoring) — nginx `[crit]` alerting installed, and the bug its own fail-closed design caught on the first run
+
+`CLAUDE-NGINX-CRIT-MONITOR-01`, committed as `db612af`/`80a466c`. Closes the gap
+the entry below named: nginx wrote `[crit]` for ~40 hours and nothing read it.
+
+### Why the application could never have caught this itself
+
+nginx returned 500 **before proxying**, so gunicorn never saw the request. No
+amount of application-side logging would have helped — the blind spot was
+structurally outside the app. That is why the monitor watches nginx and nothing
+else.
+
+### What is installed, and deliberately where
+
+`deploy/nginx_crit_monitor.py` → `/usr/local/bin/archiosk-nginx-monitor`, driven
+by a systemd oneshot and a 5-minute timer, both tracked in `deploy/` and
+installed to `/etc/systemd/system/` separately from the application sync —
+exactly as `gunicorn.service` already is.
+
+**Nothing is installed into `/var/www/archiosk`.** The application tree is an
+exact export of one commit; adding a file to it would make the live tree stop
+matching the deployed hash, which `DEPLOYMENT.md` step 12 exists to keep
+checkable. Monitoring is infrastructure, so it sits beside `nginx.conf`.
+
+### Two load-bearing properties
+
+**It must not lose an alert.** The cursor advances only *after* delivery
+succeeds. A failed send re-reports next run rather than swallowing the line.
+
+**It must not invent one.** Rotation is detected by **inode**, not size.
+logrotate runs daily here with `create 0640 www-data adm`, so a fresh file
+legitimately starts at 0 bytes — a size-only check would replay the entire
+previous day, every night, forever.
+
+### The first live run failed, and that is the design working
+
+`systemctl start` returned `Result=exit-code`:
+
+```
+nginx-crit-monitor: cannot read /var/log/nginx/error.log: [Errno 13] Permission denied
+```
+
+An empty `CapabilityBoundingSet=` drops `CAP_DAC_OVERRIDE`, and `error.log` is
+`www-data:adm 0640` — so even **root** could not read it. The hardening was too
+aggressive and broke the one thing the unit exists to do.
+
+`SupplementaryGroups=adm` is the fix, and is genuinely least-privilege in a way
+granting a capability would not have been.
+
+The failure is worth recording because a monitor that *swallowed* that error
+would have reported "no critical lines" every five minutes forever — strictly
+worse than having no monitor, since it manufactures confidence. It is now
+recorded in the unit file, the ops doc, and a test, because the next person
+hardening this unit will be tempted to re-empty that capability set.
+
+### Noise suppression, because a muted monitor is the failure mode
+
+The dry run over the real log found **71 `[crit]` lines, 19 of them scanner TLS
+handshake failures** — permanent internet background, not this server's fault.
+Paging on those every five minutes gets the alert muted within a day, which
+recreates the blindness. They are **suppressed, not hidden**: never alerting
+alone, always counted in any alert that does fire, extensible via
+`ARCHIOSK_ALERT_IGNORE` rather than by editing the script. A test asserts that a
+real fault buried in 18 noise lines still alerts.
+
+### Install order matters
+
+Dry run → `--reset` → enable. At install the log held **52 actionable `[crit]`
+lines, all of them the already-fixed incident**. Skipping `--reset` would have
+made the monitor's very first message a false alarm about a solved problem,
+spending its credibility before reporting anything real.
+
+The dry run grouped the incident as `51 x [crit] ... open()
+"/var/lib/nginx/<tempfile>" failed (13: Permission denied)` — confirming it would
+have caught the original defect.
+
+### Evidence
+
+- `tests/test_nginx_crit_monitor_01.py` — **22 tests**, in the normal suite,
+  loading the script by path the same way `test_storage_bridge_agent_04.py` loads
+  `tools/storage_bridge_agent.py`.
+- Host: `Result=success`, `ExecMainStatus=0`, timer enabled with next run
+  scheduled, state cursor advancing.
+- End-to-end detection proven against a scratch file, so the production log was
+  never written to.
+- Collection is now **6,029 / 6,025 selected** (6,004 + 3 route-guard tests from
+  `2d91615` + 22 here). The `CLAUDE.md` baseline remains accurate because it is
+  attributed to the tree `72a4a7d`..`9c2408f` rather than to "current"; **no
+  full-suite pass count exists for the current tree** and none is claimed.
+
+### An unrelated defect found while committing
+
+`MANIFEST.md` was about to be committed with **284 lines of pure line-ending
+churn** around a 3-line insert: `pathlib.Path.write_text` translates `\n` to
+`\r\n` on Windows, and this repository stores every file as LF. Caught by reading
+the diffstat rather than trusting it, fixed with a byte-level rewrite, and the
+commit amended. Worth knowing because every checkpoint and MANIFEST edit in this
+repository is made from Windows and the same trap applies to all of them.
+
+### Still carried forward
+
+- **The alert sink is currently the journal** — functional, but nobody watches a
+  journal. Webhook and email sinks are implemented, tested and documented but
+  **not configured**; email additionally needs the unit's `CAP_DAC_READ_SEARCH`
+  lines uncommented, because `.env` is `0600`. Choosing a real destination is
+  outstanding and is a Product Owner decision.
+- `e7e8962` remains the live application commit. The monitor is infrastructure
+  and shipped independently of it.
+
 ## 2026-08-31 (verification) — Document upload verified end to end by the Product Owner, and independently corroborated server-side: the upload-500 incident is CLOSED
 
 **Reported by the Product Owner, 2026-08-31**, during authenticated browser use of
