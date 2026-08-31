@@ -6,7 +6,7 @@ for-byte at the page-content level; the fourth sheet supplies vertical datum
 evidence for later coordination tests.
 """
 from pathlib import Path
-import fitz
+import pymupdf
 
 
 ROOT = Path(__file__).parent
@@ -14,7 +14,7 @@ PDF = ROOT / "builder_corpus" / "Drawings_Set.pdf"
 
 
 def append_a201() -> None:
-    document = fitz.open(PDF)
+    document = pymupdf.open(PDF)
     # Preserve the original detail sheet while making its measured frame-head
     # datum explicit for the vertical-coordination oracle.
     if "96.0 pt" not in document[2].get_text():

@@ -44,7 +44,7 @@ import re
 import sys
 
 try:
-    import fitz
+    import pymupdf
 except ImportError:  # pragma: no cover
     sys.exit("PyMuPDF is required: pip install pymupdf")
 
@@ -97,7 +97,7 @@ def segments(page):
 
 
 def _pt(x, y, m):
-    p = fitz.Point(x, y) * m
+    p = pymupdf.Point(x, y) * m
     return round(p.x, 2), round(p.y, 2)
 
 
@@ -125,7 +125,7 @@ def point_to_segment(px, py, seg):
 
 
 def derive(path, sheet, absolute_rotation):
-    doc = fitz.open(path)
+    doc = pymupdf.open(path)
     page = doc[0]
 
     # VERIFIED, and it matters: neither get_text("words") bboxes nor

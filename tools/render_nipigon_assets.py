@@ -54,7 +54,7 @@ import sys
 from datetime import datetime, timezone
 
 try:
-    import fitz  # PyMuPDF
+    import pymupdf
 except ImportError:  # pragma: no cover - environment guard
     sys.exit("PyMuPDF is required: pip install pymupdf")
 
@@ -139,7 +139,7 @@ ORIENTATION_MIN_SPANS = 40   # below this a text layer is not a usable signal
 
 
 def _edge_density(page):
-    pix = page.get_pixmap(dpi=ORIENTATION_DPI, colorspace=fitz.csGRAY)
+    pix = page.get_pixmap(dpi=ORIENTATION_DPI, colorspace=pymupdf.csGRAY)
     w, h, data = pix.width, pix.height, pix.samples
     bw = max(1, int(w * ORIENTATION_BAND))
     bh = max(1, int(h * ORIENTATION_BAND))
@@ -271,7 +271,7 @@ def render(source_root: str, out_dir: str, thumb_dpi: int, page_dpi: int) -> dic
             print("  MISSING  %s (%s) - skipped, not faked" % (sheet, filename))
             continue
 
-        doc = fitz.open(path)
+        doc = pymupdf.open(path)
         page = doc[0]
 
         orientation = derive_orientation(page)
@@ -330,7 +330,7 @@ def render(source_root: str, out_dir: str, thumb_dpi: int, page_dpi: int) -> dic
         to_view = page.rotation_matrix
         focus = {}
         for label, rect in CROPS.get(sheet, {}).items():
-            r = fitz.Rect(*rect) * to_view
+            r = pymupdf.Rect(*rect) * to_view
             focus[label] = {
                 "x": round(min(r.x0, r.x1), 2), "y": round(min(r.y0, r.y1), 2),
                 "w": round(abs(r.x1 - r.x0), 2), "h": round(abs(r.y1 - r.y0), 2),
