@@ -1,5 +1,125 @@
 # Continuation checkpoint
 
+## 2026-08-31 — `f332681` deployed: graceful CSRF expiry, and a green suite that was not green
+
+`f332681` is **live on `archiosk.com`**, carrying four commits: this checkpoint's
+previous entry, the two `POL-MULTI-MODEL-COMMAND-SAFETY` policy commits, and the
+CSRF expiry handler itself. **`STATIC_VERSION` stays at 141** — correctly, and
+confirmed from the diff rather than assumed: `git diff 9d16b8c..f332681 --
+static/` is empty, so there is nothing for a cache bust to flush. Rollback
+marker: **`/var/www/archiosk-backup-9d16b8c`** — 824 code files plus the
+pre-edit `.env` at mode `600` and the pre-edit unit file, inside that sibling
+tree.
+
+Steps 7 and 8 both skipped, verified rather than presumed: no `requirements.txt`
+change and no `migrations/`/`models.py` change in the range. `app.py` was the
+only application code in it.
+
+### The feature — an expired CSRF token is a timeout, not a fault
+
+An idle mobile session or an overnight form previously hit Flask-WTF's own raw
+"Bad Request - The CSRF token has expired" 400 page. `app.py` now registers a
+handler on `CSRFError` specifically — never a blanket 400, which would relabel
+every ordinary validation fault as an expired session.
+
+**The part that was not obvious, and would have shipped as dead code.** The
+natural implementation is to branch on the existing `_wants_json()`. That helper
+tests `request.path.startswith("/api/")`, and every blueprint mounted under
+`/api/` is `csrf.exempt` — so a CSRF failure can never arrive on an `/api/` path
+at all, and the JSON branch would have been unreachable while looking correct in
+review.
+
+The real JSON casualties are the page-level `fetch()` calls in `static/js`
+(`case_workspace.js`, `draft_assist.js`, `investigation_snapshot.js`,
+`drawing_image_viewer.js`). They POST to NON-exempt blueprints with an
+`X-CSRFToken` header and then call `resp.json()`. An HTML redirect makes that
+throw, so an expired token surfaced as the generic "a network error occurred"
+catch — a wrong diagnosis of a routine timeout. `_csrf_wants_json()` therefore
+keys off HOW the client asked (the `X-CSRFToken` header, `X-Requested-With`,
+`is_json`, or an Accept that STRICTLY prefers JSON) rather than where. The
+strictness is load-bearing: `Accept: */*` scores JSON and HTML equally, and a
+non-strict comparison would turn ordinary form posts into JSON replies.
+
+Verified LIVE on both branches, not merely that the service came up — two
+harmless rejected POSTs against a nonexistent user:
+
+- form POST, no token → `302` to `/login`
+- fetch-style POST, stale `X-CSRFToken` → `400`
+  `{"error":"csrf_expired","message":"CSRF token missing or expired"}`
+
+That live check also proves CSRF is genuinely enforced in production, which the
+suite structurally cannot: `WTF_CSRF_ENABLED = False` under `TestingConfig`.
+
+### Two existing assertions superseded — strengthened, not relaxed
+
+`tests/test_csrf_protection.py` asserted `400` for a rejected POST. The HTML
+branch now returns `302`, so those assertions had to change — and the hazard is
+that a SUCCESSFUL login is also `302`, so simply swapping the number would have
+left tests unable to tell rejection from success at all.
+
+They now assert the security property directly: a rejected POST redirects to
+`/login` and leaves **no `user_id` in the session**; a successful one redirects
+to `/` and sets one. Strictly stronger than the status code it replaces. The
+rejection MECHANISM was superseded; CSRF enforcement is unchanged.
+
+### The suite episode — a green that was not green
+
+Worth recording because it nearly caused a false-green commit, and because the
+mechanism is already documented in this repository and still caught us.
+
+The first full-suite run was launched as `pytest -q 2>&1 | tail -40` in the
+background. Three separate failures compounded:
+
+1. **`| tail` buffered everything.** The output file sat at **0 bytes for 4h27m**
+   — no progress visible at all.
+2. **`| tail` reported ITS OWN exit status.** The task notification said
+   `completed (exit code 0)`. That was `tail`'s zero, not pytest's. This exact
+   trap is already recorded in this file's own 2026-08-29 entry, and it still
+   very nearly landed a commit on a fabricated pass.
+3. **`-q` gave only dots**, so nothing could name a hung test.
+
+The run also genuinely stalled: **4h27m to reach 78%, with only 861s of CPU**
+(~5% utilization) and no open network connections. It was killed, which is what
+made the pipeline exit 0.
+
+The re-run redirected straight to a file with `-u -v` — incremental writes, one
+named line per test — and a separate watchdog armed to fire on 15 minutes of
+zero log growth, because **a hang produces no completion notification at all**
+and passive waiting is therefore not a strategy. It completed cleanly:
+**5998 passed, 2 skipped, 4 deselected, 1951 subtests, 2:52:35, pytest exit 0**
+— captured explicitly, not read off a pipe.
+
+**The stall's cause is unidentified and did not recur.** Same tree, same
+machine: 78% in 4h27m the first time, 100% in 2h52m the second. Recorded as an
+open unknown rather than explained away. Note also that 2:52:35 exceeds the
+2:44:54 maximum `CLAUDE.md` records; that range is left alone on a single
+sample, consistent with its own instruction that duration is not an assurance
+signal.
+
+**Operational rule this produced:** never pipe a background test run through
+`tail`. Redirect to a file. The exit status you read must be pytest's own.
+
+### Carried forward
+
+- **STILL NOT VERIFIED IN AN AUTHENTICATED BROWSER.** Unchanged from the
+  previous entry and now two deploys old. Sign-in renders and the CSRF handler
+  is confirmed live by request, but Gateway, opening a project, and the
+  workspace surfaces have not been exercised by a human since the lettermark
+  purge. `CIC-DEPLOYMENT` names this as a known limitation; it is not resolved
+  by anything above.
+- **The full suite ran against a COMBINED tree.** The 5998-pass result includes
+  uncommitted in-progress work present in the working directory at the time
+  (`routes/api.py`, `tests/test_api_authentication.py`, `CLAUDE.md`, plus
+  untracked `tests/conftest.py`, the PSD spin-source diagnostic, the registry
+  isolation test, and the metabolic_bridge/wd_nas_bridge fixtures). None of it
+  shipped — `git archive` exports the commit, not the tree — but the green
+  covers more than what was deployed, and a later run without those files is
+  not strictly the same test.
+- **Rollback trees are now 107** (~1.7G against 87G free), across two naming
+  conventions. Not urgent; pruning remains the deliberate per-occasion decision
+  the runbook describes and still has not been taken. The two most recent
+  generations (`9d16b8c`, `1db81eb`) are both intact.
+
 ## 2026-08-30 — `9d16b8c` deployed at `v=141`, and a prior deploy that had synced but never restarted
 
 `9d16b8c` (the lettermark purge — the constructed mark retired, the app icon
