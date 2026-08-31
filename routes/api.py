@@ -38,6 +38,7 @@ api_bp = Blueprint('api', __name__)
 
 _ADMIN_ONLY_ENDPOINTS = {
     "api.ingest_document", "api.register_pdf_structure",
+    "api.inspect_spin_source_signature",
     "api.register_spreadsheet_structure_route", "api.edit_spreadsheet_cell",
     "api.register_drawing_structure", "api.create_drawing_region",
     "api.save_eye_capture", "api.create_image_marker", "api.export_derivative_crop",
@@ -222,6 +223,65 @@ def get_governance(project_id):
     _document, _workspace = _load_authorized_project_or_404(project_id)
     events = get_governance_log(current_app).read(project_id)
     return jsonify(events=[e.__dict__ for e in events])
+
+
+@api_bp.route('/documents/<project_id>/spin-runs/<spin_run_id>/source-signature', methods=['GET'])
+def inspect_spin_source_signature(project_id, spin_run_id):
+    """Admin-only, project-scoped diagnostic of one persisted Spin input set.
+
+    The blueprint gate lists this endpoint in ``_ADMIN_ONLY_ENDPOINTS``.
+    Resolution is deliberately confined to the already-authorized workspace:
+    a signature id is never searched across another project, and therefore a
+    foreign or stale id is reported as unresolved rather than disclosed.
+    This GET performs no save, registration, restoration, or Spin action.
+    """
+    _document, workspace = _load_authorized_project_or_404(project_id)
+    run = next((item for item in workspace.spin_runs if item.get("id") == spin_run_id), None)
+    if run is None:
+        abort(404)
+
+    persisted_signature = run.get("source_signature") or ""
+    signature_ids = [item for item in persisted_signature.split(",") if item]
+    sources_by_id = {item.get("id"): item for item in workspace.sources}
+    active_ids = {item.get("id") for item in CaseWorkspaceStore.active_sources(workspace)}
+    resolved = []
+    for source_id in signature_ids:
+        source = sources_by_id.get(source_id)
+        if source is None:
+            resolved.append({
+                "source_id": source_id,
+                "resolution": "UNRESOLVED SOURCE ID",
+                "project_id": None,
+                "name": None,
+                "kind": None,
+                "origin_type": None,
+                "removed_at": None,
+                "active": False,
+                "included_in_active_sources": False,
+            })
+            continue
+        is_active = source_id in active_ids
+        resolved.append({
+            "source_id": source_id,
+            "resolution": "resolved",
+            "project_id": source.get("project_id"),
+            "name": source.get("name"),
+            "kind": source.get("kind"),
+            "origin_type": source.get("origin_type"),
+            "removed_at": source.get("removed_at"),
+            "active": is_active,
+            "included_in_active_sources": is_active,
+        })
+
+    return jsonify(
+        spin_run={
+            "run_id": run.get("id"),
+            "project_id": run.get("project_id"),
+            "spin_type": run.get("spin_kind"),
+            "source_signature": persisted_signature,
+        },
+        sources=resolved,
+    )
 
 
 # -- CLAUDE-MM1: Multimodal Foundation and Evidence Contract -----------------

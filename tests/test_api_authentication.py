@@ -32,6 +32,7 @@ API_ROUTES = [
     ("GET", "/api/v1/documents/some-project/milestones"),
     ("GET", "/api/v1/documents/some-project/consistency"),
     ("GET", "/api/v1/documents/some-project/governance"),
+    ("GET", "/api/v1/documents/some-project/spin-runs/some-run/source-signature"),
     ("GET", "/api/v1/documents/some-project/rfi"),
     ("GET", "/api/v1/categories"),
     # CLAUDE-MM1
@@ -87,6 +88,7 @@ API_ROUTES = [
 # check the moment the POST entry was added for the same path.
 ADMIN_ONLY_ROUTE_PATHS = {
     ("POST", "/api/v1/documents/ingest"),
+    ("GET", "/api/v1/documents/some-project/spin-runs/some-run/source-signature"),
     ("POST", "/api/v1/documents/some-project/sources/some-source/pdf-structure"),
     ("POST", "/api/v1/documents/some-project/sources/some-source/spreadsheet-structure"),
     ("POST", "/api/v1/documents/some-project/sources/some-source/spreadsheet-cell"),
