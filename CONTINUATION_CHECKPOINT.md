@@ -1,5 +1,97 @@
 # Continuation checkpoint
 
+## 2026-08-31 (deploy) — `e7e8962` deployed to `archiosk.com`, carrying 11 commits and exactly one application file
+
+**`e7e8962` is live on `https://archiosk.com`**, replacing `f332681`. Confirmed
+from systemd rather than assumed: `systemctl show archiosk-go.service -p
+Description --value` returns `Gunicorn - ArchiOSK GO (accepted build e7e8962)`.
+
+**Rollback marker: `/var/www/archiosk-backup-f332681`** — 827 code files, plus
+the pre-edit `.env` at mode `600` (`archiosk:archiosk`) and the pre-edit systemd
+unit, all inside that sibling tree rather than beside the live `.env`, which is
+the mistake `CLAUDE-DEPLOY-ENV-BACKUP-01` records. Rollback trees are now **108**.
+
+**`STATIC_VERSION` stays at 141** — correctly, and confirmed twice rather than
+once: `git diff f332681..e7e8962 -- static/` is empty, and the served sign-in page
+still returns `main.css?v=141`, `login.js?v=141`, `ocean_field.js?v=141`,
+`pwa.js?v=141`, `voice_input.js?v=141`. Nothing for a cache bust to flush.
+
+Steps 7 and 8 both skipped, **verified rather than presumed**: `git diff` over
+`requirements.txt` and over `models.py`/`migrations/` are both empty for this
+range.
+
+### The range is large but the risk surface is not
+
+Eleven commits, 13 changed files — and only **one** of them is application code
+the running service actually imports: `routes/api.py`, gaining the admin-gated
+Spin source-signature diagnostic (`7d7e078`). The other twelve are documentation
+(`CLAUDE.md`, `MANIFEST.md`, `CONTINUATION_CHECKPOINT.md`, `.gitignore`), tests
+and fixtures, and two `tools/` scripts that the service never imports.
+
+That distinction was established from the diff before deploying, not inferred
+afterwards, and it is why a deploy spanning eleven commits was a low-risk one.
+
+### The dry-run earned its place in the procedure
+
+Step 5's itemized dry-run (`rsync -ain`) resolved the change set exactly:
+
+- **8 files with real content changes** (`>f.s…`, size differs) — precisely the 8
+  `M` entries in `git diff --name-status`.
+- **5 newly created files** (`>f+++++++++`) — precisely the 5 `A` entries.
+- **819 metadata-only re-copies** (`>f..t…`, time/owner/group but identical
+  content) — the `git archive` artifact this runbook already warns about, and the
+  reason a plain `-v` dry-run listing 893 lines is not evidence of an 893-file
+  change.
+- **Zero deletions.**
+
+The only protected-path name appearing anywhere in the output was `.env.example`,
+which is a **tracked** file that is *supposed* to deploy — exactly the case the
+runbook cites for why the exclude is `.env` plus `.env.bak-*` and not the broader
+`.env*`. Live `.env` (813 bytes, mode `600`) and `instance/` were both confirmed
+intact after the sync.
+
+### What was verified live
+
+- `https://archiosk.com/health` → **200**; internal `127.0.0.1:8000/health` → **200**.
+- `/login` renders **4,525 bytes** with its real title, all three form fields
+  (`username`, `password`, `csrf_token`), and a CSP `nonce` on its inline script —
+  so `app.py`'s per-request nonce machinery is working, not merely present.
+- `/gateway` unauthenticated → **302** to `/login?next=/gateway`, not a 500.
+- No `error|traceback|exception|critical` in the service journal across either
+  restart (the deploy restart, and the `daemon-reload` restart for step 12).
+- **The new endpoint is genuinely live and genuinely gated.**
+  `GET /api/v1/documents/some-project/spin-runs/some-run/source-signature`
+  returns `401 {"error":"unauthorized"}` — not a `404` (so the route registered)
+  and not a `200` (so the blueprint gate holds), byte-identical in shape to the
+  pre-existing `/governance` control route tested alongside it.
+
+### Not verified, and not claimed
+
+**Authenticated browser verification was not performed for this deploy.** The
+Claude browser extension was not connected, and this agent has no credentials —
+authenticated verification is a Product Owner action, as `CIC-DEPLOYMENT` already
+records. Everything above is unauthenticated HTTP and served-content evidence.
+
+This deploy changed **no user-visible surface at all** — the one application
+change is an admin-only JSON endpoint with no UI — so the visual scope that would
+normally need a human eye is genuinely empty here. That is a reason the gap
+matters less this time, not a reason to record it as closed. The verification
+logged two entries below covers `f332681`.
+
+**The full suite was not re-run at deploy time.** It last ran green on the tree
+committed as `72a4a7d`..`9c2408f` (5,998 passed, exit 0); the three commits after
+it changed only tests, `tools/` and documentation, each covered by a targeted lane
+(239 passed, exit 0). No application code entered the range after that full run.
+
+### Still carried forward
+
+- **Rollback trees are 108** (~1.7G against 87G free). Pruning remains the
+  deliberate per-occasion decision the runbook describes and still has not been
+  taken. The two most recent generations (`f332681`, `9d16b8c`) are both intact.
+- **The unexplained full-suite stall** remains unidentified and non-recurring.
+- **`tests/fixtures/wd_nas_bridge/` remains deliberately untracked**, so it is
+  structurally absent from the deployed tree — `git archive` exports the commit.
+
 ## 2026-08-31 (reconciliation) — The three open items from the entry below, closed; and a route no authentication test had ever touched
 
 Three commits, pushed to `origin/main` at `414834f`:
