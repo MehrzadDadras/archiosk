@@ -787,26 +787,19 @@ def _register_error_handlers(app: Flask) -> None:
     def _csrf_wants_json() -> bool:
         """Whether a CSRF-rejected caller is a script expecting JSON.
 
-        Deliberately about the REQUEST's own shape rather than its path,
-        for the reason csrf_expired() states: the /api/ prefix is exempt,
-        so path tells us nothing here.
+        CLAUDE-SESSION-EXPIRY-JSON-01: the implementation MOVED to
+        services.auth.wants_json_response(), which the login gate now needs
+        for the same judgement. This delegates rather than keeping a second
+        copy - two copies of one heuristic is how they end up disagreeing
+        about the same request, and the strict-Accept trap documented there
+        is exactly the sort of detail that gets fixed in one copy only.
 
-        X-CSRFToken is the strongest signal and the one that actually fires
-        in this codebase - every fetch() in static/js sets it and no
-        rendered <form> can. The Accept comparison is deliberately STRICT:
-        a bare `Accept: */*` (curl, and some fetch defaults) scores
-        application/json and text/html equally, and treating that tie as
-        "wants JSON" would turn an ordinary form POST into a JSON reply.
+        The reasoning it encodes is unchanged: keyed off the REQUEST's shape
+        rather than its path, because the /api/ prefix is csrf.exempt and so
+        tells us nothing here.
         """
-        from flask import request
-        if request.headers.get("X-CSRFToken"):
-            return True
-        if request.headers.get("X-Requested-With") == "XMLHttpRequest":
-            return True
-        if request.is_json:
-            return True
-        accept = request.accept_mimetypes
-        return accept["application/json"] > accept["text/html"]
+        from services.auth import wants_json_response
+        return wants_json_response()
 
     def _safe_return_path():
         """Same-site path to return to after signing in, or None.

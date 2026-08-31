@@ -36,6 +36,30 @@
         return meta ? meta.getAttribute('content') : '';
     }
 
+    function jsonHeaders() {
+        // Accept is what tells services.auth.wants_json_response() that a
+        // script is asking, so an expired session comes back as 401 JSON
+        // rather than a 302 to an HTML login page. X-CSRFToken alone already
+        // satisfies that helper, but stating Accept makes the intent explicit
+        // at the call site instead of relying on a side effect of CSRF.
+        return {
+            'X-CSRFToken': csrfToken(),
+            'Accept': 'application/json'
+        };
+    }
+
+    /* An expired session mid-upload is a routine timeout, not an error to
+     * report as one. Without this the 401 would surface as "Upload failed:
+     * HTTP 401" and the reviewer would be left on a page whose every control
+     * is now dead, with no indication that signing in again is the fix. */
+    function redirectIfSessionExpired(response, payload) {
+        if (response.status !== 401) { return false; }
+        var target = (payload && payload.redirect) ||
+            ('/login?next=' + encodeURIComponent(window.location.pathname));
+        window.location.href = target;
+        return true;
+    }
+
     function delay(ms) {
         return new Promise(function (resolve) { setTimeout(resolve, ms); });
     }
@@ -80,25 +104,32 @@
             attempt += 1;
             return fetch(url, {
                 method: 'POST',
-                headers: { 'X-CSRFToken': csrfToken() },
+                headers: jsonHeaders(),
                 body: body,
                 credentials: 'same-origin'
             }).then(function (response) {
                 if (response.ok) { return response.json(); }
                 // 4xx is a refusal - a malformed chunk, an unsupported format,
-                // a revoked session. Retrying cannot change the answer, and
+                // an expired session. Retrying cannot change the answer, and
                 // retrying an authorization failure three times is worse than
                 // reporting it once.
                 if (response.status >= 400 && response.status < 500) {
                     return response.json().catch(function () { return {}; })
                         .then(function (payload) {
+                            if (redirectIfSessionExpired(response, payload)) {
+                                // Navigation is underway. Reject with a marker
+                                // the retry loop will not swallow, so no chunk
+                                // is re-sent into a session that is gone.
+                                throw new Error('SESSION_EXPIRED');
+                            }
                             var message = payload.message || ('Refused (HTTP ' + response.status + ')');
                             throw new Error(message);
                         });
                 }
                 throw new Error('HTTP ' + response.status);
             }).catch(function (error) {
-                if (attempt > MAX_RETRIES || /Refused|Unsupported|match|range|large|empty/i.test(error.message)) {
+                if (attempt > MAX_RETRIES || error.message === 'SESSION_EXPIRED' ||
+                        /Refused|Unsupported|match|range|large|empty/i.test(error.message)) {
                     throw error;
                 }
                 status.say('Chunk ' + (index + 1) + '/' + total +
@@ -126,12 +157,15 @@
                 done.append('total_chunks', String(total));
                 return fetch(completeUrl, {
                     method: 'POST',
-                    headers: { 'X-CSRFToken': csrfToken() },
+                    headers: jsonHeaders(),
                     body: done,
                     credentials: 'same-origin'
                 }).then(function (response) {
                     return response.json().catch(function () { return {}; })
                         .then(function (payload) {
+                            if (redirectIfSessionExpired(response, payload)) {
+                                throw new Error('SESSION_EXPIRED');
+                            }
                             if (!response.ok) {
                                 throw new Error(payload.message || ('HTTP ' + response.status));
                             }
@@ -191,6 +225,13 @@
                 status.say('Preparing ' + file.name + ' (' + humanSize(file.size) + ')...');
 
                 chunkedUpload(form, file, status).catch(function (error) {
+                    if (error.message === 'SESSION_EXPIRED') {
+                        // redirectIfSessionExpired already navigated. Saying
+                        // "upload failed" here would blame the upload for an
+                        // expired session and flash it as the page unloads.
+                        status.say('Your session expired. Redirecting to sign in...');
+                        return;
+                    }
                     // Re-enable so the reviewer can retry or pick another file;
                     // a dead form after a failed upload is its own defect.
                     status.say('Upload failed: ' + error.message +

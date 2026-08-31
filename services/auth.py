@@ -20,8 +20,15 @@ Scope: this gates the HTML pages in routes/portal.py directly via the
 login_required/admin_required decorators below. routes/api.py's JSON
 endpoints reuse the same is_authenticated()/is_admin() checks, enforced
 blueprint-wide via a before_request hook there (see routes/api.py) --
-not through these two decorators, since a JSON API needs a 401/403
-response rather than the redirect-to-/login these produce.
+not through these two decorators.
+
+CLAUDE-SESSION-EXPIRY-JSON-01: those decorators no longer produce ONLY a
+redirect. A browser still gets the 302 to /login; a script - detected by
+wants_json_response() below, on the shape of the request rather than its
+path -- gets 401 JSON instead, because fetch() follows a 302 transparently
+and then chokes on the login page's HTML. That does not change what
+routes/api.py does: its own before_request hook still handles /api/, and
+these decorators are still not what gates it.
 """
 from __future__ import annotations
 
@@ -29,7 +36,7 @@ import logging
 from functools import wraps
 from typing import Optional
 
-from flask import abort, redirect, request, session, url_for
+from flask import abort, jsonify, redirect, request, session, url_for
 from werkzeug.security import check_password_hash
 
 from models import ROLE_ADMIN, User
@@ -125,11 +132,66 @@ def log_out() -> None:
         logger.info("User %r logged out.", username)
 
 
+def wants_json_response() -> bool:
+    """Whether this caller is a script that will call `.json()` on the reply.
+
+    CLAUDE-SESSION-EXPIRY-JSON-01. This is app.py's `_csrf_wants_json()` moved
+    here rather than reimplemented, and app.py now delegates to it - the two
+    were about to become two copies of one judgement, and a second copy is
+    exactly how they drift into disagreeing about the same request.
+
+    Keyed off HOW the client asked, never WHERE. Path tells us nothing: every
+    blueprint under /api/ is csrf.exempt, and the workspace fetch() calls that
+    need this most are not under /api/ at all.
+
+    X-CSRFToken is the strongest signal and the one that actually fires in this
+    codebase - every fetch() in static/js sets it and no rendered <form> can.
+
+    The Accept comparison is deliberately STRICT (`>`, never `>=`): a bare
+    `Accept: */*` - curl, and some fetch defaults - scores application/json and
+    text/html equally, and treating that tie as "wants JSON" would turn an
+    ordinary browser form POST into a JSON reply. That trap is the reason this
+    helper exists as one shared implementation instead of a header check
+    written inline twice.
+    """
+    if request.headers.get("X-CSRFToken"):
+        return True
+    if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+        return True
+    if request.is_json:
+        return True
+    accept = request.accept_mimetypes
+    return accept["application/json"] > accept["text/html"]
+
+
+def _unauthenticated_response():
+    """The one place that decides what an unauthenticated caller receives.
+
+    A browser gets the 302 to /login it has always got - that behaviour is
+    correct, tested, and deliberately unchanged.
+
+    A script gets 401 JSON carrying the same destination. It previously got the
+    302, which is worse than it looks: fetch() follows redirects transparently,
+    so the script received 200 and a page of HTML, and `resp.json()` threw a
+    parse error. An expired session therefore surfaced as "a network error
+    occurred" - a wrong diagnosis of a routine timeout, and precisely the
+    failure CLAUDE-CSRF-EXPIRY-01 already fixed for CSRF while leaving it
+    unfixed for session expiry.
+
+    401 rather than 302 is the point: it is a status fetch() cannot silently
+    swallow, so the client can act on it instead of parsing a login page.
+    """
+    login_url = url_for("portal.login", next=request.path)
+    if wants_json_response():
+        return jsonify(error="session_expired", redirect=login_url), 401
+    return redirect(login_url)
+
+
 def login_required(view):
     @wraps(view)
     def wrapped(*args, **kwargs):
         if not is_authenticated():
-            return redirect(url_for("portal.login", next=request.path))
+            return _unauthenticated_response()
         return view(*args, **kwargs)
     return wrapped
 
@@ -141,11 +203,18 @@ def admin_required(view):
     unauthenticated request is redirected to /login (nothing role-related
     to reject yet); an authenticated-but-read_only request gets a 403 --
     that split is the point of having this as its own decorator.
+
+    CLAUDE-SESSION-EXPIRY-JSON-01 changes only the unauthenticated half. The
+    403 for an authenticated-but-read_only caller still renders through
+    app.py's own handler; a script hitting THAT has the same .json() problem,
+    but it is a different case (a standing authorization decision, not an
+    expiring session) and is recorded as unaddressed rather than folded in
+    silently.
     """
     @wraps(view)
     def wrapped(*args, **kwargs):
         if not is_authenticated():
-            return redirect(url_for("portal.login", next=request.path))
+            return _unauthenticated_response()
         if not is_admin():
             abort(403)
         return view(*args, **kwargs)
