@@ -1,0 +1,11 @@
+{
+  "corpus_id": "METABOLIC-BRIDGE-001",
+  "builder_root": "builder_corpus",
+  "oracle_path": "oracle/metabolic-bridge-001.md",
+  "ingest_rule": "Register only files beneath builder_corpus; oracle is private evaluation material.",
+  "files": [
+    {"file": "Drawings_Set.pdf", "role": "four-sheet architectural/structural/detail/section drawing set", "revision": "Issued", "status": "issued", "pages": 4, "sha256": "41c6524e3343b760492c319df7d45ea39af6894ef7f3a0c12b83a8f7d82ec380", "bytes": 15515},
+    {"file": "Door_Schedule.csv", "role": "door schedule", "revision": "Issued", "status": "issued"},
+    {"file": "Spec_Section_08_Doors.md", "role": "CSI Section 08 11 13 excerpt", "revision": "Issued", "status": "issued"}
+  ]
+}

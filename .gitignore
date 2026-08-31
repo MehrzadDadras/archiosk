@@ -46,3 +46,12 @@ tests/fixtures/nreocrc/_lab_instance_scratch*/
 # Derived rasters of the 5 Nipigon source PDFs (tools/render_nipigon_assets.py).
 # The PDFs remain authoritative; these are regenerable bytes.
 static/nipigon/
+
+# Held-out evaluation oracles. Five tracked tests - test_storage_bridge_01.py,
+# _trust_02, _endpoints_03, _agent_04 and test_external_custody_disconnect_02 -
+# each assert in their own docstring that tests/fixtures/wd_nas_bridge/oracle/
+# "remains unread and untracked", and each corpus manifest.json names its oracle
+# as "private evaluation material". Nothing enforced it, so a `git add -A` would
+# have committed the held-out answers and made all five of those claims false in
+# the same stroke that recorded them.
+tests/fixtures/*/oracle/
