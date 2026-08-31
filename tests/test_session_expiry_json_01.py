@@ -174,15 +174,46 @@ class TheHelperIsSharedNotCopiedTests(unittest.TestCase):
 
 
 class TheClientHandlesItTests(unittest.TestCase):
-    """The server half is useless if the script still reports a network error."""
+    """The server half is useless if the script still reports a network error.
+
+    Asserted against the shipped source. The full truth table for needsReauth()
+    is exercised directly under node during development; what must not silently
+    regress in the repository is the presence of each branch, which is what
+    these check.
+    """
 
     def setUp(self):
         self.js = (Path(__file__).resolve().parent.parent /
                    "static" / "js" / "chunked_upload.js").read_text(encoding="utf-8")
 
     def test_it_redirects_on_401(self):
-        self.assertIn("response.status !== 401", self.js)
+        self.assertIn("response.status === 401", self.js)
         self.assertIn("window.location.href", self.js)
+
+    def test_it_also_redirects_on_a_csrf_expiry(self):
+        """The case that actually happens.
+
+        Verifying the previous deploy against the live endpoints showed a POST
+        never reaches the 401: Flask-WTF's CSRF check is a before_request hook
+        and so runs BEFORE the view's @login_required, and the CSRF token is
+        bound to the session. Every request this file makes is a POST, so
+        handling only the 401 would have handled only the case that cannot
+        occur here.
+        """
+        self.assertIn("csrf_expired", self.js)
+        self.assertIn("CSRF token expired", self.js)
+
+    def test_a_successful_response_can_never_trigger_a_login_redirect(self):
+        """The trap. upload-complete returns `redirect` on SUCCESS - the
+        workspace URL to return to. Treating a bare `redirect` as a re-auth
+        signal without checking status first would send a completed upload to
+        the login page."""
+        self.assertIn("if (response.ok) { return false; }", self.js)
+
+    def test_an_ordinary_refusal_is_not_treated_as_a_login_problem(self):
+        # An unsupported format or a bad chunk index is a 400 too. The check
+        # keys off the error CODE, not merely the status.
+        self.assertIn("payload.error || payload.reason", self.js)
 
     def test_it_prefers_the_servers_redirect_target(self):
         self.assertIn("payload.redirect", self.js)
@@ -190,13 +221,13 @@ class TheClientHandlesItTests(unittest.TestCase):
     def test_it_falls_back_to_login_with_the_current_path(self):
         self.assertIn("encodeURIComponent(window.location.pathname)", self.js)
 
-    def test_a_session_expiry_is_never_retried(self):
+    def test_a_reauth_is_never_retried(self):
         # Retrying three times into a session that is gone delays the redirect
         # and re-sends bytes that cannot land.
         self.assertIn("error.message === 'SESSION_EXPIRED'", self.js)
 
-    def test_it_does_not_blame_the_upload_for_an_expired_session(self):
-        self.assertIn("Your session expired. Redirecting to sign in...", self.js)
+    def test_it_does_not_blame_the_upload_for_an_expired_sign_in(self):
+        self.assertIn("Your sign-in expired. Redirecting to sign in again...", self.js)
 
     def test_it_asks_for_json_explicitly(self):
         self.assertIn("'Accept': 'application/json'", self.js)

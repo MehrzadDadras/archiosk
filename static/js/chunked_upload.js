@@ -49,14 +49,38 @@
     }
 
     /* An expired session mid-upload is a routine timeout, not an error to
-     * report as one. Without this the 401 would surface as "Upload failed:
-     * HTTP 401" and the reviewer would be left on a page whose every control
-     * is now dead, with no indication that signing in again is the fix. */
+     * report as one. Without this it surfaces as "Upload failed: HTTP 401" and
+     * the reviewer is left on a page whose every control is now dead, with no
+     * indication that signing in again is the fix.
+     *
+     * TWO STATUSES, NOT ONE. Verifying the previous deploy against the live
+     * endpoints showed that a POST never reaches the 401: Flask-WTF's CSRF
+     * check is a before_request hook, so it runs BEFORE the view's own
+     * @login_required, and the CSRF token is bound to the session - an expired
+     * session takes the token with it. So a GET gets 401 session_expired and a
+     * POST gets 400 csrf_expired, and every request this file makes is a POST.
+     * Handling only the 401 would therefore have handled only the case that
+     * cannot happen here.
+     *
+     * GUARDED ON !response.ok, DELIBERATELY. upload-complete returns a
+     * `redirect` field on SUCCESS (the workspace URL to return to). Treating a
+     * bare `redirect` as a re-auth signal without checking the status first
+     * would send a completed upload to the login page. */
+    function needsReauth(response, payload) {
+        if (response.ok) { return false; }
+        if (response.status === 401) { return true; }
+        var code = payload && (payload.error || payload.reason);
+        if (code === 'session_expired' || code === 'csrf_expired') { return true; }
+        if (payload && payload.reason === 'CSRF token expired') { return true; }
+        // A refusal carrying an explicit destination is telling us where to go.
+        if (response.status === 400 && payload && payload.redirect) { return true; }
+        return false;
+    }
+
     function redirectIfSessionExpired(response, payload) {
-        if (response.status !== 401) { return false; }
-        var target = (payload && payload.redirect) ||
+        if (!needsReauth(response, payload)) { return false; }
+        window.location.href = (payload && payload.redirect) ||
             ('/login?next=' + encodeURIComponent(window.location.pathname));
-        window.location.href = target;
         return true;
     }
 
@@ -163,6 +187,9 @@
                 }).then(function (response) {
                     return response.json().catch(function () { return {}; })
                         .then(function (payload) {
+                            // needsReauth() returns false for any ok response,
+                            // so a successful completion carrying `redirect`
+                            // falls through to the normal success path below.
                             if (redirectIfSessionExpired(response, payload)) {
                                 throw new Error('SESSION_EXPIRED');
                             }
@@ -229,7 +256,7 @@
                         // redirectIfSessionExpired already navigated. Saying
                         // "upload failed" here would blame the upload for an
                         // expired session and flash it as the page unloads.
-                        status.say('Your session expired. Redirecting to sign in...');
+                        status.say('Your sign-in expired. Redirecting to sign in again...');
                         return;
                     }
                     // Re-enable so the reviewer can retry or pick another file;
