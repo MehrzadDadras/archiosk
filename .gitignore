@@ -54,4 +54,12 @@ static/nipigon/
 # as "private evaluation material". Nothing enforced it, so a `git add -A` would
 # have committed the held-out answers and made all five of those claims false in
 # the same stroke that recorded them.
-tests/fixtures/*/oracle/
+#
+# NAMED EXPLICITLY, NOT tests/fixtures/*/oracle/. "Oracle" is not one thing here.
+# tests/fixtures/psd/oracle/ is DELIBERATELY TRACKED and is read by
+# tests/test_psd_smoke_corpus_01.py, which asserts the file exists and covers the
+# required evaluation classes - a wildcard silently ignores any file later added
+# or renamed there, and that test fails on a fresh clone with nothing explaining
+# why. Held-out-ness is a per-corpus decision, so each one is listed by name.
+tests/fixtures/metabolic_bridge/oracle/
+tests/fixtures/wd_nas_bridge/oracle/

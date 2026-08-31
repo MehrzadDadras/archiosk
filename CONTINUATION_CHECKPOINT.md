@@ -42,10 +42,20 @@ Nothing enforced any of it. There was no `.gitignore` rule, and both oracle
 directories sat untracked in the working tree. A single `git add -A` — the
 obvious way to clear a parked tree — would have committed the held-out answers
 and made all five of those claims false in the same stroke that recorded them.
-`tests/fixtures/*/oracle/` is now ignored, following the precedent that file
-already set for `tests/fixtures/nreocrc/_lab_instance_scratch*/`, which was added
-for exactly this failure mode. Verified with `git check-ignore` in both
-directions: it catches both oracle files and nothing else.
+Those two oracle directories are now ignored **by name**, following the
+precedent that file already set for `tests/fixtures/nreocrc/_lab_instance_scratch*/`.
+
+The first attempt used a `tests/fixtures/*/oracle/` wildcard and was wrong —
+caught and corrected in the commit after `9c2408f`. "Oracle" is not one thing in
+this repository: `tests/fixtures/psd/oracle/` is **deliberately tracked** and is
+read by `tests/test_psd_smoke_corpus_01.py`, which asserts the file exists and
+covers the required evaluation classes. The already-tracked file was never at
+risk (git ignores only untracked files, which is why the suite stayed green), but
+any file later added or renamed there would have been silently dropped and that
+test would fail on a fresh clone with nothing explaining why. Held-out-ness is a
+per-corpus decision, so each corpus is now listed individually. Verified with
+`git check-ignore` in three directions: both held-out oracles caught, the PSD
+oracle not caught either as it exists today or as a hypothetical new file.
 
 **Neither oracle file was read at any point during this audit.**
 
