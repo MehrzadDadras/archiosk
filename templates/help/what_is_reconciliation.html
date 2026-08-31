@@ -1,0 +1,118 @@
+{# CLAUDE-HELP-CENTER-01 — what Reconcile does.
+
+   WRITTEN AGAINST THE CODE, NOT AGAINST THE REQUEST. The brief for this guide
+   asked it to explain "3-step indexing, integrity check, and cross-discipline
+   clash/version alignment". Reconcile does not do clash detection - no such
+   capability exists anywhere in this codebase (the only "Clash" string is a
+   label inside the fixture-fed calm_lake prototype). The seven verdicts below
+   are the real ones, from services/ingestion.py's RECONCILE_STATUS_* constants.
+
+   This file's own blueprint docstring is explicit that a guide describing
+   something unbuilt is "indistinguishable from a lie to the person reading it
+   on a site", so the absent capability is stated as absent rather than quietly
+   dropped - somebody asked for it, and silence would read as an oversight
+   rather than an answer.
+#}<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>What is Reconciliation? &mdash; Help</title>
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='app-icon.svg') }}?v={{ static_version }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/tokens.css') }}?v={{ static_version }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/project_manage.css') }}?v={{ static_version }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/fish_tank.css') }}?v={{ static_version }}">
+</head>
+<body class="pm">
+
+{% import "components/fish_tank_container.html" as tank %}
+{{ tank.scope_hud([{'label': 'Help', 'href': url_for('help_center.index')},
+                   {'label': 'What is Reconciliation?'}]) }}
+
+<header class="pm-head">
+    <h1>What is Reconciliation?</h1>
+    <p class="pm-note">
+        You point at the authoritative folder. Archiosk tells you how what it
+        holds differs from what you have. Then you decide.
+    </p>
+</header>
+
+<article class="help-body">
+
+    <section id="the-shape">
+        <h2>Compare, report, approve</h2>
+        <p>
+            <b>Nothing is added, relinked, or removed until you approve it.</b>
+            Reconcile is a comparison that produces a report. The report is the
+            product; the change is a separate, deliberate second step you take
+            after reading it. If you close the page instead, nothing has
+            happened.
+        </p>
+        <p>
+            This is the whole reason the feature is shaped this way. An import
+            that silently absorbed a folder would leave you unable to say what
+            changed or when &mdash; and on a project where a drawing revision
+            carries liability, "what changed" is the question.
+        </p>
+    </section>
+
+    <section id="how">
+        <h2>How the comparison is made</h2>
+        <p>
+            Each file in the folder you choose is reduced to a descriptor: its
+            path within the folder, its filename, its size, and a
+            <b>SHA-256 digest of its contents</b>. Those descriptors are
+            compared against the Sources already registered on the project.
+        </p>
+        <p>
+            Content, not filename, is what identifies a file. That is what lets
+            a renamed-but-identical drawing be recognised as the same document
+            rather than reported as a new one.
+        </p>
+    </section>
+
+    <section id="verdicts">
+        <h2>The seven verdicts</h2>
+        <p>Every file lands in exactly one:</p>
+        <ul>
+            <li><b>Unchanged</b> &mdash; already registered, same content.</li>
+            <li><b>New</b> &mdash; not registered before.</li>
+            <li><b>Modified</b> &mdash; same identity, different content. A
+                revision.</li>
+            <li><b>Missing</b> &mdash; registered here, but not present in the
+                folder you pointed at.</li>
+            <li><b>Renamed / moved</b> &mdash; same content, different name or
+                path.</li>
+            <li><b>Ineligible</b> &mdash; a format Archiosk does not accept. Not
+                an error, just skipped, and told to you rather than hidden.</li>
+            <li><b>Ambiguous</b> &mdash; the evidence supports more than one
+                reading, so Archiosk declines to guess. These are surfaced for a
+                person precisely because an automatic answer would be a
+                fabricated one.</li>
+        </ul>
+    </section>
+
+    <section id="not-built">
+        <h2>What Reconcile is not</h2>
+        <p>
+            <b>It is not clash detection.</b> Archiosk does not compare geometry
+            between disciplines and does not report interferences. Reconcile
+            compares a folder of files against a register of documents; it is
+            about which documents you hold and which revision they are at, not
+            about whether a duct meets a beam.
+        </p>
+        <p>
+            It is also not an importer. It never reaches out to a folder on its
+            own, on a schedule or otherwise &mdash; you choose the folder, each
+            time, and you approve the result.
+        </p>
+    </section>
+
+</article>
+
+<p class="pm-note">
+    <a href="{{ url_for('help_center.index') }}">&larr; All guides</a>
+</p>
+
+</body>
+</html>

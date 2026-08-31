@@ -1,0 +1,121 @@
+{# CLAUDE-HELP-CENTER-01 — file types and limits.
+
+   Every number and extension below is read from the code that enforces it:
+   ALLOWED_DOCUMENT_EXTENSIONS (routes/workspace.py), MAX_CONTENT_LENGTH and
+   MAX_CHUNKED_UPLOAD_MB (config.py), and CHUNK_BYTES (static/js/chunked_upload.js).
+   Restating a limit here that the code does not enforce would make this page
+   the least trustworthy thing in the product.
+#}<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>File types &amp; limits &mdash; Help</title>
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='app-icon.svg') }}?v={{ static_version }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/tokens.css') }}?v={{ static_version }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/project_manage.css') }}?v={{ static_version }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/fish_tank.css') }}?v={{ static_version }}">
+</head>
+<body class="pm">
+
+{% import "components/fish_tank_container.html" as tank %}
+{{ tank.scope_hud([{'label': 'Help', 'href': url_for('help_center.index')},
+                   {'label': 'File types & limits'}]) }}
+
+<header class="pm-head">
+    <h1>File types &amp; limits</h1>
+    <p class="pm-note">
+        What Archiosk accepts, how big it can be, and what happens to a large
+        file on the way up.
+    </p>
+</header>
+
+<article class="help-body">
+
+    <section id="formats">
+        <h2>Accepted formats</h2>
+        <p>
+            <b>.pdf, .docx, .txt, .csv, .md, .xlsx.</b> Anything else is refused
+            at the point of upload rather than accepted and quietly ignored
+            later &mdash; a Source that exists but can never be read is worse
+            than one that was never created.
+        </p>
+        <p>
+            A <b>vector</b> PDF is worth far more here than a scanned one. Text
+            and geometry that are still real objects can be read for spatial
+            reference; a scan is a picture of a drawing, and a picture cannot be
+            asked what a tag says. See
+            <a href="{{ url_for('help_center.guide', guide='drawing-ingestion') }}">Drawing
+            ingestion &amp; baselines</a> for how to get one out of Revit or CAD.
+        </p>
+    </section>
+
+    <section id="size">
+        <h2>How large a file can be</h2>
+        <p>
+            A single ordinary upload is capped at the deployment's
+            <code>MAX_UPLOAD_MB</code>. A file above the chunking threshold is
+            not sent as one request at all &mdash; see below &mdash; and is
+            instead capped by <code>MAX_CHUNKED_UPLOAD_MB</code>, which is set
+            far higher.
+        </p>
+        <p>
+            Both numbers are deployment settings rather than fixed product
+            limits, so this page deliberately does not quote them: a number
+            printed here that disagreed with the server would be worse than no
+            number. The upload will tell you the real limit if you exceed it.
+        </p>
+    </section>
+
+    <section id="chunking">
+        <h2>Large files upload in pieces</h2>
+        <p>
+            Above roughly 5&nbsp;MB, the browser slices the file and sends it as
+            a sequence of chunks instead of one request. This is automatic;
+            there is nothing to switch on.
+        </p>
+        <p>
+            You will see an explicit progress bar with a percentage and a byte
+            count, then <i>Assembling &amp; verifying file&hellip;</i> while the
+            server reassembles the pieces and checks them.
+        </p>
+        <p>
+            <b>Why it works this way.</b> One very large request occupies a
+            server worker for its whole duration and is lost entirely if the
+            connection drops at 90%. Chunks are retried individually, so a brief
+            network stumble costs one piece rather than the whole transfer.
+        </p>
+        <p>
+            <b>Integrity is checked, not assumed.</b> The server computes a
+            SHA-256 digest while it writes the reassembled file, and that digest
+            becomes the Source's recorded hash. A file that does not assemble
+            completely never becomes a Source at all &mdash; there is no partial
+            document to find later and mistake for a whole one.
+        </p>
+        <p>
+            If your sign-in expires part-way through, the upload stops and
+            returns you to the sign-in page rather than failing obscurely.
+            Nothing partial is registered.
+        </p>
+    </section>
+
+    <section id="not-built">
+        <h2>What this does not do</h2>
+        <p>
+            Chunked upload currently applies to <b>Add documents to project</b>
+            (Admin &rarr; Project Data Management). The Data Room
+            <b>Reconcile</b> folder picker still sends its files in a single
+            request and is bound by the ordinary upload limit. If you are
+            reconciling a very large issued set, add the largest documents
+            individually first.
+        </p>
+    </section>
+
+</article>
+
+<p class="pm-note">
+    <a href="{{ url_for('help_center.index') }}">&larr; All guides</a>
+</p>
+
+</body>
+</html>

@@ -1,0 +1,127 @@
+{# CLAUDE-HELP-CENTER-01 — drawing ingestion and baselines.
+
+   The export advice here is about Revit and CAD, not about Archiosk, so it is
+   safe to give plainly. What is deliberately hedged is anything describing what
+   Archiosk then DOES with a vector PDF: engine/pdf_extractor.py extracts vector
+   primitives and positioned text spans, and engine/spatial_compiler.py can
+   compile a drawing set into a model - but that is a proving-ground capability
+   reached through specific surfaces, not something that happens to every upload.
+   Saying "upload a drawing and Archiosk builds a model" would be a lie of
+   emphasis even though every clause in it is individually true.
+#}<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>Drawing ingestion &amp; baselines &mdash; Help</title>
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='app-icon.svg') }}?v={{ static_version }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/tokens.css') }}?v={{ static_version }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/project_manage.css') }}?v={{ static_version }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/fish_tank.css') }}?v={{ static_version }}">
+</head>
+<body class="pm">
+
+{% import "components/fish_tank_container.html" as tank %}
+{{ tank.scope_hud([{'label': 'Help', 'href': url_for('help_center.index')},
+                   {'label': 'Drawing ingestion & baselines'}]) }}
+
+<header class="pm-head">
+    <h1>Drawing ingestion &amp; baselines</h1>
+    <p class="pm-note">
+        Getting an issued set in cleanly, so that what Archiosk holds matches
+        what the project was actually issued.
+    </p>
+</header>
+
+<article class="help-body">
+
+    <section id="vector">
+        <h2>Export vector, not raster</h2>
+        <p>
+            <b>A scanned or rasterised PDF is a picture of a drawing.</b> Its
+            text cannot be read, its geometry cannot be measured, and a tag on
+            it cannot be bound to a row in a schedule. A vector PDF keeps text
+            as text and lines as lines, and everything downstream depends on
+            that difference.
+        </p>
+        <p><b>From Revit:</b></p>
+        <ul>
+            <li>Print / Export to PDF using a vector-capable printer, not
+                "Raster processing".</li>
+            <li>Set <b>Raster quality</b> to its lowest usable setting &mdash;
+                it governs only genuinely raster content, and a high setting can
+                push whole views through the raster path.</li>
+            <li>Leave <b>Hide scope boxes</b> / <b>Hide crop boundaries</b> on
+                so datum lines are not confused with drawn geometry.</li>
+            <li>Export sheets, not views, so the title block and sheet number
+                travel with the drawing.</li>
+        </ul>
+        <p><b>From AutoCAD:</b> plot to <i>DWG&nbsp;To&nbsp;PDF.pc3</i> rather
+            than a print-to-image driver, and keep lineweights on. If the result
+            has no selectable text when opened in a PDF reader, it went out as
+            raster and should be re-plotted.</p>
+        <p>
+            The quickest check: open the PDF and try to select a sheet number
+            with the text cursor. If it highlights, it is vector.
+        </p>
+    </section>
+
+    <section id="baseline">
+        <h2>What a baseline is here</h2>
+        <p>
+            A baseline is simply <b>the issued set you are treating as
+            authoritative</b> at a point in time. Archiosk does not have a
+            separate "baseline" object &mdash; it has Sources with recorded
+            provenance and content digests, and a baseline is the state of that
+            register after you have reconciled it against the issued folder.
+        </p>
+        <p>
+            The practical consequence: establish the register from the issued
+            set <i>first</i>, before adding sketches, markups or working files.
+            Then every later comparison has something honest to compare against.
+        </p>
+    </section>
+
+    <section id="packages">
+        <h2>Organising a multi-discipline package</h2>
+        <p>
+            Keep one folder per discipline under a single issued root, and keep
+            the issue date or revision in the folder name rather than only in
+            the filenames. Reconcile compares by path as well as content, so a
+            stable folder structure is what lets a re-issue read as
+            <i>modified</i> rather than as a pile of unrelated new documents.
+        </p>
+        <p>
+            Do not flatten disciplines into one directory to "make uploading
+            easier". The structure is evidence about how the set was issued, and
+            flattening discards it permanently.
+        </p>
+        <p>
+            When you are ready to compare a folder against what is registered,
+            see <a href="{{ url_for('help_center.guide', guide='what-is-reconciliation') }}">What
+            is Reconciliation?</a>. For accepted formats and how large files are
+            handled, see <a href="{{ url_for('help_center.guide', guide='file-types-and-limits') }}">File
+            types &amp; limits</a>.
+        </p>
+    </section>
+
+    <section id="not-built">
+        <h2>What uploading a drawing does not do by itself</h2>
+        <p>
+            Registering a drawing makes it a governed Source with provenance and
+            a content digest, and makes its text readable as project evidence.
+            It does <b>not</b> automatically build a 3D model, detect clashes, or
+            align disciplines. Those are separate capabilities &mdash; some
+            built and reached through their own surfaces, some not built at all
+            &mdash; and none of them happen as a side effect of an upload.
+        </p>
+    </section>
+
+</article>
+
+<p class="pm-note">
+    <a href="{{ url_for('help_center.index') }}">&larr; All guides</a>
+</p>
+
+</body>
+</html>

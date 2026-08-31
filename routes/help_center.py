@@ -47,6 +47,23 @@ GUIDES = {
         "title": "Building Box in meetings",
         "summary": "Running a trailer meeting from a Building Box pass.",
     },
+    # CLAUDE-UPLOAD-COPY-TO-HELP-01: the three that let the upload and Data
+    # Room surfaces carry a label and a [?] instead of paragraphs.
+    "drawing-ingestion": {
+        "template": "help/drawing_ingestion.html",
+        "title": "Drawing ingestion & baselines",
+        "summary": "Exporting vector PDFs from Revit/CAD, and organising an issued set.",
+    },
+    "what-is-reconciliation": {
+        "template": "help/what_is_reconciliation.html",
+        "title": "What is Reconciliation?",
+        "summary": "Compare a folder against what is registered, read the report, then approve.",
+    },
+    "file-types-and-limits": {
+        "template": "help/file_types_and_limits.html",
+        "title": "File types & limits",
+        "summary": "Accepted formats, size limits, and how large files upload in pieces.",
+    },
 }
 
 

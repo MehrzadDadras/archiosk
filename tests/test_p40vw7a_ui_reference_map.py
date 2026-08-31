@@ -219,6 +219,24 @@ _UPLOAD_CONFIRM_DYNAMIC_REFS = {
 }
 
 
+# CLAUDE-CHUNKED-UPLOAD-PROGRESS-01: the upload progress indicator is built by
+# static/js/chunked_upload.js at submit time, so no template contains these and
+# the template scan above cannot see them. Same situation, and the same remedy,
+# as the four dynamic sets already declared here.
+#
+# They are registered in UI_REFERENCE_MAP.md as `active` because they ARE active
+# - marking them anything else to satisfy the scanner would put a false status in
+# the registry to make a test pass, which is the wrong way round.
+#
+# Read from the JS rather than hard-coded, so a rename there fails HERE (with a
+# clear diff) instead of silently drifting out of the registry.
+_CHUNKED_UPLOAD_JS_PATH = _REPO_ROOT / "static" / "js" / "chunked_upload.js"
+_CHUNKED_UPLOAD_DYNAMIC_REFS = set(
+    re.findall(r"setAttribute\('data-ui-ref',\s*'([a-z0-9.\-]+)'",
+               _CHUNKED_UPLOAD_JS_PATH.read_text(encoding="utf-8"))
+)
+
+
 def _all_template_refs() -> set[str]:
     refs: set[str] = set()
     for path in (
@@ -240,6 +258,7 @@ def _all_template_refs() -> set[str]:
     refs |= _UPLOAD_CONFIRM_DYNAMIC_REFS
     refs |= _UPLOAD_ENTRY_CHOICE_DYNAMIC_REFS
     refs |= _UPLOAD_RETAINED_BY_DYNAMIC_REFS
+    refs |= _CHUNKED_UPLOAD_DYNAMIC_REFS
     refs |= _INDEX_CHOICE_DYNAMIC_REFS
     return refs
 

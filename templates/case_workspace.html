@@ -2491,11 +2491,19 @@
                    viewport further down the page; one combined disclosure
                    keeps the added height to a single line when collapsed. #}
                 {% call macros.subdisclosure('Data Room admin actions', ui_ref='display.files.data-room.admin-actions') %}
+                    {# CLAUDE-UPLOAD-COPY-TO-HELP-01: the HOW moved to
+                       help/what_is_reconciliation.html. The sentence kept below
+                       did NOT move, deliberately: "nothing is added, relinked,
+                       or removed until you approve" is the assurance that this
+                       button is safe to press, and an assurance about a governed
+                       action belongs at the point of action. Moving it behind a
+                       link would mean the only people who ever read it are the
+                       ones who already went looking. #}
                     <p class="pane-note">
-                        Select the authoritative Data Room folder on your own machine.
-                        Reconcile compares it against what's already registered and
-                        reports the difference - nothing is added, relinked, or removed
-                        until you review that report and approve it.
+                        Select the authoritative Data Room folder. Nothing is added,
+                        relinked, or removed until you review the report and approve it.
+                        <a href="{{ url_for('help_center.guide', guide='what-is-reconciliation') }}"
+                           data-ui-ref="display.files.data-room.reconcile.help">What is Reconciliation? &rarr;</a>
                     </p>
                     <form method="post" enctype="multipart/form-data" action="{{ url_for('workspace.reconcile_data_room_route', project_id=project_id) }}" data-ui-ref="display.files.data-room.reconcile.form">
                         <input type="file" name="folder_files" webkitdirectory directory multiple required data-ui-ref="display.files.data-room.reconcile.picker">

@@ -26,7 +26,14 @@
 
 <section class="workspace-pane{% if not upload_entitled %} storage-option-disabled{% endif %}">
     <h2>Add documents to project</h2>
-    <p class="pane-note">Upload to Storage &mdash; copy documents into the Project's configured managed storage.</p>
+    {# CLAUDE-UPLOAD-COPY-TO-HELP-01: the label stays, the explanation moves.
+       routes/help_center.py's own docstring sets the rule this follows -
+       "Desks carry concise labels and a [?]; the reasoning lives here." #}
+    <p class="pane-note">
+        Upload to Storage.
+        <a href="{{ url_for('help_center.guide', guide='file-types-and-limits') }}"
+           data-ui-ref="pdm.add-documents.help">File types &amp; limits &rarr;</a>
+    </p>
     {% if not upload_entitled %}
     <p class="mono form-error" data-ui-ref="pdm.add-documents.disabled-reason">Not available in public trial. Available on managed/organization plans.</p>
     {% endif %}
