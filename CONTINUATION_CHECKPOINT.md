@@ -1,5 +1,131 @@
 # Continuation checkpoint
 
+## 2026-08-31 (incident) — Document upload returning 500: an `nginx -t` config test had silently re-owned nginx's temp directories
+
+**Reported by the Product Owner during authenticated browser verification of
+`e7e8962`.** Uploading a document to a project workspace returned **500 Internal
+Server Error**. Root cause found, fixed and verified. **It was not a Python
+fault, and it was not caused by the deploy.**
+
+### There was no traceback, and that was the diagnosis
+
+`archiosk-go.service`'s journal was clean — **zero** HTTP 5xx since the deploy
+restart, and no `Traceback`/`Exception` anywhere today. That is not a gap in the
+logging. The request never reached Python at all; it failed one layer up, in
+nginx, which returned 500 before proxying to gunicorn.
+
+The actual error, from `/var/log/nginx/error.log`:
+
+```
+2026/08/31 15:55:02 [crit] 413469#413469: *80650
+  open() "/var/lib/nginx/body/0000000082" failed (13: Permission denied),
+  client: 99.241.129.246, server: archiosk.com,
+  request: "POST /projects/222109-1860-alstep-dr/workspace/sources/document HTTP/1.1"
+```
+
+with matching `POST .../workspace/sources/document → 500` access-log entries at
+15:55:10, 15:55:31 and 15:55:53.
+
+**A diagnostic note worth keeping:** the instinctive command
+`journalctl -u archiosk -n 100` returns records for a **retired**
+`archiosk.service` whose last entry is 11 August. It looks clean and sends the
+reader onward to nginx for the wrong reason. The live unit is
+**`archiosk-go.service`**.
+
+### Mechanism
+
+nginx workers run as `www-data` (`user www-data;` in `/etc/nginx/nginx.conf`),
+but `/var/lib/nginx/body` was owned `nobody:root`, mode `0700`. Proven directly
+rather than inferred:
+
+```
+$ sudo -u www-data touch /var/lib/nginx/body/_probe
+touch: cannot touch '/var/lib/nginx/body/_probe': Permission denied
+```
+
+nginx spills any request body larger than `client_body_buffer_size` (~8–16k) to
+disk. That is why the failure looked selective and intermittent: small POSTs such
+as sign-in fit in memory and worked normally, while **a file upload never fits**,
+so it failed every single time. `client_max_body_size 60M` is configured, so
+nginx was accepting the upload and then failing to write it.
+
+### Root cause: a configuration *test* mutated production state
+
+All five temp directories — `body`, `fastcgi`, `proxy`, `scgi`, `uwsgi` — changed
+ownership at the **identical nanosecond**, `ctime 2026-08-29 23:22:39.863329657`.
+`auth.log.2.gz` names the command at exactly that second:
+
+```
+Aug 29 23:22:39 sudo: ubuntu : COMMAND=/usr/sbin/nginx -t -c /tmp/nginxtest/test.conf
+```
+
+`nginx -t -c <file>` run as root creates and **chowns the compiled-in temp paths
+to whatever `user` that config declares**. The throwaway test config carried no
+`user www-data;` line, so nginx fell back to its built-in default — `nobody`.
+`nginx -V` confirms the binary was compiled without `--user`, so that default
+applies. Validating a candidate config re-owned live nginx state as a side
+effect, which is not a behaviour anyone would expect from a syntax check.
+
+### It was not the deploy, and the coincidence is why that needed proving
+
+The break predates `e7e8962` (deployed 15:34 on 31 August) by roughly **40
+hours**. It surfaced only now because large POSTs are rare here: the first
+occurrence in any log is a bot scan at 07:03 on 31 August, and the first real
+user impact is the upload at 15:55 — **21 minutes after the deploy**. Every
+rotated `error.log.*.gz` contains zero occurrences.
+
+Without the `ctime` and the `auth.log` entry, the obvious and wrong conclusion
+was that the deploy caused it. It did not; the deploy shipped one application
+file and never touched nginx.
+
+### The fix
+
+```bash
+sudo chown -R www-data:www-data /var/lib/nginx
+```
+
+Applied to **all five** directories rather than `body` alone. `proxy` was equally
+unwritable, and `proxy_buffering` spills large *upstream responses* to disk — RFI
+`.docx` exports and PDF/crop downloads were latent failures of exactly the same
+kind that simply had not been hit yet. No nginx restart was required; `open()`
+happens per request.
+
+### Verified
+
+- `sudo -u www-data touch` now succeeds in **all five** directories.
+- **End-to-end, not just filesystem:** a 1MB POST — large enough to force nginx to
+  buffer to disk — returned **404 from the application** rather than 500 from
+  nginx, and the request is visible in gunicorn's own log, proving it traversed
+  the layer that was broken. Repeated at 2MB, and against **`www.archiosk.com`**
+  specifically, since the last failure at 16:03:16 came through that hostname.
+- **Zero** `body/... Permission denied` entries after the fix. The last one ever
+  recorded is 16:03:16; the successful buffered POST is 16:04:42.
+- `/health` 200, `/login` 200, `/gateway` 302, service still on `e7e8962`.
+
+One honesty note on the evidence: the verification probes wrote into those same
+directories and therefore overwrote their `ctime`s, so post-fix `ctime` values are
+not usable as a record of when the chown landed. The ordering above rests on the
+nginx log timestamps and the successful buffered POST, which the probes did not
+affect.
+
+### Prevention
+
+Never run `nginx -t -c <partial-config>` as root. Either use plain `nginx -t`,
+which reads the real `/etc/nginx/nginx.conf` and so inherits `user www-data;`, or
+include `user www-data;` in any standalone test config. The failure is silent at
+test time and only appears later, on the next request large enough to need a disk
+buffer — which may be days afterwards, as it was here.
+
+### Still carried forward
+
+- **Authenticated browser verification of `e7e8962` is now partially exercised** —
+  the Product Owner reached the workspace and attempted a document upload, which
+  is more than any previous entry could claim. It is **not** recorded as complete:
+  the upload itself failed on this defect and has not yet been re-attempted
+  successfully by a human since the fix.
+- The `nobody`-owned state existed for ~40 hours before anyone noticed, because
+  nothing alerts on nginx `[crit]` lines.
+
 ## 2026-08-31 (host cleanup) — Rollback trees pruned from 108 to 2, on explicit Product Owner instruction
 
 **Product Owner directive, 2026-08-31.** `deploy/DEPLOYMENT.md` step 13 states
