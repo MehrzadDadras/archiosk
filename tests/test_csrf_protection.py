@@ -61,11 +61,27 @@ class CsrfProtectionTests(unittest.TestCase):
         self.assertIsNotNone(match, "expected <meta name=\"csrf-token\"> on every page")
         return match.group(1)
 
+    def _is_signed_in(self) -> bool:
+        """The actual security property these tests exist to protect.
+
+        CLAUDE-CSRF-EXPIRY-01 changed the REJECTION MECHANISM for HTML
+        requests from a raw 400 to a flash-and-redirect, so a bare status
+        assertion no longer separates rejection from success - both are now
+        302. Asserting on the session is strictly stronger than the 400 it
+        replaces: it checks that no session was established, which is the
+        thing CSRF protection is actually for, rather than the HTTP code
+        that happened to carry the refusal.
+        """
+        with self.client.session_transaction() as sess:
+            return "user_id" in sess
+
     def test_post_without_token_is_rejected(self):
         response = self.client.post(
             "/login", data={"username": "csrf_admin", "password": "correct-pw-123"},
         )
-        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.headers["Location"], "/login")
+        self.assertFalse(self._is_signed_in(), "a tokenless POST must not authenticate")
 
     def test_post_with_real_token_succeeds(self):
         token = self._real_token()
@@ -73,13 +89,20 @@ class CsrfProtectionTests(unittest.TestCase):
             "/login", data={"username": "csrf_admin", "password": "correct-pw-123", "csrf_token": token},
         )
         self.assertEqual(response.status_code, 302)
+        # Both success and CSRF rejection are now 302, so this asserts the
+        # DESTINATION and the session too - otherwise this test would pass
+        # against a broken build that redirected every login to /login.
+        self.assertEqual(response.headers["Location"], "/")
+        self.assertTrue(self._is_signed_in())
 
     def test_post_with_wrong_token_is_rejected(self):
         response = self.client.post(
             "/login",
             data={"username": "csrf_admin", "password": "correct-pw-123", "csrf_token": "not-the-real-token"},
         )
-        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.headers["Location"], "/login")
+        self.assertFalse(self._is_signed_in(), "a forged token must not authenticate")
 
     def test_every_page_exposes_the_csrf_meta_tag(self):
         # base.html's <head> is unconditional -- must be present even

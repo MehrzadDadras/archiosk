@@ -541,7 +541,8 @@ def _register_blueprints(app: Flask) -> None:
 
 
 def _register_error_handlers(app: Flask) -> None:
-    from flask import jsonify, render_template, url_for
+    from flask import flash, jsonify, redirect, render_template, url_for
+    from flask_wtf.csrf import CSRFError
 
     # All three dead-end error pages (403/404/500) are the same shape - one
     # message, one way out, no ongoing state - so they're one parameterized
@@ -736,6 +737,42 @@ def _register_error_handlers(app: Flask) -> None:
             ui_ref="errors.upload-too-large",
         ), 413
 
+    @app.errorhandler(CSRFError)
+    def csrf_expired(err):
+        """CLAUDE-CSRF-EXPIRY-01: an expired CSRF token is a routine idle
+        session, not a fault. It previously fell through to Flask-WTF's own
+        raw "Bad Request - The CSRF token has expired" 400 page.
+
+        There are two audiences, and the split between them is NOT
+        _wants_json()'s. That helper tests request.path.startswith("/api/"),
+        and every blueprint mounted under /api/ is csrf.exempt (see
+        _register_csrf) - so a CSRF failure can never arrive on an /api/
+        path, and branching on it alone would be dead code that looked
+        correct.
+
+        The real JSON casualties are the page-level fetch() calls in
+        static/js (case_workspace.js, draft_assist.js,
+        investigation_snapshot.js, drawing_image_viewer.js). They POST to
+        NON-exempt blueprints with an X-CSRFToken header and then call
+        resp.json(). Handing one of those an HTML redirect makes resp.json()
+        throw, so an expired token surfaced as the generic "a network error
+        occurred" catch - a wrong diagnosis of a routine timeout, and the
+        failure this handler exists to end.
+
+        _csrf_wants_json() therefore keys off HOW the client asked, not
+        where: a rendered browser form never sets X-CSRFToken, only a script
+        does. _wants_json() is still consulted first so this handler stays
+        consistent with every other handler here if an /api/ route is ever
+        un-exempted.
+        """
+        if _wants_json() or _csrf_wants_json():
+            return jsonify(
+                error="csrf_expired",
+                message="CSRF token missing or expired",
+            ), 400
+        flash("Your session expired. Please sign in again.", "error")
+        return redirect(url_for("portal.login", next=_safe_return_path()))
+
     def _upload_too_large_message(app) -> str:
         max_mb = app.config["MAX_CONTENT_LENGTH"] // (1024 * 1024)
         return (
@@ -746,6 +783,53 @@ def _register_error_handlers(app: Flask) -> None:
     def _wants_json() -> bool:
         from flask import request
         return request.path.startswith("/api/")
+
+    def _csrf_wants_json() -> bool:
+        """Whether a CSRF-rejected caller is a script expecting JSON.
+
+        Deliberately about the REQUEST's own shape rather than its path,
+        for the reason csrf_expired() states: the /api/ prefix is exempt,
+        so path tells us nothing here.
+
+        X-CSRFToken is the strongest signal and the one that actually fires
+        in this codebase - every fetch() in static/js sets it and no
+        rendered <form> can. The Accept comparison is deliberately STRICT:
+        a bare `Accept: */*` (curl, and some fetch defaults) scores
+        application/json and text/html equally, and treating that tie as
+        "wants JSON" would turn an ordinary form POST into a JSON reply.
+        """
+        from flask import request
+        if request.headers.get("X-CSRFToken"):
+            return True
+        if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+            return True
+        if request.is_json:
+            return True
+        accept = request.accept_mimetypes
+        return accept["application/json"] > accept["text/html"]
+
+    def _safe_return_path():
+        """Same-site path to return to after signing in, or None.
+
+        portal.login's own _resolve_next_url() re-validates whatever it
+        receives, so this is the outer half of a belt-and-braces pair, not
+        the only check. Returning None simply omits ?next=, which is the
+        correct behaviour for a POST with no usable referrer.
+        """
+        from urllib.parse import urlparse
+
+        from flask import request
+
+        referrer = request.referrer or ""
+        if not referrer:
+            return None
+        parsed = urlparse(referrer)
+        if parsed.netloc and parsed.netloc != urlparse(request.host_url).netloc:
+            return None
+        path = parsed.path or ""
+        if not path.startswith("/") or path.startswith("//"):
+            return None
+        return path
 
 
 _STANDALONE_AUTH_ENDPOINTS = {"portal.login", "portal.forgot_password", "portal.reset_password"}
