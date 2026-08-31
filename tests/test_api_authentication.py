@@ -51,6 +51,7 @@ API_ROUTES = [
     # CLAUDE-MM5
     ("POST", "/api/v1/documents/some-project/eye-capture"),
     ("POST", "/api/v1/documents/some-project/sources/some-source/markers"),
+    ("POST", "/api/v1/documents/some-project/sources/some-source/snapshot"),
     ("POST", "/api/v1/documents/some-project/sources/some-source/derivative-crop"),
     # CLAUDE-MM6
     ("POST", "/api/v1/documents/some-project/relationships"),
@@ -96,6 +97,7 @@ ADMIN_ONLY_ROUTE_PATHS = {
     ("POST", "/api/v1/documents/some-project/sources/some-source/drawing-regions"),
     ("POST", "/api/v1/documents/some-project/eye-capture"),
     ("POST", "/api/v1/documents/some-project/sources/some-source/markers"),
+    ("POST", "/api/v1/documents/some-project/sources/some-source/snapshot"),
     ("POST", "/api/v1/documents/some-project/sources/some-source/derivative-crop"),
     ("POST", "/api/v1/documents/some-project/relationships"),
     ("POST", "/api/v1/documents/some-project/relationships/some-relationship/confirm"),
@@ -111,6 +113,71 @@ ADMIN_ONLY_ROUTE_PATHS = {
     ("POST", "/api/v1/documents/some-project/claims/some-claim/request-authority"),
     ("POST", "/api/v1/documents/some-project/claims/some-claim/supersede"),
 }
+
+
+class RouteListsCoverTheRealBlueprintTests(unittest.TestCase):
+    """The two lists above are hand-maintained, and their own comment says a
+    route left out of them is "an obvious gap". It was not: POST
+    .../sources/<source_id>/snapshot was admin-gated in the blueprint and absent
+    from BOTH lists, so the unauthenticated sweep never touched it and the
+    read-only reachability check never noticed. Nothing failed, because a route
+    nobody lists is a route nobody tests.
+
+    This closes that by asking the app itself rather than trusting the lists.
+    """
+
+    _PARAMS = {
+        "project_id": "some-project", "source_id": "some-source",
+        "region_id": "some-region", "relationship_id": "some-relationship",
+        "investigation_step_id": "some-step", "claim_id": "some-claim",
+        "evidence_item_id": "some-evidence", "spin_run_id": "some-run",
+    }
+
+    def _real_routes(self):
+        import app as app_module
+        from routes.api import _ADMIN_ONLY_ENDPOINTS
+
+        flask_app = app_module.create_app("testing")
+        every, admin = set(), set()
+        for rule in flask_app.url_map.iter_rules():
+            if not rule.endpoint.startswith("api."):
+                continue
+            path = str(rule)
+            for name, value in self._PARAMS.items():
+                path = path.replace("<%s>" % name, value)
+            self.assertNotIn("<", path, f"{rule} has an unmapped parameter - add it to _PARAMS")
+            for method in rule.methods:
+                if method not in {"GET", "POST", "PUT", "PATCH", "DELETE"}:
+                    continue
+                every.add((method, path))
+                if rule.endpoint in _ADMIN_ONLY_ENDPOINTS:
+                    admin.add((method, path))
+        return every, admin
+
+    def test_api_routes_lists_every_registered_route(self):
+        every, _ = self._real_routes()
+        self.assertEqual(
+            every - set(API_ROUTES), set(),
+            "registered but missing from API_ROUTES - it is therefore never checked "
+            "for rejecting unauthenticated access",
+        )
+
+    def test_api_routes_lists_nothing_that_no_longer_exists(self):
+        every, _ = self._real_routes()
+        self.assertEqual(
+            set(API_ROUTES) - every, set(),
+            "listed in API_ROUTES but not registered - the sweep is asserting against "
+            "a 404, which passes for the wrong reason",
+        )
+
+    def test_admin_only_list_matches_the_blueprint_gate_exactly(self):
+        _, admin = self._real_routes()
+        self.assertEqual(
+            admin, set(ADMIN_ONLY_ROUTE_PATHS),
+            "ADMIN_ONLY_ROUTE_PATHS has drifted from _ADMIN_ONLY_ENDPOINTS: a route "
+            "missing here is wrongly expected to be reachable by read_only; a route "
+            "listed here but no longer gated is silently exempted from that check",
+        )
 
 
 class ApiAuthenticationTests(unittest.TestCase):
