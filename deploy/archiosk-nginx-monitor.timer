@@ -1,0 +1,28 @@
+# CLAUDE-NGINX-CRIT-MONITOR-01
+#
+# Install to /etc/systemd/system/archiosk-nginx-monitor.timer, then
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now archiosk-nginx-monitor.timer
+#   systemctl list-timers archiosk-nginx-monitor.timer
+
+[Unit]
+Description=Run the ARCHIOSK nginx critical-error check every 5 minutes
+
+[Timer]
+# First run shortly after boot rather than waiting a full interval - a fault
+# present at boot is exactly the kind this exists to catch.
+OnBootSec=2min
+OnUnitActiveSec=5min
+
+# Without this, every timer on the host fires on the same second. 30s of jitter
+# costs nothing here and keeps the check off the same tick as certbot et al.
+RandomizedDelaySec=30s
+
+# Survive downtime: if the machine was off when a run was due, run once on the
+# next boot rather than skipping the window silently.
+Persistent=true
+
+Unit=archiosk-nginx-monitor.service
+
+[Install]
+WantedBy=timers.target

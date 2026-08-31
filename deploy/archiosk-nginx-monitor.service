@@ -1,0 +1,77 @@
+# CLAUDE-NGINX-CRIT-MONITOR-01
+#
+# Install to /etc/systemd/system/archiosk-nginx-monitor.service, then
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now archiosk-nginx-monitor.timer
+#
+# Type=oneshot: this is a periodic check driven by the .timer beside it, not a
+# daemon. It runs, reports, exits.
+#
+# WHY User=root, given the brief asked for non-privileged.
+#
+# Two files must be read and they have no single non-root reader:
+#   /var/log/nginx/error.log   www-data:adm 0640  -> needs group adm
+#   /var/www/archiosk/.env     archiosk:archiosk 0600 -> needs archiosk or root
+# The .env read is what supplies SMTP credentials for the email sink. Creating a
+# fourth identity in two groups, or copying the credential into a second file,
+# would both be worse: the first adds an account for one script, the second
+# duplicates a secret. So this runs as root and is confined by the sandbox
+# directives below instead - the privilege is bounded by what it can touch, not
+# by which uid it holds.
+#
+# If the webhook sink is used instead of email, .env is never read, and this can
+# safely be narrowed to User=syslog (already in adm) with the ProtectHome and
+# ReadOnlyPaths lines kept.
+
+[Unit]
+Description=ARCHIOSK nginx critical-error check
+Documentation=file:/usr/local/bin/archiosk-nginx-monitor
+After=nginx.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /usr/local/bin/archiosk-nginx-monitor
+
+# error.log is www-data:adm 0640. Root is neither its owner nor in adm, and
+# CapabilityBoundingSet= below drops CAP_DAC_OVERRIDE - so without this the
+# process cannot read the very file it exists to read, and the first timer run
+# fails with EACCES. (It did. The script's fail-closed exit is what surfaced it
+# rather than a run that cheerfully reported "no critical lines" forever.)
+# Group membership, not a capability, is the least-privilege way to grant it.
+SupplementaryGroups=adm
+
+# Alert routing. Set exactly one; with neither, findings go to the journal.
+# Environment=ARCHIOSK_ALERT_WEBHOOK=https://hooks.example.com/...
+#
+# The EMAIL sink additionally reads SMTP_* out of /var/www/archiosk/.env, which
+# is mode 0600 archiosk:archiosk - unreadable to this unit as configured, since
+# no capability here overrides file permissions. Uncomment BOTH lines below to
+# use it; CAP_DAC_READ_SEARCH grants read-only override and nothing more, and
+# ProtectSystem=strict still forbids writing anywhere but the state directory.
+# Environment=ARCHIOSK_ALERT_EMAIL=someone@example.com
+# AmbientCapabilities=CAP_DAC_READ_SEARCH
+# CapabilityBoundingSet=CAP_DAC_READ_SEARCH
+
+# --- confinement -----------------------------------------------------------
+# The script's ONLY legitimate write is its own state file. Everything else it
+# touches is read-only, and that is enforced here rather than trusted to the
+# script: a bug in the script cannot damage what the unit will not let it open.
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+SystemCallArchitectures=native
+CapabilityBoundingSet=
+ProtectSystem=strict
+ReadWritePaths=/var/lib/archiosk-nginx-monitor
+ReadOnlyPaths=/var/log/nginx /var/www/archiosk /usr/local/bin
+
+# A monitor must never become the outage. If it hangs, it dies.
+TimeoutStartSec=60
