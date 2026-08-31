@@ -1,5 +1,86 @@
 # Continuation checkpoint
 
+## 2026-08-31 (host cleanup) — Rollback trees pruned from 108 to 2, on explicit Product Owner instruction
+
+**Product Owner directive, 2026-08-31.** `deploy/DEPLOYMENT.md` step 13 states
+that removing older `archiosk-backup-<hash>` trees is "a separate, deliberate
+decision each time, not part of routine per-deploy cleanup — don't automate away
+your only rollback point." This entry records that decision being taken
+deliberately, by instruction, for the first time. **106 generations removed; the
+two most recent retained.**
+
+- **Retained:** `/var/www/archiosk-backup-f332681` (829 files, `.env` at `600`)
+  and `/var/www/archiosk-backup-9d16b8c` (826 files, `.env` at `600`) — verified
+  as the two newest by mtime (15:32 and 10:19 on 2026-08-31) rather than assumed
+  from their names.
+- **Disk:** 11G used / 87G free → **8.6G used / 89G free**. Roughly 2.4G
+  reclaimed, against a measured 1.8G of `du` in the trees themselves.
+- `/var/www` now holds **6 entries**, down from 112.
+
+### The dangerous neighbours, and why the glob was safe
+
+`/var/www` contains two directories that are **real data backups, not code
+rollback trees**: `archiosk-db-backups` (392K) and `archiosk-registry-backups`
+(4.9M). Neither is recoverable from git, and losing either would be a materially
+worse outcome than losing every rollback tree combined.
+
+Both were explicitly proven to fall **outside** `archiosk-backup-*` before
+anything was deleted — the glob requires the literal `archiosk-backup-` prefix,
+and `archiosk-db-backups` / `archiosk-registry-backups` do not carry it. The live
+`/var/www/archiosk` and `/var/www/html` were checked the same way. That check was
+run as a positive test (does the glob's own output contain this path?) rather than
+by reading the pattern and reasoning about it.
+
+### How the deletion was constrained
+
+The removal did **not** run `rm -rf /var/www/archiosk-backup-*`. An explicit
+delete-list was materialised to a file and asserted against before use:
+
+1. exactly 106 entries;
+2. every entry carrying the `/var/www/archiosk-backup-` prefix;
+3. neither retained tree present;
+4. none of the four protected paths present;
+5. no `..` or glob metacharacter in any entry;
+6. every entry a real directory and not a symlink.
+
+The list was then **re-validated inside the same command that performed the
+deletion**, so no unverified gap could exist between checking and deleting, with
+an abort path that removes nothing if the re-check disagrees.
+
+One assertion failed spuriously on the first attempt and correctly stopped the
+run: `grep -c` exits 1 when its count is zero, and under `pipefail` that read as
+a failure even though the true count of offending entries was zero. Nothing was
+deleted. Recorded because the failure mode is worth knowing — a safety check that
+fails closed on its own bug is behaving correctly, and the fix was to the
+assertion, not to the safety margin.
+
+### Verified after
+
+- Live tree intact: **837 files** (836 tracked from the deployed commit, plus
+  `.env`), `.env` still `archiosk:archiosk` `600` at 813 bytes, `instance/` intact.
+- `archiosk-go.service` **active**, Description still
+  `Gunicorn - ArchiOSK GO (accepted build e7e8962)`, no `error|traceback|
+  exception|critical` in the journal.
+- `https://archiosk.com/health` **200**, `/login` **200**, `/gateway` **302**, and
+  the Spin diagnostic still **401** — nothing about the prune touched the running
+  application, which is the point.
+
+### What this changes about rollback posture
+
+Rollback depth is now **two generations, not 108**. `f332681` is the immediate
+rollback target for the current `e7e8962` deploy, and `9d16b8c` is one further
+back. Anything older is gone and is **not** recoverable — those trees were the
+only copies of their build state, since the application directory is not a git
+repository. This is an accepted, instructed trade, not an accident; every one of
+those commits remains reconstructible from `origin/main` via `git archive`, which
+is what makes the trade reasonable.
+
+### Still carried forward
+
+- **Authenticated browser verification of `e7e8962` remains outstanding** — see
+  the deploy entry below. Unchanged by this cleanup.
+- **The unexplained full-suite stall** remains unidentified and non-recurring.
+
 ## 2026-08-31 (deploy) — `e7e8962` deployed to `archiosk.com`, carrying 11 commits and exactly one application file
 
 **`e7e8962` is live on `https://archiosk.com`**, replacing `f332681`. Confirmed
