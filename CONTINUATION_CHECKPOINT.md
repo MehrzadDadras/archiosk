@@ -6,6 +6,20 @@
 `https://archiosk.com`: the document upload processed cleanly with zero 500s, and
 the document rendered and was indexed in the active project workspace.
 
+> **Correction, added after this entry was first written.** The Product Owner
+> subsequently clarified that the confirmation above was sent **before** the
+> upload was actually performed, not after it. This entry originally implied the
+> report described a completed action. It did not - the report preceded the event
+> it described by roughly ninety seconds, and the upload then genuinely succeeded
+> at 17:24:04.
+>
+> The corroboration below is unaffected and is what establishes the true order.
+> That is the point worth keeping: a first check at 17:23 found `total sources:
+> 0` and was **correct at the time**; treating it as final would have produced a
+> confident, wrong report that the upload had failed. Neither the human report
+> nor the machine check was sufficient alone. Only the two together, ordered by
+> timestamp, say what actually happened.
+
 Unlike the previous human-verification entry, this one is **not solely a report**.
 The human judgement — that the document rendered and reads correctly in the
 workspace — is the Product Owner's and is recorded as theirs. The mechanical facts
