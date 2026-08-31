@@ -107,16 +107,68 @@
         return out;
     }
 
+    /* Progress, shown three ways at once because they answer different
+     * questions: a bar (how far along, at a glance), a percentage and byte
+     * count (exactly how far, and how much is left), and a chunk counter (that
+     * something is still happening during a long transfer).
+     *
+     * Uses the NATIVE <progress> element rather than a styled div. It is
+     * accessible without any ARIA authoring, it needs no addition to
+     * main.css's semantic colour grammar, and it cannot drift from that
+     * grammar later. A bespoke bar would have to earn its place; this does the
+     * same job with no new CSS. */
     function Status(form) {
-        var node = document.createElement('p');
-        node.className = 'mono pane-note';
-        node.setAttribute('data-ui-ref', 'pdm.add-documents.progress');
-        node.setAttribute('role', 'status');
-        node.setAttribute('aria-live', 'polite');
-        form.appendChild(node);
-        this.node = node;
+        var wrap = document.createElement('div');
+        wrap.setAttribute('data-ui-ref', 'pdm.add-documents.progress');
+
+        var bar = document.createElement('progress');
+        bar.max = 100;
+        bar.value = 0;
+        bar.setAttribute('data-ui-ref', 'pdm.add-documents.progress.bar');
+        bar.style.width = '100%';
+        bar.hidden = true;
+
+        var line = document.createElement('p');
+        line.className = 'mono pane-note';
+        line.setAttribute('data-ui-ref', 'pdm.add-documents.progress.text');
+        // polite, not assertive: this updates on every chunk, and an assertive
+        // region would interrupt a screen reader continuously for minutes.
+        line.setAttribute('role', 'status');
+        line.setAttribute('aria-live', 'polite');
+
+        wrap.appendChild(bar);
+        wrap.appendChild(line);
+        form.appendChild(wrap);
+
+        this.bar = bar;
+        this.line = line;
     }
-    Status.prototype.say = function (text) { this.node.textContent = text; };
+
+    Status.prototype.say = function (text) { this.line.textContent = text; };
+
+    /* percent may be null - "assembling" has no meaningful percentage, and
+     * showing a stalled 100% there would suggest the upload had hung. */
+    Status.prototype.progress = function (percent, text) {
+        if (percent === null) {
+            this.bar.removeAttribute('value');   // indeterminate
+            this.bar.hidden = false;
+        } else {
+            this.bar.value = percent;
+            this.bar.hidden = false;
+        }
+        this.line.textContent = text;
+    };
+
+    Status.prototype.done = function (text) {
+        this.bar.value = 100;
+        this.bar.hidden = false;
+        this.line.textContent = '\u2713 ' + text;
+    };
+
+    Status.prototype.fail = function (text) {
+        this.bar.hidden = true;     // a bar frozen mid-way reads as "still going"
+        this.line.textContent = text;
+    };
 
     /* One chunk, with bounded retry. Transient failures are the normal case on
      * a long upload - a retry that gives up after the first blip would make
@@ -156,8 +208,8 @@
                         /Refused|Unsupported|match|range|large|empty/i.test(error.message)) {
                     throw error;
                 }
-                status.say('Chunk ' + (index + 1) + '/' + total +
-                           ' failed (' + error.message + ') - retry ' +
+                status.say('Chunk ' + (index + 1) + ' of ' + total +
+                           ' failed (' + error.message + ') \u2014 retry ' +
                            attempt + ' of ' + MAX_RETRIES + '...');
                 return delay(RETRY_BASE_MS * attempt).then(tryOnce);
             });
@@ -174,7 +226,9 @@
 
         function next() {
             if (index >= total) {
-                status.say('Assembling & verifying digest...');
+                // Indeterminate: the server is hashing and registering, and how
+                // long that takes is not a function of bytes already sent.
+                status.progress(null, 'Assembling & verifying file...');
                 var done = new FormData();
                 done.append('upload_id', id);
                 done.append('filename', file.name);
@@ -199,9 +253,9 @@
                             return payload;
                         });
                 }).then(function (payload) {
-                    status.say('Complete - ' + payload.name + ' (' +
-                               humanSize(payload.size_bytes) + ', sha256 ' +
-                               payload.sha256.slice(0, 12) + '...). Reloading...');
+                    status.done('Upload complete \u2014 ' + payload.name + ' (' +
+                                humanSize(payload.size_bytes) + ', sha256 ' +
+                                payload.sha256.slice(0, 12) + '...). Reloading...');
                     // Reload rather than patching the DOM: the flash message,
                     // the Source list and the archive list are all rendered
                     // server-side, and reproducing them here would be a second
@@ -219,9 +273,11 @@
             body.append('total_chunks', String(total));
             body.append('filename', file.name);
 
-            var percent = Math.round((index / total) * 100);
-            status.say('Uploading chunk ' + (index + 1) + '/' + total +
-                       ' (' + percent + '%)');
+            var sent = start;                       // bytes confirmed before this one
+            var percent = Math.round((sent / file.size) * 100);
+            status.progress(percent,
+                'Uploading chunk ' + (index + 1) + ' of ' + total + ' \u2014 ' +
+                percent + '% (' + humanSize(sent) + ' / ' + humanSize(file.size) + ')');
 
             return sendChunk(chunkUrl, body, index, total, status).then(function () {
                 index += 1;
@@ -249,20 +305,20 @@
                 input.disabled = true;
 
                 var status = new Status(form);
-                status.say('Preparing ' + file.name + ' (' + humanSize(file.size) + ')...');
+                status.progress(0, 'Preparing ' + file.name + ' (' + humanSize(file.size) + ')...');
 
                 chunkedUpload(form, file, status).catch(function (error) {
                     if (error.message === 'SESSION_EXPIRED') {
                         // redirectIfSessionExpired already navigated. Saying
                         // "upload failed" here would blame the upload for an
                         // expired session and flash it as the page unloads.
-                        status.say('Your sign-in expired. Redirecting to sign in again...');
+                        status.fail('Your sign-in expired. Redirecting to sign in again...');
                         return;
                     }
                     // Re-enable so the reviewer can retry or pick another file;
                     // a dead form after a failed upload is its own defect.
-                    status.say('Upload failed: ' + error.message +
-                               '. Nothing was added. You can try again.');
+                    status.fail('Upload failed: ' + error.message +
+                                '. Nothing was added. You can try again.');
                     if (submit) { submit.disabled = false; }
                     input.disabled = false;
                 });

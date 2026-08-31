@@ -233,5 +233,62 @@ class TheClientHandlesItTests(unittest.TestCase):
         self.assertIn("'Accept': 'application/json'", self.js)
 
 
+class TheProgressUiTests(unittest.TestCase):
+    """CLAUDE-CHUNKED-UPLOAD-PROGRESS-01.
+
+    A long upload with no visible progress is indistinguishable from a hung
+    one, and the reviewer's only recourse is to guess. These assert the states
+    exist in the shipped source; the arithmetic and the state machine are
+    exercised directly under node against the same file.
+    """
+
+    def setUp(self):
+        self.js = (Path(__file__).resolve().parent.parent /
+                   "static" / "js" / "chunked_upload.js").read_text(encoding="utf-8")
+
+    def test_it_uses_the_native_progress_element(self):
+        # Native <progress> is accessible with no ARIA authoring and needs no
+        # addition to main.css's semantic colour grammar, so it cannot drift
+        # from that grammar later. A bespoke bar would have to earn its place.
+        self.assertIn("createElement('progress')", self.js)
+
+    def test_it_reports_an_explicit_percentage_and_both_byte_counts(self):
+        self.assertIn("percent + '% ('", self.js)
+        self.assertIn("humanSize(sent)", self.js)
+        self.assertIn("humanSize(file.size)", self.js)
+
+    def test_it_names_the_active_chunk_and_the_total(self):
+        self.assertIn("'Uploading chunk ' + (index + 1) + ' of ' + total", self.js)
+
+    def test_assembling_is_indeterminate_not_a_stalled_hundred_percent(self):
+        """A bar pinned at 100% while the server hashes reads as a hang."""
+        self.assertIn("status.progress(null, 'Assembling & verifying file...')", self.js)
+        self.assertIn("removeAttribute('value')", self.js)
+
+    def test_completion_is_marked_with_a_checkmark(self):
+        self.assertIn("Upload complete", self.js)
+        self.assertIn(r"\u2713", self.js)
+
+    def test_failure_hides_the_bar_rather_than_freezing_it(self):
+        # A bar frozen mid-way reads as "still going" to someone who just
+        # looked away, which is the opposite of what a failure should convey.
+        self.assertIn("Status.prototype.fail", self.js)
+        self.assertIn("this.bar.hidden = true", self.js)
+
+    def test_the_live_region_is_polite_not_assertive(self):
+        # This updates on every chunk; assertive would interrupt a screen
+        # reader continuously for the length of the upload.
+        self.assertIn("'aria-live', 'polite'", self.js)
+
+    def test_the_submit_control_is_gated_while_uploading(self):
+        self.assertIn("submit.disabled = true", self.js)
+        self.assertIn("input.disabled = true", self.js)
+
+    def test_the_controls_are_released_again_on_failure(self):
+        # A dead form after a failed upload is its own defect.
+        self.assertIn("submit.disabled = false", self.js)
+        self.assertIn("input.disabled = false", self.js)
+
+
 if __name__ == "__main__":
     unittest.main()
