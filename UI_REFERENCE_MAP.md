@@ -897,6 +897,39 @@ references may ever start with `lists.`/`display.`/`toolbox.`/`chat.`/
 | `index.heading`, `index.zero-state.copy`, `index.zero-state.new-project`, `index.resolved.new-project`, `index.resolved.open-existing` (+ its own `index.resolved.project-list`/`index.resolved.project-list.item`/`index.resolved.project-list.empty`/`index.resolved.see-all` sub-refs) (CLAUDE-POST-SIGNIN-GATEWAY-SIMPLIFICATION-01 Option C; gate refs RETIRED CLAUDE-ENTRY-SIMPLIFY-01) | mixed (`<h1>`/`<p>`/`<a>`/`<details>`/`<ul>`) | varies | `portal.index` (`/`)'s entry surface, now TWO states rather than three: nothing accessible yet, or the projects this user can reach. **RETIRED by CLAUDE-ENTRY-SIMPLIFY-01** (named without backticks on purpose - this registry's own consistency test reads a backticked name as a claim that the ref is live in a template): index.choice.copy, index.choice, index.choice.client_owner, index.choice.design_builder_proponent, index.resolved.copy, index.resolved.switch — the "Choose where you'd like to work" gate. It presented as a governed choice while persisting nothing, granting no authority and setting no account role; operating-environment filtering moved to `projects-directory.environment-filter`, where it reads as a filter. `index.resolved.open-existing` reuses `recent_projects` (capped at 6, now spanning every environment the user can reach) with a plain list — each row a direct link — plus `index.resolved.see-all` linking to `portal.projects_list`. `index.resolved.new-project` carries `?environment=` ONLY when the user's accessible projects are unambiguously one environment — a radio pre-selection on `/upload`, never a bypass of its own confirmation step | Every authenticated page reaching `/` | active |
 | `index.orientation.form` (+ its own `index.orientation.voice`/`index.orientation.voice.status`/`index.orientation.submit`/`index.orientation.reply` sub-refs, new, CLAUDE-VOICE-CONSISTENCY-01 / CLAUDE-POST-SIGNIN-GATEWAY-SIMPLIFICATION-01) | `<form>` / `<button type="button">` / `<span>` / `<button>` / `<p>` | "Ask Archiosk" (`aria-label`) / "🎙️" / "Ask" / (hidden until a reply exists) | Ported verbatim from the retired `gateway.orientation.*` (see above) — POSTs to `portal.gateway_orientation`, the same rule-based responder that never opens a `CaseWorkspaceStore`/calls `interpret_message` (never claims project truth — constitutional-invariants.md #8). New: an optional hidden `environment` field, scoping project-name matching to the caller's own `resolved_environment` when one exists (never crossing Owner/Proponent isolation) | Every authenticated page reaching `/` | active |
 
+**Landing-page de-duplication was considered and declined (CLAUDE-LANDING-DEDUPE-REVIEW-01, Product Owner decision, 2026-08-31).**
+
+The proposal was to drop `index.resolved.open-existing` and
+`index.projects-directory` from the landing card area as redundant with the
+left rail. It was investigated and **not done**. Recorded here rather than in
+a commit message alone, because this is where somebody stands when they
+notice the apparent duplication and reach the same conclusion again.
+
+- **`index.projects-directory` is not duplication at all.** The rail lists a
+  CAPPED `nav_recent_projects` set; this link opens the FULL,
+  environment-unfiltered directory (search/sort/counts/Delete forms). Lists'
+  own "Projects" heading is an expand/collapse toggle rather than a
+  navigating link (CLAUDE-P40-E3A Section 2/4) — see this ref's own row
+  above, which already records that this is why it exists. Nothing else on
+  the landing page reaches the directory.
+- **`index.resolved.open-existing` genuinely IS duplication** of the rail,
+  which shows the same capped set and never defaults to collapsed. Removing
+  it is defensible on those grounds alone.
+- **What stopped it:** `+ New Project` is wrapped in `{% if is_admin %}`, so
+  for a `read_only` reviewer the disclosure is the ONLY project action in the
+  main card area. Removing it leaves them a heading, a directory link and a
+  command bar. Seven tests across four separate efforts assert the pairing —
+  `CA1D-GATEWAY-VISUAL-CONTINUITY`, `CA1D-PROJECT-GATEWAY-LABELS`,
+  `P40VW5-SIGNIN-GATEWAY-ISOLATION`, `P40VW8-PROJECT-SWITCH-AND-CHOOSER` —
+  most explicitly
+  `test_new_project_hidden_from_non_admin_but_open_existing_still_shown`.
+  That is accumulated intent under `CLAUDE-GO-NEUTRAL-ENTRY-01` ("sign in →
+  see the projects you can access → open one"), not incidental history.
+
+The duplication is therefore **accepted deliberately**. If it is revisited,
+the question to answer first is the non-admin main-area experience — not
+whether the rail happens to show the same names.
+
 ## Auth (`templates/auth_shell.html`, `login.html` — CLAUDE-P40-VW8-QA, new surface)
 
 Pre-authentication. `auth_shell.html` has no toggle of its own (the
