@@ -116,6 +116,12 @@ class CommandReuseTests(unittest.TestCase):
             "doc-zoom-in", "doc-zoom-out", "doc-fit-width", "doc-fit-page",
             "doc-annotate-text", "doc-annotate-highlight", "doc-annotate-ink",
             "doc-annotate-select", "doc-region-select", "toolbox-compare-btn",
+            # CLAUDE-DOCUMENT-MENU-01: Document > Rotate Clockwise reuses the
+            # viewer's own rotate button (templates/base.html, id="doc-rotate")
+            # rather than reimplementing rotation. It satisfies this test's own
+            # requirement - a PRE-EXISTING control - and the set stays exact, so
+            # an unknown target still fails here.
+            "doc-rotate",
         }
         self.assertEqual(targets, expected)
 
@@ -804,6 +810,186 @@ class AllProjectsMenuEntryTests(_BaseTestCase):
         all_projects = body.index('data-ui-ref="menu.file.all-projects"')
         add_document = body.index('data-ui-ref="menu.file.add-document')
         self.assertLess(all_projects, add_document)
+
+
+
+class HomeLabelTests(unittest.TestCase):
+    """CLAUDE-MENU-HOME-LABEL-01 - visible text shortened, accessible name kept."""
+
+    def setUp(self):
+        self.html = _APP_MENU_HTML_PATH.read_text(encoding="utf-8")
+
+    def _home_tag(self):
+        idx = self.html.index('data-ui-ref="menu.archiosk.home"')
+        return self.html[self.html.rindex("<a", 0, idx):self.html.index("</a>", idx) + 4]
+
+    def test_the_visible_label_is_just_home(self):
+        # Inside a menu already titled "Archiosk", "Archiosk Home" said the word
+        # twice.
+        tag = self._home_tag()
+        self.assertTrue(tag.endswith(">Home</a>"), tag)
+
+    def test_the_accessible_name_deliberately_stays_archiosk_home(self):
+        """NOT an oversight, and not to be "tidied" to match the visible text.
+
+        CLAUDE-P40-BRAND1 records why: the mark is aria-hidden, so without this
+        the computed name would be bare "Home" with no indication of which home.
+        WCAG 2.5.3 (Label in Name) is satisfied because the accessible name
+        still CONTAINS the visible label. Shortening it would trade an
+        accessibility property for a symmetry nobody experiences.
+        """
+        self.assertIn('aria-label="Archiosk Home"', self._home_tag())
+
+    def test_it_still_routes_to_the_landing_page(self):
+        self.assertIn("url_for('portal.index')", self._home_tag())
+
+
+class DocumentMenuTests(unittest.TestCase):
+    """CLAUDE-DOCUMENT-MENU-01.
+
+    Asserted against the template SOURCE rather than a rendered page, following
+    test_p40brand1_brand_mark.py: the active-document branch needs a selected
+    Source, and what these guard is the markup contract, not the selection
+    machinery that puts a document there.
+    """
+
+    def setUp(self):
+        self.html = _APP_MENU_HTML_PATH.read_text(encoding="utf-8")
+
+    def test_the_empty_state_names_the_action_not_only_the_state(self):
+        idx = self.html.index('data-ui-ref="menu.document.none"')
+        tag = self.html[self.html.rindex("<span", 0, idx):self.html.index("</span>", idx)]
+        self.assertIn("Document Properties", tag)
+        self.assertIn("No document active", tag)
+
+    def test_the_old_no_document_selected_wording_is_gone(self):
+        # Scoped to the ELEMENT. The phrase survives in a Jinja comment that
+        # records what the label used to say, and Jinja strips comments from
+        # rendered output - so a whole-file assertion would fail on the
+        # explanation rather than on the thing being explained.
+        idx = self.html.index('data-ui-ref="menu.document.none"')
+        tag = self.html[self.html.rindex("<span", 0, idx):self.html.index("</span>", idx)]
+        self.assertNotIn("No document selected", tag)
+
+    def test_rotate_clockwise_REUSES_the_viewer_control(self):
+        """It must click #doc-rotate, never reimplement rotation.
+
+        A second implementation would be a second source of truth for
+        currentRotation, and the view-state persistence (saveViewStateSoon)
+        hangs off the real control.
+        """
+        idx = self.html.index('data-ui-ref="menu.document.rotate-cw"')
+        tag = self.html[self.html.rindex("<button", 0, idx):self.html.index("</button>", idx)]
+        self.assertIn('data-reuse-control="doc-rotate"', tag)
+        self.assertIn("Rotate Clockwise", tag)
+
+    def test_there_is_no_counter_clockwise_entry_claiming_to_work(self):
+        # pdf_viewer.js's rotate() is `currentRotation + 90` only, and
+        # updateOrientationStatus() hardcodes "clockwise". An entry here would
+        # be a control with nothing behind it.
+        self.assertNotIn("Rotate Counterclockwise", self.html)
+        self.assertNotIn("Rotate Counter-Clockwise", self.html)
+
+    def test_document_properties_is_DISABLED_because_the_modal_does_not_exist(self):
+        """The load-bearing one.
+
+        An enabled item wired to nothing is worse than no item: a control that
+        does nothing when clicked teaches the reviewer the menu is unreliable,
+        and they cannot distinguish that from a control that is merely slow.
+        This must stay disabled until the modal is actually built.
+        """
+        idx = self.html.index('data-ui-ref="menu.document.properties-disabled"')
+        tag = self.html[self.html.rindex("<span", 0, idx):self.html.index("</span>", idx)]
+        self.assertIn('aria-disabled="true"', tag)
+        self.assertIn("workspace-menubar-item-disabled", tag)
+        self.assertIn("not yet available", tag)
+
+    def test_the_properties_item_is_a_span_not_an_actionable_control(self):
+        # A <button>/<a> would be focusable and clickable even while styled
+        # disabled; a <span aria-disabled> cannot be activated at all.
+        idx = self.html.index('data-ui-ref="menu.document.properties-disabled"')
+        opening = self.html.rindex("<", 0, idx)
+        self.assertTrue(self.html[opening:opening + 5] == "<span",
+                        self.html[opening:opening + 40])
+
+
+
+class ToolsMenuStubTests(unittest.TestCase):
+    """CLAUDE-TOOLS-MENU-STUBS-01 - six signposted tools, none of them built.
+
+    The value of these tests is not that the items exist; it is that they stay
+    DISABLED until the engines behind them do. An enabled measurement tool is
+    the dangerous case: a takeoff on an uncalibrated sheet would return a
+    number, and a number on a drawing is read as a dimension.
+    """
+
+    STUBS = ("calibrate-scale", "linear-takeoff", "area-takeoff",
+             "sheet-diff", "extract-sheet-index", "export-redlines")
+
+    def setUp(self):
+        self.html = _APP_MENU_HTML_PATH.read_text(encoding="utf-8")
+
+    def _tag(self, ref):
+        idx = self.html.index('data-ui-ref="menu.tools.%s"' % ref)
+        return self.html[self.html.rindex("<", 0, idx):self.html.index("</span>", idx)]
+
+    def test_every_stub_is_present(self):
+        for ref in self.STUBS:
+            with self.subTest(ref=ref):
+                self.assertIn('data-ui-ref="menu.tools.%s"' % ref, self.html)
+
+    def test_every_stub_is_disabled_and_says_so(self):
+        for ref in self.STUBS:
+            with self.subTest(ref=ref):
+                tag = self._tag(ref)
+                self.assertIn('aria-disabled="true"', tag)
+                self.assertIn("workspace-menubar-item-disabled", tag)
+                self.assertIn("not yet available", tag)
+
+    def test_every_stub_is_a_span_so_it_cannot_be_activated(self):
+        # A <button> or <a> stays focusable and clickable even when styled
+        # disabled; a <span aria-disabled> cannot be activated at all.
+        for ref in self.STUBS:
+            with self.subTest(ref=ref):
+                self.assertTrue(self._tag(ref).startswith("<span"), ref)
+
+    def test_no_stub_carries_an_action_or_reuse_hook(self):
+        """The load-bearing one.
+
+        data-action and data-reuse-control are what app_menu.js binds to. A stub
+        carrying either would fire something, which is precisely what "not yet
+        available" promises it will not do.
+        """
+        for ref in self.STUBS:
+            with self.subTest(ref=ref):
+                tag = self._tag(ref)
+                self.assertNotIn("data-action", tag)
+                self.assertNotIn("data-reuse-control", tag)
+
+    def test_the_title_names_the_blocker_rather_than_repeating_the_label(self):
+        # Hovering should explain WHY it is unavailable, not restate THAT.
+        self.assertIn("No calibration engine yet", self._tag("calibrate-scale"))
+        self.assertIn("Requires calibration first", self._tag("linear-takeoff"))
+        self.assertIn("no on-demand sheet-index tool", self._tag("extract-sheet-index"))
+
+    def test_the_existing_annotation_tools_are_untouched_and_still_wired(self):
+        # The five real tools must keep their reuse hooks - this change adds
+        # beside them, it does not restructure them.
+        for ref, control in (("annotate-text", "doc-annotate-text"),
+                             ("annotate-highlight", "doc-annotate-highlight"),
+                             ("annotate-ink", "doc-annotate-ink"),
+                             ("annotate-select", "doc-annotate-select"),
+                             ("region-select", "doc-region-select")):
+            with self.subTest(ref=ref):
+                idx = self.html.index('data-ui-ref="menu.tools.%s"' % ref)
+                tag = self.html[self.html.rindex("<button", 0, idx):self.html.index("</button>", idx)]
+                self.assertIn('data-reuse-control="%s"' % control, tag)
+
+    def test_the_three_groups_are_separated_by_dividers(self):
+        start = self.html.index('data-ui-ref="menu.tools"')
+        block = self.html[start:self.html.index("</details>", start)]
+        self.assertEqual(block.count("workspace-menubar-separator"), 2,
+                         "expected exactly two dividers: annotation | measurement | analysis")
 
 
 if __name__ == "__main__":

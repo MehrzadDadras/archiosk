@@ -79,7 +79,18 @@
                    "Archiosk", not communicating that it navigates home) -
                    the existing href/data-ui-ref/navigation behavior is
                    completely unchanged, only the visible content and
-                   accessible name are new. #}
+                   accessible name are new.
+
+                   CLAUDE-MENU-HOME-LABEL-01: the VISIBLE text is now just
+                   "Home" - inside a menu already titled "Archiosk", the word
+                   was saying itself twice. The aria-label deliberately stays
+                   "Archiosk Home" for the reason directly above: the mark is
+                   aria-hidden, so the computed name would otherwise be bare
+                   "Home" with no indication of which home. WCAG 2.5.3 (Label
+                   in Name) is satisfied because the accessible name still
+                   CONTAINS the visible label. Shortening the aria-label to
+                   match the visible text would trade an accessibility property
+                   for a symmetry nobody experiences. #}
                 {# ---------------- Application menu bar (CLAUDE-APP-MENU-01) --------------
                    Sits at the very top-left, above the working surfaces - the
                    Product Owner's own explicit requirement. "Archiosk" is a
@@ -124,7 +135,7 @@
                     <details class="workspace-menubar-menu" data-ui-ref="menu.archiosk">
                         <summary class="workspace-topbar-btn">Archiosk</summary>
                         <div class="workspace-menubar-panel" role="group" aria-label="Archiosk">
-                            <a class="workspace-menubar-item" data-ui-ref="menu.archiosk.home" href="{{ url_for('portal.index') }}" aria-label="Archiosk Home">Archiosk Home</a>
+                            <a class="workspace-menubar-item" data-ui-ref="menu.archiosk.home" href="{{ url_for('portal.index') }}" aria-label="Archiosk Home">Home</a>
                             <a class="workspace-menubar-item" data-ui-ref="menu.archiosk.about" href="{{ url_for('portal.about') }}">About</a>
                             <hr class="workspace-menubar-separator" aria-hidden="true">
                             {% if is_admin %}
@@ -495,12 +506,44 @@
                             <span class="workspace-menubar-item workspace-menubar-item-disabled" aria-disabled="true" title="Project owner or admin required">Remove (Owner/Admin only)</span>
                             {% endif %}
                             <hr class="workspace-menubar-separator" aria-hidden="true">
+                            {# CLAUDE-DOCUMENT-MENU-01: Rotate REUSES the viewer's
+                               own #doc-rotate control through app_menu.js's
+                               data-reuse-control mechanism - it clicks the real
+                               button rather than reimplementing rotation. A second
+                               implementation would be a second source of truth for
+                               currentRotation, and the view-state persistence
+                               (saveViewStateSoon) hangs off the real one.
+
+                               CLOCKWISE ONLY, deliberately. pdf_viewer.js's rotate()
+                               is `currentRotation + 90` and updateOrientationStatus()
+                               hardcodes the word "clockwise"; a counter-clockwise
+                               entry would need new viewer code AND a fix to that
+                               status string, in a viewer with substantial existing
+                               coverage. Recorded as an unbuilt follow-up rather than
+                               half-added here. #}
+                            <button type="button" class="workspace-menubar-item" data-ui-ref="menu.document.rotate-cw" data-reuse-control="doc-rotate">Rotate Clockwise</button>
                             <button type="button" class="workspace-menubar-item" data-ui-ref="menu.document.context" data-action="open-document-context">Document Context&hellip;</button>
+                            {# The properties modal (General/Security/Fonts/Custom)
+                               is NOT BUILT. This item is therefore disabled even
+                               with a document active, and says so.
+
+                               An enabled item wired to nothing would be worse than
+                               no item: a control that does nothing when clicked
+                               teaches the reviewer that the menu is unreliable, and
+                               they cannot tell that from a control that is merely
+                               slow. Disabled-and-honest costs nothing and stays
+                               true until the modal exists. #}
+                            <span class="workspace-menubar-item workspace-menubar-item-disabled" data-ui-ref="menu.document.properties-disabled" aria-disabled="true" title="Not yet available">Document Properties&hellip; (not yet available)</span>
                             {% if is_admin %}
                             <button type="button" class="workspace-menubar-item" data-ui-ref="menu.document.admin-understanding" data-action="open-admin-document-understanding">Admin: GO Document Understanding&hellip;</button>
                             {% endif %}
                             {% else %}
-                            <span class="workspace-menubar-item workspace-menubar-item-disabled" data-ui-ref="menu.document.none" aria-disabled="true" title="Select a document first">No document selected</span>
+                            {# CLAUDE-DOCUMENT-MENU-01: names the action that is unavailable rather
+                               than only the reason. "No document selected" told the
+                               reviewer the state; this tells them what the menu would
+                               offer once they fix it. The ref is unchanged, so every
+                               existing assertion about this element still holds. #}
+                            <span class="workspace-menubar-item workspace-menubar-item-disabled" data-ui-ref="menu.document.none" aria-disabled="true" title="Select a document first">Document Properties&hellip; (No document active)</span>
                             {% endif %}
                         </div>
                     </details>
@@ -512,6 +555,38 @@
                             <button type="button" class="workspace-menubar-item" data-ui-ref="menu.tools.annotate-ink" data-reuse-control="doc-annotate-ink">Draw</button>
                             <button type="button" class="workspace-menubar-item" data-ui-ref="menu.tools.annotate-select" data-reuse-control="doc-annotate-select">Select / Delete Annotation</button>
                             <button type="button" class="workspace-menubar-item" data-ui-ref="menu.tools.region-select" data-reuse-control="doc-region-select">Capture Drawing Region</button>
+                            {# CLAUDE-TOOLS-MENU-STUBS-01 - Measurement & Takeoff.
+
+                               Every item below is DISABLED and says so. None of
+                               these engines exist: there is no calibration, no
+                               takeoff, no sheet-diff and no redline export anywhere
+                               in services/, engine/ or static/js/. Two of them are
+                               already recorded as absent in the code itself -
+                               services/case_workspace.py notes "no full redline
+                               comparison", and static/js/drawing_image_viewer.js
+                               warns a viewer that the image is "not calibrated
+                               against this image. Do not take dimensions from this
+                               view."
+
+                               That warning is why measurement stubs must never be
+                               enabled speculatively. An enabled Linear Takeoff on an
+                               uncalibrated sheet would return a number, and a number
+                               on a drawing is taken as a dimension. Disabled is not
+                               timidity here; it is the same refusal the viewer
+                               already makes out loud.
+
+                               The `title` on each names the actual blocker rather
+                               than repeating the label, so hovering explains WHY
+                               rather than restating THAT. #}
+                            <hr class="workspace-menubar-separator" aria-hidden="true">
+                            <span class="workspace-menubar-item workspace-menubar-item-disabled" data-ui-ref="menu.tools.calibrate-scale" aria-disabled="true" title="No calibration engine yet - a page has no known real-world scale">Calibrate Scale&hellip; (not yet available)</span>
+                            <span class="workspace-menubar-item workspace-menubar-item-disabled" data-ui-ref="menu.tools.linear-takeoff" aria-disabled="true" title="Requires calibration first - an uncalibrated page cannot yield a dimension">Linear Takeoff (not yet available)</span>
+                            <span class="workspace-menubar-item workspace-menubar-item-disabled" data-ui-ref="menu.tools.area-takeoff" aria-disabled="true" title="Requires calibration first - an uncalibrated page cannot yield an area">Area Takeoff (not yet available)</span>
+                            {# CLAUDE-TOOLS-MENU-STUBS-01 - Analysis & Comparison. #}
+                            <hr class="workspace-menubar-separator" aria-hidden="true">
+                            <span class="workspace-menubar-item workspace-menubar-item-disabled" data-ui-ref="menu.tools.sheet-diff" aria-disabled="true" title="No sheet-overlay engine yet">Sheet Overlay / Diff&hellip; (not yet available)</span>
+                            <span class="workspace-menubar-item workspace-menubar-item-disabled" data-ui-ref="menu.tools.extract-sheet-index" aria-disabled="true" title="Title-block fields are extracted during ingestion; there is no on-demand sheet-index tool">Extract Title Block / Sheet Index&hellip; (not yet available)</span>
+                            <span class="workspace-menubar-item workspace-menubar-item-disabled" data-ui-ref="menu.tools.export-redlines" aria-disabled="true" title="No redline comparison or export yet">Export Redline Set (PDF)&hellip; (not yet available)</span>
                         </div>
                     </details>
                     <details class="workspace-menubar-menu" data-ui-ref="menu.window">
