@@ -1,5 +1,91 @@
 # Continuation checkpoint
 
+## 2026-09-01 (deploy) — `7445ba1` live at `v=146`: the menu fixes, on a green suite, and the stall got a bound
+
+**`7445ba1` is live on `https://archiosk.com`**, replacing `408997b`. Confirmed
+from systemd: `Gunicorn - ArchiOSK GO (accepted build 7445ba1)`.
+
+Rollback marker **`/var/www/archiosk-backup-408997b`** (20M of code, `.env`
+copied in at `600`, pre-edit unit at `/root/archiosk-go.service.bak-408997b`).
+
+**`STATIC_VERSION` 145 → 146**, stepped as `CURRENT + 1` read off the live file,
+never from a local record. Required: `main.css` changed.
+
+### The gate was green this time
+
+**6,139 passed, 2 skipped, 4 deselected, 2,509 subtests, `PYTEST_EXIT=0`** in
+**1:42:43**. Read from a redirected log with the exit code captured as its own
+line — a background-task notification again reported "exit code 0" for the
+wrapper during this session while pytest had actually exited 1, on a different
+run, which is exactly the trap `CLAUDE.md` documents.
+
+`test_storage_bridge_durable_05` passed. The unguarded `_write` in
+`bridge_queue.claim_pending` is **still a real, unfixed defect** — it simply did
+not lose the race this time. Nothing about this deploy addresses it.
+
+### A third slow run, and the first one with a diagnostic attached
+
+1:42:43 against a 26–35 minute norm. Not the 4h27m/4h35m magnitude, but well
+outside normal — the third slow run in the series.
+
+**What is new is that it now carries evidence.** `pytest.ini`'s new
+`timeout = 300` did not trip once across 6,139 tests. So no individual test
+hangs past five minutes: the slowness is **distributed across the whole run**,
+not concentrated in one stuck test. That narrows the hypothesis away from "a
+test blocks on something" and toward something environmental (I/O contention,
+AV scanning, thermal throttling). It also retires the idea that a tighter global
+bound would have been better — a 60s or 120s cap would have aborted a run that
+was genuinely just slow, which is how a timeout stops being trusted.
+
+### What shipped
+
+`329f5cd` — Home targets `/projects`, and nested submenus fly out sideways.
+
+- **Home.** The href was never broken and nothing intercepted it; `/` simply
+  renders the project entry shell for an authenticated session, and everyone who
+  can see the menu is authenticated. Product Owner decision: Home opens the full
+  Projects Directory. `/` itself is unchanged.
+- **Appearance / Display Layout.** Both kept the geometry they had as top-level
+  topbar dropdowns when `CLAUDE-APP-MENU-01` relocated them inside the Archiosk
+  menu, so they grew the parent panel downward instead of flying out. Re-anchored
+  to `.workspace-menubar-subpanel`'s own values in a separate rule, leaving
+  Account (still genuinely top-level) alone.
+
+`7445ba1` — Tier 0 and the timeout bound. Test infrastructure only; inert on the
+server, and it ships because `git archive` exports tracked files.
+
+### Verified live, over HTTPS, from outside the host
+
+| Check | Result |
+|---|---|
+| `/`, `/login` | 200, assets requested at `?v=146` |
+| `/health` | 200, `registry_store` and `registry_recovery` both `ok` |
+| `/projects` anonymous | 302 → `/login?next=/projects` — Home's new target is gated, not exposed |
+| `main.css?v=146` | 200, **419,863 bytes**, carries `CLAUDE-MENU-SUBMENU-FLYOUT-01` and the re-anchor rule |
+
+Fetched back over the wire, not read off disk — disk only proves rsync ran.
+nginx `[crit]` monitor timer still `active` after the deploy.
+
+### Still unexercised by a human
+
+Every menu change here remains unverified by a person on a real device. The
+Appearance flyout was proven by measured browser geometry (offset `+3.2px`,
+top-delta `0.0px`, pixel-identical to Admin and Developer; parent panel height
+234px unchanged when opening) — real evidence, but not the same as somebody
+using it. The `(not yet available)` stubs from `9158b95`/`0f0593e` are likewise
+still unseen.
+
+### Carried forward
+
+- **`bridge_queue.claim_pending`'s unguarded `_write`** — real, reproduced,
+  unfixed, and green-by-luck on this run.
+- **The distributed slowdown** — three occurrences now, cause still
+  unidentified, but no longer capable of hiding: a hang would now name itself.
+- **Rollback trees are 7.** `DEPLOYMENT.md` step 13 wants at most the current
+  and previous. Pruning deletes production rollback points, so it is left for an
+  explicit decision rather than done in passing.
+
+
 ## 2026-09-01 (deploy) — `408997b` live at `v=145`: the menubar work, shipped on a red suite for a stated reason
 
 **`408997b` is live on `https://archiosk.com`**, replacing `921d851`. Confirmed
