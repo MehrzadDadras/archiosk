@@ -81,9 +81,16 @@ still unseen.
   unfixed, and green-by-luck on this run.
 - **The distributed slowdown** — three occurrences now, cause still
   unidentified, but no longer capable of hiding: a hang would now name itself.
-- **Rollback trees are 7.** `DEPLOYMENT.md` step 13 wants at most the current
-  and previous. Pruning deletes production rollback points, so it is left for an
-  explicit decision rather than done in passing.
+- **Rollback trees were 7; pruned to 2 the same day**, on explicit Product Owner
+  authorization — `archiosk-backup-408997b` (this deploy's own rollback) and
+  `archiosk-backup-921d851` (one older fallback), exactly what `DEPLOYMENT.md`
+  step 13 asks for. `2d80d1f`, `9d16b8c`, `bb2b276`, `e7e8962` and `f332681` were
+  removed by explicit name, never a glob with exclusions. Both keepers were proven
+  to be genuine pre-deploy rollback points BEFORE anything was deleted: each still
+  carries `url_for('portal.index')` for Home and zero occurrences of the flyout
+  rule, against the live tree's `portal.projects_list` and one. ~100 MB freed,
+  which is nothing on 89 GB — the point was that seven near-identical trees make
+  the real rollback point harder to identify under pressure, not disk.
 
 
 ## 2026-09-01 (deploy) — `408997b` live at `v=145`: the menubar work, shipped on a red suite for a stated reason
