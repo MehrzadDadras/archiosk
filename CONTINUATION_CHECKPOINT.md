@@ -1,5 +1,123 @@
 # Continuation checkpoint
 
+## 2026-09-01 — The stall recurred, and it took a latent Windows race with it
+
+Two findings from a single full-suite run, plus the menubar work that run was
+gating. Recorded together because the second was only visible because of the
+first.
+
+### The stall is no longer "non-recurring"
+
+The entry below records an unexplained full-suite stall as **"unidentified and
+non-recurring."** That is now false. A run on 2026-09-01 took **4:35:47** against
+a 27-minute norm established over four consecutive runs on the same machine:
+
+| Run | Duration | Storage-bridge concurrency test |
+|---|---|---|
+| full5 | 33:44 | pass |
+| full6 | 26:50 | pass |
+| full7 | 26:27 | pass |
+| full8 | 26:49 | pass |
+| **full9** | **4:35:47** | **FAIL** |
+
+The earlier occurrence was 78% in 4h27m, then 100% in 2h52m on the same tree. So
+this is the second stall of roughly the same magnitude, and the pattern is
+"occasionally 6-10x, cause unknown", not a one-off.
+
+**What is new is the correlation.** The previous stall was slow but green. This
+one failed a timing-dependent test, which means the stall is not merely a
+cosmetic wall-clock problem — it widens race windows far enough to change
+outcomes. `CLAUDE.md`'s guidance that an unusually long run "is not automatically
+evidence of a code regression" still holds; what this adds is that a long run may
+manufacture failures of its own.
+
+### A latent Windows defect it exposed
+
+`tests/test_storage_bridge_durable_05.py::ClaimingIsAtomicAcrossRealProcesses`
+failed with two of four processes claiming the same request. The subprocess
+traceback names the cause:
+
+```
+services/bridge_queue.py:147  self._write(target, record)
+services/bridge_queue.py:255  os.replace(temporary, path)
+PermissionError: [WinError 32] The process cannot access the file
+  because it is being used by another process
+```
+
+Reading `claim_pending` shows why that is possible:
+
+```python
+try:
+    os.rename(path, target)      # THE concurrency primitive. Atomic.
+except (FileNotFoundError, OSError):
+    continue
+record["claimed_at"] = ...
+self._write(target, record)      # <-- OUTSIDE the guard
+```
+
+The rename — the actual atomicity primitive, and the thing the module's own
+comment calls out — **is** correctly guarded. The write that follows is not. On
+Windows `os.replace` raises `WinError 32` whenever another process holds the
+destination open, so a worker can die *after* having already won the claim,
+leaving the queue in a state the design does not describe.
+
+**Not fixed here.** It is unrelated to the menubar work that run was gating, it
+lives in real concurrency code whose semantics deserve a deliberate change rather
+than a drive-by one, and the correct repair is not obvious: moving `_write`
+inside the `try` would swallow a genuine failure, while retrying on `WinError 32`
+needs a bounded policy. Recorded as a real defect with a reproduction, not as a
+flaky test to re-run until green.
+
+### Why the menubar work was committed anyway
+
+**Product Owner decision**, on this evidence: 6,126 passed; the single failure is
+in code the change does not touch; it passed in the four preceding full runs and
+3/3 in isolation immediately afterwards (4-8 seconds each). The alternative was
+re-gating at a cost of anywhere between 27 minutes and 4.5 hours for a result
+already understood.
+
+Recorded rather than absorbed, because "the suite was red when this landed" is
+exactly the kind of fact that becomes unknowable six commits later.
+
+### The menubar work itself
+
+`8844705`, `9158b95`, `0f0593e` — File/View/Window/Document/Tools menus, the
+projects-directory action, and the shortcut-slot layout.
+
+**Most of what was requested already existed.** Across the batch, seven items
+were verified as built rather than added: Split View, in-document Search, the
+thumbnails pane, File-menu New Project, the menu dividers, and the View menu's
+zoom/fit controls. Shipping "(not yet available)" on any of them would have told
+a reviewer that a working capability was missing — worse than an inert control,
+because it is a false statement rather than an absent one.
+
+**Eleven keyboard accelerators were requested; none is bound.** There is no Ctrl
+or Alt keybinding anywhere in `static/js` — the only modifier usage is `shiftKey`
+for shift-Enter. Two of the proposed bindings collided with each other (`Ctrl+2`
+assigned to both Fit Width and Split Vertical), four sat on items that are
+themselves disabled stubs, and `F11` belongs to the browser. The **layout**
+shipped; the hints did not, and a test now fails if a `<kbd>` appears without a
+binding behind it.
+
+**A real defect the full suite caught.** `test_mobile_submenu_repair_01` failed
+`8 != 6`: the new Window > Panels submenu used `workspace-menubar-panel` where a
+nested submenu needs `workspace-menubar-subpanel`, and the mobile flatten is
+written against the subpanel class — that submenu would have been **unreachable
+on a phone**. 229 targeted tests, including the menu and registry suites, passed
+it clean. Only the full suite carries that file. That is twice in two batches
+that the full suite caught something no targeted lane could.
+
+### Still carried forward
+
+- **`bridge_queue.claim_pending`'s unguarded `_write`** — real, reproduced,
+  unfixed.
+- **The stall** — now twice observed, cause still unidentified, and now known to
+  be capable of failing tests rather than merely delaying them.
+- **`e7e8962`... none of this is deployed.** Live remains `921d851` at `v=144`;
+  every commit after it is unreleased.
+- **No human has exercised** the chunked upload, the re-auth path, the Help
+  guides, or any of the new menu items.
+
 ## 2026-08-31 (fourth deploy) — `921d851` live at `v=144`: upload progress, Help guides, and a red suite that earned its keep
 
 **`921d851` is live on `https://archiosk.com`**, replacing `bb2b276`. Confirmed
