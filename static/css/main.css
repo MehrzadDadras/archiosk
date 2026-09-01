@@ -3406,6 +3406,34 @@ main:has(.document-viewer-canvas-container) {
        line without wrapping. */
     min-width: 220px;
 }
+/* CLAUDE-MENU-SUBMENU-FLYOUT-01: Appearance and Display Layout fly out to
+   the RIGHT, like every other nested submenu.
+
+   Both panels kept the geometry they had as TOP-LEVEL topbar dropdowns
+   (top: calc(100% + 0.3rem); right: 0) when CLAUDE-APP-MENU-01 relocated
+   them inside the Archiosk menu as nested <details>. A downward-anchored
+   panel inside an already-open dropdown reads as the parent menu growing
+   vertically, not as a submenu - the Product Owner's own report.
+
+   Deliberately a separate, later rule rather than an edit to the shared
+   3-selector group above: .workspace-user-options (Account) is still a
+   real top-level topbar dropdown and its downward anchor is correct, and
+   five tests assert that group's exact selector string. This overrides
+   ONLY the anchoring; background/border/padding/flex/z-index still come
+   from the shared rule, so the two idioms cannot drift apart visually.
+
+   Values match .workspace-menubar-subpanel exactly - one flyout geometry
+   for every nested submenu, not a second set of numbers. Scoped to
+   `.workspace-menubar-submenu >` so either panel reverts to the dropdown
+   anchor if it is ever hosted top-level again. The phone breakpoint
+   flattens all three panel classes to position:static and wins on
+   specificity, so the drawer is unaffected. */
+.workspace-menubar-submenu > .workspace-appearance-options,
+.workspace-menubar-submenu > .workspace-layout-options {
+    top: 0;
+    right: auto;
+    left: calc(100% + 0.2rem);
+}
 /* CLAUDE-POSTCAMEL-PROJECT-CONTEXT-01: the Project Context control joins
    the SAME popover idiom as the three menus above, but is kept as its
    own separate rule (duplicating, not extending, the shared selector

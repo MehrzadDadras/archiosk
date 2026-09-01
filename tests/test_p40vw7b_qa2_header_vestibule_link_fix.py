@@ -234,7 +234,10 @@ class HeaderLinkCorrectnessTests(_BaseTestCase):
         body = client.get(f"/projects/{doc.project_id}/workspace").get_data(as_text=True)
         idx = body.index('data-ui-ref="menu.archiosk.home"')
         tag = body[body.rindex("<a", 0, idx):body.index(">", idx) + 1]
-        self.assertIn('href="/"', tag)
+        # CLAUDE-MENU-HOME-TARGET-01: the destination moved to the Projects
+        # Directory. What this test protects is that the relocated item is
+        # still a real link with its accessible name intact, which it is.
+        self.assertIn('href="/projects"', tag)
         self.assertIn('aria-label="Archiosk Home"', tag)
 
     def test_keyboard_focus_and_accessible_name_intact(self):

@@ -226,6 +226,61 @@ class MenubarCssTests(unittest.TestCase):
         body = self.css[idx:idx + 400]
         self.assertIn("--text-disabled", body)
 
+    def _declarations(self, selector_start):
+        """The declaration block for the rule a selector belongs to.
+
+        Comments are stripped first: main.css explains this very popover idiom
+        in prose that names these class selectors, and a raw scan finds the
+        COMMENT first, walks to the next brace, and returns an unrelated rule -
+        exactly the wrong answer test_mobile_submenu_repair_01 records getting.
+        """
+        css = re.sub(r"/\*.*?\*/", "", self.css, flags=re.S)
+        i = css.index(selector_start)
+        start = css.index("{", i)
+        return css[start + 1:css.index("}", start)]
+
+    def test_nested_submenu_panels_fly_out_right_like_every_other_submenu(self):
+        """CLAUDE-MENU-SUBMENU-FLYOUT-01 - one flyout geometry, not two.
+
+        Appearance and Display Layout kept the geometry they had as TOP-LEVEL
+        topbar dropdowns (top: calc(100% + 0.3rem); right: 0) when
+        CLAUDE-APP-MENU-01 relocated them INSIDE the Archiosk menu as nested
+        <details>. A downward-anchored panel inside an already-open dropdown
+        reads as the parent menu growing vertically rather than as a submenu -
+        the Product Owner's own report.
+
+        The load-bearing part is the COMPARISON, not the literals: these assert
+        the re-anchored panels use the same numbers .workspace-menubar-subpanel
+        uses, so moving the shared flyout geometry can never silently leave
+        these two behind at a stale offset.
+        """
+        shared = self._declarations(".workspace-menubar-subpanel {")
+        nested = self._declarations(
+            ".workspace-menubar-submenu > .workspace-appearance-options")
+
+        for declaration in ("top: 0", "left: calc(100% + 0.2rem)"):
+            with self.subTest(declaration=declaration):
+                self.assertIn(declaration, shared)
+                self.assertIn(declaration, nested)
+
+        # The dropdown anchor inherited from the shared 3-selector group has to
+        # be actively cancelled, not merely overridden on `left` - a surviving
+        # `right: 0` still pins the panel to its parent's right edge.
+        self.assertIn("right: auto", nested)
+
+    def test_both_relocated_panels_are_re_anchored_not_just_appearance(self):
+        """Display Layout sits in the same dropdown with the same inherited
+        geometry. Fixing only the one that was reported would leave two
+        siblings in one menu behaving differently."""
+        css = re.sub(r"/\*.*?\*/", "", self.css, flags=re.S)
+        i = css.index(".workspace-menubar-submenu > .workspace-appearance-options")
+        selector = css[i:css.index("{", i)]
+        self.assertIn("workspace-layout-options", selector)
+        # Account is still a REAL top-level topbar dropdown (base.html,
+        # gateway_shell.html) - its downward anchor is correct and must not be
+        # re-pointed sideways along with the two panels that genuinely moved.
+        self.assertNotIn("workspace-user-options", selector)
+
     def test_relocated_appearance_and_layout_keep_their_original_classes(self):
         # A prior bug in this same pass: dropping workspace-appearance-menu/
         # workspace-layout-menu in favor of only the new submenu class
@@ -845,8 +900,24 @@ class HomeLabelTests(unittest.TestCase):
         """
         self.assertIn('aria-label="Archiosk Home"', self._home_tag())
 
-    def test_it_still_routes_to_the_landing_page(self):
-        self.assertIn("url_for('portal.index')", self._home_tag())
+    def test_it_routes_to_the_projects_directory(self):
+        """CLAUDE-MENU-HOME-TARGET-01 - renamed, not weakened.
+
+        This assertion belongs to CLAUDE-MENU-HOME-LABEL-01, whose subject was
+        the visible TEXT: shortening "Archiosk Home" to "Home" must not quietly
+        move where the item goes. It was written as
+        `test_it_still_routes_to_the_landing_page`, which named the destination
+        of the day as if it were the invariant - and it was not even accurate
+        then, because `/` renders the landing page only for a signed-out
+        visitor, and nobody sees this menu signed out.
+
+        Product Owner decision: Home opens the Projects Directory - the full
+        table with search, environment filters and project cards - not the
+        single-card entry shell `/` renders for an authenticated session. The
+        guard itself is unchanged: the destination is still pinned, so a future
+        label or markup edit cannot move it as a side effect.
+        """
+        self.assertIn("url_for('portal.projects_list')", self._home_tag())
 
 
 class DocumentMenuTests(unittest.TestCase):

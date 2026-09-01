@@ -135,7 +135,13 @@
                     <details class="workspace-menubar-menu" data-ui-ref="menu.archiosk">
                         <summary class="workspace-topbar-btn">Archiosk</summary>
                         <div class="workspace-menubar-panel" role="group" aria-label="Archiosk">
-                            <a class="workspace-menubar-item" data-ui-ref="menu.archiosk.home" href="{{ url_for('portal.index') }}" aria-label="Archiosk Home">Home</a>
+                            {# CLAUDE-MENU-HOME-TARGET-01: Home targets /projects (the full
+                               directory - search, environment filters, project cards), NOT
+                               "/" - Product Owner, explicit. The "/" route itself is
+                               deliberately UNCHANGED and still serves the public landing
+                               page signed-out and the entry shell signed-in; only this
+                               item's destination moved. Do not "restore" portal.index. #}
+                            <a class="workspace-menubar-item" data-ui-ref="menu.archiosk.home" href="{{ url_for('portal.projects_list') }}" aria-label="Archiosk Home">Home</a>
                             <a class="workspace-menubar-item" data-ui-ref="menu.archiosk.about" href="{{ url_for('portal.about') }}">About</a>
                             <hr class="workspace-menubar-separator" aria-hidden="true">
                             {% if is_admin %}

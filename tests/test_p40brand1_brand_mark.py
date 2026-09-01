@@ -188,10 +188,19 @@ class HeaderMarkupTests(unittest.TestCase):
         self.assertNotIn("<svg", self.app_menu_source[summary_start:summary_end])
 
     def test_home_navigation_relocated_not_removed(self):
+        """CLAUDE-MENU-HOME-TARGET-01 re-pointed this item at /projects.
+
+        What this file exists to protect is that home navigation SURVIVED the
+        retirement of the icon+wordmark link - not which page it lands on. The
+        destination is a Product Owner product decision (the full Projects
+        Directory, not the single-card entry shell "/" renders); the accessible
+        name is the accessibility property CLAUDE-P40-BRAND1 actually argued
+        for, and it is unchanged.
+        """
         idx = self.app_menu_source.index('data-ui-ref="menu.archiosk.home"')
         tag = self.app_menu_source[self.app_menu_source.rindex("<a", 0, idx):self.app_menu_source.index(">", idx) + 1]
         self.assertIn('aria-label="Archiosk Home"', tag)
-        self.assertIn("url_for('portal.index')", tag)
+        self.assertIn("url_for('portal.projects_list')", tag)
 
 
 class HeaderRenderingTests(unittest.TestCase):
@@ -229,10 +238,13 @@ class HeaderRenderingTests(unittest.TestCase):
         self.assertIn(">Archiosk</summary>", block)
 
     def test_home_navigation_still_renders_and_links_home(self):
+        # CLAUDE-MENU-HOME-TARGET-01: /projects, not "/" - see the source-level
+        # test above. Still asserted as a REAL rendered href rather than a
+        # url_for string, so a broken endpoint name fails here.
         body = self.client.get("/").get_data(as_text=True)
         idx = body.index('data-ui-ref="menu.archiosk.home"')
         tag = body[body.rindex("<a", 0, idx):body.index(">", idx) + 1]
-        self.assertIn('href="/"', tag)
+        self.assertIn('href="/projects"', tag)
 
 
 class BrandCssTests(unittest.TestCase):
