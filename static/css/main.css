@@ -3210,6 +3210,54 @@ main:has(.document-viewer-canvas-container) {
     list-style: none;
 }
 .workspace-menubar-item::-webkit-details-marker { display: none; }
+
+/* CLAUDE-MENU-SHORTCUT-SLOTS-01: the two-column menu row -
+   [icon] Label .......... Accelerator
+
+   OPT-IN VIA :has(), NOT a blanket display change. The base rule above stays
+   `display: block`, and an item only becomes a flex row once it actually
+   contains an icon or a shortcut. That matters because this change could not be
+   verified in a browser: a global block->flex switch would restyle every menu
+   item in the app on the strength of reasoning alone, whereas this restyles
+   only items that do not exist yet. A browser without :has() support simply
+   keeps today's appearance, so the failure mode is "no change", not "wrong".
+
+   :has() is already an established technique in this file (see
+   .conversation-thread:has(...) and .files-folder-row:has(...)), not a new
+   dependency introduced here.
+
+   NO ACCELERATOR IS RENDERED YET, deliberately. There is no Ctrl/Alt keybinding
+   anywhere in static/js - the only modifier usage is shiftKey for shift-Enter -
+   so a <kbd> printed today would promise a keystroke that does nothing. The
+   slot exists; it stays empty until a real binding fills it. */
+.workspace-menubar-item:has(.menu-item-icon),
+.workspace-menubar-item:has(.menu-shortcut) {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+}
+.menu-item-icon {
+    flex: 0 0 auto;
+    width: 1em;
+    height: 1em;
+    /* Decorative by default - the label carries the meaning. Mark the SVG
+       aria-hidden at the call site rather than relying on this. */
+}
+.menu-shortcut {
+    /* Pushed to the trailing edge without a fixed column width, so a long
+       label never collides with its accelerator. */
+    margin-left: auto;
+    padding-left: var(--space-2);
+    font-family: var(--font-body);
+    font-size: var(--text-xs);
+    /* --text-metadata, not --text-disabled: an accelerator is a quiet LABEL,
+       and --text-disabled carries the distinct meaning "this control does not
+       work". Using it here would make every shortcut read as broken. */
+    color: var(--text-metadata);
+    background: none;
+    border: none;
+    white-space: nowrap;
+}
 .workspace-menubar-item:hover,
 .workspace-menubar-item:focus-visible {
     background: var(--surface-hover);

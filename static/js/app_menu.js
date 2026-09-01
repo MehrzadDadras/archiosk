@@ -128,6 +128,15 @@
     }
 
     var actions = {
+        // CLAUDE-WINDOW-MENU-01: Window > Panels > Search. A data-action rather
+        // than a data-reuse-control because that mechanism calls real.click(),
+        // and clicking a text input does not reliably move focus - the menu
+        // item would appear to work and visibly do nothing. openAndScroll()
+        // focuses, which is the behaviour this item promises.
+        'focus-document-search': function () {
+            openAndScroll(document.getElementById('doc-search-input'));
+        },
+
         'close-active-tab': function () {
             var activeTab = document.querySelector('.document-tab[aria-selected="true"]');
             var closeBtn = activeTab && activeTab.querySelector('.document-tab-close');

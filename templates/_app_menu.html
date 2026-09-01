@@ -451,8 +451,45 @@
                         <div class="workspace-menubar-panel" role="group" aria-label="View">
                             <button type="button" class="workspace-menubar-item" data-ui-ref="menu.view.zoom-in" data-reuse-control="doc-zoom-in">Zoom In</button>
                             <button type="button" class="workspace-menubar-item" data-ui-ref="menu.view.zoom-out" data-reuse-control="doc-zoom-out">Zoom Out</button>
+                            {# CLAUDE-VIEW-MENU-01: Actual Size is a STUB, and it is
+                               the closest of these to being real - pdf_viewer.js has
+                               setZoom(z) and zoomIn/zoomOut already call it. What it
+                               does NOT have is an actualSize() on its public API or a
+                               #doc-actual-size control for the menu to reuse, and
+                               inventing a reuse target that no toolbar renders would
+                               give app_menu.js nothing to click. Wiring it is a small
+                               follow-up in the viewer, not something to fake here. #}
+                            <span class="workspace-menubar-item workspace-menubar-item-disabled" data-ui-ref="menu.view.actual-size" aria-disabled="true" title="No 100% zoom control in the viewer toolbar yet">Actual Size (100%) (not yet available)</span>
                             <button type="button" class="workspace-menubar-item" data-ui-ref="menu.view.fit-width" data-reuse-control="doc-fit-width">Fit Width</button>
                             <button type="button" class="workspace-menubar-item" data-ui-ref="menu.view.fit-page" data-reuse-control="doc-fit-page">Fit Page</button>
+                            {# CLAUDE-VIEW-MENU-01 - Page display modes.
+
+                               Single Page and Continuous Scroll are stubs: the viewer
+                               renders one page at a time via renderPage() and has no
+                               scroll/pagination mode concept at all.
+
+                               SPLIT VIEW IS NOT A STUB. It already works, and shipping
+                               a disabled "(not yet available)" for it would have been
+                               worse than an inert control - it would tell a reviewer
+                               that a capability they can use today does not exist. It
+                               reuses the SAME #toolbox-compare-btn that
+                               Window > Compare Documents does, so there is one
+                               implementation with two entry points, not two features.
+                               Named to connect the CAD vocabulary the directive used
+                               to the vocabulary this product already has, rather than
+                               inventing a second name for one thing. #}
+                            <hr class="workspace-menubar-separator" aria-hidden="true">
+                            <span class="workspace-menubar-item workspace-menubar-item-disabled" data-ui-ref="menu.view.single-page" aria-disabled="true" title="The viewer has no page-mode concept yet">Single Page (not yet available)</span>
+                            <span class="workspace-menubar-item workspace-menubar-item-disabled" data-ui-ref="menu.view.continuous-scroll" aria-disabled="true" title="The viewer renders one page at a time">Continuous Scroll (not yet available)</span>
+                            <button type="button" class="workspace-menubar-item" data-ui-ref="menu.view.split-view" data-reuse-control="toolbox-compare-btn" aria-pressed="false">Split View (Compare Documents)</button>
+                            {# CLAUDE-VIEW-MENU-01 - Snapping & visual aids. Neither
+                               exists: no ruler and no snapping anywhere in static/js
+                               or services. Snapping in particular depends on the
+                               calibration that Tools > Calibrate Scale is itself
+                               waiting on. #}
+                            <hr class="workspace-menubar-separator" aria-hidden="true">
+                            <span class="workspace-menubar-item workspace-menubar-item-disabled" data-ui-ref="menu.view.snap-to-content" aria-disabled="true" title="Requires vector snapping, which depends on calibration">Snap to Content / Vector (not yet available)</span>
+                            <span class="workspace-menubar-item workspace-menubar-item-disabled" data-ui-ref="menu.view.show-rulers" aria-disabled="true" title="No ruler overlay in the viewer yet">Show Rulers (not yet available)</span>
                             <hr class="workspace-menubar-separator" aria-hidden="true">
                             {# CLAUDE-MOBILE-PRIMARY-RESET-01: the tray controls, relocated.
                                They used to be four permanent buttons in a band of their own
@@ -596,6 +633,70 @@
                             <button type="button" class="workspace-menubar-item" data-ui-ref="menu.window.close-all-tabs" data-action="close-all-tabs">Close All Tabs</button>
                             <hr class="workspace-menubar-separator" aria-hidden="true">
                             <button type="button" class="workspace-menubar-item" data-ui-ref="menu.window.compare" data-reuse-control="toolbox-compare-btn" aria-pressed="false">Compare Documents</button>
+                            {# CLAUDE-WINDOW-MENU-01 - split orientation.
+
+                               Compare Documents ABOVE is the real split; what does
+                               not exist is any control over its ORIENTATION or any
+                               scroll/zoom synchronisation between the two panes.
+                               These three are stubs for that missing control, not
+                               for the split itself - which is why they sit directly
+                               under the working item rather than replacing it. #}
+                            <span class="workspace-menubar-item workspace-menubar-item-disabled" data-ui-ref="menu.window.split-vertical" aria-disabled="true" title="Compare Documents has no orientation control yet">Split Vertical (not yet available)</span>
+                            <span class="workspace-menubar-item workspace-menubar-item-disabled" data-ui-ref="menu.window.split-horizontal" aria-disabled="true" title="Compare Documents has no orientation control yet">Split Horizontal (not yet available)</span>
+                            <span class="workspace-menubar-item workspace-menubar-item-disabled" data-ui-ref="menu.window.synchronize-views" aria-disabled="true" title="No scroll/zoom synchronisation between panes yet">Synchronize Views (not yet available)</span>
+                            <hr class="workspace-menubar-separator" aria-hidden="true">
+                            {# CLAUDE-WINDOW-MENU-01 - Panels submenu, built with
+                               the same nested-disclosure idiom the File menu's own
+                               Open Project already uses: a submenu details element
+                               wrapping a SUBpanel div.
+
+                               The subpanel class is load-bearing, not cosmetic -
+                               test_mobile_submenu_repair_01 counts submenus against
+                               the panel classes the mobile flatten covers, and a
+                               nested panel using the top-level class would be
+                               unreachable on a phone. That test caught exactly this
+                               here. Its regex also counts markup quoted in comments,
+                               which is why this note describes the idiom rather than
+                               reproducing the tag.
+
+                               TWO OF THESE ARE REAL and are wired rather than
+                               stubbed. Shipping "(not yet available)" for a panel
+                               that exists would tell a reviewer a capability they
+                               already have is missing - worse than an inert control,
+                               because it is a false statement rather than an absent
+                               one. #}
+                            <details class="workspace-menubar-submenu" data-ui-ref="menu.window.panels">
+                                <summary class="workspace-menubar-item">Panels</summary>
+                                <div class="workspace-menubar-subpanel" role="group" aria-label="Panels">
+                                    {# Real: the pane exists in the Lists column with
+                                       its own maximize control. The menu reuses that
+                                       button, so there is one implementation. It
+                                       MAXIMIZES rather than toggles visibility - the
+                                       pane is always present - and the title says so
+                                       rather than implying a show/hide it does not
+                                       do. #}
+                                    <button type="button" class="workspace-menubar-item" data-ui-ref="menu.window.panels.thumbnails" data-reuse-control="thumbnails-maximize-btn" title="Maximize the Page Thumbnails pane">Thumbnails / Sheets</button>
+                                    {# Real: in-document search already exists as
+                                       #doc-search-input with prev/next/count.
+                                       Deliberately a data-action rather than
+                                       data-reuse-control: that mechanism calls
+                                       real.click(), and clicking a text input does
+                                       not reliably move focus, which would give a
+                                       menu item that appears to work and visibly
+                                       does nothing. The action handler uses
+                                       app_menu.js's own openAndScroll(), which
+                                       focuses. #}
+                                    <button type="button" class="workspace-menubar-item" data-ui-ref="menu.window.panels.search" data-action="focus-document-search">Search</button>
+                                    <span class="workspace-menubar-item workspace-menubar-item-disabled" data-ui-ref="menu.window.panels.markups-list" aria-disabled="true" title="Annotations exist, but there is no list view of them yet">Markups List (not yet available)</span>
+                                    <span class="workspace-menubar-item workspace-menubar-item-disabled" data-ui-ref="menu.window.panels.bookmarks" aria-disabled="true" title="No bookmarks concept yet">Bookmarks (not yet available)</span>
+                                    <span class="workspace-menubar-item workspace-menubar-item-disabled" data-ui-ref="menu.window.panels.properties" aria-disabled="true" title="Depends on the unbuilt Document Properties modal">Properties Panel (not yet available)</span>
+                                </div>
+                            </details>
+                            <hr class="workspace-menubar-separator" aria-hidden="true">
+                            {# Reset Default Layout is a stub: panel sizes persist via
+                               workspace_trays.js and the lists/thumbnails divider, but
+                               nothing exposes a "restore the defaults" operation. #}
+                            <span class="workspace-menubar-item workspace-menubar-item-disabled" data-ui-ref="menu.window.reset-layout" aria-disabled="true" title="No stored-default restore operation yet">Reset Default Layout (not yet available)</span>
                         </div>
                     </details>
                     <details class="workspace-menubar-menu" data-ui-ref="menu.help">

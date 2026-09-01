@@ -122,6 +122,11 @@ class CommandReuseTests(unittest.TestCase):
             # requirement - a PRE-EXISTING control - and the set stays exact, so
             # an unknown target still fails here.
             "doc-rotate",
+            # CLAUDE-WINDOW-MENU-01: Window > Panels > Thumbnails reuses the
+            # Lists column's own maximize button (templates/base.html,
+            # id="thumbnails-maximize-btn") rather than a second implementation.
+            # A real pre-existing control, which is what this test requires.
+            "thumbnails-maximize-btn",
         }
         self.assertEqual(targets, expected)
 
@@ -994,3 +999,60 @@ class ToolsMenuStubTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class MenuShortcutSlotTests(unittest.TestCase):
+    """CLAUDE-MENU-SHORTCUT-SLOTS-01 - the slots exist; the hints do not yet.
+
+    The layout is infrastructure for accelerators that are not implemented. The
+    test that matters is the SECOND one: it fails the moment somebody renders a
+    <kbd> without a keybinding behind it.
+    """
+
+    def setUp(self):
+        self.css = _MAIN_CSS_PATH.read_text(encoding="utf-8")
+        self.html = _APP_MENU_HTML_PATH.read_text(encoding="utf-8")
+
+    def test_the_slot_styles_exist(self):
+        self.assertIn(".menu-item-icon {", self.css)
+        self.assertIn(".menu-shortcut {", self.css)
+
+    def test_no_accelerator_is_rendered_while_none_is_bound(self):
+        """The load-bearing assertion.
+
+        There is no Ctrl/Alt keybinding anywhere in static/js - the only
+        modifier usage is shiftKey for shift-Enter. A <kbd> in the menu today
+        would promise a keystroke that does nothing, which is the same defect as
+        an enabled control with no handler, multiplied across every item that
+        carries one.
+
+        When shortcuts ARE implemented, this test should be updated to assert
+        that every rendered <kbd> corresponds to a real binding - not deleted.
+        """
+        self.assertNotIn("menu-shortcut", self.html,
+                         "a shortcut hint was rendered, but no accelerator is "
+                         "bound in static/js - see the class docstring")
+
+    def test_the_layout_is_opt_in_so_existing_items_are_unchanged(self):
+        """A global block->flex switch would restyle every menu item in the app
+        on reasoning alone; this could not be verified in a browser, so it is
+        scoped to items that contain a slot - of which there are currently
+        none."""
+        self.assertIn(".workspace-menubar-item:has(.menu-item-icon)", self.css)
+        self.assertIn(".workspace-menubar-item:has(.menu-shortcut)", self.css)
+        # The base rule keeps its original display.
+        idx = self.css.index(".workspace-menubar-item {")
+        base = self.css[idx:self.css.index("}", idx)]
+        self.assertIn("display: block", base)
+
+    def test_the_accelerator_uses_a_label_token_not_the_disabled_token(self):
+        # --text-disabled means "this control does not work". An accelerator is
+        # a quiet label; using that token would make every shortcut read broken.
+        idx = self.css.index(".menu-shortcut {")
+        rule = self.css[idx:self.css.index("}", idx)]
+        # Strip CSS comments before asserting: the rule's own comment EXPLAINS
+        # why --text-disabled is wrong here, so a raw substring check would
+        # fail on the explanation rather than on a declaration.
+        declarations = re.sub(r"/\*.*?\*/", "", rule, flags=re.S)
+        self.assertIn("var(--text-metadata)", declarations)
+        self.assertNotIn("--text-disabled", declarations)
