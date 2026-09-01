@@ -748,5 +748,63 @@ class DeveloperModeTests(_BaseTestCase):
         self.assertNotIn('data-ui-ref="menu.file.publish-rfp"', body)
 
 
+
+class AllProjectsMenuEntryTests(_BaseTestCase):
+    """CLAUDE-MENU-ALL-PROJECTS-01 - the directory had no menu entry at all.
+
+    Before this, `portal.projects_list` was reachable only from the landing
+    page's own `index.projects-directory` link and from a "← Projects" link
+    inside an already-open workspace. A reviewer who had navigated away from `/`
+    with no project open had to edit the URL. That was found while investigating
+    a proposal to REMOVE the landing-page link as redundant - it was not
+    redundant, it was the only one.
+    """
+
+    def _menu_body(self, role):
+        username = "menu_owner" if role == "admin" else "menu_reviewer"
+        user_id = 1 if role == "admin" else 2
+        client = self._client_as(username, user_id, role=role)
+        return client.get("/projects").get_data(as_text=True)
+
+    def test_the_file_menu_offers_all_projects(self):
+        body = self._menu_body("admin")
+        self.assertIn('data-ui-ref="menu.file.all-projects"', body)
+
+    def test_it_points_at_the_projects_directory(self):
+        """Asserted against the anchor TAG. `/projects` appears elsewhere in the
+        document, so a bare substring check over the body would pass even if
+        this control pointed somewhere else."""
+        body = self._menu_body("admin")
+        tag = re.search(r'<a[^>]*data-ui-ref="menu\.file\.all-projects"[^>]*>', body)
+        self.assertIsNotNone(tag, "the All Projects entry did not render")
+        self.assertIn('href="/projects"', tag.group(0))
+
+    def test_it_is_NOT_admin_gated(self):
+        """Deliberately unlike `menu.file.new-project` beside it.
+
+        portal.projects_list is @login_required and already access-filtered per
+        reviewer, so a read_only user reaching their own projects here is shown
+        nothing the directory would not show them anyway. Gating it would remove
+        a reviewer's only menu route to their own project list.
+        """
+        body = self._menu_body("read_only")
+        self.assertIn('data-ui-ref="menu.file.all-projects"', body)
+
+    def test_new_project_beside_it_REMAINS_admin_gated(self):
+        # The two live together; this guards against a future edit widening the
+        # wrong one by copying its neighbour.
+        body = self._menu_body("read_only")
+        self.assertNotIn('data-ui-ref="menu.file.new-project"', body)
+
+    def test_it_sits_above_the_separator_with_open_project(self):
+        """Grouping is the point, not decoration: All Projects and Open Project
+        both answer "which project am I working on", while everything past the
+        rule acts on the Document already open."""
+        body = self._menu_body("admin")
+        all_projects = body.index('data-ui-ref="menu.file.all-projects"')
+        add_document = body.index('data-ui-ref="menu.file.add-document')
+        self.assertLess(all_projects, add_document)
+
+
 if __name__ == "__main__":
     unittest.main()

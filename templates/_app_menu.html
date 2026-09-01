@@ -337,6 +337,28 @@
                                     {% endif %}
                                 </div>
                             </details>
+                            {# CLAUDE-MENU-ALL-PROJECTS-01: the full projects
+                               directory had NO menu entry anywhere. It was
+                               reachable only from the landing page and from a
+                               "← Projects" link inside an already-open
+                               workspace, so a reviewer who had navigated away
+                               from `/` and had no project open could not get to
+                               it without editing the URL.
+
+                               Sits with Open Project rather than below the
+                               separator: both answer "which project am I working
+                               on", while everything past the rule acts on the
+                               Document already open. Open Project is a direct
+                               chooser over the access-scoped list; this is the
+                               full directory with search, sort, counts and the
+                               Delete forms - a different surface, not a second
+                               way to do the same thing.
+
+                               NOT admin-gated: portal.projects_list is
+                               @login_required and access-filtered per reviewer,
+                               so a read_only user seeing their own projects here
+                               is exactly what the directory already shows them. #}
+                            <a class="workspace-menubar-item" data-ui-ref="menu.file.all-projects" href="{{ url_for('portal.projects_list') }}">All Projects</a>
                             <hr class="workspace-menubar-separator" aria-hidden="true">
                             {# Add Document to the OPEN Project - a DIFFERENT
                                action from New Project above (this one adds a

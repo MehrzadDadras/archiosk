@@ -5,6 +5,26 @@
 
 {% block content %}
 {% call macros.page_header('Projects') %}
+    {# CLAUDE-PROJECTS-NEW-ACTION-01: project creation was reachable from this
+       page ONLY in its empty state - the moment an admin had one project, the
+       directory offered no way to make another, and the landing page's own
+       `+ New Project` is likewise admin-gated but a page away. A persistent
+       header action closes that.
+
+       Placed BEFORE Removed Projects and styled primary: creating is the
+       ordinary act, recovering an archived project is the exceptional one, and
+       the cluster should read in that order rather than by which arrived first.
+
+       The empty-state "Create New Project" button below is deliberately LEFT
+       ALONE. On an otherwise blank directory it is the entire point of the
+       screen, not a duplicate of a small header control - and
+       test_empty_state_with_no_projects_offers_new_project_not_ingestion
+       protects a still-valid intent (that the empty state points at project
+       creation rather than document ingestion). Both render only when empty,
+       which is the one state where a large call to action earns its place. #}
+    {% if is_admin %}
+    <a class="btn btn-primary" href="{{ url_for('portal.upload') }}" data-ui-ref="projects-directory.new-project">+ New Project</a>
+    {% endif %}
     <a class="btn btn-ghost" href="{{ url_for('portal.removed_projects') }}" data-ui-ref="projects-directory.removed-link">Removed Projects</a>
 {% endcall %}
 
