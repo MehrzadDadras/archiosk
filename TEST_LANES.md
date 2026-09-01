@@ -1,16 +1,38 @@
 # Test lanes — fast feedback without weakening the full suite
 
-**CLAUDE-TEST-ACCEL-01.** The full suite (`./venv/Scripts/python.exe -m pytest -q`,
-currently **approximately 4,964 tests**) stays the one authoritative gate before any commit that
-touches `routes/`, `services/`, `templates/`, `static/`, `models.py`, `config.py`,
-`app.py`, or migrations, and before every deployment — see `CLAUDE.md`'s own
-Testing section, which this document does not change or override.
+**CLAUDE-TEST-ACCEL-01**, extended by **CLAUDE-TEST-TIER0-01**.
+`./venv/Scripts/python.exe -m pytest -q` stays the one authoritative gate
+before any commit touching `routes/`, `services/`, `models.py`, `config.py`,
+`app.py`, or migrations, and before every deployment, accepted checkpoint, and
+high-risk security/evidence/authorization change.
+
+Its measured baseline is **6,004 collected / 4 deselected / 6,000 selected →
+5,998 passed, 2 skipped, 1,951 subtests** (2026-08-31). Quote all four figures
+rather than one: they differ, and a single number silently meaning one of the
+others is exactly how this document's previous "approximately 4,964 tests"
+drifted roughly a thousand tests out of date without anyone noticing.
+`CLAUDE.md`'s Testing section is the authority for that baseline; this document
+does not restate it further.
+
+**`templates/` and `static/` are no longer on that per-commit list** (Product
+Owner, 2026-09-01) — a change confined to markup, CSS or client JS routes
+through Tier 0 plus its Lane A/B files instead. The gate itself is untouched:
+it still fires for those files at every deployment and checkpoint. See the "Do
+not" section for what that trade explicitly accepts.
 
 What this document adds: a **hand-maintained mapping** from "what changed" to
 "which smaller test set gives fast, trustworthy feedback before the full run."
-No general pytest marker taxonomy, directory reorganization, or new dependency
-is introduced here — every lane below is still an explicit list of existing
-file paths, runnable today with the ordinary `pytest -q <paths>` command.
+No general pytest marker taxonomy or directory reorganization is introduced
+here. Lanes A–E remain explicit lists of existing file paths, runnable with the
+ordinary `pytest -q <paths>` command. **Tier 0 is the one exception, added
+2026-09-01**: its membership is derived from two mechanical properties of each
+file rather than listed, precisely so it cannot go stale in silence — see its
+own entry below. One new dev-only dependency came with it, `pytest-timeout`;
+it is deliberately **not** added to `requirements.txt`, which neither pins
+`pytest` itself nor is installed anywhere but a developer machine, and where a
+new pin would become deploy work (`deploy/DEPLOYMENT.md` step 7) for no
+production benefit. Install it with
+`./venv/Scripts/python.exe -m pip install pytest-timeout`.
 `pytest.ini` does contain one narrow `legacy_route_diagnostic` marker for
 preserved diagnostics of removed Case-collaboration route entry points; it is
 not a refactor-impact, ownership, or behavioural lane taxonomy. Nothing here
@@ -41,8 +63,50 @@ answer below: yes, by roughly 25-50x for the two worked examples tried.
 
 ## The lanes
 
+**Tier 0 — Fast feedback.** `./venv/Scripts/python.exe tools/tier0.py`.
+**Measured 2026-09-01: 50 files, 803 passed, 660 subtests, 28.33s** (30.0s
+wall), against a full suite of 26–35 minutes on a good day and 4h35m on a bad
+one.
+
+Unlike every lane below, Tier 0's membership is **derived, not listed** — and
+deliberately so, because it is the one lane whose membership is a mechanical
+fact about a file rather than a judgement about a feature. `tools/tier0.py`
+selects every `tests/test_*.py` that (a) never references `create_app`/
+`test_client`/`app_fixture`, (b) spawns no OS process and no real browser, and
+(c) genuinely reads source text and asserts on it. A hand-maintained list of 50
+paths goes stale in silence — a new source-scan test would simply never join
+the lane — so `tests/test_tier0_lane_01.py` re-applies those rules to their own
+output and fails if the selection breaks.
+
+**What it cannot catch.** Anything needing a rendered page, an authorization
+decision, or a real store. This is not a softer version of Lane A/B/C, it is a
+different question: "do the structural assertions still hold?", answered in
+seconds. Run it first; it never replaces what follows.
+
+**Why not wider.** A broader rule — "every test that does not need the Flask
+app" — was built and measured too: 97 files, still running minutes in, because
+it swept in real service-logic tests doing real work. Rejected on that
+measurement, not on taste. Membership is "reads files and asserts on them", not
+"looked fast at the time".
+
+**Per-test timeouts (CLAUDE-TEST-TIER0-01).** `pytest.ini` now sets
+`timeout = 300` for every run, and Tier 0 tightens that to `--timeout=30`.
+Neither number is a performance budget; both are hang detectors. The slowest
+real tests in this repository were measured for this: a headless-Chromium
+geometry check at **5.46s** and a four-process bridge-claim race at **2.89s**,
+so 300s leaves roughly 55x headroom over the slowest genuine test — enough that
+even a stalled run, where everything is ~10x slower, would not trip it. This
+exists because two full-suite stalls (4h27m, 4h35m) and one 8.5-hour un-mocked
+`ingest_upload` hang were all **unbounded**: the only signal was wall-clock, and
+which test was stuck could not be named afterwards. Verified firing, not merely
+configured — a deliberate `time.sleep(600)` under `--timeout=3` produced a stack
+dump naming the test and its line, and exit 1. On Windows the thread method ends
+the run when it trips; on a genuine hang that dump is the point. Raise these
+only with a measurement, never to turn a red test green.
+
 **Lane A — Immediate Local.** The test file(s) written for the exact surface
-being changed. Always the fastest, always run first.
+being changed. Always the fastest of the judgement-based lanes, and run
+immediately after Tier 0.
 
 **Lane B — Feature/Domain and reverse impact.** Other test files that exercise
 the same shared mechanism the change actually touches (a shared template block,
@@ -85,9 +149,12 @@ invents — plus any other file a real dependency chain points to (e.g. changing
 `CaseWorkspaceStore` itself should pull in every file that instantiates it,
 which in practice is most of the suite — see "Escalation past Lane C" below).
 
-**Lane E — Full Acceptance.** `./venv/Scripts/python.exe -m pytest -q` — all
-approximately 4,964 tests in the current collection, still the only gate for
-commit/deploy/checkpoint.
+**Lane E — Full Acceptance.** `./venv/Scripts/python.exe -m pytest -q` — the whole
+current collection (see `CLAUDE.md` for the measured baseline rather than a
+figure restated here, which is how the previous "approximately 4,964" drifted
+roughly a thousand tests out of date without anyone noticing). Still the gate
+for deploy/checkpoint/high-risk, and for any commit touching `routes/`,
+`services/`, `models.py`, `config.py`, `app.py` or migrations.
 
 ## Assurance tiers — orthogonal to lanes
 
@@ -292,5 +359,19 @@ zero-behavior-change diff to an existing file, individually reviewable.
 - Do not run Lane D/E lists by intuition when a real dependency chain is
   unclear — expand toward the full suite instead.
 - Do not skip the full suite before any commit touching `routes/`, `services/`,
-  `templates/`, `static/`, `models.py`, `config.py`, `app.py`, or migrations —
-  unchanged from `CLAUDE.md`.
+  `models.py`, `config.py`, `app.py`, or migrations — unchanged from
+  `CLAUDE.md`.
+- **`templates/` and `static/` left that list on 2026-09-01** (Product Owner).
+  A change confined to markup, CSS or client JS runs Tier 0 plus its Lane A/B
+  files instead. The full suite still fires for those files at a deployment
+  gate, an accepted checkpoint, or a high-risk change — see rule 5, which is
+  unchanged. What was deleted is the per-commit obligation, not the gate.
+  `CLAUDE.md`'s Testing section records the counter-evidence this trade accepts:
+  the full suite twice caught defects no targeted lane did, one of them
+  markup-shaped. Widen Tier 0 or Lane B if that starts to bite; do not quietly
+  restore the blanket gate.
+- Do not read a full-suite result through a pipe, and do not trust a background
+  runner's own "exit code 0" — that is the wrapper's status, not pytest's.
+  Redirect to a log and capture `PYTEST_EXIT=$?` as its own line. This caught a
+  real red run during CLAUDE-MENU-HOME-TARGET-01, where the task notification
+  said exit 0 while pytest had exited 1.

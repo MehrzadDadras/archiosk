@@ -181,9 +181,31 @@ pytest's, and a background-task notification saying "exit code 0" for the
 wrapper is not evidence the suite passed - that combination once nearly landed a
 commit on a fabricated pass (see `705aa2a`).
 
-There is no CI here — this is the only gate, so run it
-before committing anything that touches `routes/`, `services/`, or
-`templates/`. If a CSS-only change breaks
+There is no CI here, so the full suite remains the gate for anything that
+touches `routes/`, `services/`, `models.py`, `config.py`, `app.py`, or
+migrations — unchanged — and for every deployment, accepted checkpoint, and
+high-risk security/evidence/authorization change.
+
+**Fast-path UI/markup changes no longer require it** (Product Owner,
+2026-09-01). A change confined to `templates/`, `static/css/`, or `static/js/`
+runs **Tier 0** (`./venv/Scripts/python.exe tools/tier0.py` — 50 files, 803
+tests, ~28s) plus the targeted Lane A/B files for the surface being changed.
+See `TEST_LANES.md`. The reason is arithmetic: a markup edit was costing between
+27 minutes and 4 hours 35 minutes of gate for a result already understood, which
+is a tax on iteration rather than a safety measure.
+
+Two things this deliberately does not do. It does not touch the deploy gate —
+nothing reaches the live host without a full run. And it does not pretend the
+full suite was redundant on those changes: it twice caught defects no targeted
+lane did, including a genuinely markup-shaped one (`test_mobile_submenu_repair_01`
+failing `8 != 6`, where a new submenu used `workspace-menubar-panel` instead of
+`workspace-menubar-subpanel` and would have been unreachable on a phone). The
+trade being accepted is that such a defect is now caught at the deploy gate
+rather than at the commit — later, but still before a user sees it. If that
+proves wrong in practice, the honest fix is to widen Tier 0's membership or the
+Lane B set, not to quietly restore the blanket gate.
+
+If a CSS-only change breaks
 `test_common_ui_elements_no_longer_reference_font_mono` or
 `test_wordmark_is_the_only_space_grotesk_usage`, the fix is almost
 always updating that test's own selector list, not reverting the CSS —
