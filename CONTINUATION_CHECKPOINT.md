@@ -1,5 +1,69 @@
 # Continuation checkpoint
 
+## 2026-09-01 (deploy) — `408997b` live at `v=145`: the menubar work, shipped on a red suite for a stated reason
+
+**`408997b` is live on `https://archiosk.com`**, replacing `921d851`. Confirmed
+from systemd: `Gunicorn - ArchiOSK GO (accepted build 408997b)`.
+
+Rollback marker **`/var/www/archiosk-backup-921d851`** (845 files, `.env` at
+`600`, pre-edit unit). Rollback trees now **6**; 8.5G used / 89G free.
+
+**`STATIC_VERSION` 144 → 145**, stepped as `CURRENT + 1` from the live file.
+Required: `main.css` and `app_menu.js` both changed.
+
+### Deployed while the last full suite was red — and why that was safe
+
+The suite that gated this tree failed one test:
+`test_storage_bridge_durable_05.py::ClaimingIsAtomicAcrossRealProcesses`. The
+entry below records it in full. Three facts made deploying anyway a judgement
+with evidence rather than a gamble:
+
+1. **This deploy carries no Python application code at all.** The entire delta is
+   `static/css/main.css`, `static/js/app_menu.js`, `templates/_app_menu.html`,
+   `templates/projects.html` — plus documentation and tests. `bridge_queue.py`,
+   the red test's subject, is not in it.
+2. **The failure mode cannot occur in production.** It is `WinError 32` from
+   `os.replace` — a Windows-specific error. The live host is Linux, where
+   `os.replace` is atomic and does not raise it.
+3. The test passed in the four preceding full runs and 3/3 in isolation, in 4-8
+   seconds each, against a run that took 4:35:47.
+
+The underlying defect — `self._write` outside the guard in `claim_pending` — is
+still real and still unfixed. What the above establishes is that it is not
+*this deploy's* risk, not that it has gone away.
+
+### Verified live
+
+- Dry run: **8 modified, 0 new, zero deletions**, matching
+  `git diff --name-status` exactly; 837 metadata-only re-copies.
+- `/health` 200 (public and internal), `/login` 200, `/gateway` 302,
+  `/projects` 302. No journal errors across the restart.
+- Assets serve **`?v=145`** in served content.
+- **Both changed static files were fetched back over HTTPS and inspected**, not
+  read off disk — disk only proves rsync ran. `main.css` (418,401 bytes) carries
+  `.menu-shortcut`, `.menu-item-icon` and the `:has()` rule; `app_menu.js`
+  (12,584 bytes) carries the `focus-document-search` handler.
+- nginx `[crit]` monitor still active after the deploy.
+
+### What is now live that nobody has looked at
+
+Every menu change in this deploy is unexercised by a human: the View and Window
+groups, the Panels submenu, eleven disabled stubs, the Tools measurement group,
+the renamed Home item, and the `+ New Project` action on the projects directory.
+The shortcut slots are live and deliberately empty.
+
+Also still unexercised from earlier deploys: the chunked upload, the re-auth
+path, and the three Help guides — which have never been read by anyone.
+
+### Still carried forward
+
+- **`bridge_queue.claim_pending`'s unguarded `_write`** — real, reproduced,
+  unfixed, and not addressed by this deploy.
+- **The stall** — twice observed, cause unidentified, now known to be capable of
+  failing tests rather than only delaying them.
+- **Rollback trees are 6**, having been pruned to 2 on 31 August. Five deploys
+  since then rebuilt them.
+
 ## 2026-09-01 — The stall recurred, and it took a latent Windows race with it
 
 Two findings from a single full-suite run, plus the menubar work that run was
