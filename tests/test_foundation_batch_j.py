@@ -48,6 +48,7 @@ from services.case_workspace import (
 )
 from services.governance import GovernanceLog
 from services.ingestion import _register_source_content
+from services.conversational_turn import gather_project_evidence
 
 NREOCRC_PATH = Path(__file__).parent / "fixtures" / "nreocrc" / "immutable_original" / "NREOCRC-OPR-001.md"
 
@@ -399,6 +400,54 @@ class SourceReferenceTests(unittest.TestCase):
         self.assertEqual(len(refs), 1)
         self.assertEqual(refs[0]["reference_text"], "Section 4.3")
         self.assertEqual(self.workspace.relationships, before_relationships)
+
+    def test_declared_missing_reference_is_not_promoted_to_source_or_evidence(self):
+        class _Parser:
+            def _extract(self, raw_bytes, filename):
+                return "Refer to Section 99.9."
+
+        source_ids_before = {source["id"] for source in self.workspace.sources}
+        status, reason = _register_source_content(
+            self.store, self.workspace, self.source, b"physical bytes", "doc.md", _Parser(),
+            actor="system", governance_log=self.gov,
+        )
+
+        self.assertEqual((status, reason), ("added", None))
+        self.assertEqual({source["id"] for source in self.workspace.sources}, source_ids_before)
+        self.assertEqual(len(self.workspace.source_references), 1)
+        self.assertEqual(self.workspace.source_references[0]["resolution_status"], RESOLUTION_STATUS_TARGET_NOT_FOUND)
+        self.assertEqual({item["source_id"] for item in self.workspace.evidence_items}, {self.source["id"]})
+
+    def test_declared_missing_reference_adds_no_spin_document(self):
+        class _Parser:
+            def _extract(self, raw_bytes, filename):
+                return "Refer to Section 99.9."
+
+        _register_source_content(
+            self.store, self.workspace, self.source, b"physical bytes", "doc.md", _Parser(),
+            actor="system", governance_log=self.gov,
+        )
+
+        evidence = gather_project_evidence(self.workspace, self.store)
+        self.assertEqual(len(evidence.additional_document_evidence), 1)
+        self.assertEqual(evidence.additional_document_evidence[0]["source_id"], self.source["id"])
+
+    def test_physical_source_extracted_evidence_remains_spin_eligible(self):
+        class _Parser:
+            def _extract(self, raw_bytes, filename):
+                return "Physical project evidence without a declared citation."
+
+        status, reason = _register_source_content(
+            self.store, self.workspace, self.source, b"physical bytes", "doc.md", _Parser(),
+            actor="system", governance_log=self.gov,
+        )
+
+        evidence = gather_project_evidence(self.workspace, self.store)
+        self.assertEqual((status, reason), ("added", None))
+        self.assertEqual(
+            evidence.additional_document_evidence[0]["excerpts"],
+            ["Physical project evidence without a declared citation."],
+        )
 
     def test_v3_read_time_resolution_tracks_current_requirements_without_mutation(self):
         refs = self.store.extract_and_register_source_references(
