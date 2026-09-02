@@ -1938,6 +1938,11 @@ class SpinRun:
     baseline_spin_run_id: Optional[str] = None  # delta_spin only
     source_signature: Optional[str] = None
     scoped_source_ids: Optional[list] = None
+    evidence_sources_considered: Optional[int] = None
+    evidence_sources_included: Optional[int] = None
+    evidence_items_considered: Optional[int] = None
+    total_evidence_items_budgeted: Optional[int] = None
+    evidence_chars_budgeted: Optional[int] = None
     finding_ids: list = field(default_factory=list)  # ComposerFinding ids this run produced
     provider: Optional[str] = None
     model: Optional[str] = None
@@ -8822,6 +8827,11 @@ class CaseWorkspaceStore:
         source_signature: str,
         baseline_spin_run_id: Optional[str] = None,
         scoped_source_ids: Optional[list] = None,
+        evidence_sources_considered: Optional[int] = None,
+        evidence_sources_included: Optional[int] = None,
+        evidence_items_considered: Optional[int] = None,
+        total_evidence_items_budgeted: Optional[int] = None,
+        evidence_chars_budgeted: Optional[int] = None,
         ran: bool = True,
         skipped_reason: Optional[str] = None,
         provider: Optional[str] = None,
@@ -8883,6 +8893,11 @@ class CaseWorkspaceStore:
             baseline_spin_run_id=baseline_spin_run_id,
             source_signature=source_signature,
             scoped_source_ids=list(scoped_source_ids) if scoped_source_ids is not None else None,
+            evidence_sources_considered=evidence_sources_considered,
+            evidence_sources_included=evidence_sources_included,
+            evidence_items_considered=evidence_items_considered,
+            total_evidence_items_budgeted=total_evidence_items_budgeted,
+            evidence_chars_budgeted=evidence_chars_budgeted,
             provider=provider,
             model=model,
             world=world,

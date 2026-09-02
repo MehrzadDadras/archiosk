@@ -49,7 +49,14 @@
     {% if not run.ran %}
     <p class="history-entry"><strong>Could not run:</strong> {{ run.skipped_reason }}</p>
     {% else %}
-    <p class="history-entry"><strong>Sources examined:</strong> {{ run_report.sources_examined }}</p>
+    <p class="history-entry"><strong>Corpus known to GO:</strong> {{ run_report.sources_examined }} source(s)</p>
+    {% if run.evidence_sources_included is defined and run.evidence_sources_included is not none %}
+    <p class="history-entry"><strong>Sources examined:</strong> <span class="pane-note">Evidence examined in this Spin pass</span><br>
+        {{ run.evidence_sources_included }} of {{ run.evidence_sources_considered }} evidence-bearing source(s) &middot;
+        {{ run.total_evidence_items_budgeted }} of {{ run.evidence_items_considered }} extracted item(s) &middot;
+        {{ run.evidence_chars_budgeted }} evidence character(s)
+    </p>
+    {% endif %}
     {% if run_report.evidence_delta %}
     <p class="history-entry">
         <strong>Evidence delta since baseline:</strong>

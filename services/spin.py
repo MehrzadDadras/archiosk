@@ -75,6 +75,10 @@ _MAX_EXCERPTS_PER_DOCUMENT = 8
 # open document - here the priority signal is "this Source is new or
 # changed since the baseline Spin run", not question relevance.
 _MAX_EXCERPTS_FOR_CHANGED_DOCUMENT = 80
+# Deterministic aggregate ceiling for extracted document prose. Character
+# accounting avoids a tokenizer dependency; per-document limits remain
+# secondary bounds. This is roughly 15k input tokens for ordinary prose.
+_MAX_DOCUMENT_EVIDENCE_CHARS_IN_PROMPT = 60_000
 
 _MAX_PRIOR_FINDINGS_IN_PROMPT = 40
 
@@ -356,6 +360,11 @@ class SpinResult:
     # finding, not a second finding taxonomy.
     helix_assessments: list[dict] = field(default_factory=list)
     evidence_source_ids: list[str] = field(default_factory=list)
+    evidence_sources_considered: int = 0
+    evidence_sources_included: int = 0
+    evidence_items_considered: int = 0
+    total_evidence_items_budgeted: int = 0
+    evidence_chars_budgeted: int = 0
 
 
 def run_spin(
@@ -399,6 +408,17 @@ def run_spin(
     selected_document_evidence = _select_comprehensive_document_evidence(
         additional_document_evidence or [], changed_source_keys,
     )
+    evidence_sources_considered = len(additional_document_evidence or [])
+    evidence_items_considered = sum(
+        len(item.get("excerpts", [])) for item in (additional_document_evidence or [])
+    )
+    total_evidence_items_budgeted = sum(
+        len(item.get("excerpts", [])) for item in selected_document_evidence
+    )
+    evidence_chars_budgeted = sum(
+        len(str(excerpt))
+        for item in selected_document_evidence for excerpt in item.get("excerpts", [])
+    )
     evidence_source_ids = []
     if primary_source_id:
         evidence_source_ids.append(primary_source_id)
@@ -411,6 +431,7 @@ def run_spin(
         spin_kind, document_filename, candidate_requirements, governed_requirements, milestones,
         display_title, additional_document_evidence, changed_source_keys, prior_findings, world,
         maturity_context, expectation_context, relationship_evidence, supersession_evidence,
+        selected_document_evidence,
     )
     # CLAUDE-DELTA-SPIN-02: live acceptance testing found a second-order
     # consequence of raising max_tokens 4000 -> 8000 below - a larger
@@ -473,7 +494,15 @@ def run_spin(
         log_label=f"Spin ({spin_kind})",
     )
     if not outcome.ran:
-        return SpinResult(ran=False, skipped_reason=outcome.skipped_reason)
+        return SpinResult(
+            ran=False, skipped_reason=outcome.skipped_reason,
+            evidence_source_ids=evidence_source_ids,
+            evidence_sources_considered=evidence_sources_considered,
+            evidence_sources_included=len(selected_document_evidence),
+            evidence_items_considered=evidence_items_considered,
+            total_evidence_items_budgeted=total_evidence_items_budgeted,
+            evidence_chars_budgeted=evidence_chars_budgeted,
+        )
 
     parsed = outcome.parsed
     findings = _parse_spin_findings(parsed.get("findings"), spin_kind=spin_kind)
@@ -483,6 +512,11 @@ def run_spin(
         ran=True, findings=findings, games_played=games_played,
         helix_assessments=helix_assessments,
         evidence_source_ids=evidence_source_ids,
+        evidence_sources_considered=evidence_sources_considered,
+        evidence_sources_included=len(selected_document_evidence),
+        evidence_items_considered=evidence_items_considered,
+        total_evidence_items_budgeted=total_evidence_items_budgeted,
+        evidence_chars_budgeted=evidence_chars_budgeted,
         provider=outcome.provider, model=outcome.model, requested_at=outcome.requested_at,
     )
 
@@ -639,51 +673,89 @@ def _select_comprehensive_document_evidence(
     changed_source_keys: Optional[set],
     max_documents: int = _MAX_DOCUMENTS_IN_PROMPT,
     max_excerpts_per_document: int = _MAX_EXCERPTS_PER_DOCUMENT,
+    max_evidence_chars: int = _MAX_DOCUMENT_EVIDENCE_CHARS_IN_PROMPT,
 ) -> list[dict]:
-    """A comprehensive pass has no single "question" to score relevance
-    against (services.conversational_turn.select_relevant_document_
-    evidence's own scoring model is deliberately not reused here for that
-    reason - it is built around a question string). Instead: every
-    document is eligible for inclusion (comprehensive, not a question-
-    driven slice); a Source named in `changed_source_keys` (new or
-    changed since the baseline run - only ever non-empty for a
-    delta_spin, see run_spin's own docstring) gets the larger excerpt
-    allowance and sorts first, since PM attention should widen there
-    first (Section 6, "adaptive attention" - a small changed document may
-    deserve more excerpt budget than several large unchanged ones);
-    remaining documents sort by recency, the same smallest-tiebreaker
-    services.conversational_turn already uses. Bounded at max_documents
-    regardless - never "no cap"."""
-    if not additional_document_evidence:
+    """Pack governed evidence deterministically within aggregate and per-source bounds."""
+    if not additional_document_evidence or max_evidence_chars <= 0:
         return []
     changed_source_keys = changed_source_keys or set()
 
     def _key(doc: dict) -> str:
         return doc.get("relative_path") or doc.get("filename") or ""
 
-    def _added_at(doc: dict) -> str:
-        return doc.get("added_at") or ""
+    def _source_class(doc: dict) -> str:
+        text = " ".join(str(doc.get(key) or "") for key in (
+            "source_type", "filename", "relative_path", "document_status",
+        )).lower()
+        for category, terms in (
+            ("addendum_amendment", ("addendum", "amendment", "revision", "bulletin")),
+            ("procurement_governing", ("rfp", "request for proposal", "project agreement", "contract")),
+            ("coordination", ("coordination", "interface", "drawing", "specification", "schedule")),
+            ("auxiliary", ("site visit", "sign-in", "sign in", "attendance", "meeting minutes", "register")),
+        ):
+            if any(term in text for term in terms):
+                return category
+        return str(doc.get("source_type") or "other").lower()
 
-    is_changed = {id(doc): (_key(doc) in changed_source_keys) for doc in additional_document_evidence}
-    # Changed-since-baseline documents first; within each group, most
-    # recent first (stable sort - registration order survives remaining
-    # ties, the same harmless fallback services.conversational_turn's
-    # own scoring already relies on).
-    by_recency = sorted(additional_document_evidence, key=_added_at, reverse=True)
-    ordered = sorted(by_recency, key=lambda doc: 0 if is_changed[id(doc)] else 1)
+    changed = {id(doc): (_key(doc) in changed_source_keys) for doc in additional_document_evidence}
+
+    def _priority(doc: dict) -> tuple:
+        authority = str(doc.get("document_authority") or "").lower()
+        authority_rank = {
+            "project_agreement": 0, "contractual": 0,
+            "issued_for_procurement": 1, "reference": 3,
+            "indicative": 4, "informational": 5, "draft": 6,
+        }.get(authority, 2)
+        category = _source_class(doc)
+        status = str(doc.get("document_status") or "").lower()
+        revision_rank = 0 if (
+            category == "addendum_amendment" or doc.get("revision")
+            or "active" in status or "current" in status
+        ) else 1
+        return (
+            0 if doc.get("is_founding") else 1,
+            authority_rank, revision_rank,
+            0 if category == "coordination" else 1,
+            0 if changed[id(doc)] else 1,
+            1 if category == "auxiliary" else 0,
+            tuple(-ord(char) for char in str(doc.get("added_at") or "")),
+            _key(doc).lower(),
+        )
+
+    ranked = sorted(additional_document_evidence, key=_priority)
+    representatives: list[dict] = []
+    seen_classes: set[str] = set()
+    for doc in ranked:
+        category = _source_class(doc)
+        if category not in seen_classes:
+            representatives.append(doc)
+            seen_classes.add(category)
+    ordered = representatives + [doc for doc in ranked if doc not in representatives]
 
     selected: list[dict] = []
-    for doc in ordered[:max_documents]:
-        cap = _MAX_EXCERPTS_FOR_CHANGED_DOCUMENT if is_changed[id(doc)] else max_excerpts_per_document
+    chars_used = 0
+    for doc in ordered:
+        if len(selected) >= max_documents:
+            break
+        cap = _MAX_EXCERPTS_FOR_CHANGED_DOCUMENT if changed[id(doc)] else max_excerpts_per_document
+        packed_excerpts = []
+        for excerpt in doc.get("excerpts", [])[:cap]:
+            excerpt = str(excerpt)
+            if chars_used + len(excerpt) > max_evidence_chars:
+                continue
+            packed_excerpts.append(excerpt)
+            chars_used += len(excerpt)
+        if not packed_excerpts:
+            continue
         selected.append({
             "filename": doc.get("filename"),
             "relative_path": doc.get("relative_path"),
             "source_id": doc.get("source_id"),
-            "excerpts": doc.get("excerpts", [])[:cap],
-            "is_changed_since_baseline": is_changed[id(doc)],
+            "excerpts": packed_excerpts,
+            "is_changed_since_baseline": changed[id(doc)],
+            "source_class": _source_class(doc),
         })
     return selected
-
 
 def _shape_relationship_evidence(items: Optional[list[dict]]) -> list[dict]:
     """Project existing relationship records into a bounded prompt shape.
@@ -737,6 +809,7 @@ def _build_prompt(
     expectation_context: Optional[list[dict]] = None,
     relationship_evidence: Optional[list[dict]] = None,
     supersession_evidence: Optional[list[dict]] = None,
+    selected_document_evidence: Optional[list[dict]] = None,
 ) -> str:
     is_delta = spin_kind == SPIN_KIND_DELTA
     lines = [
@@ -889,9 +962,12 @@ def _build_prompt(
             marker = " [NEW OR CHANGED SINCE BASELINE]" if (changed_source_keys and name in changed_source_keys) else ""
             lines.append(f"- {name}{marker}")
 
-        shown = _select_comprehensive_document_evidence(additional_document_evidence, changed_source_keys)
+        shown = selected_document_evidence
+        if shown is None:
+            shown = _select_comprehensive_document_evidence(additional_document_evidence, changed_source_keys)
         lines.append(
-            f"\nExtracted text for {len(shown)} of those documents (not yet run through "
+            f"\nEvidence examined in this Spin pass: extracted text for {len(shown)} of "
+            f"{len(all_names)} documents known to GO (not yet run through "
             f"requirement classification). Documents marked [NEW OR CHANGED SINCE BASELINE] "
             f"above are the ones most likely to drive this Spin's own findings, but are not "
             f"the only ones worth considering:"

@@ -165,6 +165,11 @@ def gather_project_evidence(workspace: ProjectWorkspace, store) -> ProjectEviden
                 "source_id": source_id,
                 "added_at": source.get("added_at"),
                 "document_authority": source.get("document_authority"),
+                "source_type": source.get("kind"),
+                "revision": source.get("revision"),
+                "document_status": source.get("document_status"),
+                "origin_type": source.get("origin_type"),
+                "is_founding": bool(primary_source and source_id == primary_source.get("id")),
             })
 
     return ProjectEvidence(
