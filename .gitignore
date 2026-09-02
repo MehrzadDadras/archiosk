@@ -63,3 +63,21 @@ static/nipigon/
 # why. Held-out-ness is a per-corpus decision, so each one is listed by name.
 tests/fixtures/metabolic_bridge/oracle/
 tests/fixtures/wd_nas_bridge/oracle/
+
+# The rest of the wd_nas_bridge corpus - its builder_corpus/ and manifest.json.
+# CONTINUATION_CHECKPOINT.md records three separate times that this is
+# "deliberately untracked": no test reads it (the storage-bridge tests build
+# their own temp corpora inline), so committing it asserts a dependency that
+# does not exist, and it ships to the server, since `git archive` exports the
+# commit.
+#
+# Enforced here for the reason the block above already gives about its own
+# sibling: convention alone did not survive a `git add -A`. On 2026-09-01 one
+# committed and pushed all six files in a single stroke, against a decision
+# recorded three times. That comment predicted this exact failure for oracle/;
+# the same argument always applied one directory up.
+#
+# To TRACK these later, delete these two lines - do not weaken them to a
+# wildcard. Per-corpus, by name, is this file's established discipline.
+tests/fixtures/wd_nas_bridge/builder_corpus/
+tests/fixtures/wd_nas_bridge/manifest.json
