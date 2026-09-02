@@ -232,7 +232,7 @@ class HeaderRenderingTests(unittest.TestCase):
             self.assertNotIn('class="workspace-topbar-brand"', body, url)
 
     def test_archiosk_menu_renders_with_plain_text_label(self):
-        body = self.client.get("/").get_data(as_text=True)
+        body = self.client.get("/", follow_redirects=True).get_data(as_text=True)
         idx = body.index('data-ui-ref="menu.archiosk"')
         block = body[idx:body.index("</details>", idx)]
         self.assertIn(">Archiosk</summary>", block)
@@ -241,7 +241,7 @@ class HeaderRenderingTests(unittest.TestCase):
         # CLAUDE-MENU-HOME-TARGET-01: /projects, not "/" - see the source-level
         # test above. Still asserted as a REAL rendered href rather than a
         # url_for string, so a broken endpoint name fails here.
-        body = self.client.get("/").get_data(as_text=True)
+        body = self.client.get("/", follow_redirects=True).get_data(as_text=True)
         idx = body.index('data-ui-ref="menu.archiosk.home"')
         tag = body[body.rindex("<a", 0, idx):body.index(">", idx) + 1]
         self.assertIn('href="/projects"', tag)

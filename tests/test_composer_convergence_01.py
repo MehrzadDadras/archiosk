@@ -65,7 +65,10 @@ SURFACES = {
     # Composer and accepted less, which is exactly the drift this file exists to
     # catch. It now attaches.
     "developer-home": ("index.html", 'data-ui-ref="developer.home.composer.form"', True, True),
-    "home-orientation": ("index.html", 'id="index-orientation-form"', False, False),
+    # CLAUDE-HOME-UNIFY-01: moved to projects.html with the home destination
+    # itself. This registry existing is exactly why the move could not go
+    # unnoticed - test_the_registry_does_not_rot failed on the stale path.
+    "home-orientation": ("projects.html", 'id="index-orientation-form"', False, False),
     "establish-project": ("upload.html", 'id="upload-orientation-form"', False, False),
 }
 

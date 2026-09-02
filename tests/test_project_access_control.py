@@ -260,7 +260,7 @@ class PortalBypassPathsClosedTests(_BaseAccessControlTestCase):
         bob_doc = self._ingest(owner="bob", project_name="Bob Home")
         carol_doc = self._ingest(owner="carol", project_name="Carol Not On Bob Home")
 
-        response = self.bob_client.get("/")
+        response = self.bob_client.get("/", follow_redirects=True)
         body = response.data.decode()
         self.assertIn("Bob Home", body)
         self.assertNotIn("Carol Not On Bob Home", body)

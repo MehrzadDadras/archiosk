@@ -1,0 +1,4 @@
+Mark,Description,Location,Connected_Load_kW,Airflow_L_s,Notes
+EF-1,Accessible washroom exhaust fan,Level 1 washroom,1.5,420,Local isolator; roof discharge
+EF-2,General washroom exhaust fan,Level 1 washroom,2.0,420,Local isolator; roof discharge
+AHU-1,Air handling unit,Mechanical room,18.0,2400,Refer to controls sequence

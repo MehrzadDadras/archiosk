@@ -123,24 +123,16 @@
        resolved user's matches stay inside their own governed side
        (routes/portal.py's gateway_orientation() docstring covers the
        isolation reasoning). #}
-    {% if not developer_mode %}
-    {# CLAUDE-COMPOSER-CONVERGENCE-01: the same keyboard contract as every other
-       Composer-like surface. This field had neither half of it - no explicit
-       Enter binding and no autocomplete="off" - which is the exact pair of
-       omissions behind the Establish-a-Project helper's live "Enter does
-       nothing" report (CLAUDE-ESTABLISH-COMPOSER-ENTER-01). Same shape, same
-       omissions, one page over; converged rather than waiting for it to be
-       reported here too. #}
-    <form class="gateway-orientation-form" id="index-orientation-form" data-ui-ref="index.orientation.form"
-          data-developer-composer-form data-composer-send='[data-ui-ref="index.orientation.submit"]'>
-        <input type="text" class="text-input" id="index-orientation-input" name="message" data-developer-composer-input autocomplete="off" placeholder="Open a project, or ask what you can do here" aria-label="Ask Archiosk">
-        <button type="button" id="index-orientation-voice" class="voice-input-button" data-ui-ref="index.orientation.voice"
-                aria-label="Press and speak - audio is processed by your browser only and is never saved" hidden>&#127908;&#65039;</button>
-        <button type="submit" class="btn btn-ghost" data-ui-ref="index.orientation.submit">Ask</button>
-        <span class="voice-input-status" id="index-orientation-voice-status" data-ui-ref="index.orientation.voice.status" aria-live="polite"></span>
-    </form>
-    <p class="gateway-orientation-reply" id="index-orientation-reply" data-ui-ref="index.orientation.reply" aria-live="polite" hidden></p>
-    {% endif %}
+    {# CLAUDE-HOME-UNIFY-01: the orientation Composer MOVED to
+       templates/projects.html, which is now the home destination for a
+       signed-in session.
+
+       It could not stay. This template renders only when Developer Mode is on
+       (routes/portal.py's index()), and the block that stood here was guarded
+       by `{% if not developer_mode %}` - a condition that can no longer be
+       true, so the Composer would have been unreachable markup rather than a
+       feature. Moved rather than copied: one implementation, one set of ids,
+       one script, now on the page people actually land on. #}
 
     {% if developer_mode %}
     {# Application-level Developer Mode Composer. This deliberately reuses
@@ -287,63 +279,6 @@
    SAME window.ArchioskVoiceInput the ported script below calls. #}
 <script src="{{ url_for('static', filename='js/voice_input.js') }}?v={{ static_version }}"></script>
 <script nonce="{{ csp_nonce }}">
-// CLAUDE-VOICE-CONSISTENCY-01 / CLAUDE-POST-SIGNIN-GATEWAY-SIMPLIFICATION-01:
-// ported verbatim from the retired gateway.html's own orientation
-// composer script - same backend route, same voice wiring, only the
-// element ids and the optional environment field are new.
-(function () {
-    var form = document.getElementById('index-orientation-form');
-    var input = document.getElementById('index-orientation-input');
-    var replyEl = document.getElementById('index-orientation-reply');
-    if (!form || !input) return;
-
-    function csrfToken() {
-        var meta = document.querySelector('meta[name="csrf-token"]');
-        return meta ? meta.content : '';
-    }
-
-    function showReply(text) {
-        if (!replyEl) return;
-        replyEl.textContent = text || '';
-        replyEl.hidden = !text;
-    }
-
-    function ask(message) {
-        var formData = new FormData(form);
-        formData.set('message', message);
-        fetch('{{ url_for("portal.gateway_orientation") }}', {
-            method: 'POST',
-            body: formData,
-            headers: { 'X-CSRFToken': csrfToken() },
-            credentials: 'same-origin',
-        }).then(function (resp) {
-            return resp.json();
-        }).then(function (data) {
-            showReply(data.text || '');
-            if (data.kind === 'navigate' && data.url) {
-                window.setTimeout(function () { window.location.href = data.url; }, 350);
-            }
-        }).catch(function () {
-            showReply('Something went wrong - try again.');
-        });
-    }
-
-    form.addEventListener('submit', function (e) {
-        e.preventDefault();
-        var message = input.value.trim();
-        if (!message) return;
-        ask(message);
-    });
-
-    if (window.ArchioskVoiceInput) {
-        window.ArchioskVoiceInput({
-            buttonId: 'index-orientation-voice',
-            statusId: 'index-orientation-voice-status',
-            onTranscript: function (transcript) { input.value = transcript; },
-            onEnd: function () { input.focus(); },
-        });
-    }
-})();
 
 // The application-level Composer uses the same governed voice engine as the
 // workspace Composer; it only changes the target input and has no project_id.

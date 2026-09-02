@@ -124,13 +124,19 @@ class TopBarContractTests(_BaseTestCase):
         # an open Workspace; making it universally reachable is a genuine
         # correction, not a regression. Display Layout stays workspace-
         # only (it drives THAT project's own Display grid, unchanged).
+        # CLAUDE-HOME-UNIFY-01: the project-less URLs below follow the
+        # redirect. "/" now 302s to /projects for a signed-in session, and both
+        # loops here would otherwise interrogate a "Redirecting..." stub - the
+        # presence check would fail outright, and the absence check in
+        # ToolboxContractTests would PASS for the worst possible reason: there
+        # was nothing on the page to find either way.
         client = self._client_as("e3a_owner", 1)
         workspace_body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
         self.assertIn('id="workspace-layout-menu"', workspace_body)
         self.assertIn('id="workspace-appearance-menu"', workspace_body)
 
         for url in ("/", "/projects", "/upload", "/removed-projects"):
-            body = client.get(url).get_data(as_text=True)
+            body = client.get(url, follow_redirects=True).get_data(as_text=True)
             self.assertNotIn('id="workspace-layout-menu"', body, url)
             self.assertIn('id="workspace-appearance-menu"', body, url)
 
@@ -387,7 +393,7 @@ class ToolboxContractTests(_BaseTestCase):
     def test_toolbox_and_chat_absent_outside_a_workspace(self):
         client = self._client_as("e3a_owner", 1)
         for url in ("/", "/projects", "/upload", "/removed-projects"):
-            body = client.get(url).get_data(as_text=True)
+            body = client.get(url, follow_redirects=True).get_data(as_text=True)
             self.assertNotIn('id="workspace-toolbox-panel"', body, url)
             self.assertNotIn('id="chat-region"', body, url)
 

@@ -234,7 +234,7 @@ class PreservationTests(_BaseTestCase):
         workspace_body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
         self.assertIn('id="workspace-appearance-menu"', workspace_body)
         for url in ("/", "/projects", "/upload"):
-            body = client.get(url).get_data(as_text=True)
+            body = client.get(url, follow_redirects=True).get_data(as_text=True)
             self.assertIn('id="workspace-appearance-menu"', body, url)
 
     def test_menu_surface_target_element_present_even_outside_a_workspace(self):
@@ -243,7 +243,7 @@ class PreservationTests(_BaseTestCase):
         # workspace-gated per the test above) - its stored preference
         # must still apply everywhere, not just inside a workspace.
         client = self._client_as("vw3_owner", 1)
-        body = client.get("/").get_data(as_text=True)
+        body = client.get("/", follow_redirects=True).get_data(as_text=True)
         self.assertIn('class="workspace-topbar"', body)
 
 

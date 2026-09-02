@@ -521,7 +521,7 @@ class AuthorizationAwareReferenceTests(_BaseTestCase):
         self.assertNotIn('data-ui-ref="lists.security"', body)
         self.assertNotIn('data-ui-ref="lists.system-data-management"', body)
         self.assertNotIn('data-ui-ref="menu.account.admin.new-project"', body)
-        self.assertIn('data-ui-ref="menu.archiosk.admin.new-project"', body)
+        self.assertIn('data-ui-ref="menu.file.new-project"', body)
         self.assertIn('data-ui-ref="menu.archiosk.admin.security"', body)
         self.assertIn('data-ui-ref="menu.archiosk.admin.operations"', body)
         self.assertIn('data-ui-ref="menu.archiosk.admin.project-data-management"', body)
@@ -594,22 +594,26 @@ class SignInGatewayIsolationTests(_BaseTestCase):
         # (CLAUDE-LEFT-RAIL-01). What's still real and worth guarding:
         # display.*/toolbox.*/chat.* only ever exist when project_id/
         # workspace are actually defined, which they never are here.
+        # CLAUDE-HOME-UNIFY-01: "/" redirects an ordinary signed-in session to
+        # the Projects directory, which IS the home page now - so the leak check
+        # follows the redirect and interrogates the page a user actually lands
+        # on. Checking the 302's own empty body would have made this test pass
+        # by having nothing to leak, which is the weakest possible green.
         client = self._client_as("vw7a_owner", 1)
-        body = client.get("/").get_data(as_text=True)
+        body = client.get("/", follow_redirects=True).get_data(as_text=True)
         for ref in _DATA_REF_RE.findall(body):
             self.assertFalse(
                 ref.startswith(("display.", "toolbox.", "chat.")),
-                f"/ leaked an active-project-workspace reference: {ref}",
+                f"the home page leaked an active-project-workspace reference: {ref}",
             )
         self.assertIn("data-ui-ref=\"menu.bar\"", body)
         self.assertIn("data-ui-ref=\"lists.projects\"", body)
         self.assertNotIn("data-ui-ref=\"menu.display-layout\"", body)
-        # This test's own fixture project resolves a single accessible
-        # environment automatically (State 3 - see index.html's own
-        # comment), so the ported "Open Existing Project" disclosure
-        # renders under its new index.resolved.open-existing ref (was
-        # gateway.open-existing-projects on the now-retired gateway.html).
-        self.assertIn("data-ui-ref=\"index.resolved.open-existing\"", body)
+        # The "open an existing project" affordance is the directory's own
+        # listing now, not index.html's ported disclosure - same guarantee that
+        # a resolved reviewer can reach their projects from home, under the ref
+        # the home page actually renders.
+        self.assertIn("data-ui-ref=\"projects-directory.list\"", body)
 
 
 class UIReferenceModeToggleTests(_BaseTestCase):

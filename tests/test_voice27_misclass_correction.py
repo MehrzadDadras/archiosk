@@ -214,7 +214,7 @@ class CorrectOperatingEnvironmentRouteTests(_BaseCorrectionTestCase):
         doc = self._ingest(environment=CLIENT_OWNER)
         client = self._client_as("misclass_admin", 1)
 
-        before_body = client.get("/").get_data(as_text=True)
+        before_body = client.get("/", follow_redirects=True).get_data(as_text=True)
         self.assertIn(doc.project_id, before_body)
 
         client.post(
@@ -222,7 +222,7 @@ class CorrectOperatingEnvironmentRouteTests(_BaseCorrectionTestCase):
             data={"operating_environment": DESIGN_BUILDER_PROPONENT, "reason": "Wrong side at creation."},
         )
 
-        after_body = client.get("/").get_data(as_text=True)
+        after_body = client.get("/", follow_redirects=True).get_data(as_text=True)
         self.assertIn(doc.project_id, after_body)
         self.assertEqual(
             self._store().get(doc.project_id).operating_environment,

@@ -123,7 +123,7 @@ class SingleLeftPanelTests(_BaseTestCase):
             f"/projects/{self.project_id}/workspace?view=investigations",
             f"/projects/{self.project_id}/workspace?view=chats",
         ):
-            body = client.get(url).get_data(as_text=True)
+            body = client.get(url, follow_redirects=True).get_data(as_text=True)
             self.assertEqual(body.count('id="launcher-panel"'), 1, url)
             self.assertEqual(body.count("<nav class=\"launcher-panel\""), 1, url)
 
@@ -171,7 +171,7 @@ class NoDuplicatedChildHierarchyTests(_BaseTestCase):
         # / (index.html) shows it twice in its own main content now
         # (Lists leaf + State 3's own resolved-environment project list)
         # plus once in the menu chooser.
-        dashboard_body = client.get("/").get_data(as_text=True)
+        dashboard_body = client.get("/", follow_redirects=True).get_data(as_text=True)
         self.assertEqual(dashboard_body.count("A Second Distinct Project"), 3)
         other_project_open_body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
         self.assertEqual(other_project_open_body.count("A Second Distinct Project"), 2)
@@ -230,7 +230,7 @@ class NoDuplicatedChildHierarchyTests(_BaseTestCase):
             end = body.index("</nav>", start)
             return body[start:end]
 
-        home_panel = panel_html(client.get("/").get_data(as_text=True))
+        home_panel = panel_html(client.get("/", follow_redirects=True).get_data(as_text=True))
         workspace_panel = panel_html(client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True))
         self.assertNotEqual(home_panel, workspace_panel)
         self.assertNotIn('data-ui-ref="lists.project.documents.leaf"', home_panel)
@@ -482,7 +482,7 @@ class ToolboxAndChatContextualTests(_BaseTestCase):
             f"/projects/{self.project_id}/workspace?view=investigations",
             f"/projects/{self.project_id}/workspace?view=chats",
         ):
-            body = client.get(url).get_data(as_text=True)
+            body = client.get(url, follow_redirects=True).get_data(as_text=True)
             self.assertEqual(body.count('id="workspace-toolbox-panel"'), 1, url)
             self.assertEqual(body.count('id="conversation-dock"'), 1, url)
 

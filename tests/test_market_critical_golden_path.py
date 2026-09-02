@@ -391,7 +391,7 @@ class MarketCriticalGoldenPathTests(unittest.TestCase):
         # names (they're the Projects root launcher's own projected
         # children, on /projects only) - checked here is only that Home
         # still renders at all, not that it lists anything.
-        home_response = self.alice.get("/")
+        home_response = self.alice.get("/", follow_redirects=True)
         self.assertEqual(home_response.status_code, 200)
 
         projects_response = self.alice.get("/projects")

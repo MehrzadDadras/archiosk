@@ -77,7 +77,7 @@ def _home_html() -> str:
         sess["user_id"] = 1
         sess["username"] = "stack_admin"
         sess["role"] = "admin"
-    return client.get("/").get_data(as_text=True)
+    return client.get("/", follow_redirects=True).get_data(as_text=True)
 
 
 @unittest.skipUnless(_AVAILABLE, _SKIP)

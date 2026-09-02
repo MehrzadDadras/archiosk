@@ -255,14 +255,14 @@ class GatewayOrientationMarkupTests(unittest.TestCase):
         # from the retired gateway.html to the consolidated / (index.html)
         # entry page - same backend route, same voice wiring, new element
         # ids/refs only (index.* rather than gateway.*).
-        body = self.client.get("/").get_data(as_text=True)
+        body = self.client.get("/", follow_redirects=True).get_data(as_text=True)
         self.assertIn('data-ui-ref="index.orientation.form"', body)
         self.assertIn('data-ui-ref="index.orientation.voice"', body)
         self.assertIn('data-ui-ref="index.orientation.submit"', body)
         self.assertIn('id="index-orientation-reply"', body)
 
     def test_voice_button_hidden_by_default_server_side(self):
-        body = self.client.get("/").get_data(as_text=True)
+        body = self.client.get("/", follow_redirects=True).get_data(as_text=True)
         voice_button_start = body.index('id="index-orientation-voice"')
         button_open_tag = body.rindex("<button", 0, voice_button_start)
         button_close_tag = body.index(">", voice_button_start)
@@ -274,7 +274,7 @@ class GatewayOrientationMarkupTests(unittest.TestCase):
         # index.html's own inline script that calls it, the call would
         # silently no-op on every browser (not just unsupported ones),
         # since window.ArchioskVoiceInput wouldn't exist yet.
-        body = self.client.get("/").get_data(as_text=True)
+        body = self.client.get("/", follow_redirects=True).get_data(as_text=True)
         self.assertIn("voice_input.js", body)
         voice_engine_idx = body.index("voice_input.js")
         wiring_call_idx = body.index("window.ArchioskVoiceInput({")

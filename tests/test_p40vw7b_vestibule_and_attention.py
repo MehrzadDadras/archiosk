@@ -155,7 +155,7 @@ class OpenedProjectPortfolioRemovalTests(_BaseTestCase):
         self.assertNotIn('data-ui-ref="lists.new-project"', body)
         self.assertNotIn('data-ui-ref="lists.removed-projects"', body)
         # CLAUDE-APP-MENU-01: relocated again into the Archiosk menu.
-        self.assertIn('data-ui-ref="menu.archiosk.admin.new-project"', body)
+        self.assertIn('data-ui-ref="menu.file.new-project"', body)
         self.assertIn('data-ui-ref="menu.account.removed-projects"', body)
 
     def test_opened_project_lists_still_shows_its_own_family(self):

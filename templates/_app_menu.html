@@ -153,7 +153,21 @@
                             <details class="workspace-menubar-submenu" data-ui-ref="menu.archiosk.admin">
                                 <summary class="workspace-menubar-item">Admin</summary>
                                 <div class="workspace-menubar-subpanel" role="group" aria-label="Admin">
-                                    <a class="workspace-menubar-item" data-ui-ref="menu.archiosk.admin.new-project" href="{{ url_for('portal.upload') }}">+ New Project</a>
+                                    {# CLAUDE-HOME-UNIFY-01: the Archiosk > Admin copy of
+                                       "+ New Project" is RETIRED. Four entry points existed for
+                                       one act: this one, File > New Project..., File > Open
+                                       Project > New Project..., and the Projects directory's own
+                                       primary header action. On the unified home the last two of
+                                       those rendered the same label on one page.
+
+                                       This one is the copy to lose: File > New Project... is in the
+                                       menu bar on every page under the same admin gate (with an
+                                       honest disabled state for non-admins), so no capability and
+                                       no page loses access - only a second thing to keep in
+                                       agreement goes. It also sat two closed disclosures deep
+                                       under a summary reading "Admin", which is the same
+                                       discoverability problem CLAUDE-DEVELOPER-MENU-01 recorded
+                                       for the control that used to live beside it. #}
                                     <a class="workspace-menubar-item" data-ui-ref="menu.archiosk.admin.security" href="{{ url_for('security.department_home') }}">Security</a>
                                     <a class="workspace-menubar-item" data-ui-ref="menu.archiosk.admin.operations" href="{{ url_for('operations.department_home') }}">Operations</a>
                                     {# CLAUDE-DIAGNOSTIC-BRIDGE-01: Developer Mode is a session

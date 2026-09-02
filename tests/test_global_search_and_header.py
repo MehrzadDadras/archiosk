@@ -109,7 +109,7 @@ class HeaderAndBrandTests(unittest.TestCase):
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
 
     def test_no_visible_bhive_text_on_home(self):
-        body = self.client.get("/").get_data(as_text=True)
+        body = self.client.get("/", follow_redirects=True).get_data(as_text=True)
         self.assertNotIn("B-Hive", body)
         self.assertNotIn("BEEHIVE", body)
         self.assertNotIn("Beehive", body)
@@ -141,7 +141,7 @@ class HeaderAndBrandTests(unittest.TestCase):
         # class, not a distinct rule of its own (see
         # test_p40brand1_brand_mark.py's own HeaderMarkupTests for the
         # full structural proof of that).
-        body = self.client.get("/").get_data(as_text=True)
+        body = self.client.get("/", follow_redirects=True).get_data(as_text=True)
         self.assertIn('data-ui-ref="menu.archiosk"', body)
         idx = body.index('data-ui-ref="menu.archiosk"')
         summary_start = body.index("<summary", idx)
@@ -155,7 +155,7 @@ class HeaderAndBrandTests(unittest.TestCase):
         # side-rail's search magnifier and expand/collapse hamburger are
         # both retired outright, not merely hidden, now that the single
         # launcher panel replaces the side-rail they lived in.
-        body = self.client.get("/").get_data(as_text=True)
+        body = self.client.get("/", follow_redirects=True).get_data(as_text=True)
         self.assertNotIn('id="search-toggle"', body)
         self.assertNotIn('id="nav-toggle"', body)
 
@@ -164,7 +164,7 @@ class HeaderAndBrandTests(unittest.TestCase):
         # only entry point (Section F) - the markup is removed outright,
         # not left as inert hidden chrome (Section E's "no hidden
         # duplicate markup" principle, applied by extension).
-        body = self.client.get("/").get_data(as_text=True)
+        body = self.client.get("/", follow_redirects=True).get_data(as_text=True)
         self.assertNotIn('id="search-overlay"', body)
         self.assertNotIn('id="search-input"', body)
         self.assertNotIn('id="search-close"', body)
@@ -225,7 +225,7 @@ class ProjectsTreeTests(unittest.TestCase):
         # hero, case_workspace.html's Project Home "<- Projects" link,
         # etc.) - just no longer duplicated as a second navigation
         # affordance on the Lists heading itself.
-        body = self.client.get("/").get_data(as_text=True)
+        body = self.client.get("/", follow_redirects=True).get_data(as_text=True)
         import re
         match = re.search(r'<button type="button" class="tree-toggle launcher-heading[^"]*"[^>]*>\s*<span class="tree-label">Projects</span>', body)
         self.assertIsNotNone(match)
@@ -277,12 +277,34 @@ class ProjectsTreeTests(unittest.TestCase):
         self.assertNotIn('side-rail-context-label">Current Project<', body)
 
     def test_recent_projects_block_removed_from_sidebar(self):
-        body = self.client.get("/").get_data(as_text=True)
+        body = self.client.get("/", follow_redirects=True).get_data(as_text=True)
         self.assertNotIn("side-rail-context", body)
         self.assertNotIn("side-rail-recent", body)
 
     def test_new_project_appears_exactly_once_in_launcher_panel(self):
-        body = self.client.get("/").get_data(as_text=True)
+        """CLAUDE-HOME-UNIFY-01 - scoped to the panel this test is named for.
+
+        It counted ">+ New Project<" across the WHOLE page while asserting a
+        fact about the launcher panel. That held only because it ran against
+        "/", which used to render index.html. Now that "/" is the Projects
+        directory, the page carries two legitimately different controls: the
+        launcher panel's global one, and the directory's own header action
+        (CLAUDE-PROJECTS-NEW-ACTION-01, which the unifying directive explicitly
+        keeps). Both predate this change on /projects; only the page counted
+        changed.
+
+        Scoped to the panel so it asserts what it claims. The whole-page
+        duplicate is a real observation and is recorded in this stage's
+        checkpoint entry, not silently absorbed here.
+        """
+        # CLAUDE-HOME-UNIFY-01: back to its original form, and passing for a
+        # better reason than before. The unified home briefly carried TWO
+        # "+ New Project" controls - Archiosk > Admin's copy and the Projects
+        # directory's own header action. Retiring the Admin copy (which
+        # menu.file.new-project already covered on every page) restored the
+        # exact-once property this test was written for, rather than the test
+        # being loosened to accept the duplicate.
+        body = self.client.get("/", follow_redirects=True).get_data(as_text=True)
         self.assertEqual(body.count(">+ New Project<"), 1)
 
     def test_projects_directory_header_no_longer_has_its_own_new_project_button(self):

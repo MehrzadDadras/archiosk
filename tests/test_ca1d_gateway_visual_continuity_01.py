@@ -15,6 +15,7 @@ Run via:
 
     python -m unittest discover -s tests -v
 """
+# CLAUDE-HOME-UNIFY-01: same intent, new refs. The neutral entry actions moved with the home destination - index.resolved.new-project is now the directory's own projects-directory.new-project (same admin gate, same /upload target, still exactly one), and index.resolved.open-existing is the directory's project list. What is asserted is unchanged: one neutral create action, one way to open an existing project, never one pair per stakeholder category.
 from __future__ import annotations
 
 import unittest
@@ -148,11 +149,11 @@ class GatewayShellVisualContinuityTests(_BaseGatewayVisualTestCase):
                 )
 
         client = self._client_as("gv_admin", 1)
-        body = client.get("/").get_data(as_text=True)
+        body = client.get("/", follow_redirects=True).get_data(as_text=True)
         self.assertNotIn("Client / Owner Projects", body)
         self.assertNotIn("Design-Builder / Proponent Projects", body)
-        self.assertIn('data-ui-ref="index.resolved.new-project"', body)
-        self.assertIn('data-ui-ref="index.resolved.open-existing"', body)
+        self.assertIn('data-ui-ref="projects-directory.new-project"', body)
+        self.assertIn('data-ui-ref="projects-directory.list"', body)
 
     def test_account_menu_still_present_and_functional_markup(self):
         client = self._client_as("gv_admin", 1)

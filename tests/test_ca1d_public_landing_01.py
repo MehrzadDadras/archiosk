@@ -26,7 +26,7 @@ class PublicLandingRouteTests(unittest.TestCase):
         self.client = self.flask_app.test_client()
 
     def test_root_serves_landing_page_for_anonymous_visitor(self):
-        resp = self.client.get("/")
+        resp = self.client.get("/", follow_redirects=True)
         self.assertEqual(resp.status_code, 200)
         body = resp.get_data(as_text=True)
         self.assertIn("landing-page", body)
@@ -37,7 +37,7 @@ class PublicLandingRouteTests(unittest.TestCase):
         self.assertNotIn("Data Room Intelligence", body)
 
     def test_landing_page_has_all_three_entry_actions(self):
-        body = self.client.get("/").get_data(as_text=True)
+        body = self.client.get("/", follow_redirects=True).get_data(as_text=True)
         self.assertIn('data-ui-ref="landing.explore"', body)
         self.assertIn('data-ui-ref="landing.start-trial"', body)
         self.assertIn('data-ui-ref="landing.sign-in"', body)
@@ -46,7 +46,7 @@ class PublicLandingRouteTests(unittest.TestCase):
         self.assertIn('href="/login"', body)
 
     def test_landing_page_makes_no_unsupported_capability_claims(self):
-        body = self.client.get("/").get_data(as_text=True).lower()
+        body = self.client.get("/", follow_redirects=True).get_data(as_text=True).lower()
         for forbidden in ("fully automated procurement", "guaranteed compliance", "autonomous decision"):
             self.assertNotIn(forbidden, body)
 
@@ -108,7 +108,7 @@ class PublicLandingRouteTests(unittest.TestCase):
             sess["user_id"] = 1
             sess["username"] = "landing_admin"
             sess["role"] = "admin"
-        body = client.get("/").get_data(as_text=True)
+        body = client.get("/", follow_redirects=True).get_data(as_text=True)
         self.assertNotIn("landing-page", body)
         self.assertIn("launcher-panel", body)
 
@@ -132,7 +132,7 @@ class ConsolidatedAddendumTests(unittest.TestCase):
             self.assertNotIn("Start Free Trial", body)
 
     def test_knowledge_field_container_present_only_on_landing(self):
-        landing_body = self.client.get("/").get_data(as_text=True)
+        landing_body = self.client.get("/", follow_redirects=True).get_data(as_text=True)
         self.assertIn('id="landing-knowledge-field"', landing_body)
         self.assertIn('aria-hidden="true"', landing_body)
         for path in ("/explore", "/start-trial"):

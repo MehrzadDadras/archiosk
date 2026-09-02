@@ -1,0 +1,13 @@
+{
+  "corpus_id": "WD-NAS-BRIDGE-001",
+  "builder_root": "builder_corpus",
+  "oracle_path": "oracle/wd-nas-bridge-001.md",
+  "ingest_rule": "Register only files beneath builder_corpus; oracle is private evaluation material.",
+  "external_location_rule": "The corpus contains no external-storage path, host, drive letter, or network technology.",
+  "files": [
+    {"file": "Project_Requirements.md", "role": "issued mechanical requirements", "revision": "Rev 0", "status": "issued"},
+    {"file": "Equipment_Schedule.csv", "role": "mechanical equipment schedule", "revision": "Rev 0", "status": "issued"},
+    {"file": "Coordination_Plan.md", "role": "mechanical coordination plan", "revision": "Rev 0", "status": "issued"},
+    {"file": "Roof_Penetration_Detail.md", "role": "architectural roof detail", "revision": "Rev 0", "status": "issued"}
+  ]
+}

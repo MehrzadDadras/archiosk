@@ -62,7 +62,7 @@ class HomeNavigationShellTests(unittest.TestCase):
         client = self.flask_app.test_client()
         self._login(client)
 
-        response = client.get("/")
+        response = client.get("/", follow_redirects=True)
         body = response.get_data(as_text=True)
 
         self.assertEqual(response.status_code, 200)
@@ -83,7 +83,7 @@ class HomeNavigationShellTests(unittest.TestCase):
 
         client = self.flask_app.test_client()
         self._login(client)
-        response = client.get("/")
+        response = client.get("/", follow_redirects=True)
         body = response.get_data(as_text=True)
 
         self.assertNotIn("entry-recent", body)
@@ -109,15 +109,23 @@ class HomeNavigationShellTests(unittest.TestCase):
         # still proves what it's named for (no second listing inside the
         # page's own main content) without being broken by an unrelated,
         # deliberate second surface.
-        after_menu = body[body.index("</nav>"):]
-        self.assertEqual(after_menu.count("rfp.md"), 1)
-        # On /projects itself, "rfp.md" legitimately appears three times
-        # now: once in the top menu's File > Open Project chooser (every
-        # page), once in Lists (present on every page, Section 2), and
-        # once in the actual /projects directory listing this page
-        # renders.
+        # CLAUDE-HOME-UNIFY-01: this test's premise was that Home is a
+        # DIFFERENT page from the directory, so a project listing on Home would
+        # be a second copy of the Lists rail's. Home now IS the directory, so a
+        # listing there is the page's whole purpose rather than a duplicate -
+        # the exact-once count against "/" was asserting the absence of the
+        # thing the page now exists to show.
+        #
+        # What survives is the real invariant, and it is asserted below where it
+        # still means something: on the directory, "rfp.md" appears exactly
+        # three times - the File > Open Project chooser (every page), the Lists
+        # rail (every page), and the directory listing itself. A fourth would be
+        # the duplication this test was written to catch.
+        self.assertEqual(client.get("/").headers["Location"], "/projects")
         directory_body = client.get("/projects").get_data(as_text=True)
         self.assertEqual(directory_body.count("rfp.md"), 3)
+        # And Home really is that same page, not a look-alike.
+        self.assertIn('data-ui-ref="projects-directory.list"', body)
 
     def test_nav_rail_present_with_toggle(self):
         # CLAUDE-P40-E2B1: the old two-state (icon-only/labeled) side-rail
@@ -129,7 +137,7 @@ class HomeNavigationShellTests(unittest.TestCase):
         client = self.flask_app.test_client()
         self._login(client)
 
-        response = client.get("/")
+        response = client.get("/", follow_redirects=True)
         body = response.get_data(as_text=True)
 
         self.assertIn('id="lists-divider"', body)
@@ -141,7 +149,7 @@ class HomeNavigationShellTests(unittest.TestCase):
         client = self.flask_app.test_client()
         self._login(client)
 
-        response = client.get("/")
+        response = client.get("/", follow_redirects=True)
         body = response.get_data(as_text=True)
 
         self.assertIn(">Projects<", body)
@@ -207,11 +215,22 @@ class HomeNavigationShellTests(unittest.TestCase):
         client = self.flask_app.test_client()
         self._login(client, role="read_only")
 
-        response = client.get("/")
+        response = client.get("/", follow_redirects=True)
         body = response.get_data(as_text=True)
 
         self.assertNotIn(">New Project<", body)
-        self.assertIn('data-ui-ref="index.projects-directory"', body)
+        # CLAUDE-HOME-UNIFY-01: index.projects-directory was index.html's
+        # role-independent "All projects" LINK into the directory. Home is the
+        # directory now, so a link to it would be a control pointing at the page
+        # it sits on. The property this test protects - that a non-admin still
+        # reaches the full project directory - is stronger when asserted as
+        # arrival rather than as a link.
+        # Asserted against controls the directory renders in EVERY state. This
+        # fixture's reviewer owns no projects, so the page shows its empty state
+        # rather than a list - and "a non-admin reaches the directory" must hold
+        # whether or not they have anything in it.
+        self.assertIn('data-ui-ref="projects-directory.search"', body)
+        self.assertIn("All Projects", body)
 
 
 if __name__ == "__main__":

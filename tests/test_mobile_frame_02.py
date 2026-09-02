@@ -80,8 +80,14 @@ class TheThreeZonesExistTests(unittest.TestCase):
     """Top header, one active tray, bottom Composer."""
 
     def test_the_header_carries_a_function_switcher(self):
+        # CLAUDE-HOME-UNIFY-01: id="tray-active-label" is gone. It lived ONLY in
+        # the switcher's no-project branch, where it rendered the word
+        # "Workspace" on a page that had none; that branch is deleted with the
+        # gating below. Inside a project the shell.context.identity band names
+        # the real project and conversation, which is what the label was
+        # standing in for.
         self.assertIn('class="tray-switcher"', BASE_HTML)
-        self.assertIn('id="tray-active-label"', BASE_HTML)
+        self.assertIn('class="context-identity"', BASE_HTML)
 
     def test_the_switcher_sits_above_the_work_area_not_inside_it(self):
         """The header is a zone. If the switcher were inside the tray it
@@ -437,19 +443,55 @@ class ItRendersForAnAuthorizedUserTests(unittest.TestCase):
         self.assertNotIn("tray-switcher", body)
         self.assertNotIn("mobile-nav-toggle", body)
 
-    def test_an_authenticated_page_renders_the_switcher(self):
-        body = self.client.get("/").get_data(as_text=True)
-        self.assertIn("tray-switcher", body)
-        self.assertIn("workspace_trays.js", body)
+    def test_the_switcher_is_gated_on_an_open_project_not_on_being_signed_in(self):
+        """CLAUDE-HOME-UNIFY-01 - renamed, and now asks the right question.
 
-    def test_a_project_less_page_offers_only_the_trays_it_has(self):
-        """Eye and Toolbox render only inside an open Workspace, so their
-        buttons must not be server-rendered anywhere else."""
-        body = self.client.get("/").get_data(as_text=True)
+        It used to assert the switcher renders on "/", chosen merely because it
+        was a convenient authenticated page - which is how a workspace control
+        came to be guaranteed on pages that have no workspace. The condition
+        itself is the invariant worth pinning, and this class has no project
+        fixture to open; absence on a real project-less page is proven by a
+        real render in the test below.
+        """
+        gate = 'authenticated and project_id is defined and workspace is defined'
+        i = BASE_HTML.index('class="tray-switcher"')
+        preceding = BASE_HTML[:i]
+        self.assertIn(gate, preceding)
+        # The gate must be the LAST {% if %} opened before the nav - a matching
+        # string somewhere earlier in the file would prove nothing about it.
+        self.assertEqual(preceding.rindex("{% if "), preceding.rindex("{% if " + gate))
+        self.assertIn("workspace_trays.js", BASE_HTML)
+
+    def test_a_project_less_page_offers_no_tray_controls_at_all(self):
+        """CLAUDE-HOME-UNIFY-01 - the same rule, finally applied to all four.
+
+        This test's own intent was never "Lists and Display everywhere": it was
+        that a button must not be rendered for a tray the page does not have.
+        Eye and Toolbox already obeyed it. Lists and Display did not - they were
+        server-rendered on the Projects directory, which has no workspace to
+        switch trays within, so pressing one focused a tray that was not there.
+        The gating extends the rule rather than relaxing it, and this asserts
+        the stricter version.
+        """
+        body = self.client.get("/projects").get_data(as_text=True)
+        self.assertNotIn('class="tray-switcher"', body)
+        for tray in ("lists", "display", "eye", "toolbox"):
+            with self.subTest(tray=tray):
+                self.assertNotIn(f'data-ui-ref="shell.tray-switcher.{tray}"', body)
+
+    def test_the_view_menu_keeps_its_own_tray_controls(self):
+        """The boundary of the change above, asserted rather than assumed.
+
+        View > (Lists/Display/...) carries the SAME data-tray-focus-btn
+        mechanism (CLAUDE-MOBILE-PRIMARY-RESET-01 relocated it there), and it is
+        deliberately untouched: a menu is where you ASK for a panel, which is a
+        different claim from a persistent switcher asserting one is active. Only
+        the switcher was gated. Without this, a later "tidy up all tray controls
+        on project-less pages" would look like finishing the job.
+        """
+        body = self.client.get("/projects").get_data(as_text=True)
         self.assertIn('data-tray-focus-btn="lists"', body)
         self.assertIn('data-tray-focus-btn="display"', body)
-        self.assertNotIn('data-tray-focus-btn="eye"', body)
-        self.assertNotIn('data-tray-focus-btn="toolbox"', body)
 
 
 class TheForegroundLayerTests(unittest.TestCase):

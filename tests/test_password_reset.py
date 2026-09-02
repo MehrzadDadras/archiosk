@@ -108,7 +108,8 @@ class PasswordResetTests(unittest.TestCase):
         # /gateway - _resolve_next_url's own default is now / directly
         # (the consolidated post-sign-in destination), skipping the
         # pointless extra redirect hop through the now-retired route.
-        self.assertEqual(resp.headers["Location"], "/")
+        # CLAUDE-HOME-UNIFY-01: the post-sign-in destination is /projects.
+        self.assertEqual(resp.headers["Location"], "/projects")
 
     # -- forgot-password request is neutral -----------------------------------
 

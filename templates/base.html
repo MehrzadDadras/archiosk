@@ -347,7 +347,23 @@
         </div>
         {% endif %}
 
-        {% if authenticated %}
+        {# CLAUDE-HOME-UNIFY-01: the tray switcher requires an OPEN PROJECT, not
+           merely an authenticated session.
+
+           On a project-less page it rendered a band labelled "Workspace" over
+           two buttons, Lists and Display, that focus trays belonging to a
+           project workspace - on the Projects directory there is no workspace
+           to switch trays within, so the control offered two modes of a shell
+           that is not there. Eye and Toolbox were already project-gated below,
+           which is the same judgement applied to only half the row.
+
+           Deleted by GATING, not by removing the markup: inside a project this
+           row is a real, wired control (static/js/workspace_trays.js) and is
+           untouched. The two inner `project_id is defined` guards below are now
+           structurally redundant, and are deliberately LEFT so this stays a
+           pure gating change rather than a re-indentation of 50 lines that a
+           diff cannot cheaply be read against. #}
+        {% if authenticated and project_id is defined and workspace is defined %}
         {# ---------------- Tray switcher (CLAUDE-MOBILE-FRAME-02) ------------------
            The Product Owner's mobile frame is three persistent zones: a fixed
            compact header, ONE active work tray, and a fixed Composer. This row
@@ -419,10 +435,10 @@
             <form method="post" action="{{ url_for('workspace.start_new_conversation', project_id=project_id) }}" class="context-new-form">
                 <button type="submit" class="context-new-btn" data-ui-ref="shell.context.new-chat">New</button>
             </form>
-            {% else %}
-            <span class="tray-switcher-context" data-ui-ref="shell.tray-switcher.active" aria-live="polite">
-                <span class="tray-switcher-active-label" id="tray-active-label">Workspace</span>
-            </span>
+            {# CLAUDE-HOME-UNIFY-01: the `{% else %}` that stood here rendered a
+               band reading "Workspace" whenever no project was open. The whole
+               nav is now gated on a project being open, so that branch could
+               only ever have been dead markup claiming a workspace existed. #}
             {% endif %}
             <span class="tray-switcher-options">
                 <button type="button" class="tray-switcher-btn" data-ui-ref="shell.tray-switcher.lists"

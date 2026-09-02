@@ -1,10 +1,15 @@
 {% extends "base.html" %}
 {% import "_macros.html" as macros %}
 
-{% block title %}Projects &mdash; Archiosk{% endblock %}
+{% block title %}All Projects &mdash; Archiosk{% endblock %}
 
 {% block content %}
-{% call macros.page_header('Projects') %}
+{# CLAUDE-HOME-UNIFY-01: "All Projects", matching the File > All Projects menu
+   item verbatim. The bare "Projects" said less than the menu entry that leads
+   here, and this view is now the single home destination for a signed-in
+   session - so its heading is the one place that names what you are looking
+   at, and it should name it the same way the navigation does. #}
+{% call macros.page_header('All Projects') %}
     {# CLAUDE-PROJECTS-NEW-ACTION-01: project creation was reachable from this
        page ONLY in its empty state - the moment an admin had one project, the
        directory offered no way to make another, and the landing page's own
@@ -23,10 +28,45 @@
        creation rather than document ingestion). Both render only when empty,
        which is the one state where a large call to action earns its place. #}
     {% if is_admin %}
-    <a class="btn btn-primary" href="{{ url_for('portal.upload') }}" data-ui-ref="projects-directory.new-project">+ New Project</a>
+    {# CLAUDE-HOME-UNIFY-01: carries the operating-environment PRESET the old
+       home offered. index.html preset /upload's radio for an admin whose
+       projects all sit in one environment, so they were not re-answering a
+       settled question; unifying the home would otherwise have dropped that
+       quietly. Preset only when there is exactly ONE accessible environment -
+       with none (a zero-project admin) or several there is nothing to infer,
+       and inferring anyway is how a convenience becomes a wrong default. It
+       stays a pre-selection: /upload's own radio and confirmation checkbox are
+       still the real commissioning step, never bypassed. #}
+    <a class="btn btn-primary" href="{{ url_for('portal.upload', environment=(accessible_environments[0] if accessible_environments | length == 1 else None)) }}" data-ui-ref="projects-directory.new-project">+ New Project</a>
     {% endif %}
     <a class="btn btn-ghost" href="{{ url_for('portal.removed_projects') }}" data-ui-ref="projects-directory.removed-link">Removed Projects</a>
 {% endcall %}
+
+{# CLAUDE-HOME-UNIFY-01: the orientation Composer, MOVED here from
+   templates/index.html rather than reimplemented - same ids, same form, same
+   POST to portal.gateway_orientation, same voice wiring.
+
+   It moved because this page became the home destination for a signed-in
+   session, and index.html now renders only under Developer Mode - which left
+   the block there guarded by a condition that can never be true. Without the
+   move, unifying the home would have silently deleted the only Composer a
+   signed-in session had, against the standing direction that Chat/Composer be
+   functional on every page including project-less ones.
+
+   Placed above the filters deliberately: ask first, narrow second, browse
+   third. The refs keep their `index.orientation.*` names - a data-ui-ref
+   identifies a KIND of control, not the page it sits on, and renaming them
+   would churn the registry and several test files to describe the same
+   control doing the same job. UI_REFERENCE_MAP.md records the new location. #}
+<form class="gateway-orientation-form" id="index-orientation-form" data-ui-ref="index.orientation.form"
+      data-developer-composer-form data-composer-send='[data-ui-ref="index.orientation.submit"]'>
+    <input type="text" class="text-input" id="index-orientation-input" name="message" data-developer-composer-input autocomplete="off" placeholder="Open a project, or ask what you can do here" aria-label="Ask Archiosk">
+    <button type="button" id="index-orientation-voice" class="voice-input-button" data-ui-ref="index.orientation.voice"
+            aria-label="Press and speak - audio is processed by your browser only and is never saved" hidden>&#127908;&#65039;</button>
+    <button type="submit" class="btn btn-ghost" data-ui-ref="index.orientation.submit">Ask</button>
+    <span class="voice-input-status" id="index-orientation-voice-status" data-ui-ref="index.orientation.voice.status" aria-live="polite"></span>
+</form>
+<p class="gateway-orientation-reply" id="index-orientation-reply" data-ui-ref="index.orientation.reply" aria-live="polite" hidden></p>
 
 {# CLAUDE-ENTRY-SIMPLIFY-01: operating-environment filtering lives here now.
 
@@ -119,4 +159,71 @@
 {% endif %}
 
 {% include "components/public_footer.html" %}
+{% endblock %}
+
+{% block extra_scripts %}
+{# CLAUDE-HOME-UNIFY-01: the orientation Composer's own script, moved with it.
+   voice_input.js is the shared, governed engine every Composer-like surface
+   uses - loaded here for the same reason index.html loaded it, never a second
+   speech implementation. #}
+<script src="{{ url_for('static', filename='js/voice_input.js') }}?v={{ static_version }}"></script>
+<script nonce="{{ csp_nonce }}">
+// CLAUDE-VOICE-CONSISTENCY-01 / CLAUDE-POST-SIGNIN-GATEWAY-SIMPLIFICATION-01:
+// ported verbatim from the retired gateway.html's own orientation
+// composer script - same backend route, same voice wiring, only the
+// element ids and the optional environment field are new.
+(function () {
+    var form = document.getElementById('index-orientation-form');
+    var input = document.getElementById('index-orientation-input');
+    var replyEl = document.getElementById('index-orientation-reply');
+    if (!form || !input) return;
+
+    function csrfToken() {
+        var meta = document.querySelector('meta[name="csrf-token"]');
+        return meta ? meta.content : '';
+    }
+
+    function showReply(text) {
+        if (!replyEl) return;
+        replyEl.textContent = text || '';
+        replyEl.hidden = !text;
+    }
+
+    function ask(message) {
+        var formData = new FormData(form);
+        formData.set('message', message);
+        fetch('{{ url_for("portal.gateway_orientation") }}', {
+            method: 'POST',
+            body: formData,
+            headers: { 'X-CSRFToken': csrfToken() },
+            credentials: 'same-origin',
+        }).then(function (resp) {
+            return resp.json();
+        }).then(function (data) {
+            showReply(data.text || '');
+            if (data.kind === 'navigate' && data.url) {
+                window.setTimeout(function () { window.location.href = data.url; }, 350);
+            }
+        }).catch(function () {
+            showReply('Something went wrong - try again.');
+        });
+    }
+
+    form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        var message = input.value.trim();
+        if (!message) return;
+        ask(message);
+    });
+
+    if (window.ArchioskVoiceInput) {
+        window.ArchioskVoiceInput({
+            buttonId: 'index-orientation-voice',
+            statusId: 'index-orientation-voice-status',
+            onTranscript: function (transcript) { input.value = transcript; },
+            onEnd: function () { input.focus(); },
+        });
+    }
+})();
+</script>
 {% endblock %}

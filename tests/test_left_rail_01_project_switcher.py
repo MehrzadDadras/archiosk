@@ -255,7 +255,7 @@ class AdminSurfaceRelocationTests(_BaseTestCase):
         doc = self._ingest("Project Alpha")
         client = self._client()
         body = client.get(f"/projects/{doc.project_id}/workspace").get_data(as_text=True)
-        self.assertIn('data-ui-ref="menu.archiosk.admin.new-project"', body)
+        self.assertIn('data-ui-ref="menu.file.new-project"', body)
         self.assertIn('data-ui-ref="menu.archiosk.admin.security"', body)
         self.assertIn('data-ui-ref="menu.archiosk.admin.operations"', body)
         self.assertIn('data-ui-ref="menu.archiosk.admin.project-data-management"', body)
@@ -295,22 +295,24 @@ class AdminSurfaceRelocationTests(_BaseTestCase):
         self.assertIn('data-ui-ref="menu.account.removed-projects"', body)
 
     def test_new_project_entry_points_are_all_the_same_canonical_route(self):
-        # Section 5's original "no duplicate New Project entry point"
-        # premise is deliberately superseded by CLAUDE-FILE-MENU-
-        # CANONICAL-COMMANDS-01 (Product Owner, explicit): File > New
-        # Project was added alongside the pre-existing Archiosk > Admin
-        # > New Project - the same justified "global command access
-        # (File) vs. administrative surface (Archiosk > Admin)" duality
-        # this session's own redundant-UI audit already accepted for
-        # the Gateway/Admin pair. The real invariant that still holds:
-        # every entry point targets the exact same canonical route,
-        # never a second implementation.
+        # Section 5's ORIGINAL "no duplicate New Project entry point" premise is
+        # live again. CLAUDE-FILE-MENU-CANONICAL-COMMANDS-01 had superseded it,
+        # accepting File > New Project alongside Archiosk > Admin > New Project
+        # as a "global command vs. administrative surface" duality.
+        # CLAUDE-HOME-UNIFY-01 retired the Admin copy: once the Projects
+        # directory became the home destination, that copy and the directory's
+        # own header action rendered the same label on the same page, and
+        # File > New Project already covered every page under the same gate.
+        #
+        # Both invariants are asserted, because only one of them was ever the
+        # point. Exactly one bare /upload entry point in the menu system, AND it
+        # is the canonical route rather than a second implementation.
         doc = self._ingest("Project Alpha")
         client = self._client()
         body = client.get(f"/projects/{doc.project_id}/workspace").get_data(as_text=True)
-        self.assertEqual(body.count('href="/upload"'), 2)
+        self.assertEqual(body.count('href="/upload"'), 1)
         self.assertIn('data-ui-ref="menu.file.new-project"', body)
-        self.assertIn('data-ui-ref="menu.archiosk.admin.new-project"', body)
+        self.assertNotIn('data-ui-ref="menu.archiosk.admin.new-project"', body)
 
     def test_admin_functions_also_absent_from_portfolio_rail(self):
         # Portfolio browsing (no Project open) - same relocation applies,
@@ -322,7 +324,7 @@ class AdminSurfaceRelocationTests(_BaseTestCase):
         body = client.get("/projects").get_data(as_text=True)
         self.assertNotIn('data-ui-ref="lists.new-project"', body)
         self.assertNotIn('data-ui-ref="lists.security"', body)
-        self.assertIn('data-ui-ref="menu.archiosk.admin.new-project"', body)
+        self.assertIn('data-ui-ref="menu.file.new-project"', body)
 
 
 if __name__ == "__main__":

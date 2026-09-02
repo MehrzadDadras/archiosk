@@ -209,14 +209,18 @@ class ProtectedRouteTests(_BaseTestCase):
 
 class SuccessfulSignInTests(_BaseTestCase):
     def test_normal_sign_in_reaches_the_gateway(self):
-        # CLAUDE-POST-SIGNIN-GATEWAY-SIMPLIFICATION-01, Option C: was
-        # /gateway - _resolve_next_url's own default is now / directly
-        # (the consolidated post-sign-in destination), skipping the
-        # pointless extra redirect hop through the now-retired route.
+        # CLAUDE-HOME-UNIFY-01: /projects, the single home destination for a
+        # signed-in session. Same argument Option C made when it stopped routing
+        # logins through /gateway, applied one step further: "/" now only
+        # redirects onward to /projects for an ordinary session, so naming the
+        # destination directly lands sign-in on the directory in ONE response.
+        # Asserting the Location header rather than following it is the point -
+        # a test that followed redirects would pass either way and would not
+        # notice the hop coming back.
         client = self.flask_app.test_client()
         resp = client.post("/login", data={"username": "vw5_admin", "password": "x"}, follow_redirects=False)
         self.assertEqual(resp.status_code, 302)
-        self.assertEqual(resp.headers["Location"], "/")
+        self.assertEqual(resp.headers["Location"], "/projects")
 
     def test_safe_next_after_a_direct_protected_link_is_preserved(self):
         # Existing, already-security-tested behaviour (test_p40d1_auth_
@@ -360,16 +364,16 @@ class GatewayFunctionalChoicesTests(_BaseTestCase):
         # checkbox is still the real commissioning step - a preset only
         # pre-selects the radio, it never bypasses confirmation.
         client = self._client_as("vw5_admin", 1)
-        body = client.get("/").get_data(as_text=True)
+        body = client.get("/", follow_redirects=True).get_data(as_text=True)
         self.assertNotIn("Client / Owner Projects", body)
         self.assertNotIn("Design-Builder / Proponent Projects", body)
-        self.assertIn('data-ui-ref="index.resolved.new-project"', body)
+        self.assertIn('data-ui-ref="projects-directory.new-project"', body)
         self.assertIn('href="/upload?environment=client_owner"', body)
 
     def test_non_admin_does_not_see_create_project_action(self):
         client = self._client_as("vw5_reviewer", 2, role="read_only")
-        body = client.get("/").get_data(as_text=True)
-        self.assertNotIn('data-ui-ref="index.resolved.new-project"', body)
+        body = client.get("/", follow_redirects=True).get_data(as_text=True)
+        self.assertNotIn('data-ui-ref="projects-directory.new-project"', body)
 
     def test_open_existing_project_action_present_and_functional(self):
         # CLAUDE-GO-NEUTRAL-ENTRY-01: one unfiltered inline reveal over
@@ -383,8 +387,8 @@ class GatewayFunctionalChoicesTests(_BaseTestCase):
         # from the retired gateway.html to / under the new
         # index.resolved.open-existing ref.
         client = self._client_as("vw5_admin", 1)
-        body = client.get("/").get_data(as_text=True)
-        self.assertIn('data-ui-ref="index.resolved.open-existing"', body)
+        body = client.get("/", follow_redirects=True).get_data(as_text=True)
+        self.assertIn('data-ui-ref="projects-directory.list"', body)
         self.assertIn(_DISTINCTIVE_PROJECT_NAME, body)
         # /projects/choose itself is unchanged and still independently
         # reachable (the header's "Switch Project" Vestibule uses it).
@@ -414,19 +418,19 @@ class NonWorkspaceFunctionAccessTests(_BaseTestCase):
         # every authenticated page including the consolidated /.
         for username, uid, role in (("vw5_admin", 1, "admin"), ("vw5_reviewer", 2, "read_only")):
             client = self._client_as(username, uid, role=role)
-            body = client.get("/").get_data(as_text=True)
+            body = client.get("/", follow_redirects=True).get_data(as_text=True)
             self.assertIn('href="/removed-projects"', body, username)
             resp = client.get("/removed-projects")
             self.assertEqual(resp.status_code, 200, username)
 
     def test_security_reachable_from_gateway_for_admin_only(self):
         client = self._client_as("vw5_admin", 1)
-        body = client.get("/").get_data(as_text=True)
+        body = client.get("/", follow_redirects=True).get_data(as_text=True)
         self.assertIn('href="/security/"', body)
 
     def test_security_link_absent_from_gateway_for_non_admin(self):
         client = self._client_as("vw5_reviewer", 2, role="read_only")
-        body = client.get("/").get_data(as_text=True)
+        body = client.get("/", follow_redirects=True).get_data(as_text=True)
         self.assertNotIn('href="/security/"', body)
         self.assertNotIn(">Security<", body)
 

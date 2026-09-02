@@ -861,6 +861,52 @@ def index():
     if not is_authenticated():
         return render_template('landing.html')
 
+    # CLAUDE-HOME-UNIFY-01: an ordinary authenticated visit goes to the
+    # Projects directory, the single home destination for a signed-in session
+    # (Product Owner, 2026-09-01).
+    #
+    # SUPERSEDES CLAUDE-POST-SIGNIN-GATEWAY-SIMPLIFICATION-01 Option C, which
+    # made this route the consolidated post-sign-in destination and rendered
+    # its own entry shell below. That shell showed a capped six-project card
+    # list whose own "See all projects" link pointed at portal.projects_list -
+    # so the directory was permanently one hop behind the page that exists to
+    # find a project. Option C's reasoning still holds; what changed is which
+    # of the two surfaces is the destination.
+    #
+    # Anonymous behaviour above is deliberately UNCHANGED: "/" is still the
+    # public front door (CLAUDE-CA1D-PUBLIC-LANDING-01). This fires only for a
+    # session that has already authenticated.
+    #
+    # 302, not 301: a permanent redirect would be cached against this URL and
+    # would then also apply to the ANONYMOUS landing page served from it,
+    # sending a signed-out visitor to a login wall they never asked for.
+    #
+    # THE DEVELOPER-MODE CARVE-OUT, and why it is not a hedge on the decision.
+    # templates/index.html is the ONLY place the Developer Composer home
+    # surface renders (developer.home.composer.form ->
+    # portal.developer_home_composer, plus the application-scoped CCN controls
+    # and the reveal/history workbench). Redirecting unconditionally would not
+    # have "unified the home" - it would have silently destroyed a real,
+    # governed, separately-tested admin tool that has no other entry point.
+    # Making tests green by deleting the feature they protect is the one
+    # outcome this repository's own testing discipline rules out.
+    #
+    # Developer Mode is an explicit, admin-only session flag the user turns ON
+    # from Archiosk > Developer Mode (toggle_developer_mode, above). It is not
+    # an ordinary session and it is not the home experience: every ordinary
+    # signed-in session - which is all of them, unless an admin has deliberately
+    # asked for this - lands on the unified directory. Sign-in itself points
+    # straight at portal.projects_list regardless (see _resolve_next_url), so
+    # even a developer-mode admin is DELIVERED to the unified home; this only
+    # governs what "/" itself shows once they go looking for it.
+    #
+    # The durable fix is to relocate that surface onto /admin/developer-tools,
+    # which already exists and is already admin-gated, and then delete this
+    # branch. That is a real piece of work with its own tests, not something to
+    # do as a side effect of a routing change. Recorded, not forgotten.
+    if not (is_admin() and session.get('developer_mode')):
+        return redirect(url_for('portal.projects_list'))
+
     registry = get_registry(current_app)
     store = CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"])
     governance_log = get_governance_log(current_app)
@@ -966,18 +1012,30 @@ def health():
 def _resolve_next_url() -> str:
     """?next= target after a successful/already-satisfied login.
 
-    CLAUDE-POST-SIGNIN-GATEWAY-SIMPLIFICATION-01, Option C: was
-    portal.gateway - that route now only redirects here (see gateway(),
-    below), so pointing new logins at it directly skips a pointless
-    extra hop. portal.index is now the one consolidated post-sign-in
-    destination: it establishes/derives the user's operating environment
-    and shows that environment's projects itself.
+    CLAUDE-HOME-UNIFY-01: portal.projects_list, the single home
+    destination for a signed-in session (Product Owner, 2026-09-01).
+
+    Pointing here DIRECTLY rather than at portal.index is the same
+    argument CLAUDE-POST-SIGNIN-GATEWAY-SIMPLIFICATION-01 Option C made
+    when it stopped routing logins through portal.gateway: index() now
+    only redirects onward to this exact endpoint for an ordinary
+    session, so naming it here lands sign-in on the directory in one
+    response instead of two. It also makes the destination unconditional
+    - index()'s developer-mode branch governs what "/" shows, never
+    where a successful sign-in arrives.
+
+    The fallback below matters as much as the default. It is what an
+    off-site or protocol-relative ?next= is replaced WITH, so it must
+    name the same destination - a fallback still pointing at
+    portal.index would reintroduce the hop for exactly the requests that
+    were already suspicious.
 
     Only follows same-site relative paths -- ?next=https://evil.example
     would otherwise redirect an authenticated session off-site."""
-    next_url = request.args.get('next') or url_for('portal.index')
+    home = url_for('portal.projects_list')
+    next_url = request.args.get('next') or home
     if not next_url.startswith('/') or next_url.startswith('//'):
-        next_url = url_for('portal.index')
+        next_url = home
     return next_url
 
 

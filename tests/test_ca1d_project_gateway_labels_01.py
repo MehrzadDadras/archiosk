@@ -26,6 +26,7 @@ Run via:
 
     python -m unittest discover -s tests -v
 """
+# CLAUDE-HOME-UNIFY-01: same intent, new refs. The neutral entry actions moved with the home destination - index.resolved.new-project is now the directory's own projects-directory.new-project (same admin gate, same /upload target, still exactly one), and index.resolved.open-existing is the directory's project list. What is asserted is unchanged: one neutral create action, one way to open an existing project, never one pair per stakeholder category.
 from __future__ import annotations
 
 import io
@@ -115,26 +116,26 @@ class GatewayNeutralEntryTests(_BaseGatewayLabelsTestCase):
 
     def test_no_stakeholder_category_headings_at_the_front_door(self):
         client = self._client_as("gl_admin", 1)
-        body = client.get("/").get_data(as_text=True)
+        body = client.get("/", follow_redirects=True).get_data(as_text=True)
         self.assertNotIn("Client / Owner Projects", body)
         self.assertNotIn("Design-Builder / Proponent Projects", body)
 
     def test_gateway_offers_one_new_and_one_open_existing_action_for_admin(self):
         self._ingest(owner="gl_admin", project_name="Fixture Project", environment=CLIENT_OWNER)
         client = self._client_as("gl_admin", 1)
-        body = client.get("/").get_data(as_text=True)
-        self.assertIn('data-ui-ref="index.resolved.new-project"', body)
-        self.assertIn('data-ui-ref="index.resolved.open-existing"', body)
+        body = client.get("/", follow_redirects=True).get_data(as_text=True)
+        self.assertIn('data-ui-ref="projects-directory.new-project"', body)
+        self.assertIn('data-ui-ref="projects-directory.list"', body)
         # Exactly one of each - not one per stakeholder category.
-        self.assertEqual(body.count('data-ui-ref="index.resolved.new-project"'), 1)
-        self.assertEqual(body.count('data-ui-ref="index.resolved.open-existing"'), 1)
+        self.assertEqual(body.count('data-ui-ref="projects-directory.new-project"'), 1)
+        self.assertEqual(body.count('data-ui-ref="projects-directory.list"'), 1)
 
     def test_new_project_hidden_from_non_admin_but_open_existing_still_shown(self):
         self._ingest(owner="gl_reviewer", project_name="Fixture Project", environment=CLIENT_OWNER)
         client = self._client_as("gl_reviewer", 2, role="read_only")
-        body = client.get("/").get_data(as_text=True)
-        self.assertNotIn('data-ui-ref="index.resolved.new-project"', body)
-        self.assertIn('data-ui-ref="index.resolved.open-existing"', body)
+        body = client.get("/", follow_redirects=True).get_data(as_text=True)
+        self.assertNotIn('data-ui-ref="projects-directory.new-project"', body)
+        self.assertIn('data-ui-ref="projects-directory.list"', body)
 
     def test_new_project_link_carries_no_environment_preset(self):
         """The old two doors each deep-linked /upload?environment=... -
@@ -143,7 +144,7 @@ class GatewayNeutralEntryTests(_BaseGatewayLabelsTestCase):
         A zero-project admin fixture (State 1) still offers New Project
         with no preset - the same property this test always checked."""
         client = self._client_as("gl_admin", 1)
-        body = client.get("/").get_data(as_text=True)
+        body = client.get("/", follow_redirects=True).get_data(as_text=True)
         self.assertIn('href="/upload"', body)
         self.assertNotIn('href="/upload?environment=', body)
 
@@ -158,9 +159,9 @@ class GatewayNeutralEntryTests(_BaseGatewayLabelsTestCase):
         project never reaches."""
         self._ingest(owner="gl_admin", project_name="Fixture Project", environment=CLIENT_OWNER)
         client = self._client_as("gl_admin", 1)
-        body = client.get("/").get_data(as_text=True)
+        body = client.get("/", follow_redirects=True).get_data(as_text=True)
         self.assertNotIn('href="/projects/choose?environment=', body)
-        self.assertIn('data-ui-ref="index.resolved.open-existing"', body)
+        self.assertIn('data-ui-ref="projects-directory.list"', body)
 
     def test_entry_shows_one_neutral_list_and_the_directory_filters_it(self):
         """CLAUDE-ENTRY-SIMPLIFY-01 restores this test's ORIGINAL premise.
@@ -193,8 +194,14 @@ class GatewayNeutralEntryTests(_BaseGatewayLabelsTestCase):
         client = self._client_as("gl_admin", 1)
 
         # Entry: one list, no side asked for, both projects reachable.
-        body = client.get("/").get_data(as_text=True)
-        entry_section = body[body.index('<section class="entry">'):]
+        # CLAUDE-HOME-UNIFY-01: the neutral list is the directory's own project
+        # list now; index.html's <section class="entry"> went with the old home.
+        # Scoped to that list for the same reason it was scoped before - the
+        # projects must be in the LIST, not merely somewhere on a page that also
+        # carries the Lists rail and the File > Open Project chooser.
+        body = client.get("/", follow_redirects=True).get_data(as_text=True)
+        start = body.index('data-ui-ref="projects-directory.list"')
+        entry_section = body[start:body.index("</ul>", start)]
         self.assertIn("Riverside Client Project", entry_section)
         self.assertIn("Riverside Bidder Project", entry_section)
 
@@ -239,7 +246,7 @@ class GatewayNeutralEntryTests(_BaseGatewayLabelsTestCase):
 
     def test_open_existing_empty_state_is_one_neutral_message(self):
         client = self._client_as("gl_admin", 1)
-        body = client.get("/").get_data(as_text=True)
+        body = client.get("/", follow_redirects=True).get_data(as_text=True)
         self.assertIn("No projects yet.", body)
         self.assertNotIn("No Client / Owner projects yet.", body)
         self.assertNotIn("No Design-Builder / Proponent projects yet.", body)

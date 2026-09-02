@@ -92,7 +92,9 @@ class CsrfProtectionTests(unittest.TestCase):
         # Both success and CSRF rejection are now 302, so this asserts the
         # DESTINATION and the session too - otherwise this test would pass
         # against a broken build that redirected every login to /login.
-        self.assertEqual(response.headers["Location"], "/")
+        # CLAUDE-HOME-UNIFY-01: _resolve_next_url names the Projects directory
+        # directly - the single home destination for a signed-in session.
+        self.assertEqual(response.headers["Location"], "/projects")
         self.assertTrue(self._is_signed_in())
 
     def test_post_with_wrong_token_is_rejected(self):

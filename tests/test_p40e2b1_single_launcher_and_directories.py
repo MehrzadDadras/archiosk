@@ -138,7 +138,7 @@ class SingleLeftPanelTests(_BaseTestCase):
     def test_exactly_one_left_panel_on_non_workspace_pages(self):
         client = self._client_as("p40e2b1_owner", 1)
         for url in ("/", "/projects", "/upload", "/removed-projects"):
-            body = client.get(url).get_data(as_text=True)
+            body = client.get(url, follow_redirects=True).get_data(as_text=True)
             self.assertEqual(body.count('id="launcher-panel"'), 1, url)
 
     def test_case_workspace_grid_no_longer_declares_a_lists_area(self):
@@ -162,7 +162,7 @@ class TopBarSpansShellTests(_BaseTestCase):
     def test_top_bar_renders_identically_on_workspace_and_non_workspace_pages(self):
         client = self._client_as("p40e2b1_owner", 1)
         for url in (f"/projects/{self.project_id}/workspace", "/", "/projects"):
-            body = client.get(url).get_data(as_text=True)
+            body = client.get(url, follow_redirects=True).get_data(as_text=True)
             self.assertEqual(body.count('class="workspace-topbar"'), 1, url)
 
     def test_top_bar_is_a_sibling_of_app_shell_body_not_nested_inside_it(self):
@@ -186,7 +186,7 @@ class TopBarSpansShellTests(_BaseTestCase):
         self.assertIn('id="workspace-layout-menu"', workspace_body)
         self.assertIn('id="toolbox-divider"', workspace_body)
 
-        home_body = client.get("/").get_data(as_text=True)
+        home_body = client.get("/", follow_redirects=True).get_data(as_text=True)
         self.assertNotIn('id="workspace-layout-menu"', home_body)
         self.assertNotIn('id="toolbox-divider"', home_body)
 
@@ -484,7 +484,7 @@ class PanelBehaviorIntactTests(_BaseTestCase):
         client = self._client_as("p40e2b1_owner", 1)
         for view in (None, "documents", "investigations", "chats"):
             url = f"/projects/{self.project_id}/workspace" + (f"?view={view}" if view else "")
-            body = client.get(url).get_data(as_text=True)
+            body = client.get(url, follow_redirects=True).get_data(as_text=True)
             self.assertIn('id="conversation-dock-resize-handle"', body, url)
 
     def test_narrow_screen_drawer_rules_exist_for_both_panels(self):

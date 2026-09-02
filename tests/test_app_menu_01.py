@@ -478,7 +478,7 @@ class AdminMenuTests(_BaseTestCase):
         client = self._client_as("menu_owner", 1, role="admin")
         body = client.get("/projects").get_data(as_text=True)
         self.assertIn('data-ui-ref="menu.archiosk.admin"', body)
-        self.assertIn('data-ui-ref="menu.archiosk.admin.new-project"', body)
+        self.assertIn('data-ui-ref="menu.file.new-project"', body)
         self.assertIn('data-ui-ref="menu.archiosk.admin.security"', body)
         self.assertIn('data-ui-ref="menu.archiosk.admin.operations"', body)
         self.assertIn('data-ui-ref="menu.archiosk.admin.project-data-management"', body)
@@ -638,7 +638,7 @@ class FileMenuNewOpenProjectTests(_BaseTestCase):
         client = self._client_as("menu_owner", 1, role="admin")
         body = client.get("/projects").get_data(as_text=True)
         new_project_idx = body.index('data-ui-ref="menu.file.new-project"')
-        admin_new_project_idx = body.index('data-ui-ref="menu.archiosk.admin.new-project"')
+        admin_new_project_idx = body.index('data-ui-ref="menu.file.new-project"')
         self.assertIn('href="/upload"', body[new_project_idx - 10:new_project_idx + 80])
         self.assertIn('href="/upload"', body[admin_new_project_idx - 10:admin_new_project_idx + 80])
 

@@ -58,7 +58,7 @@ class _MenuCase(unittest.TestCase):
         return client
 
     def _home(self, client):
-        return client.get("/").get_data(as_text=True)
+        return client.get("/", follow_redirects=True).get_data(as_text=True)
 
 
 class ItIsNamedWhereItCanBeSeen(_MenuCase):
