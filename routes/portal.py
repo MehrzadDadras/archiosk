@@ -646,7 +646,16 @@ def developer_tools():
     projects = _developer_tool_projects()
     selected_id = request.args.get("project_id", "")
     selected = next((item for item in projects if item["project_id"] == selected_id), None)
-    return render_template("developer_tools.html", projects=projects, selected=selected)
+    return render_template(
+        "developer_tools.html",
+        projects=projects,
+        selected=selected,
+        developer_home_messages=_developer_home_messages(),
+        developer_home_chats=_developer_home_chats(),
+        developer_home_current_chat_id=session.get("developer_home_current_chat_id"),
+        developer_home_ccn_context=_developer_home_context(),
+        developer_application_selection=session.get("developer_application_selection"),
+    )
 
 
 @portal_bp.route('/admin/developer-tools/reset-analysis', methods=['POST'])
@@ -819,156 +828,9 @@ def favicon_ico():
 
 @portal_bp.route('/')
 def index():
-    """
-    Project-first entry point: "what project are we working on," not a
-    marketing page and not "how can I help you today." Authenticated
-    visitors see a small, restrained recent-projects list - see
-    _project_summary for the indicator set.
-
-    CLAUDE-P40-VW5: an anonymous visit used to render this same
-    template's own "identity line + sign-in link" branch, then was
-    changed to redirect straight to Sign-in instead ("a fresh
-    unauthenticated visit to the normal application entry route must
-    begin at Sign-in").
-
-    CLAUDE-CA1D-PUBLIC-LANDING-01: superseded by a new, explicit
-    Product Owner decision - archiosk.com's root now needs to be a real
-    public front door for a first-time stranger, not an immediate
-    redirect to a bare credentials form. Renders the new public landing
-    page (templates/landing.html, its own standalone shell - never
-    base.html/auth_shell.html) instead of redirecting. Authenticated
-    behavior below is completely unchanged; Sign In on that landing
-    page still goes straight to portal.login, so direct /login access
-    and the existing authentication flow are both fully preserved.
-
-    CLAUDE-POST-SIGNIN-GATEWAY-SIMPLIFICATION-01, Option C: this is now
-    ALSO the consolidated post-sign-in destination (see
-    _resolve_next_url, below, and the retired /gateway route further
-    down this file) - base.html's own shell already rendered correctly
-    with no project open on this exact route before this stage (proven,
-    not assumed: this route, /projects, and /upload all already did),
-    so consolidating onto it needed no new project-less-shell work, only
-    real content for the state itself. The one genuinely new piece is
-    the operating-environment entry sequence the Product Owner's own
-    disposition requires: establish/derive the user's authorized
-    operating environment(s) -> show that environment's own projects ->
-    enter a project -> GO orients. `?environment=<value>` is how a
-    multi-environment user's explicit choice (or a returning single-
-    environment user's own bookmark/link) reaches this route - resolved
-    ONLY against `accessible_environments` below, so an unauthorized or
-    stale value simply falls back to "ask," never a silent bypass.
-    """
     if not is_authenticated():
         return render_template('landing.html')
-
-    # CLAUDE-HOME-UNIFY-01: an ordinary authenticated visit goes to the
-    # Projects directory, the single home destination for a signed-in session
-    # (Product Owner, 2026-09-01).
-    #
-    # SUPERSEDES CLAUDE-POST-SIGNIN-GATEWAY-SIMPLIFICATION-01 Option C, which
-    # made this route the consolidated post-sign-in destination and rendered
-    # its own entry shell below. That shell showed a capped six-project card
-    # list whose own "See all projects" link pointed at portal.projects_list -
-    # so the directory was permanently one hop behind the page that exists to
-    # find a project. Option C's reasoning still holds; what changed is which
-    # of the two surfaces is the destination.
-    #
-    # Anonymous behaviour above is deliberately UNCHANGED: "/" is still the
-    # public front door (CLAUDE-CA1D-PUBLIC-LANDING-01). This fires only for a
-    # session that has already authenticated.
-    #
-    # 302, not 301: a permanent redirect would be cached against this URL and
-    # would then also apply to the ANONYMOUS landing page served from it,
-    # sending a signed-out visitor to a login wall they never asked for.
-    #
-    # THE DEVELOPER-MODE CARVE-OUT, and why it is not a hedge on the decision.
-    # templates/index.html is the ONLY place the Developer Composer home
-    # surface renders (developer.home.composer.form ->
-    # portal.developer_home_composer, plus the application-scoped CCN controls
-    # and the reveal/history workbench). Redirecting unconditionally would not
-    # have "unified the home" - it would have silently destroyed a real,
-    # governed, separately-tested admin tool that has no other entry point.
-    # Making tests green by deleting the feature they protect is the one
-    # outcome this repository's own testing discipline rules out.
-    #
-    # Developer Mode is an explicit, admin-only session flag the user turns ON
-    # from Archiosk > Developer Mode (toggle_developer_mode, above). It is not
-    # an ordinary session and it is not the home experience: every ordinary
-    # signed-in session - which is all of them, unless an admin has deliberately
-    # asked for this - lands on the unified directory. Sign-in itself points
-    # straight at portal.projects_list regardless (see _resolve_next_url), so
-    # even a developer-mode admin is DELIVERED to the unified home; this only
-    # governs what "/" itself shows once they go looking for it.
-    #
-    # The durable fix is to relocate that surface onto /admin/developer-tools,
-    # which already exists and is already admin-gated, and then delete this
-    # branch. That is a real piece of work with its own tests, not something to
-    # do as a side effect of a routing change. Recorded, not forgotten.
-    if not (is_admin() and session.get('developer_mode')):
-        return redirect(url_for('portal.projects_list'))
-
-    registry = get_registry(current_app)
-    store = CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"])
-    governance_log = get_governance_log(current_app)
-
-    # CLAUDE-ENTRY-SIMPLIFY-01: the two-card "Choose where you'd like to
-    # work" gate is RETIRED, and nothing replaces it here.
-    #
-    # It looked like a governed choice and was not one. It filtered these six
-    # rows for one page load, persisted nothing, granted no authority, set no
-    # account role, and was forgotten on the next request - while asking the
-    # user, in the product's own voice, to pick a side. A surface must not
-    # appear to carry authority it does not have.
-    #
-    # It also only ever appeared for people whose projects span BOTH
-    # environments, which in practice means admins - so the one population
-    # that most needs a fast way into their work got an extra door.
-    #
-    # Entry is now literally the accepted principle again: sign in -> see the
-    # projects you can access -> open one. Genuinely useful environment
-    # FILTERING did not disappear; it moved to projects_list, where it sits
-    # beside search and sort and reads as what it is. See GO-NEUTRAL-ENTRY-01,
-    # whose principle this restores rather than reinterprets.
-    accessible_environments = _accessible_operating_environments(registry, store)
-
-    # Retiring the gate must not cost the one genuinely useful thing it did:
-    # pre-selecting /upload's operating-environment radio so an admin who only
-    # ever works one side is not re-answering a settled question. Presetting
-    # from an UNAMBIGUOUS fact (they have projects in exactly one environment)
-    # rather than from a choice we asked them to make is the same convenience
-    # without the false question - and it stays a pre-selection only: /upload's
-    # own radio and confirmation checkbox remain the real commissioning step,
-    # never bypassed. With more than one environment in play there is nothing
-    # to infer, so nothing is preset.
-    preset_environment = accessible_environments[0] if len(accessible_environments) == 1 else None
-
-    accessible = _accessible_documents(registry, store)
-    workspaces_by_project = {
-        document.project_id: _safe_workspace(store, document.project_id)
-        for document in accessible
-    }
-    documents = sorted(accessible, key=lambda d: d.ingested_at, reverse=True)
-    recent_projects = [
-        _project_summary(document, workspaces_by_project[document.project_id], governance_log.read(document.project_id))
-        for document in documents[:6]
-    ]
-
-    return render_template(
-        'index.html',
-        accessible_environments=accessible_environments,
-        preset_environment=preset_environment,
-        operating_environment_labels=OPERATING_ENVIRONMENT_LABELS,
-        operating_environment_subtitles=OPERATING_ENVIRONMENT_SUBTITLES,
-        recent_projects=recent_projects,
-        developer_home_messages=_developer_home_messages() if is_admin() and session.get("developer_mode") else [],
-        developer_home_chats=_developer_home_chats() if is_admin() and session.get("developer_mode") else [],
-        developer_home_current_chat_id=session.get("developer_home_current_chat_id") if is_admin() and session.get("developer_mode") else None,
-        developer_home_ccn_context=(_developer_home_context()
-                                    if is_admin() and session.get("developer_mode") else None),
-        developer_application_selection=(session.get("developer_application_selection")
-                                         if is_admin() and session.get("developer_mode") else None),
-    )
-
+    return redirect(url_for('portal.projects_list'))
 
 @portal_bp.route('/health')
 def health():

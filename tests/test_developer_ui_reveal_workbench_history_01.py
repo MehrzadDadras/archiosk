@@ -19,11 +19,11 @@ class DeveloperUiRevealWorkbenchHistoryTests(unittest.TestCase):
         shutil.rmtree(self.tmp, ignore_errors=True)
 
     def test_reveal_is_server_session_gated_and_maps_inventory_identity(self):
-        response = self.client.get("/")
-        self.assertNotIn(b"TPL-001", response.data)
+        response = self.client.get("/admin/developer-tools")
+        self.assertNotIn(b"TPL-012", response.data)
         self.client.post("/developer-mode/ui-reveal")
-        response = self.client.get("/")
-        self.assertIn(b"TPL-001 \xc2\xb7 Home", response.data)
+        response = self.client.get("/admin/developer-tools")
+        self.assertIn(b"TPL-012 \xc2\xb7 Developer Tools", response.data)
         self.assertIn(b"Reveal Template IDs" if False else b"Hide Template IDs", response.data)
 
     def test_client_cannot_fabricate_template_context(self):
@@ -46,12 +46,12 @@ class DeveloperUiRevealWorkbenchHistoryTests(unittest.TestCase):
         to, which is stronger: a renamed button still passes, a removed
         capability does not.
         """
-        response = self.client.get("/")
+        response = self.client.get("/admin/developer-tools")
         self.assertEqual(response.data.count(b'data-ui-ref="developer.home.composer.form"'), 1)
         self.assertIn(b'data-developer-workbench', response.data)
         self.assertIn(b"/developer-composer/new-chat", response.data)
         self.client.post("/developer-composer", data={"message": "Inspect the home page"})
-        response = self.client.get("/")
+        response = self.client.get("/admin/developer-tools")
         self.assertIn(b"Inspect the home page", response.data)
         self.assertIn(b"/developer-composer/delete-chat", response.data)
 

@@ -52,4 +52,136 @@
 {% else %}
 <section class="workspace-pane"><p class="pane-note">Choose a project to inspect its bounded reset operations.</p></section>
 {% endif %}
+    <section class="developer-home-composer developer-chat-workbench" data-ui-ref="developer.home.composer" data-developer-workbench aria-label="Developer Mode Composer">
+        {# CLAUDE-ONE-COMPOSER-01: this surface no longer presents itself as a
+           second Composer.
+
+           It said "Developer Composer" in an <h2>, offered "New Chat", and
+           listed its own conversation history permanently beside the message
+           box. Strip the source-code names and a user would reasonably conclude
+           ARCHIOSK has two chat systems - because it visibly did.
+
+           The product had already decided this twice; this surface was simply
+           never brought in line:
+             - CLAUDE-P40-E1 removed the aperture's own composer under the
+               "exactly one composer in the Workspace DOM" requirement;
+             - CLAUDE-MOBILE-PRIMARY-RESET-01 relocated the conversation-history
+               tray out of the composing area, because "which conversations
+               exist is a question that belongs to context, not to composing".
+
+           So this is not new doctrine - it is the last surviving instance of a
+           pattern already eliminated. Developer Mode remains a real, distinct
+           CONTEXT (application-scoped, session-stored, never project evidence);
+           what is removed is the claim that it is a different Composer. The
+           DEVELOPER MODE badge already states the context, which is what made
+           the heading redundant machinery rather than information. #}
+        <div class="developer-home-composer-heading">
+            <h2 class="visually-hidden">GO</h2>
+            {% if developer_ui_reveal and template_identity %}<span class="developer-template-identity-inline">{{ template_identity.template_id }} · {{ template_identity.name }}</span>{% endif %}
+            <form method="post" action="{{ url_for('portal.developer_home_new_chat') }}" class="developer-new-chat-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                {# "New", matching chat.dock.new-conversation. "New Chat" was a
+                   second word for an act the product already names. #}
+                <button type="submit" class="btn btn-ghost btn-small"
+                        data-ui-ref="developer.home.new-conversation"
+                        aria-label="Start a new conversation">New</button>
+            </form>
+            {% if developer_home_ccn_context and developer_home_ccn_context.status == 'active' %}
+            <span class="developer-ccn-indicator" data-ui-ref="developer.ccn.active">CCN: {{ developer_home_ccn_context.title }}</span>
+            {% endif %}
+        </div>
+        {# History is context, available on request - not a permanent band beside
+           the message box. Same progressive-disclosure grammar the rest of the
+           app uses, and the same conclusion CLAUDE-MOBILE-PRIMARY-RESET-01
+           reached for the project conversation. #}
+        {% if developer_home_chats %}
+        <details class="developer-chat-history-disclosure" data-ui-ref="developer.chat.history.disclosure">
+            <summary class="workspace-menubar-item">Conversations ({{ developer_home_chats|length }})</summary>
+        <div class="developer-chat-history" data-ui-ref="developer.chat.history" aria-label="Conversation history">
+            {% for chat in developer_home_chats|reverse %}
+            <details class="developer-chat-history-row" data-chat-id="{{ chat.id }}" {% if chat.id == developer_home_current_chat_id %}open{% endif %}>
+                <summary aria-label="{{ chat.title }}">{{ '⌄' if chat.id == developer_home_current_chat_id else '›' }} {{ chat.title }} · {{ chat.updated_at[:16]|replace('T', ' ') }}</summary>
+                {% if chat.id == developer_home_current_chat_id %}
+                <form method="post" action="{{ url_for('portal.developer_home_delete_chat') }}" class="developer-delete-chat-form">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="chat_id" value="{{ chat.id }}">
+                    <label>Type DELETE CHAT to remove this conversation
+                        <input type="text" name="confirmation" autocomplete="off">
+                    </label>
+                    <button type="submit" class="btn btn-ghost btn-small">Delete</button>
+                </form>
+                {% else %}
+                <form method="post" action="{{ url_for('portal.developer_home_select_chat') }}" class="developer-select-chat-form">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="chat_id" value="{{ chat.id }}">
+                    <button type="submit" class="btn btn-ghost btn-small">Open</button>
+                </form>
+                {% endif %}
+            </details>
+            {% endfor %}
+        </div>
+        </details>
+        {% endif %}
+        {% if developer_application_selection %}
+        <p class="developer-home-selection" data-ui-ref="developer.home.selection">
+            Selected: {{ developer_application_selection.label }}
+        </p>
+        {% endif %}
+        {% if developer_home_messages %}
+        <div class="developer-home-messages" data-ui-ref="developer.home.messages" aria-live="polite">
+            {% for message in developer_home_messages[-8:] %}
+            <p class="developer-home-message developer-home-message-{{ message.role }}">
+                <span class="developer-home-message-role">{{ 'You' if message.role == 'human' else 'GO' }}</span>
+                {{ message.text }}
+            </p>
+            {% endfor %}
+        </div>
+        {% endif %}
+        <form class="developer-home-composer-form" method="post" action="{{ url_for('portal.developer_home_composer') }}" data-ui-ref="developer.home.composer.form" data-developer-composer-form>
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <textarea class="text-input" name="message" data-developer-composer-input placeholder="Ask about ARCHIOSK, paste a screenshot, or use /CCN" aria-label="Developer Composer message" autocomplete="off" rows="1"></textarea>
+            {# CLAUDE-DEVELOPER-COMPOSER-IMAGE-01: the same two doors the
+               workspace Composer already offers - a picker and a real paste -
+               but deliberately NOT its full attachment apparatus. Make-Q,
+               Add-to-Q and the capture crop/review flow are project-evidence
+               concerns, and Developer Mode has no project and creates no
+               governed record. This screenshot rides one turn to the model and
+               is never filed. #}
+            <label class="composer-attach" for="developer-home-composer-image"
+                   data-ui-ref="developer.home.composer.attach" title="Attach a screenshot">
+                <span aria-hidden="true">+</span>
+                <span class="visually-hidden">Attach a screenshot</span>
+            </label>
+            <input type="file" id="developer-home-composer-image" accept="image/*" hidden>
+            <input type="hidden" name="image_data_url" id="developer-home-composer-image-data">
+            <span class="composer-attach-chip" id="developer-home-composer-image-chip"
+                  data-ui-ref="developer.home.composer.attach.preview" hidden>
+                <img class="composer-attach-thumb" id="developer-home-composer-image-thumb" alt="" aria-hidden="true">
+                <span class="composer-attach-name" id="developer-home-composer-image-name"></span>
+                <button type="button" class="composer-attach-clear" id="developer-home-composer-image-clear"
+                        data-ui-ref="developer.home.composer.attach.clear" aria-label="Remove the attached screenshot">&times;</button>
+            </span>
+            <button type="button" id="developer-home-composer-voice" class="voice-input-button" data-ui-ref="developer.home.composer.voice"
+                    aria-label="Press and speak - audio is processed by your browser only and is never saved">&#127908;&#65039;</button>
+            <span class="voice-input-status" id="developer-home-composer-voice-status" data-ui-ref="developer.home.composer.voice.status" aria-live="polite"></span>
+            <button type="submit" class="btn btn-ghost" data-ui-ref="developer.home.composer.send">Send</button>
+        </form>
+    </section>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{{ url_for('static', filename='js/voice_input.js') }}?v={{ static_version }}"></script>
+<script nonce="{{ csp_nonce }}">
+(function () {
+    var input = document.querySelector(
+        '.developer-home-composer-form [data-developer-composer-input]');
+    if (!input || !window.ArchioskVoiceInput) return;
+    window.ArchioskVoiceInput({
+        buttonId: 'developer-home-composer-voice',
+        statusId: 'developer-home-composer-voice-status',
+        onTranscript: function (transcript) { input.value = transcript; },
+        onEnd: function () { input.focus(); },
+    });
+})();
+</script>
 {% endblock %}

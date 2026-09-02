@@ -228,7 +228,10 @@ class ItActuallyWorksEndToEnd(_MenuCase):
         self.assertNotIn('data-ui-ref="developer.home.composer.form"', self._home(client))
         resp = client.post("/developer-mode/toggle")
         self.assertEqual(resp.status_code, 302)
-        body = self._home(client)
+        root = client.get("/")
+        self.assertEqual(root.status_code, 302)
+        self.assertEqual(root.headers["Location"], "/projects")
+        body = client.get("/admin/developer-tools").get_data(as_text=True)
         self.assertIn('data-ui-ref="developer.home.composer.form"', body)
         self.assertIn('data-ui-ref="developer.home.composer.attach"', body)
 

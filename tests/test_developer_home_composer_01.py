@@ -36,7 +36,7 @@ class DeveloperHomeComposerTests(unittest.TestCase):
 
     def test_developer_home_has_one_composer_and_no_gateway_ask_form(self):
         self._developer()
-        response = self.client.get("/", follow_redirects=True)
+        response = self.client.get("/admin/developer-tools", follow_redirects=True)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data.count(b'data-ui-ref="developer.home.composer.form"'), 1)
         self.assertNotIn(b'data-ui-ref="index.orientation.form"', response.data)
@@ -45,7 +45,7 @@ class DeveloperHomeComposerTests(unittest.TestCase):
 
     def test_developer_home_composer_has_canonical_microphone_and_voice_status(self):
         self._developer()
-        response = self.client.get("/", follow_redirects=True)
+        response = self.client.get("/admin/developer-tools", follow_redirects=True)
         self.assertEqual(response.status_code, 200)
         self.assertIn(b'id="developer-home-composer-voice"', response.data)
         self.assertIn(b'data-ui-ref="developer.home.composer.voice"', response.data)
@@ -56,14 +56,14 @@ class DeveloperHomeComposerTests(unittest.TestCase):
 
     def test_developer_home_project_navigation_remains_available_as_links(self):
         self._developer()
-        response = self.client.get("/", follow_redirects=True)
+        response = self.client.get("/admin/developer-tools", follow_redirects=True)
         self.assertEqual(response.status_code, 200)
         self.assertNotIn(b'data-ui-ref="index.orientation.form"', response.data)
         self.assertIn(b'data-ui-ref="developer.home.composer.form"', response.data)
 
     def test_home_ccn_is_application_scoped_and_lifecycle_works(self):
         self._developer()
-        response = self.client.get("/", follow_redirects=True)
+        response = self.client.get("/admin/developer-tools", follow_redirects=True)
         self.assertIn(b'data-ui-ref="developer.home.composer"', response.data)
 
         response = self.client.post("/developer-composer", data={"message": "/CCN inspect the project list"})
@@ -74,12 +74,12 @@ class DeveloperHomeComposerTests(unittest.TestCase):
 
         for command in ("/CCN status", "/CCN show"):
             self.client.post("/developer-composer", data={"message": command})
-        response = self.client.get("/", follow_redirects=True)
+        response = self.client.get("/admin/developer-tools", follow_redirects=True)
         self.assertIn(b"CCN:", response.data)
         self.assertIn(b"CCN status", response.data)
 
         self.client.post("/developer-composer", data={"message": "/CCN cancel"})
-        response = self.client.get("/", follow_redirects=True)
+        response = self.client.get("/admin/developer-tools", follow_redirects=True)
         self.assertNotIn(b'data-ui-ref="developer.ccn.active"', response.data)
 
     def test_inline_ccn_intent_accepts_space_and_colon_forms(self):
@@ -164,7 +164,7 @@ class DeveloperHomeComposerTests(unittest.TestCase):
         root = Path(__file__).parents[1]
         script = (root / "static/js/developer_composer_input.js").read_text(encoding="utf-8")
         macro = (root / "templates/_macros.html").read_text(encoding="utf-8")
-        home = (root / "templates/index.html").read_text(encoding="utf-8")
+        home = (root / "templates/developer_tools.html").read_text(encoding="utf-8")
         self.assertIn("event.shiftKey", script)
         self.assertIn("event.isComposing", script)
         self.assertIn("requestSubmit", script)
@@ -253,7 +253,7 @@ class DeveloperHomeComposerTests(unittest.TestCase):
 
     def test_application_context_controls_are_outside_workbench_boundary(self):
         self._developer()
-        html = self.client.get("/", follow_redirects=True).data.decode("utf-8")
+        html = self.client.get("/admin/developer-tools", follow_redirects=True).data.decode("utf-8")
         start = html.index('data-developer-workbench')
         end = html.index('</section>', start)
         workbench = html[start:end]

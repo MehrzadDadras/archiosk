@@ -64,7 +64,7 @@ SURFACES = {
     # for paste-a-screenshot here and found nothing - a surface that looked like
     # Composer and accepted less, which is exactly the drift this file exists to
     # catch. It now attaches.
-    "developer-home": ("index.html", 'data-ui-ref="developer.home.composer.form"', True, True),
+    "developer-home": ("developer_tools.html", 'data-ui-ref="developer.home.composer.form"', True, True),
     # CLAUDE-HOME-UNIFY-01: moved to projects.html with the home destination
     # itself. This registry existing is exactly why the move could not go
     # unnoticed - test_the_registry_does_not_rot failed on the stale path.
