@@ -1,5 +1,25 @@
 # Continuation checkpoint
 
+## 2026-09-01 (application) — `3ab9477`: Developer Composer moved to Developer Tools
+
+**`3ab9477` is the latest application commit and is pushed to `origin/main`.** This
+entry records application completion; it does not claim a production deployment newer
+than the `d760e6b` / `v=147` deployment recorded below.
+
+The Developer Composer moved from authenticated `/` to the protected
+`/admin/developer-tools` surface. Its workbench, conversation history, screenshot
+attachment, voice input, CCN context, and application-scoped session state now render
+through `templates/developer_tools.html`. The route supplies the complete Developer
+Composer context directly.
+
+`portal.index()` now has only two outcomes: unauthenticated requests render
+`landing.html`; authenticated requests receive a **302** to
+`portal.projects_list`. The Developer Mode exception and the old template-rendering
+fallback were removed.
+
+Verification: **56 passed, 37 subtests passed** across Composer convergence,
+Developer Composer, Developer menu, and Developer UI reveal/workbench/history tests.
+
 ## 2026-09-01 (deploy) — `d760e6b` live at `v=147`: one home destination, and a staging mistake caught before it shipped
 
 **`d760e6b` is live on `https://archiosk.com`**, replacing `7445ba1`. Confirmed
